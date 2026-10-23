@@ -6,6 +6,8 @@ final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var snapshots: [TrainerSaveSnapshot] = []
     @Published private(set) var pendingRestore: TrainerPendingRestore?
     @Published private(set) var recoveryPaths: [String] = []
+    @Published private(set) var retention: TrainerSaveRetention?
+    @Published private(set) var storageUsage: TrainerSaveStorageUsage?
     @Published private(set) var busy = false
     @Published private(set) var error = ""
     @Published private(set) var errorArguments: [String] = []
@@ -44,6 +46,22 @@ final class TrainerSaveManagerModel: ObservableObject {
             successNotice: "host.save.notice.renamed",
             onComplete: completion
         )
+    }
+
+    func configureRetention(maxCount: Int, maxBytes: Int, completion: ((Bool) -> Void)? = nil) {
+        guard (1...10000).contains(maxCount), (1...9_007_199_254_740_991).contains(maxBytes) else {
+            completion?(false)
+            return
+        }
+        request("core.save.set_retention", params: ["maxCount": maxCount, "maxBytes": maxBytes],
+                operation: "host.save.operation.retention", successNotice: "host.save.notice.retentionSaved",
+                onComplete: completion)
+    }
+
+    func protect(id: String, protected: Bool) {
+        guard !id.isEmpty else { return }
+        request("core.save.protect", params: ["snapshotId": id, "protected": protected],
+                operation: "host.save.operation.protection", successNotice: "host.save.notice.protectionSaved")
     }
 
     func delete(ids: Set<String>) {
@@ -235,6 +253,12 @@ final class TrainerSaveManagerModel: ObservableObject {
         guard let result = reply.result else { return }
         if let rows = result["snapshots"] as? [[String: Any]] {
             snapshots = rows.compactMap(TrainerSaveSnapshot.init(row:))
+        }
+        if let row = result["retention"] as? [String: Any] {
+            retention = TrainerSaveRetention(row: row)
+        }
+        if let row = result["storageUsage"] as? [String: Any] {
+            storageUsage = TrainerSaveStorageUsage(row: row)
         }
         recoveryPaths = (result["recoveryPaths"] as? [String] ?? [])
             .compactMap { TrainerSavePathValidator.validatedLocalURL(for: $0)?.path }

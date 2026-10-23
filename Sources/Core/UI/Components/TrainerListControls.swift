@@ -194,6 +194,7 @@ struct TrainerOverflowMenu<Content: View>: View {
         .fixedSize()
         .disabled(!enabled)
         .help(localization.localized("host.more"))
+        .accessibilityLabel(localization.localized("host.more"))
     }
 }
 

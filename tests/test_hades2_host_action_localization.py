@@ -107,9 +107,9 @@ for token in (
     'localization.localized("host.hotkeys.pressNew")',
     'Text(shortcutIssueText(issue))',
     'localization.localized("host.done")',
-    'Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")',
-    'Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")',
-    'Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")',
+    'title: localization.localized("host.shortcutSettings")',
+    'title: localization.localized("host.viewLog")',
+    'title: localization.localized("host.saveManagement")',
 ):
     assert token in management, token
 
@@ -154,7 +154,7 @@ for token in (
     'title: "host.disableAll"',
 ):
     assert token in model, token
-assert 'localization.localized("host.disableAll")' in hades_view
+assert 'localization.localized("host.disableAll")' in hades_view + management
 assert 'localization.localized("host.viewLog")' in management
 
 # The cross-game fixture proves the exact same seam, including in-flight

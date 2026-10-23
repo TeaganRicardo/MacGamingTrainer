@@ -1,0 +1,43 @@
+# Save Editor player-journey acceptance
+
+[#482](https://github.com/TeaganRicardo/MacGamingTrainer/issues/482) owns this usability gate. Save fields are editable when their actual path, type and codec round trip are reliable; game-specific descriptors own linked semantics, and [typed Advanced editing](hades2-advanced-save-ui-acceptance.md) covers raw values whose purpose is unknown. A technical read-only reason must name the actual obstacle. The final selected source SHA, packaged artifact and checksum belong to the consolidated handoff recorded in [PROJECT_STATUS.md](../../PROJECT_STATUS.md).
+
+## Reproducible automated evidence
+
+`tests/test_hades2_save_editor_player_journey.py` opens the actual SwiftUI tool window in a synthetic native application. It uses the production Hades Save commands, workspace, codec, provider and Core transaction service against disposable saves and backup roots. Its Save-only worker cannot initialize a game transport or query the real game process. Authored localized names in that fixture exercise the installed-text parser and are not evidence of terminology in an installed game build.
+
+The simple journey uses the native search field, inline numeric field, Changes and Apply buttons. It checks that staging does not write bytes; the selected target receives the acknowledged value only after Apply. The longer journey stages three independent actions, removes the middle action, revises a number inside Changes, and inspects linked effects on demand. It also stages/removes an overlapping direct action and verifies the surviving linked projection. A later change to the target bytes and active-profile file leaves the fixed source and explicit target intact. The test independently decodes installed bytes and verifies both pre-write backups, then closes and reopens the native document to observe the installed values in a fresh workspace.
+
+The actual inline boolean control is pressed. The actual inline enum control is checked for a semantic name; completed enum choice dispatch is exercised by a native `NSPopUpButton` event bound to the same production completion owner. Tracking and selecting a SwiftUI popup menu, and operating the source/target menus, remain manual steps. The automated target selection calls its production model owner directly. Native accessibility traversal establishes control semantics and event delivery, not rendered layout, keyboard usability or VoiceOver acceptance.
+
+`tests/test_hades2_save_editor_frontend.py` owns focused correction and recovery cases: invalid text remains beside its owning control through unrelated stage/removal/Apply; a valid correction clears only that field; backend-refused values revert to acknowledged state with local feedback; explicit discard abandons retained drafts. Backend operation failures retain separate owners: a successful review clears its own failure while preserving an Apply recovery path, and changing targets or discarding requested edits cannot erase a failed disk transaction's recovery evidence. A successful retry of that operation or opening a new document clears the corresponding notice. Query/detail failures, stale responses, source selection and separate workspaces remain covered there. These fixtures use temporary documents and do not establish game loading or runtime reload.
+
+`tests/test_hades2_save_record_frontend.py` extends this native journey to ordinary stored history and narrative fields. It edits exact/empty text, a numeric RunResult enum, a creatable absent FishingFails counter, quest status and its linked completion record, a companion boolean, dialogue playback/choice and integer/boolean speech records. Actual controls revise the string in Changes, expose the selected numeric enum's localized label before and after acknowledgement, and Apply once to an explicit target. A fresh document still shows the chosen result and whitespace. An independent codec read verifies every installed field, the unchanged source, reward resources and CurrentRun. The temporary narrative source corpus has its own exact test digest; it proves contextual indexing and dispatch, not an installed game's source compatibility. As above, completed enum dispatch uses a native selector bound to the production owner; actual SwiftUI menu tracking remains user-run.
+
+In that newly opened document, the same journey edits a stored gift quantity
+through its actual integer field, revises it in Changes, and grants a different
+quest's reward through the actual Boolean control. It verifies the visible
+impact warning for the gift, reward and an unknown but reliably typed NPC
+record. Expanding actual Changes controls exposes the gift aggregate and all
+five reward effects. A second Apply and fresh window confirm the revised
+quantity and already-claimed state; the claimed row has no repeat-grant control.
+Independent decoding checks inventory, lifetime and CurrentRun reward gains,
+preserved ordered gift events and run gift records, and the earlier ordinary
+record edits. The quest/resource definitions and mutation-owner digests are
+authored within the temporary fixture; no installed source or real save path
+is included in the test.
+
+Run these tests with the repository's supported Python and Swift toolchain on macOS. They are registered in the existing macOS test list. The parent lane runs the full owning checks and build/package on its final reviewed source; do not substitute an earlier branch result after integration.
+
+## Consolidated user-run procedure
+
+Use the final handoff's fixed artifact/checksum and an expendable copied save set. Record language, source/target identities, the chosen test values, observed result and any recovery folder. Never infer an in-memory game reload from a disk-write receipt.
+
+1. Open Save Editor, choose a source and a different explicit write target using the actual menus, then inspect the source information. Search for a supported resource in both English and Chinese. Its numeric input should be directly editable without entering an entity or per-field edit mode. Type an invalid value, leave the field, and confirm that the typed value and readable correction remain at that field. Correct it, then use Return and click-away in separate edits; typing alone must not stage an unfinished draft.
+2. Search supported entities with boolean and enum properties. Change each through the actual inline controls. Check their names, selected state, help and keyboard focus in both languages. Open Changes, revise an acknowledged value there, and confirm that the inline projection agrees. The enum's actual popup selection is required here because the automated fixture does not operate that SwiftUI menu.
+3. Stage at least three supported actions across two entities. Remove the middle requested action; the other two must retain their order and values. Expand and collapse linked effects. A linked physical effect must remain distinguishable from an individually removable user request. Where supported, add then remove a direct action sharing one of those physical fields and confirm the remaining projection is coherent.
+4. Retain an invalid draft in another field while revising and removing an unrelated requested action. Its correction must remain local. Apply only the acknowledged batch; the invalid draft must still await correction. Explicitly discard or re-read the document and confirm that abandoned drafts and their corrections clear. For a refused operation, use the displayed recovery path and keep any rollback evidence; an unrelated successful edit must not hide the refusal.
+5. Before Apply, confirm the originally read source and the explicit target again. Apply once and inspect the receipt and recoverable pre-write backup. Verify the installed target using a fresh read. Close and reopen the tool; its new document should reflect the selected source on disk with no abandoned batch. Reopening an already open entry should instead focus its existing document and retained draft.
+6. Inspect the rendered tool at supported sizes and both languages: long names, alignment, scroll reachability, expanded Changes/effects, feedback, keyboard navigation and accessibility. Finally load the copied target in the real supported game and inspect the intended changes and any later game-authored save. Record disk replacement, actual game loading, in-memory behavior and later persistence as separate observations.
+
+Passing automated tests does not complete these manual observations. Keep failures and unexecuted steps attached to #482 or the consolidated acceptance owner instead of marking them as real-game or rendered acceptance.

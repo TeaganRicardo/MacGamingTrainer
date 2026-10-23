@@ -37,6 +37,7 @@ omit_first_target = False
 manual_inventory_count = 0
 apply_count = 0
 detail_counts = {}
+refused_recovery_review = False
 
 def staged_result():
     if pending_value is None or pending_entry_id is None or pending_operation is None:
@@ -149,7 +150,7 @@ for raw in sys.stdin:
         opened_summary['relativePath'] = req['params']['target']['relativePath']
         opened_summary['pendingCount'] = int(pending_value is not None)
         result = opened_summary
-        if opened_summary['source'].get('snapshotId') != 'manual-selection':
+        if opened_summary['source'].get('snapshotId') not in (None, 'manual-selection'):
             omit_first_target = True
     elif command == 'save_editor_query':
         domain = req['params']['domain']
@@ -311,7 +312,7 @@ for raw in sys.stdin:
                 'domain': 'weapons',
                 'rawId': 'WeaponDagger',
                 'path': ['GameState', 'LastWeaponUpgradeName', 'WeaponDagger'],
-                'name': name + ' · Selected aspect',
+                'name': name + (' · 当前形态' if req['params']['language'] == 'zh-CN' else ' · Selected aspect'),
                 'englishName': 'Sister Blades · Selected aspect',
                 'entityId': 'weapon:WeaponDagger',
                 'entityName': name,
@@ -448,7 +449,7 @@ for raw in sys.stdin:
             'domain': domain,
             'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
-            'total': len(groups) if domain == 'entities' else len(items),
+            'total': 201 if req['params']['search'] == 'pagination-fixture' else (len(groups) if domain == 'entities' else len(items)),
             'items': [] if domain == 'entities' else items,
             'entities': list(groups.values()) if domain == 'entities' else [],
             'sourceStatus': 'available' if domain == 'investigate' else None,
@@ -511,6 +512,15 @@ for raw in sys.stdin:
             pending_operation = None
         result = staged_result()
     elif command == 'save_editor_review':
+        if pending_value == 600 and not refused_recovery_review:
+            refused_recovery_review = True
+            print(json.dumps({
+                'type': 'result', 'id': req['id'], 'protocolVersion': 6,
+                'moduleProtocolVersion': 17, 'gameID': args.game, 'ok': False,
+                'error': {'code': 'invalid_request',
+                          'presentation': 'hades2.saveEditor.error.invalidResponse', 'arguments': []},
+            }), flush=True)
+            continue
         result = staged_result()
     elif command == 'save_editor_cancel':
         pending_value = None
@@ -709,9 +719,13 @@ struct Main {
             forKey: TrainerLocalizationStore.userDefaultsKey
         )
         let localization = TrainerLocalizationStore(defaults: defaults)
+        localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix) {
+            Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.finishLaunching()
+        enableNativeAccessibility()
         let toolWindows = TrainerToolWindowStore()
         let window = toolWindows.open(id: "save-editor", title: "Save Editor", localization: localization, theme: .standard) {
             TrainerToolWindowContent(canClose: { !model.busy }, onClose: model.close) {
@@ -790,7 +804,7 @@ struct Main {
         }
         fieldEditor.selectAll(nil); fieldEditor.insertText("3.5", replacementRange: fieldEditor.selectedRange())
         editorWindow.makeFirstResponder(nil); pump(0.1)
-        if model.pendingCount != 0 || model.failure?.key != "hades2.saveEditor.invalidDraft" || draft != "3.5" {
+        if model.pendingCount != 0 || model.editFailures[entry.id]?.key != "hades2.saveEditor.invalidDraft" || draft != "3.5" {
             fail("invalid Save draft was truncated/staged or lost its correction feedback")
         }
         guard editorWindow.makeFirstResponder(field), let fieldEditor = field.currentEditor() as? NSTextView else {
@@ -806,6 +820,9 @@ struct Main {
         editorWindow.close()
         if model.pendingCount != 1 || model.pendingActions.count != 1 {
             fail("staged action was not projected into review state")
+        }
+        if model.editFailures[entry.id] != nil {
+            fail("Correcting a Save field left its earlier rejection attached")
         }
         let action = model.pendingActions[0]
         if action.name != "Ashes" {
@@ -869,9 +886,18 @@ struct Main {
         unrelatedDraftWindow.makeFirstResponder(nil)
         pump(0.15)
         if model.pendingCount != 0
-            || model.failure?.key != "hades2.saveEditor.invalidDraft"
+            || model.editFailures["resource:GiftPoints"]?.key != "hades2.saveEditor.invalidDraft"
             || unrelatedDraftField.stringValue != "3.5" {
             fail("Unrelated invalid draft was not retained before per-item removal")
+        }
+        let nectarCorrection = "Nectar: " + Hades2GameModule.resolveText(
+            key: "hades2.saveEditor.invalidDraft", localization: localization
+        )
+        if namedNativeControl(window.contentView!, role: "AXStaticText", name: nectarCorrection) == nil {
+            let observed = nativeAccessibilityControls(window.contentView!).filter {
+                $0.text?.contains("Nectar") == true || $0.text?.contains("valid") == true
+            }.map { "\($0.role ?? "nil"): \($0.text ?? "nil")" }
+            fail("The invalid Save draft has no correction feedback at its owning control: \(observed)")
         }
 
         // Edit the actual initially rendered Save result, not a detached
@@ -890,6 +916,9 @@ struct Main {
             commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
             fail("Direct Save result editing did not stage on blur")
         }
+        if namedNativeControl(window.contentView!, role: "AXStaticText", name: nectarCorrection) == nil {
+            fail("An unrelated successful Save edit cleared the retained invalid draft's correction feedback")
+        }
 
         // A backend-refused but syntactically valid edit must not strand the
         // real inline field on an unacknowledged local value.
@@ -902,7 +931,7 @@ struct Main {
         sheet.makeFirstResponder(nil)
         pumpUntil {
             !model.busy
-                && model.failure?.key == "hades2.saveEditor.error.invalidMutation"
+                && model.editFailures[entry.id]?.key == "hades2.saveEditor.error.invalidMutation"
                 && inPlace.stringValue == "430"
         }
         if model.pendingActions.first?.after != AnyHashable(430)
@@ -977,9 +1006,21 @@ struct Main {
         if inlineField("3.5") == nil {
             fail("Removing the last staged action discarded an unrelated invalid field draft")
         }
+        if namedNativeControl(window.contentView!, role: "AXStaticText", name: nectarCorrection) == nil {
+            fail("Removing an unrelated action cleared the invalid draft's correction feedback")
+        }
 
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
         pumpUntil { !model.busy && model.pendingCount == 1 }
+        guard let sameActionDraft = fields(window.contentView!).first(where: {
+            $0.isEditable && $0.accessibilityLabel() == "Ashes"
+        }), window.makeFirstResponder(sameActionDraft),
+              let sameActionEditor = sameActionDraft.currentEditor() as? NSTextView else {
+            fail("Could not retain a later invalid draft on an acknowledged action's field")
+        }
+        sameActionEditor.selectAll(nil)
+        sameActionEditor.insertText("3.5", replacementRange: sameActionEditor.selectedRange())
+        window.makeFirstResponder(nil); pump(0.10)
         model.apply()
         pump(0.35)
         if model.pendingCount != 0 || !model.pendingActions.isEmpty {
@@ -987,6 +1028,16 @@ struct Main {
         }
         if model.items.first?.value != AnyHashable(500) {
             fail("successful Apply did not reload the installed page")
+        }
+        if inlineField("3.5") == nil
+            || namedNativeControl(window.contentView!, role: "AXStaticText", name: nectarCorrection) == nil {
+            fail("Applying unrelated acknowledged changes discarded an invalid Save draft or its correction feedback")
+        }
+        if model.editFailures["resource:MetaCurrency"]?.key != "hades2.saveEditor.invalidDraft"
+            || !fields(window.contentView!).contains(where: {
+                $0.isEditable && $0.accessibilityLabel() == "Ashes" && $0.stringValue == "3.5"
+            }) {
+            fail("Applying an acknowledged action erased a later invalid draft on the same field")
         }
         guard let hotReceipt = model.lastApplyReceipt else {
             fail("hot Apply did not expose its backend receipt")
@@ -1029,12 +1080,39 @@ struct Main {
         model.apply()
         pump(0.20)
         if model.pendingCount != 1
-            || model.failure?.key != "host.save.error.rollbackFailed"
-            || model.failure?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            || model.operationFailures[.saveEditorApply]?.key != "host.save.error.rollbackFailed"
+            || model.operationFailures[.saveEditorApply]?.arguments != ["/tmp/mgt-recovery/save-600"] {
             fail("Save Editor lost rollback failure/recovery context")
         }
+        model.review()
+        pump(0.20)
+        if model.operationFailures[.saveEditorReview]?.key != "hades2.saveEditor.error.invalidResponse"
+            || model.operationFailures[.saveEditorApply]?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            fail("A second failed operation replaced Apply recovery evidence")
+        }
+        model.review()
+        pump(0.20)
+        if model.operationFailures[.saveEditorReview] != nil
+            || model.operationFailures[.saveEditorApply]?.key != "host.save.error.rollbackFailed"
+            || model.operationFailures[.saveEditorApply]?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            fail("An unrelated successful Changes refresh cleared Apply recovery evidence")
+        }
+        model.selectTarget("main/Profile2.sav")
+        pumpUntil { !model.busy && model.selectedTargetID == "main/Profile2.sav" }
+        guard let recovery = model.operationFailures[.saveEditorApply],
+              namedNativeControl(window.contentView!, role: "AXStaticText", name: localization.string(recovery)) != nil else {
+            fail("A successful target change hid the native Apply recovery notice")
+        }
+        model.selectTarget("main/Profile1.sav")
+        pumpUntil { !model.busy && model.selectedTargetID == "main/Profile1.sav" }
         model.cancel()
         pumpUntil { model.pendingCount == 0 && !model.busy }
+        if !model.editFailures.isEmpty || inlineField("3.5") != nil {
+            fail("Explicitly discarding Save changes retained an abandoned draft or its correction feedback")
+        }
+        if model.operationFailures[.saveEditorApply]?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            fail("Discarding requested edits erased a failed disk transaction's recovery path")
+        }
 
         model.selectScope("all")
         pump(0.20)
@@ -1064,6 +1142,12 @@ struct Main {
         if model.entityResults.first?.entries.count != 2
             || model.entityResults.first?.entries.filter({ $0.editable }).count != 2 {
             fail("Arcana was not a complete, immediately editable multi-field entity")
+        }
+        pump(0.10)
+        guard let content = window.contentView,
+              let unlocked = model.items.first(where: { $0.valueType == "boolean" }),
+              namedNativeControl(content, role: "AXCheckBox", name: unlocked.displayName) != nil else {
+            fail("The actual inline Save switch has no owning field name")
         }
         model.selectScope("all")
         pumpUntil { !model.querying }
@@ -1191,6 +1275,10 @@ struct Main {
         }
         let chosenWeaponID = Hades2SaveEditorEntityGrouping.entities(from: model.items).first?.id
         let chineseWeaponName = model.items.first?.entityName
+        pump(0.10)
+        if namedNativeControl(content, role: "AXPopUpButton", name: selector.displayName) == nil {
+            fail("The actual Save enum control is named only by its generic value label")
+        }
         model.setLanguage(.en)
         pump(0.25)
         let localizedWeapon = Hades2SaveEditorEntityGrouping.entities(from: model.items).first
@@ -1200,6 +1288,40 @@ struct Main {
             || localizedWeapon?.title != "Sister Blades" {
             fail("Selection did not survive a real model language reload")
         }
+        pump(0.10)
+        if namedNativeControl(content, role: "AXPopUpButton", name: model.items[0].displayName) == nil {
+            fail("The Save enum control kept its old native name after a language reload")
+        }
+
+        model.search = "pagination-fixture"
+        model.submitSearch()
+        pumpUntil { !model.querying && model.total == 201 }
+        for language in [TrainerPresentationLanguage.en, .zhCN] {
+            localization.language = language
+            pumpUntil { !model.querying && model.total == 201 }
+            pump(0.10)
+            let previousName = Hades2GameModule.resolveText(key: "hades2.saveEditor.previousPage", localization: localization)
+            let nextName = Hades2GameModule.resolveText(key: "hades2.saveEditor.nextPage", localization: localization)
+            guard let next = namedNativeControl(content, role: "AXButton", name: nextName),
+                  let previous = namedNativeControl(content, role: "AXButton", name: previousName),
+                  next.enabled, !previous.enabled,
+                  next.help == nextName,
+                  previous.help == previousName,
+                  next.press() else {
+                fail("Save page actions have missing names/help or incorrect initial availability")
+            }
+            pumpUntil { !model.querying && model.offset == 100 }
+            guard let currentPrevious = namedNativeControl(content, role: "AXButton", name: previousName),
+                  currentPrevious.enabled,
+                  currentPrevious.press() else {
+                fail("The named previous-page action did not become available")
+            }
+            pumpUntil { !model.querying && model.offset == 0 }
+        }
+        localization.language = .en
+        model.search = "ash"
+        model.submitSearch()
+        pumpUntil { !model.querying }
 
         model.selectDomain(.advanced)
         pump(0.20)
@@ -1494,7 +1616,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated, main_path]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", ROOT / "tests/fixtures/swift/NativeAccessibility.swift", generated, main_path]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],

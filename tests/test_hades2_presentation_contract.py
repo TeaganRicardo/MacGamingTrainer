@@ -154,7 +154,22 @@ ERROR_SHAPED = re.compile(
 # Modules whose CJK strings are never a raised player-facing message.
 # `catalog.py` collects warnings and the official term table; `diagnostics.py`
 # returns a report whose field values the Host renders in its own table.
-ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py"))
+# History/narrative read projections own explicit bilingual labels/reasons
+# (including "Failures"). Those data fields do not enter the error funnel;
+# raised messages remain scanned independently below in every module.
+ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py", "save_history.py", "save_investigation.py"))
+# These functions return explicitly bilingual row data, not raised errors.
+# Keep the exemption at the function boundary: workspace/Advanced mutations
+# still pass through the ordinary literal scan, and every actual raise below
+# is inspected even inside one of these presentation functions. Adding a raise
+# removes the whole function's exemption, including error literals assigned to
+# variables before being raised.
+BILINGUAL_DATA_FUNCTIONS = {
+    "save_advanced.py": frozenset(("row", "warning")),
+    "save_workspace.py": frozenset(("_discovery_reason",)),
+    "save_narrative.py": frozenset(("entry_row",)),
+    "save_quest_rewards.py": frozenset(("rows",)),
+}
 
 
 def render(template, arguments):
@@ -288,10 +303,19 @@ for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
     if path.name in ERROR_FREE_MODULES:
         assigned = []
     else:
+        data_spans = [
+            (node.lineno, node.end_lineno)
+            for node in ast.walk(ast.parse(body))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in BILINGUAL_DATA_FUNCTIONS.get(path.name, ())
+            and not any(isinstance(child, ast.Raise) for child in ast.walk(node))
+        ]
         assigned = [
             literal.group(1)
             for literal in STRING_ARG.finditer(body)
             if has_cjk(literal.group(1)) and ERROR_SHAPED.search(literal.group(1))
+            and not any(start <= body.count("\n", 0, literal.start()) + 1 <= end
+                        for start, end in data_spans)
         ]
     for message in (
         list(raised_messages(body))

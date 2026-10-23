@@ -5,22 +5,21 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
-import copy
 import json
 import math
 import uuid
 from types import SimpleNamespace
 
-from . import save_equipment, save_long_term, save_narrative
+from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
 from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
-from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
+from .save_mutation_utils import owner as lua_owner
+from .save_document import clone_lua_value, AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import editor_default_source, editor_files, profile_file_identity
-from .schema import MAX_AMOUNT
 
 
 _MAX_EXACT_LUA_INTEGER = 9_007_199_254_740_991
@@ -239,11 +238,12 @@ class Hades2SaveWorkspace:
         return game_state
 
     def _resources(self):
-        try:
-            game_state = self._game_state()
-            resources = game_state["Resources"]
-        except KeyError as error:
-            raise ValueError("Save Editor resource inventory is unavailable.") from error
+        game_state = self._game_state()
+        resources = game_state.get("Resources")
+        if resources is None:
+            # Query/preview must not materialize a source owner. Apply creates
+            # the table on its isolated candidate when an edit requests it.
+            return LuaTable()
         if not isinstance(resources, LuaTable):
             raise ValueError("Save Editor resource inventory is malformed.")
         return resources
@@ -267,6 +267,7 @@ class Hades2SaveWorkspace:
             "rawId": identifier,
             "path": ["GameState", "Resources", identifier],
             "before": int(value),
+            "beforePresent": identifier in resources,
             "mutationKinds": ("set",),
         }
 
@@ -283,6 +284,19 @@ class Hades2SaveWorkspace:
         )
 
         rows = []
+        try:
+            resources = self._resources()
+        except ValueError:
+            resources = None
+
+        def typed_row(index, key):
+            path = ["GameState", "Resources", key]
+            item = save_advanced.row(self.document.lua_state,
+                save_advanced.entry_id(path, index), language)
+            if type(key) is str:
+                item.update(name=names.get(key) or key, englishName=english.get(key) or key)
+            return item
+
         for key in sorted(RESOURCE_IDS):
             row = {
                 "id": "resource:" + key,
@@ -297,23 +311,50 @@ class Hades2SaveWorkspace:
                 "mutationKinds": [],
                 "constraints": {
                     "min": 0,
-                    "max": MAX_AMOUNT,
+                    "max": _MAX_EXACT_LUA_INTEGER,
                     "integer": True,
                 },
             }
             try:
                 descriptor = self._resource_descriptor(key)
             except AmbiguousLuaKeyError:
+                matches = [(index, field) for index, field, _, _ in resources.physical_entries()
+                           if field == key] if isinstance(resources, LuaTable) else []
+                if matches:
+                    rows.extend(typed_row(index, field) for index, field in matches)
+                    continue
                 row["ownerState"] = "ambiguous"
                 row["blockReasonCode"] = "ambiguousOwner"
             except ValueError:
+                # A known semantic integer with another reliably encoded type
+                # remains repairable through the same typed path owner.
+                matches = [(index, field) for index, field, _, _ in resources.physical_entries()
+                           if field == key] if isinstance(resources, LuaTable) else []
+                if matches:
+                    rows.extend(typed_row(index, field) for index, field in matches)
+                    continue
                 row["ownerState"] = "unsupported"
                 row["blockReasonCode"] = "unsupportedOwner"
             else:
                 row["value"] = descriptor["before"]
+                row["beforePresent"] = descriptor["beforePresent"]
                 row["editable"] = True
                 row["mutationKinds"] = list(descriptor["mutationKinds"])
             rows.append(row)
+        if isinstance(resources, LuaTable):
+            for index, key, value, _ in resources.physical_entries():
+                if type(key) is str and key in RESOURCE_IDS:
+                    continue
+                try:
+                    save_advanced.validate_key(key)
+                except ValueError as error:
+                    rows.append({"id": "advanced-unaddressable-resource:" + str(index),
+                        "domain": "advanced", "rawId": str(key), "name": str(key),
+                        "englishName": str(key), "path": [], "value": None,
+                        "valueType": save_advanced.value_type(value), "editable": False,
+                        "mutationKinds": [], "readOnlyReason": str(error)})
+                else:
+                    rows.append(typed_row(index, key))
         return rows
 
     def _player_stat_descriptor(self, identifier):
@@ -422,38 +463,34 @@ class Hades2SaveWorkspace:
                 "valueType": "integer",
                 "editable": False,
                 "mutationKinds": [],
+                "readOnlyReason": ("这是根据下层记录计算的汇总；请修改对应记录。" if language == "zh-CN" else
+                                   "This summary is calculated from underlying records; edit those records directly."),
             }
             for key, zh, en, value, path in measurements
         ]
 
-    def _advanced_rows(self, path):
-        target = _lua_path(self.document.lua_state, path)
+    def _advanced_rows(self, path, language="en"):
+        if save_container.namespace(path) is not None:
+            return save_container.rows(self.document, path, language)
+        path = save_advanced.decode_path(path)
+        target = save_advanced.resolve_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
             raise ValueError("Save Editor Advanced path must identify a table.")
         rows = []
         for physical_index, key, value, ambiguous in target.physical_entries():
-            item_path = [*path, key]
-            kind = _value_type(value)
-            row = {
-                # Preserve Lua key type and path boundaries in opaque Swift IDs.
-                # Numbers, booleans and strings can share the same printed key.
-                "id": "advanced:" + json.dumps(
-                    item_path, ensure_ascii=True, separators=(",", ":")
-                ) + ":" + str(physical_index),
-                "pathAmbiguous": ambiguous,
-                "domain": "advanced",
-                "rawId": str(key),
-                "path": item_path,
-                "name": str(key),
-                "englishName": str(key),
-                "value": _json_scalar(value),
-                "valueType": kind,
-                "editable": False,
-                "mutationKinds": [],
-            }
-            if isinstance(value, LuaTable):
-                row["childCount"] = len(value)
-            rows.append(row)
+            try:
+                save_advanced.validate_key(key)
+            except ValueError as error:
+                rows.append({"id": "advanced-unaddressable:" + str(physical_index),
+                    "domain": "advanced", "rawId": str(key), "name": str(key),
+                    "englishName": str(key), "path": [], "value": None,
+                    "valueType": save_advanced.value_type(value), "editable": False,
+                    "mutationKinds": [], "readOnlyReason": str(error)})
+            else:
+                rows.append(save_advanced.row(self.document.lua_state,
+                    save_advanced.entry_id([*path, key], physical_index), language))
+        if not path:
+            rows.extend(save_container.root_rows(self.document, language))
         return rows
 
     @staticmethod
@@ -477,8 +514,8 @@ class Hades2SaveWorkspace:
                 "Native-known state is absent; its complete write lifecycle is not yet verified, so it remains read-only.",
             ),
             "unknownRaw": (
-                "修改器尚不了解此存档数据；保留原值，仅可在“高级”中只读查看。",
-                "Unknown save data is preserved and available read-only in Advanced.",
+                "此数据的用途或影响可能未知；高级编辑按实际 Lua 类型和唯一路径写入，请检查修改。",
+                "Its purpose or effects may be unknown. Advanced edits by actual Lua type and unique path; inspect the changes.",
             ),
             "ambiguousOwner": (
                 "存档中存在重复或歧义所有权；仅允许只读检查。",
@@ -596,7 +633,7 @@ class Hades2SaveWorkspace:
                 elif state == "unsupported":
                     row["editable"] = False
                     row["mutationKinds"] = []
-                    reason_code = "unsupportedOwner"
+                    reason_code = row.get("blockReasonCode") or "unsupportedOwner"
                 elif row.get("editable"):
                     reason_code = "editable" if state == "observed" else "editableAbsent"
                 else:
@@ -656,31 +693,9 @@ class Hades2SaveWorkspace:
         for name in missing:
             localized = current.get(name) or (("任务 · " if zh else "Quest · ") + name)
             english_name = english.get(name) or ("Quest · " + name)
-            row = {
-                "id": "quest:" + name,
-                "domain": "progression",
-                "rawId": name,
-                "path": ["GameState", "QuestStatus", name],
-                "name": localized,
-                "englishName": english_name,
-                "value": None,
-                "valueType": "enum",
-                "editable": False,
-                "mutationKinds": [],
-                "group": "命运清单" if zh else "Fated List quests",
-                "choices": [],
-                "state": "absent",
-                "reasonCode": "knownAbsent",
-                "reason": self._discovery_reason("knownAbsent", language),
-                "_search": tuple({
-                    token for token in (
-                        name,
-                        localized,
-                        english_name,
-                        chinese.get(name),
-                    ) if token
-                }),
-            }
+            row = save_narrative.entry_row(self.document.lua_state, "quest:" + name, language, self._game_path)
+            row.update(state="absent", reasonCode="editableAbsent", _search=tuple(
+                token for token in (name, localized, english_name, chinese.get(name)) if token))
             rows.append(row)
         return rows
 
@@ -735,6 +750,10 @@ class Hades2SaveWorkspace:
                     }
                     if isinstance(value, LuaTable):
                         row["childCount"] = len(value)
+                    if not path_ambiguous:
+                        raw_row = save_advanced.row(self.document.lua_state, row["id"], language)
+                        row.update(raw_row)
+                        row.update(state="unknown", reasonCode=reason_code)
                     rows.append(row)
                 if isinstance(value, LuaTable):
                     visit(
@@ -823,24 +842,35 @@ class Hades2SaveWorkspace:
         return self._investigation
 
     def _dialogue_write_decisions(self):
-        # Reuse the actual descriptor/companion validator, including its
-        # precise block reason. Do not make investigation its own write policy.
-        try:
-            observed = save_narrative.rows(
-                self.document.lua_state, "dialogue", "en", game_path=self._game_path
-            )
-        except (ValueError, AmbiguousLuaKeyError, KeyError):
-            return {}
-        return {
-            row["rawId"]: {
-                "allowed": row["editable"],
-                "code": row.get("blockReasonCode"),
-                "diagnostic": row.get("blockReasonDiagnostic"),
-            }
-            for row in observed
-        }
+        return save_narrative.reset_decisions(self.document.lua_state)
 
     def investigate(self, entry_id, language="zh-CN"):
+        if save_container.is_id(entry_id) and language in ("en", "zh-CN"):
+            row = save_container.row(self.document, entry_id, language)
+            projection = self._validated_review_state(tuple(self._pending.values()), language) if self._pending else self.document
+            try:
+                value = save_container.effective(projection, entry_id)
+                present = True
+            except KeyError:
+                value, present = None, False
+            return {**row, "entryId": entry_id, "typedValue": save_advanced.typed_value(value),
+                    "effectivePresent": present,
+                    "sourcePresent": save_container.descriptor(self.document, entry_id)["beforePresent"]}
+        if isinstance(entry_id, str) and entry_id.startswith("advanced:") and language in ("en", "zh-CN"):
+            row = save_advanced.row(self.document.lua_state, entry_id, language)
+            result = {**row, "entryId": entry_id}
+            if row["editable"]:
+                path, _ = save_advanced.parse_id(entry_id)
+                projection = self._validated_review_state(tuple(self._pending.values()), language).lua_state if self._pending else self.document.lua_state
+                try:
+                    effective = save_advanced.resolve_path(projection, path)
+                    result["effectivePresent"] = True
+                except KeyError:
+                    effective = None
+                    result["effectivePresent"] = False
+                result["typedValue"] = save_advanced.typed_value(effective)
+                result["sourcePresent"] = save_advanced.descriptor(self.document.lua_state, entry_id, include_value=False)["beforePresent"]
+            return result
         if language not in ("en", "zh-CN") or not isinstance(entry_id, str) or not entry_id.startswith("investigate:") or len(entry_id) > 512:
             raise ValueError("Save Editor investigation identity is invalid.")
         return self._narrative_investigation().detail(
@@ -856,6 +886,7 @@ class Hades2SaveWorkspace:
             rows.extend(self._resource_rows(language))
         if scope in ("all", "records"):
             rows.extend(self._player_stat_rows(language))
+            rows.extend(save_history.rows(root, language, game_path=self._game_path))
         if scope in ("all", "story"):
             rows.extend(save_narrative.rows(
                 root, "flags", language, game_path=self._game_path
@@ -878,9 +909,15 @@ class Hades2SaveWorkspace:
                         raise
             if search.strip():
                 rows.extend(self._known_absent_quest_rows(language))
+            rows.extend(self._narrative_investigation().quest_rows(
+                root, language, include_absent=bool(search.strip())
+            ))
+            rows.extend(save_quest_rewards.rows(root, language, self._narrative_investigation(),
+                self._game_path, include_absent=bool(search.strip())))
         if scope in ("all", "growth", "records"):
             progression = save_long_term.rows(
-                root, "progression", language, game_path=self._game_path
+                root, "progression", language, game_path=self._game_path,
+                include_absent=bool(search.strip())
             )
             rows.extend(row for row in progression if (
                 scope == "all"
@@ -888,7 +925,9 @@ class Hades2SaveWorkspace:
                     else row["id"].startswith("objective:"))
             ))
         if scope in ("all", "growth"):
-            rows.extend(save_equipment.rows(root, language, game_path=self._game_path))
+            rows.extend(row for row in save_equipment.rows(
+                root, language, game_path=self._game_path
+            ) if row["id"] != "familiarSelection")
         return rows
 
     def _entity_query(self, *, scope, search, offset, limit, language):
@@ -903,15 +942,17 @@ class Hades2SaveWorkspace:
                     alias.get("name"), alias.get("englishName"),
                     alias.get("entityName"), alias.get("group"),
                 )
-            # Authored scenes and spoken text are source-backed, read-only
-            # context for the same character entity. Never infer a mutation
-            # from the scene's Boolean observation or its localised name.
+            # Authored context groups the character; actual record fields
+            # retain their typed physical owner, independently of source text.
             if scope in ("all", "story"):
                 results = self._narrative_investigation().query(
                     self.document.lua_state, search=search, offset=0,
                     limit=100000, language=language,
                     permissions=self._dialogue_write_decisions(),
                 )
+                rows.extend(self._narrative_investigation().spoken_rows(
+                    self.document.lua_state, results["items"], language
+                ))
                 verified_people = {}
                 for scene in results["items"]:
                     # The source-bound narrative index must prove the native
@@ -1015,11 +1056,14 @@ class Hades2SaveWorkspace:
                 self.document.lua_state, owner_domain, language, game_path=self._game_path
             )
             if owner_domain == "progression":
+                rows.extend(save_quest_rewards.rows(self.document.lua_state, language,
+                    self._narrative_investigation(), self._game_path, include_absent=bool(search.strip())))
                 rows.extend(save_long_term.rows(
-                    self.document.lua_state, owner_domain, language, game_path=self._game_path
+                    self.document.lua_state, owner_domain, language, game_path=self._game_path,
+                    include_absent=bool(search.strip())
                 ))
                 if domain == "quests":
-                    rows = [row for row in rows if row["id"].startswith(("quest:", "objective:"))]
+                    rows = [row for row in rows if row["id"].startswith(("quest:", "questClaim:", "objective:"))]
                 elif domain == "arcana":
                     rows = [row for row in rows if row["id"].startswith("card:")]
         elif domain == "relationships":
@@ -1033,9 +1077,9 @@ class Hades2SaveWorkspace:
         elif domain == "advanced":
             if path is None:
                 path = []
-            if not isinstance(path, (list, tuple)) or len(path) > 64:
+            if not isinstance(path, (list, tuple)):
                 raise ValueError("Save Editor Advanced path is invalid.")
-            rows = self._advanced_rows(list(path))
+            rows = self._advanced_rows(list(path), language)
         else:
             rows = []
 
@@ -1114,9 +1158,9 @@ class Hades2SaveWorkspace:
                 {
                     "id": "unknown",
                     "discoverability": "supported",
-                    "understanding": "readOnly",
-                    "write": "readOnly",
-                    "reasonCode": "unknownReadOnly",
+                    "understanding": "partial",
+                    "write": "supported",
+                    "reasonCode": "typedAdvanced",
                 },
             ],
         }
@@ -1125,10 +1169,24 @@ class Hades2SaveWorkspace:
         if not isinstance(entry_id, str) or not entry_id:
             raise ValueError("Save Editor entry identity is invalid.")
         prefix, separator, identifier = entry_id.partition(":")
+        if save_container.is_id(entry_id):
+            return save_container.descriptor(self.document, entry_id)
+        if prefix == "advanced":
+            try:
+                return save_advanced.descriptor(self.document.lua_state, entry_id)
+            except (AmbiguousLuaKeyError, KeyError) as error:
+                raise save_advanced.AdvancedMutationError(str(error)) from error
         if separator and prefix == "resource":
             return self._resource_descriptor(identifier)
         if separator and prefix == "playerStat":
             return self._player_stat_descriptor(identifier)
+        if prefix == "questClaim":
+            semantic = save_quest_rewards.descriptor(self.document.lua_state, entry_id, self._narrative_investigation())
+            if semantic is not None:
+                return semantic
+        semantic = save_history.descriptor(self.document.lua_state, entry_id, game_path=self._game_path)
+        if semantic is not None:
+            return semantic
         semantic = save_narrative.descriptor(
             self.document.lua_state, entry_id, game_path=self._game_path
         )
@@ -1152,17 +1210,24 @@ class Hades2SaveWorkspace:
         descriptor = self._descriptor(entry_id)
         root = self.document.lua_state
         prefix = entry_id.partition(":")[0]
-        if prefix == "resource":
+        if save_container.is_id(entry_id):
+            return descriptor, save_container.row(self.document, entry_id, language)
+        if prefix == "advanced":
+            row = save_advanced.row(root, entry_id, language)
+            return descriptor, row
+        if prefix == "questClaim":
+            rows = save_quest_rewards.rows(root, language, self._narrative_investigation(), self._game_path, include_absent=True)
+        elif prefix == "history":
+            rows = save_history.rows(root, language, game_path=self._game_path)
+        elif prefix == "resource":
             rows = self._resource_rows(language)
         elif prefix == "playerStat":
             rows = self._player_stat_rows(language)
-        elif prefix in ("flag", "dialogue", "quest"):
-            rows = save_narrative.rows(
-                root, descriptor["domain"], language, game_path=self._game_path
-            )
-        elif prefix in ("interaction", "specialInteraction", "card", "objective"):
+        elif prefix in ("flag", "dialogue", "dialogueReset", "dialogueChoice", "quest", "questObservation", "speech"):
+            rows = [save_narrative.entry_row(root, entry_id, language, self._game_path)]
+        elif prefix in ("interaction", "specialInteraction", "gift", "card", "objective"):
             rows = save_long_term.rows(
-                root, descriptor["domain"], language, game_path=self._game_path
+                root, descriptor["domain"], language, game_path=self._game_path, include_absent=True
             )
         else:
             rows = save_equipment.rows(
@@ -1214,7 +1279,8 @@ class Hades2SaveWorkspace:
         elif category == "familiar":
             relevant = [
                 intent for intent in intents
-                if intent["id"].startswith("familiar:") or intent["id"] == "familiarSelection"
+                if intent["id"].startswith(("familiar:", "familiarSelected:", "familiarUpgrade:"))
+                or intent["id"] == "familiarSelection"
             ]
         else:
             relevant = list(intents)
@@ -1246,8 +1312,10 @@ class Hades2SaveWorkspace:
         intents = tuple(intents)
         rows = []
         rows.extend(save_narrative.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_quest_rewards.linked_changes(self.document.lua_state, intents))
         rows.extend(save_long_term.linked_changes(self.document.lua_state, intents))
         rows.extend(save_equipment.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_container.linked_changes(self.document, intents))
         unique = {}
         order = []
         for row in rows:
@@ -1272,30 +1340,50 @@ class Hades2SaveWorkspace:
         identity = effect["id"]
         root = self.document.lua_state
 
+        if identity == "linked:save-container:cosmetics_points":
+            result["name"] = "装饰点数 · 格式字段" if language == "zh-CN" else "Cosmetics points · format field"
+            return result
+
+        if identity.startswith("linked:arcanaCache:"):
+            result["name"] = save_long_term.linked_cache_label(effect["rawId"], language, game_path=self._game_path)
+            return result
+
+        if identity.startswith("linked:giftTotal:"):
+            resource = identity[len("linked:giftTotal:"):]
+            native = official_display_names((resource,), language, game_path=self._game_path)
+            result["name"] = ("赠礼资源累计 · " if language == "zh-CN" else "Gift resource total · ") + native.get(resource, resource)
+            return result
+
+        if identity.startswith("linked:questReward:"):
+            path = effect["path"]
+            owner_name = path[-2] if len(path) > 2 else path[-1]
+            labels = {
+                "Resources": ("资源库存", "Resource balance"),
+                "LifetimeResourcesGained": ("累计获得资源", "Lifetime resource gains"),
+                "ResourcesGained": ("当前挑战获得资源", "CurrentRun resource gains"),
+                "QuestsCompleted": ("任务完成记录", "Quest completion history"),
+                "UnviewedLastResourceGained": ("最近获得资源提示", "Last gained resource indicator"),
+            }
+            pair = labels[owner_name]
+            result["name"] = pair[0 if language == "zh-CN" else 1]
+            if len(path) > 2:
+                native = official_display_names((path[-1],), language, game_path=self._game_path)
+                result["name"] += " · " + native.get(path[-1], path[-1])
+            return result
+
         if identity.startswith("linked:card:"):
             parts = identity.split(":")
             if len(parts) == 4:
                 name, field = parts[2], parts[3]
                 rows = save_long_term.rows(
-                    root, "progression", language, game_path=self._game_path
+                    root, "progression", language, game_path=self._game_path, include_absent=True
                 )
-                if field == "Level":
-                    row = next(
-                        (item for item in rows if item["id"] == "card:{}:Level".format(name)),
-                        None,
-                    )
-                    if row is not None:
-                        result["name"] = row["name"]
-                        return result
                 row = next(
-                    (item for item in rows if item["id"] == "card:{}:Unlocked".format(name)),
+                    (item for item in rows if item["id"] == "card:{}:{}".format(name, field)),
                     None,
                 )
                 if row is not None:
-                    entity = row.get("entityName") or row["name"]
-                    result["name"] = entity + (
-                        " · 已装备" if language == "zh-CN" else " · Equipped"
-                    )
+                    result["name"] = row["name"]
                     return result
 
         if identity.startswith("linked:quest:"):
@@ -1371,21 +1459,53 @@ class Hades2SaveWorkspace:
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
-        if descriptor["domain"] == "weapons":
+        if descriptor["domain"] == "advanced":
+            if operation in ("addMembership", "removeMembership"):
+                descriptor, operation, value = (save_container.member_descriptor(
+                    self.document, descriptor, operation, value) if save_container.is_id(entry_id) else
+                    save_advanced.member_descriptor(self.document.lua_state, descriptor, operation, value))
+                entry_id = descriptor["id"]
+            if operation == "unset":
+                after, typed_after = None, {"luaType": "nil", "value": None}
+                no_change = not descriptor["beforePresent"]
+            else:
+                after, typed_after = (save_container.normalize_set(descriptor, value)
+                    if save_container.is_id(entry_id) else save_advanced.normalize_set(descriptor, value))
+                no_change = descriptor["beforePresent"] and descriptor["typedBefore"] == typed_after
+            snapshot = dict(self._pending)
+            if no_change and not self._overlaps_pending_transaction(descriptor):
+                self._pending.pop(entry_id, None)
+            else:
+                self._pending[entry_id] = {
+                    **{key: descriptor[key] for key in ("id", "domain", "rawId", "path", "before", "beforePresent", "typedBefore")},
+                    "operation": operation, "after": after, "typedAfter": typed_after,
+                    "afterPresent": operation != "unset",
+                }
+            try:
+                return self.review(language=language)
+            except Exception:
+                self._pending.clear()
+                self._pending.update(snapshot)
+                raise
+        if descriptor["domain"] == "questRewards":
+            value = save_quest_rewards.validate(descriptor, operation, value)
+        elif descriptor["domain"] == "history":
+            value = save_history.validate(descriptor, operation, value)
+        elif descriptor["domain"] == "weapons":
             save_equipment.validate(descriptor, operation, value)
-        elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+        elif entry_id.startswith(("interaction:", "specialInteraction:", "gift:", "card:", "objective:")):
             save_long_term.validate(descriptor, operation, value)
-        elif descriptor["domain"] in ("flags", "dialogue", "progression"):
+        elif descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.validate(descriptor, operation, value)
         if operation == "set":
             if descriptor["domain"] == "resources":
                 if (
                     type(value) is not int
                     or isinstance(value, bool)
-                    or not 0 <= value <= MAX_AMOUNT
+                    or not 0 <= value <= _MAX_EXACT_LUA_INTEGER
                 ):
-                    raise ValueError(
-                        "Save Editor resource value must be an integer 0..999999."
+                    raise save_advanced.AdvancedMutationError(
+                        "Save Editor resource balance must be a non-negative, exactly representable Lua integer."
                     )
             elif descriptor["domain"] == "playerStats":
                 constraints = descriptor["constraints"]
@@ -1412,7 +1532,11 @@ class Hades2SaveWorkspace:
                     value = float(value)
         before = descriptor["before"]
         snapshot = dict(self._pending)
-        if value == before:
+        no_change = (save_narrative.is_noop(self.document.lua_state, descriptor, value)
+                     if descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory")
+                     and entry_id.startswith(("flag:", "dialogue:", "dialogueReset:", "dialogueChoice:", "quest:", "questObservation:", "speech:"))
+                     else value == before)
+        if no_change and descriptor.get("beforePresent", True) and not self._overlaps_pending_transaction(descriptor):
             self._pending.pop(entry_id, None)
         else:
             self._pending[entry_id] = {
@@ -1423,6 +1547,8 @@ class Hades2SaveWorkspace:
                 "operation": operation,
                 "before": before,
                 "after": value,
+                **({"ownerEvidence": descriptor["ownerEvidence"]} if descriptor["domain"] == "questRewards" else {}),
+                **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] in ("history", "resources") else {}),
             }
         try:
             return self.review(language=language)
@@ -1448,7 +1574,11 @@ class Hades2SaveWorkspace:
         # A staged batch represents a set of user intents, not a sequence of
         # mutations. Canonical ordering makes overlapping side effects and the
         # resulting constraint error independent of click/staging order.
-        intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
+        intents = tuple(sorted(intents, key=save_container.intent_sort_key))
+        semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
+        if any(intent["domain"] == "advanced" for intent in intents):
+            semantic_root = self._project_intent_batch_root(semantic)
+            save_container.validate_overlaps(self.document.lua_state, intents, semantic_root)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never
@@ -1456,12 +1586,24 @@ class Hades2SaveWorkspace:
             descriptor = self._descriptor(intent["id"])
             if intent["operation"] not in descriptor["mutationKinds"]:
                 raise ValueError("Save Editor mutation is no longer allowed.")
-            if intent["before"] != descriptor["before"]:
+            if intent.get("ownerEvidence") != descriptor.get("ownerEvidence"):
+                raise save_advanced.AdvancedMutationError("Save Editor staged reward source has changed; remove and stage the claim again.", conflict=True)
+            if ((intent.get("typedBefore") != descriptor.get("typedBefore"))
+                    if intent["domain"] == "advanced" else
+                    (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
+                     intent["beforePresent"] != descriptor["beforePresent"]))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
-            self._apply_intent(candidate, intent)
+        self._apply_intent_batch(candidate, intents)
+        save_quest_rewards.validate_batch(self.document.lua_state, intents, self._project_intent_batch_root)
+        save_relationships.validate_transaction_owners(self.document.lua_state, intents, self._project_intent_batch_root)
         try:
-            save_long_term.validate_batch(candidate.lua_state, intents)
-            save_equipment.validate_batch(candidate.lua_state, intents)
+            save_container.finalize_batch(candidate, intents)
+            if semantic:
+                save_long_term.finalize_batch(
+                    candidate.lua_state, semantic, source=self.document.lua_state)
+                save_narrative.validate_batch(candidate.lua_state, semantic)
+                save_long_term.validate_batch(candidate.lua_state, semantic)
+                save_equipment.validate_batch(candidate.lua_state, semantic)
         except ValueError as error:
             presented = self._actionable_batch_error(error, intents, language)
             if presented is error:
@@ -1469,9 +1611,22 @@ class Hades2SaveWorkspace:
             raise presented from error
         return candidate
 
+    def _overlaps_pending_transaction(self, descriptor):
+        return (save_quest_rewards.overlaps_pending_claim(self._pending.values(), descriptor)
+                or save_relationships.overlaps_pending_gift(self._pending.values(), descriptor))
+
     def _validated_review_state(self, intents, language="en"):
-        candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
-        return self._apply_and_validate_intents(candidate, intents, language)
+        intents = tuple(intents)
+        raw = any(intent["domain"] == "advanced" for intent in intents)
+        candidate = (Hades2SaveDocument.from_bytes(self.document.to_bytes()) if raw else
+                     SimpleNamespace(lua_state=clone_lua_value(self.document.lua_state)))
+        result = self._apply_and_validate_intents(candidate, intents, language)
+        if raw:
+            try:
+                candidate.to_bytes()
+            except HadesSaveFormatError as error:
+                raise save_advanced.AdvancedMutationError(str(error)) from error
+        return result
 
     def review(self, language="en"):
         if language not in ("en", "zh-CN"):
@@ -1486,7 +1641,10 @@ class Hades2SaveWorkspace:
             # Reject a stale or ambiguous preview before linked effects are shown.
             descriptor, row = self._pending_action_row(intent["id"], language)
             if (intent["operation"] not in descriptor["mutationKinds"]
-                    or intent["before"] != descriptor["before"]):
+                    or (intent.get("typedBefore") != descriptor.get("typedBefore")
+                        if intent["domain"] == "advanced" else
+                        (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
+                         intent["beforePresent"] != descriptor["beforePresent"])))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             direct.append({
                 key: intent[key]
@@ -1502,7 +1660,7 @@ class Hades2SaveWorkspace:
             self._validated_review_state(intents, language)
 
         try:
-            effects = self._linked_change_rows(intents)
+            effects = self._linked_change_rows(intents) if intents else []
         except ValueError as error:
             presented = self._actionable_batch_error(error, intents, language)
             if presented is error:
@@ -1531,10 +1689,17 @@ class Hades2SaveWorkspace:
                 "constraints": dict(row.get("constraints") or {}),
                 "choices": list(row.get("choices") or ()),
                 "choiceNames": dict(row.get("choiceNames") or {}),
+                **({"beforePresent": intent["beforePresent"], "afterPresent": True} if intent["domain"] in ("history", "resources") else {}),
                 "effects": [
                     self._present_linked_effect(effect, language)
                     for effect in effects_by_action.get(intent["id"], [])
                 ],
+                **({"typedBefore": intent["typedBefore"], "typedAfter": intent["typedAfter"],
+                    "typedValue": intent["typedAfter"], "beforePresent": intent["beforePresent"],
+                    "afterPresent": intent["afterPresent"], "warning": save_advanced.warning(language),
+                    "valueType": ("binary" if (intent["typedBefore"] if intent["operation"] == "unset" else intent["typedAfter"]).get("encoding") == "base64" else
+                        (intent["typedBefore"] if intent["operation"] == "unset" else intent["typedAfter"])["luaType"])}
+                   if intent["domain"] == "advanced" else {}),
             })
 
         changes = direct + effects
@@ -1553,19 +1718,50 @@ class Hades2SaveWorkspace:
         self._pending.clear()
         return self.review(language=language)
 
+    def _project_intent_batch_root(self, intents):
+        # Batch planners may include header, extra-payload or whole-root edits.
+        # Project a complete document and return its resulting root: an in-place
+        # Lua-only callback loses both container state and root replacements.
+        intents = tuple(intents)
+        candidate = Hades2SaveDocument.from_bytes(self.document.to_bytes())
+        self._apply_intent_batch(candidate, intents)
+        save_long_term.finalize_batch(candidate.lua_state, intents, source=self.document.lua_state)
+        save_container.finalize_batch(candidate, intents)
+        return candidate.lua_state
+
+    def _apply_intent_batch(self, document, intents):
+        for intent in intents:
+            if not intent["id"].startswith(("gift:", "questClaim:")):
+                self._apply_intent(document, intent)
+        save_relationships.apply_batch(document.lua_state, intents)
+        save_quest_rewards.apply_batch(document.lua_state, intents)
+
     @staticmethod
     def _apply_intent(document, intent):
+        if intent["domain"] == "questRewards":
+            save_quest_rewards.apply_batch(document.lua_state, (intent,))
+            return
+        if save_container.is_id(intent["id"]):
+            save_container.apply_intent(document, intent)
+            return
+        if intent["domain"] == "advanced":
+            save_advanced.apply_intent(document.lua_state, intent)
+            return
+        if intent["domain"] == "history":
+            save_history.apply_intent(document.lua_state, intent)
+            return
         if intent["domain"] == "weapons":
             save_equipment.apply_intent(document.lua_state, intent)
             return
-        if intent["id"].startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+        if intent["id"].startswith(("interaction:", "specialInteraction:", "gift:", "card:", "objective:")):
             save_long_term.apply_intent(document.lua_state, intent)
             return
-        if intent["domain"] in ("flags", "dialogue", "progression"):
+        if intent["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.apply_intent(document.lua_state, intent)
             return
         path = intent["path"]
-        owner = _lua_path(document.lua_state, path[:-1])
+        owner = (lua_owner(document.lua_state, path[:-1], create=True)
+                 if intent["domain"] == "resources" else _lua_path(document.lua_state, path[:-1]))
         if not isinstance(owner, LuaTable):
             raise ValueError("Save Editor mutation owner is not a table.")
         key = path[-1]

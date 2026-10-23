@@ -523,6 +523,11 @@ def _encode_luabins(values):
     return bytes(writer.data)
 
 
+def clone_lua_value(value):
+    """Copy a structured value within the codec's supported depth and types."""
+    return _decode_luabins(_encode_luabins([value]))[0]
+
+
 def _parse_header_prefix(data):
     """Validate an SGB1 file and decode the complete Hades header prefix.
 

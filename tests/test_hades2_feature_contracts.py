@@ -130,6 +130,7 @@ parts = [
     source_section(view, "private var nextRoomRewardPanel: some View {", "private var resourcePanel:"),
     source_section(view, "private var rewardSpawningPanel: some View {", "private var boonAcquisitionPanel:"),
     source_section(view, "private var management: some View {", "private func featureRow("),
+    management.split("struct Hades2ManagementUtilities: View {", 1)[1],
 ]
 visible_actions = [action for part in parts for action in shortcut_references(part)]
 if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:

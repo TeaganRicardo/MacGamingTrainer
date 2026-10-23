@@ -29,11 +29,13 @@ def entity_page(rows, *, search, offset, limit, aliases=None):
             grouped[identity] = {
                 "id": identity, "name": title, "items": [],
                 "_terms": set(), "_populated": False, "_writable": False,
+                "_browseReadOnly": False,
             }
         group = grouped[identity]
         group["items"].append(row)
-        group["_populated"] |= _meaningful(row.get("value"))
+        group["_populated"] |= _meaningful(row.get("value")) or bool(row.get("_browseReadOnly"))
         group["_writable"] |= bool(row.get("editable") and row.get("mutationKinds"))
+        group["_browseReadOnly"] |= bool(row.get("_browseReadOnly"))
         group["_terms"].update(
             str(item).casefold() for item in (
                 identity, title, row["id"], row["rawId"],
@@ -48,7 +50,7 @@ def entity_page(rows, *, search, offset, limit, aliases=None):
         if needle:
             if not any(needle in term for term in group["_terms"]):
                 continue
-        elif not group["_populated"] or not group["_writable"]:
+        elif not group["_populated"] or not (group["_writable"] or group["_browseReadOnly"]):
             # Default browse favors present, actionable state. Deliberate
             # search still finds zero-valued and non-editable native records.
             continue

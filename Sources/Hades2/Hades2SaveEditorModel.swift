@@ -26,10 +26,25 @@ enum Hades2SaveEditorPathComponent: Hashable {
     case integer(Int)
     case number(Double)
     case boolean(Bool)
+    case typed(Hades2SaveTypedValue)
+    case saveContainer(String)
 
     init?(_ value: Any) {
         if let text = value as? String {
             self = .string(text)
+            return
+        }
+        if let object = value as? [String: Any], object["saveContainer"] != nil {
+            guard object.count == 1, let name = object["saveContainer"] as? String,
+                  ["header", "payload", "main"].contains(name) else { return nil }
+            self = .saveContainer(name)
+            return
+        }
+        if let object = value as? [String: Any],
+           let typed = Hades2SaveTypedValue(object),
+           typed.kind == "string" || (typed.kind == "number" && object["encoding"] as? String == "nonfinite"
+               && ["inf", "-inf"].contains(object["value"] as? String ?? "")) {
+            self = .typed(typed)
             return
         }
         guard let number = value as? NSNumber else { return nil }
@@ -55,6 +70,8 @@ enum Hades2SaveEditorPathComponent: Hashable {
         case .integer(let value): return value
         case .number(let value): return value
         case .boolean(let value): return value
+        case .typed(let value): return value.object
+        case .saveContainer(let name): return ["saveContainer": name]
         }
     }
 }
@@ -104,6 +121,10 @@ struct Hades2SaveEditorAction: Identifiable, Equatable {
     let choices: [String]
     let choiceNames: [String: String]
     let effects: [Hades2SaveEditorChange]
+    var typedBefore: Hades2SaveTypedValue? = nil
+    var typedAfter: Hades2SaveTypedValue? = nil
+    var beforePresent = true
+    var afterPresent = true
 
     var id: String { entryID }
 
@@ -133,7 +154,8 @@ struct Hades2SaveEditorAction: Identifiable, Equatable {
             investigationReason: nil,
             discoveryState: nil,
             discoveryReasonCode: nil,
-            discoveryReason: nil
+            discoveryReason: nil,
+            typedValue: typedAfter ?? typedBefore
         )
     }
 }
@@ -173,6 +195,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let discoveryState: String?
     let discoveryReasonCode: String?
     let discoveryReason: String?
+    var typedValue: Hades2SaveTypedValue? = nil
+    var warning: String? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -200,6 +224,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.discoveryState == rhs.discoveryState
             && lhs.discoveryReasonCode == rhs.discoveryReasonCode
             && lhs.discoveryReason == rhs.discoveryReason
+            && lhs.typedValue == rhs.typedValue
+            && lhs.warning == rhs.warning
     }
 }
 
@@ -402,9 +428,12 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var pendingEffectCount = 0
     @Published private(set) var pendingPhysicalChangeCount = 0
     @Published private(set) var editRevision = 0
-    private(set) var reconciledEntryID: String?
+    private(set) var reconciledEntryIDs: Set<String>?
     @Published private(set) var busy = false
-    @Published private(set) var failure: TrainerTextToken?
+    @Published private(set) var operationFailures: [Hades2Command: TrainerTextToken] = [:]
+    @Published private(set) var editFailures: [String: TrainerTextToken] = [:]
+    @Published private(set) var typedDrafts: [String: String] = [:]
+    @Published private(set) var membershipDrafts: [String: Hades2SaveAdvancedMembershipDraft] = [:]
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingActions.count }
@@ -425,7 +454,6 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func open(language: TrainerPresentationLanguage) {
         self.language = language
-        failure = nil
         lastApplyReceipt = nil
         invalidateDetail()
         refreshFiles(openDefault: true)
@@ -437,17 +465,18 @@ final class Hades2SaveEditorModel: ObservableObject {
             guard let self, reply.success, let result = reply.result else { return }
             guard let sources = result["sources"] as? [[String: Any]],
                   let targets = result["targets"] as? [[String: Any]] else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorInventory] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             let decodedSources = sources.compactMap(Hades2SaveEditorFile.init)
             let decodedTargets = targets.compactMap(Hades2SaveEditorFile.init)
             guard decodedSources.count == sources.count, decodedTargets.count == targets.count else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorInventory] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.sourceFiles = decodedSources
             self.writeTargets = decodedTargets
+            self.operationFailures.removeValue(forKey: .saveEditorInventory)
             if openDefault, self.workspaceID == nil,
                let source = result["defaultSource"] as? [String: String],
                let selected = decodedSources.first(where: { $0.identity == source }) {
@@ -474,7 +503,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 return
             }
             guard self.applySummary(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 self.restoreLoadedSourceSelection()
                 return
             }
@@ -482,6 +511,10 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.releaseWorkspace(previousWorkspace)
             }
             self.pendingActions = []
+            self.operationFailures = [:]
+            self.editFailures = [:]
+            self.typedDrafts = [:]
+            self.membershipDrafts = [:]
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
             self.items = []
@@ -503,6 +536,10 @@ final class Hades2SaveEditorModel: ObservableObject {
         invalidateDetail()
         if let workspaceID { releaseWorkspace(workspaceID) }
         workspaceID = nil
+        operationFailures = [:]
+        editFailures = [:]
+        typedDrafts = [:]
+        membershipDrafts = [:]
     }
 
     private func releaseWorkspace(_ identifier: String) {
@@ -526,11 +563,11 @@ final class Hades2SaveEditorModel: ObservableObject {
                 announceSuccess: false) { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
             guard self.applySummary(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorTarget] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.lastApplyReceipt = nil
-            self.failure = nil
+            self.operationFailures.removeValue(forKey: .saveEditorTarget)
         }
     }
 
@@ -836,6 +873,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func parsedTextDraft(for entry: Hades2SaveEditorEntry, text: String) -> Any? {
+        if entry.valueType == "string" { return text }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if entry.valueType == "enum" { return entry.choices.contains(trimmed) ? trimmed : nil }
         guard !trimmed.isEmpty else { return nil }
@@ -864,26 +902,77 @@ final class Hades2SaveEditorModel: ObservableObject {
     func completeTextEdit(_ entry: Hades2SaveEditorEntry, text: String, changed: Bool = true) -> String {
         guard changed else { return text }
         guard !busy else {
-            failure = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
             return text
         }
         guard entry.editable, !entry.mutationKinds.isEmpty,
               let value = parsedTextDraft(for: entry, text: text) else {
-            failure = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
             return text
         }
         stage(entryID: entry.id, operation: entry.mutationKinds.contains("setEnum") ? "setEnum" : "set", value: value)
         return String(describing: value)
     }
 
-    private func reconcileEdit(_ entryID: String?) {
-        reconciledEntryID = entryID
+    func loadAdvancedValue(
+        _ entry: Hades2SaveEditorEntry,
+        language requestedLanguage: TrainerPresentationLanguage,
+        completion: @escaping (Hades2SaveAdvancedDetail?, TrainerTextToken?) -> Void
+    ) {
+        guard entry.domain == "advanced", let workspace = workspaceID else { return }
+        perform(.saveEditorDetail(entryID: entry.id, language: requestedLanguage.rawValue),
+                operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
+                occupy: false, presentFailure: false) { [weak self] reply in
+            guard let self, self.workspaceID == workspace else { return }
+            guard reply.success, let result = reply.result,
+                  let detail = Hades2SaveAdvancedDetail(result), detail.entryID == entry.id else {
+                completion(nil, reply.failure.map {
+                    TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
+                } ?? TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse"))
+                return
+            }
+            completion(detail, nil)
+        }
+    }
+
+    func completeTypedEdit(_ entry: Hades2SaveEditorEntry, text: String, changed: Bool = true) -> String {
+        guard changed else { return text }
+        typedDrafts[entry.id] = text
+        guard !busy else {
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
+            return text
+        }
+        guard entry.editable, entry.mutationKinds.contains("set"),
+              let value = Hades2SaveTypedValue(text: text) else {
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+            return text
+        }
+        stage(entryID: entry.id, operation: "set", value: value.object)
+        return value.json
+    }
+
+    func retainMembershipDraft(_ draft: Hades2SaveAdvancedMembershipDraft, for entryID: String) {
+        guard workspaceID != nil else { return }
+        membershipDrafts[entryID] = draft
+    }
+
+    private func reconcileEdits(_ entryIDs: Set<String>?, preservingTypedDrafts: Bool = false) {
+        if let entryIDs {
+            if !preservingTypedDrafts {
+                for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID) }
+            }
+        } else {
+            typedDrafts = [:]
+            membershipDrafts = [:]
+        }
+        reconciledEntryIDs = entryIDs
         editRevision += 1
     }
 
     func stage(entryID: String, operation: String, value: Any?) {
         lastApplyReceipt = nil
         let requestedLanguage = language
+        let workspace = workspaceID
         perform(
             .saveEditorStage(
                 entryID: entryID,
@@ -892,35 +981,53 @@ final class Hades2SaveEditorModel: ObservableObject {
                 language: requestedLanguage.rawValue
             ),
             operation: "hades2.saveEditor.operation.stage",
-            announceSuccess: false
+            announceSuccess: false,
+            presentFailure: false
         ) { [weak self] reply in
-            guard let self else { return }
-            defer { self.reconcileEdit(entryID) }
-            guard reply.success, let result = reply.result else { return }
-            guard self.applyReview(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+            guard let self, self.workspaceID == workspace else { return }
+            var acknowledged = false
+            // Inline controls still restore their acknowledged projection on
+            // refusal; the structure editor retains its explicit typed input
+            // so reopening can correct a backend-only codec/conflict error.
+            defer { self.reconcileEdits([entryID], preservingTypedDrafts: !acknowledged) }
+            guard reply.success, let result = reply.result else {
+                self.editFailures[entryID] = reply.failure.map {
+                    TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
+                } ?? TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.failure = nil
+            guard self.applyReview(result) else {
+                self.editFailures[entryID] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.editFailures.removeValue(forKey: entryID)
+            acknowledged = true
             if self.language != requestedLanguage { self.review() }
         }
     }
 
     func unstage(entryID: String) {
         let requestedLanguage = language
+        let workspace = workspaceID
         perform(
             .saveEditorUnstage(entryID: entryID, language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.unstage",
-            announceSuccess: false
+            announceSuccess: false,
+            presentFailure: false
         ) { [weak self] reply in
-            guard let self else { return }
-            defer { self.reconcileEdit(entryID) }
-            guard reply.success, let result = reply.result else { return }
-            guard self.applyReview(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+            guard let self, self.workspaceID == workspace else { return }
+            guard reply.success, let result = reply.result else {
+                self.editFailures[entryID] = reply.failure.map {
+                    TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
+                } ?? TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.failure = nil
+            guard self.applyReview(result) else {
+                self.editFailures[entryID] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.editFailures.removeValue(forKey: entryID)
+            self.reconcileEdits([entryID])
             if self.language != requestedLanguage { self.review() }
         }
     }
@@ -939,27 +1046,30 @@ final class Hades2SaveEditorModel: ObservableObject {
                   self.language == requestedLanguage,
                   reply.success, let result = reply.result else { return }
             guard self.applyReview(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorReview] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.failure = nil
+            self.operationFailures.removeValue(forKey: .saveEditorReview)
         }
     }
 
     func cancel() {
         let requestedLanguage = language
+        let workspace = workspaceID
         perform(
             .saveEditorCancel(language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.cancel",
             announceSuccess: false
         ) { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self, self.workspaceID == workspace,
+                  reply.success, let result = reply.result else { return }
             guard self.applyReview(result) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorCancel] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.reconcileEdit(nil)
-            self.failure = nil
+            self.editFailures = [:]
+            self.reconcileEdits(nil)
+            self.operationFailures.removeValue(forKey: .saveEditorCancel)
         }
     }
 
@@ -968,26 +1078,31 @@ final class Hades2SaveEditorModel: ObservableObject {
         let appliedOffset = offset
         let source = sourceRootID + "/" + sourceRelativePath
         let target = selectedTargetID
+        let appliedEntryIDs = Set(pendingActions.map(\.entryID))
+        let workspace = workspaceID
         lastApplyReceipt = nil
         perform(
             .saveEditorApply,
             operation: "hades2.saveEditor.operation.apply"
         ) { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self, self.workspaceID == workspace,
+                  reply.success, let result = reply.result else { return }
             guard let receipt = self.decodeApplyReceipt(
                 result,
                 source: source,
                 target: target
             ) else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.operationFailures[.saveEditorApply] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.pendingActions = []
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
-            self.reconcileEdit(nil)
+            // Apply commits acknowledged actions. A later invalid draft is
+            // still waiting for correction, even when it shares their field.
+            self.reconcileEdits(appliedEntryIDs.subtracting(self.editFailures.keys))
             self.lastApplyReceipt = receipt
-            self.failure = nil
+            self.operationFailures.removeValue(forKey: .saveEditorApply)
             self.query(offset: appliedOffset)
         }
     }
@@ -1157,7 +1272,11 @@ final class Hades2SaveEditorModel: ObservableObject {
                 constraints: constraints,
                 choices: row["choices"] as? [String] ?? [],
                 choiceNames: row["choiceNames"] as? [String: String] ?? [:],
-                effects: effects
+                effects: effects,
+                typedBefore: row["typedBefore"].flatMap(Hades2SaveTypedValue.init),
+                typedAfter: row["typedAfter"].flatMap(Hades2SaveTypedValue.init),
+                beforePresent: row["beforePresent"] as? Bool ?? true,
+                afterPresent: row["afterPresent"] as? Bool ?? true
             ))
         }
         guard decodedEffectCount == effectCount else { return false }
@@ -1176,6 +1295,8 @@ final class Hades2SaveEditorModel: ObservableObject {
         presentFailure: Bool = true,
         reply: @escaping (BackendReply) -> Void
     ) {
+        let ownsWorkspace = request.command != .saveEditorOpen && request.command != .saveEditorInventory
+        let requestWorkspaceID = ownsWorkspace ? workspaceID : nil
         if occupy {
             pendingRequests += 1
             busy = true
@@ -1184,11 +1305,12 @@ final class Hades2SaveEditorModel: ObservableObject {
             request,
             operation: operation,
             announceSuccess: announceSuccess,
-            saveWorkspaceID: (request.command == .saveEditorOpen || request.command == .saveEditorInventory) ? nil : workspaceID,
+            saveWorkspaceID: requestWorkspaceID,
             reply: { [weak self] backendReply in
-                if presentFailure, !backendReply.success,
+                if presentFailure, (!ownsWorkspace || self?.workspaceID == requestWorkspaceID),
+                   !backendReply.success,
                    let backendFailure = backendReply.failure {
-                    self?.failure = TrainerTextToken(
+                    self?.operationFailures[request.command] = TrainerTextToken(
                         key: backendFailure.presentation,
                         arguments: backendFailure.presentationArguments
                     )
@@ -1254,7 +1376,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             investigationReason: row["reason"] as? String,
             discoveryState: row["state"] as? String,
             discoveryReasonCode: (row["reasonCode"] as? String) ?? (row["blockReasonCode"] as? String),
-            discoveryReason: row["reason"] as? String
+            discoveryReason: (row["readOnlyReason"] as? String)
+                ?? (row["blockReasonDiagnostic"] as? String)
+                ?? (row["reason"] as? String),
+            typedValue: row["typedValue"].flatMap(Hades2SaveTypedValue.init),
+            warning: row["warning"] as? String
         )
     }
 

@@ -97,7 +97,7 @@ assert 'TrainerRow(opacity:' in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(text: $amount' in resource
 assert 'TrainerLockButton(' in resource
-assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
+assert 'localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title])' in lock_button
 
 print('hades2_visual_baseline_v0175_ok')
 

@@ -75,14 +75,21 @@ state = {
     "ObjectivesCompleted": table({}),
     "CompletedObjectiveSets": table({}),
 }
+ARCANA_CACHE_EFFECTS = {
+    "linked:arcanaCache:MetaUpgradeUnlockedCountCache",
+    "linked:arcanaCache:MetaUpgradeMaxLevelCountCache",
+    "linked:arcanaCache:MetaUpgradeCostCache",
+    "linked:arcanaCache:MaxMetaUpgradeCostCache",
+    "linked:arcanaCache:MetaUpgradeCardLayout",
+}
 saves, workspace = environment("basic", state)
 workspace.stage("card:ChanneledCast:Unlocked", "set", False)
 workspace.stage("interaction:NPC_Hecate_01", "set", 4)
 workspace.stage("resource:MetaCurrency", "set", 50)
 review = workspace.review(language="en")
 assert review["actionCount"] == 3
-assert review["effectCount"] == 2
-assert review["physicalChangeCount"] == 5
+assert review["effectCount"] == 7
+assert review["physicalChangeCount"] == 10
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked",
     "interaction:NPC_Hecate_01",
@@ -95,7 +102,7 @@ assert arcana["valueType"] == "boolean"
 assert {effect["id"] for effect in arcana["effects"]} == {
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 zh_arcana = workspace.review(language="zh-CN")["actions"][0]["effects"]
 assert any(effect["name"].endswith("已装备") for effect in zh_arcana)
 assert any(effect["name"].endswith("等级") for effect in zh_arcana)
@@ -107,7 +114,7 @@ assert review["actionCount"] == 2
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked", "resource:MetaCurrency",
 ]
-assert review["effectCount"] == 2
+assert review["effectCount"] == 7
 
 # Restaging an existing action revises it in place rather than adding another
 # user action, even after unrelated query/browse work.
@@ -116,13 +123,13 @@ review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
 assert review["actions"][1]["entryId"] == "resource:MetaCurrency"
 assert review["actions"][1]["after"] == 75
-assert review["physicalChangeCount"] == 4
+assert review["physicalChangeCount"] == 9
 assert {row["id"] for row in review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "resource:MetaCurrency",
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 
 # Cancel clears the requested-action set without touching the loaded source;
 # re-staging reconstructs the same linked projection from intent, not cached diff.
@@ -133,8 +140,8 @@ assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] ==
 workspace.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
-assert review["effectCount"] == 2
-assert review["physicalChangeCount"] == 4
+assert review["effectCount"] == 7
+assert review["physicalChangeCount"] == 9
 
 # Applying the remaining two requested actions crosses the Save transaction
 # exactly once and clears the action basket.
@@ -160,23 +167,23 @@ _, arcana_overlap = environment("arcana-overlap", arcana_overlap_state)
 arcana_overlap.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 overlap_review = arcana_overlap.stage("card:ChanneledCast:Level", "set", 1, language="en")
 assert overlap_review["actionCount"] == 2
-assert overlap_review["effectCount"] == 1
-assert overlap_review["physicalChangeCount"] == 3
+assert overlap_review["effectCount"] == 6
+assert overlap_review["physicalChangeCount"] == 8
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "card:ChanneledCast:Level",
     "linked:card:ChanneledCast:Equipped",
-}
-assert len({row["id"] for row in overlap_review["changes"]}) == 3
+} | ARCANA_CACHE_EFFECTS
+assert len({row["id"] for row in overlap_review["changes"]}) == 8
 overlap_review = arcana_overlap.unstage("card:ChanneledCast:Level", language="en")
 assert overlap_review["actionCount"] == 1
-assert overlap_review["effectCount"] == 2
-assert overlap_review["physicalChangeCount"] == 3
+assert overlap_review["effectCount"] == 7
+assert overlap_review["physicalChangeCount"] == 8
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 
 # Overlapping direct/linked ownership must be recomputed rather than cached.
 # Disabling the equipped familiar implies clearing the selection. Explicitly
@@ -235,8 +242,7 @@ survivors = conflict.review(language="en")
 assert survivors["actionCount"] == 1
 assert survivors["actions"][0]["entryId"] == "weapon:WeaponDagger"
 
-# A source-known but read-only relationship record never becomes a requested
-# action merely because it is visible in the entity/search projection.
+# Stored gift quantities are actual requested actions, with aggregate effects.
 gift_npc = LuaTable(1, 1, [(1.0, "GiftPoints"), ("GiftPoints", 1.0)])
 read_only_state = {
     "NPCInteractions": table({"NPC_Hecate_01": 1.0}),
@@ -247,17 +253,17 @@ read_only_state = {
     "ObjectivesCompleted": table({}),
     "CompletedObjectiveSets": table({}),
 }
-_, read_only = environment("read-only", read_only_state)
-gift_rows = read_only.query(domain="relationships", language="en")["items"]
+gift_saves, read_only = environment("gift-quantity", read_only_state)
+gift_rows = read_only.query(domain="relationships", search="Hecate", language="en")["items"]
 gift = next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")
-assert gift["editable"] is False
-try:
-    read_only.stage("gift:Hecate:GiftPoints", "set", 0, language="en")
-except ValueError:
-    pass
-else:
-    raise AssertionError("read-only gift history became a staged action")
-assert read_only.review(language="en")["actionCount"] == 0
+assert gift["editable"] is True and gift["warning"]
+read_only.stage(gift["id"], "set", 0, language="en")
+assert read_only.review(language="en")["actionCount"] == 1
+read_only.apply()
+gift_state = Hades2SaveDocument.load(gift_saves / "Profile1.sav").lua_state["GameState"]
+assert gift_state["GiftRecord"]["Hecate"]["GiftPoints"] == 0
+assert gift_state["GiftResourceRecord"]["GiftPoints"] == 0
+assert gift_state["GiftRecord"]["Hecate"][1] == "GiftPoints"
 
 # If a previously staged physical owner becomes ambiguous, review fails closed
 # without discarding that intent; the user can still explicitly remove it.

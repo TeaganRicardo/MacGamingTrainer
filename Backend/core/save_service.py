@@ -15,6 +15,7 @@ from .save_restore import (
     SaveRollbackError,
 )
 from .save_snapshots import SaveSnapshotError, SaveSnapshotStore
+from .save_retention import SaveBackupRetention
 
 
 class SaveManagementUnsupportedError(RuntimeError):
@@ -35,6 +36,7 @@ class CoreSaveService:
         self.spec = spec
         self.target_running_probe = target_running_probe
         self.store = SaveSnapshotStore(game_id, Path(data_root))
+        self.retention = SaveBackupRetention(self.store)
         self.provider = None
         if spec is not None and spec.provider is not None:
             loader = provider_loader or load_save_provider
@@ -140,13 +142,27 @@ class CoreSaveService:
         running = self._running()
         if running and not allow_running:
             raise SaveBusyError('Game must be stopped before applying a save edit.')
-        return self._transaction().replace_files(
+        result = self._transaction().replace_files(
             replacements,
             expected_hashes,
             post_install_verify=post_install_verify,
             expected_paths=expected_paths,
             target_running=running,
         )
+        # The transaction has already committed and verified. Retention errors
+        # are separate maintenance feedback, never a failed Apply or rollback.
+        try:
+            pending = self.pending_restore()
+            pinned = (pending['snapshotId'],) if pending else ()
+            result['retention'] = self.retention.after_successful_edit(
+                result['previousSnapshotId'], pinned,
+                recovery_pending=bool(self._recovery_paths()) or bool(pending and pending.get('indeterminate')),
+            )
+        except Exception:
+            logging.exception('Automatic backup checkpoint failed after a confirmed save edit')
+            self.retention.warning = 'cleanup_failed'
+            result['retention'] = {'deletedIds': [], 'warning': 'cleanup_failed'}
+        return result
 
     def _staged_path(self):
         return self.store.ensure_storage_root() / 'staged-restore.json'
@@ -280,11 +296,22 @@ class CoreSaveService:
 
     def list_state(self):
         self._require_supported()
+        snapshots = self.store.list_snapshots()
+        recovery_paths = self._recovery_paths()
         return {
-            'snapshots': self.store.list_snapshots(),
+            'snapshots': snapshots,
             'pendingRestore': self.pending_restore(),
-            'recoveryPaths': self._recovery_paths(),
+            'recoveryPaths': recovery_paths,
+            **self.retention.state(snapshots, recovery_paths),
         }
+
+    def configure_retention(self, max_count, max_bytes):
+        self._require_supported()
+        return self.retention.configure(max_count, max_bytes)
+
+    def protect(self, snapshot_id, protected):
+        self._require_supported()
+        return self.store.protect_snapshot(snapshot_id, protected)
 
     def backup(self, display_name=None):
         self._require_supported()
@@ -295,6 +322,7 @@ class CoreSaveService:
             self._resolve,
             hot=running,
             display_name=display_name,
+            origin="manual",
             describe=self._snapshot_naming if self.provider is not None else None,
         )
 

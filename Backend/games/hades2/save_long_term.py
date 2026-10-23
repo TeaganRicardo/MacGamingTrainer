@@ -1,27 +1,21 @@
 """Source-verified relationship and long-term progression save descriptors.
 
-Gift history combines purchased quantities, ordered gifts, dialogue records,
-and game-triggered side effects; it is inspectable but not safely synthesizable.
-Arcana changes preserve unlocked/equipped/level invariants.
+Gift quantities delegate to their own stored-count/aggregate transaction owner;
+ordered gift events and dialogue history remain separate.
+Arcana loadout and automatic-card semantics belong to save_arcana.
 """
 
+from . import save_advanced, save_arcana, save_relationships
+from .save_mutation_utils import owner as lua_owner
 from .localization import official_display_names
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import NPC_INTERACTION_IDS, OBJECTIVE_IDS
 
 _MAX = 9_007_199_254_740_991
-_ARCANA_CARDS = frozenset((
-    "ChanneledCast", "HealthRegen", "LowManaDamageBonus", "CastCount",
-    "SorceryRegenUpgrade", "CastBuff", "BonusHealth", "BonusDodge",
-    "ManaOverTime", "MagicCrit", "SprintShield", "LastStand",
-    "MaxHealthPerRoom", "StatusVulnerability", "ChanneledBlock",
-    "DoorReroll", "StartingGold", "MetaToRunUpgrade", "RarityBoost",
-    "BonusRarity", "TradeOff", "ScreenReroll", "LowHealthBonus",
-    "EpicRarityBoost", "CardDraw",
-))
-# Confirmed against MetaUpgradeCardData.UpgradeResourceCost in target build
-# 1.143476 / 25481925. Each card has two upgrade purchases, hence levels 1..3.
-_ARCANA_MAX_LEVEL = 3
+
+
+def linked_cache_label(raw_id, language, game_path=None):
+    return save_arcana.cache_label(raw_id, language, game_path=game_path)
 
 
 def _state(root):
@@ -88,318 +82,88 @@ def _row(entry_id, domain, raw_id, path, label, en, value, value_type,
     return result
 
 
-def rows(root, domain, language="zh-CN", game_path=None):
+def _counter_rows(state, field, prefix, known, domain, language, game_path, chinese, english, *, person=False):
+    owner_state = None
+    try:
+        collection = state.get(field)
+    except AmbiguousLuaKeyError:
+        collection, owner_state = None, "ambiguous"
+    else:
+        if collection is not None and not isinstance(collection, LuaTable):
+            owner_state = "unsupported"
+    names = set(known)
+    if isinstance(collection, LuaTable):
+        names.update(name for name, _ in collection.entries() if type(name) is str)
+    native, en = _display(names, language, game_path)
+    result = []
+    for name in sorted(names):
+        issue, value, kind = owner_state, 0, "integer"
+        if isinstance(collection, LuaTable):
+            try:
+                raw_value = collection.get(name, 0)
+            except AmbiguousLuaKeyError:
+                issue, value = "ambiguous", None
+            else:
+                if name not in known and save_advanced.value_type(raw_value) in ("boolean", "number", "string"):
+                    kind = save_advanced.value_type(raw_value)
+                    try:
+                        value = save_advanced.validate_scalar(raw_value, kind)
+                    except ValueError:
+                        issue, value = "unsupported", None
+                elif _integer(raw_value):
+                    value = int(raw_value)
+                else:
+                    issue, value = "unsupported", None
+        title = native.get(name) or name
+        row = _row(prefix + ":" + name, domain, name, ["GameState", field, name],
+            (chinese if language == "zh-CN" else english) + " · " + title,
+            english + " · " + (en.get(name) or name), value, kind,
+            group=("角色互动" if language == "zh-CN" else "Character interactions") if person else
+                  ("目标统计" if language == "zh-CN" else "Objective counters"),
+            editable=issue is None, owner_state=issue,
+            block_reason_code="ambiguousOwner" if issue == "ambiguous" else "unsupportedOwner" if issue else None,
+            entity_id="person:" + _npc_person(name) if person else None,
+            entity_name=title if title != name else _npc_person(name) if person else None)
+        if name not in known:
+            row["rawTyped"] = True
+            row["reason"] = ("此已保存字段用途未编目；按实际类型修改，不重放互动事件。" if language == "zh-CN" else
+                             "This saved field is not catalogued; edit its actual type without replaying interaction events.")
+            if issue is None:
+                row["warning"] = row["reason"]
+        result.append(row)
+    return result
+
+
+def rows(root, domain, language="zh-CN", game_path=None, *, include_absent=False):
     state = _state(root)
     result = []
     zh = language == "zh-CN"
     if domain == "relationships":
-        names = sorted(NPC_INTERACTION_IDS)
-        native, en = _display(names, language, game_path)
-        try:
-            interaction = state.get("NPCInteractions")
-        except AmbiguousLuaKeyError:
-            interaction = None
-            interaction_owner_state = "ambiguous"
-        else:
-            interaction_owner_state = (
-                None if interaction is None or isinstance(interaction, LuaTable)
-                else "unsupported"
-            )
-        for name in names:
-            owner_state = interaction_owner_state
-            value = 0 if interaction is None else None
-            if isinstance(interaction, LuaTable):
-                try:
-                    raw_value = interaction.get(name, 0)
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                else:
-                    if _integer(raw_value):
-                        value = int(raw_value)
-                    else:
-                        owner_state = "unsupported"
-            title = native.get(name) or name
-            english = en.get(name) or name
-            editable = owner_state is None and isinstance(interaction, LuaTable)
-            result.append(_row(
-                "interaction:" + name, domain, name,
-                ["GameState", "NPCInteractions", name],
-                ("互动次数 · " if zh else "Interactions · ") + title,
-                "Interactions · " + english, value, "integer",
-                group="角色互动" if zh else "Character interactions",
-                editable=editable,
-                block_reason_code=(
-                    "ambiguousOwner" if owner_state == "ambiguous"
-                    else "unsupportedOwner" if owner_state == "unsupported"
-                    else None
-                ),
-                owner_state=owner_state,
-                entity_id="person:" + _npc_person(name),
-                entity_name=title if title != name else _npc_person(name),
-            ))
+        result.extend(_counter_rows(state, "NPCInteractions", "interaction", NPC_INTERACTION_IDS,
+            domain, language, game_path, "互动次数", "Interactions", person=True))
+        result.extend(_counter_rows(state, "SpecialInteractRecord", "specialInteraction", NPC_INTERACTION_IDS,
+            domain, language, game_path, "特殊互动次数", "Special interactions", person=True))
 
-        try:
-            special = state.get("SpecialInteractRecord")
-        except AmbiguousLuaKeyError:
-            special = None
-        if isinstance(special, LuaTable):
-            special_names = {
-                name for name, _ in special.entries()
-                if isinstance(name, str) and name in NPC_INTERACTION_IDS
-            }
-            special_native, special_en = _display(
-                special_names, language, game_path
-            )
-            for name in sorted(special_names):
-                owner_state = None
-                value = None
-                try:
-                    raw_value = special[name]
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                else:
-                    if _integer(raw_value):
-                        value = int(raw_value)
-                    else:
-                        owner_state = "unsupported"
-                editable = owner_state is None
-                result.append(_row(
-                    "specialInteraction:" + name, domain, name,
-                    ["GameState", "SpecialInteractRecord", name],
-                    ("特殊互动次数 · " if zh else "Special interactions · ") +
-                        (special_native.get(name) or name),
-                    "Special interactions · " + (special_en.get(name) or name),
-                    value, "integer",
-                    group="角色互动" if zh else "Character interactions",
-                    editable=editable,
-                    block_reason_code=(
-                        "ambiguousOwner" if owner_state == "ambiguous"
-                        else "unsupportedOwner" if owner_state == "unsupported"
-                        else None
-                    ),
-                    owner_state=owner_state,
-                    entity_id="person:" + _npc_person(name),
-                    entity_name=special_native.get(name) or _npc_person(name),
-                ))
-
-        try:
-            gift_record = state.get("GiftRecord")
-            gift_totals = state.get("GiftResourceRecord")
-        except AmbiguousLuaKeyError:
-            gift_record = None
-            gift_totals = None
-        if isinstance(gift_record, LuaTable) and isinstance(gift_totals, LuaTable):
-            person_records = {}
-            resources = set()
-            for _index, person, record, ambiguous in gift_record.physical_entries():
-                if not isinstance(person, str) or not isinstance(record, LuaTable):
-                    continue
-                person_records.setdefault(person, []).append((record, ambiguous))
-                resources.update(
-                    resource
-                    for _child_index, resource, _value, _child_ambiguous
-                    in record.physical_entries()
-                    if isinstance(resource, str)
-                )
-            gift_native, gift_en = _display(
-                set(person_records) | resources, language, game_path
-            )
-            for person in sorted(person_records):
-                records = person_records[person]
-                person_ambiguous = (
-                    len(records) > 1 or any(ambiguous for _record, ambiguous in records)
-                )
-                by_resource = {}
-                for record, _person_ambiguous in records:
-                    for _index, resource, value, ambiguous in record.physical_entries():
-                        if not isinstance(resource, str):
-                            continue
-                        by_resource.setdefault(resource, []).append((value, ambiguous))
-                for resource in sorted(by_resource):
-                    occurrences = by_resource[resource]
-                    owner_state = None
-                    presented_value = None
-                    if (
-                        person_ambiguous
-                        or len(occurrences) > 1
-                        or any(ambiguous for _value, ambiguous in occurrences)
-                    ):
-                        owner_state = "ambiguous"
-                    else:
-                        value = occurrences[0][0]
-                        if _integer(value):
-                            presented_value = int(value)
-                        else:
-                            owner_state = "unsupported"
-                    title = (
-                        (gift_native.get(person) or person) + " · " +
-                        (gift_native.get(resource) or resource)
-                    )
-                    english = (
-                        (gift_en.get(person) or person) + " · " +
-                        (gift_en.get(resource) or resource)
-                    )
-                    result.append(_row(
-                        "gift:{}:{}".format(person, resource), domain,
-                        "{} / {}".format(person, resource),
-                        ["GameState", "GiftRecord", person, resource],
-                        title, english, presented_value, "integer",
-                        group="赠礼记录" if zh else "Gift history",
-                        editable=False, maximum=999999,
-                        block_reason_code=(
-                            "ambiguousOwner" if owner_state == "ambiguous"
-                            else "unsupportedOwner" if owner_state == "unsupported"
-                            else "giftHistoryLinked"
-                        ),
-                        owner_state=owner_state,
-                        entity_id="person:" + person,
-                        entity_name=gift_native.get(person) or person,
-                    ))
+        result.extend(save_relationships.rows(root, language, game_path))
 
     if domain == "progression":
-        try:
-            states = state.get("MetaUpgradeState")
-        except AmbiguousLuaKeyError:
-            states = None
-            states_owner_state = "ambiguous"
-            card_names = set(_ARCANA_CARDS)
-        else:
-            if states is None:
-                states_owner_state = None
-                card_names = set()
-            elif isinstance(states, LuaTable):
-                states_owner_state = None
-                card_names = {
-                    name for name, _ in states.entries()
-                    if isinstance(name, str) and name in _ARCANA_CARDS
-                }
-            else:
-                states_owner_state = "unsupported"
-                card_names = set(_ARCANA_CARDS)
+        result.extend(save_arcana.rows(root, language, game_path=game_path, include_absent=include_absent))
 
-        card_native, card_en = _display(card_names, language, game_path)
-        for name in sorted(card_names):
-            owner_state = states_owner_state
-            unlocked = None
-            level = None
-            if isinstance(states, LuaTable):
-                try:
-                    card = states[name]
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                    card = None
-                if owner_state is None and not isinstance(card, LuaTable):
-                    owner_state = "unsupported"
-                if owner_state is None:
-                    try:
-                        raw_unlocked = card.get("Unlocked")
-                        raw_level = card.get("Level", 1)
-                        raw_equipped = card.get("Equipped")
-                    except AmbiguousLuaKeyError:
-                        owner_state = "ambiguous"
-                    else:
-                        if (
-                            (raw_unlocked is not None and type(raw_unlocked) is not bool)
-                            or not _integer(raw_level)
-                            or (raw_equipped is not None and type(raw_equipped) is not bool)
-                            or not 1 <= int(raw_level) <= _ARCANA_MAX_LEVEL
-                        ):
-                            owner_state = "unsupported"
-                        else:
-                            unlocked = bool(raw_unlocked)
-                            level = int(raw_level)
-            title = card_native.get(name) or (
-                ("塔罗牌 · " if zh else "Arcana · ") + name
-            )
-            english = card_en.get(name) or ("Arcana · " + name)
-            editable = owner_state is None
-            block_reason = (
-                "ambiguousOwner" if owner_state == "ambiguous"
-                else "unsupportedOwner" if owner_state == "unsupported"
-                else None
-            )
-            result.append(_row(
-                "card:{}:Unlocked".format(name), domain, name,
-                ["GameState", "MetaUpgradeState", name, "Unlocked"],
-                title + (" · 已解锁" if zh else " · Unlocked"),
-                english + " · Unlocked", unlocked, "boolean",
-                group="塔罗牌" if zh else "Arcana",
-                editable=editable, block_reason_code=block_reason,
-                owner_state=owner_state,
-                entity_id="arcana:" + name, entity_name=title,
-            ))
-            result.append(_row(
-                "card:{}:Level".format(name), domain, name,
-                ["GameState", "MetaUpgradeState", name, "Level"],
-                title + (" · 等级" if zh else " · Level"),
-                english + " · Level", level, "integer",
-                group="塔罗牌" if zh else "Arcana", maximum=_ARCANA_MAX_LEVEL,
-                editable=editable, block_reason_code=block_reason,
-                owner_state=owner_state,
-                entity_id="arcana:" + name, entity_name=title,
-            ))
-
-        try:
-            objectives = state.get("ObjectivesCompleted")
-        except AmbiguousLuaKeyError:
-            objectives = None
-            objectives_owner_state = "ambiguous"
-            objective_names = sorted(OBJECTIVE_IDS)
-        else:
-            if objectives is None:
-                objectives_owner_state = None
-                objective_names = []
-            elif isinstance(objectives, LuaTable):
-                objectives_owner_state = None
-                objective_names = sorted(OBJECTIVE_IDS)
-            else:
-                objectives_owner_state = "unsupported"
-                objective_names = sorted(OBJECTIVE_IDS)
-
-        objective_native, objective_en = _display(
-            objective_names, language, game_path
-        )
-        for name in objective_names:
-            owner_state = objectives_owner_state
-            amount = None
-            if isinstance(objectives, LuaTable):
-                try:
-                    raw_amount = objectives.get(name, 0)
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                else:
-                    if _integer(raw_amount):
-                        amount = int(raw_amount)
-                    else:
-                        owner_state = "unsupported"
-            editable = owner_state is None
-            result.append(_row(
-                "objective:" + name, domain, name,
-                ["GameState", "ObjectivesCompleted", name],
-                ("目标完成次数 · " if zh else "Objective completions · ") +
-                    (objective_native.get(name) or name),
-                "Objective completions · " + (objective_en.get(name) or name),
-                amount, "integer",
-                group="目标统计" if zh else "Objective counters",
-                editable=editable,
-                block_reason_code=(
-                    "ambiguousOwner" if owner_state == "ambiguous"
-                    else "unsupportedOwner" if owner_state == "unsupported"
-                    else None
-                ),
-                owner_state=owner_state,
-            ))
+        result.extend(_counter_rows(state, "ObjectivesCompleted", "objective", OBJECTIVE_IDS,
+            domain, language, game_path, "目标完成次数", "Objective completions"))
     return result
 
 
 def descriptor(root, entry_id, game_path=None):
     if not isinstance(entry_id, str):
         return None
+    if entry_id.startswith("gift:"):
+        return save_relationships.descriptor(root, entry_id)
     domain = ("relationships" if entry_id.startswith(("interaction:", "specialInteraction:"))
               else "progression" if entry_id.startswith(("card:", "objective:")) else None)
     if domain is None:
         return None
-    for row in rows(root, domain, "en", game_path=game_path):
+    for row in rows(root, domain, "en", game_path=game_path, include_absent=entry_id.startswith("card:")):
         if row["id"] == entry_id:
             if row.get("ownerState") == "ambiguous":
                 raise AmbiguousLuaKeyError(
@@ -413,13 +177,19 @@ def descriptor(root, entry_id, game_path=None):
                 "valueType": row["valueType"],
                 "mutationKinds": tuple(row["mutationKinds"]),
                 "constraints": row.get("constraints", {}),
+                "rawTyped": row.get("rawTyped", False),
             }
     return None
 
 
 def validate(descriptor_value, operation, value):
+    if descriptor_value["id"].startswith("gift:"):
+        return save_relationships.validate(descriptor_value, operation, value)
     if operation not in descriptor_value["mutationKinds"] or operation != "set":
         raise ValueError("Save Editor long-term mutation is not authorized.")
+    if descriptor_value.get("rawTyped"):
+        save_advanced.validate_scalar(value, descriptor_value["valueType"])
+        return
     if descriptor_value["valueType"] == "boolean":
         if type(value) is not bool:
             raise ValueError("Save Editor long-term flag must be boolean.")
@@ -432,43 +202,31 @@ def validate(descriptor_value, operation, value):
 
 
 def apply_intent(root, intent):
+    if intent["id"].startswith("gift:"):
+        return save_relationships.apply_intent(root, intent)
     state = _state(root)
     entry_id = intent["id"]
     after = intent["after"]
     if entry_id.startswith(("interaction:", "specialInteraction:")):
         special = entry_id.startswith("specialInteraction:")
         name = entry_id[len("specialInteraction:"):] if special else entry_id[len("interaction:"):]
+        owner = lua_owner(root, ["GameState", "SpecialInteractRecord" if special else "NPCInteractions"], create=True)
         if name not in NPC_INTERACTION_IDS:
-            raise ValueError("Save Editor NPC identity is not supported.")
-        owner = _table(state, "SpecialInteractRecord" if special else "NPCInteractions")
+            owner[name] = after
+            return
         if after == 0:
             owner.pop(name, None)
         else:
             owner[name] = after
         return
     if entry_id.startswith("card:"):
-        _, name, field = entry_id.split(":", 2)
-        cards = _table(state, "MetaUpgradeState")
-        card = cards.get(name)
-        if name not in _ARCANA_CARDS or not isinstance(card, LuaTable):
-            raise ValueError("Save Editor Arcana card identity is invalid.")
-        if field == "Unlocked":
-            if after:
-                card[field] = True
-            else:
-                card.pop(field, None)
-                card.pop("Equipped", None)
-                card["Level"] = 1
-        elif field == "Level":
-            card[field] = after
-        else:
-            raise ValueError("Save Editor Arcana field is not editable.")
-        return
+        return save_arcana.apply_intent(root, intent)
     if entry_id.startswith("objective:"):
         name = entry_id[len("objective:"):]
+        owner = lua_owner(root, ["GameState", "ObjectivesCompleted"], create=True)
         if name not in OBJECTIVE_IDS:
-            raise ValueError("Save Editor objective identity is not supported.")
-        owner = _table(state, "ObjectivesCompleted")
+            owner[name] = after
+            return
         if after:
             owner[name] = after
         else:
@@ -478,52 +236,12 @@ def apply_intent(root, intent):
 
 
 def linked_changes(root, intents):
-    state = _state(root)
-    changes = []
-    cards = state.get("MetaUpgradeState")
-    direct_ids = {intent["id"] for intent in intents}
-    for intent in intents:
-        entry = intent["id"]
-        if entry.startswith("card:") and entry.endswith(":Unlocked") and intent["after"] is False:
-            _, name, _ = entry.split(":", 2)
-            card = cards.get(name) if isinstance(cards, LuaTable) else None
-            if isinstance(card, LuaTable):
-                if card.get("Equipped") is True:
-                    changes.append({
-                        "id": "linked:card:{}:Equipped".format(name),
-                        "domain": "progression", "rawId": name,
-                        "name": "Arcana equipped · " + name,
-                        "operation": "set", "before": True, "after": False,
-                    })
-                if (
-                    int(card.get("Level", 1)) != 1
-                    and "card:{}:Level".format(name) not in direct_ids
-                ):
-                    changes.append({
-                        "id": "linked:card:{}:Level".format(name),
-                        "domain": "progression", "rawId": name,
-                        "name": "Arcana level · " + name,
-                        "operation": "set", "before": int(card.get("Level")), "after": 1,
-                    })
-    return changes
+    return save_arcana.linked_changes(root, intents) + save_relationships.linked_changes(root, intents)
+
+
+def finalize_batch(root, intents, source=None):
+    save_arcana.finalize_batch(root, intents, source=source)
 
 
 def validate_batch(root, intents):
-    state = _state(root)
-    for intent in intents:
-        entry_id = intent["id"]
-        if entry_id.startswith("card:"):
-            _, name, field = entry_id.split(":", 2)
-            card = _table(state, "MetaUpgradeState")[name]
-            unlocked = card.get("Unlocked") is True
-            equipped = card.get("Equipped") is True
-            level = card.get("Level", 1)
-            if not _integer(level) or not 1 <= level <= _ARCANA_MAX_LEVEL:
-                raise ValueError("Save Editor Arcana level is invalid.")
-            if equipped and not unlocked:
-                raise ValueError("Save Editor equipped Arcana must be unlocked.")
-            if level > 1 and not unlocked:
-                raise ValueError("Save Editor upgraded Arcana must be unlocked.")
-            actual = (bool(card.get(field)) if field == "Unlocked" else int(level))
-            if actual != intent["after"]:
-                raise ValueError("Save Editor Arcana changes conflict.")
+    save_arcana.validate_batch(root, intents)

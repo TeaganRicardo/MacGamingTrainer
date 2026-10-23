@@ -1229,6 +1229,7 @@ struct Hades2TrainerView: View {
                 Spacer()
                 TrainerShortcutBadge(text: model.shortcutText(.boonRarityEnabled))
                 TrainerToggleControl(
+                    title: text("hades2.rarity.title"),
                     isOn: model.boonRarityEnabled,
                     enabled: model.canEditDesired,
                     tint: state.indicatorColor,
@@ -1643,36 +1644,16 @@ struct Hades2TrainerView: View {
 
     private var management: some View {
         TrainerSection(title: text("hades2.section.management"), icon: "gearshape.2.fill") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Spacer()
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
-                    Button { model.disableAll() } label: {
-                        Label(localization.localized("host.disableAll"), systemImage: "power")
+            Hades2ManagementUtilities(
+                model: model,
+                openProfiles: { profileManager = true; model.listProfiles() },
+                openSaveEditor: {
+                    toolWindows.open("hades2-save-editor", text("hades2.saveEditor.title")) {
+                        Hades2GameModule.makeSaveEditorWindow(model: model)
                     }
-                    .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
-                }
-                HStack(spacing: 12) {
-                    Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }
-                    Button {
-                        toolWindows.open("hades2-save-editor", text("hades2.saveEditor.title")) {
-                            Hades2GameModule.makeSaveEditorWindow(model: model)
-                        }
-                    } label: {
-                        Label(text("hades2.saveEditor.title"), systemImage: "externaldrive.badge.gearshape")
-                    }
-                    .disabled(!model.backendAvailable || !model.canAcceptRuntimeAction || model.exiting)
-                    Button { diagnosticSheet = true; model.runDiagnostics() } label: { Label(text("hades2.manage.diagnostics"), systemImage: "stethoscope") }
-                    Spacer()
-                }
-                HStack(spacing: 12) {
-                    Button { model.prepareDebugging() } label: { Label(text("hades2.manage.prepareSigning"), systemImage: "signature") }
-                    Button { model.restoreOriginalSignature() } label: { Label(text("hades2.manage.restoreSigning"), systemImage: "arrow.uturn.backward.circle") }
-                    Spacer()
-                }
-                .disabled(!model.canAcceptRuntimeAction || model.exiting)
-                Hades2ManagementUtilities(model: model)
-            }.trainerPanel()
+                },
+                openDiagnostics: { diagnosticSheet = true; model.runDiagnostics() }
+            )
         }
     }
 

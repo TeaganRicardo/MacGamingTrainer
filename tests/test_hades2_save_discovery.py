@@ -121,15 +121,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     ambiguous_known = ambiguous_workspace.query(
         domain="discover", search="Ashes", language="en"
     )
-    ambiguous_resource = next(
-        item for item in ambiguous_known["items"]
-        if item["id"] == "resource:MetaCurrency"
-    )
-    assert ambiguous_resource["state"] == "ambiguous"
-    assert ambiguous_resource["editable"] is False
-    assert ambiguous_resource["reasonCode"] == "ambiguousOwner"
+    ambiguous_resources = [item for item in ambiguous_known["items"]
+                           if item["path"] == ["GameState", "Resources", "MetaCurrency"]]
+    assert len(ambiguous_resources) == 2
+    assert len({item["id"] for item in ambiguous_resources}) == 2
+    assert all(item["state"] == "ambiguous" and not item["editable"]
+               and item["reasonCode"] == "ambiguousOwner" and item["readOnlyReason"]
+               for item in ambiguous_resources)
     assert any(
-        item["id"] == "resource:MetaCurrency"
+        item["path"] == ["GameState", "Resources", "MetaCurrency"]
         for item in ambiguous_workspace.query(
             domain="discover", search="灰烬", language="en"
         )["items"]
@@ -158,20 +158,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     malformed_resource = next(
         item for item in malformed_known["items"]
-        if item["id"] == "resource:MetaCurrency"
+        if item["path"] == ["GameState", "Resources", "MetaCurrency"]
     )
-    assert malformed_resource["state"] == "unsupported"
-    assert malformed_resource["editable"] is False
-    assert malformed_resource["reasonCode"] == "unsupportedOwner"
+    assert malformed_resource["state"] == "observed"
+    assert malformed_resource["editable"] is True
+    assert malformed_resource["valueType"] == "string"
+    assert malformed_resource["warning"]
     unsupported_only = malformed_workspace.query(
         domain="discover",
         search="Ashes",
         language="en",
         stateFilter="unsupported",
     )
-    assert [item["id"] for item in unsupported_only["items"]] == [
-        "resource:MetaCurrency"
-    ]
+    assert unsupported_only["items"] == []
 
     flag_session = Session()
     flag_state = flag_session.document.lua_state["GameState"]
@@ -272,7 +271,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         if item["id"] == "gift:Hecate:MedeaPoints"
     )
     assert safe_gift["state"] == "observed"
-    assert safe_gift["reasonCode"] == "giftHistoryLinked"
+    assert safe_gift["reasonCode"] == "editable" and safe_gift["editable"]
     assert safe_gift["entityId"] == good_relationship["entityId"]
 
     gift_person_session = Session()
@@ -328,7 +327,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert all(row["id"].startswith("card:") for row in arcana_scope["items"])
     quest_scope = arcana_workspace.query(domain="quests", search="", language="en")
     assert quest_scope["items"]
-    assert all(row["id"].startswith(("quest:", "objective:"))
+    assert all(row["id"].startswith(("quest:", "questClaim:", "objective:"))
                for row in quest_scope["items"])
     assert not {row["id"] for row in quest_scope["items"]} & {
         row["id"] for row in arcana_scope["items"]
@@ -410,8 +409,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     claimed_quest = next(item for item in claimed["items"] if item["id"] == "quest:QuestHelpDora")
     assert claimed_quest["state"] == "observed"
-    assert claimed_quest["editable"] is False
-    assert claimed_quest["reasonCode"] == "rewardClaimed"
+    assert claimed_quest["editable"] is True
+    assert claimed_quest["reasonCode"] == "editable"
 
     linked_quest_session = Session()
     linked_quest_state = linked_quest_session.document.lua_state["GameState"]
@@ -443,8 +442,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         language="en",
     )
     starter_weapon = next(item for item in starter["items"] if item["id"] == "weapon:WeaponStaffSwing")
-    assert starter_weapon["editable"] is False
-    assert starter_weapon["reasonCode"] == "starterWeapon"
+    assert starter_weapon["editable"] is True
+    assert starter_weapon["reasonCode"] == "editable"
 
     linked_weapon_session = Session()
     linked_weapon_state = linked_weapon_session.document.lua_state["GameState"]
@@ -527,13 +526,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert all(item["reasonCode"] == "ambiguousRaw" for item in deep)
     assert all(item["pathAmbiguous"] is True for item in deep)
 
-    # Unknown data is searchable without granting write authority and keeps the
-    # exact Advanced path needed to inspect it.
+    # Unknown data is searchable and writable by actual type and unique path;
+    # lack of game meaning is a warning rather than a blanket write prohibition.
     unknown = workspace.query(domain="discover", search="MysteryCounter", language="en")
     mystery = next(item for item in unknown["items"] if item["rawId"] == "MysteryCounter")
     assert mystery["domain"] == "advanced"
     assert mystery["state"] == "unknown"
-    assert mystery["editable"] is False
+    assert mystery["editable"] is True
     assert mystery["reasonCode"] == "unknownRaw"
     assert mystery["path"] == ["GameState", "UnknownFutureField", "MysteryCounter"]
 
@@ -566,8 +565,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     quest = next(item for item in missing_quest["items"] if item["id"] == "quest:QuestHelpOdysseus")
     assert quest["state"] == "absent"
-    assert quest["editable"] is False
-    assert quest["reasonCode"] == "knownAbsent"
+    assert quest["editable"] is True
+    assert quest["reasonCode"] == "editableAbsent"
 
     coverage = {item["id"]: item for item in workspace.summary()["coverage"]}
     assert set(coverage) == {
@@ -584,7 +583,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert coverage["playerHistory"]["discoverability"] == "partial"
     assert coverage["playerHistory"]["write"] == "partial"
     assert coverage["unknown"]["discoverability"] == "supported"
-    assert coverage["unknown"]["understanding"] == "readOnly"
-    assert coverage["unknown"]["write"] == "readOnly"
+    assert coverage["unknown"]["understanding"] == "partial"
+    assert coverage["unknown"]["write"] == "supported"
 
 print("hades2_save_discovery_ok")

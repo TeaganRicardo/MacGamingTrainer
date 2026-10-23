@@ -14,7 +14,6 @@ struct TrainerFeatureControlState {
 }
 
 struct TrainerFeatureToggleRow: View {
-    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     let state: TrainerFeatureControlState
@@ -28,14 +27,13 @@ struct TrainerFeatureToggleRow: View {
                 Spacer()
                 TrainerShortcutBadgeSlot(text: shortcutText)
                 TrainerToggleControl(
+                    title: title,
                     isOn: state.isOn,
                     enabled: state.isInteractive,
                     helpText: state.helpText,
                     tint: state.indicatorColor,
                     action: action
                 )
-                .accessibilityLabel(title)
-                .accessibilityValue(localization.localized(state.isOn ? "host.accessibility.on" : "host.accessibility.off"))
             }
         }
     }
@@ -60,6 +58,7 @@ struct TrainerFeatureMultiplierRow: View {
                 Text("×").foregroundStyle(.secondary)
                 TrainerShortcutBadgeSlot(text: shortcutText)
                 TrainerToggleControl(
+                    title: title,
                     isOn: state.isOn,
                     enabled: state.isInteractive,
                     helpText: state.helpText,
@@ -93,6 +92,7 @@ struct TrainerCompactMultiplierRow: View {
             Text("×").foregroundStyle(.secondary)
             TrainerShortcutBadgeSlot(text: shortcutText)
             TrainerToggleControl(
+                title: title,
                 isOn: state.isOn,
                 enabled: state.isInteractive,
                 helpText: state.helpText,

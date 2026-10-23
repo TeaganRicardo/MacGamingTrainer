@@ -7,6 +7,7 @@ import SwiftUI
 /// indicator communicate the same phase.
 struct TrainerToggleControl: View {
     @Environment(\.trainerTheme) private var theme
+    let title: String
     let isOn: Bool
     let enabled: Bool
     let helpText: String
@@ -14,12 +15,14 @@ struct TrainerToggleControl: View {
     private let onChange: (Bool) -> Void
 
     init(
+        title: String,
         isOn: Bool,
         enabled: Bool = true,
         helpText: String = "",
         tint: Color? = nil,
         action: @escaping () -> Void
     ) {
+        self.title = title
         self.isOn = isOn
         self.enabled = enabled
         self.helpText = helpText
@@ -28,12 +31,14 @@ struct TrainerToggleControl: View {
     }
 
     init(
+        title: String,
         isOn: Bool,
         enabled: Bool = true,
         helpText: String = "",
         tint: Color? = nil,
         onChange: @escaping (Bool) -> Void
     ) {
+        self.title = title
         self.isOn = isOn
         self.enabled = enabled
         self.helpText = helpText
@@ -42,7 +47,7 @@ struct TrainerToggleControl: View {
     }
 
     var body: some View {
-        Toggle("", isOn: Binding(get: { isOn }, set: onChange))
+        Toggle(title, isOn: Binding(get: { isOn }, set: onChange))
             .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.regular)
@@ -80,6 +85,7 @@ struct TrainerCheckboxControl: View {
 struct TrainerLockButton: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    let title: String
     let locked: Bool
     let enabled: Bool
     let action: () -> Void
@@ -94,7 +100,7 @@ struct TrainerLockButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))
-        .help(localization.localized(locked ? "host.unlock" : "host.lock"))
+        .accessibilityLabel(localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title]))
+        .help(localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title]))
     }
 }

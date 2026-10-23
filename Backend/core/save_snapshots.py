@@ -12,6 +12,7 @@ from pathlib import Path
 from .save_resolution import ResolvedSaveFile, SaveResolutionError, read_resolved_save_file
 
 _SCHEMA_VERSION = 1
+_SNAPSHOT_ORIGINS = {"manual", "automaticPreEdit", "preRestore", "unclassified"}
 _STAGING_MIN_AGE_SECONDS = 24 * 60 * 60
 _SNAPSHOT_STAGE_RE = re.compile(r'^\.snapshot-[A-Za-z0-9_]+$')
 _MANIFEST_STAGE_RE = re.compile(r'^\.manifest-[A-Za-z0-9_]+\.json$')
@@ -236,11 +237,13 @@ class SaveSnapshotStore:
             raise SaveNotFoundError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
-    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None, describe=None):
+    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None, describe=None, *, origin="manual"):
         if not callable(resolver):
             raise ValueError('Snapshot creation requires a resolver callback.')
         if type(hot) is not bool:
             raise ValueError('Snapshot hot flag must be boolean.')
+        if not isinstance(origin, str) or origin not in _SNAPSHOT_ORIGINS:
+            raise ValueError('Snapshot creation origin is invalid.')
         self._ensure_parent()
         snapshot_id = self._new_id()
         created_at = created_at or _local_timestamp()
@@ -302,6 +305,10 @@ class SaveSnapshotStore:
 
                 manifest = {
                     'schemaVersion': _SCHEMA_VERSION,
+                    'origin': origin,
+                    'protected': origin != 'automaticPreEdit' or explicit_name is not None,
+                    'retentionEligible': False,
+                    'createdAtNs': str(time.time_ns()),
                     'snapshotId': snapshot_id,
                     'gameId': self.game_id,
                     'createdAt': created_at,
@@ -362,6 +369,19 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('Snapshot automatic name has no localized presentation.')
         if type(manifest.get('hot')) is not bool:
             raise SaveSnapshotError('Snapshot hot flag is invalid.')
+        manifest['origin'] = manifest.get('origin', 'unclassified')
+        manifest['protected'] = manifest.get('protected', True)
+        manifest['retentionEligible'] = manifest.get('retentionEligible', False)
+        if not isinstance(manifest['origin'], str) or manifest['origin'] not in _SNAPSHOT_ORIGINS or type(manifest['protected']) is not bool:
+            raise SaveSnapshotError('Snapshot origin/protection metadata is invalid.')
+        if type(manifest['retentionEligible']) is not bool or (
+            manifest['retentionEligible'] and manifest['origin'] != 'automaticPreEdit'
+        ):
+            raise SaveSnapshotError('Snapshot retention metadata is invalid.')
+        if 'createdAtNs' in manifest and (
+            not isinstance(manifest['createdAtNs'], str) or not manifest['createdAtNs'].isdigit()
+        ):
+            raise SaveSnapshotError('Snapshot creation order is invalid.')
         files = manifest.get('files')
         if not isinstance(files, list) or not files:
             raise SaveSnapshotError('Snapshot file manifest is empty or invalid.')
@@ -478,6 +498,11 @@ class SaveSnapshotStore:
             'name': name,
             'createdAt': created_at,
             'fileCount': file_count,
+            'origin': manifest.get('origin', 'unclassified') if valid else 'unclassified',
+            'protected': manifest.get('protected', True) if valid else True,
+            'retentionEligible': manifest.get('retentionEligible', False) if valid else False,
+            'createdAtNs': manifest.get('createdAtNs', '0') if valid else '0',
+            'storageBytes': self.storage_bytes(root),
             'nameDetails': name_details,
             'automaticName': automatic_name,
             'localizedPresentation': localized_presentation,
@@ -508,13 +533,36 @@ class SaveSnapshotStore:
                 rows.append(self._row(root, manifest, valid=False, error=str(error)))
         return rows
 
-    def rename_snapshot(self, snapshot_id, display_name):
-        name = _validate_display_name(display_name)
+    @staticmethod
+    def storage_bytes(root):
+        """Logical bytes of contained directory entries, without following links.
+
+        Include the manifest and invalid/unlisted files, not a manifest's claimed
+        sizes. A permission/read failure is unknown size, never reported as zero.
+        """
+        def unreadable(error):
+            raise error
+        try:
+            if Path(root).is_symlink() or not Path(root).is_dir():
+                return None
+            total = 0
+            for parent, directories, files in os.walk(root, followlinks=False, onerror=unreadable):
+                for name in list(directories):
+                    path = Path(parent) / name
+                    if path.is_symlink():
+                        total += path.lstat().st_size
+                        directories.remove(name)
+                for name in files:
+                    total += (Path(parent) / name).lstat().st_size
+            return total
+        except OSError:
+            return None
+
+    def _update_metadata(self, snapshot_id, mutate):
         verified = self.load_verified_snapshot(snapshot_id)
         root = verified['root']
         manifest = dict(verified['manifest'])
-        manifest['displayName'] = name
-        manifest['automaticName'] = False
+        mutate(manifest)
         fd, temp_name = tempfile.mkstemp(prefix='.manifest-', suffix='.json', dir=str(root))
         try:
             with os.fdopen(fd, 'w', encoding='utf-8', newline='') as handle:
@@ -529,6 +577,32 @@ class SaveSnapshotStore:
             except FileNotFoundError:
                 pass
         return self._row(root, manifest, valid=True)
+
+    def rename_snapshot(self, snapshot_id, display_name):
+        name = _validate_display_name(display_name)
+        def rename(manifest):
+            manifest['displayName'] = name
+            manifest['automaticName'] = False
+            manifest['protected'] = True
+        return self._update_metadata(snapshot_id, rename)
+
+    def protect_snapshot(self, snapshot_id, protected):
+        if type(protected) is not bool:
+            raise ValueError('Snapshot protection must be boolean.')
+        def protect(manifest):
+            if manifest['origin'] != 'automaticPreEdit':
+                raise ValueError('Only automatic pre-edit backups participate in retention.')
+            manifest['protected'] = protected
+        return self._update_metadata(snapshot_id, protect)
+
+    def confirm_pre_edit(self, snapshot_id):
+        # Creation starts ineligible. A crash, failed Apply, or failed metadata
+        # update leaves those recovery bytes permanently outside eviction.
+        def confirm(manifest):
+            if manifest['origin'] != 'automaticPreEdit':
+                raise SaveSnapshotError('Successful edit backup has an unexpected origin.')
+            manifest['retentionEligible'] = True
+        return self._update_metadata(snapshot_id, confirm)
 
     def delete_snapshot(self, snapshot_id):
         root, _ = self._inventory_path_for_id(snapshot_id)

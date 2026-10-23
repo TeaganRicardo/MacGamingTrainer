@@ -252,6 +252,7 @@ class SaveRestoreTransaction:
         require_idle=False,
         expected_paths=None,
         owned_keys=None,
+        snapshot_origin="preRestore",
     ):
         # Recovery evidence can preserve the whole save set. Mutation authority
         # is narrower for a selected replacement: unrelated live files must not
@@ -273,6 +274,7 @@ class SaveRestoreTransaction:
                     lambda: list(snapshot_rows),
                     hot=target_running,
                     describe=self.snapshot_describer,
+                    origin=snapshot_origin,
                 )
                 previous_snapshot_id = previous['id']
 
@@ -440,6 +442,7 @@ class SaveRestoreTransaction:
             require_idle=True,
             expected_paths=expected_paths,
             owned_keys=replacement_keys,
+            snapshot_origin="automaticPreEdit",
         )
 
     def restore(self, snapshot_id, preserve_current=False, target_running=False):
