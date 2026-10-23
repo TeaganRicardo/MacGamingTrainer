@@ -1,5 +1,7 @@
 """Hades entity queries and native-owner mutations on isolated in-memory Save data."""
+import hashlib
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.save_document import LuaTable
+from games.hades2.save_investigation import NativeDialogueInvestigation
 from games.hades2.save_workspace import Hades2SaveWorkspace
 from games.hades2.command_contract import _save_editor_query
 
@@ -85,36 +88,36 @@ for invalid in ("future", "", 5, None):
 # A real source-verified scene can attach its recorded physical dialogue field
 # to the same NPC as interaction history. Unverified IDs cannot borrow identity.
 state["TextLinesRecord"]["NemesisPostTrueEnding01"] = True
-class NativeSceneFixture:
-    def quest_rows(self, _root, _language, **_params):
-        return []
-
-    def spoken_rows(self, _root, _scenes, _language):
-        return []
-
-    def query(self, _root, **_params):
-        return {"items": [{
-            "id": "investigate:NemesisPostTrueEnding01",
-            "domain": "investigate",
-            "rawId": "NemesisPostTrueEnding01",
-            "path": ["GameState", "TextLinesRecord", "NemesisPostTrueEnding01"],
-            "name": "Nemesis · NemesisPostTrueEnding01",
-            "englishName": "Nemesis · NemesisPostTrueEnding01",
-            "value": True, "valueType": "boolean", "editable": False,
-            "mutationKinds": [], "entityId": "person:Nemesis",
-            "entityName": "Nemesis", "snippet": "I remember this",
-        }]}
-
-workspace._investigation = NativeSceneFixture()
-linked = workspace.query(domain="entities", scope="story",
-                         search="Nemesis", language="en", limit=1)
-assert linked["total"] >= 1
-person = next(group for group in linked["entities"] if group["id"] == "person:Nemesis")
-assert {"interaction:NPC_Nemesis_01", "dialogue:NemesisPostTrueEnding01",
-        "investigate:NemesisPostTrueEnding01"}.issubset(
-            {row["id"] for row in person["items"]})
-assert all("NemesisPostTrueEnding01" not in row["name"] for row in person["items"]
-           if row["domain"] in ("dialogue", "investigate"))
-assert next(row for row in person["items"] if row["domain"] == "investigate")["editable"] is False
+with tempfile.TemporaryDirectory(prefix="mgt-entity-source-") as directory:
+    game = Path(directory)
+    scripts = game / "sources/Scripts"
+    english = game / "sources/Text/en"
+    scripts.mkdir(parents=True)
+    english.mkdir(parents=True)
+    reset = scripts / "StoryResetData.lua"
+    reset.write_text('StoryResetData = { TextLines = { "NemesisPostTrueEnding01" } }')
+    (scripts / "NPCData_Nemesis.lua").write_text('''UnitSetData = {
+      NPC_Nemesis_01 = { InteractTextLineSets = {
+        NemesisPostTrueEnding01 = { { Cue = "/VO/Nemesis_0407", Text = "I remember this" } },
+      } },
+    }''')
+    (english / "_NPCData_Nemesis.en.sjson").write_text('''{ Texts = [
+      { Id = "NPC_Nemesis_01" DisplayName = "Nemesis" }
+      { Id = "Nemesis_0407" DisplayName = "I remember this" Event = "NemesisPostTrueEnding01" }
+    ] }''')
+    workspace._investigation = NativeDialogueInvestigation(
+        game, expected_hash=hashlib.sha256(reset.read_bytes()).hexdigest())
+    linked = workspace.query(domain="entities", scope="story",
+                             search="Nemesis", language="en", limit=1)
+    assert workspace._investigation.native["status"] == "available"
+    assert linked["total"] >= 1
+    person = next(group for group in linked["entities"] if group["id"] == "person:Nemesis")
+    assert {"interaction:NPC_Nemesis_01", "dialogue:NemesisPostTrueEnding01",
+            "investigate:NemesisPostTrueEnding01"}.issubset(
+                {row["id"] for row in person["items"]})
+    assert all("NemesisPostTrueEnding01" not in row["name"] for row in person["items"]
+               if row["domain"] in ("dialogue", "investigate"))
+    scene = next(row for row in person["items"] if row["domain"] == "investigate")
+    assert scene["editable"] is False and scene["snippet"] == "I remember this"
 
 print("Hades source-owned entity query and staging contract: PASS")
