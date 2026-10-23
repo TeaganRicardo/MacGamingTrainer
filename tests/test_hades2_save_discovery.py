@@ -272,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         if item["id"] == "gift:Hecate:MedeaPoints"
     )
     assert safe_gift["state"] == "observed"
-    assert safe_gift["reasonCode"] == "giftHistoryLinked"
+    assert safe_gift["reasonCode"] == "editable" and safe_gift["editable"]
     assert safe_gift["entityId"] == good_relationship["entityId"]
 
     gift_person_session = Session()
@@ -328,7 +328,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert all(row["id"].startswith("card:") for row in arcana_scope["items"])
     quest_scope = arcana_workspace.query(domain="quests", search="", language="en")
     assert quest_scope["items"]
-    assert all(row["id"].startswith(("quest:", "objective:"))
+    assert all(row["id"].startswith(("quest:", "questClaim:", "objective:"))
                for row in quest_scope["items"])
     assert not {row["id"] for row in quest_scope["items"]} & {
         row["id"] for row in arcana_scope["items"]

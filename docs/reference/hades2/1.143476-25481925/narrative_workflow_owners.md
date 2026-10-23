@@ -56,10 +56,67 @@ the runtime resource-spawn limit is not a native save-format limit.
 `test_hades2_save_quest_workflow.py` separately covers native bilingual lookup,
 all observed and absent status families, on-demand AND/OR/dynamic/stage
 requirements, named inheritance, NPC interaction/gift/dialogue/speech grouping,
-duplicate physical owners and source replacement. Full gift/reward workflow
-operations remain active work under #425, rather than claimed by these direct
-record controls. These fixtures do not establish real-game/load/rendered user
-acceptance.
+duplicate physical owners and source replacement. These fixtures do not establish
+real-game/load/rendered user acceptance.
+
+Gift quantity and reward transactions
+------------------------------------
+
+`GiftLogic.lua:203–212` adds a purchased quantity to persistent/current-run
+resource/person counters, then appends **one** ordered resource-name event.
+The quantity and event count therefore need not match. `save_relationships.py`
+edits a reliable existing `GameState.GiftRecord[person][resource]` quantity
+without inventing an event. A batch combines all person deltas before updating
+`GameState.GiftResourceRecord[resource]`; an absent total is rebuilt from every
+reliable saved contributor. Duplicate keys or a malformed required contributor
+block that particular total, while independent resources remain editable.
+Gift event order, dialogue history, inventory and `CurrentRun` stay unchanged.
+Missing known NPC/special-interaction and objective-counter tables can be
+created; observed unregistered counters remain editable with a purpose warning.
+
+`questClaim:<quest>` is a separate Boolean intent named **Grant reward and mark
+claimed / 发放奖励并标记已领取**. The shared byte-captured investigation index
+resolves literal quest rewards and named inheritance. Amounts are not copied
+into a second registry. `save_native_ids.py` owns the verified mutation-script
+digests; changing a staged reward's source invalidates its preview/apply.
+
+For `CashOutQuest` (`QuestLogLogic.lua:211–224`) and `AddResource`
+(`ResourceLogic.lua:7–38`), the explicit offline transaction adds the reward to
+`GameState.Resources`, `GameState.LifetimeResourcesGained` and
+`CurrentRun.ResourcesGained`, updates `GameState.UnviewedLastResourceGained`
+unless the native resource policy skips it, and sets `QuestStatus=CashedOut`
+with `QuestsCompleted=true`. Repeated grants to an already-claimed status do
+not award again. Multiple claims combine resource deltas in canonical quest-ID
+order; the last non-skipped resource in that order owns the last-resource marker.
+The basket lists concrete physical linked changes. Revise/remove recomputes
+them; conflicting direct fields, ancestors, callback inputs or other semantic
+effects reject the new intent and preserve the existing basket.
+
+The operation does not evaluate eligibility or replay native Lua. In particular,
+`AddResource:43–48` can invoke `CheckObjectiveSet("OpenInventory")` or flag the
+current encounter. `ObjectiveLogic.lua:29–117` uses session state, UI animation
+configuration, current-hub context and runtime screen state before showing an
+objective and possibly writing `GameState.ActiveObjectiveSet`. Offline grants
+preserve these objective-prompt owners and disclose that presentation boundary.
+
+Of resources used by supported quest rewards, only GiftPoints has an OnAdded
+callback. `ResourceLogic.lua:158–169` sums the saved traits'
+`GiftPointHealthMultiplier` through `GetTotalHeroTraitValue` and calls
+`AddMaxHealth` for a positive sum. Supported TraitData defines no producer of
+this legacy field. A zero/non-positive saved sum has no health effect. A custom
+or legacy positive sum needs `GetProcessedTraitData`, `PropertyChanges` and
+`AddTraitToHero` (`RoomLogic.lua:2722–2741`), not a fabricated MaxHealth delta.
+That specific grant reports the unresolved processed-health-trait owner.
+Typed Advanced and direct quest/resource editing remain available.
+
+`test_hades2_save_relationship_transactions.py` and
+`test_hades2_save_quest_rewards.py` use temporary Core/codec documents to cover
+Stage → review → revise/remove → Apply → reopen, exact pre-write backups,
+nonmatching gift event counts, aggregate reconstruction, combined deltas,
+missing-owner creation, repeated claims, reward inheritance/source changes,
+duplicate definitions, callback dependencies, explicit overlaps (including
+source-equal values), and preservation of unknown/run/narrative data. No real
+game, user save or rendered acceptance is implied.
 
 SHA-256 of read-only supported installed scripts inspected on 2026-10-23:
 

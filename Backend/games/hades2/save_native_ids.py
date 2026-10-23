@@ -8,6 +8,12 @@ Quest IDs come from QuestOrderData; resources are top-level ResourceData entries
 excluding abstract Base* templates. Recheck these IDs on target-build changes.
 """
 
+QUEST_REWARD_OWNER_SHA256 = {
+    "ResourceLogic.lua": "809bdf80b277179d45c420ec3873eebc36e7aca5f3e30d79ad4df01ddf8f82a0",
+    "QuestLogLogic.lua": "0dff8cb49c54715ffe13c1c2986553087688e9dbd2aec3fa1fe61943ba91c254",
+    "ResourceData.lua": "94b2dc9edc22c34b213ab78dea42f2dc76c80cbcfde14104cbe772b254a29b03",
+}
+
 QUEST_IDS = frozenset((
     "QuestRescueFatesTrue", "QuestHelpOdysseus", "QuestHelpDora", "QuestHelpArachne", "QuestHelpNarcissusAndEcho",
     "QuestWakeHypnos", "QuestFirstSurfaceClear", "QuestFirstUnderworldClear", "QuestUnlockMoros", "QuestBeatHecate",

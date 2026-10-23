@@ -118,7 +118,7 @@ def _lua_without_comments(text):
     return ''.join(out)
 
 
-def _parse_lua_table(source):
+def _parse_lua_table(source, *, reject_duplicate_fields=()):
     """Conservative literal-only table reader for presenting authored requirements."""
     tokens = _LUA_TOKENS.findall(_lua_without_comments(source))
     pos = 0
@@ -135,6 +135,8 @@ def _parse_lua_table(source):
                 if pos + 1 < len(tokens) and tokens[pos + 1] == '=' and re.fullmatch(r'[A-Za-z_]\w*', tokens[pos]):
                     key = tokens[pos]
                     pos += 2
+                    if key in fields and key in reject_duplicate_fields:
+                        raise ValueError("Save Editor native source has a duplicate field: " + key)
                     fields[key] = value()
                 else:
                     members.append(value())
@@ -335,12 +337,14 @@ def _load_native(source, expected_hash):
         'roots': source['roots'], 'storyResetSHA256': observed_hash,
         'expectedStoryResetSHA256': expected_hash,
         'storyResetVerification': 'matched' if observed_hash == expected_hash else 'missing' if observed_hash is None else 'mismatch',
-        # Only StoryResetData has a supported hash here. Installed NPC scripts
-        # and translations remain observed evidence, never new write authority.
+        # This index certifies only the StoryReset boundary. Other consumers
+        # verify their specific mutation owners in the shared native registry;
+        # installed NPC text and translations remain observational evidence.
         'buildVerification': 'unverified',
         'limitation': 'The complete installed script/localization set has no supported-build digest manifest.',
     }
-    result = {'status': 'available', 'scenes': {}, 'quests': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}},
+    result = {'status': 'available', 'scenes': {}, 'quests': {}, 'resources': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}},
+              'scriptHashes': {name: digest for owner, name, digest, raw in source['inputs'] if owner == 'Scripts'},
               'errors': source['errors'], 'sourceIdentity': source['identity'], 'sourceProvenance': provenance}
     if observed_hash is None or observed_hash != expected_hash:
         result['status'] = 'missing' if observed_hash is None else 'mismatch'
@@ -389,6 +393,7 @@ def _load_native(source, expected_hash):
     candidates.update(events)
     scenes = defaultdict(list)
     quests = defaultdict(list)
+    resources = defaultdict(list)
     for owner, filename, digest, raw in source['inputs']:
         if owner != 'Scripts' or raw is None:
             continue
@@ -401,8 +406,15 @@ def _load_native(source, expected_hash):
         quest_owners = {match.start(1) for match in re.finditer(
             r'\bOverwriteTableKeys\s*\(\s*QuestData\s*,\s*(\{)', masked)}
         quest_owners.update(match.start(2) for match in assignments if match.group(1) == 'QuestData')
+        resource_owners = {match.start(1) for match in re.finditer(
+            r'\bOverwriteTableKeys\s*\(\s*ResourceData\s*,\s*(\{)', masked)}
+        resource_owners.update(match.start(2) for match in assignments if match.group(1) == 'ResourceData')
         for match in assignments:
             opening = match.start(2)
+            if parents.get(opening) in resource_owners and opening in pairs:
+                resources[match.group(1)].append({'file': filename,
+                    'line': raw.count('\n', 0, match.start()) + 1,
+                    'script': raw[opening:pairs[opening] + 1]})
             if parents.get(opening) not in quest_owners or opening not in pairs:
                 continue
             quests[match.group(1)].append({
@@ -444,7 +456,7 @@ def _load_native(source, expected_hash):
             scenes[name].append({'file': filename, 'line': raw.count('\n', 0, match.start()) + 1,
                                  'script': body, 'search': active_body, 'cues': cues,
                                  'partner': partner})
-    result.update(scenes=dict(scenes), quests=dict(quests), events=dict(events),
+    result.update(scenes=dict(scenes), quests=dict(quests), resources=dict(resources), events=dict(events),
                   text={lang: dict(index) for lang, index in by_language.items()})
     return result
 

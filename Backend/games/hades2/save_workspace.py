@@ -11,7 +11,7 @@ import math
 import uuid
 from types import SimpleNamespace
 
-from . import save_advanced, save_equipment, save_history, save_long_term, save_narrative
+from . import save_advanced, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
@@ -853,6 +853,8 @@ class Hades2SaveWorkspace:
             rows.extend(self._narrative_investigation().quest_rows(
                 root, language, include_absent=bool(search.strip())
             ))
+            rows.extend(save_quest_rewards.rows(root, language, self._narrative_investigation(),
+                self._game_path, include_absent=bool(search.strip())))
         if scope in ("all", "growth", "records"):
             progression = save_long_term.rows(
                 root, "progression", language, game_path=self._game_path,
@@ -995,12 +997,14 @@ class Hades2SaveWorkspace:
                 self.document.lua_state, owner_domain, language, game_path=self._game_path
             )
             if owner_domain == "progression":
+                rows.extend(save_quest_rewards.rows(self.document.lua_state, language,
+                    self._narrative_investigation(), self._game_path, include_absent=bool(search.strip())))
                 rows.extend(save_long_term.rows(
                     self.document.lua_state, owner_domain, language, game_path=self._game_path,
                     include_absent=bool(search.strip())
                 ))
                 if domain == "quests":
-                    rows = [row for row in rows if row["id"].startswith(("quest:", "objective:"))]
+                    rows = [row for row in rows if row["id"].startswith(("quest:", "questClaim:", "objective:"))]
                 elif domain == "arcana":
                     rows = [row for row in rows if row["id"].startswith("card:")]
         elif domain == "relationships":
@@ -1115,6 +1119,10 @@ class Hades2SaveWorkspace:
             return self._resource_descriptor(identifier)
         if separator and prefix == "playerStat":
             return self._player_stat_descriptor(identifier)
+        if prefix == "questClaim":
+            semantic = save_quest_rewards.descriptor(self.document.lua_state, entry_id, self._narrative_investigation())
+            if semantic is not None:
+                return semantic
         semantic = save_history.descriptor(self.document.lua_state, entry_id, game_path=self._game_path)
         if semantic is not None:
             return semantic
@@ -1144,7 +1152,9 @@ class Hades2SaveWorkspace:
         if prefix == "advanced":
             row = save_advanced.row(root, entry_id, language)
             return descriptor, row
-        if prefix == "history":
+        if prefix == "questClaim":
+            rows = save_quest_rewards.rows(root, language, self._narrative_investigation(), self._game_path, include_absent=True)
+        elif prefix == "history":
             rows = save_history.rows(root, language, game_path=self._game_path)
         elif prefix == "resource":
             rows = self._resource_rows(language)
@@ -1152,7 +1162,7 @@ class Hades2SaveWorkspace:
             rows = self._player_stat_rows(language)
         elif prefix in ("flag", "dialogue", "dialogueReset", "dialogueChoice", "quest", "questObservation", "speech"):
             rows = [save_narrative.entry_row(root, entry_id, language, self._game_path)]
-        elif prefix in ("interaction", "specialInteraction", "card", "objective"):
+        elif prefix in ("interaction", "specialInteraction", "gift", "card", "objective"):
             rows = save_long_term.rows(
                 root, descriptor["domain"], language, game_path=self._game_path, include_absent=True
             )
@@ -1239,6 +1249,7 @@ class Hades2SaveWorkspace:
         intents = tuple(intents)
         rows = []
         rows.extend(save_narrative.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_quest_rewards.linked_changes(self.document.lua_state, intents))
         rows.extend(save_long_term.linked_changes(self.document.lua_state, intents))
         rows.extend(save_equipment.linked_changes(self.document.lua_state, intents))
         unique = {}
@@ -1267,6 +1278,29 @@ class Hades2SaveWorkspace:
 
         if identity.startswith("linked:arcanaCache:"):
             result["name"] = save_long_term.linked_cache_label(effect["rawId"], language, game_path=self._game_path)
+            return result
+
+        if identity.startswith("linked:giftTotal:"):
+            resource = identity[len("linked:giftTotal:"):]
+            native = official_display_names((resource,), language, game_path=self._game_path)
+            result["name"] = ("赠礼资源累计 · " if language == "zh-CN" else "Gift resource total · ") + native.get(resource, resource)
+            return result
+
+        if identity.startswith("linked:questReward:"):
+            path = effect["path"]
+            owner_name = path[-2] if len(path) > 2 else path[-1]
+            labels = {
+                "Resources": ("资源库存", "Resource balance"),
+                "LifetimeResourcesGained": ("累计获得资源", "Lifetime resource gains"),
+                "ResourcesGained": ("当前挑战获得资源", "CurrentRun resource gains"),
+                "QuestsCompleted": ("任务完成记录", "Quest completion history"),
+                "UnviewedLastResourceGained": ("最近获得资源提示", "Last gained resource indicator"),
+            }
+            pair = labels[owner_name]
+            result["name"] = pair[0 if language == "zh-CN" else 1]
+            if len(path) > 2:
+                native = official_display_names((path[-1],), language, game_path=self._game_path)
+                result["name"] += " · " + native.get(path[-1], path[-1])
             return result
 
         if identity.startswith("linked:card:"):
@@ -1369,7 +1403,7 @@ class Hades2SaveWorkspace:
                 after, typed_after = save_advanced.normalize_set(descriptor, value)
                 no_change = descriptor["beforePresent"] and descriptor["typedBefore"] == typed_after
             snapshot = dict(self._pending)
-            if no_change:
+            if no_change and not self._overlaps_pending_transaction(descriptor):
                 self._pending.pop(entry_id, None)
             else:
                 self._pending[entry_id] = {
@@ -1383,11 +1417,13 @@ class Hades2SaveWorkspace:
                 self._pending.clear()
                 self._pending.update(snapshot)
                 raise
-        if descriptor["domain"] == "history":
+        if descriptor["domain"] == "questRewards":
+            value = save_quest_rewards.validate(descriptor, operation, value)
+        elif descriptor["domain"] == "history":
             value = save_history.validate(descriptor, operation, value)
         elif descriptor["domain"] == "weapons":
             save_equipment.validate(descriptor, operation, value)
-        elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+        elif entry_id.startswith(("interaction:", "specialInteraction:", "gift:", "card:", "objective:")):
             save_long_term.validate(descriptor, operation, value)
         elif descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.validate(descriptor, operation, value)
@@ -1430,7 +1466,7 @@ class Hades2SaveWorkspace:
                      if descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory")
                      and entry_id.startswith(("flag:", "dialogue:", "dialogueReset:", "dialogueChoice:", "quest:", "questObservation:", "speech:"))
                      else value == before)
-        if no_change and descriptor.get("beforePresent", True):
+        if no_change and descriptor.get("beforePresent", True) and not self._overlaps_pending_transaction(descriptor):
             self._pending.pop(entry_id, None)
         else:
             self._pending[entry_id] = {
@@ -1441,6 +1477,7 @@ class Hades2SaveWorkspace:
                 "operation": operation,
                 "before": before,
                 "after": value,
+                **({"ownerEvidence": descriptor["ownerEvidence"]} if descriptor["domain"] == "questRewards" else {}),
                 **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] == "history" else {}),
             }
         try:
@@ -1471,8 +1508,7 @@ class Hades2SaveWorkspace:
         semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
         if any(intent["domain"] == "advanced" for intent in intents):
             semantic_candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
-            for intent in semantic:
-                self._apply_intent(semantic_candidate, intent)
+            self._apply_intent_batch(semantic_candidate, semantic)
             save_long_term.finalize_batch(
                 semantic_candidate.lua_state, semantic, source=self.document.lua_state)
             save_advanced.validate_overlaps(self.document.lua_state, intents, semantic_candidate.lua_state)
@@ -1483,12 +1519,18 @@ class Hades2SaveWorkspace:
             descriptor = self._descriptor(intent["id"])
             if intent["operation"] not in descriptor["mutationKinds"]:
                 raise ValueError("Save Editor mutation is no longer allowed.")
+            if intent.get("ownerEvidence") != descriptor.get("ownerEvidence"):
+                raise save_advanced.AdvancedMutationError("Save Editor staged reward source has changed; remove and stage the claim again.", conflict=True)
             if ((intent.get("typedBefore") != descriptor.get("typedBefore"))
                     if intent["domain"] == "advanced" else
                     (intent["before"] != descriptor["before"] or (intent["domain"] == "history" and
                      intent["beforePresent"] != descriptor["beforePresent"]))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
-            self._apply_intent(candidate, intent)
+        self._apply_intent_batch(candidate, intents)
+        save_quest_rewards.validate_batch(self.document.lua_state, candidate.lua_state, intents,
+            lambda root, others: self._apply_intent_batch(SimpleNamespace(lua_state=root), others))
+        save_relationships.validate_transaction_owners(self.document.lua_state, intents,
+            lambda root, others: self._apply_intent_batch(SimpleNamespace(lua_state=root), others))
         try:
             if semantic:
                 save_long_term.finalize_batch(
@@ -1502,6 +1544,10 @@ class Hades2SaveWorkspace:
                 raise
             raise presented from error
         return candidate
+
+    def _overlaps_pending_transaction(self, descriptor):
+        return (save_quest_rewards.overlaps_pending_claim(self._pending.values(), descriptor)
+                or save_relationships.overlaps_pending_gift(self._pending.values(), descriptor))
 
     def _validated_review_state(self, intents, language="en"):
         intents = tuple(intents)
@@ -1606,8 +1652,18 @@ class Hades2SaveWorkspace:
         self._pending.clear()
         return self.review(language=language)
 
+    def _apply_intent_batch(self, document, intents):
+        for intent in intents:
+            if not intent["id"].startswith(("gift:", "questClaim:")):
+                self._apply_intent(document, intent)
+        save_relationships.apply_batch(document.lua_state, intents)
+        save_quest_rewards.apply_batch(document.lua_state, intents)
+
     @staticmethod
     def _apply_intent(document, intent):
+        if intent["domain"] == "questRewards":
+            save_quest_rewards.apply_batch(document.lua_state, (intent,))
+            return
         if intent["domain"] == "advanced":
             save_advanced.apply_intent(document.lua_state, intent)
             return
@@ -1617,7 +1673,7 @@ class Hades2SaveWorkspace:
         if intent["domain"] == "weapons":
             save_equipment.apply_intent(document.lua_state, intent)
             return
-        if intent["id"].startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+        if intent["id"].startswith(("interaction:", "specialInteraction:", "gift:", "card:", "objective:")):
             save_long_term.apply_intent(document.lua_state, intent)
             return
         if intent["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
