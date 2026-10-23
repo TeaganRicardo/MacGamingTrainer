@@ -7,6 +7,8 @@ struct TrainerSaveRetentionSettings: View {
     @State private var count = ""
     @State private var mebibytes = ""
     @State private var editing: Set<String> = []
+    // Inventory refresh must not resign a focused native editor and its draft.
+    @State private var saving = false
 
     private var values: (Int, Int)? {
         guard let count = Int(count), (1...10000).contains(count),
@@ -25,13 +27,13 @@ struct TrainerSaveRetentionSettings: View {
                     Text(localization.localized("host.save.retention.count"))
                     Spacer()
                     TrainerNumberField(text: $count, placeholder: "host.save.retention.count", width: 110,
-                        enabled: !model.busy, onEditingChanged: { setEditing("count", $0) })
+                        enabled: !saving, onEditingChanged: { setEditing("count", $0) })
                 }
                 HStack {
                     Text(localization.localized("host.save.retention.bytes"))
                     Spacer()
                     TrainerNumberField(text: $mebibytes, placeholder: "host.save.retention.bytes", width: 110,
-                        enabled: !model.busy, onEditingChanged: { setEditing("bytes", $0) })
+                        enabled: !saving, onEditingChanged: { setEditing("bytes", $0) })
                 }
                 Text(localization.localized("host.save.retention.floor"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -50,7 +52,9 @@ struct TrainerSaveRetentionSettings: View {
                 Spacer()
                 TrainerPrimaryActionButton(title: localization.localized("host.save.retention.save"), enabled: !model.busy && values != nil) {
                     guard let values else { return }
+                    saving = true
                     model.configureRetention(maxCount: values.0, maxBytes: values.1) { success in
+                        saving = false
                         if success { onClose() }
                     }
                 }

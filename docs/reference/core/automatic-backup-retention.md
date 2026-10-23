@@ -66,5 +66,10 @@ remains visible and may exceed the automatic budget.
 Core protocol commands are `core.save.set_retention` (`maxCount`, `maxBytes`)
 and `core.save.protect` (`snapshotId`, boolean `protected`). The existing inventory
 returns `retention`, `storageUsage` and each snapshot's origin/protection/size.
-All automated tests use temporary fixture save roots. Native window rendering,
-real saves, game reload and later game-authored save behavior remain user-run.
+The policy sheet preserves a focused draft during background observations and
+refreshes unfocused fields. Its own acknowledged save owns field disabling;
+generic inventory refresh does not interrupt editing. The native control fixture
+exercises Return/blur, explicit Save acknowledgement and feedback, and both
+protection menu actions through the real Core service and temporary save roots.
+Visual acceptance, real saves, game reload and later game-authored save behavior
+remain user-run.
