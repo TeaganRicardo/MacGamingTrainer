@@ -219,8 +219,7 @@ def _familiar_rank(state, upgrade):
     owner = _table(state, "FamiliarUpgrades")
     level = 0
     for key in _familiar_upgrade_keys(upgrade):
-        _flag(owner, key)
-        if key in owner:
+        if _flag(owner, key):
             level += 1
     return level
 

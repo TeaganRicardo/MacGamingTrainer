@@ -40,9 +40,9 @@ ownership. A positive rank also unlocks its parent Familiar. Revoking a
 Familiar clears known current upgrade memberships and its selected state while
 preserving purchase history and unknown records. Missing owners are created;
 existing tier gaps and disagreeing current mirrors are normalized to the explicit
-desired rank. Native stack counting iterates matching keys, so an observed gap
-is displayed by its existing purchase count before the requested repair. Only
-an ambiguous key or a parent value that cannot be traversed as a table prevents
+desired rank. Native stack counting uses matching Lua-truthy memberships, so an
+observed gap is displayed by its existing purchase count before the requested
+repair. Only an ambiguous key or a parent value that cannot be traversed as a table prevents
 this linked child operation; Advanced exposes the actual parent data separately.
 
 Each Familiar entity groups its unlock, purchased ranks and selected observation

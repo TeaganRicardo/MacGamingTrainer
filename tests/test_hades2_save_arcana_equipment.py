@@ -327,4 +327,27 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     assert state["MetaUpgradeState"]["FutureCard"].get("Equipped") is None
     assert state.get("MetaUpgradeCostCache") is None, "unknown metadata invented derived state"
 
+    # Familiar purchases use Lua truth, unlike weapon upgrade key counting.
+    # A stored false membership must not hide an explicit first-rank purchase.
+    for membership, before, desired in ((False, 0, 1), (0, 1, 2), ("", 1, 2)):
+        fixture = copy.deepcopy(document)
+        fixture.lua_state["GameState"]["FamiliarsUnlocked"] = table({"FrogFamiliar": True})
+        fixture.lua_state["GameState"]["FamiliarUpgrades"] = table({
+            "FrogHealthBonus": membership, "FutureFamiliarUpgrade": "preserve"})
+        path.write_bytes(fixture.to_bytes())
+        editor = Hades2SaveWorkspace.open(service)
+        row = next(row for row in editor.query(domain="weapons", limit=200)["items"]
+                   if row["id"] == "familiarUpgrade:FrogHealthBonus")
+        assert row["value"] == before, (membership, row["value"])
+        assert editor.stage(row["id"], "set", desired)["actionCount"] == 1
+        editor.apply()
+        saved = Hades2SaveDocument.load(path).lua_state
+        assert saved["GameState"]["FamiliarUpgrades"]["FrogHealthBonus"] is True
+        assert saved["GameState"]["FamiliarUpgrades"]["FutureFamiliarUpgrade"] == "preserve"
+        assert saved["CurrentRun"]["Sentinel"] == "unchanged"
+        reopened = Hades2SaveWorkspace.open(service)
+        row = next(row for row in reopened.query(domain="weapons", limit=200)["items"]
+                   if row["id"] == "familiarUpgrade:FrogHealthBonus")
+        assert row["value"] == desired
+
 print("Arcana native equipment Save journey: PASS")
