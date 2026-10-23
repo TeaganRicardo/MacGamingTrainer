@@ -28,11 +28,17 @@ owners retain their separate lifecycle paths.
 
 The ordinary-boon helper therefore snapshots the actual modifier records, removes
 the selected source-matching record (recursive processed-value comparison,
-allowing extra live fields), and preserves surviving records and their live
+allowing object extension fields), and preserves surviving records and their
 state. It does not infer modifier ownership from the order of `Hero.Traits` and
 does not reconstruct modifiers by reacquiring a boon. Equal source-valued
-modifier records are mathematically interchangeable; the game exposes no
-instance ID on those registry records. If no record matches the processed source,
+modifier records in the five audited ordinary registries have equivalent native
+state: their added lookup fields are deterministic from the processed source,
+and the audited ordinary consumers do not maintain per-instance usage counters.
+The game's mutable `LimitedUse` modifier belongs to the separate Hades lifesteal
+owner (`CombatLogic.lua:1099`, `PowersLogic.lua:4951-4958`). The fixture's extra
+`RemainingUses` field only protects object preservation against reconstruction;
+it does not establish an ordinary native usage lifecycle. The game exposes no
+instance ID on these registry records. If no record matches the processed source,
 command preflight refuses removal before the action ledger begins mutation;
 it does not guess from trait-list position or rebuild a possibly used modifier.
 
