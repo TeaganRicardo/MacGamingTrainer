@@ -1,7 +1,8 @@
 # Advanced typed Save editing
 
 `Backend/games/hades2/save_advanced.py` owns raw writes by actual Lua type and a
-unique path. Unknown game meaning produces a warning; it does not remove write
+unique path; `save_container.py` owns header, main-root structure and extra Lua
+payload edits. Unknown game meaning produces a warning; it does not remove write
 capability. Semantic workflows remain useful owners for recognizable operations
 and linked effects. Advanced edits do not claim the game will accept or reload
 an arbitrary value simply because the codec can write it.
@@ -31,10 +32,13 @@ Tables use ordered entries rather than JSON object keys, preserving physical
 order and allocation hints. Omitted hints default to a hash table of the supplied
 entries. Strings retain whitespace and empty strings. Lua byte strings use the
 string tag with `encoding:"base64"`, preserving bytes that are not UTF-8.
-Numbers must be finite and exactly representable by the codec's Lua double;
-unsupported values are rejected, without changing pending intent. Existing
-non-finite values in unrelated fields are preserved. Depth validation uses the
-codec's own limit.
+Plain JSON numbers must be finite and exactly representable by the codec's Lua
+double. Non-finite Lua values are writable through
+`{"luaType":"number","encoding":"nonfinite","value":"nan"}`; the other
+accepted spellings are `"inf"` and `"-inf"`. Infinite keys use this same tagged
+encoding in IDs and query paths. NaN, nil and table keys are invalid. Unsupported
+values are rejected without changing pending intent. Depth validation uses the
+actual codec limit; transport namespace wrappers do not reduce it.
 
 `unset` removes the physical entry. `beforePresent` / `afterPresent` distinguish
 an existing serialized nil from a removed field. New table membership uses
@@ -43,6 +47,18 @@ overwrite an existing key. `removeMembership` uses `{key:<tagged scalar>}`.
 Each becomes a separate child action with a stable field ID. A new child ID has
 the suffix `:new`; it can be revised through `set` or removed from the basket
 before Apply. Different members do not overwrite the parent table's one action.
+
+## Save container
+
+Container IDs use `save-container:`; row paths start with
+`{"saveContainer":"header"}`, `{"saveContainer":"payload"}` or
+`{"saveContainer":"main"}` rather than a game-owned Lua key. Existing main-root
+members retain their canonical Advanced IDs. The main root must remain a table;
+header fields follow the codec's required types, integer widths and
+format-specific fields. Its uint64 timestamp uses decimal text to retain every
+bit. Extra payloads and `notable_lua_data` use contiguous one-based positions.
+Removing a sequence member conflicts with other edits in that sequence because
+later positions shift. These edits use the same Changes and Apply transaction.
 
 ## Query, detail, Changes and Apply
 

@@ -4,7 +4,7 @@ The user selected broad Save editability on 2026-10-23. A known number, boolean,
 text value, collection member or selection is editable by default when its
 physical path and codec round trip are reliable. Unknown purpose is an impact
 warning. A read-only decision needs a concrete technical reason such as an
-ambiguous physical key or an unsupported nonfinite value. This extends the
+ambiguous physical key or an unsupported encoding. This extends the
 ordinary entity workflow rather than requiring a new catalog allow-list.
 
 Advanced keeps scalar inputs inline. Completed numeric, boolean and text edits
@@ -16,6 +16,9 @@ The table form adds/removes a typed key as an independent requested action.
 Changes retains the distinction between a present nil value and an absent
 field, and permits revision or removal before Apply. Typed before/after values
 remain available through the same structure editor.
+The same surface edits container headers, extra Lua payloads and main-root
+structure. Tagged non-finite values and infinite keys remain writable within
+the codec's actual constraints; namespace wrappers do not consume Lua depth.
 
 The owning backend policy and wire representation are documented in
 [Advanced typed Save mutations](../reference/hades2/advanced-typed-save-editing.md).
