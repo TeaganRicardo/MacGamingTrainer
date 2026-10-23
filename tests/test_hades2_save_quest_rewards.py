@@ -194,14 +194,19 @@ class QuestRewardTests(SaveTransactionFixture):
         raw = next(row for row in self.work.query(domain="advanced", path=["GameState"])["items"]
                    if row["rawId"] == "KeepUnknown")
         self.work.stage(raw["id"], "set", "requested raw value")
+        stamp = next(row for row in self.work.query(domain="advanced", path=[{"saveContainer": "header"}])["items"]
+                     if row["rawId"] == "timestamp")
+        self.work.stage(stamp["id"], "set", "101")
         review = self.work.review()
-        self.assertEqual(review["actionCount"], 9)
+        self.assertEqual(review["actionCount"], 10)
         effects = {row["id"] for row in review["changes"]}
         self.assertIn("linked:giftTotal:GiftPoints", effects)
         self.assertIn("linked:arcanaCache:MetaUpgradeCardLayout", effects)
         self.assertEqual(target.read_bytes(), previous_target)
         result = self.work.apply()
-        saved = Hades2SaveDocument.load(target).lua_state
+        installed = Hades2SaveDocument.load(target)
+        self.assertEqual(installed.header.timestamp, 101)
+        saved = installed.lua_state
         state = saved["GameState"]
         self.assertEqual(self.path.read_bytes(), later_source)
         self.assertEqual(state["KeepUnknown"], "requested raw value")
@@ -222,6 +227,32 @@ class QuestRewardTests(SaveTransactionFixture):
         backup = self.service.store.load_verified_snapshot(result["previousSnapshotId"])
         self.assertEqual((backup["root"] / "files/main/Profile2.sav").read_bytes(), previous_target)
         self.assertEqual(self.work.review()["actionCount"], 0)
+
+    def test_unrelated_container_edits_coexist_with_each_transaction_in_either_order(self):
+        from games.hades2 import save_advanced
+        for identity, value in (("questClaim:QuestHelpDora", True), ("gift:Hecate:GiftPoints", 10)):
+            for reverse in (False, True):
+                with self.subTest(identity=identity, reverse=reverse):
+                    self.write(); self.work = self.open()
+                    stamp = next(row for row in self.work.query(domain="advanced", path=[{"saveContainer": "header"}])["items"]
+                                 if row["rawId"] == "timestamp")
+                    payload = next(row for row in self.work.query(domain="advanced")["items"]
+                                   if row["path"] == [{"saveContainer": "payload"}])
+                    edits = [(identity, "set", value), (stamp["id"], "set", "101"),
+                             (payload["id"], "set", save_advanced.typed_value(table({1: 9.25})))]
+                    for entry, operation, after in reversed(edits) if reverse else edits:
+                        self.work.stage(entry, operation, after)
+                    self.assertEqual(self.work.review()["actionCount"], 3)
+                    self.work.apply()
+                    saved = Hades2SaveDocument.load(self.path)
+                    self.assertEqual(saved.header.timestamp, 101)
+                    self.assertEqual(saved.lua_values[1:], [9.25])
+                    if identity.startswith("questClaim:"):
+                        self.assertEqual(saved.lua_state["GameState"]["Resources"]["GiftPoints"], 23)
+                        self.assertEqual(saved.lua_state["GameState"]["QuestStatus"]["QuestHelpDora"], "CashedOut")
+                    else:
+                        self.assertEqual(saved.lua_state["GameState"]["GiftRecord"]["Hecate"]["GiftPoints"], 10)
+                        self.assertEqual(saved.lua_state["GameState"]["GiftResourceRecord"]["GiftPoints"], 14)
 
 if __name__ == "__main__":
     unittest.main()

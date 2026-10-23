@@ -212,14 +212,13 @@ def linked_changes(root, intents):
     return result
 
 
-def validate_batch(source, candidate, intents, apply_other):
+def validate_batch(source, intents, project_other):
     own = [intent for intent in intents if intent["id"].startswith("questClaim:") and intent["after"]]
     if not own:
         return
     claim_paths = [path for intent in own for path in _claim_paths(intent)]
     other_intents = [intent for intent in intents if not intent["id"].startswith("questClaim:")]
-    others = copy.deepcopy(source)
-    apply_other(others, other_intents)
+    others = project_other(other_intents)
     other_paths = [intent["path"] for intent in other_intents]
     other_paths.extend(save_advanced.changed_paths(source, others))
     if any(save_advanced.paths_overlap(left, right) for left in claim_paths

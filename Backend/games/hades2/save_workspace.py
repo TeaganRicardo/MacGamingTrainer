@@ -1578,11 +1578,8 @@ class Hades2SaveWorkspace:
         intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
         semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
         if any(intent["domain"] == "advanced" for intent in intents):
-            semantic_candidate = Hades2SaveDocument.from_bytes(self.document.to_bytes())
-            self._apply_intent_batch(semantic_candidate, semantic)
-            save_long_term.finalize_batch(
-                semantic_candidate.lua_state, semantic, source=self.document.lua_state)
-            save_container.validate_overlaps(self.document.lua_state, intents, semantic_candidate.lua_state)
+            semantic_root = self._project_intent_batch_root(semantic)
+            save_container.validate_overlaps(self.document.lua_state, intents, semantic_root)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never
@@ -1598,10 +1595,8 @@ class Hades2SaveWorkspace:
                      intent["beforePresent"] != descriptor["beforePresent"]))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
         self._apply_intent_batch(candidate, intents)
-        save_quest_rewards.validate_batch(self.document.lua_state, candidate.lua_state, intents,
-            lambda root, others: self._apply_intent_batch(SimpleNamespace(lua_state=root), others))
-        save_relationships.validate_transaction_owners(self.document.lua_state, intents,
-            lambda root, others: self._apply_intent_batch(SimpleNamespace(lua_state=root), others))
+        save_quest_rewards.validate_batch(self.document.lua_state, intents, self._project_intent_batch_root)
+        save_relationships.validate_transaction_owners(self.document.lua_state, intents, self._project_intent_batch_root)
         try:
             save_container.finalize_batch(candidate, intents)
             if semantic:
@@ -1723,6 +1718,17 @@ class Hades2SaveWorkspace:
     def cancel(self, language="en"):
         self._pending.clear()
         return self.review(language=language)
+
+    def _project_intent_batch_root(self, intents):
+        # Batch planners may include header, extra-payload or whole-root edits.
+        # Project a complete document and return its resulting root: an in-place
+        # Lua-only callback loses both container state and root replacements.
+        intents = tuple(intents)
+        candidate = Hades2SaveDocument.from_bytes(self.document.to_bytes())
+        self._apply_intent_batch(candidate, intents)
+        save_long_term.finalize_batch(candidate.lua_state, intents, source=self.document.lua_state)
+        save_container.finalize_batch(candidate, intents)
+        return candidate.lua_state
 
     def _apply_intent_batch(self, document, intents):
         for intent in intents:

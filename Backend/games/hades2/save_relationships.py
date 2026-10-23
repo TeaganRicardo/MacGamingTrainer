@@ -167,13 +167,12 @@ def overlaps_pending_gift(intents, info):
     return any(save_advanced.paths_overlap(path, info["path"]) for path in _owned_paths(others))
 
 
-def validate_transaction_owners(source, intents, apply_other):
+def validate_transaction_owners(source, intents, project_other):
     paths = tuple(_owned_paths(intents))
     if not paths:
         return
     others = [intent for intent in intents if not intent["id"].startswith("gift:")]
-    candidate = copy.deepcopy(source)
-    apply_other(candidate, others)
+    candidate = project_other(others)
     for resource in {_parts(intent["id"])[1] for intent in intents if intent["id"].startswith("gift:")}:
         if (read(source, ["GameState", "GiftResourceRecord", resource]) is None
                 and _reconstructed_total(source, resource) != _reconstructed_total(candidate, resource)):
