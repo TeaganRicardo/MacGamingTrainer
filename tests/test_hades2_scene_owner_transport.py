@@ -39,7 +39,7 @@ try:
             )
             adapter.preferences = adapter._default_preferences()
             adapter.preferences.update(
-                damageEnabled=True,
+                damageMultiplier=2.0,
                 statLocks={"moveSpeed": 150},
                 vitalLocks={"health": {"current": 60, "max": 100}},
                 rerollsLock=4,

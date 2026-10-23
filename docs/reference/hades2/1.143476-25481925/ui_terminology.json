@@ -529,8 +529,8 @@
       "status": "trainer_product_label"
     },
     "generateGathering": {
-      "value": "当前房间生成",
-      "englishValue": "Generate in Current Room",
+      "value": "生成",
+      "englishValue": "Generate",
       "reason": "Trainer one-shot action invokes native setup for one unused authored gathering point.",
       "status": "trainer_product_label"
     },

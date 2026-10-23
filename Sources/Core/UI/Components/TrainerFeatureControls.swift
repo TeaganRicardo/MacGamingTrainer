@@ -86,13 +86,8 @@ struct TrainerCompactMultiplierRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .foregroundStyle(state.indicatorColor)
-                Text(title)
-                    .foregroundStyle(state.isWarning ? theme.warning : .primary)
-            }
-            .font(.subheadline.weight(.medium))
+            TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, emphasized: state.isOn)
+                .foregroundStyle(state.isWarning ? theme.warning : .primary)
             Spacer()
             TrainerNumberField(text: $text, placeholder: "2", accessibilityLabel: title, width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
             Text("×").foregroundStyle(.secondary)

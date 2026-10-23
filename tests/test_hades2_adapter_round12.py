@@ -80,7 +80,7 @@ def reset_payload(god_mode=False):
     return {
         'status':'ready','scene':'run','capabilities':{'setFeature':True},
         'desiredFeatures':desired,'activeFeatures':active,'dormantFeatures':{},'featureErrors':{},
-        'damageMultiplier':2.0,'moneyMultiplier':2.0,'resourceMultiplier':2.0,'gameSpeed':1.0,
+        'damageMultiplier':1.0,'moneyMultiplier':2.0,'resourceMultiplier':2.0,'gameSpeed':1.0,
         'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
         'nextRoomReward':None,'stats':{},'resources':[],'elements':[],'boons':[],'rewards':[],
     }

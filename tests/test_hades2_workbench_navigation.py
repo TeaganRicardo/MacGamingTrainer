@@ -7,6 +7,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+header_actions = (ROOT/'Sources/Hades2/Views/Hades2HostActions.swift').read_text()
+assert '.popover(isPresented: $resultsPresented, arrowEdge: .bottom)' in header_actions
+assert 'resultsPresented = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty' in header_actions
+assert 'if !model.workbenchSearch.trimmingCharacters' not in header_actions
+assert 'resultsPresented = false' in header_actions
 SWIFTC = shutil.which('swiftc')
 assert SWIFTC, 'swiftc required for workbench search behavior'
 reference = json.loads((ROOT/'docs/reference/hades2/1.143476-25481925/ui_terminology.json').read_text())
@@ -48,6 +53,10 @@ for key in ["hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.tr
 precondition(matches("无法匹配的功能").isEmpty)
 let entries = Hades2WorkbenchCatalog.entries
 precondition(Set(entries.map(\.id)).count == entries.count, "search destinations must be stable and unique")
+precondition(Set(Hades2WorkbenchCatalog.orderedShortcutActions) == Set(ShortcutAction.allCases))
+precondition(Hades2WorkbenchCatalog.orderedShortcutActions.count == ShortcutAction.allCases.count)
+precondition(entries.contains { $0.titleKey == "hades2.feature.damageMultiplier" && $0.shortcut == nil && $0.section == .values })
+precondition(!ShortcutAction.allCases.contains { $0.rawValue == "damageEnabled" })
 for action in ShortcutAction.allCases {
     precondition(entries.filter { $0.shortcut == action }.count == 1, "a current shortcut action is absent or duplicated")
 }
@@ -69,3 +78,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
                     str(ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
                     str(main), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
+
+workbench_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert "specialSearch" not in workbench_view
+assert "inline: true" in workbench_view

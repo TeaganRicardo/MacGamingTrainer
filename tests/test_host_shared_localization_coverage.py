@@ -377,6 +377,10 @@ assert "localization.presentation(text)" in message_banner, (
 )
 
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
+sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text(encoding="utf-8")
+# The connection card moved its status/operation/detail tokens into the sidebar
+# card, so each shared lookup must live at one of those two seams.
+shared_status_surfaces = status_controls + sidebar
 for token in (
     "localization.string(operationToken)",
     "localization.string(statusToken)",
@@ -385,7 +389,7 @@ for token in (
     'localization.localized(primaryActionTitleKey)',
     'return "host.restartBackend"',
 ):
-    assert token in status_controls, token
+    assert token in shared_status_surfaces, token
 
 reference = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 assert 'connected ? "host.connected" : "host.disconnected"' in reference

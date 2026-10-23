@@ -31,7 +31,7 @@ enum Hades2MultiplierKey: String, CaseIterable {
 
     var defaultValue: Double {
         switch self {
-        case .damageMultiplier: return 2.0
+        case .damageMultiplier: return 1.0
         case .moneyMultiplier: return 2.0
         case .resourceMultiplier: return 2.0
         case .gameSpeed: return 1.0

@@ -168,10 +168,20 @@ def render_lua_multiplier_dispatch():
         lines.extend([
             f'      if feature == "{key}" then',
             f'        if not finite(value) or value < {lo} or value > {hi} then error("Multiplier must be {lo}..{hi}") end',
-            f"        M.{key} = value",
-            "        return state(params.includeCatalogs)",
-            "      end",
         ])
+        if key == "damageMultiplier":
+            lines.extend([
+                "        runtimeState.previousDamageMultiplier = M.damageMultiplier",
+                "        M.damageMultiplier = value",
+                '        feature = "damageEnabled"',
+                "        value = value ~= 1",
+            ])
+        else:
+            lines.extend([
+                f"        M.{key} = value",
+                "        return state(params.includeCatalogs)",
+            ])
+        lines.append("      end")
     lines.append(LUA_MULTIPLIER_END)
     return "\n".join(lines)
 

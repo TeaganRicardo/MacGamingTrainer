@@ -207,7 +207,11 @@ try:
             capabilities={"setFeature": True},
         )
 
-        resident_cases = [(key, True) for key in TOGGLES]
+        # `damageEnabled` is a derived projection of `damageMultiplier`, so the
+        # adapter translates a write to it instead of forwarding the retired
+        # name; the translation is asserted on its own below.
+        derived_toggles = {"damageEnabled"}
+        resident_cases = [(key, True) for key in TOGGLES if key not in derived_toggles]
         resident_cases.extend(
             (key, MULTIPLIER_RULES[key]["default"])
             for key in MULTIPLIER_RULES
@@ -226,6 +230,15 @@ try:
             assert call["command"] == "set_feature"
             assert call["params"] == {"feature": key, "value": value}
             assert not time_warp.calls
+
+        before = len(session.calls)
+        adapter.dispatch(
+            "set_desired",
+            {"feature": "damageEnabled", "value": True},
+            "resident-damage-toggle",
+        )
+        assert len(session.calls) == before + 1
+        assert session.calls[-1]["params"] == {"feature": "damageMultiplier", "value": 2.0}
 
         before = len(session.calls)
         speed = MULTIPLIER_RULES["gameSpeed"]["default"] + 1.0

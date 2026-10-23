@@ -17,7 +17,7 @@ struct Hades2ShortcutStore {
     private static let profileLayoutVersion = 1
 
     /// Frozen ordering used only to recognize defaults written by released
-    /// shortcut layouts. Active allocation always uses ShortcutAction.allCases.
+    /// shortcut layouts. Active allocation follows the ordered workbench catalog.
     private static let legacyV4ActionOrder: [String] = [
         "invincibility", "infiniteHealth", "infiniteMana", "instantCastCooldown", "hexAlwaysReady",
         "infiniteAmmo", "damageEnabled", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
@@ -26,10 +26,10 @@ struct Hades2ShortcutStore {
         "applyNextRoomReward", "disableAll",
     ]
 
-    private static let legacyV3DefaultDigits: [ShortcutAction: Int] = [
-        .invincibility: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
-        .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
-        .moneyMultiplierEnabled: 9, .disableAll: 0,
+    private static let legacyV3DefaultDigits: [String: Int] = [
+        "invincibility": 1, "infiniteHealth": 2, "infiniteMana": 3, "instantCastCooldown": 4,
+        "hexAlwaysReady": 5, "infiniteAmmo": 6, "damageEnabled": 7, "autoMiniGames": 8,
+        "moneyMultiplierEnabled": 9, "disableAll": 0,
     ]
 
     init(defaults: UserDefaults = .standard) {
@@ -37,16 +37,22 @@ struct Hades2ShortcutStore {
         self.chords = Self.defaultLayout()
         loadAndMigrate()
         defaults.removeObject(forKey: "shortcut.action.gardenQoL")
+        defaults.removeObject(forKey: "shortcut.action.damageEnabled")
     }
 
     static func defaultLayout() -> [ShortcutAction: HotkeyChord] {
-        let ordinary = ShortcutAction.allCases.filter { !$0.isSpeedAdjustment }
+        // Actions with a dedicated, hand-picked chord keep it out of the
+        // sequential allocation so they never consume a positional slot.
+        let dedicated: Set<ShortcutAction> = [.decreaseGameSpeed, .increaseGameSpeed, .disableAll]
+        let ordinary = Hades2WorkbenchCatalog.orderedShortcutActions.filter { !dedicated.contains($0) }
         var result = Dictionary(uniqueKeysWithValues: ordinary.enumerated().compactMap { index, action in
             HotkeyChord.defaultShortcut(index: index).map { (action, $0) }
         })
         let modifiers = HotkeyChord.controlModifier | HotkeyChord.optionModifier
         result[.decreaseGameSpeed] = HotkeyChord(keyCode: 27, modifiers: modifiers, keyLabel: "−")
         result[.increaseGameSpeed] = HotkeyChord(keyCode: 24, modifiers: modifiers, keyLabel: "+")
+        // "Disable all" is a panic key: one fixed chord, never reallocated.
+        result[.disableAll] = HotkeyChord(keyCode: 51, modifiers: modifiers, keyLabel: "⌫")
         return result
     }
 
@@ -59,7 +65,7 @@ struct Hades2ShortcutStore {
     /// intentional shortcut for a chord that used to be a default.
     func payload() -> [String: Any] {
         var result: [String: Any] = [Self.profileLayoutVersionKey: Self.profileLayoutVersion]
-        for action in ShortcutAction.allCases {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             if let explicit = overrides[action] {
                 result[action.rawValue] = explicit.payload
             }
@@ -68,6 +74,11 @@ struct Hades2ShortcutStore {
     }
 
     mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> ShortcutAction? {
+        // "Disable all" is a panic chord. It is reserved, so no other action can
+        // claim it and displace the panic key to some arbitrary free slot.
+        if action != .disableAll, newChord == Self.defaultLayout()[.disableAll] {
+            return .disableAll
+        }
         if let other = ShortcutAction.allCases.first(where: {
             $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers
         }) {
@@ -96,10 +107,10 @@ struct Hades2ShortcutStore {
         var patch: [ShortcutAction: HotkeyChord] = [:]
         var patchTokens = Set<String>()
 
-        for action in ShortcutAction.allCases {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value) else { continue }
             if !isCurrentPayload,
-               (proposed == legacyV4Defaults[action.rawValue] || proposed == legacyV3Defaults[action]) {
+               (proposed == legacyV4Defaults[action.rawValue] || proposed == legacyV3Defaults[action.rawValue]) {
                 // Old Profiles serialized derived defaults as if they were
                 // user choices. Re-derive those slots in the current UI order.
                 continue
@@ -123,7 +134,7 @@ struct Hades2ShortcutStore {
             values[$0] != nil
         }
         let completeLegacyV3Layout = Self.legacyV3DefaultDigits.keys.allSatisfy {
-            values[$0.rawValue] != nil
+            values[$0] != nil
         }
         if completeLegacyV4Layout || completeLegacyV3Layout {
             overrides = patch
@@ -185,7 +196,7 @@ struct Hades2ShortcutStore {
     private mutating func loadPersistedOverrides() {
         overrides.removeAll()
         var used = Set<String>()
-        for action in ShortcutAction.allCases {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             guard let value = defaults.object(forKey: key(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
             let token = Self.token(parsed)
@@ -198,7 +209,7 @@ struct Hades2ShortcutStore {
     private mutating func migrateV5Identity() {
         overrides.removeAll()
         var used = Set<String>()
-        for action in ShortcutAction.allCases {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             guard let value = defaults.object(forKey: legacyKey(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
             let token = Self.token(parsed)
@@ -213,7 +224,7 @@ struct Hades2ShortcutStore {
         var used = Set<String>()
         for action in ShortcutAction.legacyDigitActions {
             guard let digit = defaults.object(forKey: legacyKey(action)) as? Int,
-                  digit != Self.legacyV3DefaultDigits[action],
+                  digit != Self.legacyV3DefaultDigits[action.rawValue],
                   let chord = HotkeyChord.controlOptionDigit(digit) else { continue }
             let token = Self.token(chord)
             guard !used.contains(token) else { continue }
@@ -253,23 +264,23 @@ struct Hades2ShortcutStore {
         })
     }
 
-    private static func legacyV3DefaultChords() -> [ShortcutAction: HotkeyChord] {
-        Dictionary(uniqueKeysWithValues: legacyV3DefaultDigits.compactMap { action, digit in
-            HotkeyChord.controlOptionDigit(digit).map { (action, $0) }
+    private static func legacyV3DefaultChords() -> [String: HotkeyChord] {
+        Dictionary(uniqueKeysWithValues: legacyV3DefaultDigits.compactMap { identity, digit in
+            HotkeyChord.controlOptionDigit(digit).map { (identity, $0) }
         })
     }
 
     private static func knownBrokenV4MigratedLayout() -> [String: HotkeyChord] {
         var layout = legacyV4DefaultLayout()
-        for action in ShortcutAction.legacyDigitActions {
-            guard let digit = legacyV3DefaultDigits[action],
+        for identity in legacyV4ActionOrder {
+            guard let digit = legacyV3DefaultDigits[identity],
                   let proposed = HotkeyChord.controlOptionDigit(digit) else { continue }
             if let other = legacyV4ActionOrder.first(where: {
-                $0 != action.rawValue && layout[$0].map(Self.token) == Self.token(proposed)
+                $0 != identity && layout[$0].map(Self.token) == Self.token(proposed)
             }) {
-                layout[other] = layout[action.rawValue]
+                layout[other] = layout[identity]
             }
-            layout[action.rawValue] = proposed
+            layout[identity] = proposed
         }
         return layout
     }
@@ -277,10 +288,15 @@ struct Hades2ShortcutStore {
     private mutating func rebuildResolvedLayout() {
         let defaultLayout = Self.defaultLayout()
         var next: [ShortcutAction: HotkeyChord] = [:]
+        // The panic chord is allocated first and its token marked used, so
+        // neither an override nor a fallback allocation can take it away.
+        let reserved = Self.defaultLayout()[.disableAll]!
+        next[.disableAll] = reserved
         var used = Set(overrides.values.map(Self.token))
+        used.insert(Self.token(reserved))
 
-        for action in ShortcutAction.allCases {
-            if let explicit = overrides[action] {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            if let explicit = overrides[action], Self.token(explicit) != Self.token(reserved) {
                 next[action] = explicit
                 continue
             }
@@ -314,7 +330,7 @@ struct Hades2ShortcutStore {
     }
 
     private mutating func persistOverrides() {
-        for action in ShortcutAction.allCases {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             if let explicit = overrides[action] {
                 defaults.set(explicit.payload, forKey: key(action))
             } else {
@@ -322,6 +338,7 @@ struct Hades2ShortcutStore {
             }
         }
         defaults.removeObject(forKey: "shortcut.action.godMode")
+        defaults.removeObject(forKey: "shortcut.action.damageEnabled")
         defaults.set(6, forKey: "shortcut.layoutVersion")
     }
 }

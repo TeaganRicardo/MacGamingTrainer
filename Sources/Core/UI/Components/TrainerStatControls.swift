@@ -144,6 +144,38 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
     }
 }
 
+/// Numeric multiplier metric. Same card geometry, typography and suffix
+/// treatment as `TrainerStatMetricCard`, without the lock accessory: a
+/// multiplier carries no lock, so the header row is the label alone.
+struct TrainerMultiplierMetricCard<Field: Hashable>: View {
+    @Environment(\.trainerTheme) private var theme
+    let title: String
+    let icon: String
+    @Binding var text: String
+    let focus: Binding<Field?>
+    let focusValue: Field
+    let suffix: String
+    let editable: Bool
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
+
+    var body: some View {
+        TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
+            // Reserve the lock button's footprint so this card keeps the same
+            // header height as its locked siblings in the same grid row.
+            Color.clear.frame(width: 26, height: 24)
+        } content: {
+            HStack(spacing: 3) {
+                TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
+                    .frame(width: 58)
+                    .disabled(!editable)
+                if !suffix.isEmpty {
+                    Text(suffix).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 struct TrainerInlineStatEditor<Field: Hashable>: View {
     let title: String
     @Binding var text: String

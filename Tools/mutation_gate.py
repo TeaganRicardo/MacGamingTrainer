@@ -285,7 +285,7 @@ def manifest() -> list[Mutation]:
             ident="seam-literal-feature-title",
             invariant="a feature row never carries a literal title",
             path=ROOT / "Sources/Hades2/Hades2View.swift",
-            old='featureRow(text("hades2.feature.invincibility")',
+            old='featureRow(text(action.presentationKey)',
             new='featureRow("Invincibility"',
             test="tests/test_hades2_presentation_contract.py",
             note="#202 review CRITICAL: the only row out of 24 that bypassed the seam",

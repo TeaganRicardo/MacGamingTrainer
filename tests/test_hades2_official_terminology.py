@@ -156,7 +156,7 @@ assert 'englishSectionTitle: row["englishSectionTitle"] as? String ?? ""' in sta
 assert 'sourceEnglishName: row["sourceEnglishName"] as? String ?? ""' in state
 assert 'nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? ""' in state
 assert "option.nativeChoiceEnglishTitle" in model
-assert "$0.englishCategory.localizedCaseInsensitiveContains(specialSearch)" in view
+assert "option.englishCategory.localizedCaseInsensitiveContains(exactSearch)" in view
 # User-facing native terms resolve through the shipped table by key, so the
 # model/view/types carry identity rather than either language's wording. The
 # wording itself is checked in both languages in the packaging test.

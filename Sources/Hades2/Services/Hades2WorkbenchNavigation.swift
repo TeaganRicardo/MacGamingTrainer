@@ -36,14 +36,55 @@ struct Hades2WorkbenchEntry: Identifiable {
 /// Function discovery owns only stable destinations and existing label keys.
 /// Choosing a result locates a section; it never performs a game action.
 enum Hades2WorkbenchCatalog {
+    /// One ordered registry drives default shortcut allocation, shortcut
+    /// settings and function discovery. Keep this in the visible workbench order.
+    static let orderedShortcutActions: [ShortcutAction] = [
+        .invincibility,
+        .infiniteHealth,
+        .infiniteMana,
+        .infiniteMoney,
+        .infiniteRerolls,
+        .forceEnableRerolls,
+        .instantCastCooldown,
+        .hexAlwaysReady,
+        .infiniteAmmo,
+        .autoMiniGames,
+        .decreaseGameSpeed,
+        .increaseGameSpeed,
+        .boonRarityEnabled,
+        .forceLegendary,
+        .forceDuo,
+        .openSellTraits,
+        .acquireChaosPair,
+        .acquireExactBoon,
+        .moneyMultiplierEnabled,
+        .resourceMultiplierEnabled,
+        .generateFlora,
+        .generateMining,
+        .generateDigging,
+        .generateShades,
+        .generateFishing,
+        .matureGarden,
+        .applyNextRoomReward,
+        .applyNextOccurrence,
+        .spawnOlympian,
+        .spawnPickup,
+        .spawnSpecial,
+        .disableAll,
+    ]
+
+    static func shortcutActions(in workbenchSection: Hades2WorkbenchSection) -> [ShortcutAction] {
+        orderedShortcutActions.filter { section(for: $0) == workbenchSection }
+    }
+
     static let entries: [Hades2WorkbenchEntry] = {
-        var result = ShortcutAction.allCases.map { action in
+        var result = orderedShortcutActions.map { action in
             Hades2WorkbenchEntry(id: "shortcut.\(action.rawValue)", titleKey: action.presentationKey,
                                  section: section(for: action), shortcut: action)
         }
         let numeric = [
             "hades2.vital.health", "hades2.vital.mana", "hades2.vital.runGold", "hades2.vital.armor",
-            "hades2.metric.rerolls", "hades2.metric.spellCharge", "hades2.stat.grasp",
+            "hades2.feature.damageMultiplier", "hades2.stat.grasp", "hades2.metric.rerolls", "hades2.metric.spellCharge",
             "hades2.stat.dodge", "hades2.stat.crit", "hades2.stat.enemyDamage", "hades2.stat.enemyHealth",
             "hades2.stat.chargeSpeed", "hades2.stat.moveSpeed", "hades2.stat.sprintSpeed",
             "hades2.stat.dashSpeed", "hades2.stat.attackSpeed", "hades2.stat.manaRegen",
@@ -90,7 +131,6 @@ enum Hades2WorkbenchCatalog {
         case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
              .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames,
              .decreaseGameSpeed, .increaseGameSpeed: .common
-        case .damageEnabled: .values
         case .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources

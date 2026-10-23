@@ -12,7 +12,7 @@ harness = r'''
 import Foundation
 
 let durableShortcutFeatures = Set(ShortcutAction.allCases.compactMap(\.featureKey))
-precondition(durableShortcutFeatures == Set(Hades2FeatureKey.allCases))
+precondition(durableShortcutFeatures == Set(Hades2FeatureKey.allCases.filter { $0 != .damageEnabled }))
 
 precondition(ShortcutAction.invincibility.featureKey == .invincibility)
 precondition(ShortcutAction.infiniteHealth.featureKey == .infiniteHealth)

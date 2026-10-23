@@ -17,27 +17,26 @@ struct Hades2ChaosGatePanel: View {
 
     var body: some View {
         let generation = model.editGeneration
-        return TrainerSection(title: text("hades2.chaosGate.title"), icon: "door.left.hand.open") {
-            Hades2OccurrenceSetting(
-                title: text("hades2.chaosGate.probability"),
-                icon: "percent",
-                input: $percentage,
-                hasOverride: model.chaosGateProbability != nil,
-                enabled: model.canEditDesired,
-                probabilityLabel: text("hades2.gathering.percent"),
-                nativeLabel: text("hades2.gathering.native"),
-                resetLabel: text("hades2.gathering.restoreNative"),
-                probabilityHelp: text("hades2.chaosGate.explanation") + "\n"
-                    + text("hades2.chaosGate.lifecycle"),
-                onEditingChanged: { editing = $0 },
-                onCommit: { completion in
-                    model.completeTextEdit(.chaosGate, text: completion.text,
-                        changed: completion.changed, generation: generation)
-                },
-                onReset: { model.setChaosGateProbability(nil) }
-            )
-        }
+        return Hades2OccurrenceSetting(
+            title: text("hades2.chaosGate.probability"),
+            icon: "percent",
+            input: $percentage,
+            hasOverride: model.chaosGateProbability != nil,
+            enabled: model.canEditDesired,
+            probabilityLabel: text("hades2.gathering.percent"),
+            nativeLabel: text("hades2.gathering.native"),
+            resetLabel: text("hades2.gathering.restoreNative"),
+            probabilityHelp: text("hades2.chaosGate.explanation") + "\n"
+                + text("hades2.chaosGate.lifecycle"),
+            onEditingChanged: { editing = $0 },
+            onCommit: { completion in
+                model.completeTextEdit(.chaosGate, text: completion.text,
+                    changed: completion.changed, generation: generation)
+            },
+            onReset: { model.setChaosGateProbability(nil) }
+        )
         .onAppear { synchronize() }
-        .onChange(of: model.chaosGateProbability) { synchronize() }
+        .onChange(of: model.chaosGateProbability) { _, _ in synchronize() }
+        .onChange(of: model.editGeneration) { _, _ in synchronize() }
     }
 }

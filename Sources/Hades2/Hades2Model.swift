@@ -1052,6 +1052,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
              onReply: onReply, completion: completion)
     }
 
+    func isFeatureEnabled(_ key: Hades2FeatureKey) -> Bool {
+        self[keyPath: key.modelKeyPath]
+    }
+
     func feature(_ key: Hades2FeatureKey, value: Bool, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired else { return }
         if value { beginFeatureActivationGrace(key) }
@@ -1594,7 +1598,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .resourceMultiplier: current = resourceMultiplier
         case .gameSpeed: return
         }
-        if abs(current - value) < 0.0001 { return }
+        if abs(current - value) < 0.0001 {
+            if feature == .damageMultiplier && damageEnabled != (value != 1) {
+                sendEdit(request: .setDesired(feature: feature.rawValue, value: value), title: "hades2.op.updateMultiplier")
+            }
+            return
+        }
         switch feature {
         case .damageMultiplier: damageMultiplier = value
         case .moneyMultiplier: moneyMultiplier = value
@@ -1717,7 +1726,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch action {
         case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
              .instantCastCooldown, .hexAlwaysReady,
-             .infiniteAmmo, .damageEnabled, .autoMiniGames, .boonRarityEnabled,
+             .infiniteAmmo, .autoMiniGames, .boonRarityEnabled,
              .forceEnableRerolls, .moneyMultiplierEnabled, .resourceMultiplierEnabled:
             // Durable desired edits are FIFO; earlier requests do not discard
             // newer hotkey intent.

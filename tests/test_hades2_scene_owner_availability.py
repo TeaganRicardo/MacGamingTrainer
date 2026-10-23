@@ -263,7 +263,8 @@ CurrentHubRoom = {}
 -- Durable global hooks should arm immediately instead of waiting for the
 -- combat-ready aggregate predicate.
 do
-  local state = setFeature("damageEnabled", true)
+  -- The multiplier is the durable damage intent; the toggle is its projection.
+  local state = setFeature("damageMultiplier", 2)
   check(state.desiredFeatures.damageEnabled, "damage desired state was not retained")
   check(state.activeFeatures.damageEnabled, "global damage hook did not arm in Crossroads")
 

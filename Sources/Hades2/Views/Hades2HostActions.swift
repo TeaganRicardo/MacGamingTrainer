@@ -17,6 +17,11 @@ struct Hades2SidebarActions: View {
                     model.showWorkbenchSection(section)
                     navigate(section.id)
                 }
+                // Section rows are navigation shortcuts, not form controls: the
+                // window's initial key view lands on the first row and would
+                // otherwise keep a focus ring on it until something else takes
+                // focus. Keep them keyboard-reachable without the persistent box.
+                .focusEffectDisabled()
             }
             if !model.currentIssues.isEmpty {
                 Button { model.showFeedbackDetails() } label: {
@@ -41,6 +46,7 @@ struct Hades2HeaderActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
+    @State private var resultsPresented = false
 
     private var results: [Hades2WorkbenchEntry] {
         Hades2WorkbenchCatalog.matches(model.workbenchSearch) { key in
@@ -53,18 +59,24 @@ struct Hades2HeaderActions: View {
     private func locate(_ entry: Hades2WorkbenchEntry) {
         model.showWorkbenchSection(entry.section)
         navigate(entry.section.id)
+        resultsPresented = false
+    }
+
+    private func submitSearch() {
+        if let first = results.first { locate(first) }
+        else { resultsPresented = false }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TrainerSearchField(
-                text: $model.workbenchSearch,
-                placeholder: Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization),
-                clearLabel: localization.localized("host.search.clear")
-            ) {
-                if let first = results.first { locate(first) }
-            }
-            if !model.workbenchSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        TrainerSearchField(
+            text: $model.workbenchSearch,
+            placeholder: Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization),
+            clearLabel: localization.localized("host.search.clear")
+        ) {
+            submitSearch()
+        }
+        .popover(isPresented: $resultsPresented, arrowEdge: .bottom) {
+            Group {
                 if results.isEmpty {
                     TrainerEmptyState(text: Hades2GameModule.resolveText(key: "hades2.workbench.searchEmpty", localization: localization))
                 } else {
@@ -82,10 +94,14 @@ struct Hades2HeaderActions: View {
                     .frame(height: min(CGFloat(results.count) * 52, 312))
                 }
             }
+            .frame(width: 420)
+            .padding(8)
+        }
+        .onChange(of: model.workbenchSearch) { _, query in
+            resultsPresented = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 }
-
 
 struct Hades2ManagementCommands: Commands {
     @ObservedObject var model: Hades2TrainerModel

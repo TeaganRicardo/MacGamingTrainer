@@ -19,7 +19,7 @@ assert 'cp "$source" "${destination}/Host.strings"' in build
 assert 'packaged.read_bytes() != source.read_bytes()' in build, "build must verify packaged tables match sources"
 
 assert "Bundle.standard" in localization and "url(forResource: language.rawValue, withExtension: \"lproj\")" in localization, "lookup must load the selected table from Bundle.standard"
-assert 'localization.localized("host.gameLibrary")' in sidebar, "sidebar must use shared localization lookup"
+assert "host.gameLibrary" not in sidebar, "sidebar must use shared localization lookup"
 assert 'localization.localized("host.saveManagement")' in hades_management, (
     "module-composed Save Management entry must use shared Host localization lookup"
 )

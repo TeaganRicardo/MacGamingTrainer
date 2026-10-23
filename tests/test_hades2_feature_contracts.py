@@ -11,7 +11,11 @@ view = read('Sources/Hades2/Hades2View.swift')
 types = read('Sources/Hades2/Hades2Types.swift')
 model = read('Sources/Hades2/Hades2Model.swift')
 store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
+navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
+schema = read('Backend/games/hades2/schema.py')
+feature_generator = read('Tools/generate_hades2_feature_bindings.py')
+feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
 gathering = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
 occurrence = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
 badge = read('Sources/Core/UI/Primitives/TrainerBadge.swift')
@@ -85,7 +89,7 @@ family_order = enum_cases(
 assert "static let uiOrder" not in types
 assert "ShortcutAction.uiOrder" not in store + model + management
 assert "ShortcutAction.allCases" in store
-assert "ShortcutAction.allCases.filter" in store
+assert "Hades2WorkbenchCatalog.orderedShortcutActions.filter" in store
 assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
@@ -96,7 +100,7 @@ shortcut_settings = management[management.index("struct Hades2ShortcutSettingsVi
 assert "ScrollView {" in shortcut_settings
 assert ".frame(maxHeight: 560)" in shortcut_settings
 assert "ShortcutAction.allCases" in model
-assert "ShortcutAction.allCases" in management
+assert "Hades2WorkbenchCatalog.orderedShortcutActions" in management
 assert 'title: "hades2.op.acquireSelectedReward"' in model
 assert 'title: "hades2.op.acquireChaosPair"' in model
 assert "family.shortcutAction" in gathering
@@ -104,7 +108,11 @@ assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gath
 assert "TrainerShortcutBadgeSlot(text: generateShortcutText)" in occurrence
 
 common = source_section(view, "private var commonSection: some View {", "private var boonsSection: some View {")
-common_order = shortcut_references(common)
+if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
+    assert "action.commonFeatureIcon" in common
+    common_order = action_order[:10]
+else:
+    common_order = shortcut_references(common)
 assert common_order == [
     "invincibility", "infiniteHealth", "infiniteMana", "infiniteMoney", "infiniteRerolls",
     "forceEnableRerolls", "instantCastCooldown", "hexAlwaysReady", "infiniteAmmo", "autoMiniGames",
@@ -124,11 +132,29 @@ parts = [
     source_section(view, "private var management: some View {", "private func featureRow("),
 ]
 visible_actions = [action for part in parts for action in shortcut_references(part)]
+if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
+    visible_actions.extend(common_order)
 visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
 root = source_section(view, "private var rootContent: some View {", "@ViewBuilder\n    private var statusAndSessionSection")
 assert all(section in root for section in ("statusAndSessionSection", "commonSection", "boonsSection", "resourceSection", "roomsSection", "management"))
 assert "gardenQoL" not in view
+damage = source_section(view, "private var damageMetric: some View {", "private var boonRarityPanel:")
+assert "TrainerToggleControl" not in damage
+assert ".damageEnabled" not in damage
+assert "TrainerShortcutBadgeSlot" not in damage
+# Damage renders through the shared numeric metric card so its height, label
+# colour and suffix treatment match the rest of the numeric section.
+assert "TrainerMultiplierMetricCard(" in damage
+assert 'suffix: "×"' in damage
+assert "TrainerNumberField" not in damage
+assert "'damageMultiplier': {'default':1.0" in schema
+assert "case .damageMultiplier: return 1.0" in feature_bindings
+assert 'feature = "damageEnabled"' in feature_generator
+assert "value = value ~= 1" in feature_generator
+assert 'if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end' in lua
+assert "M.damageMultiplier = 1" in lua[lua.index("local function disable()"):lua.index("local function anyDesired()")]
+assert "revision = 120" in lua
 assert len(set(action_order)) == len(action_order)
 assert "Color.clear" not in badge
 assert "if let text, !text.isEmpty" in badge
@@ -175,3 +201,35 @@ for line in (
     assert line in view
 
 print('hades2_feature_contracts_ok')
+
+
+resource_controls = read('Sources/Core/UI/Components/TrainerResourceControls.swift')
+occurrence_setting = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
+gathering_panel = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
+chaos_gate_panel = read('Sources/Hades2/Views/Hades2ChaosGatePanel.swift')
+host_actions = read('Sources/Hades2/Views/Hades2HostActions.swift')
+assert "inline: true" in view
+assert "if inline" in resource_controls
+assert "actionAvailable ? theme.accent : theme.inactive" in resource_controls
+assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
+assert 'TrainerSection(title: text("hades2.section.elements")' not in view
+assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
+assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
+assert "specialSearch" not in view
+assert "resultsPresented" in host_actions
+assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions
+
+
+gathering_action_key = "hades2.gathering.generate"
+gathering_help_key = "hades2.gathering.generateHelp"
+zh_localization = read('Sources/Hades2/Presentation/Localization/hades2.zh-CN.json')
+en_localization = read('Sources/Hades2/Presentation/Localization/hades2.en.json')
+terminology = json.loads(read('docs/reference/hades2/1.143476-25481925/ui_terminology.json'))
+# The compact action label is one short product term; the hover help stays an
+# explanation, so it must not collapse into a copy of the label.
+assert terminology['productTerms']['generateGathering']['value'] == "生成"
+assert terminology['productTerms']['generateGathering']['englishValue'] == "Generate"
+assert f'"{gathering_action_key}": "{{term:productTerms.generateGathering}}"' in zh_localization
+assert f'"{gathering_action_key}": "{{term:productTerms.generateGathering}}"' in en_localization
+assert f'"{gathering_help_key}": "生成"' not in zh_localization
+assert f'"{gathering_help_key}": "Generate"' not in en_localization

@@ -50,7 +50,7 @@ assert result["nextOccurrenceTarget"] is None
 assert probe.calls == [("set_next_occurrence_desired", None)]
 
 # Durable desired state keeps the one-shot identity across backend restarts.
-assert DESIRED_STATE_SCHEMA_VERSION == 10
+assert DESIRED_STATE_SCHEMA_VERSION == 11
 normalized = Hades2PreferenceStore.normalize(
     {
         "nextOccurrenceTarget": "npc:Nemesis",

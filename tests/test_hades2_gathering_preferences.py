@@ -19,7 +19,7 @@ from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VE
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
-assert DESIRED_STATE_SCHEMA_VERSION == 10
+assert DESIRED_STATE_SCHEMA_VERSION == 11
 assert PROFILE_SCHEMA_VERSION == 6
 assert Hades2PreferenceStore.defaults()['gatheringProbabilities'] == {}
 valid = dict(zip(FAMILIES, (0, 100, 32.5, 1, 99)))

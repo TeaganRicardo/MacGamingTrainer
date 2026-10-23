@@ -48,7 +48,7 @@ assert 'func openSellTraits()' in model
 assert '.openSellTraits' in model
 # Player-facing copy resolves through the module presentation table, so the view
 # names a key rather than embedding the official term.
-assert 'Label(text("hades2.spawn.purgingPool")' in view
+assert 'title: text("hades2.spawn.purgingPool")' in view
 assert 'text("hades2.spawn.open")' in view
 assert '出售祝福' not in view
 assert 'model.openSellTraits()' in view

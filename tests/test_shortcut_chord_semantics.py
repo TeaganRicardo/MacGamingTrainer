@@ -15,10 +15,15 @@ precondition(Set(ShortcutAction.allCases.map(\.rawValue)).count == ShortcutActio
 precondition(ShortcutAction.allCases.count <= HotkeyChord.defaultShortcutCapacity)
 precondition(Hades2ShortcutStore.defaultLayout().count == ShortcutAction.allCases.count)
 precondition(ShortcutAction.allCases.last == .disableAll)
-precondition(HotkeyChord.defaultShortcut(index: 34)?.displayText == "⌃⌥Z")
-precondition(HotkeyChord.defaultShortcut(index: 35)?.displayText == "⌃⌥⇧1")
-precondition(HotkeyChord.defaultShortcut(index: 70)?.displayText == "⌃⌥⌘1")
-precondition(HotkeyChord.defaultShortcut(index: 105)?.displayText == "⌃⌥⇧⌘1")
+precondition(HotkeyChord.defaultShortcut(index: 9)?.displayText == "⌃⌥0")
+precondition(HotkeyChord.defaultShortcut(index: 10)?.displayText == "⌃⌥Q")
+precondition(HotkeyChord.defaultShortcut(index: 35)?.displayText == "⌃⌥M")
+precondition(HotkeyChord.defaultShortcut(index: 36)?.displayText == "⌃⌥⇧1")
+precondition(HotkeyChord.defaultShortcut(index: 72)?.displayText == "⌃⌥⌘1")
+precondition(HotkeyChord.defaultShortcut(index: 108)?.displayText == "⌃⌥⇧⌘1")
+precondition(HotkeyChord.defaultShortcut(index: HotkeyChord.defaultShortcutCapacity - 1)?.displayText == "⌃⌥⇧⌘M")
+precondition(Hades2ShortcutStore.defaultLayout()[.disableAll]?.displayText == "⌃⌥⌫", "disable all keeps one fixed panic chord")
+precondition(HotkeyChord.controlOptionDefault(index: 9)?.displayText == "⌃⌥A", "legacy v4 defaults must remain frozen")
 precondition(HotkeyChord.defaultShortcut(index: HotkeyChord.defaultShortcutCapacity) == nil)
 let generatedDefaults = (0..<HotkeyChord.defaultShortcutCapacity).compactMap(HotkeyChord.defaultShortcut(index:))
 precondition(Set(generatedDefaults.map { "\($0.keyCode):\($0.modifiers)" }).count == HotkeyChord.defaultShortcutCapacity)
@@ -48,13 +53,13 @@ func legacyShortcutKey(_ action: ShortcutAction) -> String {
 
 func seedV3Defaults(_ defaults: UserDefaults, invincibilityOverride: Int? = nil) {
     defaults.set(3, forKey: "shortcut.layoutVersion")
-    let legacy: [ShortcutAction: Int] = [
-        .invincibility: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
-        .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
-        .moneyMultiplierEnabled: 9, .disableAll: 0,
+    let legacy: [String: Int] = [
+        "invincibility": 1, "infiniteHealth": 2, "infiniteMana": 3, "instantCastCooldown": 4,
+        "hexAlwaysReady": 5, "infiniteAmmo": 6, "damageEnabled": 7, "autoMiniGames": 8,
+        "moneyMultiplierEnabled": 9, "disableAll": 0,
     ]
-    for (action, digit) in legacy {
-        defaults.set(action == .invincibility ? (invincibilityOverride ?? digit) : digit, forKey: legacyShortcutKey(action))
+    for (identity, digit) in legacy {
+        defaults.set(identity == "invincibility" ? (invincibilityOverride ?? digit) : digit, forKey: legacyShortcutKey(identity))
     }
 }
 
@@ -113,21 +118,34 @@ let defaults = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(matchesDerivedDefaults(defaults))
 precondition(unique(defaults))
 precondition(defaults.chord(.disableAll) == disableAllDefault)
+// The panic chord is reserved: another action cannot claim it and push the
+// panic key onto some arbitrary free slot.
+var reservedStore = Hades2ShortcutStore(defaults: makeDefaults())
+precondition(reservedStore.set(.spawnPickup, chord: disableAllDefault) == .disableAll,
+             "the disable-all chord must be reserved")
+precondition(reservedStore.chord(.disableAll) == disableAllDefault)
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)
 let common: [ShortcutAction] = [.invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney,
     .infiniteRerolls, .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames]
-precondition(Array(ShortcutAction.allCases.prefix(10)) == common)
-precondition(common.map { defaults.chord($0).displayText } == ["⌃⌥1", "⌃⌥2", "⌃⌥3", "⌃⌥4", "⌃⌥5", "⌃⌥6", "⌃⌥7", "⌃⌥8", "⌃⌥9", "⌃⌥A"])
+precondition(Array(Hades2WorkbenchCatalog.orderedShortcutActions.prefix(10)) == common)
+precondition(Hades2WorkbenchCatalog.shortcutActions(in: .common).filter { !$0.isSpeedAdjustment } == common)
+precondition(common.map { defaults.chord($0).displayText } == ["⌃⌥1", "⌃⌥2", "⌃⌥3", "⌃⌥4", "⌃⌥5", "⌃⌥6", "⌃⌥7", "⌃⌥8", "⌃⌥9", "⌃⌥0"])
+precondition(!ShortcutAction.allCases.contains { $0.rawValue == "damageEnabled" })
+precondition(defaults.payload()["damageEnabled"] == nil)
 precondition(defaults.chord(.decreaseGameSpeed).displayText == "⌃⌥−")
 precondition(defaults.chord(.increaseGameSpeed).displayText == "⌃⌥+")
 let retiredStore = makeDefaults()
 retiredStore.set(6, forKey: "shortcut.layoutVersion")
 retiredStore.set(HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X").payload, forKey: "shortcut.action.gardenQoL")
+retiredStore.set(HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X").payload, forKey: "shortcut.action.damageEnabled")
 let retired = Hades2ShortcutStore(defaults: retiredStore)
 precondition(retiredStore.object(forKey: "shortcut.action.gardenQoL") == nil)
+precondition(retiredStore.object(forKey: "shortcut.action.damageEnabled") == nil)
 precondition(ShortcutAction(rawValue: "gardenQoL") == nil)
+precondition(ShortcutAction(rawValue: "damageEnabled") == nil)
 precondition(retired.payload()["gardenQoL"] == nil)
+precondition(retired.payload()["damageEnabled"] == nil)
 
 // Legacy Profiles serialized every derived chord. Loading their untouched
 // layout should reflow to current visible order, while a real custom chord survives.
@@ -201,6 +219,7 @@ with tempfile.TemporaryDirectory() as td:
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
         str(ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
         str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
+        str(ROOT / 'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
         str(ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift'),
         str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'),
         str(main), '-o', str(binary),

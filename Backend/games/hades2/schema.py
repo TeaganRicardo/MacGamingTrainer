@@ -7,7 +7,7 @@ TOGGLES = (
 )
 
 MULTIPLIER_RULES = {
-    'damageMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
+    'damageMultiplier': {'default':1.0,'min':1.0,'max':100.0,'runtime':'resident'},
     'moneyMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
     'resourceMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
     'gameSpeed': {'default':1.0,'min':0.0,'max':10.0,'runtime':'core'},
