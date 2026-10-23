@@ -158,6 +158,15 @@ ERROR_SHAPED = re.compile(
 # (including "Failures"). Those data fields do not enter the error funnel;
 # raised messages remain scanned independently below in every module.
 ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py", "save_history.py", "save_investigation.py"))
+# These functions return explicitly bilingual row data, not raised errors.
+# Keep the exemption at the function boundary: workspace/Advanced mutations
+# still pass through the ordinary literal scan, and every actual raise below
+# is inspected even inside one of these presentation functions.
+BILINGUAL_DATA_FUNCTIONS = {
+    "save_advanced.py": frozenset(("row", "warning")),
+    "save_workspace.py": frozenset(("_discovery_reason",)),
+    "save_narrative.py": frozenset(("entry_row",)),
+}
 
 
 def render(template, arguments):
@@ -291,10 +300,18 @@ for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
     if path.name in ERROR_FREE_MODULES:
         assigned = []
     else:
+        data_spans = [
+            (node.lineno, node.end_lineno)
+            for node in ast.walk(ast.parse(body))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in BILINGUAL_DATA_FUNCTIONS.get(path.name, ())
+        ]
         assigned = [
             literal.group(1)
             for literal in STRING_ARG.finditer(body)
             if has_cjk(literal.group(1)) and ERROR_SHAPED.search(literal.group(1))
+            and not any(start <= body.count("\n", 0, literal.start()) + 1 <= end
+                        for start, end in data_spans)
         ]
     for message in (
         list(raised_messages(body))
