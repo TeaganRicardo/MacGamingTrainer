@@ -511,6 +511,8 @@
     "hades2.saveEditor.error.applyRequiresStopped": "请先完全退出 Hades II，再应用已暂存的存档修改。",
     "hades2.saveEditor.error.invalidQuery": "存档编辑器查询参数无效。",
     "hades2.saveEditor.error.invalidMutation": "请求的存档修改无效。",
+    "hades2.saveEditor.error.typedLuaMutation": "修改必须符合实际 Lua 类型，并指向唯一字段路径。请使用有限且可精确表示的数字或有效的类型化值，并检查字段技术详情。",
+    "hades2.saveEditor.error.typedLuaConflict": "原始字段操作与其他暂存操作影响同一 Lua 字段或关联效果。请在“修改”中修订或移除其中一项。",
     "hades2.saveEditor.error.equipmentChangesConflict": "这些装备修改操作互相冲突：{0}。请在“修改清单”中修改或移除其中一项。",
     "hades2.saveEditor.error.lockedWeaponHasAspects": "武器仍有已解锁的形态时不能锁定：{0}。请修改武器或形态操作。",
     "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect": "已解锁的武器必须保留默认形态：{0}。请恢复默认形态或修改武器操作。",
@@ -573,7 +575,9 @@
     "hades2.shortcut.decreaseGameSpeed": "降低游戏速度",
     "hades2.shortcut.increaseGameSpeed": "提高游戏速度",
     "hades2.workbench.search": "搜索功能…",
-    "hades2.workbench.searchEmpty": "未找到匹配的功能。"
+    "hades2.workbench.searchEmpty": "未找到匹配的功能。",
+    "hades2.saveEditor.investigate.block.questContextReadOnly": "任务展示与奖励历史仅供查看；修改状态请使用已验证的任务状态操作，该操作会同步完成记录。",
+    "hades2.saveEditor.investigate.block.questSourceUnresolved": "原生任务定义或继承来源缺失、重复或存在循环。原记录已保留，无法推断资格。"
   },
   "language": "zh-CN"
 }

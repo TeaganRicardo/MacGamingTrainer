@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.save_document import LuaTable
+from games.hades2 import save_narrative
 from games.hades2.save_workspace import Hades2SaveWorkspace
 
 
@@ -43,7 +44,9 @@ def editor(*, gift=MISSING, choice=MISSING, run=None, lines=None):
 
 
 def records(model):
-    return {row["rawId"]: row for row in model.query(domain="dialogue", limit=100)["items"]}
+    root = model.document.lua_state
+    return {name: save_narrative.entry_row(root, "dialogueReset:" + name)
+            for name in save_narrative.reset_decisions(root)}
 
 
 empty_gifts = table([("Hecate", table([]))])
@@ -54,7 +57,7 @@ unverified, root = editor(gift=empty_gifts, choice=choice_record)
 assert UNKNOWN in records(unverified)
 assert records(unverified)[UNKNOWN]["editable"] is False
 try:
-    unverified.stage("dialogue:" + UNKNOWN, "set", False)
+    unverified.stage("dialogueReset:" + UNKNOWN, "set", False)
 except ValueError:
     pass
 else:
@@ -73,7 +76,7 @@ for provenance in (
     unsafe, _ = editor(gift=provenance, choice=choice_record)
     assert records(unsafe)[SAFE]["editable"] is False
     try:
-        unsafe.stage("dialogue:" + SAFE, "set", False)
+        unsafe.stage("dialogueReset:" + SAFE, "set", False)
     except ValueError:
         pass
     else:
@@ -110,7 +113,7 @@ run = table([
 ])
 legitimate, root = editor(gift=empty_gifts, choice=choice_record, run=run)
 assert records(legitimate)[SAFE]["editable"] is True
-legitimate.stage("dialogue:" + SAFE, "set", False)
+legitimate.stage("dialogueReset:" + SAFE, "set", False)
 linked = {change["id"] for change in legitimate.review()["changes"] if change["id"].startswith("linked:")}
 assert "linked:dialogue:" + SAFE in linked
 for owner in ("TextLinesRecord", "HubTextLinesRecord", "TextLinesChoiceRecord", "CurrentRoom.TextLinesRecord"):
@@ -120,13 +123,13 @@ for owner in ("TextLinesRecord", "HubTextLinesRecord", "TextLinesChoiceRecord", 
 # resources, even when it follows a valid cross-domain resource stage.
 legitimate.stage("resource:MetaCurrency", "set", 22)
 try:
-    legitimate.stage("dialogue:" + UNKNOWN, "set", False)
+    legitimate.stage("dialogueReset:" + UNKNOWN, "set", False)
 except ValueError:
     pass
 else:
     raise AssertionError("unverified cross-domain edit was staged")
 assert {row["id"] for row in legitimate.review()["changes"] if not row["id"].startswith("linked:")} == {
-    "dialogue:" + SAFE, "resource:MetaCurrency"
+    "dialogueReset:" + SAFE, "resource:MetaCurrency"
 }
 assert root["GameState"]["Resources"]["MetaCurrency"] == 5.0
 
@@ -172,14 +175,13 @@ for label, override in ambiguous_cases:
     unsafe, original_root = editor(**context)
     original_lines = original_root["GameState"]["TextLinesRecord"].entries()
     displayed = [
-        row for row in unsafe.query(domain="dialogue", limit=100)["items"]
-        if row["rawId"] == SAFE
+        row for row in records(unsafe).values() if row["rawId"] == SAFE
     ]
     assert len(displayed) == 1, (label, "duplicate semantic row IDs")
     assert displayed[0]["editable"] is False, label
     assert displayed[0]["mutationKinds"] == [], label
     try:
-        unsafe.stage("dialogue:" + SAFE, "set", False)
+        unsafe.stage("dialogueReset:" + SAFE, "set", False)
     except ValueError:
         pass
     else:
@@ -202,7 +204,7 @@ original_root["GameState"] = table([
 row = records(unsafe)[SAFE]
 assert row["editable"] is False
 try:
-    unsafe.stage("dialogue:" + SAFE, "set", False)
+    unsafe.stage("dialogueReset:" + SAFE, "set", False)
 except ValueError:
     pass
 else:

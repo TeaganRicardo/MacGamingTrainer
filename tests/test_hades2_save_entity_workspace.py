@@ -85,6 +85,12 @@ for invalid in ("future", "", 5, None):
 # to the same NPC as interaction history. Unverified IDs cannot borrow identity.
 state["TextLinesRecord"]["NemesisPostTrueEnding01"] = True
 class NativeSceneFixture:
+    def quest_rows(self, _root, _language, **_params):
+        return []
+
+    def spoken_rows(self, _root, _scenes, _language):
+        return []
+
     def query(self, _root, **_params):
         return {"items": [{
             "id": "investigate:NemesisPostTrueEnding01",
