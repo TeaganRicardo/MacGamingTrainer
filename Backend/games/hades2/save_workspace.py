@@ -585,7 +585,7 @@ class Hades2SaveWorkspace:
                 elif state == "unsupported":
                     row["editable"] = False
                     row["mutationKinds"] = []
-                    reason_code = "unsupportedOwner"
+                    reason_code = row.get("blockReasonCode") or "unsupportedOwner"
                 elif row.get("editable"):
                     reason_code = "editable" if state == "observed" else "editableAbsent"
                 else:
@@ -863,7 +863,9 @@ class Hades2SaveWorkspace:
                     else row["id"].startswith("objective:"))
             ))
         if scope in ("all", "growth"):
-            rows.extend(save_equipment.rows(root, language, game_path=self._game_path))
+            rows.extend(row for row in save_equipment.rows(
+                root, language, game_path=self._game_path
+            ) if row["id"] != "familiarSelection")
         return rows
 
     def _entity_query(self, *, scope, search, offset, limit, language):
@@ -1202,7 +1204,8 @@ class Hades2SaveWorkspace:
         elif category == "familiar":
             relevant = [
                 intent for intent in intents
-                if intent["id"].startswith("familiar:") or intent["id"] == "familiarSelection"
+                if intent["id"].startswith(("familiar:", "familiarSelected:", "familiarUpgrade:"))
+                or intent["id"] == "familiarSelection"
             ]
         else:
             relevant = list(intents)
@@ -1259,6 +1262,10 @@ class Hades2SaveWorkspace:
         result = dict(effect)
         identity = effect["id"]
         root = self.document.lua_state
+
+        if identity.startswith("linked:arcanaCache:"):
+            result["name"] = save_long_term.linked_cache_label(effect["rawId"], language)
+            return result
 
         if identity.startswith("linked:card:"):
             parts = identity.split(":")

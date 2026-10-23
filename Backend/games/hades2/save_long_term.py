@@ -2,26 +2,100 @@
 
 Gift history combines purchased quantities, ordered gifts, dialogue records,
 and game-triggered side effects; it is inspectable but not safely synthesizable.
-Arcana changes preserve unlocked/equipped/level invariants.
+Arcana changes preserve unlocked/equipped/level invariants and observed caches;
+unlock operations that need the native automatic loadout remain read-only.
 """
+
+import copy
 
 from .localization import official_display_names
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import NPC_INTERACTION_IDS, OBJECTIVE_IDS
 
 _MAX = 9_007_199_254_740_991
-_ARCANA_CARDS = frozenset((
-    "ChanneledCast", "HealthRegen", "LowManaDamageBonus", "CastCount",
-    "SorceryRegenUpgrade", "CastBuff", "BonusHealth", "BonusDodge",
-    "ManaOverTime", "MagicCrit", "SprintShield", "LastStand",
-    "MaxHealthPerRoom", "StatusVulnerability", "ChanneledBlock",
-    "DoorReroll", "StartingGold", "MetaToRunUpgrade", "RarityBoost",
-    "BonusRarity", "TradeOff", "ScreenReroll", "LowHealthBonus",
+# Supported MetaUpgradeCardData costs after native inheritance. BonusDodge's
+# old AutoEquipRequirements block is commented out in this build.
+_ARCANA_COSTS = {
+    "ChanneledCast": 1, "HealthRegen": 1, "LowManaDamageBonus": 2,
+    "CastCount": 3, "SorceryRegenUpgrade": 0, "CastBuff": 2,
+    "BonusHealth": 2, "BonusDodge": 1, "ManaOverTime": 5, "MagicCrit": 2,
+    "SprintShield": 1, "LastStand": 4, "MaxHealthPerRoom": 0,
+    "StatusVulnerability": 5, "ChanneledBlock": 3, "DoorReroll": 3,
+    "StartingGold": 5, "MetaToRunUpgrade": 3, "RarityBoost": 5,
+    "BonusRarity": 0, "TradeOff": 0, "ScreenReroll": 4,
+    "LowHealthBonus": 4, "EpicRarityBoost": 0, "CardDraw": 0,
+}
+_ARCANA_CARDS = frozenset(_ARCANA_COSTS)
+_ARCANA_AUTOMATIC = frozenset((
+    "SorceryRegenUpgrade", "MaxHealthPerRoom", "BonusRarity", "TradeOff",
     "EpicRarityBoost", "CardDraw",
 ))
 # Confirmed against MetaUpgradeCardData.UpgradeResourceCost in target build
 # 1.143476 / 25481925. Each card has two upgrade purchases, hence levels 1..3.
 _ARCANA_MAX_LEVEL = 3
+_ARCANA_CACHE_LABELS = {
+    "MetaUpgradeUnlockedCountCache": ("Arcana unlocked count", "塔罗牌已解锁数量"),
+    "MetaUpgradeMaxLevelCountCache": ("Arcana maximum-level count", "塔罗牌满级数量"),
+    "MetaUpgradeCostCache": ("Arcana equipped cost", "塔罗牌已装备消耗"),
+}
+
+
+def linked_cache_label(raw_id, language):
+    labels = _ARCANA_CACHE_LABELS.get(raw_id)
+    return labels[1 if language == "zh-CN" else 0] if labels else None
+
+
+def _arcana_projection(name, card):
+    return {
+        "MetaUpgradeUnlockedCountCache": int(card.get("Unlocked") is True),
+        "MetaUpgradeMaxLevelCountCache": int(card.get("Level", 1) >= _ARCANA_MAX_LEVEL),
+        "MetaUpgradeCostCache": _ARCANA_COSTS[name] if card.get("Equipped") is True else 0,
+    }
+
+
+def _arcana_cache_owner(state, name, card, field):
+    # Update only caches already present in the Save. Deltas preserve opaque
+    # cards' existing contribution instead of reconstructing their native data.
+    projection = _arcana_projection(name, card)
+    fields = ("MetaUpgradeMaxLevelCountCache",) if field == "Level" else projection
+    try:
+        for cache in fields:
+            value = state.get(cache)
+            if value is not None and (not _integer(value) or value < projection[cache]):
+                return "unsupported"
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    return None
+
+
+def _arcana_unlock_requires_loadout(states, name, card):
+    if name in _ARCANA_AUTOMATIC:
+        return True
+    if card.get("Equipped") is not True:
+        return False
+    for automatic in _ARCANA_AUTOMATIC:
+        try:
+            other = states.get(automatic)
+            if other is not None and (
+                not isinstance(other, LuaTable)
+                or (other.get("Unlocked") is not None and other.get("Unlocked") is not False)
+            ):
+                return True
+        except AmbiguousLuaKeyError:
+            return True
+    return False
+
+
+def _update_arcana_caches(state, before, after, field):
+    fields = ("MetaUpgradeMaxLevelCountCache",) if field == "Level" else before
+    for cache in fields:
+        value = state.get(cache)
+        if value is None:
+            continue
+        updated = value + after[cache] - before[cache]
+        if not _integer(updated):
+            raise ValueError("Save Editor semantic owner is unsupported.")
+        state[cache] = int(updated)
 
 
 def _state(root):
@@ -282,6 +356,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
             owner_state = states_owner_state
             unlocked = None
             level = None
+            equipped = None
             if isinstance(states, LuaTable):
                 try:
                     card = states[name]
@@ -308,6 +383,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
                         else:
                             unlocked = bool(raw_unlocked)
                             level = int(raw_level)
+                            equipped = raw_equipped is True
             title = card_native.get(name) or (
                 ("塔罗牌 · " if zh else "Arcana · ") + name
             )
@@ -318,26 +394,67 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 else "unsupportedOwner" if owner_state == "unsupported"
                 else None
             )
-            result.append(_row(
+            unlock_state = owner_state
+            level_state = owner_state
+            if owner_state is None:
+                unlock_state = _arcana_cache_owner(state, name, card, "Unlocked")
+                level_state = _arcana_cache_owner(state, name, card, "Level")
+            unlock_reason = block_reason
+            level_reason = block_reason
+            if owner_state is None:
+                if unlock_state or level_state:
+                    unlock_reason = ("ambiguousOwner" if unlock_state == "ambiguous"
+                                     else "arcanaProgressionCacheUnsupported" if unlock_state else None)
+                    level_reason = ("ambiguousOwner" if level_state == "ambiguous"
+                                    else "arcanaProgressionCacheUnsupported" if level_state else None)
+                if not unlock_state and _arcana_unlock_requires_loadout(states, name, card):
+                    unlock_reason = "arcanaUnlockLoadoutOwned"
+            unlock_row = _row(
                 "card:{}:Unlocked".format(name), domain, name,
                 ["GameState", "MetaUpgradeState", name, "Unlocked"],
                 title + (" · 已解锁" if zh else " · Unlocked"),
                 english + " · Unlocked", unlocked, "boolean",
                 group="塔罗牌" if zh else "Arcana",
-                editable=editable, block_reason_code=block_reason,
-                owner_state=owner_state,
+                editable=editable and not unlock_reason, block_reason_code=unlock_reason,
+                owner_state=unlock_state,
                 entity_id="arcana:" + name, entity_name=title,
-            ))
-            result.append(_row(
+            )
+            level_row = _row(
                 "card:{}:Level".format(name), domain, name,
                 ["GameState", "MetaUpgradeState", name, "Level"],
                 title + (" · 等级" if zh else " · Level"),
                 english + " · Level", level, "integer",
                 group="塔罗牌" if zh else "Arcana", maximum=_ARCANA_MAX_LEVEL,
-                editable=editable, block_reason_code=block_reason,
-                owner_state=owner_state,
+                editable=editable and not level_reason, block_reason_code=level_reason,
+                owner_state=level_state,
                 entity_id="arcana:" + name, entity_name=title,
-            ))
+            )
+            for card_row in (unlock_row, level_row):
+                if card_row.get("blockReasonCode") == "arcanaUnlockLoadoutOwned":
+                    card_row["blockReasonDiagnostic"] = (
+                        "此解锁状态会影响整套塔罗牌的自动装备规则；当前仅支持独立于该装备推导的进度操作。"
+                        if zh else "This unlock state affects automatic equipment across the Arcana loadout; only progression independent of that loadout calculation is supported."
+                    )
+                elif card_row.get("blockReasonCode") == "arcanaProgressionCacheUnsupported":
+                    card_row["blockReasonDiagnostic"] = (
+                        "此塔罗牌关联的原生进度或装备缓存不是一致的非负整数，无法安全同步修改。"
+                        if zh else "This Arcana record has an inconsistent native progression or equipment cache; a linked change cannot be synchronized safely."
+                    )
+                result.append(card_row)
+            equipment = _row(
+                "card:{}:Equipped".format(name), domain, name,
+                ["GameState", "MetaUpgradeState", name, "Equipped"],
+                title + (" · 已装备" if zh else " · Equipped"),
+                english + " · Equipped", equipped, "boolean",
+                group="塔罗牌" if zh else "Arcana", editable=False,
+                block_reason_code=block_reason or "arcanaEquipmentGridOwned",
+                owner_state=owner_state, entity_id="arcana:" + name, entity_name=title,
+            )
+            equipment["blockReasonDiagnostic"] = (
+                "装备由整套塔罗牌的预算、自动激活和相邻效果共同决定；此处只显示当前记录。"
+                if zh else "Equipment belongs to the complete Arcana loadout, including its budget, automatic activation and adjacency effects; this field shows the saved observation."
+            )
+            result.append(equipment)
 
         try:
             objectives = state.get("ObjectivesCompleted")
@@ -452,7 +569,12 @@ def apply_intent(root, intent):
         card = cards.get(name)
         if name not in _ARCANA_CARDS or not isinstance(card, LuaTable):
             raise ValueError("Save Editor Arcana card identity is invalid.")
+        if _arcana_cache_owner(state, name, card, field) is not None:
+            raise ValueError("Save Editor semantic owner is unsupported.")
+        before = _arcana_projection(name, card)
         if field == "Unlocked":
+            if _arcana_unlock_requires_loadout(cards, name, card):
+                raise ValueError("Save Editor long-term mutation is not authorized.")
             if after:
                 card[field] = True
             else:
@@ -463,6 +585,7 @@ def apply_intent(root, intent):
             card[field] = after
         else:
             raise ValueError("Save Editor Arcana field is not editable.")
+        _update_arcana_caches(state, before, _arcana_projection(name, card), field)
         return
     if entry_id.startswith("objective:"):
         name = entry_id[len("objective:"):]
@@ -505,6 +628,25 @@ def linked_changes(root, intents):
                         "name": "Arcana level · " + name,
                         "operation": "set", "before": int(card.get("Level")), "after": 1,
                     })
+    card_intents = [intent for intent in intents if intent["id"].startswith("card:")]
+    if card_intents:
+        candidate = copy.deepcopy(root)
+        for intent in sorted(card_intents, key=lambda item: item["id"]):
+            apply_intent(candidate, intent)
+        final = _state(candidate)
+        affected_caches = ({"MetaUpgradeMaxLevelCountCache"} if all(
+            intent["id"].endswith(":Level") for intent in card_intents
+        ) else _ARCANA_CACHE_LABELS)
+        for cache in affected_caches:
+            before = state.get(cache)
+            after = final.get(cache)
+            if before != after:
+                changes.append({
+                    "id": "linked:arcanaCache:" + cache,
+                    "domain": "progression", "rawId": cache,
+                    "name": linked_cache_label(cache, "en"),
+                    "operation": "set", "before": before, "after": after,
+                })
     return changes
 
 

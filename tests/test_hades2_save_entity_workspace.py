@@ -46,9 +46,11 @@ assert arcana["total"] == 1
 assert arcana["entities"][0]["id"] == "arcana:ChanneledCast"
 fields = arcana["entities"][0]["items"]
 assert {row["id"] for row in fields} == {
-    "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level",
+    "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level", "card:ChanneledCast:Equipped",
 }
-assert all(row["editable"] and row["mutationKinds"] == ["set"] for row in fields)
+assert all(row["editable"] and row["mutationKinds"] == ["set"]
+           for row in fields if not row["id"].endswith(":Equipped"))
+assert next(row for row in fields if row["id"].endswith(":Equipped"))["editable"] is False
 # Read-only query never changes the pinned original Save.
 assert root["GameState"]["MetaUpgradeState"]["ChanneledCast"]["Level"] == 2
 workspace.stage("card:ChanneledCast:Level", "set", 3)

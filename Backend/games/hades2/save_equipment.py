@@ -1,6 +1,7 @@
 """Hades II durable weapon, aspect, tool, and familiar Save Editor ownership.
 
-Shop purchases write WeaponsUnlocked plus WorldUpgrades/WorldUpgradesAdded.
+Weapon/tool shop purchases write WeaponsUnlocked plus world-upgrade markers.
+Familiar ranks own separate purchase membership and retain ever-purchased history.
 An aspect level is the contiguous purchased shop tier sequence, not a runtime
 trait stack. Changing a durable selector never edits CurrentRun mounts.
 """
@@ -20,6 +21,21 @@ _WEAPONS = {
 }
 _TOOLS = ("ToolExorcismBook", "ToolFishingRod", "ToolPickaxe", "ToolShovel")
 _FAMILIARS = ("CatFamiliar", "FrogFamiliar", "RavenFamiliar", "HoundFamiliar", "PolecatFamiliar")
+_FAMILIAR_UPGRADES = {
+    "CatFamiliar": ("CatLastStandHeal", "CatUses", "CatAttack"),
+    "FrogFamiliar": ("FrogHealthBonus", "FrogUses", "FrogDamage"),
+    "RavenFamiliar": ("RavenCritChanceBonus", "RavenUses", "RavenAttack"),
+    "HoundFamiliar": ("HoundManaBonus", "HoundUses", "HoundAttack"),
+    "PolecatFamiliar": ("PolecatDodgeBonus", "PolecatUses", "PolecatDamage"),
+}
+_FAMILIAR_UPGRADE_PARENT = {
+    upgrade: familiar for familiar, upgrades in _FAMILIAR_UPGRADES.items() for upgrade in upgrades
+}
+_FAMILIAR_TOOLS = {
+    "FrogFamiliar": "ToolExorcismBook", "CatFamiliar": "ToolFishingRod",
+    "RavenFamiliar": "ToolPickaxe", "HoundFamiliar": "ToolShovel",
+    "PolecatFamiliar": "ToolHarvest",
+}
 _ASPECT_PARENT = {aspect: weapon for weapon, aspects in _WEAPONS.items() for aspect in aspects}
 _DEFAULT_ASPECTS = {aspects[0] for aspects in _WEAPONS.values()}
 _MARKER_FIELDS = ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded")
@@ -61,13 +77,24 @@ def _conflicting_action_ids(entry, own):
         if selected:
             related.add("aspect:" + selected)
     elif entry == "familiarSelection":
+        related.update("familiarSelected:" + familiar for familiar in _FAMILIARS)
         selected = next(
             (intent["after"] for intent in own if intent["id"] == entry), None
         )
         if selected:
             related.add("familiar:" + selected)
     elif entry.startswith("familiar:"):
-        related.add("familiarSelection")
+        familiar = entry[len("familiar:"):]
+        related.update(("familiarSelection", "familiarSelected:" + familiar))
+        related.update("familiarUpgrade:" + upgrade for upgrade in _FAMILIAR_UPGRADES.get(familiar, ()))
+    elif entry.startswith("familiarUpgrade:"):
+        familiar = _FAMILIAR_UPGRADE_PARENT.get(entry[len("familiarUpgrade:"):])
+        if familiar:
+            related.update(("familiar:" + familiar, "familiarSelected:" + familiar, "familiarSelection"))
+    elif entry.startswith("familiarSelected:"):
+        familiar = entry[len("familiarSelected:"):]
+        related.update(("familiarSelection", "familiar:" + familiar))
+        related.update("familiarSelected:" + name for name in _FAMILIARS)
     return _action_ids(own, related)
 
 
@@ -180,6 +207,59 @@ def _tool_level(state, tool):
     return 2 if second else (1 if first else 0)
 
 
+def _familiar_upgrade_keys(upgrade):
+    return (upgrade, upgrade + "2", upgrade + "3")
+
+
+def _familiar_rank(state, upgrade):
+    owner = _table(state, "FamiliarUpgrades")
+    level, gap = 0, False
+    for key in _familiar_upgrade_keys(upgrade):
+        purchased = _flag(owner, key)
+        if purchased and gap:
+            raise ValueError("Save Editor semantic owner is unsupported.")
+        if purchased:
+            level += 1
+        else:
+            gap = True
+    return level
+
+
+def _familiar_rank_write_state(state, upgrade):
+    try:
+        _familiar_rank(state, upgrade)
+        _flag(_table(state, "FamiliarsUnlocked"), _FAMILIAR_UPGRADE_PARENT[upgrade])
+        owners = tuple(_table(state, field) for field in
+                       ("FamiliarUpgrades", "WorldUpgrades", "WorldUpgradesAdded"))
+        for key in _familiar_upgrade_keys(upgrade):
+            purchased, current, ever = (_flag(owner, key) for owner in owners)
+            if purchased != current or (purchased and not ever):
+                return "unsupported"
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    except ValueError:
+        return "unsupported"
+    return None
+
+
+def _set_familiar_rank(state, upgrade, rank):
+    # Current purchase membership and ever-purchased history are separate native
+    # owners. Downgrading never pretends a previously purchased tier was unseen.
+    upgrades = _table(state, "FamiliarUpgrades")
+    current = _table(state, "WorldUpgrades")
+    history = _table(state, "WorldUpgradesAdded")
+    for tier, key in enumerate(_familiar_upgrade_keys(upgrade), 1):
+        for owner in (upgrades, current, history):
+            _flag(owner, key)
+        if tier <= rank:
+            upgrades[key] = current[key] = history[key] = True
+        else:
+            upgrades.pop(key, None)
+            current.pop(key, None)
+    if rank:
+        _table(state, "FamiliarsUnlocked")[_FAMILIAR_UPGRADE_PARENT[upgrade]] = True
+
+
 def _set_rank(state, aspect, level):
     for tier in range(1, 6):
         if tier == 1 and aspect in _DEFAULT_ASPECTS:
@@ -245,7 +325,8 @@ def rows(root, language="zh-CN", game_path=None):
     state = _state(root)
     zh = language == "zh-CN"
     native, en = _names(
-        set(_WEAPONS) | set(_ASPECT_PARENT) | set(_TOOLS) | set(_FAMILIARS),
+        set(_WEAPONS) | set(_ASPECT_PARENT) | set(_TOOLS) | set(_FAMILIARS)
+        | set(_FAMILIAR_UPGRADE_PARENT),
         language, game_path,
     )
     result = []
@@ -393,7 +474,36 @@ def rows(root, language="zh-CN", game_path=None):
                 else None
             ),
             owner_state=tool_owner_state,
+            entity_id="tool:" + tool, entity_name=name,
         ))
+
+        access_owner_state = None
+        access = None
+        try:
+            selected = state.get("EquippedFamiliar")
+            if selected is not None and (not isinstance(selected, str) or selected not in _FAMILIARS):
+                raise ValueError("Save Editor familiar selection is unknown.")
+            access = _owned(state, tool) or _FAMILIAR_TOOLS.get(selected) == tool
+        except AmbiguousLuaKeyError:
+            access_owner_state = "ambiguous"
+        except ValueError:
+            access_owner_state = "unsupported"
+        access_row = _row(
+            "toolSelection:" + tool, tool, ["GameState", "WeaponsUnlocked", tool],
+            name + (" · 可使用" if zh else " · Available"), english + " · Available",
+            access, "boolean", tool_group, editable=False,
+            block_reason_code=(
+                "ambiguousOwner" if access_owner_state == "ambiguous"
+                else "unsupportedOwner" if access_owner_state == "unsupported"
+                else "noIndependentToolSelection"
+            ),
+            owner_state=access_owner_state, entity_id="tool:" + tool, entity_name=name,
+        )
+        access_row["blockReasonDiagnostic"] = (
+            "已解锁的工具均可使用，携带的魔宠也可能提供工具；此版本没有独立的工具装备选择。"
+            if zh else "Unlocked tools are available together; the selected Familiar may also provide access. This version has no independent tool equipment selection."
+        )
+        result.append(access_row)
 
     try:
         familiar_unlocks = state.get("FamiliarsUnlocked")
@@ -402,7 +512,7 @@ def rows(root, language="zh-CN", game_path=None):
         familiar_owner_state = "ambiguous"
     else:
         familiar_owner_state = (
-            None if familiar_unlocks is None or isinstance(familiar_unlocks, LuaTable)
+            None if isinstance(familiar_unlocks, LuaTable)
             else "unsupported"
         )
 
@@ -417,12 +527,24 @@ def rows(root, language="zh-CN", game_path=None):
                     owner_state = "ambiguous"
                 except ValueError:
                     owner_state = "unsupported"
+            if owner_state is None and owned:
+                try:
+                    has_upgrades = state.get("FamiliarUpgrades") is not None
+                except AmbiguousLuaKeyError:
+                    owner_state = "ambiguous"
+                else:
+                    if has_upgrades:
+                        owner_state = _merge_owner_state(*(
+                            _familiar_rank_write_state(state, upgrade)
+                            for upgrade in _FAMILIAR_UPGRADES[familiar]
+                        ))
             name = native.get(familiar) or familiar
             english = en.get(familiar) or familiar
             result.append(_row(
                 "familiar:" + familiar, familiar,
                 ["GameState", "FamiliarsUnlocked", familiar],
-                name, english, owned, "boolean", familiar_group,
+                name + (" · 已解锁" if zh else " · Unlocked"), english + " · Unlocked",
+                owned, "boolean", familiar_group,
                 editable=owner_state is None,
                 choices=(False, True),
                 block_reason_code=(
@@ -431,6 +553,7 @@ def rows(root, language="zh-CN", game_path=None):
                     else None
                 ),
                 owner_state=owner_state,
+                entity_id="familiar:" + familiar, entity_name=name,
             ))
 
         selection_owner_state = familiar_owner_state
@@ -448,6 +571,62 @@ def rows(root, language="zh-CN", game_path=None):
         choices = ("", *_FAMILIARS)
         choice_names = {"": "不携带" if zh else "None"}
         choice_names.update({f: native.get(f) or f for f in _FAMILIARS})
+        for familiar in _FAMILIARS:
+            name, english = native.get(familiar) or familiar, en.get(familiar) or familiar
+            selected_owner_state = selection_owner_state
+            if selected_owner_state is None:
+                try:
+                    _flag(familiar_unlocks, familiar)
+                except AmbiguousLuaKeyError:
+                    selected_owner_state = "ambiguous"
+                except ValueError:
+                    selected_owner_state = "unsupported"
+            result.append(_row(
+                "familiarSelected:" + familiar, familiar, ["GameState", "EquippedFamiliar"],
+                name + (" · 携带" if zh else " · Selected"), english + " · Selected",
+                chosen == familiar if selected_owner_state is None else None,
+                "boolean", familiar_group, editable=selected_owner_state is None,
+                choices=(False, True),
+                block_reason_code=("ambiguousOwner" if selected_owner_state == "ambiguous"
+                                   else "unsupportedOwner" if selected_owner_state else None),
+                owner_state=selected_owner_state, entity_id="familiar:" + familiar, entity_name=name,
+            ))
+            for upgrade in _FAMILIAR_UPGRADES[familiar]:
+                upgrade_state = _familiar_rank_write_state(state, upgrade)
+                rank = None
+                try:
+                    rank = _familiar_rank(state, upgrade)
+                except (AmbiguousLuaKeyError, ValueError):
+                    pass
+                try:
+                    missing_owner = state.get("FamiliarUpgrades") is None
+                except AmbiguousLuaKeyError:
+                    missing_owner = False
+                row = _row(
+                    "familiarUpgrade:" + upgrade, upgrade,
+                    ["GameState", "FamiliarUpgrades", upgrade],
+                    (native.get(upgrade) or upgrade) + (" · 已购等级" if zh else " · Purchased rank"),
+                    (en.get(upgrade) or upgrade) + " · Purchased rank",
+                    rank, "integer", familiar_group, maximum=len(_familiar_upgrade_keys(upgrade)),
+                    editable=upgrade_state is None,
+                    block_reason_code=(
+                        "ambiguousOwner" if upgrade_state == "ambiguous"
+                        else "missingFamiliarUpgradeOwner" if missing_owner
+                        else "familiarUpgradeOwnerUnsupported" if upgrade_state else None
+                    ),
+                    owner_state=upgrade_state, entity_id="familiar:" + familiar, entity_name=name,
+                )
+                if missing_owner:
+                    row["blockReasonDiagnostic"] = (
+                        "此存档缺少魔宠升级所有者，不能只写入购买镜像或重建未知升级状态。"
+                        if zh else "This Save lacks its Familiar upgrade owner; purchase mirrors alone cannot establish or reconstruct that progression."
+                    )
+                elif upgrade_state == "unsupported":
+                    row["blockReasonDiagnostic"] = (
+                        "魔宠购买等级必须连续，原生升级、解锁和购买记录须为一致的布尔所有权；当前记录不支持安全联动写入。"
+                        if zh else "Familiar purchase tiers must be contiguous, with consistent boolean upgrade, unlock and purchase owners; this record cannot be changed safely as a linked operation."
+                    )
+                result.append(row)
         result.append(_row(
             "familiarSelection", "EquippedFamiliar",
             ["GameState", "EquippedFamiliar"],
@@ -467,7 +646,8 @@ def rows(root, language="zh-CN", game_path=None):
 
 def descriptor(root, entry_id, game_path=None):
     if not isinstance(entry_id, str) or not (
-        entry_id.startswith(("weapon:", "aspect:", "aspectSelection:", "tool:", "familiar:"))
+        entry_id.startswith(("weapon:", "aspect:", "aspectSelection:", "tool:", "familiar:",
+                             "familiarUpgrade:", "familiarSelected:"))
         or entry_id == "familiarSelection"
     ):
         return None
@@ -564,6 +744,24 @@ def apply_intent(root, intent):
             table.pop(familiar, None)
             if state.get("EquippedFamiliar") == familiar:
                 state.pop("EquippedFamiliar", None)
+            if state.get("FamiliarUpgrades") is not None:
+                for upgrade in _FAMILIAR_UPGRADES[familiar]:
+                    _set_familiar_rank(state, upgrade, 0)
+        return
+    if entry_id.startswith("familiarUpgrade:"):
+        upgrade = entry_id[len("familiarUpgrade:"):]
+        if upgrade not in _FAMILIAR_UPGRADE_PARENT:
+            raise ValueError("Save Editor equipment mutation is unknown.")
+        _set_familiar_rank(state, upgrade, after)
+        return
+    if entry_id.startswith("familiarSelected:"):
+        familiar = entry_id[len("familiarSelected:"):]
+        if familiar not in _FAMILIARS:
+            raise ValueError("Save Editor familiar is unknown.")
+        if after:
+            state["EquippedFamiliar"] = familiar
+        elif state.get("EquippedFamiliar") == familiar:
+            state.pop("EquippedFamiliar", None)
         return
     if entry_id == "familiarSelection":
         if after:
@@ -615,6 +813,13 @@ def _semantic_values(root):
             value = object()
         if value is None or (isinstance(value, str) and value in _FAMILIARS):
             values["familiarSelection"] = value or ""
+            for familiar in _FAMILIARS:
+                values["familiarSelected:" + familiar] = value == familiar
+        for upgrade in _FAMILIAR_UPGRADE_PARENT:
+            try:
+                values["familiarUpgrade:" + upgrade] = _familiar_rank(state, upgrade)
+            except (AmbiguousLuaKeyError, ValueError):
+                pass
     return values
 
 
@@ -630,7 +835,12 @@ def linked_changes(root, intents):
     after = _semantic_values(candidate)
     edited = {intent["id"] for intent in own}
     changes = []
+    entity_selection = any(item.startswith("familiarSelected:") for item in edited)
     for key in sorted(set(before) & set(after)):
+        if key == "familiarSelection" and entity_selection:
+            continue
+        if key.startswith("familiarSelected:") and not entity_selection:
+            continue
         if key not in edited and before[key] != after[key]:
             changes.append({
                 "id": "linked:" + key, "domain": "weapons", "rawId": key,
@@ -661,7 +871,7 @@ def validate_batch(root, intents):
             affected_weapons.add(_ASPECT_PARENT[entry[len("aspect:"):]])
         elif entry.startswith("aspectSelection:"):
             affected_weapons.add(entry[len("aspectSelection:"):])
-        elif entry.startswith("familiar:") or entry == "familiarSelection":
+        elif entry.startswith(("familiar:", "familiarSelected:", "familiarUpgrade:")) or entry == "familiarSelection":
             familiars_changed = True
 
     for weapon in affected_weapons:
@@ -699,7 +909,7 @@ def validate_batch(root, intents):
     if familiars_changed:
         familiar = current.get("familiarSelection")
         if familiar and current.get("familiar:" + familiar) is not True:
-            related = {"familiarSelection", "familiar:" + familiar}
+            related = {"familiarSelection", "familiarSelected:" + familiar, "familiar:" + familiar}
             raise SaveEquipmentBatchValidationError(
                 "Save Editor equipped familiar must be unlocked.",
                 _action_ids(own, related),
