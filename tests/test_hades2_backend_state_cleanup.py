@@ -62,6 +62,20 @@ struct Main {
               "resource patch published an unrelated collection")
         withExtendedLifetime(publications) {}
 
+        // An old name-level capability cannot authorize the selected-instance
+        // action. The current capability preserves the exact row identity.
+        var selectedTrait: [String: Any] = [
+            "generationId": "generation", "runId": "run", "instanceId": "selected-502",
+            "name": "OrdinaryDuplicate", "removalCapability": "nameLevelAllMatching",
+        ]
+        model.apply(["currentRunTraits": [selectedTrait]])
+        check(model.currentRunTraits.count == 1 && !model.currentRunTraits[0].canRemove,
+              "legacy all-matching capability authorized selected-instance removal")
+        selectedTrait["removalCapability"] = "singleInstanceForce"
+        model.apply(["currentRunTraits": [selectedTrait]])
+        check(model.currentRunTraits[0].canRemove && model.currentRunTraits[0].instanceID == "selected-502",
+              "single-instance capability lost selected identity")
+
         let setOccurrence = Hades2Request.setNextOccurrence("npc:Nemesis")
         check(setOccurrence.command == .setNextOccurrenceDesired,
               "occurrence request routed to the wrong Host command")

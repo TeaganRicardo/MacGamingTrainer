@@ -1708,10 +1708,6 @@
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
     },
-    "remove_trait::Native trait removal left a matching instance mounted": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNoEffect"
-    },
     "remove_trait::Selene spell removal left owner state mounted": {
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"

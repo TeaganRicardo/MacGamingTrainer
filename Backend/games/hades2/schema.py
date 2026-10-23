@@ -161,14 +161,12 @@ TRAIT_RARITY_SET_EXACT = 'setExact'
 TRAIT_RARITY_NONE = 'none'
 TRAIT_RARITY_CAPABILITIES = (TRAIT_RARITY_SET_EXACT, TRAIT_RARITY_NONE)
 
-# Native SellTraits is name-level/all-matching. #227 also admits one bounded
-# direct-trait strategy whose lifecycle has been audited for object-level
-# teardown; every other owner-specific lifecycle remains deferred.
-TRAIT_REMOVAL_NAME_LEVEL = 'nameLevelAllMatching'
+# The selected live instance is the ordinary removal target. Lifecycle-specific
+# cancellation and owner teardown remain Hades-owned; no name-level capability
+# may widen the selected-boon action to every matching instance.
 TRAIT_REMOVAL_SINGLE_INSTANCE_FORCE = 'singleInstanceForce'
 TRAIT_REMOVAL_NONE = 'none'
 TRAIT_REMOVAL_CAPABILITIES = (
-    TRAIT_REMOVAL_NAME_LEVEL,
     TRAIT_REMOVAL_SINGLE_INSTANCE_FORCE,
     TRAIT_REMOVAL_NONE,
 )

@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 120 then
+if previousModule and previousModule.revision ~= 121 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 120 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 120,
+    version = 1, revision = 121,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -4014,6 +4014,267 @@ if __MacGamingTrainerV1 == nil then
       }
     end)()
 
+    local ordinaryRemovalModel = (function()
+      local modifierRoles = {
+        { "AddIncomingDamageModifiers", "IncomingDamageModifiers" },
+        { "AddOutgoingDamageModifiers", "OutgoingDamageModifiers" },
+        { "AddOutgoingCritModifiers", "OutgoingCritModifiers" },
+        { "AddOutgoingDoubleDamageModifiers", "OutgoingDoubleDamageModifiers" },
+        { "AddOutgoingLifestealModifiers", "OutgoingLifestealModifiers" },
+      }
+
+      local function siblingsOf(trait)
+        local siblings = {}
+        for _, mounted in ipairs(CurrentRun.Hero.Traits or {}) do
+          if mounted ~= trait and type(mounted) == "table" and mounted.Name == trait.Name then
+            siblings[#siblings + 1] = mounted
+          end
+        end
+        return siblings
+      end
+
+      -- Native modifier records have a source name, not a trait instance ID.
+      -- Match the processed source values while preserving extra live fields
+      -- (for example usage state), rather than assuming Traits/registry order.
+      local function sourceMatches(record, source, ignoreName)
+        if type(source) ~= "table" then return record == source end
+        if type(record) ~= "table" then return false end
+        for key, value in pairs(source) do
+          if not (ignoreName and key == "Name") and not sourceMatches(record[key], value) then return false end
+        end
+        return true
+      end
+
+      local function modifierSnapshots(trait)
+        local snapshots = {}
+        local function exclude(field, source, name)
+          if type(source) ~= "table" then return true end
+          local registry = CurrentRun.Hero[field]
+          if type(registry) ~= "table" then return false end
+          local snapshot = snapshots[field]
+          if snapshot == nil then
+            snapshot = { registry = registry, excluded = {} }
+            snapshots[field] = snapshot
+          end
+          for _, record in pairs(registry) do
+            if type(record) == "table" and record.Name == name
+                and not snapshot.excluded[record] and sourceMatches(record, source, true) then
+              snapshot.excluded[record] = true
+              return true
+            end
+          end
+          return false
+        end
+        for _, role in ipairs(modifierRoles) do
+          if not exclude(role[2], trait[role[1]], trait.Name) then return nil end
+        end
+        for index, source in pairs(trait.AddOutgoingDamageModifiersArray or {}) do
+          if not exclude("OutgoingDamageModifiers", source, trait.Name .. index) then return nil end
+        end
+        for _, snapshot in pairs(snapshots) do
+          local indices, retained = {}, {}
+          for index, record in pairs(snapshot.registry) do
+            if type(index) == "number" then
+              indices[#indices + 1] = index
+            else
+              retained[index] = record
+            end
+          end
+          table.sort(indices)
+          for _, index in ipairs(indices) do
+            local record = snapshot.registry[index]
+            if not snapshot.excluded[record] then retained[#retained + 1] = record end
+          end
+          snapshot.retained = retained
+        end
+        return snapshots
+      end
+
+      local function weaponProperties(trait, visit)
+        for _, property in ipairs(trait.PropertyChanges or {}) do
+          if type(property) == "table" and (property.WeaponName or property.WeaponNames) then
+            if visit(property) == false then return false end
+          end
+        end
+        return true
+      end
+
+      local function armorSnapshot(trait, siblings)
+        local sources = type(MapState) == "table" and MapState.HealthBufferSources or nil
+        -- A missing source is the native inactive/expired boundary. A mounted
+        -- row's old CurrentArmor does not authorize restarting that lifecycle.
+        if type(sources) ~= "table" or sources[trait.Name] == nil then return nil end
+        for _, sibling in ipairs(siblings) do
+          if sibling.CostumeTrait and finite(sibling.CurrentArmor) then
+            -- Native GetHeroTrait uses the first mounted name owner. Reproject
+            -- its remaining armor, never the selected peer's source amount or
+            -- an acquisition/setup amount, and leave every row's value intact.
+            return {
+              amount = sibling.CurrentArmor,
+              temporary = type(MapState.TemporaryHealthBufferSources) == "table"
+                and MapState.TemporaryHealthBufferSources[trait.Name] or nil,
+            }
+          end
+        end
+        return nil
+      end
+
+      local function repairArmor(hero, trait, armor)
+        if armor == nil then return end
+        MapState.HealthBufferSources[trait.Name] = armor.amount
+        MapState.TemporaryHealthBufferSources[trait.Name] = armor.temporary
+        local total = 0
+        for _, value in pairs(MapState.HealthBufferSources) do total = total + value end
+        hero.HealthBuffer = total
+        FrameState.RequestUpdateHealthUI = true
+      end
+
+      local function ready(trait)
+        if type(RemoveTraitData) ~= "function" or type(UpdateHeroTraitDictionary) ~= "function" then
+          return false
+        end
+        local siblings = siblingsOf(trait)
+        if #siblings == 0 then return true end
+        if type(CheckActivatedTraits) ~= "function" then return false end
+        if trait.AnchorId ~= nil and (type(IsShownInHUD) ~= "function"
+            or type(TraitUIAdd) ~= "function" or type(GetRarityValue) ~= "function") then return false end
+        for _, sibling in ipairs(siblings) do
+          if sibling.AnchorId ~= nil and type(UpdateTraitNumber) ~= "function" then return false end
+        end
+        local function propertyReady(property)
+          return type(DeepCopyTable) == "function" and type(RecordTraitPropertyChange) == "function"
+            and type(ProcessHeroTraitChanges) == "function"
+            and type(MapState) == "table" and type(MapState.EquippedWeapons) == "table"
+            and (property.ExcludeLinked or type(AddLinkedWeapons) == "function")
+        end
+        if not weaponProperties(trait, propertyReady) then return false end
+        for _, sibling in ipairs(siblings) do
+          if not weaponProperties(sibling, propertyReady) then return false end
+        end
+        return true
+      end
+
+      local function repairWeapons(trait, siblings)
+        local affected = {}
+        local function visitWeapons(property, record)
+          local names = {}
+          if property.WeaponName then names[#names + 1] = property.WeaponName end
+          for _, name in ipairs(property.WeaponNames or {}) do names[#names + 1] = name end
+          if not property.ExcludeLinked then names = AddLinkedWeapons(names) end
+          for _, name in ipairs(names) do
+            if MapState.EquippedWeapons[name] then
+              affected[name] = true
+              if record then
+                local copy = DeepCopyTable(property)
+                copy.ExcludeLinked, copy.WeaponName, copy.WeaponNames = true, name, nil
+                RecordTraitPropertyChange(trait.Name, copy)
+              end
+            end
+          end
+        end
+        local hasProperties = false
+        local function collect(property) hasProperties = true; visitWeapons(property, false) end
+        weaponProperties(trait, collect)
+        for _, sibling in ipairs(siblings) do weaponProperties(sibling, collect) end
+        if not hasProperties then return end
+
+        -- RemoveTraitData deletes property records by ParentTraitName. Clear
+        -- any untouched sibling targets too before rebuilding just this name.
+        local function prune(node, depth)
+          for key, value in pairs(node or {}) do
+            if depth > 0 then
+              prune(value, depth - 1)
+            else
+              local kept = {}
+              for _, property in ipairs(value) do
+                if property.ParentTraitName ~= trait.Name then kept[#kept + 1] = property end
+              end
+              node[key] = kept
+            end
+          end
+        end
+        local registry = SessionState.PropertyChangeList
+        prune(registry and registry.WeaponChanges, 1)
+        prune(registry and registry.ProjectileChanges, 1)
+        prune(registry and registry.EffectChanges, 2)
+        for _, sibling in ipairs(siblings) do
+          weaponProperties(sibling, function(property) visitWeapons(property, true) end)
+        end
+        for name in pairs(affected) do
+          -- The native force-refresh branch resets/reapplies one weapon.
+          -- No survivor unit/Lua property, acquisition, or setup is replayed.
+          ProcessHeroTraitChanges({ Name = trait.Name, ForceWeaponRefreshOnRemove = name }, true)
+        end
+      end
+
+      local function validate(trait)
+        if not ready(trait) then error("Trait removal is unavailable for the selected target") end
+        local siblings = siblingsOf(trait)
+        local snapshots = #siblings > 0 and modifierSnapshots(trait) or {}
+        if snapshots == nil then error("Trait removal is unavailable for the selected target") end
+        return siblings, snapshots, armorSnapshot(trait, siblings)
+      end
+
+      local function remove(trait)
+        local siblings, snapshots, armor = validate(trait)
+        local hero = CurrentRun.Hero
+        local hadIcon = trait.AnchorId ~= nil
+        local ok, message = pcall(RemoveTraitData, hero, trait, {
+          Silent = true,
+          -- Ordinary expiration releases name-owned reserved mana. Keep that
+          -- owner mounted while siblings exist; preserve native last removal.
+          SkipExpire = #siblings > 0,
+          SkipActivatedTraitUpdate = #siblings > 0,
+        })
+        for _, mounted in ipairs(hero.Traits or {}) do
+          if mounted == trait or (mounted.Id ~= nil and tostring(mounted.Id) == tostring(trait.Id)) then
+            if not ok then error(message) end
+            error("Direct trait removal left the selected instance mounted")
+          end
+        end
+
+        -- A callback can acknowledge late after removal. Finish each distinct
+        -- repair once, then preserve the first error for outcome-unknown.
+        local firstError = not ok and tostring(message) or nil
+        local function attempt(work)
+          local repaired, repairMessage = pcall(work)
+          if not repaired and firstError == nil then firstError = tostring(repairMessage) end
+        end
+        attempt(function() repairArmor(hero, trait, armor) end)
+        attempt(function()
+          hero.FirstTraitWithPropertyCache = {}
+          UpdateHeroTraitDictionary()
+        end)
+        if #siblings > 0 then
+          for field, snapshot in pairs(snapshots) do hero[field] = snapshot.retained end
+          attempt(function() repairWeapons(trait, siblings) end)
+          attempt(function() CheckActivatedTraits(hero) end)
+          local showing = nil
+          for _, sibling in ipairs(siblings) do
+            if sibling.AnchorId ~= nil then showing = sibling; break end
+          end
+          if showing then
+            attempt(function() UpdateTraitNumber(showing) end)
+          end
+          if hadIcon then
+            attempt(function()
+              if showing ~= nil then return end
+              for _, sibling in ipairs(siblings) do
+                if not sibling.Hidden and IsShownInHUD(sibling)
+                    and (showing == nil or GetRarityValue(sibling.Rarity) > GetRarityValue(showing.Rarity)) then
+                  showing = sibling
+                end
+              end
+              if showing then TraitUIAdd(showing, { Show = true }) end
+            end)
+          end
+        end
+        if firstError ~= nil then error(firstError) end
+      end
+
+      return { ready = ready, validate = validate, remove = remove }
+    end)()
+
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
@@ -4207,8 +4468,10 @@ if __MacGamingTrainerV1 == nil then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "directSpecial" then
           removalReason = "ownerSpecificLifecycle"
+        elseif family == "olympianHermes" and sellEligible and ordinaryRemovalModel.ready(trait) then
+          removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "olympianHermes" and sellEligible then
-          removalCapability, removalReason = "nameLevelAllMatching", ""
+          removalReason = "nativePathUnavailable"
         end
       end
 
@@ -4266,12 +4529,15 @@ if __MacGamingTrainerV1 == nil then
         "UnequipKeepsake", "EquipKeepsake", "UnequipWeapon", "RemoveTrait", "RemoveLastStand",
         "RemoveWeaponTrait", "UpdateLifePips", "Destroy", "SetupCostume", "CallFunctionName",
         "ValidateMaxHealth", "ValidateMaxMana", "HandleWeaponAnimSwaps", "GetEquippedWeapon",
-        "HeroHasTrait", "ExtractValues",
+        "HeroHasTrait", "ExtractValues", "UpdateHeroTraitDictionary", "CheckActivatedTraits",
+        "RecordTraitPropertyChange", "ProcessHeroTraitChanges", "AddLinkedWeapons", "DeepCopyTable",
+        "IsShownInHUD", "TraitUIAdd", "GetRarityValue",
       }) do append(_G[name]) end
 
       local hero = owner and owner.hero or nil
       append(type(hero) == "table" and hero.Weapons or nil)
       if type(hero) == "table" and type(hero.Weapons) == "table" then appendMap(hero.Weapons) end
+      appendMap(type(MapState) == "table" and MapState.EquippedWeapons or nil)
       local aspect = type(GameState) == "table" and GameState.LastWeaponUpgradeName or nil
       if type(aspect) == "table" then appendMap(aspect) else append(aspect) end
 
@@ -4327,6 +4593,12 @@ if __MacGamingTrainerV1 == nil then
           append(trait.CustomTitle); append(trait.IsHammerTrait); append(trait.IsWeaponEnchantment)
           append(trait.RequiredWeapon); append(trait.BlockStacking); append(trait.CurrentArmor)
           append(trait.RarityMultiplier); append(trait.BlockInRunRarify)
+          append(trait.AnchorId)
+          appendSequence(trait.PropertyChanges)
+          for _, property in ipairs(trait.PropertyChanges or {}) do
+            append(property.WeaponName); append(property.ExcludeLinked)
+            appendSequence(property.WeaponNames)
+          end
           append(trait.AcquireFunctionName); append(trait.AcquireFunction)
           append(trait.OnExpireFunctionName); append(trait.CurrentRoom); append(trait.RoomsPerUpgrade)
           append(trait.UseFunctionName); appendSequence(trait.UseFunctionNames)
@@ -4718,8 +4990,8 @@ if __MacGamingTrainerV1 == nil then
           if removalCapability == "none" then
             error("Trait removal is unavailable for the selected target")
           end
-          if removalCapability == "nameLevelAllMatching" then
-            requireFunctions("native trait removal", { "RemoveWeaponTrait" })
+          if removalCapability == "singleInstanceForce" and family == "olympianHermes" then
+            ordinaryRemovalModel.validate(target)
           elseif removalCapability == "singleInstanceForce" and family == "hex" then
             requireFunctions("Selene spell removal", {
               "HeroHasTrait", "RemoveTrait", "UnequipWeapon", "UpdateTalentPointInvestedCache",
@@ -4758,14 +5030,8 @@ if __MacGamingTrainerV1 == nil then
         end
         return actionLedger.run(command, params, function()
           local live, removalCapability, family = validateRemovalTarget()
-          if removalCapability == "nameLevelAllMatching" then
-            -- Native SellTraits teardown: deliberately name-level/all-matching.
-            RemoveWeaponTrait(live.Name, { Silent = true })
-            for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-              if type(trait) == "table" and trait.Name == live.Name then
-                error("Native trait removal left a matching instance mounted")
-              end
-            end
+          if family == "olympianHermes" then
+            ordinaryRemovalModel.remove(live)
           elseif family == "hex" then
             seleneModel.teardown()
             local slotted = seleneModel.currentSpell()

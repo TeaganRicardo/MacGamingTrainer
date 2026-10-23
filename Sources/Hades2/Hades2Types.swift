@@ -188,7 +188,6 @@ enum TraitRarityCapability: String, Codable, Equatable, Sendable {
 
 enum TraitRemovalCapability: String, Codable, Equatable, Sendable {
     case none
-    case nameLevelAllMatching
     case singleInstanceForce
 }
 
