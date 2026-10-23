@@ -97,9 +97,7 @@ defer { for child in inheritedChildren { _ = kill(child, SIGKILL) } }
 // Reuse the same owner immediately after each termination. All callbacks must
 // belong to that start, with complete stdout/stderr preceding termination.
 var modes = ["exit", "inherited", "restart", "stop", "after-stop"]
-#if os(Linux)
 modes.insert("continuous", at: 3)
-#endif
 for mode in modes {
     var messages = [[String: Any]]()
     var stderrText = ""

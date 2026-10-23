@@ -34,12 +34,11 @@ final class BackendProcess {
     private var stderrBuffer = Data()
     private var stderrDroppedBytes = 0
     private var stderrDeliveryScheduled = false
+    private var stdoutHandlerEnabled = false
     private var stderrHandlerEnabled = false
     private var stderrCallback: ((String) -> Void)?
     private var profileLog: ((String) -> Void)?
-    #if os(Linux)
     private var pipeErrorCallback: ((String) -> Void)?
-    #endif
 
     private let executableURL: URL
     private let argumentsPrefix: [String]
@@ -99,6 +98,7 @@ final class BackendProcess {
             stderrBuffer.removeAll(keepingCapacity: false)
             stderrDroppedBytes = 0
             stderrDeliveryScheduled = false
+            stdoutHandlerEnabled = true
             stderrHandlerEnabled = true
         }
 
@@ -118,24 +118,24 @@ final class BackendProcess {
         input = stdin.fileHandleForWriting
         output = stdout.fileHandleForReading
         errorOutput = stderr.fileHandleForReading
+        pipeErrorCallback = onProtocolError
 
         #if os(Linux)
         // FileHandle read-source teardown races epoll delivery on Linux
         // (swift-corelibs-libdispatch#949). Keep these pipes off that event loop.
         let readers = DispatchGroup()
         let cancellation = Pipe()
-        pipeErrorCallback = onProtocolError
         #else
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
             self?.readQueue.async { [weak self] in
-                self?.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
+                guard let self, self.stdoutHandlerEnabled, self.output === handle,
+                      let data = self.readPipeIfReadableLocked(handle) else { return }
+                self.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
             }
         }
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             self?.readQueue.async { [weak self] in
-                guard let self, self.stderrHandlerEnabled else { return }
+                guard let self, self.stderrHandlerEnabled, self.errorOutput === handle else { return }
                 self.readStderrIfReadableLocked(handle)
             }
         }
@@ -159,9 +159,8 @@ final class BackendProcess {
                 owner.flushStderr { message in
                     onStderr(message)
                 }
-                #if os(Linux)
                 owner.pipeErrorCallback = nil
-                #else
+                #if !os(Linux)
                 owner.output?.readabilityHandler = nil
                 owner.errorOutput?.readabilityHandler = nil
                 #endif
@@ -175,6 +174,7 @@ final class BackendProcess {
                     owner.stderrBuffer.removeAll(keepingCapacity: false)
                     owner.stderrDroppedBytes = 0
                     owner.stderrDeliveryScheduled = false
+                    owner.stdoutHandlerEnabled = false
                     owner.stderrHandlerEnabled = false
                 }
                 onTermination(status)
@@ -182,7 +182,21 @@ final class BackendProcess {
             #if os(Linux)
             readers.notify(queue: .main, execute: finish)
             #else
-            DispatchQueue.main.async(execute: finish)
+            stdout.fileHandleForReading.readabilityHandler = nil
+            stderr.fileHandleForReading.readabilityHandler = nil
+            owner.readQueue.async {
+                owner.stdoutHandlerEnabled = false
+                owner.stderrHandlerEnabled = false
+                do {
+                    try owner.drainPipeLocked(stdout.fileHandleForReading) { data in
+                        owner.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
+                    }
+                } catch {
+                    owner.reportProtocolError("后端 stdout 读取失败：\(error.localizedDescription)", callback: onProtocolError)
+                }
+                owner.drainStderrPipeLocked(stderr.fileHandleForReading)
+                DispatchQueue.main.async(execute: finish)
+            }
             #endif
         }
 
@@ -209,11 +223,11 @@ final class BackendProcess {
             #if os(Linux)
             try? cancellation.fileHandleForWriting.close()
             readers.wait()
-            pipeErrorCallback = nil
             #else
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
             #endif
+            pipeErrorCallback = nil
             try? stdin.fileHandleForWriting.close()
             input = nil
             output = nil
@@ -223,6 +237,7 @@ final class BackendProcess {
                 stderrBuffer.removeAll(keepingCapacity: false)
                 stderrDroppedBytes = 0
                 stderrDeliveryScheduled = false
+                stdoutHandlerEnabled = false
                 stderrHandlerEnabled = false
             }
             process = nil
@@ -256,7 +271,7 @@ final class BackendProcess {
         }
         handle.readabilityHandler = { [weak self] handle in
             self?.readQueue.async { [weak self] in
-                guard let self, self.stderrHandlerEnabled else { return }
+                guard let self, self.stderrHandlerEnabled, self.errorOutput === handle else { return }
                 self.readStderrIfReadableLocked(handle)
             }
         }
@@ -282,7 +297,10 @@ final class BackendProcess {
         output?.readabilityHandler = nil
         errorOutput?.readabilityHandler = nil
         #endif
-        readQueue.sync { stderrHandlerEnabled = false }
+        readQueue.sync {
+            stdoutHandlerEnabled = false
+            stderrHandlerEnabled = false
+        }
         guard let task, task.isRunning else { return }
 
         task.terminate()
@@ -339,12 +357,11 @@ final class BackendProcess {
         return message.isEmpty ? nil : message
     }
 
-    /// Every stderr read is serialized on readQueue. Multiple readability
+    /// Every pipe read is serialized on readQueue. Multiple readability
     /// callbacks may have been queued for the same bytes; after the first one
     /// drains them, another availableData call would block on an open but quiet
     /// worker. Check readiness at execution time, not callback-enqueue time.
-    @discardableResult
-    private func readStderrIfReadableLocked(_ handle: FileHandle) -> Bool {
+    private func readPipeIfReadableLocked(_ handle: FileHandle) -> Data? {
         #if canImport(Darwin) || canImport(Glibc)
         var descriptor = pollfd(
             fd: handle.fileDescriptor,
@@ -352,26 +369,25 @@ final class BackendProcess {
             revents: 0
         )
         guard poll(&descriptor, 1, 0) > 0,
-              descriptor.revents & Int16(POLLIN | POLLHUP) != 0 else { return false }
+              descriptor.revents & Int16(POLLIN | POLLHUP) != 0 else { return nil }
         #endif
         let data = handle.availableData
-        guard !data.isEmpty else { return false }
+        return data.isEmpty ? nil : data
+    }
+
+    private func readStderrIfReadableLocked(_ handle: FileHandle) {
+        guard let data = readPipeIfReadableLocked(handle) else { return }
         enqueueStderrLocked(data)
-        return true
     }
 
     private func drainStderrPipeLocked(_ handle: FileHandle) {
-        #if os(Linux)
         do {
-            try drainLinuxPipeLocked(handle, onData: enqueueStderrLocked)
+            try drainPipeLocked(handle, onData: enqueueStderrLocked)
         } catch {
             if let pipeErrorCallback {
                 reportProtocolError("后端 stderr 读取失败：\(error.localizedDescription)", callback: pipeErrorCallback)
             }
         }
-        #else
-        while readStderrIfReadableLocked(handle) {}
-        #endif
     }
 
     #if os(Linux)
@@ -400,7 +416,7 @@ final class BackendProcess {
                 guard let owner = self else { return }
                 do {
                     try owner.readQueue.sync {
-                        try owner.drainLinuxPipeLocked(handle, onData: onData)
+                        try owner.drainPipeLocked(handle, onData: onData)
                     }
                     if descriptors[0].revents & Int16(POLLHUP) != 0 || descriptors[1].revents != 0 { return }
                 } catch {
@@ -410,16 +426,35 @@ final class BackendProcess {
             }
         }
     }
+    #endif
 
     /// Called only on readQueue, including explicit stderr flushes.
     /// A byte-count snapshot also bounds cancellation when a descendant keeps
     /// writing after the worker exits; later output cannot extend this drain.
-    private func drainLinuxPipeLocked(_ handle: FileHandle, onData: (Data) -> Void) throws {
+    private func drainPipeLocked(_ handle: FileHandle, onData: (Data) -> Void) throws {
+        #if os(Linux)
         var available: CInt = 0
         guard ioctl(handle.fileDescriptor, UInt(FIONREAD), &available) == 0 else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
         var remaining = Int(available)
+        #else
+        let queue = kqueue()
+        guard queue >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        defer { close(queue) }
+        var change = kevent64_s()
+        change.ident = UInt64(handle.fileDescriptor)
+        change.filter = Int16(EVFILT_READ)
+        change.flags = UInt16(EV_ADD | EV_ONESHOT)
+        var event = kevent64_s()
+        var timeout = timespec()
+        let count = kevent64(queue, &change, 1, &event, 1, 0, &timeout)
+        guard count >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        guard count == 0 || event.flags & UInt16(EV_ERROR) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(event.data))
+        }
+        var remaining = count == 0 ? 0 : Int(event.data)
+        #endif
         var bytes = [UInt8](repeating: 0, count: 8 * 1024)
         while remaining > 0 {
             let count = read(handle.fileDescriptor, &bytes, min(bytes.count, remaining))
@@ -437,7 +472,6 @@ final class BackendProcess {
             }
         }
     }
-    #endif
 
     private func consume(
         _ data: Data,
