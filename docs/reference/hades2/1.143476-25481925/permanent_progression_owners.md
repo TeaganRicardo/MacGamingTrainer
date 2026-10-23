@@ -35,8 +35,8 @@ The permanent purchase path is:
 The supported Save operation sets a **purchased rank** over contiguous native
 tiers. It updates `FamiliarUpgrades` and current `WorldUpgrades` together, adds
 ever-purchased markers for newly owned tiers, and retains historical markers on
-downgrade. It does not use the weapon owner's reset helper, which has different
-existing semantics. A positive rank also unlocks its parent Familiar. Revoking a
+downgrade. Its purchase membership has a distinct native owner from weapon
+ownership. A positive rank also unlocks its parent Familiar. Revoking a
 Familiar clears known current upgrade memberships and its selected state while
 preserving purchase history and unknown records. Missing, duplicate, malformed,
 noncontiguous or disagreeing linked owners are read-only with a visible reason.
@@ -61,9 +61,17 @@ The existing weapon/aspect owner continues to use native purchase membership,
 contiguous aspect ranks and the saved per-weapon aspect selector.
 `WeaponShopLogic.lua:514-520` writes weapon/tool purchase ownership and world
 markers; `543-550` writes `GameState.LastWeaponUpgradeName[weapon]` for aspect
-selection. Parent weapon revocation and aspect downgrade retain their existing
-linked behavior and are verified by the owning equipment tests. This task does
-not invent a permanent selected-weapon scalar from a `CurrentRun` mount.
+selection. `GhostAdminLogic.lua:552-557` distinguishes current ownership from
+ever-added history, and `WeaponShopLogic.lua:182` uses the latter to classify
+purchased shop items. The shared weapon/tool/aspect mutation therefore removes
+only current membership on downgrade or revocation; it retains existing history
+and adds history on acquisition. The temporary Save journey first reproduced
+Pickaxe rank 2 → 1 erasing `WorldUpgradesAdded.ToolPickaxe2`, then verifies tool
+revocation, aspect downgrade/revocation, free-aspect tiers and parent-weapon
+teardown with preserved purchase history and unchanged unknown records. Review
+continues to describe current ranks and dependent selections, without claiming
+that existing history was removed. This task does not invent a permanent
+selected-weapon scalar from a `CurrentRun` mount.
 
 `WeaponShopData.lua:3157-3427` defines initial tool purchases and their upgrades.
 Each tool now has one entity containing purchased rank and an explicit read-only
@@ -115,6 +123,18 @@ of an original aggregate that already contains opaque contributions, and does
 not claim a complete native grid or historical-cache repair. Native full-cache
 recalculation itself dereferences every card's native data in the maximum-level
 loop; blindly replaying it against opaque card names would be unsafe.
+
+## Remaining work under the expanded editing contract
+
+The user's latest acceptance requires reliable scalar, Boolean, enum, counter,
+membership and selection edits by default. Native linked effects belong to the
+implementation; absent whitelist membership or incomplete owner research is
+not a final read-only disposition. This implementation snapshot therefore does
+**not** complete #427. Automatic Arcana unlock/equipment recomputation, broader
+typed/path access to reliable unknown fields, and the existing progression and
+equipment whitelist/refusal policies remain development gaps for the next
+owner pass. The read-only boundaries described above record current behavior
+and source dependencies, not authorization to close those requirements.
 
 ## Reproduction and verification boundary
 

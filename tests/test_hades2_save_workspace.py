@@ -608,8 +608,8 @@ nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["
 assert nested_game["TextLinesChoiceRecord"]["ChoiceScene"]["ChoiceIndex"] == 2.0
 assert nested_game["QuestStatus"]["QuestC"] == "Unlocked"
 
-# WeaponsUnlocked is authoritative for ownership. Shop purchases also
-# keep the two optional world-upgrade marker tables synchronized.
+# WeaponsUnlocked is authoritative for ownership. Shop purchases add current
+# world ownership and the separate ever-purchased history together.
 equipment_owned = {
     "WeaponDagger", "DaggerBlockAspect", "DaggerBlockAspect2", "ToolShovel"
 }
@@ -676,7 +676,7 @@ assert state["EquippedFamiliar"] == "CatFamiliar"
 assert state["UnknownFutureField"]["KeepMe"] == "yes"
 
 # Turning off an owned aspect and familiar resets dependent selections; a
-# downgrade removes later shop tiers from all three purchase-marker tables.
+# downgrade removes current shop ownership while preserving purchase history.
 equipment_again = Hades2SaveWorkspace.open(equipment_service)
 equipment_again.stage("aspect:DaggerBlockAspect", "set", 0)
 equipment_again.stage("familiar:CatFamiliar", "set", False)
@@ -689,10 +689,13 @@ state = Hades2SaveDocument.load(equipment_saves / "Profile1.sav").lua_state["Gam
 assert state["LastWeaponUpgradeName"].get("WeaponDagger") is None
 assert state.get("EquippedFamiliar") is None
 assert state["FamiliarsUnlocked"].get("CatFamiliar") is None
-for table_name in ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded"):
+for table_name in ("WeaponsUnlocked", "WorldUpgrades"):
     for tier in ("DaggerBlockAspect", "DaggerBlockAspect2",
                  "DaggerBlockAspect3", "DaggerBlockAspect4"):
         assert state[table_name].get(tier) is None
+for tier in ("DaggerBlockAspect", "DaggerBlockAspect2",
+             "DaggerBlockAspect3", "DaggerBlockAspect4"):
+    assert state["WorldUpgradesAdded"][tier] is True
 
 # A proposed selection of an unowned aspect is not silently installed. The
 # known-invalid action is rejected before entering the staged basket.

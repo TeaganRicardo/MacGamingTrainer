@@ -171,12 +171,18 @@ def _owned(state, key):
 
 
 def _set_owned(state, key, owned):
-    for table in _markers(state):
+    current, world, history = _markers(state)
+    for table in (current, world, history):
         _flag(table, key)  # Never overwrite unknown non-boolean data.
+    for table in (current, world):
         if owned:
             table[key] = True
         else:
             table.pop(key, None)
+    # AddWorldUpgrade distinguishes current ownership from the record of ever
+    # being purchased. Tier downgrades and revocation change only the former.
+    if owned:
+        history[key] = True
 
 
 def _rank(state, aspect):

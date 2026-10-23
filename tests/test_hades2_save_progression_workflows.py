@@ -302,6 +302,67 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     assert next(row for row in editor.query(domain="weapons")["items"]
                 if row["id"] == "toolSelection:ToolPickaxe")["value"] is False
 
+    # Removing current ownership cannot erase the native ever-purchased owner.
+    # The shop uses that history to distinguish already purchased records.
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("tool:ToolPickaxe", "set", 1)
+    change = next(row for row in editor.review()["changes"] if row["id"] == "tool:ToolPickaxe")
+    assert change["before"] == 2 and change["after"] == 1
+    editor.apply()
+    saved = Hades2SaveDocument.load(path).lua_state["GameState"]
+    assert saved["WeaponsUnlocked"].get("ToolPickaxe2") is None
+    assert saved["WorldUpgrades"].get("ToolPickaxe2") is None
+    assert saved["WorldUpgradesAdded"].get("ToolPickaxe2") is True, "tool downgrade erased purchase history"
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("tool:ToolPickaxe", "set", 0)
+    editor.apply()
+    saved = Hades2SaveDocument.load(path).lua_state["GameState"]
+    for key in ("ToolPickaxe", "ToolPickaxe2"):
+        assert saved["WeaponsUnlocked"].get(key) is None
+        assert saved["WorldUpgrades"].get(key) is None
+        assert saved["WorldUpgradesAdded"][key] is True
+
+    # The same owner policy covers ordinary and free-aspect tiers, explicit
+    # aspect revocation and parent weapon teardown, including review effects.
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("aspect:DaggerBlockAspect", "set", 5)
+    assert "linked:weapon:WeaponDagger" in {row["id"] for row in editor.review()["changes"]}
+    editor.apply()
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
+    editor.stage("aspect:DaggerBlockAspect", "set", 2)
+    editor.apply()
+    saved = Hades2SaveDocument.load(path).lua_state["GameState"]
+    for key in ("DaggerBlockAspect3", "DaggerBlockAspect4", "DaggerBlockAspect5"):
+        assert saved["WeaponsUnlocked"].get(key) is None
+        assert saved["WorldUpgrades"].get(key) is None
+        assert saved["WorldUpgradesAdded"][key] is True
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("aspect:DaggerBlockAspect", "set", 0)
+    assert "linked:aspectSelection:WeaponDagger" in {row["id"] for row in editor.review()["changes"]}
+    editor.apply()
+    saved = Hades2SaveDocument.load(path).lua_state["GameState"]
+    assert saved["LastWeaponUpgradeName"].get("WeaponDagger") is None
+    assert saved["WorldUpgradesAdded"]["DaggerBlockAspect"] is True
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("aspect:DaggerBackstabAspect", "set", 5)
+    editor.apply()
+    editor = Hades2SaveWorkspace.open(service)
+    editor.stage("weapon:WeaponDagger", "set", False)
+    assert "linked:aspect:DaggerBackstabAspect" in {row["id"] for row in editor.review()["changes"]}
+    editor.apply()
+    saved = Hades2SaveDocument.load(path).lua_state["GameState"]
+    assert saved["WeaponsUnlocked"].get("WeaponDagger") is None
+    assert saved["WorldUpgrades"].get("WeaponDagger") is None
+    assert saved["WorldUpgradesAdded"]["WeaponDagger"] is True
+    for tier in range(2, 6):
+        key = "DaggerBackstabAspect" + str(tier)
+        assert saved["WeaponsUnlocked"].get(key) is None
+        assert saved["WorldUpgrades"].get(key) is None
+        assert saved["WorldUpgradesAdded"][key] is True
+    for owner in ("WorldUpgrades", "WorldUpgradesAdded"):
+        assert saved[owner]["FutureUpgrade"] is True
+
     # The safe manual-card revocation path updates all observed native caches
     # through Stage -> review -> Apply -> reopen, including its linked reset.
     editor = Hades2SaveWorkspace.open(service)
