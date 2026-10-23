@@ -1,4 +1,4 @@
-"""Read-only player history through the real Save entity query and stage seam."""
+"""Player history projection and typed edits share the real entity/stage seam."""
 import sys
 import tempfile
 from pathlib import Path
@@ -46,15 +46,16 @@ assert "history:run:1" in groups, "completed runs are missing from the player-hi
 assert "history:run:2" in groups
 assert "history:trait:UnknownHistoricBoon" in groups
 assert "history:gathering:fishing" in groups
-assert all(not r["editable"] and r["mutationKinds"] == []
+assert all(r["editable"] and r["mutationKinds"]
            for g in groups.values() if g["id"].startswith("history:") for r in g["items"])
 run = {r["rawId"]: r for r in groups["history:run:1"]["items"]}
-assert run["RunResult"]["value"] == "Underworld · Failed"
+assert run["RunResult"]["value"] == 2
+assert run["RunResult"]["choiceNames"]["2"] == "Underworld · Failed"
 assert run["GameplayTime"]["value"] == 123.5
 assert "seconds" in run["GameplayTime"]["name"]
-assert run["EndingRoomName"]["value"] == "Unidentified destination"
+assert run["EndingRoomName"]["value"] == "F_Boss01"
 assert run["trait:UnknownHistoricBoon"]["path"] == ["GameState", "RunHistory", 1, "TraitCache", "UnknownHistoricBoon"]
-assert all(r.get("reason") and r.get("reasonCode") == "historyReadOnly" for r in run.values())
+assert all(r.get("reason") and r.get("reasonCode") == "editable" for r in run.values())
 trait = {r["rawId"]: r for r in groups["history:trait:UnknownHistoricBoon"]["items"]}
 assert trait["UseCount"]["value"] == 5 and trait["ClearCountSurface"]["value"] == 1
 assert trait["HighestShrinePointsSurface"]["value"] == 12
@@ -76,20 +77,18 @@ for language, needle in (("en", "Underworld"), ("zh-CN", "Underworld"),
 unknown, _ = workspace({"RunHistory": table({1: table({"RunResult": 777})})})
 assert any(g["id"] == "history:run:1" for g in unknown.query(
     domain="entities", scope="records", search="777", language="en")["entities"])
-entry = groups["history:run:1"]["items"][0]
-try:
-    w.stage(entry["id"], "set", 0)
-except ValueError as error:
-    assert "not writable" in str(error)
-else:
-    raise AssertionError("history projection acquired write authority")
+entry = run["GameplayTime"]
+w.stage(entry["id"], "set", 11.5)
+assert w.review()["actionCount"] == 1
+w.cancel()
 assert w.review()["count"] == 0
 assert root["GameState"]["LifetimeTraitStats"]["UnknownHistoricBoon"]["UnknownFutureMeasure"] == 999
 assert root["GameState"]["RunHistory"][1]["GameplayTime"] == 123.5
 
 empty, _ = workspace({})
-assert not any(g["id"].startswith("history:") for g in empty.query(
-    domain="entities", scope="records", language="en")["entities"])
+default = next(row for group in empty.query(domain="entities", scope="records", language="en")["entities"]
+               for row in group["items"] if row["rawId"] == "FishingFails")
+assert default["editable"] and default["beforePresent"] is False and default["value"] == 0
 zero, _ = workspace({"FishingFails": 0})
 assert any(g["id"] == "history:gathering:fishing" for g in zero.query(
     domain="entities", scope="records", language="en")["entities"])
@@ -110,8 +109,14 @@ for field, value, unavailable_owner in (
 ):
     duplicate, document = workspace({field: value})
     duplicate_page = duplicate.query(domain="entities", scope="records", language="en")
-    assert any(g["id"] == "history:unavailable:" + unavailable_owner
-               for g in duplicate_page["entities"]), "ambiguous history keys acquired a normal projection"
+    duplicate_rows = [row for group in duplicate_page["entities"] for row in group["items"]
+                      if row["path"][-1] == "KnownBoon"]
+    assert duplicate_rows and all(not row["editable"] and row["reasonCode"] == "ambiguousHistoryPath"
+                                  for row in duplicate_rows)
+    if field == "RunHistory":
+        result_row = next(row for group in duplicate_page["entities"] for row in group["items"]
+                          if row["rawId"] == "RunResult")
+        assert result_row["editable"], "one ambiguous trait hid an unrelated unique result"
     assert document["GameState"][field] is value
 
 with tempfile.TemporaryDirectory(prefix="mgt-history-names-") as temporary:

@@ -1111,6 +1111,9 @@ class Hades2SaveWorkspace:
             return self._resource_descriptor(identifier)
         if separator and prefix == "playerStat":
             return self._player_stat_descriptor(identifier)
+        semantic = save_history.descriptor(self.document.lua_state, entry_id, game_path=self._game_path)
+        if semantic is not None:
+            return semantic
         semantic = save_narrative.descriptor(
             self.document.lua_state, entry_id, game_path=self._game_path
         )
@@ -1137,7 +1140,9 @@ class Hades2SaveWorkspace:
         if prefix == "advanced":
             row = save_advanced.row(root, entry_id, language)
             return descriptor, row
-        if prefix == "resource":
+        if prefix == "history":
+            rows = save_history.rows(root, language, game_path=self._game_path)
+        elif prefix == "resource":
             rows = self._resource_rows(language)
         elif prefix == "playerStat":
             rows = self._player_stat_rows(language)
@@ -1380,7 +1385,9 @@ class Hades2SaveWorkspace:
                 self._pending.clear()
                 self._pending.update(snapshot)
                 raise
-        if descriptor["domain"] == "weapons":
+        if descriptor["domain"] == "history":
+            value = save_history.validate(descriptor, operation, value)
+        elif descriptor["domain"] == "weapons":
             save_equipment.validate(descriptor, operation, value)
         elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
             save_long_term.validate(descriptor, operation, value)
@@ -1421,7 +1428,7 @@ class Hades2SaveWorkspace:
                     value = float(value)
         before = descriptor["before"]
         snapshot = dict(self._pending)
-        if value == before:
+        if value == before and descriptor.get("beforePresent", True):
             self._pending.pop(entry_id, None)
         else:
             self._pending[entry_id] = {
@@ -1432,6 +1439,7 @@ class Hades2SaveWorkspace:
                 "operation": operation,
                 "before": before,
                 "after": value,
+                **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] == "history" else {}),
             }
         try:
             return self.review(language=language)
@@ -1472,7 +1480,9 @@ class Hades2SaveWorkspace:
             if intent["operation"] not in descriptor["mutationKinds"]:
                 raise ValueError("Save Editor mutation is no longer allowed.")
             if ((intent.get("typedBefore") != descriptor.get("typedBefore"))
-                    if intent["domain"] == "advanced" else intent["before"] != descriptor["before"]):
+                    if intent["domain"] == "advanced" else
+                    (intent["before"] != descriptor["before"] or (intent["domain"] == "history" and
+                     intent["beforePresent"] != descriptor["beforePresent"]))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             self._apply_intent(candidate, intent)
         try:
@@ -1514,7 +1524,9 @@ class Hades2SaveWorkspace:
             descriptor, row = self._pending_action_row(intent["id"], language)
             if (intent["operation"] not in descriptor["mutationKinds"]
                     or (intent.get("typedBefore") != descriptor.get("typedBefore")
-                        if intent["domain"] == "advanced" else intent["before"] != descriptor["before"])):
+                        if intent["domain"] == "advanced" else
+                        (intent["before"] != descriptor["before"] or (intent["domain"] == "history" and
+                         intent["beforePresent"] != descriptor["beforePresent"])))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             direct.append({
                 key: intent[key]
@@ -1559,6 +1571,7 @@ class Hades2SaveWorkspace:
                 "constraints": dict(row.get("constraints") or {}),
                 "choices": list(row.get("choices") or ()),
                 "choiceNames": dict(row.get("choiceNames") or {}),
+                **({"beforePresent": intent["beforePresent"], "afterPresent": True} if intent["domain"] == "history" else {}),
                 "effects": [
                     self._present_linked_effect(effect, language)
                     for effect in effects_by_action.get(intent["id"], [])
@@ -1591,6 +1604,9 @@ class Hades2SaveWorkspace:
     def _apply_intent(document, intent):
         if intent["domain"] == "advanced":
             save_advanced.apply_intent(document.lua_state, intent)
+            return
+        if intent["domain"] == "history":
+            save_history.apply_intent(document.lua_state, intent)
             return
         if intent["domain"] == "weapons":
             save_equipment.apply_intent(document.lua_state, intent)
