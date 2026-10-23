@@ -14,6 +14,19 @@ The actual inline boolean control is pressed. The actual inline enum control is 
 
 `tests/test_hades2_save_record_frontend.py` extends this native journey to ordinary stored history and narrative fields. It edits exact/empty text, a numeric RunResult enum, a creatable absent FishingFails counter, quest status and its linked completion record, a companion boolean, dialogue playback/choice and integer/boolean speech records. Actual controls revise the string in Changes, expose the selected numeric enum's localized label before and after acknowledgement, and Apply once to an explicit target. A fresh document still shows the chosen result and whitespace. An independent codec read verifies every installed field, the unchanged source, reward resources and CurrentRun. The temporary narrative source corpus has its own exact test digest; it proves contextual indexing and dispatch, not an installed game's source compatibility. As above, completed enum dispatch uses a native selector bound to the production owner; actual SwiftUI menu tracking remains user-run.
 
+In that newly opened document, the same journey edits a stored gift quantity
+through its actual integer field, revises it in Changes, and grants a different
+quest's reward through the actual Boolean control. It verifies the visible
+impact warning for the gift, reward and an unknown but reliably typed NPC
+record. Expanding actual Changes controls exposes the gift aggregate and all
+five reward effects. A second Apply and fresh window confirm the revised
+quantity and already-claimed state; the claimed row has no repeat-grant control.
+Independent decoding checks inventory, lifetime and CurrentRun reward gains,
+preserved ordered gift events and run gift records, and the earlier ordinary
+record edits. The quest/resource definitions and mutation-owner digests are
+authored within the temporary fixture; no installed source or real save path
+is included in the test.
+
 Run these tests with the repository's supported Python and Swift toolchain on macOS. They are registered in the existing macOS test list. The parent lane runs the full owning checks and build/package on its final reviewed source; do not substitute an earlier branch result after integration.
 
 ## Consolidated user-run procedure

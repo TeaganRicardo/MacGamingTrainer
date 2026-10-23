@@ -56,12 +56,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-record-save-journey-") as temporary
     assert state["TextLinesChoiceRecord"]["UnverifiedScene"] == " Choice B "
     assert state["SpeechRecord"]["/VO/Unknown_0001"] == 12
     assert state["SpeechRecord"]["/VO/Legacy_0001"] is False
-    assert state["Resources"]["GiftPoints"] == 2
+    assert state["Resources"]["GiftPoints"] == 5
+    assert state["LifetimeResourcesGained"]["GiftPoints"] == 103
+    assert installed["CurrentRun"]["ResourcesGained"]["GiftPoints"] == 7
+    assert state["UnviewedLastResourceGained"] == "GiftPoints"
+    assert state["QuestStatus"]["QuestUnlockMoros"] == "CashedOut"
+    assert state["QuestsCompleted"]["QuestUnlockMoros"] is True
+    assert state["GiftRecord"]["Hecate"]["GiftPoints"] == 10
+    assert state["GiftResourceRecord"]["GiftPoints"] == 14
+    assert state["GiftRecord"]["Hecate"][1] == "GiftPoints"
+    assert state["GiftTextLinesOrderRecord"]["Hecate"][1] == "OriginalGiftLine"
+    assert installed["CurrentRun"]["GiftRecord"]["Hecate"]["GiftPoints"] == 1
+    assert installed["CurrentRun"]["GiftResourceRecord"]["GiftPoints"] == 1
     assert installed["CurrentRun"]["RunResult"] == 2 and installed["CurrentRun"]["GameplayTime"] == 999
     assert (base / "saves/Profile1.sav").read_bytes() == (base / "source-original.sav").read_bytes()
     requests = [json.loads(line) for line in (base / "commands.jsonl").read_text().splitlines()]
     commands = [request["command"] for request in requests]
-    assert commands.count("save_editor_apply") == 1 and commands.count("save_editor_close") == 2
+    assert commands.count("save_editor_apply") == 2 and commands.count("save_editor_close") == 3
     assert any(request["command"] == "save_editor_stage" and request["params"].get("value") == "" for request in requests)
     assert any(request["command"] == "save_editor_stage" and request["params"].get("entryId") == "history:run:1:RunResult"
                and request["params"].get("operation") == "setEnum" and request["params"].get("value") == "3" for request in requests)

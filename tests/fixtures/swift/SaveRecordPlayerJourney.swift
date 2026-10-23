@@ -117,6 +117,11 @@ private func fields(_ view: NSView) -> [NSTextField] {
             else { fatalError("record native action unavailable: \(key)") }
             pump()
         }
+        func assertWarning(_ entry: Hades2SaveEditorEntry, in content: NSView) {
+            guard let warning = entry.warning, !warning.isEmpty,
+                  namedNativeControl(content, role: "AXStaticText", name: warning) != nil
+            else { fatalError("editable record impact warning is absent from its actual native row: \(entry.id)") }
+        }
 
         // Physical navigation uses the document owner; text/boolean controls,
         // correction/revision, acknowledgement and Apply use actual controls.
@@ -171,7 +176,68 @@ private func fields(_ view: NSView) -> [NSTextField] {
         selectedLabel(reopenedResult, "3", in: reopenedWindow.contentView!)
         let reopenedBounty = search("ActiveBounty", bounty.entryID, in: reopened, root: reopenedWindow.contentView!)
         require(reopenedBounty.value == AnyHashable("  revised  "), "reopening stripped ordinary text whitespace")
-        reopenedWindow.performClose(nil); pump(); session.stop(); pump()
+        let installedRoot = reopenedWindow.contentView!
+        let unknown = search("FutureNPC", "interaction:FutureNPC", in: reopened, root: installedRoot)
+        require(unknown.editable && unknown.valueType == "string", "unknown observed interaction lost its reliable actual type")
+        assertWarning(unknown, in: installedRoot)
+        let gift = search("Hecate", "gift:Hecate:GiftPoints", in: reopened, root: installedRoot)
+        assertWarning(gift, in: installedRoot)
+        let giftInput = fields(installedRoot).first { $0.isEditable && $0.accessibilityLabel() == gift.displayName }!
+        edit(giftInput, "12")
+        until("native gift quantity did not acknowledge") { !reopened.busy && reopened.pendingActions.first?.after == AnyHashable(12) }
+        let claim = search("QuestUnlockMoros", "questClaim:QuestUnlockMoros", in: reopened, root: installedRoot)
+        assertWarning(claim, in: installedRoot)
+        require(claim.value == AnyHashable(false) && claim.editable,
+                "explicit unclaimed reward is not an editable boolean intent")
+        require(namedNativeControl(installedRoot, role: "AXCheckBox", name: claim.displayName)?.press() == true,
+                "actual native reward grant control did not dispatch")
+        until("native reward intent did not acknowledge") { !reopened.busy && reopened.pendingCount == 2 }
+        let beforeRewardApply = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
+        func installedPress(_ key: String, _ arguments: [String] = []) {
+            let label = Hades2GameModule.resolveText(key: key, arguments: arguments, localization: localization)
+            guard let button = namedNativeControl(installedRoot, role: "AXButton", name: label), button.enabled, button.press()
+            else { fatalError("installed record action missing: \(key)") }
+            pump()
+        }
+        installedPress("hades2.saveEditor.workbench.reviewApply")
+        until("gift/reward Changes review did not finish") { !reopened.busy }
+        let giftInChanges = fields(installedRoot).last { $0.isEditable && $0.accessibilityLabel() == gift.displayName }!
+        edit(giftInChanges, "10")
+        until("gift Changes revision did not acknowledge") { !reopened.busy && reopened.pendingActions.first?.after == AnyHashable(10) }
+        let giftAction = reopened.pendingActions.first { $0.entryID == gift.id }!
+        let claimAction = reopened.pendingActions.first { $0.entryID == claim.id }!
+        require(giftAction.effects.count == 1 && claimAction.effects.count == 5,
+                "gift/reward Changes omitted a proven physical owner")
+        installedPress("hades2.saveEditor.basket.linkedEffects", [String(giftAction.effects.count)])
+        for effect in giftAction.effects {
+            require(namedNativeControl(installedRoot, role: "AXStaticText", name: effect.name!) != nil,
+                    "actual Changes hid gift aggregate effects")
+        }
+        installedPress("hades2.saveEditor.basket.linkedEffects", [String(giftAction.effects.count)])
+        installedPress("hades2.saveEditor.basket.linkedEffects", [String(claimAction.effects.count)])
+        for effect in claimAction.effects {
+            require(namedNativeControl(installedRoot, role: "AXStaticText", name: effect.name!) != nil,
+                    "actual Changes hid reward resource/lifetime/CurrentRun effects")
+        }
+        let afterRewardStaging = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
+        require(afterRewardStaging == beforeRewardApply, "gift/reward staging wrote before explicit Apply")
+        installedPress("hades2.saveEditor.apply")
+        until("native gift/reward Apply did not verify") { !reopened.busy && !reopened.querying && reopened.pendingCount == 0 && reopened.lastApplyReceipt != nil }
+        require(reopened.lastApplyReceipt!.source == "main/Profile2.sav" && reopened.lastApplyReceipt!.target == "main/Profile2.sav"
+                && !reopened.lastApplyReceipt!.runtimeReloaded, "reward receipt lost the reopened fixed source/target")
+        reopenedWindow.performClose(nil)
+        until("reward document did not release workspace") { reopened.workspaceID == nil }
+        let rewardReopened = Hades2SaveEditorModel(session: session)
+        let rewardWindow = open(rewardReopened)
+        until("reward target did not reopen") { !rewardReopened.busy && !rewardReopened.querying && rewardReopened.sourceRelativePath == "Profile2.sav" && !rewardReopened.items.isEmpty }
+        let installedGift = search("Hecate", gift.id, in: rewardReopened, root: rewardWindow.contentView!)
+        require(installedGift.value == AnyHashable(10), "reopening lost the acknowledged gift quantity")
+        let installedClaim = search("QuestUnlockMoros", claim.id, in: rewardReopened, root: rewardWindow.contentView!)
+        require(installedClaim.value == AnyHashable(true) && !installedClaim.editable && installedClaim.mutationKinds.isEmpty,
+                "reopened claimed reward permits duplicate grant intent")
+        require(namedNativeControl(rewardWindow.contentView!, role: "AXCheckBox", name: installedClaim.displayName) == nil,
+                "already-claimed reward exposes an enabled native grant control")
+        rewardWindow.performClose(nil); pump(); session.stop(); pump()
         print("save_record_native_player_journey_ok")
     }
 }

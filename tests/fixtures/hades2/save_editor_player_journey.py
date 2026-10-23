@@ -53,12 +53,18 @@ def document(amount, marker):
             "GameplayTime": 12.5, "ShrinePointsCache": 4.0, "TraitCache": table({}),
         })})
         state["FishingSuccesses"] = 9.0
-        state["QuestStatus"] = table({"QuestHelpDora": "Unlocked"})
+        state["QuestStatus"] = table({"QuestHelpDora": "Unlocked", "QuestUnlockMoros": "Complete"})
         state["QuestsViewed"] = table({"QuestHelpDora": False})
         state["QuestsCompleted"] = table({"QuestHelpDora": False})
         state["TextLinesRecord"] = table({"UnverifiedScene": False})
         state["TextLinesChoiceRecord"] = table({"UnverifiedScene": " Choice A "})
         state["SpeechRecord"] = table({"/VO/Unknown_0001": 3.0, "/VO/Legacy_0001": True})
+        state["GiftRecord"] = table({"Hecate": table({1.0: "GiftPoints", "GiftPoints": 7.0}),
+                                     "Odysseus": table({"GiftPoints": 3.0})})
+        state["GiftResourceRecord"] = table({"GiftPoints": 11.0})
+        state["GiftTextLinesOrderRecord"] = table({"Hecate": table({1.0: "OriginalGiftLine"})})
+        state["LifetimeResourcesGained"] = table({"GiftPoints": 100.0})
+        state["NPCInteractions"]["FutureNPC"] = " exact observed value "
     header = Hades2SaveHeader(
         game_version=0x12, save_flags=0, timestamp=100, location="Crossroads",
         completed_runs=1, accumulated_meta_points=0, active_shrine_points=0,
@@ -66,7 +72,12 @@ def document(amount, marker):
         notable_lua_data=("GameState", "CurrentRun"),
         map_name="Hub_Main", next_map_name="F_Opening01",
     )
-    values = [table({"GameState": state, "CurrentRun": table({"RunResult": 2.0, "GameplayTime": 999.0})})]
+    current = table({"RunResult": 2.0, "GameplayTime": 999.0})
+    if os.environ.get("MGT_SAVE_JOURNEY_RECORDS") == "1":
+        current["ResourcesGained"] = table({"GiftPoints": 4.0})
+        current["GiftRecord"] = table({"Hecate": table({"GiftPoints": 1.0})})
+        current["GiftResourceRecord"] = table({"GiftPoints": 1.0})
+    values = [table({"GameState": state, "CurrentRun": current})]
     if os.environ.get("MGT_SAVE_CONTAINER_FIXTURE") == "1":
         header.timestamp = 18446744073709551615
         values.extend([12.5, table({"Child": "original"}), None])
@@ -149,13 +160,26 @@ def main():
 }''')
         reset = b'StoryResetData = { TextLines = { "HecateJourney01" } }'
         (scripts / "StoryResetData.lua").write_bytes(reset)
+        (scripts / "QuestData.lua").write_text('''QuestData = {
+ QuestUnlockMoros = { RewardResourceName = "GiftPoints", RewardResourceAmount = 3 },
+}''')
+        (scripts / "ResourceData.lua").write_text('''ResourceData = {
+ GiftPoints = { OnAddedFunctionName = "OnGiftPointsAdded" },
+}''')
+        (scripts / "ResourceLogic.lua").write_text("-- authored reward mutation owner fixture\n")
+        (scripts / "QuestLogLogic.lua").write_text("-- authored claim mutation owner fixture\n")
         # The authored text corpus has its own exact fixture digest. Keep the
         # production source scanner/parser; this proves contextual controls,
         # not compatibility with an installed supported game's source set.
         from games.hades2 import save_workspace
         investigation_type = save_workspace.NativeDialogueInvestigation
         checksum = hashlib.sha256(reset).hexdigest()
-        save_workspace.NativeDialogueInvestigation = lambda path: investigation_type(path, expected_hash=checksum)
+        def fixture_investigation(path):
+            finding = investigation_type(path, expected_hash=checksum)
+            finding.reward_owner_hashes = {name: hashlib.sha256((scripts / name).read_bytes()).hexdigest()
+                for name in ("ResourceLogic.lua", "QuestLogLogic.lua", "ResourceData.lua")}
+            return finding
+        save_workspace.NativeDialogueInvestigation = fixture_investigation
         for language in ("en", "zh-CN"):
             directory = text_root / language
             directory.mkdir()
