@@ -144,7 +144,7 @@ for row in page["items"]:
     assert row["editable"] is True
     assert row["mutationKinds"] == ["set"]
     assert row["valueType"] == "integer"
-    assert row["constraints"] == {"min": 0, "max": 999999, "integer": True}
+    assert row["constraints"] == {"min": 0, "max": 9_007_199_254_740_991, "integer": True}
 
 # Only independently understood persistent scalar statistics are writable.
 # These three identities are owned by current RunLogic / CombatLogic; cache
@@ -226,7 +226,7 @@ assert workspace.review()["actionCount"] == 0
 for entry_id, operation, value in (
     ("resource:UnmodeledCurrency", "set", 500),
     ("resource:MetaCurrency", "set", -1),
-    ("resource:MetaCurrency", "set", 1_000_000),
+    ("resource:MetaCurrency", "set", 9_007_199_254_740_992),
     ("resource:MetaCurrency", "set", 1.5),
     ("resource:MetaCurrency", "unset", None),
     ("playerStat:GameplayTime", "set", -1),
@@ -313,22 +313,19 @@ narrative_file.write_bytes(narrative_document.to_bytes())
 narrative = Hades2SaveWorkspace.open(narrative_service)
 flags = narrative.query(domain="flags", search="HasPinnedAnyBoon", language="en")
 assert flags["total"] == 1
-assert flags["items"][0]["value"] is False
+assert flags["items"][0]["value"] is None
 assert flags["items"][0]["group"] == "Tutorial and presentation records"
 dialogue = narrative.query(domain="dialogue", limit=10, language="zh-CN")
 assert {row["rawId"] for row in dialogue["items"]} == {"HecatePostTrueEnding01", "GiftLine"}
-assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
+assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is True
 quests = narrative.query(domain="progression", limit=10, language="en")
-assert quests["total"] == 2  # unrecognized QuestA is not an editable game quest
+assert quests["total"] == 2  # unknown quest semantics remain in writable Advanced
 assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpOdysseus")["choices"] == [
-    "Unlocked", "Complete"
+    "Unrecorded", "Unlocked", "Complete", "CashedOut"
 ]
-assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpDora")["editable"] is False
+assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpDora")["editable"] is True
 for identity, action, value in (
-    ("flag:UnsupportedHiddenFlag", "set", False),
-    ("dialogue:GiftLine", "set", False),
-    ("quest:QuestHelpDora", "setEnum", "Unlocked"),
-    ("quest:QuestHelpOdysseus", "setEnum", "CashedOut"),
+    ("dialogueReset:GiftLine", "set", False),
     ("quest:QuestHelpOdysseus", "set", "Complete"),
     ("flag:HasPinnedAnyBoon", "set", 1),
 ):
@@ -341,7 +338,7 @@ for identity, action, value in (
 
 narrative.stage("flag:HasPinnedAnyBoon", "set", True)
 narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
-narrative.stage("dialogue:HecatePostTrueEnding01", "set", False)
+narrative.stage("dialogueReset:HecatePostTrueEnding01", "set", False)
 narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
 assert len(changes) == 10, changes  # four intents, five dialogue owner links, quest history
@@ -356,7 +353,7 @@ narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
 game = installed_narrative.lua_state["GameState"]
 assert game["Flags"]["HasPinnedAnyBoon"] is True
-assert game["Flags"].get("HasShuffledMusicPlayer") is None
+assert game["Flags"]["HasShuffledMusicPlayer"] is False
 assert game["Flags"]["UnsupportedHiddenFlag"] is True
 assert game["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
@@ -386,7 +383,7 @@ _base, duplicated_saves, duplicated_service = _environment(
 duplicated_path = duplicated_saves / "Profile1.sav"
 duplicated = Hades2SaveWorkspace.open(duplicated_service)
 duplicated.stage("resource:MetaCurrency", "set", 500)
-duplicated.stage("dialogue:HecatePostTrueEnding01", "set", False)
+duplicated.stage("dialogueReset:HecatePostTrueEnding01", "set", False)
 before_ambiguous_apply = duplicated_path.read_bytes()
 # Only in-memory source state changes. The actual save file remains untouched.
 duplicated.document.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
@@ -397,7 +394,7 @@ duplicated.document.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
 )
 assert next(
     row for row in duplicated.query(domain="dialogue")["items"]
-    if row["rawId"] == "HecatePostTrueEnding01"
+    if row["id"] == "dialogueChoice:HecatePostTrueEnding01"
 )["editable"] is False
 try:
     duplicated.review()
@@ -428,10 +425,10 @@ original_duplicate_bytes = duplicated_path.read_bytes()
 read_only_duplicate = Hades2SaveWorkspace.open(duplicated_service)
 assert next(
     row for row in read_only_duplicate.query(domain="dialogue")["items"]
-    if row["rawId"] == "HecatePostTrueEnding01"
+    if row["id"] == "dialogueChoice:HecatePostTrueEnding01"
 )["editable"] is False
 try:
-    read_only_duplicate.stage("dialogue:HecatePostTrueEnding01", "set", False)
+    read_only_duplicate.stage("dialogueReset:HecatePostTrueEnding01", "set", False)
 except ValueError:
     pass
 else:
@@ -599,7 +596,7 @@ nested_state = {
 _base, nested_saves, nested_service = _environment("nested-dialogue", state=nested_state)
 nested_workspace = Hades2SaveWorkspace.open(nested_service)
 try:
-    nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+    nested_workspace.stage("dialogueReset:ChoiceScene", "set", False)
 except ValueError:
     pass
 else:
@@ -906,7 +903,7 @@ invalid_owner_state = {
 _base, refusal_saves, refusal_service = _environment("dialogue-refusal", state=invalid_owner_state)
 refusal = Hades2SaveWorkspace.open(refusal_service)
 refusal.stage("resource:MetaCurrency", "set", 99)
-refusal.stage("dialogue:HecatePostTrueEnding01", "set", False)
+refusal.stage("dialogueReset:HecatePostTrueEnding01", "set", False)
 source_bytes = (refusal_saves / "Profile1.sav").read_bytes()
 refusal.document.lua_state["GameState"]["GiftTextLinesOrderRecord"] = "invalid"
 try:

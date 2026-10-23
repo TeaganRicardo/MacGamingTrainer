@@ -1,8 +1,9 @@
 """Hades-owned narrative Save Editor descriptors and linked-state mutations.
 
-Only explicit, source-verified records receive write authority. The generic
-Advanced tree remains the read-only escape hatch for everything else.
+Direct saved records are editable by their reliable type and physical owner.
+Native event resets retain their distinct verified companion-owner operation.
 """
+from . import save_advanced
 from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, STORY_RESET_TEXT_IDS
 from .save_document import AmbiguousLuaKeyError, LuaTable
@@ -157,309 +158,307 @@ def _validated_dialogue_owners(root, name, authority):
     return owners
 
 
-def _row(*, entry_id, domain, key, path, label, english, value,
-         value_type, editable, operations, group, choices=None,
-         block_reason_code=None, owner_state=None):
-    row = {
-        "id": entry_id, "domain": domain, "rawId": key, "path": path,
-        "name": label, "englishName": english, "value": value,
-        "valueType": value_type, "editable": editable,
-        "mutationKinds": list(operations), "group": group,
-        "choices": list(choices or ()),
-    }
-    if block_reason_code:
-        row["blockReasonCode"] = block_reason_code
-    if owner_state:
-        row["ownerState"] = owner_state
-    if entry_id.startswith("quest:"):
-        row["entityId"] = entry_id
-        row["entityName"] = label
-    return row
+_MAX_INTEGER = 9_007_199_254_740_991
+_QUEST_COMPANIONS = {
+    'QuestsCompleted': ('完成记录', 'Completion record'),
+    'QuestsViewed': ('已查看', 'Viewed'),
+    'QuestsUpdated': ('更新提示', 'Update marker'),
+    'PlayedQuestInterstitials': ('已播放任务过场', 'Quest interstitial played'),
+}
 
 
-def rows(root, domain, language="zh-CN", game_path=None):
-    state = _game_state(root)
-    result = []
-    if domain == "flags":
-        try:
-            flags = _table(state, "Flags")
-            flags_owner_state = None
-        except AmbiguousLuaKeyError:
-            flags = None
-            flags_owner_state = "ambiguous"
-        except ValueError:
-            flags = None
-            flags_owner_state = "unsupported"
-        for name, (group, zh, en) in _FLAG_DESCRIPTORS.items():
-            value = None
-            owner_state = flags_owner_state
-            if flags is not None:
-                try:
-                    value = _read_bool(flags, name)
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                except ValueError:
-                    owner_state = "unsupported"
-            editable = owner_state is None
-            result.append(_row(
-                entry_id="flag:" + name, domain="flags", key=name,
-                path=["GameState", "Flags", name],
-                label=zh if language == "zh-CN" else en, english=en, value=value,
-                value_type="boolean", editable=editable,
-                operations=("set",) if editable else (),
-                group=_GROUP_NAMES[group][0 if language == "zh-CN" else 1],
-                choices=(False, True),
-                block_reason_code=(
-                    "ambiguousOwner" if owner_state == "ambiguous"
-                    else "unsupportedOwner" if owner_state == "unsupported"
-                    else None
-                ),
-                owner_state=owner_state,
-            ))
-    if domain == "dialogue":
-        lines = _table(state, "TextLinesRecord")
-        try:
-            authority = _dialogue_authority(root)
-            authority_error = None
-        except ValueError as error:
-            authority = None  # Keep the recorded rows inspectable, but read-only.
-            authority_error = error
-        seen_lines = set()
-        for name, value in lines.entries():
-            if not isinstance(name, str) or type(value) is not bool:
-                continue
-            # Duplicate physical keys retain one read-only semantic row; the
-            # full underlying entries remain inspectable in Advanced.
-            if name in seen_lines:
-                continue
-            seen_lines.add(name)
-            # A gift event also changes GiftRecord/order/choice history. It
-            # cannot safely be reset by treating one text flag as independent.
-            writable = False
-            block = authority_error if value is True else DialogueWriteBlocked(
-                "notPlayed", "Save Editor dialogue must be a played record."
-            )
-            if authority is not None and value is True:
-                try:
-                    _validated_dialogue_owners(root, name, authority)
-                except ValueError as error:
-                    block = error
-                else:
-                    writable = True
-                    block = None
-            row = _row(
-                entry_id="dialogue:" + name, domain="dialogue", key=name,
-                path=["GameState", "TextLinesRecord", name],
-                label=("对话记录 · " if language == "zh-CN" else "Dialogue record · ") + name,
-                english="Dialogue record · " + name, value=value,
-                value_type="boolean", editable=writable,
-                operations=("set",) if writable else (),
-                group=_GROUP_NAMES["dialogue"][0 if language == "zh-CN" else 1],
-                choices=(False, True),
-            )
-            # Share the exact native companion-owner verdict with the
-            # investigation. Never infer editability from the scene index.
-            row["blockReasonCode"] = (
-                getattr(block, "code", "invalidOwner") if block else None
-            )
-            row["blockReasonDiagnostic"] = str(block) if block else None
-            result.append(row)
-    if domain == "progression":
-        try:
-            statuses = _table(state, "QuestStatus")
-            statuses_owner_state = None
-            names = {
-                key for key, _ in statuses.entries()
-                if isinstance(key, str) and key in QUEST_IDS
-            }
-        except AmbiguousLuaKeyError:
-            statuses = None
-            statuses_owner_state = "ambiguous"
-            names = set(QUEST_IDS)
-        except ValueError:
-            statuses = None
-            statuses_owner_state = "unsupported"
-            names = set(QUEST_IDS)
-        try:
-            completed = state.get("QuestsCompleted")
-        except AmbiguousLuaKeyError:
-            completed = None
-            completed_owner_state = "ambiguous"
+def _owner(root, path, *, create=False):
+    current = root
+    for key in path:
+        if not isinstance(current, LuaTable):
+            raise save_advanced.AdvancedMutationError('Save Editor narrative path crosses a non-table owner.')
+        child = current.get(key)
+        if child is None and create:
+            child = LuaTable()
+            current[key] = child
+        if child is not None and not isinstance(child, LuaTable):
+            raise save_advanced.AdvancedMutationError('Save Editor narrative path crosses a non-table owner.')
+        if child is None:
+            return None
+        current = child
+    return current
+
+
+def _read(root, path):
+    owner = _owner(root, path[:-1])
+    return owner.get(path[-1]) if owner is not None else None
+
+
+def _direct_descriptor(root, entry_id):
+    prefix, _, name = entry_id.partition(':')
+    if not name:
+        return None
+    kind, choices, minimum = 'boolean', (), None
+    if prefix == 'flag':
+        path, domain = ['GameState', 'Flags', name], 'flags'
+    elif prefix == 'dialogue':
+        path, domain = ['GameState', 'TextLinesRecord', name], 'dialogue'
+    elif prefix == 'dialogueChoice':
+        path, domain, kind = ['GameState', 'TextLinesChoiceRecord', name], 'dialogue', 'string'
+    elif prefix == 'quest':
+        if name not in QUEST_IDS:
+            return None
+        path, domain, kind = ['GameState', 'QuestStatus', name], 'progression', 'enum'
+        choices = ('Unrecorded', 'Unlocked', 'Complete', 'CashedOut')
+    elif prefix == 'questObservation':
+        owner, separator, name = name.partition(':')
+        if not separator or owner not in _QUEST_COMPANIONS or name not in QUEST_IDS:
+            return None
+        path, domain = ['GameState', owner, name], 'questObservation'
+    elif prefix == 'speech':
+        path, domain, kind, minimum = ['GameState', 'SpeechRecord', name], 'speechHistory', 'integer', 0
+    else:
+        return None
+    before = _read(root, path)
+    if prefix == 'speech' and type(before) is bool:
+        kind, minimum = 'boolean', None
+    if before is not None:
+        if kind == 'enum':
+            # A nonstandard saved string can still be replaced with a supported
+            # status. Arbitrary raw strings remain editable in Advanced.
+            if type(before) is not str:
+                raise save_advanced.AdvancedMutationError('Save Editor quest status owner is not a string.')
         else:
-            completed_owner_state = (
-                None if completed is None or isinstance(completed, LuaTable)
-                else "unsupported"
-            )
-        official = official_display_names(names, language, game_path=game_path)
-        english = (
-            official if language == "en"
-            else official_display_names(names, "en", game_path=game_path)
-        )
-        for name in sorted(names):
-            owner_state = statuses_owner_state
-            status = None
-            if statuses is not None:
-                try:
-                    status = statuses.get(name)
-                except AmbiguousLuaKeyError:
-                    owner_state = "ambiguous"
-                else:
-                    if status not in _QUEST_STATUSES:
-                        owner_state = "unsupported"
-            if owner_state is None and status != "CashedOut":
-                linked_state = completed_owner_state
-                if linked_state is None and isinstance(completed, LuaTable):
-                    try:
-                        completion = completed.get(name)
-                    except AmbiguousLuaKeyError:
-                        linked_state = "ambiguous"
-                    else:
-                        if completion is not None and type(completion) is not bool:
-                            linked_state = "unsupported"
-                owner_state = linked_state
-            label = official.get(name) or (("任务 · " if language == "zh-CN" else "Quest · ") + name)
-            en = english.get(name) or ("Quest · " + name)
-            editable = owner_state is None and status != "CashedOut"
-            block_reason = (
-                "ambiguousOwner" if owner_state == "ambiguous"
-                else "unsupportedOwner" if owner_state == "unsupported"
-                else None if editable
-                else "rewardClaimed"
-            )
-            result.append(_row(
-                entry_id="quest:" + name, domain="progression", key=name,
-                path=["GameState", "QuestStatus", name],
-                label=label, english=en, value=status, value_type="enum",
-                editable=editable, operations=("setEnum",) if editable else (),
-                group=_GROUP_NAMES["quest"][0 if language == "zh-CN" else 1],
-                choices=("Unlocked", "Complete") if editable else (),
-                block_reason_code=block_reason,
-                owner_state=owner_state,
-            ))
-    return result
+            save_advanced.validate_scalar(before, kind)
+            if minimum is not None and not 0 <= before <= _MAX_INTEGER:
+                raise save_advanced.AdvancedMutationError('Save Editor narrative counter is outside its integer range.')
+    if prefix == 'quest':
+        completed = _read(root, ['GameState', 'QuestsCompleted', name])
+        if completed is not None:
+            save_advanced.validate_scalar(completed, 'boolean')
+    return {'id': entry_id, 'domain': domain, 'rawId': name, 'path': path,
+            'before': before, 'mutationKinds': ('setEnum',) if kind == 'enum' else ('set',),
+            'valueType': kind, 'choices': choices,
+            'constraints': {'min': 0, 'max': _MAX_INTEGER, 'integer': True} if kind == 'integer' else {}}
+
+
+def reset_descriptor(root, name):
+    """Native reset is distinct from directly editing a playback record."""
+    before = _read(root, ['GameState', 'TextLinesRecord', name])
+    _validated_dialogue_owners(root, name, _dialogue_authority(root))
+    return {'id': 'dialogueReset:' + name, 'domain': 'dialogue', 'rawId': name,
+            'path': ['GameState', 'TextLinesRecord', name], 'before': before,
+            'mutationKinds': ('set',), 'valueType': 'boolean', 'choices': (False,)}
 
 
 def descriptor(root, entry_id, game_path=None):
-    if not isinstance(entry_id, str) or ":" not in entry_id:
+    if not isinstance(entry_id, str):
         return None
-    prefix = entry_id.partition(":")[0]
-    domain = {"flag": "flags", "dialogue": "dialogue", "quest": "progression"}.get(prefix)
-    if domain is None:
-        return None
-    for row in rows(root, domain, "en", game_path=game_path):
-        if row["id"] == entry_id:
-            if row.get("ownerState") == "ambiguous":
-                raise AmbiguousLuaKeyError(
-                    "Save Editor semantic owner is ambiguous."
-                )
-            if row.get("ownerState") == "unsupported":
-                raise ValueError("Save Editor semantic owner is unsupported.")
-            return {
-                "id": entry_id, "domain": domain, "rawId": row["rawId"],
-                "path": row["path"], "before": row["value"],
-                "mutationKinds": tuple(row["mutationKinds"]),
-                "valueType": row["valueType"], "choices": row["choices"],
-            }
-    return None
+    if entry_id.startswith('dialogueReset:'):
+        return reset_descriptor(root, entry_id[len('dialogueReset:'):])
+    return _direct_descriptor(root, entry_id)
+
+
+def entry_row(root, entry_id, language='zh-CN', game_path=None):
+    zh = language == 'zh-CN'
+    prefix, _, name = entry_id.partition(':')
+    block = None
+    try:
+        item = descriptor(root, entry_id, game_path)
+    except (ValueError, KeyError) as error:
+        block = error
+        item = None
+    if item is None:
+        # Keep malformed saved fields visible with the actual technical reason.
+        if prefix == 'questObservation':
+            owner, _, name = name.partition(':')
+            path, kind, domain = ['GameState', owner, name], 'boolean', 'questObservation'
+        else:
+            fields = {'flag': ('Flags', 'boolean', 'flags'),
+                      'dialogue': ('TextLinesRecord', 'boolean', 'dialogue'),
+                      'dialogueReset': ('TextLinesRecord', 'boolean', 'dialogue'),
+                      'dialogueChoice': ('TextLinesChoiceRecord', 'string', 'dialogue'),
+                      'speech': ('SpeechRecord', 'integer', 'speechHistory'),
+                      'quest': ('QuestStatus', 'enum', 'progression')}
+            if prefix not in fields:
+                return None
+            owner, kind, domain = fields[prefix]
+            path = ['GameState', owner, name]
+        item = {'id': entry_id, 'domain': domain, 'rawId': name, 'path': path,
+                'before': None, 'valueType': kind, 'mutationKinds': (), 'choices': ()}
+    name = item['rawId']
+    label = name
+    en = name
+    entity = None
+    entity_name = None
+    group = _GROUP_NAMES['dialogue'][0 if zh else 1]
+    if prefix == 'flag':
+        category, chinese, en = _FLAG_DESCRIPTORS.get(name, ('story', '布尔记录 · ' + name, 'Boolean record · ' + name))
+        label = chinese if zh else en
+        group = _GROUP_NAMES[category][0 if zh else 1]
+    elif prefix in ('quest', 'questObservation'):
+        native = official_display_names((name,), language, game_path=game_path)
+        english = native if not zh else official_display_names((name,), 'en', game_path=game_path)
+        entity_name = native.get(name) or ('任务 · ' if zh else 'Quest · ') + name
+        entity = 'quest:' + name
+        label, en = entity_name, english.get(name) or 'Quest · ' + name
+        group = _GROUP_NAMES['quest'][0 if zh else 1]
+        if prefix == 'questObservation':
+            labels = _QUEST_COMPANIONS[item['path'][1]]
+            label, en = labels[0 if zh else 1], labels[1]
+    else:
+        labels = {'dialogue': ('已播放记录', 'Playback record'),
+                  'dialogueReset': ('重置剧情事件', 'Reset narrative event'),
+                  'dialogueChoice': ('选择记录', 'Choice record'),
+                  'speech': ('语音计数', 'Speech count')}
+        chinese, english = labels[prefix]
+        label, en = (chinese if zh else english) + ' · ' + name, english + ' · ' + name
+    result = {**item, 'name': label, 'englishName': en, 'value': item['before'],
+              'editable': block is None and bool(item['mutationKinds']),
+              'mutationKinds': list(item['mutationKinds']), 'choices': list(item['choices']),
+              'group': group, 'reasonCode': 'editable'}
+    result.pop('before', None)
+    if entity:
+        result.update(entityId=entity, entityName=entity_name)
+    if item['valueType'] == 'boolean':
+        result['choices'] = [False, True] if prefix != 'dialogueReset' else [False]
+    if prefix == 'quest':
+        result['choiceNames'] = dict(zip(('Unrecorded', 'Unlocked', 'Complete', 'CashedOut'),
+            ('状态未记录', '已解锁', '已完成', '已领取奖励') if zh else
+            ('Status unrecorded', 'Unlocked', 'Complete', 'Reward claimed')))
+        result['reason'] = ('直接修改任务状态和完成记录；不发放或收回奖励资源。' if zh else
+                            'Edits the status and completion record; does not grant or reclaim reward resources.')
+    if block:
+        result.update(reasonCode='ambiguousOwner' if isinstance(block, AmbiguousLuaKeyError) else 'unsupportedOwner',
+                      blockReasonCode='ambiguousOwner' if isinstance(block, AmbiguousLuaKeyError) else 'unsupportedOwner',
+                      ownerState='ambiguous' if isinstance(block, AmbiguousLuaKeyError) else 'unsupported',
+                      reason=('目标路径重复，无法确定唯一记录。' if zh else 'The target path has duplicate physical records.')
+                      if isinstance(block, AmbiguousLuaKeyError) else
+                      ('此路径的实际类型与字段类型不符；可在高级编辑中按实际类型修改。' if zh else
+                       'The saved type differs from this field type; edit its actual type in Advanced.'),
+                      blockReasonDiagnostic=str(block))
+    return result
+
+
+def rows(root, domain, language='zh-CN', game_path=None):
+    state = _game_state(root)
+    identities = []
+    if domain == 'flags':
+        names = set(_FLAG_DESCRIPTORS)
+        try:
+            owner = state.get('Flags')
+            if isinstance(owner, LuaTable):
+                names.update(key for key, _ in owner.entries() if type(key) is str)
+        except AmbiguousLuaKeyError:
+            pass
+        identities.extend('flag:' + name for name in sorted(names))
+    elif domain == 'dialogue':
+        for field, prefix in (('TextLinesRecord', 'dialogue:'), ('TextLinesChoiceRecord', 'dialogueChoice:')):
+            try:
+                owner = state.get(field)
+            except AmbiguousLuaKeyError:
+                continue
+            if isinstance(owner, LuaTable):
+                identities.extend(prefix + name for name in sorted({key for key, _ in owner.entries() if type(key) is str}))
+    elif domain == 'progression':
+        try:
+            statuses = state.get('QuestStatus')
+            names = {key for key, _ in statuses.entries() if type(key) is str and key in QUEST_IDS} if isinstance(statuses, LuaTable) else set()
+        except AmbiguousLuaKeyError:
+            names = set(QUEST_IDS)
+        identities.extend('quest:' + name for name in sorted(names))
+    return [entry_row(root, identity, language, game_path) for identity in identities]
+
+
+def reset_decisions(root):
+    decisions = {}
+    try:
+        lines = _table(_game_state(root), 'TextLinesRecord')
+    except (ValueError, KeyError):
+        return decisions
+    for name, _ in lines.entries():
+        if type(name) is not str or name in decisions:
+            continue
+        try:
+            reset_descriptor(root, name)
+        except (ValueError, KeyError) as error:
+            decisions[name] = {'allowed': False, 'code': getattr(error, 'code', 'invalidOwner'), 'diagnostic': str(error)}
+        else:
+            decisions[name] = {'allowed': True, 'code': None, 'diagnostic': None}
+    return decisions
 
 
 def validate(descriptor_value, operation, value):
-    if operation not in descriptor_value["mutationKinds"]:
-        raise ValueError("Save Editor narrative mutation is not authorized.")
-    if descriptor_value["valueType"] == "boolean":
-        if type(value) is not bool or operation != "set":
-            raise ValueError("Save Editor narrative flag must be boolean.")
-    elif descriptor_value["valueType"] == "enum":
-        if type(value) is not str or value not in descriptor_value["choices"] or operation != "setEnum":
-            raise ValueError("Save Editor quest status is not an authorized transition.")
+    if operation not in descriptor_value['mutationKinds']:
+        raise save_advanced.AdvancedMutationError('Save Editor narrative mutation is not authorized.')
+    if descriptor_value['id'].startswith('dialogueReset:'):
+        if value is not False:
+            raise save_advanced.AdvancedMutationError('Save Editor dialogue reset requires an explicit false value.')
+        return
+    kind = descriptor_value['valueType']
+    if kind == 'enum':
+        if type(value) is not str or value not in descriptor_value['choices']:
+            raise save_advanced.AdvancedMutationError('Save Editor quest status is not an authorized transition.')
     else:
-        raise ValueError("Save Editor narrative value type is unsupported.")
+        save_advanced.validate_scalar(value, kind)
+        if kind == 'integer' and not 0 <= value <= _MAX_INTEGER:
+            raise save_advanced.AdvancedMutationError('Save Editor narrative counter is outside its integer range.')
 
 
 def apply_intent(root, intent):
-    state = _game_state(root)
-    prefix = intent["id"].partition(":")[0]
-    name = intent["rawId"]
-    after = intent["after"]
-    if prefix == "flag":
-        owner = _table(state, "Flags")
-        if after:
-            owner[name] = True
-        else:
-            owner.pop(name, None)
-    elif prefix == "dialogue":
-        if after is not False:
-            raise ValueError("Save Editor dialogue reset requires an explicit false value.")
-        # Validate every linked owner before modifying this candidate document.
+    name = intent['rawId']
+    if intent['id'].startswith('dialogueReset:'):
         owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
-        _table(state, "TextLinesRecord").pop(name, None)
-        for _owner_name, record, _type in owners:
+        _table(_game_state(root), 'TextLinesRecord').pop(name, None)
+        for _owner_name, record, _expected_type in owners:
             record.pop(name, None)
-    elif prefix == "quest":
-        if name not in QUEST_IDS:
-            raise ValueError("Save Editor quest identity is unknown.")
-        status = _table(state, "QuestStatus")
-        if status.get(name) == "CashedOut":
-            raise ValueError("Save Editor cannot rewrite a claimed quest reward.")
-        completed = state.get("QuestsCompleted")
-        if completed is not None and not isinstance(completed, LuaTable):
-            raise ValueError("Save Editor quest completion history is malformed.")
-        if completed is None and after == "Complete":
-            completed = LuaTable()
-            state["QuestsCompleted"] = completed
-        if completed is not None:
-            previous = completed.get(name)
-            if previous is not None and type(previous) is not bool:
-                raise ValueError("Save Editor quest completion record is malformed.")
-            if after == "Complete":
-                completed[name] = True
-            else:
-                completed.pop(name, None)
-        status[name] = after
-    else:
-        raise ValueError("Save Editor narrative mutation is unknown.")
+        return
+    owner = _owner(root, intent['path'][:-1], create=True)
+    after = intent['after']
+    if intent['id'].startswith('quest:'):
+        completion = _owner(root, ['GameState', 'QuestsCompleted'], create=True)
+        if after in ('Complete', 'CashedOut'):
+            completion[name] = True
+        else:
+            completion.pop(name, None)
+        if after == 'Unrecorded':
+            owner.pop(name, None)
+            return
+    owner[intent['path'][-1]] = after
 
 
 def linked_changes(root, intents):
-    state = _game_state(root)
     changes = []
     intents = tuple(intents)
-    completed = state.get("QuestsCompleted") if any(
-        intent["id"].startswith("quest:") for intent in intents
-    ) else None
-    if completed is not None and not isinstance(completed, LuaTable):
-        raise ValueError("Save Editor quest completion history is malformed.")
+    explicit = {intent['id'] for intent in intents}
     for intent in intents:
-        if intent["id"].startswith("quest:"):
-            name = intent["rawId"]
-            record = completed.get(name) if completed is not None else None
-            if record is not None and type(record) is not bool:
-                raise ValueError("Save Editor quest completion record is malformed.")
-            before = record is True
-            after = intent["after"] == "Complete"
-            if before != after:
-                changes.append({
-                    "id": "linked:quest:" + name,
-                    "domain": "progression",
-                    "rawId": name,
-                    "name": "Quest completion history · " + name,
-                    "operation": "set",
-                    "before": before,
-                    "after": after,
-                })
-        if intent["id"].startswith("dialogue:") and intent["after"] is False:
-            name = intent["rawId"]
+        name = intent['rawId']
+        if intent['id'].startswith('quest:'):
+            before = _read(root, ['GameState', 'QuestsCompleted', name])
+            after = True if intent['after'] in ('Complete', 'CashedOut') else None
+            if before != after and 'questObservation:QuestsCompleted:' + name not in explicit:
+                changes.append({'id': 'linked:quest:' + name, 'domain': 'progression', 'rawId': name,
+                    'name': 'Quest completion history · ' + name, 'operation': 'set' if after else 'unset',
+                    'before': before, 'after': after})
+        if intent['id'].startswith('dialogueReset:'):
             owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
             for owner_name, record, _expected_type in owners:
                 before = record.get(name)
                 if before is None:
                     continue
-                identity = ("linked:dialogue:" + name
-                            if owner_name == "GameState.TextLinesChoiceRecord"
-                            else "linked:dialogue:" + owner_name + ":" + name)
-                changes.append({
-                    "id": identity, "domain": "dialogue", "rawId": name,
-                    "name": owner_name + " · " + name,
-                    "operation": "unset", "before": before, "after": None,
-                })
+                identity = 'linked:dialogue:' + ('' if owner_name == 'GameState.TextLinesChoiceRecord' else owner_name + ':') + name
+                changes.append({'id': identity, 'domain': 'dialogue', 'rawId': name,
+                    'name': owner_name + ' · ' + name, 'operation': 'unset', 'before': before, 'after': None})
     return changes
+
+
+def validate_batch(root, intents):
+    for intent in intents:
+        if intent['domain'] not in ('flags', 'dialogue', 'progression', 'questObservation', 'speechHistory'):
+            continue
+        if not intent['id'].startswith(('flag:', 'dialogue:', 'dialogueReset:', 'dialogueChoice:', 'quest:', 'questObservation:', 'speech:')):
+            continue
+        expected = None if (intent['id'].startswith('dialogueReset:') or
+                            intent['id'].startswith('quest:') and intent['after'] == 'Unrecorded') else intent['after']
+        if intent['id'].startswith('quest:'):
+            completion = _read(root, ['GameState', 'QuestsCompleted', intent['rawId']])
+            expected_completion = True if intent['after'] in ('Complete', 'CashedOut') else None
+            if completion != expected_completion:
+                raise save_advanced.AdvancedMutationError('Save Editor quest status conflicts with its explicit completion record.', conflict=True)
+        if _read(root, intent['path']) != expected:
+            raise save_advanced.AdvancedMutationError('Save Editor staged narrative records conflict at ' + repr(intent['path']), conflict=True)

@@ -103,7 +103,7 @@ OverwriteTableKeys( QuestData, {
     assert person_fields["interaction:NPC_Moros_01"]["value"] == 4
     assert person_fields["gift:Moros:GiftPoints"]["value"] == 2
     spoken = next(row for row in person["items"] if row["domain"] == "speechHistory")
-    assert spoken["value"] == 3 and "我们又见面了" in spoken["name"] and not spoken["editable"]
+    assert spoken["value"] == 3 and "我们又见面了" in spoken["name"] and spoken["editable"]
     assert any(row["domain"] == "investigate" for row in person["items"])
     # Each observed lifecycle remains distinguishable, including absent source
     # identities on deliberate search, without inventing a writable unlock.
@@ -119,7 +119,7 @@ OverwriteTableKeys( QuestData, {
     assert changes["count"] >= 1
     assert state["QuestStatus"]["QuestUnlockMoros"] == "Unlocked", "staging changed the fixed source"
     linked = next(effect for effect in changes["changes"] if effect["id"] == "linked:quest:QuestUnlockMoros")
-    assert linked["before"] is False and linked["after"] is True
+    assert linked["before"] is None and linked["after"] is True
     candidate = work._validated_review_state(work._pending.values())
     assert candidate.lua_state["GameState"]["QuestStatus"]["QuestUnlockMoros"] == "Complete"
     assert candidate.lua_state["GameState"]["QuestsCompleted"]["QuestUnlockMoros"] is True

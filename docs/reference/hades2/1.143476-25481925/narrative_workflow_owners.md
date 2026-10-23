@@ -19,27 +19,47 @@ granted. Existing source-verified quest status writes keep their linked owner.
 owners. Source-identified cue counts now join the same NPC entity as interaction,
 gift and dialogue records. Unknown and duplicate physical data remain preserved.
 
-Source and translation freshness reuse the existing byte-captured narrative
-source identity. The supported StoryReset digest only authorizes its existing
-dialogue-reset boundary; it does not certify the complete installed source set
-or grant new mutations. The original reset/gift/choice-history policy is retained
-by this context foundation.
+Actual Boolean flags, playback records, choice strings, quest presentation
+markers and legacy Boolean/integer speech records now have typed physical
+writes. This authority comes from their reliable saved type and unique owner,
+independently of source availability or membership in the native reset list.
+Absent known quest status and companion tables can be created. Quest status
+supports unrecorded, unlocked, complete and claimed states, updating the
+completion companion. Direct status editing does not grant/reclaim a reward;
+its controls explain that distinction. Direct record editing preserves current-
+run counters, gift order and unrelated data instead of inventing an event.
 
-The user's later 2026-10-23 maximum-editability contract supersedes blanket
-read-only domain delivery. This foundation is **not completion of #425**:
-physical presentation flags, speech/gift values, broader semantic operations and
-Advanced typed writes must receive editing support or a specific technical
-limitation under #397. Computed authored-source context itself is observational.
-Unknown purpose alone is not a reason to deny reliably encoded physical writes.
+The existing native narrative-reset operation now has the separate identity
+`dialogueReset:<scene>`. It keeps the verified reset boundary, gift/choice/run
+companion validation and complete removal of the proven linked records. Direct
+`dialogue:<scene>` playback editing remains available when that separate native
+operation cannot be established. Conflicting explicit status/completion and
+playback/reset requests reject the new action and retain the accepted basket.
 
-`test_hades2_save_quest_workflow.py` first reproduced the missing joined quest
-subject on baseline `b4d3bac` (RED). Temporary source/save fixtures cover native
-bilingual lookup, all observed status families and missing status, on-demand
-AND/OR/dynamic/stage requirements, explicit inheritance, NPC interaction/gift/
-dialogue/speech grouping, the existing linked completion action, duplicate
-physical owners, and source replacement/ambiguity without widening reset
-authority. Existing dialogue/entity regressions retain their owning contracts.
-These checks are separate from user-only rendered/game/load acceptance.
+Source and translation freshness reuse the byte-captured narrative source
+identity. The supported StoryReset digest only certifies that reset boundary,
+not the full installed source set. Authored context is observational rather than
+a saved field. Unknown purpose alone does not deny reliably encoded physical
+writes; Advanced provides typed tables, unknown fields and actual type changes.
+
+The temporary Core/codec journey in `test_hades2_save_narrative_editing.py`
+reproduced the claimed-status blanket restriction and the arbitrary resource
+balance cap before their corrections. It stages and applies status transitions,
+absent completion/presentation records, arbitrary Boolean flags, gift-linked and
+unknown playback records, choice text preserving whitespace, legacy speech
+Boolean/count values, invalid-input/basket recovery and the separate native
+reset. Reopening and independent decoding verify saved values, original prewrite
+backup, untouched current-run/gift/unknown records and cleared intent. Save
+resource balance input uses the exact-integer boundary of its Lua number type;
+the runtime resource-spawn limit is not a native save-format limit.
+
+`test_hades2_save_quest_workflow.py` separately covers native bilingual lookup,
+all observed and absent status families, on-demand AND/OR/dynamic/stage
+requirements, named inheritance, NPC interaction/gift/dialogue/speech grouping,
+duplicate physical owners and source replacement. Full gift/reward workflow
+operations remain active work under #425, rather than claimed by these direct
+record controls. These fixtures do not establish real-game/load/rendered user
+acceptance.
 
 SHA-256 of read-only supported installed scripts inspected on 2026-10-23:
 

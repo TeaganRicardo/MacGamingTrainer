@@ -20,7 +20,6 @@ from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import editor_default_source, editor_files, profile_file_identity
-from .schema import MAX_AMOUNT
 
 
 _MAX_EXACT_LUA_INTEGER = 9_007_199_254_740_991
@@ -297,7 +296,7 @@ class Hades2SaveWorkspace:
                 "mutationKinds": [],
                 "constraints": {
                     "min": 0,
-                    "max": MAX_AMOUNT,
+                    "max": _MAX_EXACT_LUA_INTEGER,
                     "integer": True,
                 },
             }
@@ -646,33 +645,9 @@ class Hades2SaveWorkspace:
         for name in missing:
             localized = current.get(name) or (("任务 · " if zh else "Quest · ") + name)
             english_name = english.get(name) or ("Quest · " + name)
-            row = {
-                "id": "quest:" + name,
-                "entityId": "quest:" + name,
-                "entityName": localized,
-                "domain": "progression",
-                "rawId": name,
-                "path": ["GameState", "QuestStatus", name],
-                "name": localized,
-                "englishName": english_name,
-                "value": None,
-                "valueType": "enum",
-                "editable": False,
-                "mutationKinds": [],
-                "group": "命运清单" if zh else "Fated List quests",
-                "choices": [],
-                "state": "absent",
-                "reasonCode": "knownAbsent",
-                "reason": self._discovery_reason("knownAbsent", language),
-                "_search": tuple({
-                    token for token in (
-                        name,
-                        localized,
-                        english_name,
-                        chinese.get(name),
-                    ) if token
-                }),
-            }
+            row = save_narrative.entry_row(self.document.lua_state, "quest:" + name, language, self._game_path)
+            row.update(state="absent", reasonCode="editableAbsent", _search=tuple(
+                token for token in (name, localized, english_name, chinese.get(name)) if token))
             rows.append(row)
         return rows
 
@@ -819,22 +794,7 @@ class Hades2SaveWorkspace:
         return self._investigation
 
     def _dialogue_write_decisions(self):
-        # Reuse the actual descriptor/companion validator, including its
-        # precise block reason. Do not make investigation its own write policy.
-        try:
-            observed = save_narrative.rows(
-                self.document.lua_state, "dialogue", "en", game_path=self._game_path
-            )
-        except (ValueError, AmbiguousLuaKeyError, KeyError):
-            return {}
-        return {
-            row["rawId"]: {
-                "allowed": row["editable"],
-                "code": row.get("blockReasonCode"),
-                "diagnostic": row.get("blockReasonDiagnostic"),
-            }
-            for row in observed
-        }
+        return save_narrative.reset_decisions(self.document.lua_state)
 
     def investigate(self, entry_id, language="zh-CN"):
         if isinstance(entry_id, str) and entry_id.startswith("advanced:") and language in ("en", "zh-CN"):
@@ -918,9 +878,8 @@ class Hades2SaveWorkspace:
                     alias.get("name"), alias.get("englishName"),
                     alias.get("entityName"), alias.get("group"),
                 )
-            # Authored scenes and spoken text are source-backed, read-only
-            # context for the same character entity. Never infer a mutation
-            # from the scene's Boolean observation or its localised name.
+            # Authored context groups the character; actual record fields
+            # retain their typed physical owner, independently of source text.
             if scope in ("all", "story"):
                 results = self._narrative_investigation().query(
                     self.document.lua_state, search=search, offset=0,
@@ -1182,10 +1141,8 @@ class Hades2SaveWorkspace:
             rows = self._resource_rows(language)
         elif prefix == "playerStat":
             rows = self._player_stat_rows(language)
-        elif prefix in ("flag", "dialogue", "quest"):
-            rows = save_narrative.rows(
-                root, descriptor["domain"], language, game_path=self._game_path
-            )
+        elif prefix in ("flag", "dialogue", "dialogueReset", "dialogueChoice", "quest", "questObservation", "speech"):
+            rows = [save_narrative.entry_row(root, entry_id, language, self._game_path)]
         elif prefix in ("interaction", "specialInteraction", "card", "objective"):
             rows = save_long_term.rows(
                 root, descriptor["domain"], language, game_path=self._game_path
@@ -1427,17 +1384,17 @@ class Hades2SaveWorkspace:
             save_equipment.validate(descriptor, operation, value)
         elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
             save_long_term.validate(descriptor, operation, value)
-        elif descriptor["domain"] in ("flags", "dialogue", "progression"):
+        elif descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.validate(descriptor, operation, value)
         if operation == "set":
             if descriptor["domain"] == "resources":
                 if (
                     type(value) is not int
                     or isinstance(value, bool)
-                    or not 0 <= value <= MAX_AMOUNT
+                    or not 0 <= value <= _MAX_EXACT_LUA_INTEGER
                 ):
-                    raise ValueError(
-                        "Save Editor resource value must be an integer 0..999999."
+                    raise save_advanced.AdvancedMutationError(
+                        "Save Editor resource balance must be a non-negative, exactly representable Lua integer."
                     )
             elif descriptor["domain"] == "playerStats":
                 constraints = descriptor["constraints"]
@@ -1520,6 +1477,7 @@ class Hades2SaveWorkspace:
             self._apply_intent(candidate, intent)
         try:
             if semantic:
+                save_narrative.validate_batch(candidate.lua_state, semantic)
                 save_long_term.validate_batch(candidate.lua_state, semantic)
                 save_equipment.validate_batch(candidate.lua_state, semantic)
         except ValueError as error:
@@ -1640,7 +1598,7 @@ class Hades2SaveWorkspace:
         if intent["id"].startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
             save_long_term.apply_intent(document.lua_state, intent)
             return
-        if intent["domain"] in ("flags", "dialogue", "progression"):
+        if intent["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.apply_intent(document.lua_state, intent)
             return
         path = intent["path"]

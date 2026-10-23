@@ -546,8 +546,8 @@ class NativeDialogueInvestigation:
                       'group': '命运清单' if zh else 'Fated List quests', '_browseReadOnly': True,
                       '_search': (name, title, en, *(source['script'] for source in self.native['quests'].get(name, ()))),
                       'reasonCode': 'questContextReadOnly',
-                      'reason': ('这些记录包含展示和奖励流程的关联状态，仅供查看。' if zh else
-                                 'These records include presentation and reward lifecycle state and are read-only.')}
+                      'reason': ('此项展示原生条件和调查结果；保存字段在同一任务下单独编辑。' if zh else
+                                 'Shows authored conditions and investigation results; edit saved fields on this quest.')}
             rows.append({**common, 'id': 'investigate:quest:' + name, 'domain': 'investigate',
                          'rawId': 'quest:' + name, 'path': ['GameState', 'QuestStatus', name],
                          'name': '任务状态与原生条件' if zh else 'Quest state and authored conditions',
@@ -566,13 +566,9 @@ class NativeDialogueInvestigation:
                 ('PlayedQuestInterstitials', ('已播放任务过场', 'Quest interstitial played')),
             ):
                 value, reason = observation(owner, name)
-                rows.append({**common, 'id': 'questObservation:' + owner + ':' + name,
-                             'domain': 'questObservation', 'rawId': owner,
-                             'path': ['GameState', owner, name], 'name': labels[0 if zh else 1],
-                             'englishName': labels[1], 'value': value, 'valueType': 'boolean',
-                             'reasonCode': reason or 'questContextReadOnly',
-                             'reason': (('记录存在歧义或格式不受支持；原数据已保留。' if zh else
-                                         'Ambiguous or unsupported record; original data is preserved.') if reason else common['reason'])})
+                from . import save_narrative
+                record = save_narrative.entry_row(save_root, 'questObservation:' + owner + ':' + name, language, self.game_path)
+                rows.append({**common, **record})
         return rows
 
     def spoken_rows(self, save_root, scenes, language):
@@ -603,23 +599,17 @@ class NativeDialogueInvestigation:
                 english = line['en']
                 title = next(iter(phrases), '未翻译台词' if zh else 'Untranslated line')
                 en = next(iter(english), 'Untranslated line')
-                rows.append({
-                    'id': 'speech:' + identity, 'domain': 'speechHistory', 'rawId': cue,
+                from . import save_narrative
+                authority = save_narrative.entry_row(save_root, 'speech:' + cue, language, self.game_path)
+                row = {**authority,
                     'entityId': scene['entityId'], 'entityName': scene['entityName'],
-                    'path': ['GameState', 'SpeechRecord', cue],
                     'name': ('语音记录 · ' if zh else 'Speech history · ') + title[:100],
                     'englishName': 'Speech history · ' + en[:100],
-                    'value': count if reason is None else None,
-                    'valueType': 'boolean' if type(count) is bool else 'number',
-                    'editable': False, 'mutationKinds': [], 'choices': [], '_browseReadOnly': True,
-                    'group': '语音历史' if zh else 'Speech history',
-                    'reasonCode': reason or 'speechHistoryReadOnly',
-                    'reason': (('语音计数与挑战和场景历史共同维护，仅供查看。' if zh else
-                                'Speech counts are maintained with run and room history and are read-only.') if reason is None else
-                               ('记录存在歧义或格式不受支持；原数据已保留。' if zh else
-                                'Ambiguous or unsupported record; original data is preserved.')),
+                    '_browseReadOnly': True, 'group': '语音历史' if zh else 'Speech history',
                     '_search': (cue, title, en),
-                })
+                }
+                rows.append(row)
+
         return rows
 
     def quest_detail(self, save_root, name, language):
@@ -773,7 +763,7 @@ class NativeDialogueInvestigation:
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
             'sourceIdentity': self.native['sourceIdentity'],
             'reason': reason, 'blockReasonCode': block_code,
-            'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
+            'canStage': can_stage, 'stageID': 'dialogueReset:' + scene if can_stage else '',
         }
 
     def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all", include_unobserved=False):

@@ -410,8 +410,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     claimed_quest = next(item for item in claimed["items"] if item["id"] == "quest:QuestHelpDora")
     assert claimed_quest["state"] == "observed"
-    assert claimed_quest["editable"] is False
-    assert claimed_quest["reasonCode"] == "rewardClaimed"
+    assert claimed_quest["editable"] is True
+    assert claimed_quest["reasonCode"] == "editable"
 
     linked_quest_session = Session()
     linked_quest_state = linked_quest_session.document.lua_state["GameState"]
@@ -566,8 +566,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     quest = next(item for item in missing_quest["items"] if item["id"] == "quest:QuestHelpOdysseus")
     assert quest["state"] == "absent"
-    assert quest["editable"] is False
-    assert quest["reasonCode"] == "knownAbsent"
+    assert quest["editable"] is True
+    assert quest["reasonCode"] == "editableAbsent"
 
     coverage = {item["id"]: item for item in workspace.summary()["coverage"]}
     assert set(coverage) == {
