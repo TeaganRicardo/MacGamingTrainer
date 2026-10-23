@@ -14,10 +14,17 @@ struct Hades2SaveAdvancedValueView: View {
     @State private var failure: TrainerTextToken?
     @State private var requestID = UUID()
     @State private var valueDraft = ""
-    @State private var keyType = "string"
-    @State private var keyDraft = ""
-    @State private var memberDraft = "{\"luaType\":\"string\",\"value\":\"\"}"
-    @State private var memberFailure: TrainerTextToken?
+
+    private var membershipDraft: Hades2SaveAdvancedMembershipDraft {
+        model.membershipDrafts[entry.id] ?? Hades2SaveAdvancedMembershipDraft()
+    }
+    private func membershipBinding(_ path: WritableKeyPath<Hades2SaveAdvancedMembershipDraft, String>) -> Binding<String> {
+        Binding(get: { membershipDraft[keyPath: path] }, set: { value in
+            var draft = membershipDraft
+            draft[keyPath: path] = value
+            model.retainMembershipDraft(draft, for: entry.id)
+        })
+    }
 
     private func text(_ key: String) -> String {
         Hades2GameModule.resolveText(key: key, localization: localization)
@@ -58,21 +65,21 @@ struct Hades2SaveAdvancedValueView: View {
                     Divider()
                     Text(text("hades2.saveEditor.advanced.membership")).font(.callout.weight(.medium))
                     HStack {
-                        Picker(text("hades2.saveEditor.advanced.keyType"), selection: $keyType) {
+                        Picker(text("hades2.saveEditor.advanced.keyType"), selection: membershipBinding(\.keyType)) {
                             Text(text("hades2.saveEditor.advanced.type.string")).tag("string")
                             Text(text("hades2.saveEditor.advanced.type.number")).tag("number")
                             Text(text("hades2.saveEditor.advanced.type.boolean")).tag("boolean")
                         }.frame(width: 220)
-                        TrainerTextField(title: text("hades2.saveEditor.advanced.key"), text: $keyDraft)
+                        TrainerTextField(title: text("hades2.saveEditor.advanced.key"), text: membershipBinding(\.key))
                     }
-                    TrainerTextField(title: text("hades2.saveEditor.advanced.memberValue"), text: $memberDraft)
+                    TrainerTextField(title: text("hades2.saveEditor.advanced.memberValue"), text: membershipBinding(\.value))
                     HStack {
                         Button(text("hades2.saveEditor.advanced.addMember")) { membership("addMembership") }
                             .disabled(!editable || !mutations.contains("addMembership"))
                         Button(text("hades2.saveEditor.advanced.removeMember")) { membership("removeMembership") }
                             .disabled(!editable || !mutations.contains("removeMembership"))
                     }
-                    if let memberFailure {
+                    if let memberFailure = membershipDraft.failure {
                         Text(localization.string(memberFailure)).font(.caption).foregroundStyle(theme.warning)
                     }
                 }
@@ -122,27 +129,31 @@ struct Hades2SaveAdvancedValueView: View {
     }
 
     private func membership(_ operation: String) {
+        var draft = membershipDraft
         let rawKey: Any
-        switch keyType {
+        switch draft.keyType {
         case "number":
-            guard let number = Double(keyDraft), number.isFinite else { invalidMembership(); return }
+            guard let number = Double(draft.key), number.isFinite else { invalidMembership(); return }
             rawKey = number
         case "boolean":
-            guard ["true", "false"].contains(keyDraft) else { invalidMembership(); return }
-            rawKey = keyDraft == "true"
-        default: rawKey = keyDraft
+            guard ["true", "false"].contains(draft.key) else { invalidMembership(); return }
+            rawKey = draft.key == "true"
+        default: rawKey = draft.key
         }
-        let key: [String: Any] = ["luaType": keyType, "value": rawKey]
+        let key: [String: Any] = ["luaType": draft.keyType, "value": rawKey]
         var payload: [String: Any] = ["key": key]
         if operation == "addMembership" {
-            guard let value = Hades2SaveTypedValue(text: memberDraft) else { invalidMembership(); return }
+            guard let value = Hades2SaveTypedValue(text: draft.value) else { invalidMembership(); return }
             payload["value"] = value.object
         }
-        memberFailure = nil
+        draft.failure = nil
+        model.retainMembershipDraft(draft, for: entry.id)
         model.stage(entryID: entry.id, operation: operation, value: payload)
     }
 
     private func invalidMembership() {
-        memberFailure = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+        var draft = membershipDraft
+        draft.failure = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+        model.retainMembershipDraft(draft, for: entry.id)
     }
 }

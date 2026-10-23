@@ -423,6 +423,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var operationFailures: [Hades2Command: TrainerTextToken] = [:]
     @Published private(set) var editFailures: [String: TrainerTextToken] = [:]
     @Published private(set) var typedDrafts: [String: String] = [:]
+    @Published private(set) var membershipDrafts: [String: Hades2SaveAdvancedMembershipDraft] = [:]
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingActions.count }
@@ -503,6 +504,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.operationFailures = [:]
             self.editFailures = [:]
             self.typedDrafts = [:]
+            self.membershipDrafts = [:]
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
             self.items = []
@@ -527,6 +529,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         operationFailures = [:]
         editFailures = [:]
         typedDrafts = [:]
+        membershipDrafts = [:]
     }
 
     private func releaseWorkspace(_ identifier: String) {
@@ -938,11 +941,17 @@ final class Hades2SaveEditorModel: ObservableObject {
         return value.json
     }
 
+    func retainMembershipDraft(_ draft: Hades2SaveAdvancedMembershipDraft, for entryID: String) {
+        guard workspaceID != nil else { return }
+        membershipDrafts[entryID] = draft
+    }
+
     private func reconcileEdits(_ entryIDs: Set<String>?) {
         if let entryIDs {
             for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID) }
         } else {
             typedDrafts = [:]
+            membershipDrafts = [:]
         }
         reconciledEntryIDs = entryIDs
         editRevision += 1

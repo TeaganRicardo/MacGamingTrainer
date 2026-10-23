@@ -25,6 +25,10 @@ ownership. Error feedback remains scoped to the field or operation. A language
 or detail refresh preserves a focused draft. Completed invalid typed drafts
 remain in that Save document when the value editor closes and reopens; a valid
 correction or explicit document abandonment clears the corresponding draft.
+The table member form likewise retains its key type, exact key/value text and
+local correction when its sheet closes and reopens. Those drafts belong to the
+current Save document; changing source, closing it or canceling its changes
+abandons them. Unrelated acknowledged edits leave the form available.
 
 `tests/test_hades2_advanced_save_frontend.py` uses actual native controls in the
 SwiftUI tool window and sheet, the production Save-only worker, temporary codec
@@ -34,7 +38,8 @@ journey then edits numbers, booleans, exact/empty text, binary strings and Lua
 types, replaces a table preserving boolean/number/string/binary keys, removes a
 field, adds a member, removes and re-adds its requested action, and revises that
 new member in Changes. It checks a focused typed draft through bilingual
-refresh, applies two acknowledged batches, independently decodes installed
+refresh and an invalid member form through closing/reopening its sheet, applies
+two acknowledged batches, independently decodes installed
 bytes, and closes/reopens the target to read its values. Every fixture path is
 temporary; no game transport or real save tree is constructed.
 

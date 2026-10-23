@@ -164,6 +164,25 @@ private func fields(_ view: NSView) -> [NSTextField] {
         apply(8)
         try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav")).write(to: base.appendingPathComponent("after-advanced-first.sav"))
 
+        let membershipRow = search("Members")
+        var membershipSheet = openValue(membershipRow)
+        edit(fields(membershipSheet).first { $0.placeholderString == text("hades2.saveEditor.advanced.key") }!, "  unfinished key  ")
+        edit(fields(membershipSheet).first { $0.placeholderString == text("hades2.saveEditor.advanced.memberValue") }!, "invalid member value")
+        press(membershipSheet, "hades2.saveEditor.advanced.addMember")
+        require(namedNativeControl(membershipSheet, role: "AXStaticText", name: text("hades2.saveEditor.invalidDraft")) != nil,
+                "invalid membership did not expose its correction")
+        press(membershipSheet, "host.done")
+        until("invalid membership editor did not dismiss") { window.attachedSheet == nil }
+        membershipSheet = openValue(membershipRow)
+        require(fields(membershipSheet).first { $0.placeholderString == text("hades2.saveEditor.advanced.key") }?.stringValue == "  unfinished key  ",
+                "reopening the table lost its unfinished membership key")
+        require(fields(membershipSheet).first { $0.placeholderString == text("hades2.saveEditor.advanced.memberValue") }?.stringValue == "invalid member value",
+                "reopening the table lost its unfinished membership value")
+        require(namedNativeControl(membershipSheet, role: "AXStaticText", name: text("hades2.saveEditor.invalidDraft")) != nil,
+                "reopening the table lost its membership correction")
+        press(membershipSheet, "host.done")
+        until("membership draft editor did not dismiss") { window.attachedSheet == nil }
+
         membership("hades2.saveEditor.advanced.addMember", key: "Added", value: "{\"luaType\":\"number\",\"value\":42}")
         let initialAdded = model.pendingActions.first!
         press(root, "hades2.saveEditor.workbench.reviewApply")

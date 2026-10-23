@@ -1,6 +1,15 @@
 import CoreFoundation
 import Foundation
 
+/// An unfinished member request belongs to its table in the open document,
+/// including its correction when the structure sheet is temporarily closed.
+struct Hades2SaveAdvancedMembershipDraft {
+    var keyType = "string"
+    var key = ""
+    var value = "{\"luaType\":\"string\",\"value\":\"\"}"
+    var failure: TrainerTextToken?
+}
+
 /// The Save codec's tagged Lua value. JSON objects are transport structure;
 /// explicit tags preserve Lua booleans/numbers/strings, table keys and nil.
 struct Hades2SaveTypedValue: Hashable {
