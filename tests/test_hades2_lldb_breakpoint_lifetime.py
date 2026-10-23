@@ -109,6 +109,15 @@ def assert_progress(counter):
 def check_expressions(executable, progress):
     child, debugger, transport, addresses = attach_helper(executable, 0, diagnostics=True)
     try:
+        configuration = lldb.SBCommandReturnObject()
+        debugger.GetCommandInterpreter().HandleCommand(
+            'settings show target.preload-symbols', configuration,
+        )
+        assert configuration.Succeeded(), configuration.GetError()
+        assert configuration.GetOutput().strip() == 'target.preload-symbols (boolean) = true', (
+            'fresh targets must preload symbol indexes before serial runtime discovery',
+            configuration.GetOutput(),
+        )
         # Repeated operations must leave no pending stop signal, breakpoint or
         # focus change. Verify native entry counts rather than a timing bound or
         # the debugger primitive used to pause the target.

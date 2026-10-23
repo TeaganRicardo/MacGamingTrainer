@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = Path(os.environ.get("MGT_PROFILE_SOURCE_ROOT", ROOT))
 sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests")]
 
-from hades2_lldb_worker_support import run_lldb_worker
+from hades2_lldb_worker_support import phase, run_lldb_worker
 
 
 def summarize(samples):
@@ -142,6 +142,147 @@ def profile_transport(samples, tick_interval_us):
     }
 
 
+def profile_first_touch_worker(variant):
+    from hades2_lldb_fixture import HELPER_SOURCE, SYMBOLS, cleanup, lldb, symbol_address
+    from games.hades2.transport import Hades2LuaTransport
+
+    framework_source = r'''
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <stdio.h>
+__attribute__((constructor)) static void load_frameworks(void) {
+  const char *frameworks[] = {
+    "/System/Library/Frameworks/Foundation.framework/Foundation",
+    "/System/Library/Frameworks/AppKit.framework/AppKit",
+    "/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+    "/System/Library/Frameworks/Metal.framework/Metal"
+  };
+  printf("initial %u\n", _dyld_image_count());
+  for (unsigned int i = 0; i < 4; ++i) {
+    if (!dlopen(frameworks[i], RTLD_NOW | RTLD_LOCAL)) {
+      fprintf(stderr, "%s\n", dlerror());
+      exit(2);
+    }
+    printf("%s %u\n", frameworks[i], _dyld_image_count());
+  }
+  printf("READY %u\n", _dyld_image_count());
+  fflush(stdout);
+}
+'''
+    with tempfile.TemporaryDirectory(prefix="mgt-first-touch-") as temporary:
+        temporary = Path(temporary)
+        source, executable = temporary / "helper.c", temporary / "helper"
+        source.write_text(HELPER_SOURCE + framework_source, encoding="utf-8")
+        subprocess.run(
+            ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
+            check=True, capture_output=True, text=True,
+        )
+        cache = temporary / "index-cache"
+        cache.mkdir()
+        transport = Hades2LuaTransport()
+        debugger = transport.debugger
+        child = subprocess.Popen([str(executable), "0", "1000"],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            scale = []
+            with phase("fixture.frameworks"):
+                for line in child.stdout:
+                    name, count = line.strip().rsplit(" ", 1)
+                    scale.append({"image": name, "count": int(count)})
+                    if name == "READY":
+                        break
+                else:
+                    raise RuntimeError("helper did not become ready: " + child.stderr.read())
+            changes = [("symbols.enable-lldb-index-cache", "false"),
+                       ("symbols.lldb-index-cache-path", '"' + str(cache) + '"')]
+            if variant == "baseline":
+                changes.append(("target.preload-symbols", "false"))
+            for name, value in changes:
+                result = lldb.SBCommandReturnObject()
+                debugger.GetCommandInterpreter().HandleCommand("settings set " + name + " " + value, result)
+                assert result.Succeeded(), result.GetError()
+            transport.target = target = debugger.CreateTarget("")
+            settings = {}
+            for name in ("symbols.enable-external-lookup", "target.preload-symbols",
+                         "target.load-script-from-symbol-file", "symbols.load-on-demand",
+                         "target.parallel-module-load", "symbols.enable-lldb-index-cache",
+                         "symbols.lldb-index-cache-path", "symbols.shared-cache-binary-loading"):
+                result = lldb.SBCommandReturnObject()
+                debugger.GetCommandInterpreter().HandleCommand("settings show " + name, result)
+                assert result.Succeeded(), result.GetError()
+                settings[name] = result.GetOutput().strip()
+            assert not list(cache.iterdir()), "worker did not start with an empty private cache"
+            error = lldb.SBError()
+            with phase("target.firstAttach"):
+                started = time.perf_counter()
+                transport.process = target.AttachToProcessWithID(transport.listener, child.pid, error)
+                attach_seconds = time.perf_counter() - started
+            assert error.Success(), str(error)
+            transport.pid = child.pid
+            stats = lldb.SBCommandReturnObject()
+            debugger.GetCommandInterpreter().HandleCommand("statistics dump", stats)
+            assert stats.Succeeded(), stats.GetError()
+            statistics_dump = json.loads(stats.GetOutput())
+            assert statistics_dump["totalSymbolTablesLoadedFromCache"] == 0
+            assert statistics_dump["totalSymbolTablesSavedToCache"] == 0
+            addresses = {name: symbol_address(target.GetModuleAtIndex(0), target, symbol)
+                         for name, symbol in SYMBOLS.items()}
+            transport.address = addresses.__getitem__
+            transport.mailbox_mode = "lldb"
+            expressions = []
+            for index in range(3):
+                with phase("expression." + str(index)):
+                    started = time.perf_counter()
+                    result = transport.execute("return true")
+                    expressions.append({"total_seconds": time.perf_counter() - started,
+                                        "evaluate_seconds": transport.last_expression_duration, "result": result})
+                assert result == "{}" and not transport.tainted and transport.focus_original is None
+                assert target.GetNumBreakpoints() == 0, "expression leaked a breakpoint"
+            transport.stop(time.monotonic() + 3)
+            focus = transport.process.ReadMemory(
+                addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error,
+            )
+            assert error.Success() and focus == b"\x01", (str(error), focus)
+            entries = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
+            assert error.Success() and entries == 3, (str(error), entries)
+            row = {"variant": variant, "worker_pid": os.getpid(), "helper_pid": child.pid,
+                   "attach_seconds": attach_seconds, "settings": settings, "helper_images": scale,
+                   "target_modules": target.GetNumModules(), "statistics": statistics_dump,
+                   "expressions": expressions, "native_entries": entries, "focus_restored": True,
+                   "python": sys.version, "lldb": lldb.SBDebugger.GetVersionString()}
+        finally:
+            cleanup(child, debugger, transport)
+        assert not list(cache.iterdir()), "disabled private cache acquired files"
+        row["private_cache_empty_before_and_after"] = True
+        return row
+
+
+def profile_first_touch():
+    environment = dict(os.environ)
+    lldb_path = subprocess.check_output(["/usr/bin/xcrun", "lldb", "-P"], text=True).strip()
+    environment["PYTHONPATH"] = lldb_path + os.pathsep + environment.get("PYTHONPATH", "")
+    trials = []
+    for _ in range(5):
+        for variant in ("baseline", "production"):
+            raw = run_lldb_worker(
+                ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()), "--mode", "first-touch",
+                 "--first-touch-worker", variant], environment, timeout=30,
+            )
+            row = json.loads(raw.splitlines()[-1])
+            row["phases"] = [json.loads(line.removeprefix("lldb_phase "))
+                             for line in raw.splitlines() if line.startswith("lldb_phase ")]
+            trials.append(row)
+    return {
+        "workload": "5 alternating fresh LLDB workers per variant; Foundation/AppKit/SwiftUI/Metal helper; no game",
+        "baseline": "production constructor with only target.preload-symbols overridden to false",
+        "cache": "per-worker private empty index-cache directory, cache disabled; OS file caches not purged",
+        "trials": trials,
+        "metrics": {variant + ".first_attach": summarize([
+            row["attach_seconds"] for row in trials if row["variant"] == variant
+        ]) for variant in ("baseline", "production")},
+    }
+
+
 def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_count=32):
     from lua_runtime_support import require_lua52
 
@@ -214,7 +355,7 @@ def human_summary(report):
                      "sidecar.rpc", "resident.materialize_dispatch", "resident.json_serialize", "resident.localization"):
             metric = trial["paths"]["warm"]["phases"].get(name)
             if metric: lines.append("  %s median/p95 %.3f/%.3f ms (%d)" % (name, metric["median_ms"], metric["p95_ms"], metric["count"]))
-    for section in ("resident", "save_query", "time_warp", "transport"):
+    for section in ("resident", "save_query", "time_warp", "transport", "first_touch"):
         for name, metric in report.get(section, {}).get("metrics", {}).items():
             lines.append("%s.%s median/p95 %.6f/%.6f ms (%d)" % (section, name, metric["median_ms"], metric["p95_ms"], metric["count"]))
     if "baseline" in report:
@@ -224,7 +365,8 @@ def human_summary(report):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("all", "offline", "transport", "resident", "end-to-end", "save", "time-warp"), default="all")
+    parser.add_argument("--mode", choices=("all", "offline", "transport", "first-touch", "resident", "end-to-end", "save", "time-warp"), default="all")
+    parser.add_argument("--first-touch-worker", choices=("baseline", "production"), help=argparse.SUPPRESS)
     parser.add_argument("--samples", type=positive_integer, default=30)
     parser.add_argument("--resident-traits", type=non_negative_integer, default=32,
                         help="synthetic mounted ordinary God traits; resident mode only")
@@ -243,6 +385,9 @@ def main():
         parser.error("resources >= 2, traits <= 512, catalog <= 1000 and trials <= 10 are required")
     if args.tick_microseconds < 0:
         parser.error("--tick-microseconds must be non-negative (0 means a busy loop)")
+    if args.first_touch_worker:
+        print(json.dumps(profile_first_touch_worker(args.first_touch_worker)))
+        return
 
     harness_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     selected_sha = os.environ.get("MGT_PROFILE_SOURCE_SHA", harness_sha)
@@ -297,6 +442,10 @@ def main():
             environment, 30 + (args.samples + 6) * 4,
         )
         report["transport"] = json.loads(raw)
+    if args.mode == "first-touch":
+        if sys.platform != "darwin":
+            parser.error("first-touch profiling needs macOS, Xcode Python and LLDB")
+        report["first_touch"] = profile_first_touch()
     report["working_tree_changes"] = report["harness_working_tree_changes"] if SOURCE_ROOT == ROOT else []
     report["source_clean"] = not report["working_tree_changes"]
     report["exact_head_evidence"] = report["source_clean"] and not report["harness_working_tree_changes"]
