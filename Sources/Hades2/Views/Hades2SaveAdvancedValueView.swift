@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Explicit structure/type editing for Advanced. Ordinary scalar controls stay
 /// inline; this editor preserves table key types and non-UTF8 Lua strings.
-struct Hades2SaveAdvancedEditor: View {
+struct Hades2SaveAdvancedValueView: View {
     @ObservedObject var model: Hades2SaveEditorModel
     let entry: Hades2SaveEditorEntry
     @EnvironmentObject private var localization: TrainerLocalizationStore

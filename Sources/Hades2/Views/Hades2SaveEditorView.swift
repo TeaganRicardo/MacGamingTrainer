@@ -95,7 +95,7 @@ struct Hades2SaveEditorView: View {
         .trainerSurface(.canvas)
         .trainerDismissTextEditingOnClickAway()
         .sheet(item: $advancedEditingEntry) { entry in
-            Hades2SaveAdvancedEditor(model: model, entry: entry)
+            Hades2SaveAdvancedValueView(model: model, entry: entry)
         }
         .confirmationDialog(
             text("hades2.saveEditor.source.confirmTitle"),
