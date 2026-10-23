@@ -97,6 +97,7 @@ def rows(root, language="zh-CN", game_path=None):
             row.update(value=info["before"], editable=True, mutationKinds=["set"], constraints=info["constraints"],
                 reason=("修改已存储的赠礼数量及资源总计；保留赠礼顺序、剧情与当前挑战，不执行赠礼事件。" if zh else
                         "Edit the stored quantity and resource total; preserve gift order, narrative and CurrentRun without replaying a gift."))
+            row["warning"] = row["reason"]
         result.append(row)
     return result
 

@@ -159,6 +159,8 @@ def rows(root, language, investigation, game_path=None, *, include_absent=False)
                 reason=(("已领取；不会再次发放奖励。" if zh else "Already claimed; no duplicate reward is granted.") if info["before"] else
                         (("离线发放 {} × {}，记录资源、累计与当前挑战获得量，并标记已领取；保留活动目标提示，不运行游戏表现或判断未来条件。" if zh else
                           "Offline grant: {} × {}; records inventory, lifetime and CurrentRun gains and marks claimed. Active objective prompts are preserved; no game presentation or future eligibility evaluation.").format(resource_name, evidence["amount"]))))
+            if not info["before"]:
+                row["warning"] = row["reason"]
         result.append(row)
     return result
 

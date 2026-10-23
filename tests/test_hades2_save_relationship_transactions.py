@@ -52,6 +52,7 @@ class GiftTransactionTests(SaveTransactionFixture):
         row = next(row for row in self.work.query(domain="relationships", language="en", search="Hecate")["items"]
                    if row["id"] == "gift:Hecate:GiftPoints")
         self.assertTrue(row["editable"], "a reliable stored quantity is blocked by unproven order coupling")
+        self.assertIn("without replaying a gift", row.get("warning", ""))
         original = self.path.read_bytes()
         self.work.stage(row["id"], "set", 12)
         self.work.stage("gift:Odysseus:GiftPoints", "set", 1)
@@ -143,6 +144,9 @@ class GiftTransactionTests(SaveTransactionFixture):
         self.state["NPCInteractions"] = table({"FutureFraction": -2.5, "FutureString": " original "})
         self.state["SpecialInteractRecord"] = table({"FutureBoolean": True})
         self.write(); self.work = self.open()
+        unknown = next(row for row in self.work.query(domain="relationships", search="FutureString", language="en")["items"]
+                       if row["id"] == "interaction:FutureString")
+        self.assertIn("not catalogued", unknown.get("warning", ""))
         self.work.stage("interaction:FutureFraction", "set", -3.25)
         self.work.stage("interaction:FutureString", "set", " ")
         self.work.stage("specialInteraction:FutureBoolean", "set", False)

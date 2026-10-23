@@ -49,6 +49,11 @@ class QuestRewardTests(SaveTransactionFixture):
 
     def test_explicit_claim_grants_all_saved_native_effects_and_reopens(self):
         original = self.path.read_bytes()
+        claim = next(row for row in self.work.query(domain="quests", search="QuestHelpDora", language="en")["items"]
+                     if row["id"] == "questClaim:QuestHelpDora")
+        self.assertIn("× 3", claim.get("warning", ""))
+        self.assertIn("Active objective prompts are preserved", claim.get("warning", ""))
+        self.assertIn("no game presentation", claim.get("warning", ""))
         staged = self.work.stage("questClaim:QuestHelpDora", "set", True)
         self.assertEqual(staged["actionCount"], 1)
         paths = {tuple(item["path"]) for item in staged["changes"] if item.get("path")}

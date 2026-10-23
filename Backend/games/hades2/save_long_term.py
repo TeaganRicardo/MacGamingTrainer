@@ -128,6 +128,8 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
             row["rawTyped"] = True
             row["reason"] = ("此已保存字段用途未编目；按实际类型修改，不重放互动事件。" if language == "zh-CN" else
                              "This saved field is not catalogued; edit its actual type without replaying interaction events.")
+            if issue is None:
+                row["warning"] = row["reason"]
         result.append(row)
     return result
 
