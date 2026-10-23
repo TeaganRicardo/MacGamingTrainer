@@ -23,6 +23,8 @@ mode = p.parse_args().game
 if mode in {'inherited', 'continuous'}:
     child = os.fork()
     if child == 0:
+        # Retain stdio, not Foundation's private process-exit socket.
+        os.closerange(3, os.sysconf('SC_OPEN_MAX'))
         if mode == 'continuous':
             while not Path(__file__ + '.write').exists():
                 time.sleep(0.001)
