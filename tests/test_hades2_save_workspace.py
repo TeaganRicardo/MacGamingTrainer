@@ -494,13 +494,14 @@ long_term.stage("specialInteraction:NPC_Hecate_01", "set", 4)
 long_term.stage("card:ChanneledCast:Unlocked", "set", False)
 long_term.stage("objective:GiftPrompt", "set", 3)
 review = long_term.review()
-assert review["actionCount"] == 4 and review["count"] == 10, review
+assert review["actionCount"] == 4 and review["count"] == 11, review
 assert {item["id"] for item in review["changes"] if item["id"].startswith("linked:")} == {
     "linked:card:ChanneledCast:Equipped", "linked:card:ChanneledCast:Level",
     "linked:arcanaCache:MetaUpgradeUnlockedCountCache",
     "linked:arcanaCache:MetaUpgradeMaxLevelCountCache",
     "linked:arcanaCache:MetaUpgradeCostCache",
     "linked:arcanaCache:MaxMetaUpgradeCostCache",
+    "linked:arcanaCache:MetaUpgradeCardLayout",
 }
 long_term.apply()
 edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]

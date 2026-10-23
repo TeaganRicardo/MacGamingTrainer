@@ -265,7 +265,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
 
     allowed = finding.query(root, search='NemesisPostTrueEnding01', offset=0, limit=10,
                             language='en', permissions={'NemesisPostTrueEnding01': {'allowed': True, 'code': None, 'diagnostic': None}})['items'][0]
-    assert allowed['canStage'] and allowed['stageID'] == 'dialogue:NemesisPostTrueEnding01'
+    assert allowed['canStage'] and allowed['stageID'] == 'dialogueReset:NemesisPostTrueEnding01'
     duplicated = LuaTable(0, 2, [('NemesisPostTrueEnding01', True), ('NemesisPostTrueEnding01', False)])
     conflicting_root = lua(GameState=lua(TextLinesRecord=duplicated))
     conflict = NativeDialogueInvestigation(game, expected_hash=checksum)
@@ -290,14 +290,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
         )),
         TextLinesChoiceRecord=lua(),
     ))
-    narrative_rows = save_narrative.rows(protected_root, 'dialogue', 'en')
-    decisions = {
-        row['rawId']: {
-            'allowed': row['editable'],
-            'code': row['blockReasonCode'],
-            'diagnostic': row['blockReasonDiagnostic'],
-        } for row in narrative_rows
-    }
+    decisions = save_narrative.reset_decisions(protected_root)
     assert decisions['NemesisPostTrueEnding01']['code'] == 'giftLinked'
     assert decisions['NemesisBathHouseRepeatable01']['code'] == 'notResettable'
     for scene, code in (
@@ -357,7 +350,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
         assert first['status'] == 'recorded' and first['canStage']
         before_detail = workspace.investigate(first['id'], 'en')
         assert before_detail['status'] == 'recorded' and before_detail['canStage']
-        preview = workspace.stage('dialogue:NemesisPostTrueEnding01', 'set', False)
+        preview = workspace.stage(first['stageID'], 'set', False)
         assert preview['count'] >= 1
         assert target.read_bytes() == initial_bytes
         applied = workspace.apply()

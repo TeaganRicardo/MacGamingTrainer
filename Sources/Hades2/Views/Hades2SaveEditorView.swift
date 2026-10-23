@@ -963,7 +963,8 @@ struct Hades2SaveEditorView: View {
         let known = [
             "editable", "editableAbsent", "readOnly", "unknownRaw",
             "ambiguousOwner", "unsupportedOwner", "ambiguousRaw", "knownAbsent",
-            "rewardClaimed", "starterWeapon", "baseWeaponRequired", "giftHistoryLinked"
+            "rewardClaimed", "starterWeapon", "baseWeaponRequired", "giftHistoryLinked",
+            "familiarUpgradeOwnerUnsupported", "noIndependentToolSelection"
         ]
         return known.contains(code)
             ? text("hades2.saveEditor.discovery.reason." + code)

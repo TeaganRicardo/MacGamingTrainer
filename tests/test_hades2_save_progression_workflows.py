@@ -164,7 +164,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     invalid.cancel()
     assert invalid.review()["actionCount"] == 0
     discovery = invalid.query(domain="discover", search="FutureFamiliarUpgrade", language="en")
-    assert discovery["items"] and all(not row["editable"] for row in discovery["items"])
+    assert discovery["items"] and all(row["editable"] and "set" in row["mutationKinds"]
+                                      for row in discovery["items"])
+    future = next(row for row in discovery["items"]
+                  if row["path"] == ["GameState", "FamiliarUpgrades", "FutureFamiliarUpgrade"])
+    invalid.stage(future["id"], "set", False)
+    invalid.apply()
+    assert Hades2SaveDocument.load(path).lua_state["GameState"]["FamiliarUpgrades"]["FutureFamiliarUpgrade"] is False
 
     def inspection(root):
         session = SimpleNamespace(document=SimpleNamespace(lua_state=root), relative_path="Profile1.sav")
@@ -196,6 +202,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     editor.stage("card:ChanneledCast:Unlocked", "set", False)
     effects = {row["rawId"]: row for row in editor.review()["changes"]
                if row["id"].startswith("linked:arcanaCache:")}
+    layout_effect = effects.pop("MetaUpgradeCardLayout")
+    assert layout_effect["before"] is None
+    layout = layout_effect["after"]
+    assert layout["luaType"] == "table" and layout["arraySize"] == 5
+    assert len(layout["entries"]) == 5
+    assert all(len(entry["value"]["entries"]) == 5 for entry in layout["entries"])
     assert {key: row["after"] for key, row in effects.items()} == {
         "MetaUpgradeUnlockedCountCache": 0,
         "MetaUpgradeMaxLevelCountCache": 0,

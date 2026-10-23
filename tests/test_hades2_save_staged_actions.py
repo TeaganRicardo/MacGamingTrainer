@@ -80,6 +80,7 @@ ARCANA_CACHE_EFFECTS = {
     "linked:arcanaCache:MetaUpgradeMaxLevelCountCache",
     "linked:arcanaCache:MetaUpgradeCostCache",
     "linked:arcanaCache:MaxMetaUpgradeCostCache",
+    "linked:arcanaCache:MetaUpgradeCardLayout",
 }
 saves, workspace = environment("basic", state)
 workspace.stage("card:ChanneledCast:Unlocked", "set", False)
@@ -87,8 +88,8 @@ workspace.stage("interaction:NPC_Hecate_01", "set", 4)
 workspace.stage("resource:MetaCurrency", "set", 50)
 review = workspace.review(language="en")
 assert review["actionCount"] == 3
-assert review["effectCount"] == 6
-assert review["physicalChangeCount"] == 9
+assert review["effectCount"] == 7
+assert review["physicalChangeCount"] == 10
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked",
     "interaction:NPC_Hecate_01",
@@ -113,7 +114,7 @@ assert review["actionCount"] == 2
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked", "resource:MetaCurrency",
 ]
-assert review["effectCount"] == 6
+assert review["effectCount"] == 7
 
 # Restaging an existing action revises it in place rather than adding another
 # user action, even after unrelated query/browse work.
@@ -122,7 +123,7 @@ review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
 assert review["actions"][1]["entryId"] == "resource:MetaCurrency"
 assert review["actions"][1]["after"] == 75
-assert review["physicalChangeCount"] == 8
+assert review["physicalChangeCount"] == 9
 assert {row["id"] for row in review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "resource:MetaCurrency",
@@ -139,8 +140,8 @@ assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] ==
 workspace.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
-assert review["effectCount"] == 6
-assert review["physicalChangeCount"] == 8
+assert review["effectCount"] == 7
+assert review["physicalChangeCount"] == 9
 
 # Applying the remaining two requested actions crosses the Save transaction
 # exactly once and clears the action basket.
@@ -166,18 +167,18 @@ _, arcana_overlap = environment("arcana-overlap", arcana_overlap_state)
 arcana_overlap.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 overlap_review = arcana_overlap.stage("card:ChanneledCast:Level", "set", 1, language="en")
 assert overlap_review["actionCount"] == 2
-assert overlap_review["effectCount"] == 5
-assert overlap_review["physicalChangeCount"] == 7
+assert overlap_review["effectCount"] == 6
+assert overlap_review["physicalChangeCount"] == 8
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "card:ChanneledCast:Level",
     "linked:card:ChanneledCast:Equipped",
 } | ARCANA_CACHE_EFFECTS
-assert len({row["id"] for row in overlap_review["changes"]}) == 7
+assert len({row["id"] for row in overlap_review["changes"]}) == 8
 overlap_review = arcana_overlap.unstage("card:ChanneledCast:Level", language="en")
 assert overlap_review["actionCount"] == 1
-assert overlap_review["effectCount"] == 6
-assert overlap_review["physicalChangeCount"] == 7
+assert overlap_review["effectCount"] == 7
+assert overlap_review["physicalChangeCount"] == 8
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "linked:card:ChanneledCast:Equipped",
