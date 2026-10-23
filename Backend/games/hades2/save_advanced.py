@@ -236,10 +236,10 @@ def row(root, identifier, language):
     except (ValueError, KeyError, TypeError) as error:
         ambiguous = isinstance(error, AmbiguousLuaKeyError)
         reason = (("此路径包含重复的物理 Lua 键，无法唯一确定写入目标。" if ambiguous else
-                   "此值或路径不能按当前有限 Lua 类型可靠写回；请查看技术原因。")
+                   "此值或路径不能按当前 Lua 编码可靠写回；请查看技术原因。")
                   if language == "zh-CN" else
                   ("This path contains duplicate physical Lua keys, so its write target is ambiguous." if ambiguous else
-                   "This value or path cannot be written reliably using the supported finite Lua types; inspect the technical reason."))
+                   "This value or path cannot be written reliably using the supported Lua encoding; inspect the technical reason."))
         result.update(pathAmbiguous=isinstance(error, AmbiguousLuaKeyError),
                       readOnlyReason=reason, readOnlyReasonDiagnostic=str(error), value=None, valueType="unknown")
         # Inspection retains the physical occurrence even when key lookup is
