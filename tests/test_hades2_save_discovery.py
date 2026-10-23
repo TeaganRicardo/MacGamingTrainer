@@ -527,13 +527,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert all(item["reasonCode"] == "ambiguousRaw" for item in deep)
     assert all(item["pathAmbiguous"] is True for item in deep)
 
-    # Unknown data is searchable without granting write authority and keeps the
-    # exact Advanced path needed to inspect it.
+    # Unknown data is searchable and writable by actual type and unique path;
+    # lack of game meaning is a warning rather than a blanket write prohibition.
     unknown = workspace.query(domain="discover", search="MysteryCounter", language="en")
     mystery = next(item for item in unknown["items"] if item["rawId"] == "MysteryCounter")
     assert mystery["domain"] == "advanced"
     assert mystery["state"] == "unknown"
-    assert mystery["editable"] is False
+    assert mystery["editable"] is True
     assert mystery["reasonCode"] == "unknownRaw"
     assert mystery["path"] == ["GameState", "UnknownFutureField", "MysteryCounter"]
 
@@ -584,7 +584,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert coverage["playerHistory"]["discoverability"] == "partial"
     assert coverage["playerHistory"]["write"] == "partial"
     assert coverage["unknown"]["discoverability"] == "supported"
-    assert coverage["unknown"]["understanding"] == "readOnly"
-    assert coverage["unknown"]["write"] == "readOnly"
+    assert coverage["unknown"]["understanding"] == "partial"
+    assert coverage["unknown"]["write"] == "supported"
 
 print("hades2_save_discovery_ok")

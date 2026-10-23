@@ -511,6 +511,8 @@
     "hades2.saveEditor.error.applyRequiresStopped": "Quit Hades II before applying staged save changes.",
     "hades2.saveEditor.error.invalidQuery": "The Save Editor query is invalid.",
     "hades2.saveEditor.error.invalidMutation": "The requested save change is invalid.",
+    "hades2.saveEditor.error.typedLuaMutation": "The change must match its actual Lua type and use a unique path. Use a finite, exactly representable number or a valid typed value, and inspect the field’s technical details.",
+    "hades2.saveEditor.error.typedLuaConflict": "These raw and semantic actions overlap on the same Lua field or linked effect. Revise or remove one of the related actions in Changes.",
     "hades2.saveEditor.error.equipmentChangesConflict": "These equipment actions conflict: {0}. Revise or remove one of the listed actions in Changes.",
     "hades2.saveEditor.error.lockedWeaponHasAspects": "A weapon cannot be locked while an aspect remains acquired: {0}. Revise the weapon or aspect action.",
     "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect": "An unlocked weapon must retain its default aspect: {0}. Restore the default aspect or revise the weapon action.",

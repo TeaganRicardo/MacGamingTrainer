@@ -168,7 +168,7 @@ assert all(row["editable"] is True for row in stats["items"])
 assert all(row["mutationKinds"] == ["set"] for row in stats["items"])
 
 # Advanced browsing is lazy. Asking for one nested table returns only one page
-# of its immediate children, and ungoverned values are read-only.
+# of its immediate children. Unique unknown scalar paths use their actual type.
 advanced = workspace.query(
     domain="advanced",
     path=["GameState", "UnknownFutureField"],
@@ -179,7 +179,7 @@ advanced = workspace.query(
 assert advanced["total"] == 1500
 assert len(advanced["items"]) == 25
 assert advanced["items"][0]["rawId"] == "Item0100"
-assert all(row["editable"] is False for row in advanced["items"])
+assert all(row["editable"] is True and row["mutationKinds"] == ["set", "unset"] for row in advanced["items"])
 assert all(row["path"][:2] == ["GameState", "UnknownFutureField"] for row in advanced["items"])
 
 # Staging stores typed mutation intent only. The source document stays pinned
