@@ -161,5 +161,67 @@ class QuestRewardTests(SaveTransactionFixture):
         self.work.stage("quest:QuestHelpDora", "setEnum", "Complete")
         self.assertEqual(self.work.review()["actionCount"], 1)
 
+    def test_mixed_workflows_keep_the_original_source_and_explicit_target(self):
+        self.state["MetaUpgradeState"] = table({})
+        self.state["Flags"]["FutureFlag"] = False
+        self.write(); self.work = self.open()
+        original_source = self.path.read_bytes()
+        target = self.saves / "Profile2.sav"
+        target.write_bytes(original_source)
+        self.work.set_target({"rootId": "main", "relativePath": target.name})
+        # Neither a new source version nor a later target version may silently
+        # replace the originally opened document's requested values.
+        changed_source = Hades2SaveDocument.load(self.path)
+        changed_source.lua_state["GameState"]["KeepUnknown"] = "external source"
+        self.path.write_bytes(changed_source.to_bytes())
+        later_source = self.path.read_bytes()
+        changed_target = Hades2SaveDocument.load(target)
+        changed_target.lua_state["GameState"]["KeepUnknown"] = "external target"
+        target.write_bytes(changed_target.to_bytes())
+        previous_target = target.read_bytes()
+        edits = (
+            ("questClaim:QuestHelpDora", "set", True),
+            ("gift:Hecate:GiftPoints", "set", 10),
+            ("history:gathering:fishing:FishingFails", "set", 12),
+            ("card:ChanneledCast:Level", "set", 2),
+            ("familiarSelected:FrogFamiliar", "set", True),
+            ("resource:MetaCurrency", "set", 200),
+            ("flag:FutureFlag", "set", True),
+            ("dialogue:A", "set", False),
+        )
+        for identity, operation, value in edits:
+            self.work.stage(identity, operation, value)
+        raw = next(row for row in self.work.query(domain="advanced", path=["GameState"])["items"]
+                   if row["rawId"] == "KeepUnknown")
+        self.work.stage(raw["id"], "set", "requested raw value")
+        review = self.work.review()
+        self.assertEqual(review["actionCount"], 9)
+        effects = {row["id"] for row in review["changes"]}
+        self.assertIn("linked:giftTotal:GiftPoints", effects)
+        self.assertIn("linked:arcanaCache:MetaUpgradeCardLayout", effects)
+        self.assertEqual(target.read_bytes(), previous_target)
+        result = self.work.apply()
+        saved = Hades2SaveDocument.load(target).lua_state
+        state = saved["GameState"]
+        self.assertEqual(self.path.read_bytes(), later_source)
+        self.assertEqual(state["KeepUnknown"], "requested raw value")
+        self.assertEqual(state["QuestStatus"]["QuestHelpDora"], "CashedOut")
+        self.assertEqual(state["Resources"]["GiftPoints"], 23)
+        self.assertEqual(state["GiftRecord"]["Hecate"]["GiftPoints"], 10)
+        self.assertEqual(state["GiftResourceRecord"]["GiftPoints"], 14)
+        self.assertEqual(state["FishingFails"], 12)
+        self.assertEqual(state["MetaUpgradeState"]["ChanneledCast"]["Level"], 2)
+        self.assertTrue(state["MetaUpgradeState"]["ChanneledCast"]["Unlocked"])
+        self.assertEqual(state["EquippedFamiliar"], "FrogFamiliar")
+        self.assertTrue(state["FamiliarsUnlocked"]["FrogFamiliar"])
+        self.assertEqual(state["Resources"]["MetaCurrency"], 200)
+        self.assertTrue(state["Flags"]["FutureFlag"])
+        self.assertIs(state["TextLinesRecord"]["A"], False)
+        self.assertEqual(saved["CurrentRun"]["ResourcesGained"]["GiftPoints"], 7)
+        self.assertEqual(saved["CurrentRun"]["GiftRecord"]["Hecate"]["GiftPoints"], 1)
+        backup = self.service.store.load_verified_snapshot(result["previousSnapshotId"])
+        self.assertEqual((backup["root"] / "files/main/Profile2.sav").read_bytes(), previous_target)
+        self.assertEqual(self.work.review()["actionCount"], 0)
+
 if __name__ == "__main__":
     unittest.main()
