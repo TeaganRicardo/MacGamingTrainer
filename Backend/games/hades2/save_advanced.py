@@ -52,7 +52,7 @@ def validate_scalar(value, value_type):
     else:
         valid = False
     if not valid:
-        raise AdvancedMutationError("Save Editor value does not match its writable Lua type: " + value_type)
+        raise AdvancedMutationError("Save Editor value does not match its writable Lua type: " + str(value_type))
     return value
 
 
@@ -83,16 +83,16 @@ def typed_value(value):
             return {"luaType": kind, "encoding": "base64",
                     "value": base64.b64encode(value.encode("utf-8", errors="surrogateescape")).decode("ascii")}
     if kind == "number" and not math.isfinite(value):
-        # Existing codec bytes remain untouched. The explicit representation is
-        # inspectable JSON, but cannot be submitted as a new finite number.
+        # Explicit encoding keeps JSON finite and gives NaN stable intent
+        # equality. Nonfinite values remain forbidden as table keys.
         return {"luaType": kind, "encoding": "nonfinite", "value": repr(value)}
     if kind == "unsupported":
         raise AdvancedMutationError("Save Editor Lua value cannot be encoded.")
     return {"luaType": kind, "value": value}
 
 
-def value_from_typed(node, depth=0):
-    if not isinstance(node, dict) or depth > _MAX_LUABINS_DEPTH:
+def value_from_typed(node, depth=0, *, max_depth=_MAX_LUABINS_DEPTH):
+    if not isinstance(node, dict) or depth > max_depth:
         raise AdvancedMutationError("Save Editor typed Lua node is invalid or too deeply nested.")
     kind = node.get("luaType")
     if kind == "table":
@@ -103,9 +103,9 @@ def value_from_typed(node, depth=0):
         for entry in entries:
             if not isinstance(entry, dict) or set(entry) != {"key", "value"}:
                 raise AdvancedMutationError("Save Editor typed table entry is invalid.")
-            key = value_from_typed(entry["key"], depth + 1)
+            key = value_from_typed(entry["key"], depth + 1, max_depth=max_depth)
             validate_key(key)
-            decoded.append((key, value_from_typed(entry["value"], depth + 1)))
+            decoded.append((key, value_from_typed(entry["value"], depth + 1, max_depth=max_depth)))
         array = node.get("arraySize", 0)
         hashed = node.get("hashSize", len(decoded) - array if type(array) is int else -1)
         if type(array) is not int or type(hashed) is not int or min(array, hashed) < 0 or array + hashed != len(decoded):
@@ -117,6 +117,11 @@ def value_from_typed(node, depth=0):
             value = base64.b64decode(value, validate=True).decode("utf-8", errors="surrogateescape")
         except (ValueError, TypeError, UnicodeError) as error:
             raise AdvancedMutationError("Save Editor Lua byte string is invalid base64.") from error
+    elif kind == "number" and node.get("encoding") == "nonfinite":
+        choices = {"nan": float("nan"), "inf": float("inf"), "-inf": -float("inf")}
+        if not isinstance(value, str) or value not in choices:
+            raise AdvancedMutationError("Save Editor nonfinite number must be nan, inf or -inf.")
+        return choices[value]
     elif node.get("encoding") is not None:
         raise AdvancedMutationError("Save Editor typed scalar encoding is unsupported.")
     return validate_scalar(value, kind)
@@ -130,7 +135,7 @@ def validate_key(key):
 
 
 def resolve_path(root, path):
-    if not isinstance(path, (list, tuple)) or len(path) > _MAX_LUABINS_DEPTH:
+    if not isinstance(path, (list, tuple)) or len(path) > _MAX_LUABINS_DEPTH + 2:
         raise AdvancedMutationError("Save Editor Lua path is invalid.")
     current = root
     for key in path:
@@ -151,7 +156,7 @@ def parse_id(identifier):
     try:
         text, suffix = identifier[len("advanced:"):].rsplit(":", 1)
         path = json.loads(text)
-        if not isinstance(path, list) or not path or len(path) > _MAX_LUABINS_DEPTH:
+        if not isinstance(path, list) or not path or len(path) > _MAX_LUABINS_DEPTH + 2:
             raise AdvancedMutationError()
         for key in path:
             validate_key(key)
@@ -180,7 +185,7 @@ def descriptor(root, identifier, *, include_value=True):
             raise AdvancedMutationError("Save Editor Advanced field identity is stale.")
         present, value = True, matches[0][1]
     kind = value_type(value)
-    if present and kind != "table":
+    if present and kind != "table" and not (kind == "number" and not math.isfinite(value)):
         validate_scalar(value, kind)
     result = {"id": identifier, "domain": "advanced", "rawId": display_key(path[-1]),
             "path": path, "beforePresent": present, "valueType": kind,
@@ -254,16 +259,20 @@ def row(root, identifier, language):
         result["value"] = None if encoded.get("encoding") else value
         if encoded.get("encoding") == "base64":
             result["valueType"] = "binary"
+        elif encoded.get("encoding") == "nonfinite":
+            result["typedValue"] = encoded
     return result
 
 
-def normalize_set(info, value):
+def normalize_set(info, value, *, container=False):
     if isinstance(value, dict) and "luaType" in value:
-        decoded = value_from_typed(value)
+        decoded = value_from_typed(value, max_depth=_MAX_LUABINS_DEPTH + (2 if container else 0))
     else:
         decoded = validate_scalar(value, info["valueType"])
-    # Use the owning encoder, including its supported depth and byte types.
-    _encode_luabins([decoded])
+    # Synthetic container views add up to two transport layers. Their actual
+    # unwrapped document passes the same codec before Stage is acknowledged.
+    if not container:
+        _encode_luabins([decoded])
     return json_value(decoded), typed_value(decoded)
 
 
@@ -325,18 +334,6 @@ def changed_paths(before, after, path=()):
     else:
         same = type(before) is type(after) and before == after
     return [] if same else [path]
-
-
-def validate_overlaps(source, intents, semantic_candidate):
-    raw = [intent for intent in intents if intent["domain"] == "advanced"]
-    for index, intent in enumerate(raw):
-        if any(paths_overlap(intent["path"], other["path"]) for other in raw[index + 1:]):
-            raise AdvancedMutationError("Save Editor Advanced actions overlap; revise or remove the existing action first.", conflict=True)
-    if not raw:
-        return
-    physical = changed_paths(source, semantic_candidate)
-    if any(paths_overlap(intent["path"], path) for intent in raw for path in physical):
-        raise AdvancedMutationError("Save Editor Advanced and semantic actions affect the same Lua path; revise or remove one action.", conflict=True)
 
 
 def warning(language):

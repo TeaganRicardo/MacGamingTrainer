@@ -66,9 +66,11 @@ def document(amount, marker):
         notable_lua_data=("GameState", "CurrentRun"),
         map_name="Hub_Main", next_map_name="F_Opening01",
     )
-    return Hades2SaveDocument(header, [table({
-        "GameState": state, "CurrentRun": table({"RunResult": 2.0, "GameplayTime": 999.0}),
-    })]).to_bytes()
+    values = [table({"GameState": state, "CurrentRun": table({"RunResult": 2.0, "GameplayTime": 999.0})})]
+    if os.environ.get("MGT_SAVE_CONTAINER_FIXTURE") == "1":
+        header.timestamp = 18446744073709551615
+        values.extend([12.5, table({"Child": "original"}), None])
+    return Hades2SaveDocument(header, values).to_bytes()
 
 
 class SaveOnlyAdapter(Hades2Adapter):

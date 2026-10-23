@@ -40,6 +40,9 @@ struct Hades2SaveTypedValue: Hashable {
             guard let number = node["value"] as? NSNumber else { return false }
             return CFGetTypeID(number) == CFBooleanGetTypeID()
         case "number":
+            if let encoding = node["encoding"] as? String {
+                return encoding == "nonfinite" && ["nan", "inf", "-inf"].contains(node["value"] as? String ?? "")
+            }
             guard let number = node["value"] as? NSNumber,
                   CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
             return number.doubleValue.isFinite

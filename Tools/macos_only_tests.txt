@@ -28,3 +28,4 @@ test_invincibility_shortcut_migration.py
 test_hades2_repeated_actions_frontend.py
 test_host_target_ownership.py
 test_core_save_retention_controls.py
+test_hades2_save_container_frontend.py

@@ -215,8 +215,8 @@ class AdvancedSaveMutationTests(unittest.TestCase):
         raw[byte_key] = table({"Child": "old"})
         raw["BadNumber"] = float("inf")
         bad = self.row("BadNumber")
-        self.assertFalse(bad["editable"])
-        self.assertTrue(bad["readOnlyReason"])
+        self.assertTrue(bad["editable"])
+        self.assertEqual(bad["typedValue"], {"luaType": "number", "encoding": "nonfinite", "value": "inf"})
         byte_row = self.row(save_advanced.display_key(byte_key))
         child = self.rows(byte_row["path"])[0]
         self.workspace.stage(child["id"], "set", "new")

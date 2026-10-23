@@ -523,7 +523,7 @@ struct Hades2SaveEditorView: View {
     @ViewBuilder
     private func advancedEntry(_ entry: Hades2SaveEditorEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.rawID)
+            Text(entry.displayName)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
             if let count = entry.childCount {

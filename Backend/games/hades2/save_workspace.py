@@ -11,7 +11,7 @@ import math
 import uuid
 from types import SimpleNamespace
 
-from . import save_advanced, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
+from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
@@ -471,6 +471,8 @@ class Hades2SaveWorkspace:
         ]
 
     def _advanced_rows(self, path, language="en"):
+        if save_container.namespace(path) is not None:
+            return save_container.rows(self.document, path, language)
         path = save_advanced.decode_path(path)
         target = save_advanced.resolve_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
@@ -488,6 +490,8 @@ class Hades2SaveWorkspace:
             else:
                 rows.append(save_advanced.row(self.document.lua_state,
                     save_advanced.entry_id([*path, key], physical_index), language))
+        if not path:
+            rows.extend(save_container.root_rows(self.document, language))
         return rows
 
     @staticmethod
@@ -842,6 +846,17 @@ class Hades2SaveWorkspace:
         return save_narrative.reset_decisions(self.document.lua_state)
 
     def investigate(self, entry_id, language="zh-CN"):
+        if save_container.is_id(entry_id) and language in ("en", "zh-CN"):
+            row = save_container.row(self.document, entry_id, language)
+            projection = self._validated_review_state(tuple(self._pending.values()), language) if self._pending else self.document
+            try:
+                value = save_container.effective(projection, entry_id)
+                present = True
+            except KeyError:
+                value, present = None, False
+            return {**row, "entryId": entry_id, "typedValue": save_advanced.typed_value(value),
+                    "effectivePresent": present,
+                    "sourcePresent": save_container.descriptor(self.document, entry_id)["beforePresent"]}
         if isinstance(entry_id, str) and entry_id.startswith("advanced:") and language in ("en", "zh-CN"):
             row = save_advanced.row(self.document.lua_state, entry_id, language)
             result = {**row, "entryId": entry_id}
@@ -1155,6 +1170,8 @@ class Hades2SaveWorkspace:
         if not isinstance(entry_id, str) or not entry_id:
             raise ValueError("Save Editor entry identity is invalid.")
         prefix, separator, identifier = entry_id.partition(":")
+        if save_container.is_id(entry_id):
+            return save_container.descriptor(self.document, entry_id)
         if prefix == "advanced":
             try:
                 return save_advanced.descriptor(self.document.lua_state, entry_id)
@@ -1194,6 +1211,8 @@ class Hades2SaveWorkspace:
         descriptor = self._descriptor(entry_id)
         root = self.document.lua_state
         prefix = entry_id.partition(":")[0]
+        if save_container.is_id(entry_id):
+            return descriptor, save_container.row(self.document, entry_id, language)
         if prefix == "advanced":
             row = save_advanced.row(root, entry_id, language)
             return descriptor, row
@@ -1297,6 +1316,7 @@ class Hades2SaveWorkspace:
         rows.extend(save_quest_rewards.linked_changes(self.document.lua_state, intents))
         rows.extend(save_long_term.linked_changes(self.document.lua_state, intents))
         rows.extend(save_equipment.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_container.linked_changes(self.document, intents))
         unique = {}
         order = []
         for row in rows:
@@ -1320,6 +1340,10 @@ class Hades2SaveWorkspace:
         result = dict(effect)
         identity = effect["id"]
         root = self.document.lua_state
+
+        if identity == "linked:save-container:cosmetics_points":
+            result["name"] = "装饰点数 · 格式字段" if language == "zh-CN" else "Cosmetics points · format field"
+            return result
 
         if identity.startswith("linked:arcanaCache:"):
             result["name"] = save_long_term.linked_cache_label(effect["rawId"], language, game_path=self._game_path)
@@ -1438,14 +1462,16 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
         if descriptor["domain"] == "advanced":
             if operation in ("addMembership", "removeMembership"):
-                descriptor, operation, value = save_advanced.member_descriptor(
-                    self.document.lua_state, descriptor, operation, value)
+                descriptor, operation, value = (save_container.member_descriptor(
+                    self.document, descriptor, operation, value) if save_container.is_id(entry_id) else
+                    save_advanced.member_descriptor(self.document.lua_state, descriptor, operation, value))
                 entry_id = descriptor["id"]
             if operation == "unset":
                 after, typed_after = None, {"luaType": "nil", "value": None}
                 no_change = not descriptor["beforePresent"]
             else:
-                after, typed_after = save_advanced.normalize_set(descriptor, value)
+                after, typed_after = (save_container.normalize_set(descriptor, value)
+                    if save_container.is_id(entry_id) else save_advanced.normalize_set(descriptor, value))
                 no_change = descriptor["beforePresent"] and descriptor["typedBefore"] == typed_after
             snapshot = dict(self._pending)
             if no_change and not self._overlaps_pending_transaction(descriptor):
@@ -1552,11 +1578,11 @@ class Hades2SaveWorkspace:
         intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
         semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
         if any(intent["domain"] == "advanced" for intent in intents):
-            semantic_candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
+            semantic_candidate = Hades2SaveDocument.from_bytes(self.document.to_bytes())
             self._apply_intent_batch(semantic_candidate, semantic)
             save_long_term.finalize_batch(
                 semantic_candidate.lua_state, semantic, source=self.document.lua_state)
-            save_advanced.validate_overlaps(self.document.lua_state, intents, semantic_candidate.lua_state)
+            save_container.validate_overlaps(self.document.lua_state, intents, semantic_candidate.lua_state)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never
@@ -1577,6 +1603,7 @@ class Hades2SaveWorkspace:
         save_relationships.validate_transaction_owners(self.document.lua_state, intents,
             lambda root, others: self._apply_intent_batch(SimpleNamespace(lua_state=root), others))
         try:
+            save_container.finalize_batch(candidate, intents)
             if semantic:
                 save_long_term.finalize_batch(
                     candidate.lua_state, semantic, source=self.document.lua_state)
@@ -1597,7 +1624,7 @@ class Hades2SaveWorkspace:
     def _validated_review_state(self, intents, language="en"):
         intents = tuple(intents)
         raw = any(intent["domain"] == "advanced" for intent in intents)
-        candidate = (copy.deepcopy(self.document) if raw else
+        candidate = (Hades2SaveDocument.from_bytes(self.document.to_bytes()) if raw else
                      SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state)))
         result = self._apply_and_validate_intents(candidate, intents, language)
         if raw:
@@ -1639,7 +1666,7 @@ class Hades2SaveWorkspace:
             self._validated_review_state(intents, language)
 
         try:
-            effects = self._linked_change_rows(tuple(intent for intent in intents if intent["domain"] != "advanced")) if any(intent["domain"] != "advanced" for intent in intents) else []
+            effects = self._linked_change_rows(intents) if intents else []
         except ValueError as error:
             presented = self._actionable_batch_error(error, intents, language)
             if presented is error:
@@ -1708,6 +1735,9 @@ class Hades2SaveWorkspace:
     def _apply_intent(document, intent):
         if intent["domain"] == "questRewards":
             save_quest_rewards.apply_batch(document.lua_state, (intent,))
+            return
+        if save_container.is_id(intent["id"]):
+            save_container.apply_intent(document, intent)
             return
         if intent["domain"] == "advanced":
             save_advanced.apply_intent(document.lua_state, intent)

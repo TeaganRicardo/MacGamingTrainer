@@ -27,10 +27,17 @@ enum Hades2SaveEditorPathComponent: Hashable {
     case number(Double)
     case boolean(Bool)
     case typed(Hades2SaveTypedValue)
+    case saveContainer(String)
 
     init?(_ value: Any) {
         if let text = value as? String {
             self = .string(text)
+            return
+        }
+        if let object = value as? [String: Any], object["saveContainer"] != nil {
+            guard object.count == 1, let name = object["saveContainer"] as? String,
+                  ["header", "payload", "main"].contains(name) else { return nil }
+            self = .saveContainer(name)
             return
         }
         if let object = value as? [String: Any],
@@ -62,6 +69,7 @@ enum Hades2SaveEditorPathComponent: Hashable {
         case .number(let value): return value
         case .boolean(let value): return value
         case .typed(let value): return value.object
+        case .saveContainer(let name): return ["saveContainer": name]
         }
     }
 }

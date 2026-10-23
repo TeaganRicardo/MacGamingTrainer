@@ -12,7 +12,7 @@ import copy
 import math
 import subprocess
 
-from . import preparation, save_advanced
+from . import preparation, save_advanced, save_container
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
@@ -379,9 +379,14 @@ def _save_editor_query(raw):
         raise ValueError("Save Editor query offset is invalid.")
     if type(limit) is not int or not 1 <= limit <= 200:
         raise ValueError("Save Editor query limit must be 1..200.")
-    if not isinstance(path, list) or len(path) > save_advanced._MAX_LUABINS_DEPTH:
+    if not isinstance(path, list) or len(path) > save_advanced._MAX_LUABINS_DEPTH + 2:
         raise ValueError("Save Editor query path is invalid.")
-    save_advanced.decode_path(path)
+    if save_container.namespace(path) is not None:
+        if domain != "advanced":
+            raise save_advanced.AdvancedMutationError("Save Editor container paths require Advanced.")
+        save_advanced.decode_path(path[1:])
+    else:
+        save_advanced.decode_path(path)
     if language not in ("zh-CN", "en"):
         raise ValueError("Save Editor query language is invalid.")
     result = {
@@ -405,7 +410,7 @@ def _save_editor_detail(raw):
     params = _params(raw)
     entry_id = params.get("entryId")
     language = params.get("language", "zh-CN")
-    if (not isinstance(entry_id, str) or not entry_id.startswith(("investigate:", "advanced:"))
+    if (not isinstance(entry_id, str) or not entry_id.startswith(("investigate:", "advanced:", "save-container:"))
             or len(entry_id) <= 9 or language not in ("en", "zh-CN")):
         raise ValueError("Save Editor investigation identity is invalid.")
     return {"entryId": entry_id, "language": language}
@@ -424,7 +429,7 @@ def _save_editor_stage(raw):
     entry_id = params.get("entryId")
     operation = params.get("operation")
     language = params.get("language", "zh-CN")
-    if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith("advanced:")):
+    if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith(("advanced:", "save-container:"))):
         raise ValueError("Save Editor mutation entry is invalid.")
     if operation not in SAVE_EDITOR_MUTATION_KINDS:
         raise ValueError("Save Editor mutation operation is invalid.")
@@ -440,7 +445,7 @@ def _save_editor_unstage(raw):
     params = _params(raw)
     entry_id = params.get("entryId")
     language = params.get("language", "zh-CN")
-    if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith("advanced:")):
+    if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith(("advanced:", "save-container:"))):
         raise ValueError("Save Editor staged action identity is invalid.")
     if language not in ("en", "zh-CN"):
         raise ValueError("Save Editor language is unsupported.")
