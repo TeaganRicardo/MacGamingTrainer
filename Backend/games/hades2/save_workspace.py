@@ -1428,7 +1428,11 @@ class Hades2SaveWorkspace:
                     value = float(value)
         before = descriptor["before"]
         snapshot = dict(self._pending)
-        if value == before and descriptor.get("beforePresent", True):
+        no_change = (save_narrative.is_noop(self.document.lua_state, descriptor, value)
+                     if descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory")
+                     and entry_id.startswith(("flag:", "dialogue:", "dialogueReset:", "dialogueChoice:", "quest:", "questObservation:", "speech:"))
+                     else value == before)
+        if no_change and descriptor.get("beforePresent", True):
             self._pending.pop(entry_id, None)
         else:
             self._pending[entry_id] = {

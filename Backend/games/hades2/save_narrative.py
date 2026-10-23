@@ -408,18 +408,29 @@ def apply_intent(root, intent):
         for _owner_name, record, _expected_type in owners:
             record.pop(name, None)
         return
-    owner = _owner(root, intent['path'][:-1], create=True)
     after = intent['after']
     if intent['id'].startswith('quest:'):
-        completion = _owner(root, ['GameState', 'QuestsCompleted'], create=True)
+        completion = _owner(root, ['GameState', 'QuestsCompleted'], create=after in ('Complete', 'CashedOut'))
         if after in ('Complete', 'CashedOut'):
             completion[name] = True
-        else:
+        elif completion is not None:
             completion.pop(name, None)
         if after == 'Unrecorded':
-            owner.pop(name, None)
+            owner = _owner(root, intent['path'][:-1])
+            if owner is not None:
+                owner.pop(name, None)
             return
+    owner = _owner(root, intent['path'][:-1], create=True)
     owner[intent['path'][-1]] = after
+
+
+def is_noop(root, descriptor_value, after):
+    if not descriptor_value['id'].startswith('quest:'):
+        return after == descriptor_value['before']
+    expected = None if after == 'Unrecorded' else after
+    completion = _read(root, ['GameState', 'QuestsCompleted', descriptor_value['rawId']])
+    expected_completion = True if after in ('Complete', 'CashedOut') else None
+    return descriptor_value['before'] == expected and completion == expected_completion
 
 
 def linked_changes(root, intents):

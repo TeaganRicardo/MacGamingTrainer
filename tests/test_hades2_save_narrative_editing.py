@@ -54,6 +54,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-narrative-editing-') as temporary:
     service = CoreSaveService('hades2', spec, base / 'data', lambda: False,
         provider_loader=lambda _: Hades2SaveProvider())
     work = Hades2SaveWorkspace.open(service)
+    work.stage('quest:QuestCatchFish', 'setEnum', 'Unrecorded')
+    assert work.review()['actionCount'] == 0, 'absent→unrecorded created a no-op basket that Apply cannot write'
     work.stage('resource:GiftPoints', 'set', 1_000_000)
     assert work.review()['actions'][0]['after'] == 1_000_000
     work.unstage('resource:GiftPoints')
@@ -135,4 +137,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-narrative-editing-') as temporary:
     final = Hades2SaveDocument.load(path).lua_state['GameState']
     assert final['TextLinesRecord'].get('HecatePostTrueEnding01') is None
     assert final['TextLinesRecord']['UnverifiedScene'] is True
+    repair_document = Hades2SaveDocument.load(path)
+    repair_document.lua_state['GameState']['QuestsCompleted'].pop('QuestCatchFish')
+    path.write_bytes(repair_document.to_bytes())
+    repair = Hades2SaveWorkspace.open(service)
+    repair.stage('quest:QuestCatchFish', 'setEnum', 'Complete')
+    assert repair.review()['actionCount'] == 1, 'same status suppressed a necessary completion repair'
+    repair.apply()
+    assert Hades2SaveDocument.load(path).lua_state['GameState']['QuestsCompleted']['QuestCatchFish'] is True
 print('hades2_save_narrative_editing_ok')
