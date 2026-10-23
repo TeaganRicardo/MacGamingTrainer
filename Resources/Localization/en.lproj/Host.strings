@@ -148,3 +148,9 @@
 "host.feedback.collapse" = "Hide Notice";
 "host.feedback.currentIssues" = "Current Issues";
 "host.feedback.closeDetails" = "Close";
+
+"host.startup.alreadyRunning" = "Another Trainer instance is already running";
+"host.startup.useExisting" = "Use the existing Trainer window. If you cannot find it, quit the other Trainer instance and open this app again. You do not need to restart the game.";
+"host.startup.ownershipUnavailable" = "Unable to establish Trainer ownership";
+"host.startup.ownershipRecovery" = "Quit the Trainer, resolve the file access error below, then open the app again.";
+"host.startup.quit" = "Quit";

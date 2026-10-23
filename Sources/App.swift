@@ -69,6 +69,10 @@ private struct WindowCloseBridge: NSViewRepresentable {
     @StateObject private var localization = TrainerLocalizationStore()
 
     init() {
+        TrainerApplicationStartup.requireOwnership(
+            targetProcessName: ActiveGameModule.descriptor.targetProcessName,
+            targetBundleIdentifier: ActiveGameModule.descriptor.targetBundleIdentifier
+        )
         let backendSession = TrainerBackendSession()
         self.backendSession = backendSession
         _model = StateObject(wrappedValue: ActiveGameModule.makeModel(session: backendSession))

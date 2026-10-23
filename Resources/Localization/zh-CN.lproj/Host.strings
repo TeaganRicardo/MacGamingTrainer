@@ -148,3 +148,9 @@
 "host.feedback.collapse" = "收起提示";
 "host.feedback.currentIssues" = "当前问题";
 "host.feedback.closeDetails" = "关闭";
+
+"host.startup.alreadyRunning" = "另一个修改器实例已在运行";
+"host.startup.useExisting" = "请使用已打开的修改器窗口。如果找不到窗口，请退出另一个修改器实例后重新打开。无需重启游戏。";
+"host.startup.ownershipUnavailable" = "无法确认修改器运行所有权";
+"host.startup.ownershipRecovery" = "请退出修改器并检查下方文件访问错误，然后重新打开。";
+"host.startup.quit" = "退出";
