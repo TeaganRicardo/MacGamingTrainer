@@ -161,7 +161,9 @@ ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py", "save_history.py
 # These functions return explicitly bilingual row data, not raised errors.
 # Keep the exemption at the function boundary: workspace/Advanced mutations
 # still pass through the ordinary literal scan, and every actual raise below
-# is inspected even inside one of these presentation functions.
+# is inspected even inside one of these presentation functions. Adding a raise
+# removes the whole function's exemption, including error literals assigned to
+# variables before being raised.
 BILINGUAL_DATA_FUNCTIONS = {
     "save_advanced.py": frozenset(("row", "warning")),
     "save_workspace.py": frozenset(("_discovery_reason",)),
@@ -305,6 +307,7 @@ for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
             for node in ast.walk(ast.parse(body))
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             and node.name in BILINGUAL_DATA_FUNCTIONS.get(path.name, ())
+            and not any(isinstance(child, ast.Raise) for child in ast.walk(node))
         ]
         assigned = [
             literal.group(1)

@@ -38,6 +38,7 @@ class AdvancedSaveMutationTests(unittest.TestCase):
                           "Unknown": table({"Keep": "unchanged"})})
         state = table({"Resources": table({"MetaCurrency": 10.0}),
                        "MetaUpgradeState": table({"LowManaDamageBonus": table({"Unlocked": True, "Equipped": True, "Level": 2.0})}),
+                       "MetaUpgradeCostCache": 2.0,
                        "Raw": self.raw})
         header = Hades2SaveHeader(0x12, 0, 123, "Crossroads", 1, 2, 3, 4, 5, 0, 0,
                                  ("GameState", "CurrentRun"), "Hub_Main", "F_Opening01")
@@ -73,6 +74,23 @@ class AdvancedSaveMutationTests(unittest.TestCase):
         self.assertEqual(raw["Unknown"]["Keep"], "unchanged")
         self.assertEqual(raw["Bytes"].encode("utf8", "surrogateescape"), b"\xff\x00raw")
         self.assertEqual(reopened.header.timestamp, 123)
+
+    def test_derived_arcana_effects_conflict_with_raw_edits_in_both_staging_orders(self):
+        cache = self.row("MetaUpgradeCostCache", path=("GameState",))
+        card_id = "card:LowManaDamageBonus:Equipped"
+        self.workspace.stage(cache["id"], "set", 10)
+        with self.assertRaises(save_advanced.AdvancedMutationError):
+            self.workspace.stage(card_id, "set", False)
+        self.assertEqual([action["entryId"] for action in self.workspace.review()["actions"]], [cache["id"]])
+        self.workspace.unstage(cache["id"])
+        self.workspace.stage(card_id, "set", False)
+        with self.assertRaises(save_advanced.AdvancedMutationError):
+            self.workspace.stage(cache["id"], "set", 10)
+        self.assertEqual([action["entryId"] for action in self.workspace.review()["actions"]], [card_id])
+        self.workspace.apply()
+        saved = Hades2SaveDocument.load(self.path).lua_state["GameState"]
+        self.assertEqual(saved["MetaUpgradeCostCache"], 0)
+        self.assertIsNone(saved["MetaUpgradeState"]["LowManaDamageBonus"].get("Equipped"))
 
     def test_members_have_independent_revisable_actions_and_real_key_types(self):
         members = self.row("Members")
