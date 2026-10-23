@@ -1,9 +1,11 @@
 """Explicit offline rewards survive the complete temporary Save transaction."""
 import hashlib
 import unittest
+from unittest.mock import patch
 from test_hades2_save_relationship_transactions import SaveTransactionFixture, table
 from games.hades2.save_document import Hades2SaveDocument
 from games.hades2.save_investigation import NativeDialogueInvestigation
+from games.hades2.save_native_ids import QUEST_IDS
 
 
 class QuestRewardTests(SaveTransactionFixture):
@@ -253,6 +255,21 @@ class QuestRewardTests(SaveTransactionFixture):
                     else:
                         self.assertEqual(saved.lua_state["GameState"]["GiftRecord"]["Hecate"]["GiftPoints"], 10)
                         self.assertEqual(saved.lua_state["GameState"]["GiftResourceRecord"]["GiftPoints"], 14)
+
+    def test_one_browse_uses_one_source_capture_for_all_reward_rows(self):
+        (self.scripts / "QuestData.lua").write_text("QuestData = {\n" + "\n".join(
+            name + ' = { RewardResourceName = "GiftPoints", RewardResourceAmount = 3 },'
+            for name in sorted(QUEST_IDS)) + "\n}")
+        source = self.work._investigation
+        with patch.object(source, "_refresh", wraps=source._refresh) as refresh:
+            rows = self.work.query(domain="quests", search="Quest", language="en")["items"]
+        self.assertEqual(sum(row["id"].startswith("questClaim:") for row in rows), len(QUEST_IDS))
+        self.assertEqual(refresh.call_count, 1, "each reward row rescans the same native tree")
+        self.work.stage("questClaim:QuestHelpDora", "set", True)
+        path = self.scripts / "QuestData.lua"
+        path.write_text(path.read_text().replace("Amount = 3", "Amount = 9"))
+        with self.assertRaisesRegex(ValueError, "source has changed"):
+            self.work.apply()
 
 if __name__ == "__main__":
     unittest.main()

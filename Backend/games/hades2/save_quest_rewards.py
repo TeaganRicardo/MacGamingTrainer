@@ -72,9 +72,10 @@ def _gift_callback(root):
         raise save_advanced.AdvancedMutationError("This reward invokes a saved positive GiftPointHealthMultiplier and processed native health-trait setup; use direct resource/status editing until that specific callback owner is supported.")
 
 
-def _reward(root, name, investigation):
-    investigation._refresh()
-    native = investigation.native
+def _reward(root, name, investigation, *, native=None):
+    if native is None:
+        investigation._refresh()
+        native = investigation.native
     expected = getattr(investigation, "reward_owner_hashes", QUEST_REWARD_OWNER_SHA256)
     if any(native.get("scriptHashes", {}).get(key) != digest for key, digest in expected.items()):
         raise save_advanced.AdvancedMutationError("Save Editor quest reward mutation owners do not match their verified source capture.")
@@ -103,7 +104,7 @@ def _reward(root, name, investigation):
             "mutationIdentity": policy_identity}
 
 
-def descriptor(root, entry_id, investigation):
+def descriptor(root, entry_id, investigation, *, native=None):
     if not isinstance(entry_id, str) or not entry_id.startswith("questClaim:"):
         return None
     name = entry_id[len("questClaim:"):]
@@ -112,7 +113,7 @@ def descriptor(root, entry_id, investigation):
     status = read(root, ["GameState", "QuestStatus", name])
     if status is not None and type(status) is not str:
         raise save_advanced.AdvancedMutationError("Save Editor quest reward status has an incompatible type.")
-    evidence = _reward(root, name, investigation)
+    evidence = _reward(root, name, investigation, native=native)
     for path in _counter_paths(evidence["resource"]):
         integer(read(root, path, 0))
     completion = read(root, ["GameState", "QuestsCompleted", name])
@@ -126,6 +127,10 @@ def descriptor(root, entry_id, investigation):
 
 def rows(root, language, investigation, game_path=None, *, include_absent=False):
     zh = language == "zh-CN"
+    # One browse is one captured source observation. Independent descriptors
+    # used by Stage/review/Apply still refresh before granting authority.
+    investigation._refresh()
+    native = investigation.native
     try:
         statuses = owner(root, ["GameState", "QuestStatus"])
     except ValueError:
@@ -133,8 +138,7 @@ def rows(root, language, investigation, game_path=None, *, include_absent=False)
     names = ({name for name, _ in statuses.entries() if type(name) is str and name in QUEST_IDS}
              if statuses is not None else set())
     if include_absent:
-        investigation._refresh()
-        names.update(set(investigation.native.get("quests", {})) & QUEST_IDS)
+        names.update(set(native.get("quests", {})) & QUEST_IDS)
     localized = official_display_names(names, language, game_path=game_path)
     english = localized if not zh else official_display_names(names, "en", game_path=game_path)
     result = []
@@ -146,7 +150,7 @@ def rows(root, language, investigation, game_path=None, *, include_absent=False)
                "englishName": "Grant reward and mark claimed", "valueType": "boolean", "choices": [False, True],
                "group": "命运清单奖励" if zh else "Fated List rewards"}
         try:
-            info = descriptor(root, row["id"], investigation)
+            info = descriptor(root, row["id"], investigation, native=native)
         except (ValueError, KeyError) as error:
             row.update(value=None, editable=False, mutationKinds=[], reasonDiagnostic=str(error),
                        reason=(("此离线发放动作无法完整确定：{}；普通任务与资源字段仍可直接编辑。" if zh else
