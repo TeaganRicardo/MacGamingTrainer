@@ -26,10 +26,16 @@ enum Hades2SaveEditorPathComponent: Hashable {
     case integer(Int)
     case number(Double)
     case boolean(Bool)
+    case typed(Hades2SaveTypedValue)
 
     init?(_ value: Any) {
         if let text = value as? String {
             self = .string(text)
+            return
+        }
+        if let object = value as? [String: Any],
+           let typed = Hades2SaveTypedValue(object), typed.kind == "string" {
+            self = .typed(typed)
             return
         }
         guard let number = value as? NSNumber else { return nil }
@@ -55,6 +61,7 @@ enum Hades2SaveEditorPathComponent: Hashable {
         case .integer(let value): return value
         case .number(let value): return value
         case .boolean(let value): return value
+        case .typed(let value): return value.object
         }
     }
 }
@@ -104,6 +111,10 @@ struct Hades2SaveEditorAction: Identifiable, Equatable {
     let choices: [String]
     let choiceNames: [String: String]
     let effects: [Hades2SaveEditorChange]
+    var typedBefore: Hades2SaveTypedValue? = nil
+    var typedAfter: Hades2SaveTypedValue? = nil
+    var beforePresent = true
+    var afterPresent = true
 
     var id: String { entryID }
 
@@ -133,7 +144,8 @@ struct Hades2SaveEditorAction: Identifiable, Equatable {
             investigationReason: nil,
             discoveryState: nil,
             discoveryReasonCode: nil,
-            discoveryReason: nil
+            discoveryReason: nil,
+            typedValue: typedAfter ?? typedBefore
         )
     }
 }
@@ -173,6 +185,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let discoveryState: String?
     let discoveryReasonCode: String?
     let discoveryReason: String?
+    var typedValue: Hades2SaveTypedValue? = nil
+    var warning: String? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -200,6 +214,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.discoveryState == rhs.discoveryState
             && lhs.discoveryReasonCode == rhs.discoveryReasonCode
             && lhs.discoveryReason == rhs.discoveryReason
+            && lhs.typedValue == rhs.typedValue
+            && lhs.warning == rhs.warning
     }
 }
 
@@ -406,6 +422,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var operationFailures: [Hades2Command: TrainerTextToken] = [:]
     @Published private(set) var editFailures: [String: TrainerTextToken] = [:]
+    @Published private(set) var typedDrafts: [String: String] = [:]
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingActions.count }
@@ -485,6 +502,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.pendingActions = []
             self.operationFailures = [:]
             self.editFailures = [:]
+            self.typedDrafts = [:]
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
             self.items = []
@@ -508,6 +526,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         workspaceID = nil
         operationFailures = [:]
         editFailures = [:]
+        typedDrafts = [:]
     }
 
     private func releaseWorkspace(_ identifier: String) {
@@ -841,6 +860,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func parsedTextDraft(for entry: Hades2SaveEditorEntry, text: String) -> Any? {
+        if entry.valueType == "string" { return text }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if entry.valueType == "enum" { return entry.choices.contains(trimmed) ? trimmed : nil }
         guard !trimmed.isEmpty else { return nil }
@@ -881,7 +901,49 @@ final class Hades2SaveEditorModel: ObservableObject {
         return String(describing: value)
     }
 
+    func loadAdvancedValue(
+        _ entry: Hades2SaveEditorEntry,
+        language requestedLanguage: TrainerPresentationLanguage,
+        completion: @escaping (Hades2SaveAdvancedDetail?, TrainerTextToken?) -> Void
+    ) {
+        guard entry.domain == "advanced", let workspace = workspaceID else { return }
+        perform(.saveEditorDetail(entryID: entry.id, language: requestedLanguage.rawValue),
+                operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
+                occupy: false, presentFailure: false) { [weak self] reply in
+            guard let self, self.workspaceID == workspace else { return }
+            guard reply.success, let result = reply.result,
+                  let detail = Hades2SaveAdvancedDetail(result), detail.entryID == entry.id else {
+                completion(nil, reply.failure.map {
+                    TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
+                } ?? TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse"))
+                return
+            }
+            completion(detail, nil)
+        }
+    }
+
+    func completeTypedEdit(_ entry: Hades2SaveEditorEntry, text: String, changed: Bool = true) -> String {
+        guard changed else { return text }
+        typedDrafts[entry.id] = text
+        guard !busy else {
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
+            return text
+        }
+        guard entry.editable, entry.mutationKinds.contains("set"),
+              let value = Hades2SaveTypedValue(text: text) else {
+            editFailures[entry.id] = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+            return text
+        }
+        stage(entryID: entry.id, operation: "set", value: value.object)
+        return value.json
+    }
+
     private func reconcileEdits(_ entryIDs: Set<String>?) {
+        if let entryIDs {
+            for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID) }
+        } else {
+            typedDrafts = [:]
+        }
         reconciledEntryIDs = entryIDs
         editRevision += 1
     }
@@ -1184,7 +1246,11 @@ final class Hades2SaveEditorModel: ObservableObject {
                 constraints: constraints,
                 choices: row["choices"] as? [String] ?? [],
                 choiceNames: row["choiceNames"] as? [String: String] ?? [:],
-                effects: effects
+                effects: effects,
+                typedBefore: row["typedBefore"].flatMap(Hades2SaveTypedValue.init),
+                typedAfter: row["typedAfter"].flatMap(Hades2SaveTypedValue.init),
+                beforePresent: row["beforePresent"] as? Bool ?? true,
+                afterPresent: row["afterPresent"] as? Bool ?? true
             ))
         }
         guard decodedEffectCount == effectCount else { return false }
@@ -1284,7 +1350,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             investigationReason: row["reason"] as? String,
             discoveryState: row["state"] as? String,
             discoveryReasonCode: (row["reasonCode"] as? String) ?? (row["blockReasonCode"] as? String),
-            discoveryReason: row["reason"] as? String
+            discoveryReason: (row["readOnlyReason"] as? String)
+                ?? (row["blockReasonDiagnostic"] as? String)
+                ?? (row["reason"] as? String),
+            typedValue: row["typedValue"].flatMap(Hades2SaveTypedValue.init),
+            warning: row["warning"] as? String
         )
     }
 

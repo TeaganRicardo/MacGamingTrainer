@@ -41,6 +41,11 @@ def document(amount, marker):
         "FamiliarsUnlocked": table({"HoundFamiliar": True}),
         "EquippedFamiliar": "HoundFamiliar",
         "UnknownFutureField": table({"Marker": marker}),
+        "AdvancedFixture": table({
+            "Number": 4.5, "Boolean": True, "Text": "initial", "Empty": "initial", "Removed": 99.0,
+            "Binary": "\udcff\x00", "Nil": None,
+            "Members": LuaTable(0, 4, [(True, "boolean key"), (1.0, "numeric key"), ("1", "string key"), ("\udcff", "binary key")]),
+        }),
     })
     header = Hades2SaveHeader(
         game_version=0x12, save_flags=0, timestamp=100, location="Crossroads",

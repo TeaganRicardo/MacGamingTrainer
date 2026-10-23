@@ -583,7 +583,24 @@
     "hades2.workbench.search": "Search functions…",
     "hades2.workbench.searchEmpty": "No matching functions.",
     "hades2.saveEditor.investigate.block.questContextReadOnly": "Quest presentation and reward history is read-only; use the supported status action for its linked completion record.",
-    "hades2.saveEditor.investigate.block.questSourceUnresolved": "The native quest definition or an inherited owner is missing, duplicated or cyclic. Original records are preserved; eligibility is unknown."
+    "hades2.saveEditor.investigate.block.questSourceUnresolved": "The native quest definition or an inherited owner is missing, duplicated or cyclic. Original records are preserved; eligibility is unknown.",
+    "hades2.saveEditor.advanced.unknownImpact": "This field’s purpose is unverified. It can be edited; its impact is unknown.",
+    "hades2.saveEditor.advanced.retry": "Read value again",
+    "hades2.saveEditor.advanced.typedHint": "Use tagged JSON with luaType: nil, boolean, number, string or table. Table entries declare typed key and value nodes; binary strings use encoding: base64. Completed valid input joins Changes; Apply writes the save.",
+    "hades2.saveEditor.advanced.typedValue": "Typed value",
+    "hades2.saveEditor.advanced.membership": "Table members",
+    "hades2.saveEditor.advanced.keyType": "Key type",
+    "hades2.saveEditor.advanced.type.string": "Text",
+    "hades2.saveEditor.advanced.type.number": "Number",
+    "hades2.saveEditor.advanced.type.boolean": "Boolean",
+    "hades2.saveEditor.advanced.key": "Field key",
+    "hades2.saveEditor.advanced.memberValue": "Typed value for new member",
+    "hades2.saveEditor.advanced.addMember": "Add member",
+    "hades2.saveEditor.advanced.removeMember": "Remove member with this key",
+    "hades2.saveEditor.advanced.removeField": "Remove this field",
+    "hades2.saveEditor.advanced.removed": "Field removed",
+    "hades2.saveEditor.advanced.restore": "Restore field value",
+    "hades2.saveEditor.advanced.editValue": "Edit type or structure"
   },
   "language": "en"
 }

@@ -583,7 +583,24 @@
     "hades2.workbench.search": "搜索功能…",
     "hades2.workbench.searchEmpty": "未找到匹配的功能。",
     "hades2.saveEditor.investigate.block.questContextReadOnly": "任务展示与奖励历史仅供查看；修改状态请使用已验证的任务状态操作，该操作会同步完成记录。",
-    "hades2.saveEditor.investigate.block.questSourceUnresolved": "原生任务定义或继承来源缺失、重复或存在循环。原记录已保留，无法推断资格。"
+    "hades2.saveEditor.investigate.block.questSourceUnresolved": "原生任务定义或继承来源缺失、重复或存在循环。原记录已保留，无法推断资格。",
+    "hades2.saveEditor.advanced.unknownImpact": "该字段用途未经确认；可以修改，但影响未知。",
+    "hades2.saveEditor.advanced.retry": "重新读取值",
+    "hades2.saveEditor.advanced.typedHint": "使用带 Lua 类型的 JSON。nil、boolean、number、string 或 table 保留原始类型；表的 entries 分别声明 key 和 value，二进制字符串使用 encoding: base64。有效输入在结束编辑时加入“更改”，写入仍需 Apply。",
+    "hades2.saveEditor.advanced.typedValue": "带类型的值",
+    "hades2.saveEditor.advanced.membership": "表成员",
+    "hades2.saveEditor.advanced.keyType": "键类型",
+    "hades2.saveEditor.advanced.type.string": "文本",
+    "hades2.saveEditor.advanced.type.number": "数字",
+    "hades2.saveEditor.advanced.type.boolean": "布尔值",
+    "hades2.saveEditor.advanced.key": "字段键",
+    "hades2.saveEditor.advanced.memberValue": "新成员的带类型值",
+    "hades2.saveEditor.advanced.addMember": "添加成员",
+    "hades2.saveEditor.advanced.removeMember": "移除该键的成员",
+    "hades2.saveEditor.advanced.removeField": "移除此字段",
+    "hades2.saveEditor.advanced.removed": "字段已移除",
+    "hades2.saveEditor.advanced.restore": "恢复字段值",
+    "hades2.saveEditor.advanced.editValue": "编辑类型或结构"
   },
   "language": "zh-CN"
 }

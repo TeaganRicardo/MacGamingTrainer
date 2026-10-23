@@ -24,6 +24,7 @@ struct Hades2SaveEditorView: View {
     @State private var reviewExpanded = false
     @State private var expandedEffects: Set<String> = []
     @State private var confirmingSource = false
+    @State private var advancedEditingEntry: Hades2SaveEditorEntry?
 
     init(model: Hades2SaveEditorModel) {
         _model = StateObject(wrappedValue: model)
@@ -93,6 +94,9 @@ struct Hades2SaveEditorView: View {
         .frame(width: 980)
         .trainerSurface(.canvas)
         .trainerDismissTextEditingOnClickAway()
+        .sheet(item: $advancedEditingEntry) { entry in
+            Hades2SaveAdvancedEditor(model: model, entry: entry)
+        }
         .confirmationDialog(
             text("hades2.saveEditor.source.confirmTitle"),
             isPresented: $confirmingSource
@@ -150,6 +154,7 @@ struct Hades2SaveEditorView: View {
             }
         }
         .onChange(of: model.workspaceID) { _, _ in
+            advancedEditingEntry = nil
             drafts.removeAll()
             expandedEffects.removeAll()
             section = .all
@@ -454,7 +459,20 @@ struct Hades2SaveEditorView: View {
     ) -> some View {
         let workspaceID = model.workspaceID
         let draft = draftBinding(for: entry)
-        if entry.valueType == "boolean" {
+        if entry.domain == "advanced",
+           let removed = model.pendingActions.first(where: { $0.entryID == entry.id }), !removed.afterPresent {
+            Text(text("hades2.saveEditor.advanced.removed")).font(.caption).foregroundStyle(.secondary)
+            if let before = removed.typedBefore, removed.beforePresent {
+                Button(text("hades2.saveEditor.advanced.restore")) {
+                    model.stage(entryID: entry.id, operation: "set", value: before.object)
+                }.disabled(model.busy)
+            }
+        } else if entry.domain == "advanced" &&
+                    (entry.typedValue != nil || ["table", "binary", "nil"].contains(entry.valueType)) {
+            Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
+                .accessibilityIdentifier("saveEditor.editValue." + entry.id)
+                .disabled(model.busy)
+        } else if entry.valueType == "boolean" {
             TrainerToggleControl(
                 title: entry.displayName,
                 isOn: stagedValue(for: entry)?.base as? Bool ?? false,
@@ -469,7 +487,7 @@ struct Hades2SaveEditorView: View {
             Picker(
                 entry.displayName,
                 selection: Binding<String>(
-                    get: { stagedValue(for: entry)?.base as? String ?? "" },
+                    get: { enumToken(stagedValue(for: entry)) },
                     set: { choice in
                         guard !model.busy, model.workspaceID == workspaceID else { return }
                         _ = model.completeTextEdit(entry, text: choice)
@@ -522,9 +540,12 @@ struct Hades2SaveEditorView: View {
                     .disabled(model.busy)
                 }
             } else {
-                Text(valueText(entry.value))
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
+                if entry.editable { editorControl(entry) }
+                else {
+                    Text(valueText(entry.value))
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                }
                 if model.selectedDomain == .discover && !entry.pathAmbiguous {
                     Button(text("hades2.saveEditor.workbench.browse")) {
                         section = .advanced
@@ -534,6 +555,28 @@ struct Hades2SaveEditorView: View {
                     .disabled(model.busy)
                 }
             }
+            if entry.editable {
+                if entry.childCount != nil { editorControl(entry) }
+                else if !["binary", "nil"].contains(entry.valueType) && entry.typedValue == nil {
+                    Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
+                        .accessibilityIdentifier("saveEditor.editValue." + entry.id)
+                        .disabled(model.busy)
+                }
+                if entry.mutationKinds.contains("unset") {
+                    Button(text("hades2.saveEditor.advanced.removeField")) {
+                        model.stage(entryID: entry.id, operation: "unset", value: nil)
+                    }
+                    .accessibilityIdentifier("saveEditor.unset." + entry.id)
+                    .disabled(model.busy)
+                }
+            }
+            if let warning = entry.warning {
+                Text(warning).font(.caption).foregroundStyle(theme.warning)
+            }
+            if !entry.editable, let reason = entry.discoveryReason {
+                Text(reason).font(.caption).foregroundStyle(theme.warning)
+            }
+            editFailure(entry)
             if entry.pathAmbiguous {
                 Text(text("hades2.saveEditor.ambiguousPath"))
                     .font(.caption)
@@ -738,11 +781,15 @@ struct Hades2SaveEditorView: View {
             }
             editFailure(action.editorEntry)
             HStack(spacing: 6) {
-                Text(reviewValue(action.before, for: action))
+                Text(action.domain == "advanced"
+                     ? typedReviewValue(action.typedBefore, present: action.beforePresent)
+                     : reviewValue(action.before, for: action))
                 .foregroundStyle(.secondary)
                 Image(systemName: "arrow.right")
                     .foregroundStyle(.secondary)
-                Text(reviewValue(action.after, for: action))
+                Text(action.domain == "advanced"
+                     ? typedReviewValue(action.typedAfter, present: action.afterPresent)
+                     : reviewValue(action.after, for: action))
                 Spacer()
                 if !action.effects.isEmpty {
                     Button(text("hades2.saveEditor.basket.linkedEffects", arguments: [
@@ -849,10 +896,16 @@ struct Hades2SaveEditorView: View {
     private func reviewValue(
         _ value: AnyHashable?, for action: Hades2SaveEditorAction
     ) -> String {
-        if action.operation == "setEnum", let raw = value?.base as? String {
+        if action.operation == "setEnum", value != nil {
+            let raw = enumToken(value)
             return action.choiceNames[raw] ?? enumTitle(raw)
         }
         return reviewValue(value, operation: action.operation, domain: action.domain)
+    }
+
+    private func typedReviewValue(_ value: Hades2SaveTypedValue?, present: Bool) -> String {
+        guard present else { return text("hades2.saveEditor.advanced.removed") }
+        return value?.json ?? "—"
     }
 
     private func reviewValue(
@@ -893,6 +946,11 @@ struct Hades2SaveEditorView: View {
         case "CashedOut": return text("hades2.saveEditor.quest.cashedOut")
         default: return value
         }
+    }
+
+    private func enumToken(_ value: AnyHashable?) -> String {
+        guard let value else { return "" }
+        return (value.base as? String) ?? String(describing: value.base)
     }
 
 
