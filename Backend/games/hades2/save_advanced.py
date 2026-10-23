@@ -239,6 +239,8 @@ def row(root, identifier, language):
             occurrence = owner.physical_entries()[int(suffix)]
             item = occurrence[2]
             result["valueType"] = value_type(item)
+            if isinstance(item, LuaTable):
+                result["childCount"] = len(item)
             if not isinstance(item, LuaTable) and result["valueType"] != "number":
                 result["value"] = json_value(item)
         return result
