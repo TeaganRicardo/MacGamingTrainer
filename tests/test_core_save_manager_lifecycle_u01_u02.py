@@ -14,12 +14,25 @@ if not SWIFTC or not PYTHON:
 worker = r'''
 import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
+policy={'maxCount':20,'maxBytes':268435456,'policyValid':True,'overBudget':False,'warning':''}
+protected=False
 for raw in sys.stdin:
     req=json.loads(raw)
     command=req.get('command','')
     params=req.get('params',{})
     recovery=pathlib.Path.home()/'Library/Application Support/MacGamingTrainer/test/transactions/.rollback-fixture'
     result={'snapshots': [], 'pendingRestore': None, 'recoveryPaths': [str(recovery)]}
+    if command == 'core.save.set_retention':
+        policy.update(params)
+    if command == 'core.save.protect':
+        assert params['snapshotId'] == 'auto-fixture'
+        protected=params['protected']
+    result['retention']=dict(policy)
+    result['storageUsage']={'snapshotCount':1,'snapshotBytes':4321,'automaticCount':0 if protected else 1,
+                            'automaticBytes':0 if protected else 4321,'protectedCount':1 if protected else 0,
+                            'protectedBytes':4321 if protected else 0,'recoveryCount':1,'recoveryBytes':55}
+    result['snapshots']=[{'id':'auto-fixture','name':'Automatic','origin':'automaticPreEdit','protected':protected,
+                          'retentionEligible':True,'storageBytes':4321,'valid':True}]
     if command == 'core.save.list':
         time.sleep(0.10)
     elif command == 'core.save.backup':
@@ -108,6 +121,26 @@ struct Runner {
         if TrainerSavePathValidator.validatedDirectoryURL(for: recoveryPath)?.path != recoveryPath {
             fail("alternate HOME rejected a valid directory reveal")
         }
+
+        if model.retention?.maxCount != 20 || model.storageUsage?.snapshotBytes != 4321 {
+            fail("Save retention/actual byte usage did not decode")
+        }
+        var policySaved = false
+        model.configureRetention(maxCount: 2, maxBytes: 1048576) { policySaved = $0 }
+        if !waitUntil(2.0, { !model.busy }) || !policySaved || model.retention?.maxCount != 2 || model.retention?.maxBytes != 1048576 {
+            fail("Save policy commit did not refresh acknowledged values")
+        }
+        model.protect(id: "auto-fixture", protected: true)
+        if !waitUntil(2.0, { !model.busy }) || model.snapshots.first?.protected != true || model.storageUsage?.protectedBytes != 4321 {
+            fail("protecting an automatic snapshot did not refresh inventory/usage")
+        }
+        let old = TrainerSaveSnapshot(row: ["id": "old", "name": "Unknown"])
+        if old?.origin != "unclassified" || old?.protected != true || old?.storageBytes != nil {
+            fail("legacy snapshot decode inferred automatic ownership or zero bytes")
+        }
+        var invalidFinished = false
+        model.configureRetention(maxCount: 0, maxBytes: 1) { invalidFinished = !$0 }
+        if !invalidFinished || model.busy { fail("invalid retention input dispatched backend work") }
 
         var trackingDeleteChain = false
         var prematureIdle = false

@@ -162,6 +162,12 @@ class JsonlRequestRouter:
             if not isinstance(name, str):
                 raise ValueError('name 无效。')
             return self._with_state(self.save_service.rename(snapshot_id, name))
+        if command == 'core.save.set_retention':
+            return self._with_state(self.save_service.configure_retention(
+                params.get('maxCount'), params.get('maxBytes')))
+        if command == 'core.save.protect':
+            return self._with_state(self.save_service.protect(
+                self._snapshot_id(params), params.get('protected')))
         if command == 'core.save.delete':
             return self._with_state(self.save_service.delete(self._snapshot_id(params)))
         if command == 'core.save.open_folder':

@@ -17,6 +17,7 @@ struct TrainerSaveManagerView: View {
     @State private var preserveCurrent = true
     @State private var deleteIDs: Set<String> = []
     @State private var confirmDelete = false
+    @State private var showRetention = false
 
     var body: some View {
         TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: "externaldrive.fill", width: 780) {
@@ -25,6 +26,10 @@ struct TrainerSaveManagerView: View {
                 .disabled(model.busy)
             Button { model.refresh() } label: { Label(localization.localized("host.refresh"), systemImage: "arrow.clockwise") }
                 .disabled(model.busy)
+            Button { showRetention = true } label: {
+                Label(localization.localized("host.save.retention.title"), systemImage: "clock.badge.checkmark")
+            }
+            .disabled(model.busy || model.retention == nil)
             TrainerPrimaryActionButton(
                 title: localization.localized("host.save.createBackup"),
                 systemImage: "plus",
@@ -70,6 +75,27 @@ struct TrainerSaveManagerView: View {
                 TrainerMessageBanner(text: localization.presentation(model.error, arguments: model.errorArguments), icon: "exclamationmark.triangle", color: theme.warning)
             } else if !model.notice.isEmpty {
                 TrainerMessageBanner(text: localization.presentation(model.notice, arguments: model.noticeArguments), icon: "checkmark.circle", color: theme.success)
+            }
+
+            if let usage = model.storageUsage {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(localization.localized("host.save.usage.total", arguments: [String(usage.snapshotCount), bytes(usage.snapshotBytes)]))
+                    Text(localization.localized("host.save.usage.automatic", arguments: [String(usage.automaticCount), bytes(usage.automaticBytes), String(usage.protectedCount), bytes(usage.protectedBytes)]))
+                    Text(localization.localized("host.save.usage.recovery", arguments: [String(usage.recoveryCount), bytes(usage.recoveryBytes)]))
+                    if usage.unknownSizes > 0 {
+                        Text(localization.localized("host.save.usage.unknown")).foregroundStyle(theme.warning)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            if let retention = model.retention {
+                if retention.overBudget {
+                    TrainerMessageBanner(text: localization.localized("host.save.retention.overBudget"), icon: "externaldrive.badge.exclamationmark", color: theme.warning)
+                }
+                if !retention.warning.isEmpty {
+                    TrainerMessageBanner(text: localization.localized("host.save.retention.warning." + retention.warning), icon: "exclamationmark.triangle", color: theme.warning)
+                }
             }
 
             TrainerSection(title: localization.localized("host.save.history"), icon: "clock.arrow.circlepath") {
@@ -119,6 +145,10 @@ struct TrainerSaveManagerView: View {
                 }
             )
             .trainerTheme(theme)
+        }
+        .sheet(isPresented: $showRetention) {
+            TrainerSaveRetentionSettings(model: model, onClose: { showRetention = false })
+                .trainerTheme(theme)
         }
         .alert(deleteTitle, isPresented: $confirmDelete) {
             Button(localization.localized("host.cancel"), role: .cancel) { deleteIDs.removeAll() }
@@ -197,9 +227,17 @@ struct TrainerSaveManagerView: View {
                             Text("·")
                         }
                         Text(localization.localized("host.save.fileCount", arguments: [String(snapshot.fileCount)]))
+                        Text("·")
+                        Text(snapshot.storageBytes.map(bytes) ?? localization.localized("host.save.usage.sizeUnknown"))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                    Text(localization.localized("host.save.origin." + snapshot.origin) +
+                         (snapshot.origin == "automaticPreEdit" && (snapshot.protected || !snapshot.retentionEligible)
+                          ? " · " + localization.localized(snapshot.protected ? "host.save.protected" : "host.save.recoveryProtected") : ""))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
                     let localizedDetails = snapshot.displayDetails(for: localization.language.rawValue)
                     if !localizedDetails.isEmpty {
@@ -238,6 +276,13 @@ struct TrainerSaveManagerView: View {
                         }
                         .disabled(!snapshot.valid)
                     }
+                    if snapshot.valid && snapshot.origin == "automaticPreEdit" && snapshot.retentionEligible {
+                        Button {
+                            model.protect(id: snapshot.id, protected: !snapshot.protected)
+                        } label: {
+                            Label(localization.localized(snapshot.protected ? "host.save.allowAutomaticCleanup" : "host.save.keepBackup"), systemImage: snapshot.protected ? "lock.open" : "lock")
+                        }
+                    }
                     Button {
                         beginRename(snapshot)
                     } label: {
@@ -258,6 +303,10 @@ struct TrainerSaveManagerView: View {
                 }
             }
         }
+    }
+
+    private func bytes(_ value: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
     }
 
     private var deleteTitle: String {

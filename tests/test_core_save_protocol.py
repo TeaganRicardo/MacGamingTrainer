@@ -80,6 +80,20 @@ renamed = router.handle({'id':'r1','command':'core.save.rename','params':{'snaps
 assert renamed['ok'] is True and renamed['result']['operation']['name'] == 'Renamed'
 assert adapter.calls == []
 
+policy = router.handle({'id':'policy1','command':'core.save.set_retention','params':{'maxCount':2,'maxBytes':1048576}})
+assert policy['ok'] is True and policy['result']['retention']['maxCount'] == 2
+assert policy['result']['snapshots'][0]['origin'] == 'manual'
+assert policy['result']['storageUsage']['snapshotBytes'] > len(b'one')
+invalid_policy = router.handle({'id':'policy-bad','command':'core.save.set_retention','params':{'maxCount':0,'maxBytes':1}})
+assert invalid_policy['ok'] is False
+
+automatic = router.save_service.store.create_snapshot(router.save_service._resolve, origin='automaticPreEdit')
+router.save_service.store.confirm_pre_edit(automatic['id'])
+protected = router.handle({'id':'protect1','command':'core.save.protect','params':{'snapshotId':automatic['id'],'protected':True}})
+assert protected['ok'] is True
+assert next(row for row in protected['result']['snapshots'] if row['id'] == automatic['id'])['protected'] is True
+assert protected['result']['storageUsage']['protectedCount'] == 1
+
 folder = router.handle({'id':'f1','command':'core.save.open_folder','params':{'snapshotId':snapshot_id}})
 assert folder['ok'] is True and Path(folder['result']['folder']).name == snapshot_id
 assert adapter.calls == []
