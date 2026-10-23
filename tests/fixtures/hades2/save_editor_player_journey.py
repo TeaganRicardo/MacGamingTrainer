@@ -31,7 +31,7 @@ def document(amount, marker):
         "GameplayTime": 100.0, "TotalTime": 200.0, "TotalRequiredEnemyKills": 3.0,
         "NPCInteractions": table({"NPC_Hecate_01": 1.0}),
         "SpecialInteractRecord": table({}), "GiftRecord": table({}),
-        "GiftResourceRecord": table({}), "QuestStatus": table({}),
+        "GiftResourceRecord": table({}), "QuestStatus": table({"QuestHelpDora": "Unlocked"}),
         "ObjectivesCompleted": table({}), "CompletedObjectiveSets": table({}),
         "MetaUpgradeState": table({
             "ChanneledCast": table({"Unlocked": True, "Equipped": True, "Level": 2.0}),

@@ -141,8 +141,8 @@ private func fields(_ view: NSView) -> [NSTextField] {
 
         // Inspect the actual inline enum and exercise native completed choice
         // dispatch through the shared production edit owner, then remove it.
-        search("Familiar")
-        let selector = entry("familiarSelection")
+        search("QuestHelpDora")
+        let selector = entry("quest:QuestHelpDora")
         require(namedNativeControl(root, role: "AXPopUpButton", name: selector.displayName) != nil,
                 "inline enum requires another entity/edit mode before selection")
         let enumTarget = EnumSelection(model, selector)
@@ -152,10 +152,10 @@ private func fields(_ view: NSView) -> [NSTextField] {
             popup.lastItem!.representedObject = choice
         }
         popup.target = enumTarget; popup.action = #selector(EnumSelection.changed(_:))
-        popup.selectItem(at: selector.choices.firstIndex(of: "")!)
+        popup.selectItem(at: selector.choices.firstIndex(of: "Complete")!)
         require(popup.sendAction(popup.action, to: enumTarget), "native enum selection did not dispatch")
         until("enum selection did not stage") { !model.busy && model.pendingActions.first?.entryID == selector.id }
-        require(model.pendingActions.first?.after == AnyHashable(""), "enum choice lost its semantic value")
+        require(model.pendingActions.first?.after == AnyHashable("Complete"), "enum choice lost its semantic value")
         showChanges(); remove(selector.id, remaining: 0)
 
         // Three independent actions, middle removal and revision through the
@@ -164,7 +164,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         let unlock = entry("card:ChanneledCast:Unlocked")
         require(namedNativeControl(root, role: "AXCheckBox", name: unlock.displayName)?.press() == true,
                 "native inline boolean did not dispatch")
-        until("inline boolean did not stage linked effects") { !model.busy && model.pendingCount == 1 && model.pendingEffectCount == 2 }
+        until("inline boolean did not stage linked effects") { !model.busy && model.pendingCount == 1 && model.pendingEffectCount == 7 }
         search("Hecate"); number("interaction:NPC_Hecate_01", "4")
         search("Ashes"); number("resource:MetaCurrency", "50")
         require(model.pendingActions.map(\.entryID) == [unlock.id, "interaction:NPC_Hecate_01", "resource:MetaCurrency"],
@@ -175,12 +175,12 @@ private func fields(_ view: NSView) -> [NSTextField] {
         // A requested level and the unlock action's linked reset share one
         // physical field. Removing the direct action restores its linked owner.
         search("Sorceress"); number("card:ChanneledCast:Level", "1")
-        require(model.pendingCount == 3 && model.pendingEffectCount == 1,
+        require(model.pendingCount == 3 && model.pendingEffectCount == 6,
                 "overlapping direct intent duplicated a linked physical effect")
         remove("card:ChanneledCast:Level", remaining: 2)
-        require(model.pendingEffectCount == 2 && model.pendingPhysicalChangeCount == 4,
+        require(model.pendingEffectCount == 7 && model.pendingPhysicalChangeCount == 9,
                 "removing direct intent did not recompute the surviving linked projection")
-        press("hades2.saveEditor.basket.linkedEffects", ["2"])
+        press("hades2.saveEditor.basket.linkedEffects", ["7"])
         for effect in model.pendingActions.first!.effects {
             guard let name = effect.name, !name.isEmpty else { fatalError("linked effect has no presentation name") }
             require(nativeAccessibilityControls(root).contains { $0.text == name },
