@@ -5,7 +5,6 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
-import copy
 import json
 import math
 import uuid
@@ -18,7 +17,7 @@ from .localization import official_display_names
 from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_mutation_utils import owner as lua_owner
-from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
+from .save_document import clone_lua_value, AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import editor_default_source, editor_files, profile_file_identity
 
@@ -1620,7 +1619,7 @@ class Hades2SaveWorkspace:
         intents = tuple(intents)
         raw = any(intent["domain"] == "advanced" for intent in intents)
         candidate = (Hades2SaveDocument.from_bytes(self.document.to_bytes()) if raw else
-                     SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state)))
+                     SimpleNamespace(lua_state=clone_lua_value(self.document.lua_state)))
         result = self._apply_and_validate_intents(candidate, intents, language)
         if raw:
             try:

@@ -4,14 +4,13 @@ Literal native rewards are read from the shared installed-source capture. This
 plans the proven saved AddResource writes; it never executes installed Lua,
 evaluates future quest eligibility or pretends to show a game presentation.
 """
-import copy
 import hashlib
 import json
 import re
 
 from . import save_advanced
 from .localization import official_display_names
-from .save_document import LuaTable
+from .save_document import clone_lua_value, LuaTable
 from .save_investigation import _parse_lua_table, _scalar
 from .save_mutation_utils import add, effect, integer, owner, read
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS, QUEST_REWARD_OWNER_SHA256
@@ -199,7 +198,7 @@ def linked_changes(root, intents):
     own = [intent for intent in intents if intent["id"].startswith("questClaim:") and intent["after"]]
     if not own:
         return []
-    candidate = copy.deepcopy(root)
+    candidate = clone_lua_value(root)
     apply_batch(candidate, own)
     paths = set()
     for intent in own:

@@ -5,10 +5,9 @@ Familiar ranks own separate purchase membership and retain ever-purchased histor
 An aspect level counts native purchased upgrade records; writes normalize the
 requested tier sequence without changing a runtime trait stack. Changing a durable selector never edits CurrentRun mounts.
 """
-import copy
 
 from .localization import official_display_names
-from .save_document import AmbiguousLuaKeyError, LuaTable
+from .save_document import clone_lua_value, AmbiguousLuaKeyError, LuaTable
 
 
 _WEAPONS = {
@@ -818,7 +817,7 @@ def linked_changes(root, intents):
         return []
     before = _semantic_values(root)
     english_labels = {row["id"]: row["name"] for row in rows(root, "en")}
-    candidate = copy.deepcopy(root)
+    candidate = clone_lua_value(root)
     for intent in own:
         apply_intent(candidate, intent)
     after = _semantic_values(candidate)

@@ -1,9 +1,8 @@
 """Edit stored gift quantities and their proven aggregate, without replaying gifts."""
-import copy
 
 from . import save_advanced
 from .localization import official_display_names
-from .save_document import AmbiguousLuaKeyError, LuaTable
+from .save_document import clone_lua_value, AmbiguousLuaKeyError, LuaTable
 from .save_mutation_utils import MAX_INTEGER, add, effect, integer, owner, read
 
 
@@ -137,7 +136,7 @@ def linked_changes(root, intents):
     own = [intent for intent in intents if intent["id"].startswith("gift:")]
     if not own:
         return []
-    candidate = copy.deepcopy(root)
+    candidate = clone_lua_value(root)
     apply_batch(candidate, own)
     result = []
     for resource in sorted({_parts(intent["id"])[1] for intent in own}):

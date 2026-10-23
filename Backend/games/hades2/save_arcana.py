@@ -4,14 +4,13 @@ The supported-build manifest below owns card identities, costs and automatic
 requirements. Native menus spend resources and mount runtime traits separately;
 these edits change the durable loadout and its derived Save projections.
 """
-import copy
 import itertools
 import json
 import math
 
 from . import save_advanced
 from .localization import official_display_names
-from .save_document import AmbiguousLuaKeyError, LuaTable
+from .save_document import clone_lua_value, AmbiguousLuaKeyError, LuaTable
 
 
 LAYOUT = (
@@ -400,7 +399,7 @@ def linked_changes(root, intents):
     own = [intent for intent in intents if intent["id"].startswith("card:")]
     if not own:
         return []
-    candidate = copy.deepcopy(root)
+    candidate = clone_lua_value(root)
     for intent in sorted(own, key=lambda item: item["id"]):
         apply_intent(candidate, intent)
     finalize_batch(candidate, own, source=root)

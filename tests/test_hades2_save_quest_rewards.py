@@ -166,6 +166,10 @@ class QuestRewardTests(SaveTransactionFixture):
     def test_mixed_workflows_keep_the_original_source_and_explicit_target(self):
         self.state["MetaUpgradeState"] = table({})
         self.state["Flags"]["FutureFlag"] = False
+        deep = "preserved at codec depth limit"
+        for _ in range(126):
+            deep = table({"Child": deep})
+        self.state["UnknownDeep"] = deep
         self.write(); self.work = self.open()
         original_source = self.path.read_bytes()
         target = self.saves / "Profile2.sav"
@@ -212,6 +216,10 @@ class QuestRewardTests(SaveTransactionFixture):
         state = saved["GameState"]
         self.assertEqual(self.path.read_bytes(), later_source)
         self.assertEqual(state["KeepUnknown"], "requested raw value")
+        deep = state["UnknownDeep"]
+        for _ in range(126):
+            deep = deep["Child"]
+        self.assertEqual(deep, "preserved at codec depth limit")
         self.assertEqual(state["QuestStatus"]["QuestHelpDora"], "CashedOut")
         self.assertEqual(state["Resources"]["GiftPoints"], 23)
         self.assertEqual(state["GiftRecord"]["Hecate"]["GiftPoints"], 10)
