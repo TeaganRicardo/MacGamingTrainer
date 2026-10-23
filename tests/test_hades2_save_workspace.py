@@ -474,7 +474,7 @@ assert {
     "card:BonusHealth:Unlocked", "card:BonusHealth:Level",
     "objective:GiftPrompt",
 }.issubset({row["id"] for row in progress["items"]})
-assert all(row["id"] != "card:UnknownHiddenCard:Level" for row in progress["items"])
+assert next(row for row in progress["items"] if row["id"] == "card:UnknownHiddenCard:Level")["editable"] is True
 for identity, value in (
     ("gift:Hecate:GiftPoints", 3),
     ("card:ChanneledCast:Level", 4),
@@ -494,9 +494,13 @@ long_term.stage("specialInteraction:NPC_Hecate_01", "set", 4)
 long_term.stage("card:ChanneledCast:Unlocked", "set", False)
 long_term.stage("objective:GiftPrompt", "set", 3)
 review = long_term.review()
-assert review["count"] == 6, review
+assert review["actionCount"] == 4 and review["count"] == 10, review
 assert {item["id"] for item in review["changes"] if item["id"].startswith("linked:")} == {
-    "linked:card:ChanneledCast:Equipped", "linked:card:ChanneledCast:Level"
+    "linked:card:ChanneledCast:Equipped", "linked:card:ChanneledCast:Level",
+    "linked:arcanaCache:MetaUpgradeUnlockedCountCache",
+    "linked:arcanaCache:MetaUpgradeMaxLevelCountCache",
+    "linked:arcanaCache:MetaUpgradeCostCache",
+    "linked:arcanaCache:MaxMetaUpgradeCostCache",
 }
 long_term.apply()
 edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
@@ -516,18 +520,13 @@ assert edited["ObjectivesCompleted"]["GiftPrompt"] == 3
 assert edited["MetaUpgradeState"]["UnknownHiddenCard"]["Level"] == 17
 assert edited["UnknownFutureField"]["KeepMe"] == "yes"
 
-# A card cannot be upgraded while locked. #481 validates the combined staged
-# intent before it becomes authoritative, so this known-invalid action is
-# rejected at Stage rather than being retained until Apply.
+# A purchased level intent supplies its native unlock prerequisite explicitly
+# in the review while retaining the original Save until Apply.
 bad = Hades2SaveWorkspace.open(long_term_service)
 before_bad = (long_term_saves / "Profile1.sav").read_bytes()
-try:
-    bad.stage("card:BonusHealth:Level", "set", 2)
-except ValueError:
-    pass
-else:
-    raise AssertionError("upgrading locked Arcana was staged")
-assert bad.review()["actionCount"] == 0
+bad.stage("card:BonusHealth:Level", "set", 2)
+assert bad.review()["actionCount"] == 1
+assert "linked:card:BonusHealth:Unlocked" in {row["id"] for row in bad.review()["changes"]}
 assert (long_term_saves / "Profile1.sav").read_bytes() == before_bad
 bad.stage("card:BonusHealth:Unlocked", "set", True)
 bad.stage("card:BonusHealth:Level", "set", 2)
@@ -537,7 +536,7 @@ assert edited["MetaUpgradeState"]["BonusHealth"]["Unlocked"] is True
 assert edited["MetaUpgradeState"]["BonusHealth"]["Level"] == 2
 
 # Gift chronology must remain read-only even when counts look consistent.
-# Numeric zero/one must not be accepted as Arcana boolean ownership.
+# Existing noncanonical scalar flags use native Lua truth and remain repairable.
 malformed_gifts = LuaTable(2, 1, [
     (1.0, "GiftPoints"), (2.0, "MedeaPoints"), ("GiftPoints", 1.0),
 ])
@@ -558,15 +557,11 @@ card_rows = malformed.query(domain="progression", language="en")["items"]
 malformed_card = next(
     row for row in card_rows if row["id"] == "card:ChanneledCast:Level"
 )
-assert malformed_card["editable"] is False
-assert malformed_card["ownerState"] == "unsupported"
-assert malformed_card["blockReasonCode"] == "unsupportedOwner"
-try:
-    malformed.stage("card:ChanneledCast:Level", "set", 2)
-except ValueError:
-    pass
-else:
-    raise AssertionError("malformed Arcana owner became writable")
+assert malformed_card["editable"] is True
+malformed.stage("card:ChanneledCast:Unlocked", "set", False)
+malformed.apply()
+assert Hades2SaveDocument.load(_malformed_saves / "Profile1.sav").lua_state[
+    "GameState"]["MetaUpgradeState"]["ChanneledCast"].get("Unlocked") is None
 
 # Gift quantities need not equal gift-event count. No synthetic gifts or
 # dialogue events may be manufactured when the two representations differ.
@@ -632,7 +627,7 @@ assert by_id["aspect:DaggerBlockAspect"]["value"] == 2
 assert by_id["aspect:DaggerBackstabAspect"]["value"] == 1
 assert by_id["aspect:DaggerBackstabAspect"]["editable"]
 assert by_id["aspect:StaffClearCastAspect"]["value"] == 0
-assert by_id["aspect:BaseStaffAspect"]["editable"] is False
+assert by_id["aspect:BaseStaffAspect"]["editable"] is True
 assert by_id["aspectSelection:WeaponDagger"]["value"] == "DaggerBlockAspect"
 assert "DaggerBackstabAspect" in by_id["aspectSelection:WeaponDagger"]["choices"]
 assert by_id["aspectSelection:WeaponDagger"]["choiceNames"][""] == "默认形态"
@@ -697,18 +692,15 @@ for tier in ("DaggerBlockAspect", "DaggerBlockAspect2",
              "DaggerBlockAspect3", "DaggerBlockAspect4"):
     assert state["WorldUpgradesAdded"][tier] is True
 
-# A proposed selection of an unowned aspect is not silently installed. The
-# known-invalid action is rejected before entering the staged basket.
+# Selecting an unowned aspect supplies its purchase prerequisite in the
+# preview, without changing the original Save until the user applies it.
 bad_equipment = Hades2SaveWorkspace.open(equipment_service)
 before_bad_equipment = (equipment_saves / "Profile1.sav").read_bytes()
-try:
-    bad_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
-except ValueError:
-    pass
-else:
-    raise AssertionError("unowned selected weapon aspect was staged")
-assert bad_equipment.review()["actionCount"] == 0
+bad_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
+assert bad_equipment.review()["actionCount"] == 1
+assert "linked:aspect:DaggerBlockAspect" in {row["id"] for row in bad_equipment.review()["changes"]}
 assert (equipment_saves / "Profile1.sav").read_bytes() == before_bad_equipment
+bad_equipment.cancel()
 
 # Compatible staged unlock and selection are committed together, without
 # rewriting CurrentRun runtime mounted effects.
@@ -749,7 +741,7 @@ starter_editor = Hades2SaveWorkspace.open(starter_service)
 starter_rows = {r["id"]: r for r in starter_editor.query(domain="weapons")["items"]}
 assert starter_rows["weapon:WeaponStaffSwing"]["value"] is True
 assert starter_rows["aspect:BaseStaffAspect"]["value"] == 1
-assert starter_rows["weapon:WeaponStaffSwing"]["editable"] is False
+assert starter_rows["weapon:WeaponStaffSwing"]["editable"] is True
 assert starter_rows["aspect:StaffClearCastAspect"]["value"] == 0
 starter_editor.stage("aspect:StaffClearCastAspect", "set", 2)
 starter_editor.apply()

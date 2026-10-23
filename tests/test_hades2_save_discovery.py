@@ -443,8 +443,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         language="en",
     )
     starter_weapon = next(item for item in starter["items"] if item["id"] == "weapon:WeaponStaffSwing")
-    assert starter_weapon["editable"] is False
-    assert starter_weapon["reasonCode"] == "starterWeapon"
+    assert starter_weapon["editable"] is True
+    assert starter_weapon["reasonCode"] == "editable"
 
     linked_weapon_session = Session()
     linked_weapon_state = linked_weapon_session.document.lua_state["GameState"]

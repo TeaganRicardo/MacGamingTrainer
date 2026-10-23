@@ -105,8 +105,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     assert access["blockReasonCode"] == "noIndependentToolSelection"
     card = entity(workspace, "arcana:ChanneledCast", "The Sorceress")
     equipped = next(row for row in card["items"] if row["id"] == "card:ChanneledCast:Equipped")
-    assert equipped["value"] is True and equipped["editable"] is False
-    assert equipped["blockReasonCode"] == "arcanaEquipmentGridOwned"
+    assert equipped["value"] is True and equipped["editable"] is True
 
     workspace.stage("familiarUpgrade:FrogHealthBonus", "set", 3)
     workspace.stage("familiarSelected:FrogFamiliar", "set", True)
@@ -156,14 +155,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
 
     invalid = Hades2SaveWorkspace.open(service)
     rejects(lambda: invalid.stage("familiarUpgrade:FrogHealthBonus", "set", 4))
-    try:
-        invalid.stage("familiarSelected:FrogFamiliar", "set", True)
-    except ValueError as error:
-        assert "Frinos" in " ".join(getattr(error, "arguments", ())), error
-    else:
-        raise AssertionError("selection of a locked Familiar was accepted")
+    invalid.stage("familiarSelected:FrogFamiliar", "set", True)
+    assert "linked:familiar:FrogFamiliar" in {row["id"] for row in invalid.review()["changes"]}
+    invalid.cancel()
     rejects(lambda: invalid.stage("toolSelection:ToolPickaxe", "set", False))
-    rejects(lambda: invalid.stage("card:ChanneledCast:Equipped", "set", False))
+    invalid.stage("card:ChanneledCast:Equipped", "set", False)
+    assert invalid.review()["actionCount"] == 1
+    invalid.cancel()
     assert invalid.review()["actionCount"] == 0
     discovery = invalid.query(domain="discover", search="FutureFamiliarUpgrade", language="en")
     assert discovery["items"] and all(not row["editable"] for row in discovery["items"])
@@ -172,30 +170,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
         session = SimpleNamespace(document=SimpleNamespace(lua_state=root), relative_path="Profile1.sav")
         return Hades2SaveWorkspace(session, "Profile1", game_path=game)
 
-    # Native automatic-card equipment depends on the complete saved loadout.
-    # An equipped manual-card revoke must not advertise a partial linked write.
+    # Manual revocation now owns the native automatic equipment recomputation.
     root = copy.deepcopy(Hades2SaveDocument.load(path).lua_state)
     root["GameState"]["MetaUpgradeState"]["MaxHealthPerRoom"] = table({
         "Unlocked": True, "Level": 1, "Equipped": True,
     })
     editor = inspection(root)
     card_rows = {row["id"]: row for row in editor.query(domain="progression")["items"]}
-    for identity in ("card:ChanneledCast:Unlocked", "card:MaxHealthPerRoom:Unlocked"):
-        assert card_rows[identity]["editable"] is False, identity
-        assert card_rows[identity]["blockReasonCode"] == "arcanaUnlockLoadoutOwned"
-        rejects(lambda: editor.stage(identity, "set", False))
-    assert card_rows["card:ChanneledCast:Level"]["editable"] is True
-    assert card_rows["card:MaxHealthPerRoom:Level"]["editable"] is True
-
-    # The same automatic owner does not prevent changing an unequipped manual
-    # card's progression: native requirements depend on equipped costs/grid.
-    root["GameState"]["MetaUpgradeState"]["ChanneledCast"].pop("Equipped", None)
-    editor = inspection(root)
-    card_rows = {row["id"]: row for row in editor.query(domain="progression")["items"]}
-    assert card_rows["card:ChanneledCast:Unlocked"]["editable"] is True
+    assert all(card_rows[identity]["editable"] for identity in (
+        "card:ChanneledCast:Unlocked", "card:MaxHealthPerRoom:Unlocked",
+        "card:ChanneledCast:Equipped", "card:MaxHealthPerRoom:Equipped",
+    ))
     editor.stage("card:ChanneledCast:Unlocked", "set", False)
+    effects = {row["id"]: row for row in editor.review()["changes"]}
+    assert effects["linked:card:MaxHealthPerRoom:Equipped"]["after"] is False
 
-    # Cache deltas retain opaque contribution; no unrelated card is rebuilt.
+    # Native known-card caches are rebuilt; opaque card records are preserved.
     root = copy.deepcopy(Hades2SaveDocument.load(path).lua_state)
     owner = root["GameState"]
     owner["MetaUpgradeState"]["FutureCard"] = table({"Level": 19, "Equipped": True})
@@ -207,9 +197,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     effects = {row["rawId"]: row for row in editor.review()["changes"]
                if row["id"].startswith("linked:arcanaCache:")}
     assert {key: row["after"] for key, row in effects.items()} == {
-        "MetaUpgradeUnlockedCountCache": 6,
-        "MetaUpgradeMaxLevelCountCache": 8,
-        "MetaUpgradeCostCache": 10,
+        "MetaUpgradeUnlockedCountCache": 0,
+        "MetaUpgradeMaxLevelCountCache": 0,
+        "MetaUpgradeCostCache": 0,
     }
     assert owner["MetaUpgradeState"]["FutureCard"]["Level"] == 19
     assert owner["MetaUpgradeMaxLevelCountCache"] == 9
@@ -217,8 +207,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
         owner.pop(cache, None)
     editor = inspection(root)
     editor.stage("card:ChanneledCast:Level", "set", 2)
-    assert not any(row["id"].startswith("linked:arcanaCache:")
-                   for row in editor.review()["changes"]), "absent native caches were synthesized"
+    assert any(row["id"] == "linked:arcanaCache:MetaUpgradeMaxLevelCountCache"
+               and row["after"] == 0 for row in editor.review()["changes"])
 
     for case in ("malformed", "duplicate", "underflow"):
         root = copy.deepcopy(Hades2SaveDocument.load(path).lua_state)
@@ -234,10 +224,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
         editor = inspection(root)
         row = next(row for row in editor.query(domain="progression")["items"]
                    if row["id"] == "card:ChanneledCast:Level")
-        assert row["editable"] is False, case
-        assert row["blockReasonCode"] == ("ambiguousOwner" if case == "duplicate"
-                                           else "arcanaProgressionCacheUnsupported")
-        rejects(lambda: editor.stage("card:ChanneledCast:Level", "set", 2))
+        if case == "duplicate":
+            assert row["editable"] is False
+            assert row["blockReasonCode"] == "ambiguousOwner"
+            rejects(lambda: editor.stage("card:ChanneledCast:Level", "set", 2))
+        else:
+            assert row["editable"] is True
+            editor.stage("card:ChanneledCast:Level", "set", 2)
+            cache_effects = [effect for effect in editor.review()["changes"]
+                             if effect["id"] == "linked:arcanaCache:MetaUpgradeMaxLevelCountCache"]
+            assert cache_effects[0]["after"] == 0 if case == "malformed" else not cache_effects
 
     # Each linked owner must be uniquely typed, contiguous and consistent.
     # Unknown upgrades remain untouched while unsafe known records are inspectable.
@@ -261,20 +257,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
         editor = inspection(root)
         row = next(row for row in editor.query(domain="weapons", language="en")["items"]
                    if row["id"] == "familiarUpgrade:FrogHealthBonus")
-        assert row["editable"] is False, case
-        assert row["mutationKinds"] == [], case
-        expected = ("missingFamiliarUpgradeOwner" if case == "missing"
-                    else "ambiguousOwner" if case == "duplicate"
-                    else "familiarUpgradeOwnerUnsupported")
-        assert row["blockReasonCode"] == expected, (case, row)
-        rejects(lambda: editor.stage("familiarUpgrade:FrogHealthBonus", "set", 3))
-        assert editor.review()["actionCount"] == 0
-        if case == "missing":
-            discovered = next(row for row in editor.query(
-                domain="discover", search="FrogHealthBonus", language="en"
-            )["items"] if row["id"] == "familiarUpgrade:FrogHealthBonus")
-            assert discovered["reasonCode"] == expected
-            assert "lacks its Familiar upgrade owner" in discovered["reason"]
+        if case in ("missing", "gap", "mirror"):
+            assert row["editable"] is True, case
+            editor.stage("familiarUpgrade:FrogHealthBonus", "set", 3)
+            assert editor.review()["actionCount"] == 1
+            if case == "missing":
+                discovered = next(row for row in editor.query(
+                    domain="discover", search="FrogHealthBonus", language="en"
+                )["items"] if row["id"] == "familiarUpgrade:FrogHealthBonus")
+                assert discovered["reasonCode"] == "editableAbsent"
+        else:
+            assert row["editable"] is False, case
+            assert row["mutationKinds"] == []
+            assert row["blockReasonCode"] == ("ambiguousOwner" if case == "duplicate"
+                                                else "familiarUpgradeOwnerUnsupported")
+            rejects(lambda: editor.stage("familiarUpgrade:FrogHealthBonus", "set", 3))
+            assert editor.review()["actionCount"] == 0
 
     # A staged batch is a set of intents: rank acquisition and parent revocation
     # must report the same contradiction regardless of the click order.

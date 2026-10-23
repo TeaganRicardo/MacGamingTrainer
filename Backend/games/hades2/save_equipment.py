@@ -2,8 +2,8 @@
 
 Weapon/tool shop purchases write WeaponsUnlocked plus world-upgrade markers.
 Familiar ranks own separate purchase membership and retain ever-purchased history.
-An aspect level is the contiguous purchased shop tier sequence, not a runtime
-trait stack. Changing a durable selector never edits CurrentRun mounts.
+An aspect level counts native purchased upgrade records; writes normalize the
+requested tier sequence without changing a runtime trait stack. Changing a durable selector never edits CurrentRun mounts.
 """
 import copy
 
@@ -105,8 +105,12 @@ def _state(root):
     return state
 
 
-def _table(state, name):
+def _table(state, name, *, create=False):
     value = state.get(name)
+    if value is None:
+        value = LuaTable()
+        if create:
+            state[name] = value
     if not isinstance(value, LuaTable):
         raise ValueError("Save Editor {} is unavailable or malformed.".format(name))
     return value
@@ -114,13 +118,13 @@ def _table(state, name):
 
 def _flag(table, key):
     value = table.get(key)
-    if value is not None and type(value) is not bool:
-        raise ValueError("Save Editor equipment ownership is not boolean.")
-    return value is True
+    # Native membership conditions use Lua truth, where 0 and empty strings
+    # are true. An explicit desired rank/flag repairs those selected records.
+    return value is not None and value is not False
 
 
-def _markers(state):
-    return tuple(_table(state, field) for field in _MARKER_FIELDS)
+def _markers(state, *, create=False):
+    return tuple(_table(state, field, create=create) for field in _MARKER_FIELDS)
 
 
 def _merge_owner_state(*states):
@@ -171,9 +175,12 @@ def _owned(state, key):
 
 
 def _set_owned(state, key, owned):
-    current, world, history = _markers(state)
+    current, world, history = _markers(state, create=True)
     for table in (current, world, history):
-        _flag(table, key)  # Never overwrite unknown non-boolean data.
+        _flag(table, key)  # Resolve key uniqueness before changing any mirror.
+    was_purchased = _flag(world, key) or (
+        _flag(current, key) and key not in _DEFAULT_ASPECTS and key != "WeaponStaffSwing"
+    )
     for table in (current, world):
         if owned:
             table[key] = True
@@ -181,7 +188,7 @@ def _set_owned(state, key, owned):
             table.pop(key, None)
     # AddWorldUpgrade distinguishes current ownership from the record of ever
     # being purchased. Tier downgrades and revocation change only the former.
-    if owned:
+    if owned or was_purchased:
         history[key] = True
 
 
@@ -190,26 +197,18 @@ def _rank(state, aspect):
     parent = _owned(state, weapon)
     default = aspect in _DEFAULT_ASPECTS
     owned = parent if default else _owned(state, aspect)
-    if owned and not parent:
-        raise ValueError("Save Editor owned aspect lacks its base weapon.")
-    level = 1 if owned else 0
-    gap = False
+    upgrades = 0
     for rank in range(2, 6):
-        purchased = _owned(state, "{}{}".format(aspect, rank))
-        if purchased and (gap or not owned):
-            raise ValueError("Save Editor aspect upgrade tiers are not contiguous.")
-        if purchased:
-            level = rank
-        else:
-            gap = True
-    return level
+        key = "{}{}".format(aspect, rank)
+        _owned(state, key)
+        if key in _table(state, "WeaponsUnlocked"):
+            upgrades += 1
+    return 1 + upgrades if owned or upgrades else 0
 
 
 def _tool_level(state, tool):
     first = _owned(state, tool)
     second = _owned(state, tool + "2")
-    if second and not first:
-        raise ValueError("Save Editor tool upgrade lacks the initial tool.")
     return 2 if second else (1 if first else 0)
 
 
@@ -219,15 +218,11 @@ def _familiar_upgrade_keys(upgrade):
 
 def _familiar_rank(state, upgrade):
     owner = _table(state, "FamiliarUpgrades")
-    level, gap = 0, False
+    level = 0
     for key in _familiar_upgrade_keys(upgrade):
-        purchased = _flag(owner, key)
-        if purchased and gap:
-            raise ValueError("Save Editor semantic owner is unsupported.")
-        if purchased:
+        _flag(owner, key)
+        if key in owner:
             level += 1
-        else:
-            gap = True
     return level
 
 
@@ -238,9 +233,8 @@ def _familiar_rank_write_state(state, upgrade):
         owners = tuple(_table(state, field) for field in
                        ("FamiliarUpgrades", "WorldUpgrades", "WorldUpgradesAdded"))
         for key in _familiar_upgrade_keys(upgrade):
-            purchased, current, ever = (_flag(owner, key) for owner in owners)
-            if purchased != current or (purchased and not ever):
-                return "unsupported"
+            for owner in owners:
+                _flag(owner, key)
     except AmbiguousLuaKeyError:
         return "ambiguous"
     except ValueError:
@@ -251,19 +245,21 @@ def _familiar_rank_write_state(state, upgrade):
 def _set_familiar_rank(state, upgrade, rank):
     # Current purchase membership and ever-purchased history are separate native
     # owners. Downgrading never pretends a previously purchased tier was unseen.
-    upgrades = _table(state, "FamiliarUpgrades")
-    current = _table(state, "WorldUpgrades")
-    history = _table(state, "WorldUpgradesAdded")
+    upgrades = _table(state, "FamiliarUpgrades", create=True)
+    current = _table(state, "WorldUpgrades", create=True)
+    history = _table(state, "WorldUpgradesAdded", create=True)
     for tier, key in enumerate(_familiar_upgrade_keys(upgrade), 1):
         for owner in (upgrades, current, history):
             _flag(owner, key)
+        if _flag(upgrades, key) or _flag(current, key):
+            history[key] = True
         if tier <= rank:
             upgrades[key] = current[key] = history[key] = True
         else:
             upgrades.pop(key, None)
             current.pop(key, None)
     if rank:
-        _table(state, "FamiliarsUnlocked")[_FAMILIAR_UPGRADE_PARENT[upgrade]] = True
+        _table(state, "FamiliarsUnlocked", create=True)[_FAMILIAR_UPGRADE_PARENT[upgrade]] = True
 
 
 def _set_rank(state, aspect, level):
@@ -275,7 +271,7 @@ def _set_rank(state, aspect, level):
             if level == 0:
                 _set_owned(state, aspect, False)
             elif level > 1:
-                owner = _table(state, "WeaponsUnlocked")
+                owner = _table(state, "WeaponsUnlocked", create=True)
                 _flag(owner, aspect)
                 owner[aspect] = True
             continue
@@ -288,9 +284,7 @@ def _selection(state, weapon):
     value = selections.get(weapon)
     if value is None:
         return ""
-    if not isinstance(value, str) or value not in _WEAPONS[weapon]:
-        raise ValueError("Save Editor weapon selection is unknown.")
-    return value
+    return None if isinstance(value, LuaTable) else value
 
 
 def _names(ids, language, game_path):
@@ -315,8 +309,7 @@ def _row(entry_id, key, path, name, english, value, kind, group,
         row["entityId"] = entity_id
         row["entityName"] = entity_name
     if maximum is not None:
-        row["constraints"] = {"min": 1 if entry_id.startswith("aspect:") and
-                             key in _DEFAULT_ASPECTS else 0,
+        row["constraints"] = {"min": 0,
                              "max": maximum, "integer": True}
     if choice_names is not None:
         row["choiceNames"] = choice_names
@@ -352,7 +345,7 @@ def rows(root, language="zh-CN", game_path=None):
             weapon_owner_state = "ambiguous"
         except ValueError:
             weapon_owner_state = "unsupported"
-        if weapon_owner_state is None and weapon != "WeaponStaffSwing":
+        if weapon_owner_state is None:
             marker_keys = [weapon]
             selection_state = None
             if owned is True:
@@ -363,9 +356,7 @@ def rows(root, language="zh-CN", game_path=None):
                 _marker_write_state(state, marker_keys),
                 selection_state,
             )
-        weapon_editable = (
-            weapon_owner_state is None and weapon != "WeaponStaffSwing"
-        )
+        weapon_editable = weapon_owner_state is None
         result.append(_row(
             "weapon:" + weapon, weapon, ["GameState", "WeaponsUnlocked", weapon],
             title, english, owned, "boolean", world_group,
@@ -374,7 +365,6 @@ def rows(root, language="zh-CN", game_path=None):
             block_reason_code=(
                 "ambiguousOwner" if weapon_owner_state == "ambiguous"
                 else "unsupportedOwner" if weapon_owner_state == "unsupported"
-                else "starterWeapon" if weapon == "WeaponStaffSwing"
                 else None
             ),
             owner_state=weapon_owner_state,
@@ -404,10 +394,7 @@ def rows(root, language="zh-CN", game_path=None):
                     _marker_write_state(state, marker_keys),
                     selection_state,
                 )
-            aspect_editable = (
-                aspect_owner_state is None
-                and (owned is True or aspect not in _DEFAULT_ASPECTS)
-            )
+            aspect_editable = aspect_owner_state is None
             result.append(_row(
                 "aspect:" + aspect, aspect, ["GameState", "WeaponsUnlocked", aspect],
                 title + " · " + name + (" · 等级" if zh else " · Rank"),
@@ -423,7 +410,7 @@ def rows(root, language="zh-CN", game_path=None):
                 entity_id="weapon:" + weapon, entity_name=title,
             ))
 
-        if owned is True:
+        if weapon_owner_state is None:
             selection_owner_state = None
             chosen = None
             try:
@@ -512,10 +499,13 @@ def rows(root, language="zh-CN", game_path=None):
         result.append(access_row)
 
     try:
-        familiar_unlocks = state.get("FamiliarsUnlocked")
+        familiar_unlocks = _table(state, "FamiliarsUnlocked")
     except AmbiguousLuaKeyError:
         familiar_unlocks = None
         familiar_owner_state = "ambiguous"
+    except ValueError:
+        familiar_unlocks = None
+        familiar_owner_state = "unsupported"
     else:
         familiar_owner_state = (
             None if isinstance(familiar_unlocks, LuaTable)
@@ -570,11 +560,9 @@ def rows(root, language="zh-CN", game_path=None):
             except AmbiguousLuaKeyError:
                 selection_owner_state = "ambiguous"
             else:
-                if chosen is not None and (
-                    not isinstance(chosen, str) or chosen not in _FAMILIARS
-                ):
-                    selection_owner_state = "unsupported"
-        choices = ("", *_FAMILIARS)
+                if isinstance(chosen, LuaTable):
+                    chosen = None
+        choices = ("", *_FAMILIARS, *((chosen,) if isinstance(chosen, str) and chosen not in _FAMILIARS and chosen else ()))
         choice_names = {"": "不携带" if zh else "None"}
         choice_names.update({f: native.get(f) or f for f in _FAMILIARS})
         for familiar in _FAMILIARS:
@@ -604,10 +592,6 @@ def rows(root, language="zh-CN", game_path=None):
                     rank = _familiar_rank(state, upgrade)
                 except (AmbiguousLuaKeyError, ValueError):
                     pass
-                try:
-                    missing_owner = state.get("FamiliarUpgrades") is None
-                except AmbiguousLuaKeyError:
-                    missing_owner = False
                 row = _row(
                     "familiarUpgrade:" + upgrade, upgrade,
                     ["GameState", "FamiliarUpgrades", upgrade],
@@ -617,21 +601,10 @@ def rows(root, language="zh-CN", game_path=None):
                     editable=upgrade_state is None,
                     block_reason_code=(
                         "ambiguousOwner" if upgrade_state == "ambiguous"
-                        else "missingFamiliarUpgradeOwner" if missing_owner
                         else "familiarUpgradeOwnerUnsupported" if upgrade_state else None
                     ),
                     owner_state=upgrade_state, entity_id="familiar:" + familiar, entity_name=name,
                 )
-                if missing_owner:
-                    row["blockReasonDiagnostic"] = (
-                        "此存档缺少魔宠升级所有者，不能只写入购买镜像或重建未知升级状态。"
-                        if zh else "This Save lacks its Familiar upgrade owner; purchase mirrors alone cannot establish or reconstruct that progression."
-                    )
-                elif upgrade_state == "unsupported":
-                    row["blockReasonDiagnostic"] = (
-                        "魔宠购买等级必须连续，原生升级、解锁和购买记录须为一致的布尔所有权；当前记录不支持安全联动写入。"
-                        if zh else "Familiar purchase tiers must be contiguous, with consistent boolean upgrade, unlock and purchase owners; this record cannot be changed safely as a linked operation."
-                    )
                 result.append(row)
         result.append(_row(
             "familiarSelection", "EquippedFamiliar",
@@ -706,19 +679,26 @@ def apply_intent(root, intent):
         if not after:
             for aspect in _WEAPONS[weapon]:
                 _set_rank(state, aspect, 0)
-            _table(state, "LastWeaponUpgradeName").pop(weapon, None)
+            _table(state, "LastWeaponUpgradeName", create=True).pop(weapon, None)
         return
     if entry_id.startswith("aspect:"):
         aspect = entry_id[len("aspect:"):]
         if aspect not in _ASPECT_PARENT:
             raise ValueError("Save Editor aspect is unknown.")
+        if not after and aspect in _DEFAULT_ASPECTS:
+            weapon = _ASPECT_PARENT[aspect]
+            _set_owned(state, weapon, False)
+            for related in _WEAPONS[weapon]:
+                _set_rank(state, related, 0)
+            _table(state, "LastWeaponUpgradeName", create=True).pop(weapon, None)
+            return
         # A starter weapon may already be owned without purchase markers.
         # Only create linked parent purchase records if ownership changes.
         if after and not _owned(state, _ASPECT_PARENT[aspect]):
             _set_owned(state, _ASPECT_PARENT[aspect], True)
         _set_rank(state, aspect, after)
         if not after:
-            selected = _table(state, "LastWeaponUpgradeName")
+            selected = _table(state, "LastWeaponUpgradeName", create=True)
             if selected.get(_ASPECT_PARENT[aspect]) == aspect:
                 selected.pop(_ASPECT_PARENT[aspect], None)
         return
@@ -726,8 +706,11 @@ def apply_intent(root, intent):
         weapon = entry_id[len("aspectSelection:"):]
         if weapon not in _WEAPONS or (after and after not in _WEAPONS[weapon]):
             raise ValueError("Save Editor selected aspect is unknown.")
-        owner = _table(state, "LastWeaponUpgradeName")
+        owner = _table(state, "LastWeaponUpgradeName", create=True)
         if after:
+            if not _owned(state, weapon):
+                _set_owned(state, weapon, True)
+            _set_rank(state, after, max(1, _rank(state, after)))
             owner[weapon] = after
         else:
             owner.pop(weapon, None)
@@ -743,7 +726,7 @@ def apply_intent(root, intent):
         familiar = entry_id[len("familiar:"):]
         if familiar not in _FAMILIARS:
             raise ValueError("Save Editor familiar is unknown.")
-        table = _table(state, "FamiliarsUnlocked")
+        table = _table(state, "FamiliarsUnlocked", create=True)
         if after:
             table[familiar] = True
         else:
@@ -765,14 +748,14 @@ def apply_intent(root, intent):
         if familiar not in _FAMILIARS:
             raise ValueError("Save Editor familiar is unknown.")
         if after:
+            _table(state, "FamiliarsUnlocked", create=True)[familiar] = True
             state["EquippedFamiliar"] = familiar
         elif state.get("EquippedFamiliar") == familiar:
             state.pop("EquippedFamiliar", None)
         return
     if entry_id == "familiarSelection":
         if after:
-            if after not in _FAMILIARS:
-                raise ValueError("Save Editor familiar selection is unknown.")
+            _table(state, "FamiliarsUnlocked", create=True)[after] = True
             state["EquippedFamiliar"] = after
         else:
             state.pop("EquippedFamiliar", None)
@@ -804,8 +787,8 @@ def _semantic_values(root):
         except (AmbiguousLuaKeyError, ValueError):
             pass
     try:
-        familiars = state.get("FamiliarsUnlocked")
-    except AmbiguousLuaKeyError:
+        familiars = _table(state, "FamiliarsUnlocked")
+    except (AmbiguousLuaKeyError, ValueError):
         familiars = None
     if isinstance(familiars, LuaTable):
         for familiar in _FAMILIARS:
@@ -817,7 +800,7 @@ def _semantic_values(root):
             value = state.get("EquippedFamiliar")
         except AmbiguousLuaKeyError:
             value = object()
-        if value is None or (isinstance(value, str) and value in _FAMILIARS):
+        if value is None or isinstance(value, str):
             values["familiarSelection"] = value or ""
             for familiar in _FAMILIARS:
                 values["familiarSelected:" + familiar] = value == familiar
@@ -867,6 +850,12 @@ def validate_batch(root, intents):
     for intent in own:
         entry = intent["id"]
         if current.get(entry) != intent["after"]:
+            if (entry.startswith("familiar:") and intent["after"] is False
+                    and current.get("familiarSelection") == entry[len("familiar:"):]):
+                raise SaveEquipmentBatchValidationError(
+                    "Save Editor equipped familiar must be unlocked.",
+                    _conflicting_action_ids(entry, own),
+                )
             raise SaveEquipmentBatchValidationError(
                 "Save Editor equipment changes conflict.",
                 _conflicting_action_ids(entry, own),
@@ -914,7 +903,7 @@ def validate_batch(root, intents):
 
     if familiars_changed:
         familiar = current.get("familiarSelection")
-        if familiar and current.get("familiar:" + familiar) is not True:
+        if familiar and _flag(_table(_state(root), "FamiliarsUnlocked"), familiar) is not True:
             related = {"familiarSelection", "familiarSelected:" + familiar, "familiar:" + familiar}
             raise SaveEquipmentBatchValidationError(
                 "Save Editor equipped familiar must be unlocked.",

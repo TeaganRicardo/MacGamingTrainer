@@ -49,13 +49,12 @@ assert {row["id"] for row in fields} == {
     "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level", "card:ChanneledCast:Equipped",
 }
 assert all(row["editable"] and row["mutationKinds"] == ["set"]
-           for row in fields if not row["id"].endswith(":Equipped"))
-assert next(row for row in fields if row["id"].endswith(":Equipped"))["editable"] is False
+           for row in fields)
 # Read-only query never changes the pinned original Save.
 assert root["GameState"]["MetaUpgradeState"]["ChanneledCast"]["Level"] == 2
 workspace.stage("card:ChanneledCast:Level", "set", 3)
 assert root["GameState"]["MetaUpgradeState"]["ChanneledCast"]["Level"] == 2
-assert workspace.review()["count"] == 1
+assert workspace.review()["actionCount"] == 1
 assert workspace.review()["changes"][0]["after"] == 3
 workspace.cancel()
 

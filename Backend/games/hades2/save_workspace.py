@@ -855,7 +855,8 @@ class Hades2SaveWorkspace:
             ))
         if scope in ("all", "growth", "records"):
             progression = save_long_term.rows(
-                root, "progression", language, game_path=self._game_path
+                root, "progression", language, game_path=self._game_path,
+                include_absent=bool(search.strip())
             )
             rows.extend(row for row in progression if (
                 scope == "all"
@@ -995,7 +996,8 @@ class Hades2SaveWorkspace:
             )
             if owner_domain == "progression":
                 rows.extend(save_long_term.rows(
-                    self.document.lua_state, owner_domain, language, game_path=self._game_path
+                    self.document.lua_state, owner_domain, language, game_path=self._game_path,
+                    include_absent=bool(search.strip())
                 ))
                 if domain == "quests":
                     rows = [row for row in rows if row["id"].startswith(("quest:", "objective:"))]
@@ -1152,7 +1154,7 @@ class Hades2SaveWorkspace:
             rows = [save_narrative.entry_row(root, entry_id, language, self._game_path)]
         elif prefix in ("interaction", "specialInteraction", "card", "objective"):
             rows = save_long_term.rows(
-                root, descriptor["domain"], language, game_path=self._game_path
+                root, descriptor["domain"], language, game_path=self._game_path, include_absent=True
             )
         else:
             rows = save_equipment.rows(
@@ -1264,7 +1266,7 @@ class Hades2SaveWorkspace:
         root = self.document.lua_state
 
         if identity.startswith("linked:arcanaCache:"):
-            result["name"] = save_long_term.linked_cache_label(effect["rawId"], language)
+            result["name"] = save_long_term.linked_cache_label(effect["rawId"], language, game_path=self._game_path)
             return result
 
         if identity.startswith("linked:card:"):
@@ -1272,25 +1274,14 @@ class Hades2SaveWorkspace:
             if len(parts) == 4:
                 name, field = parts[2], parts[3]
                 rows = save_long_term.rows(
-                    root, "progression", language, game_path=self._game_path
+                    root, "progression", language, game_path=self._game_path, include_absent=True
                 )
-                if field == "Level":
-                    row = next(
-                        (item for item in rows if item["id"] == "card:{}:Level".format(name)),
-                        None,
-                    )
-                    if row is not None:
-                        result["name"] = row["name"]
-                        return result
                 row = next(
-                    (item for item in rows if item["id"] == "card:{}:Unlocked".format(name)),
+                    (item for item in rows if item["id"] == "card:{}:{}".format(name, field)),
                     None,
                 )
                 if row is not None:
-                    entity = row.get("entityName") or row["name"]
-                    result["name"] = entity + (
-                        " · 已装备" if language == "zh-CN" else " · Equipped"
-                    )
+                    result["name"] = row["name"]
                     return result
 
         if identity.startswith("linked:quest:"):
@@ -1482,6 +1473,8 @@ class Hades2SaveWorkspace:
             semantic_candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
             for intent in semantic:
                 self._apply_intent(semantic_candidate, intent)
+            save_long_term.finalize_batch(
+                semantic_candidate.lua_state, semantic, source=self.document.lua_state)
             save_advanced.validate_overlaps(self.document.lua_state, intents, semantic_candidate.lua_state)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
@@ -1498,6 +1491,8 @@ class Hades2SaveWorkspace:
             self._apply_intent(candidate, intent)
         try:
             if semantic:
+                save_long_term.finalize_batch(
+                    candidate.lua_state, semantic, source=self.document.lua_state)
                 save_narrative.validate_batch(candidate.lua_state, semantic)
                 save_long_term.validate_batch(candidate.lua_state, semantic)
                 save_equipment.validate_batch(candidate.lua_state, semantic)

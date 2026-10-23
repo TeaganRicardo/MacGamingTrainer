@@ -4,7 +4,7 @@ Target: Hades II **1.143476 / Steam 25481925**. This investigation read the
 installed `Content/Scripts` and bilingual text sources on 2026-10-23 without
 launching/attaching the game or reading user saves. The supported identities and
 group relationships remain declared once in `save_equipment.py` and
-`save_long_term.py`; this note records their native ownership evidence.
+`save_arcana.py`; this note records their native ownership evidence.
 
 ## Familiar purchase rank and selection
 
@@ -38,8 +38,12 @@ ever-purchased markers for newly owned tiers, and retains historical markers on
 downgrade. Its purchase membership has a distinct native owner from weapon
 ownership. A positive rank also unlocks its parent Familiar. Revoking a
 Familiar clears known current upgrade memberships and its selected state while
-preserving purchase history and unknown records. Missing, duplicate, malformed,
-noncontiguous or disagreeing linked owners are read-only with a visible reason.
+preserving purchase history and unknown records. Missing owners are created;
+existing tier gaps and disagreeing current mirrors are normalized to the explicit
+desired rank. Native stack counting iterates matching keys, so an observed gap
+is displayed by its existing purchase count before the requested repair. Only
+an ambiguous key or a parent value that cannot be traversed as a table prevents
+this linked child operation; Advanced exposes the actual parent data separately.
 
 Each Familiar entity groups its unlock, purchased ranks and selected observation
 around official bilingual identities. Per-entity selection actions mutate the
@@ -57,8 +61,11 @@ prove that an already running game reloads those owners.
 
 ## Weapons, aspects and tools
 
-The existing weapon/aspect owner continues to use native purchase membership,
-contiguous aspect ranks and the saved per-weapon aspect selector.
+The weapon/aspect owner uses native purchase membership and the saved
+per-weapon aspect selector. `WeaponUpgradeLogic.lua:478-486` derives a level
+from one plus the number of existing known upgrade keys. An observed gap is
+therefore displayed by count, while an explicit desired rank writes its native
+contiguous tier sequence and repairs the current purchase mirrors.
 `WeaponShopLogic.lua:514-520` writes weapon/tool purchase ownership and world
 markers; `543-550` writes `GameState.LastWeaponUpgradeName[weapon]` for aspect
 selection. `GhostAdminLogic.lua:552-557` distinguishes current ownership from
@@ -68,7 +75,13 @@ only current membership on downgrade or revocation; it retains existing history
 and adds history on acquisition. The temporary Save journey first reproduced
 Pickaxe rank 2 → 1 erasing `WorldUpgradesAdded.ToolPickaxe2`, then verifies tool
 revocation, aspect downgrade/revocation, free-aspect tiers and parent-weapon
-teardown with preserved purchase history and unchanged unknown records. Review
+teardown with preserved purchase history and unchanged unknown records.
+Starter weapon ownership and a default aspect's rank zero are writable; the
+latter revokes its actual parent weapon, current aspect tiers and saved selector.
+Selecting a locked native aspect grants its missing weapon/aspect prerequisites.
+Selecting a native Familiar grants its missing unlock prerequisite. Explicit
+contradictory revoke/selection requests fail instead of overriding a requested
+choice, and the existing staged basket survives rejection. Review
 continues to describe current ranks and dependent selections, without claiming
 that existing history was removed. This task does not invent a permanent
 selected-weapon scalar from a `CurrentRun` mount.
@@ -83,77 +96,98 @@ equipment selector in this path. The UI states that limitation, rather than
 offering an unrelated Boolean as an equipment toggle. A Familiar's harvesting
 link does not invent an additional purchasable tool progression record.
 
-## Arcana disposition
+## Arcana loadout ownership
 
-Each card entity contains unlocked state, purchased level and a read-only saved
-`Equipped` observation. Independent equipment is a loadout operation:
-`MetaUpgradeCardScreenLogic.lua:994-1060,1595-1598` re-evaluates automatic cards
-and derived state. `MetaUpgradeLogic.lua:97-235` evaluates costs, equipped counts
-and grid relationships, without reading card levels. The six active automatic
-cards are declared once in the owner; the old automatic requirements inside
-`BonusDodge` are commented out in this installed build. There are no active
-`AdjacencyBonus` definitions in its card data, though native adjacency processing
-remains in `MetaUpgradeLogic.lua:237-253`.
+Each known card entity exposes unlocked state, purchased level and equipped
+state. `save_arcana.py` is the single supported-build manifest for the native
+5×5 layout, inherited costs and six active automatic requirements; the old
+`BonusDodge` automatic requirements are commented out in this installed build.
+`MetaUpgradeLogic.lua:97-235` evaluates costs, manual equipped counts and grid
+relationships without reading purchased card levels.
 
-The supported boundaries are therefore specific to the changed owner:
+`MetaUpgradeCardScreenLogic.lua:992-1060` computes automatic results from one
+snapshot before applying them. `1595-1598` deliberately invokes that pass twice.
+The Save operation preserves these two snapshot passes, diagonal neighbors and
+the current saved layout. A missing layout is created from the native default;
+a custom layout is retained. `179-194` derives visible grid size from unlocked
+coordinates, with a minimum of three and maximum of five rows/columns. An
+already-unlocked card's pure level edit does not require a layout: the native
+level does not participate in these equipment predicates.
 
-- Purchased levels remain editable; they cannot change automatic equipment.
-- An automatic card's unlocked state is read-only because acquiring it can
-  activate it and change automatic neighbors.
-- Revoking an equipped manual card is read-only if an unlocked automatic card
-  exists, or that automatic unlock owner cannot be uniquely interpreted.
-- A manual unequipped card's unlock state remains editable. Revoking an
-  equipped manual card also remains supported when no automatic card is
-  unlocked. The existing linked equipment and level reset then remains safe.
+An explicit automatic-equipment intent can supply required manual selections,
+card unlocks and sufficient purchased Grasp. The deterministic solver first
+minimizes manual selection changes, then added unlocks, then total equipped
+cost, then native manifest order. Existing explicit manual selections and
+revocations remain fixed. A conflicting automatic/card request, an impossible
+capacity, or mutually unsatisfiable explicit choices produces a conflict while
+preserving the earlier staged actions. The temporary-file tests fix this tie
+break, including preferring an existing unlocked prerequisite and choosing an
+alternative when a user explicitly removed the cheapest candidate.
 
-The owning mutation also maintains **observed** native caches. Native
-`MetaUpgradeCardScreenLogic.lua:763-772,784-798` derives equipped cost, unlocked
-count and maximum-level count; the upgrade screen refreshes the latter two on
-close at `MetaUpgradeCardUpgradeScreenLogic.lua:104`. This task reproduced a
-level 2 → 3 write leaving the saved maximum-level cache at zero, then corrected
-the known card's count contribution. A safe revocation adjusts all three
-observed caches, and review lists those linked effects with bilingual labels.
+The operation reconstructs known native unlocked/max-level count and equipped
+cost caches. `MetaUpgradeCardScreenLogic.lua:763-772,784-807` owns those
+projections; `MetaUpgradeCardUpgradeScreenLogic.lua:104` refreshes count caches
+when the upgrade screen closes. `MetaUpgradeData.lua:31` and its tier data set
+the native starting Grasp and capacity purchases. The operation raises capacity
+only as needed for the final explicit loadout; removing a card does not revoke
+previously purchased capacity. Review lists every additional unlock, level
+reset, equipped/unequipped card, cache and capacity change before disk Apply.
+Scalar cache inconsistencies are repaired rather than treated as a blanket
+read-only reason. Duplicate physical cache keys remain ambiguous.
 
-The implementation applies a known card's before/after contribution as a delta
-to existing caches. It retains absent cache fields and opaque cards' existing
-contributions instead of synthesizing their unknown native data. Duplicate,
-noninteger, negative or contribution-underflowing affected cache owners are
-read-only with a specific visible reason. It does not establish the correctness
-of an original aggregate that already contains opaque contributions, and does
-not claim a complete native grid or historical-cache repair. Native full-cache
-recalculation itself dereferences every card's native data in the maximum-level
-loop; blindly replaying it against opaque card names would be unsafe.
+There are no active `AdjacencyBonus` definitions in this build. Native
+`MetaUpgradeLogic.lua:237-253` still clears the old
+`AdjacencyBonuses.CustomMultiplier` projection during a loadout update. The
+operation clears that known stale projection, preserves other unknown bonus
+members, and includes the removed value in review. It does not replay purchase
+setup, resource spending, runtime mounting or current-run callbacks.
 
-## Remaining work under the expanded editing contract
+Unknown observed card metadata is preserved. Its existing scalar physical
+fields remain writable with their actual Lua types and the shared Advanced
+unknown-impact warning; absent fields are not invented. The module does not
+infer unlocks, costs or runtime effects for unknown metadata. Native full-cache
+code itself dereferences native card data, so known cache reconstruction is
+explicitly limited to the supported manifest rather than claiming unknown
+cards' contributions. Structured unknown data, raw layout edits and fields
+outside the semantic card actions remain the Advanced typed/path owner's
+responsibility.
 
-The user's latest acceptance requires reliable scalar, Boolean, enum, counter,
-membership and selection edits by default. Native linked effects belong to the
-implementation; absent whitelist membership or incomplete owner research is
-not a final read-only disposition. This implementation snapshot therefore does
-**not** complete #427. Automatic Arcana unlock/equipment recomputation, broader
-typed/path access to reliable unknown fields, and the existing progression and
-equipment whitelist/refusal policies remain development gaps for the next
-owner pass. The read-only boundaries described above record current behavior
-and source dependencies, not authorization to close those requirements.
+## Verification and remaining acceptance
 
-## Reproduction and verification boundary
+The initial temporary-file entity journey reproduced missing Familiar grouping
+on baseline `293b6473912991a570729d68fd456e5334977ef1`. Subsequent RED fixtures
+reproduced an equipped Arcana Boolean being read-only, an automatic activation
+being refused without implementing its prerequisites, locked native selectors
+being omitted/refused, and Pickaxe rank 2 → 1 erasing ever-purchased history.
+The expanded typed-card RED also caught synthetic absent fields and incorrect
+assumed value types on unknown metadata.
 
-The new temporary-file entity journey first failed on source baseline
-`293b6473912991a570729d68fd456e5334977ef1`: searching for the native Familiar
-could not find a `familiar:<native-id>` entity, so no grouped purchase/selection
-workflow existed. The test now queries bilingual entities, stages linked
-progression and equipment changes, inspects the review, applies to temporary
-Save bytes, reopens, and verifies native owners and unknown-record preservation.
-It covers downgrade/history separation, parent revocation, read-only tool and
-Arcana dispositions, missing/malformed/duplicate/gapped/disagreeing Familiar
-owners, conflicting intent order, access supplied by a selected Familiar,
-observed Arcana cache deltas, absent/opaque cache preservation, invalid cache
-owners and the safe manual-card revocation path through reopened Save bytes.
+`test_hades2_save_arcana_equipment.py` exercises actual temporary Core Save
+query → Stage → review → Apply → reopen journeys: all six automatic rules,
+two-pass automatic dependencies, custom layouts, deterministic prerequisites,
+capacity, explicit-intent conflicts and retained baskets, missing table
+creation, native tier/mirror repair, starter/default-aspect revocation, native
+selection prerequisites, unknown values, adjacency projections and current-run
+preservation. Existing equipment/progression/entity/discovery/staged-action
+and unique-owner tests cover the neighboring workflows and successful paths.
+Tests never read or mutate the user's save tree.
 
-Nearest entity, unique-owner, discovery and staged-action contracts are also
-run. Automated file/fixture evidence does not establish rendered app acceptance
-or real Hades save-load behavior. Exact-head portable and macOS task gates and
-independent final-head review belong to the authorized handoff for this issue.
+A local source oracle additionally executed the installed unmodified native
+automatic requirement, coordinate, zoom and snapshot functions. It verified the
+manifest's inherited costs/rules and compared 120 seeded default/custom-layout
+states against the Python implementation, with matching automatic results.
+The oracle log and extraction script are retained locally under
+`/tmp/mgt-427-native-arcana-oracle.{log,lua}`; native game source is not copied
+into the repository. This is native Lua function evidence, without a game
+process, runtime mounting or real-save acceptance.
+
+Advanced typed/path integration and Swift warning presentation are developed
+by their separate owners. The workspace must run this module's finalizer when
+building both the final semantic candidate and the semantic candidate used to
+detect Advanced overlap. Exact-head portable/macOS gates, independent review,
+rendered UI acceptance and real Hades save loading remain distinct completion
+evidence for the integrated issue. This scoped implementation does not close
+#427 or the wider Save Editor acceptance on its own.
 
 ## Source hashes
 
@@ -171,6 +205,7 @@ MetaUpgradeData.lua 9023e35c8f74e466aeba8287f618bb439000ca93e9d8a5eded7abe0f1a28
 MetaUpgradeCardScreenLogic.lua 228ad33a9ef71af6142109afd6105c3b599759ee600df12dd638ba2b33f41752
 MetaUpgradeCardUpgradeScreenLogic.lua d65be170cf0dcc4c2010139895b877dd2b21a01e21b05251ebf2b791e8ea1eaa
 WeaponShopLogic.lua 3a0b47260e29e8f10fd3abe6b683047687448081dadd704a8ca5a9495bd6c9a9
+WeaponUpgradeLogic.lua 023271aab24f3f12dd76f5ccbece3175be7ae9e22fd72c07c4e38d4aaaf1f8d9
 WeaponShopData.lua d7e7f8eec088da86962e8355eb514c4e83188cf1a6fe849c4ad3236a24298e46
 RunData.lua 604497cb405551a4364ee9d5bb22ee35731c545ce3cef06a53dc4b6ab6e4b86e
 ```

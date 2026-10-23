@@ -75,14 +75,20 @@ state = {
     "ObjectivesCompleted": table({}),
     "CompletedObjectiveSets": table({}),
 }
+ARCANA_CACHE_EFFECTS = {
+    "linked:arcanaCache:MetaUpgradeUnlockedCountCache",
+    "linked:arcanaCache:MetaUpgradeMaxLevelCountCache",
+    "linked:arcanaCache:MetaUpgradeCostCache",
+    "linked:arcanaCache:MaxMetaUpgradeCostCache",
+}
 saves, workspace = environment("basic", state)
 workspace.stage("card:ChanneledCast:Unlocked", "set", False)
 workspace.stage("interaction:NPC_Hecate_01", "set", 4)
 workspace.stage("resource:MetaCurrency", "set", 50)
 review = workspace.review(language="en")
 assert review["actionCount"] == 3
-assert review["effectCount"] == 2
-assert review["physicalChangeCount"] == 5
+assert review["effectCount"] == 6
+assert review["physicalChangeCount"] == 9
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked",
     "interaction:NPC_Hecate_01",
@@ -95,7 +101,7 @@ assert arcana["valueType"] == "boolean"
 assert {effect["id"] for effect in arcana["effects"]} == {
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 zh_arcana = workspace.review(language="zh-CN")["actions"][0]["effects"]
 assert any(effect["name"].endswith("已装备") for effect in zh_arcana)
 assert any(effect["name"].endswith("等级") for effect in zh_arcana)
@@ -107,7 +113,7 @@ assert review["actionCount"] == 2
 assert [action["entryId"] for action in review["actions"]] == [
     "card:ChanneledCast:Unlocked", "resource:MetaCurrency",
 ]
-assert review["effectCount"] == 2
+assert review["effectCount"] == 6
 
 # Restaging an existing action revises it in place rather than adding another
 # user action, even after unrelated query/browse work.
@@ -116,13 +122,13 @@ review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
 assert review["actions"][1]["entryId"] == "resource:MetaCurrency"
 assert review["actions"][1]["after"] == 75
-assert review["physicalChangeCount"] == 4
+assert review["physicalChangeCount"] == 8
 assert {row["id"] for row in review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "resource:MetaCurrency",
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 
 # Cancel clears the requested-action set without touching the loaded source;
 # re-staging reconstructs the same linked projection from intent, not cached diff.
@@ -133,8 +139,8 @@ assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] ==
 workspace.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 review = workspace.stage("resource:MetaCurrency", "set", 75, language="en")
 assert review["actionCount"] == 2
-assert review["effectCount"] == 2
-assert review["physicalChangeCount"] == 4
+assert review["effectCount"] == 6
+assert review["physicalChangeCount"] == 8
 
 # Applying the remaining two requested actions crosses the Save transaction
 # exactly once and clears the action basket.
@@ -160,23 +166,23 @@ _, arcana_overlap = environment("arcana-overlap", arcana_overlap_state)
 arcana_overlap.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
 overlap_review = arcana_overlap.stage("card:ChanneledCast:Level", "set", 1, language="en")
 assert overlap_review["actionCount"] == 2
-assert overlap_review["effectCount"] == 1
-assert overlap_review["physicalChangeCount"] == 3
+assert overlap_review["effectCount"] == 5
+assert overlap_review["physicalChangeCount"] == 7
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "card:ChanneledCast:Level",
     "linked:card:ChanneledCast:Equipped",
-}
-assert len({row["id"] for row in overlap_review["changes"]}) == 3
+} | ARCANA_CACHE_EFFECTS
+assert len({row["id"] for row in overlap_review["changes"]}) == 7
 overlap_review = arcana_overlap.unstage("card:ChanneledCast:Level", language="en")
 assert overlap_review["actionCount"] == 1
-assert overlap_review["effectCount"] == 2
-assert overlap_review["physicalChangeCount"] == 3
+assert overlap_review["effectCount"] == 6
+assert overlap_review["physicalChangeCount"] == 7
 assert {row["id"] for row in overlap_review["changes"]} == {
     "card:ChanneledCast:Unlocked",
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
-}
+} | ARCANA_CACHE_EFFECTS
 
 # Overlapping direct/linked ownership must be recomputed rather than cached.
 # Disabling the equipped familiar implies clearing the selection. Explicitly
