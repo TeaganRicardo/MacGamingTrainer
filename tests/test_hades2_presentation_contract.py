@@ -154,7 +154,10 @@ ERROR_SHAPED = re.compile(
 # Modules whose CJK strings are never a raised player-facing message.
 # `catalog.py` collects warnings and the official term table; `diagnostics.py`
 # returns a report whose field values the Host renders in its own table.
-ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py"))
+# History's read-only projection also owns explicit bilingual labels/reasons
+# (including "Failures"). Those data fields do not enter the error funnel;
+# raised messages remain scanned independently below in every module.
+ERROR_FREE_MODULES = frozenset(("catalog.py", "diagnostics.py", "save_history.py"))
 
 
 def render(template, arguments):
