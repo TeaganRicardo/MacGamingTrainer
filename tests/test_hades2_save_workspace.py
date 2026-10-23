@@ -125,7 +125,11 @@ page = workspace.query(domain="resources", search="Points", offset=0, limit=2, l
 assert page["domain"] == "resources"
 assert page["total"] >= 2
 assert len(page["items"]) == 2
-assert workspace.query(domain="resources", search="UnmodeledCurrency")["total"] == 0
+unknown_resource = workspace.query(domain="resources", search="UnmodeledCurrency")["items"]
+assert len(unknown_resource) == 1
+assert unknown_resource[0]["editable"] and unknown_resource[0]["domain"] == "advanced"
+assert unknown_resource[0]["path"] == ["GameState", "Resources", "UnmodeledCurrency"]
+assert unknown_resource[0]["warning"]
 by_resource = {row["rawId"]: row for row in workspace.query(
     domain="resources", limit=200, language="en"
 )["items"]}

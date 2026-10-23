@@ -168,6 +168,7 @@ BILINGUAL_DATA_FUNCTIONS = {
     "save_advanced.py": frozenset(("row", "warning")),
     "save_workspace.py": frozenset(("_discovery_reason",)),
     "save_narrative.py": frozenset(("entry_row",)),
+    "save_quest_rewards.py": frozenset(("rows",)),
 }
 
 
