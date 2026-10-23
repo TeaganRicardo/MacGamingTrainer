@@ -47,6 +47,18 @@ def document(amount, marker):
             "Members": LuaTable(0, 4, [(True, "boolean key"), (1.0, "numeric key"), ("1", "string key"), ("\udcff", "binary key")]),
         }),
     })
+    if os.environ.get("MGT_SAVE_JOURNEY_RECORDS") == "1":
+        state["RunHistory"] = table({1.0: table({
+            "RunResult": 2.0, "EndingRoomName": "F_Boss01", "ActiveBounty": "Initial bounty",
+            "GameplayTime": 12.5, "ShrinePointsCache": 4.0, "TraitCache": table({}),
+        })})
+        state["FishingSuccesses"] = 9.0
+        state["QuestStatus"] = table({"QuestHelpDora": "Unlocked"})
+        state["QuestsViewed"] = table({"QuestHelpDora": False})
+        state["QuestsCompleted"] = table({"QuestHelpDora": False})
+        state["TextLinesRecord"] = table({"UnverifiedScene": False})
+        state["TextLinesChoiceRecord"] = table({"UnverifiedScene": " Choice A "})
+        state["SpeechRecord"] = table({"/VO/Unknown_0001": 3.0, "/VO/Legacy_0001": True})
     header = Hades2SaveHeader(
         game_version=0x12, save_flags=0, timestamp=100, location="Crossroads",
         completed_runs=1, accumulated_meta_points=0, active_shrine_points=0,
@@ -55,7 +67,7 @@ def document(amount, marker):
         map_name="Hub_Main", next_map_name="F_Opening01",
     )
     return Hades2SaveDocument(header, [table({
-        "GameState": state, "CurrentRun": table({}),
+        "GameState": state, "CurrentRun": table({"RunResult": 2.0, "GameplayTime": 999.0}),
     })]).to_bytes()
 
 
@@ -120,6 +132,35 @@ def main():
             + json.dumps(name, ensure_ascii=False) + " }"
             for identifier, name in names.items()
         ))
+    if os.environ.get("MGT_SAVE_JOURNEY_RECORDS") == "1":
+        scripts = base / "native-game/Contents/Resources/Content/Scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "NPCData_Hecate.lua").write_text('''UnitSetData = {
+ NPC_Hecate_01 = {
+  InteractTextLineSets = {
+   HecateJourney01 = {
+  { Cue = "/VO/Unknown_0001", Text = "Integer speech fixture" },
+  { Cue = "/VO/Legacy_0001", Text = "Boolean speech fixture" },
+   }
+  }
+ }
+}''')
+        reset = b'StoryResetData = { TextLines = { "HecateJourney01" } }'
+        (scripts / "StoryResetData.lua").write_bytes(reset)
+        # The authored text corpus has its own exact fixture digest. Keep the
+        # production source scanner/parser; this proves contextual controls,
+        # not compatibility with an installed supported game's source set.
+        from games.hades2 import save_workspace
+        investigation_type = save_workspace.NativeDialogueInvestigation
+        checksum = hashlib.sha256(reset).hexdigest()
+        save_workspace.NativeDialogueInvestigation = lambda path: investigation_type(path, expected_hash=checksum)
+        for language in ("en", "zh-CN"):
+            directory = text_root / language
+            directory.mkdir()
+            (directory / f"Journey.{language}.sjson").write_text('''{ Texts = [
+ { Id = "Unknown_0001" DisplayName = "Integer speech fixture" Event = "HecateJourney01" }
+ { Id = "Legacy_0001" DisplayName = "Boolean speech fixture" Event = "HecateJourney01" }
+] }''')
     module = Path(sys.modules[Hades2Adapter.__module__].__file__).parent
     protocol = json.loads((module / "module.json").read_text())["protocolVersion"]
     spec = SaveManagementSpec(

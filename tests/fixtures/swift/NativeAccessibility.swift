@@ -24,6 +24,7 @@ struct NativeAccessibilityControl {
     // AppKit exposes static text through AXValue, including its authored
     // accessibility label. Interactive controls retain their separate label.
     var text: String? { label ?? value("accessibilityValue") as? String }
+    var valueText: String? { value("accessibilityValue") as? String }
     var help: String? { value("accessibilityHelp") as? String }
     var identifier: String? { value("accessibilityIdentifier") as? String }
     var enabled: Bool { boolean("isAccessibilityEnabled") }

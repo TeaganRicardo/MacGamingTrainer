@@ -423,6 +423,9 @@ struct Hades2SaveEditorView: View {
                             ))
                     }
                 }
+                if let warning = entry.warning {
+                    Text(warning).font(.caption).foregroundStyle(theme.warning)
+                }
                 editFailure(entry)
             }
             .padding(.horizontal, theme.rowHorizontalPadding)

@@ -1,6 +1,6 @@
 # Save Editor player-journey acceptance
 
-[#482](https://github.com/TeaganRicardo/MacGamingTrainer/issues/482) owns this usability gate. The supported Save domains and their write permissions remain owned by the Hades descriptors; this procedure does not extend them. The final selected source SHA, packaged artifact and checksum belong to the consolidated handoff recorded in [PROJECT_STATUS.md](../../PROJECT_STATUS.md).
+[#482](https://github.com/TeaganRicardo/MacGamingTrainer/issues/482) owns this usability gate. Save fields are editable when their actual path, type and codec round trip are reliable; game-specific descriptors own linked semantics, and [typed Advanced editing](hades2-advanced-save-ui-acceptance.md) covers raw values whose purpose is unknown. A technical read-only reason must name the actual obstacle. The final selected source SHA, packaged artifact and checksum belong to the consolidated handoff recorded in [PROJECT_STATUS.md](../../PROJECT_STATUS.md).
 
 ## Reproducible automated evidence
 
@@ -12,7 +12,9 @@ The actual inline boolean control is pressed. The actual inline enum control is 
 
 `tests/test_hades2_save_editor_frontend.py` owns focused correction and recovery cases: invalid text remains beside its owning control through unrelated stage/removal/Apply; a valid correction clears only that field; backend-refused values revert to acknowledged state with local feedback; explicit discard abandons retained drafts. Backend operation failures retain separate owners: a successful review clears its own failure while preserving an Apply recovery path, and changing targets or discarding requested edits cannot erase a failed disk transaction's recovery evidence. A successful retry of that operation or opening a new document clears the corresponding notice. Query/detail failures, stale responses, source selection and separate workspaces remain covered there. These fixtures use temporary documents and do not establish game loading or runtime reload.
 
-Run the two tests with the repository's supported Python and Swift toolchain on macOS. Both are registered in the existing macOS test list. The parent lane runs the full owning checks and build/package on its final reviewed source; do not substitute an earlier branch result after integration.
+`tests/test_hades2_save_record_frontend.py` extends this native journey to ordinary stored history and narrative fields. It edits exact/empty text, a numeric RunResult enum, a creatable absent FishingFails counter, quest status and its linked completion record, a companion boolean, dialogue playback/choice and integer/boolean speech records. Actual controls revise the string in Changes, expose the selected numeric enum's localized label before and after acknowledgement, and Apply once to an explicit target. A fresh document still shows the chosen result and whitespace. An independent codec read verifies every installed field, the unchanged source, reward resources and CurrentRun. The temporary narrative source corpus has its own exact test digest; it proves contextual indexing and dispatch, not an installed game's source compatibility. As above, completed enum dispatch uses a native selector bound to the production owner; actual SwiftUI menu tracking remains user-run.
+
+Run these tests with the repository's supported Python and Swift toolchain on macOS. They are registered in the existing macOS test list. The parent lane runs the full owning checks and build/package on its final reviewed source; do not substitute an earlier branch result after integration.
 
 ## Consolidated user-run procedure
 
