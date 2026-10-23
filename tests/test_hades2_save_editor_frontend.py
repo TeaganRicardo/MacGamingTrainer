@@ -311,7 +311,7 @@ for raw in sys.stdin:
                 'domain': 'weapons',
                 'rawId': 'WeaponDagger',
                 'path': ['GameState', 'LastWeaponUpgradeName', 'WeaponDagger'],
-                'name': name + ' · Selected aspect',
+                'name': name + (' · 当前形态' if req['params']['language'] == 'zh-CN' else ' · Selected aspect'),
                 'englishName': 'Sister Blades · Selected aspect',
                 'entityId': 'weapon:WeaponDagger',
                 'entityName': name,
@@ -448,7 +448,7 @@ for raw in sys.stdin:
             'domain': domain,
             'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
-            'total': len(groups) if domain == 'entities' else len(items),
+            'total': 201 if req['params']['search'] == 'pagination-fixture' else (len(groups) if domain == 'entities' else len(items)),
             'items': [] if domain == 'entities' else items,
             'entities': list(groups.values()) if domain == 'entities' else [],
             'sourceStatus': 'available' if domain == 'investigate' else None,
@@ -712,6 +712,7 @@ struct Main {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.finishLaunching()
+        enableNativeAccessibility()
         let toolWindows = TrainerToolWindowStore()
         let window = toolWindows.open(id: "save-editor", title: "Save Editor", localization: localization, theme: .standard) {
             TrainerToolWindowContent(canClose: { !model.busy }, onClose: model.close) {
@@ -1065,6 +1066,12 @@ struct Main {
             || model.entityResults.first?.entries.filter({ $0.editable }).count != 2 {
             fail("Arcana was not a complete, immediately editable multi-field entity")
         }
+        pump(0.10)
+        guard let content = window.contentView,
+              let unlocked = model.items.first(where: { $0.valueType == "boolean" }),
+              namedNativeControl(content, role: "AXCheckBox", name: unlocked.displayName) != nil else {
+            fail("The actual inline Save switch has no owning field name")
+        }
         model.selectScope("all")
         pumpUntil { !model.querying }
         if model.search != "Sorceress" {
@@ -1191,6 +1198,10 @@ struct Main {
         }
         let chosenWeaponID = Hades2SaveEditorEntityGrouping.entities(from: model.items).first?.id
         let chineseWeaponName = model.items.first?.entityName
+        pump(0.10)
+        if namedNativeControl(content, role: "AXPopUpButton", name: selector.displayName) == nil {
+            fail("The actual Save enum control is named only by its generic value label")
+        }
         model.setLanguage(.en)
         pump(0.25)
         let localizedWeapon = Hades2SaveEditorEntityGrouping.entities(from: model.items).first
@@ -1200,6 +1211,40 @@ struct Main {
             || localizedWeapon?.title != "Sister Blades" {
             fail("Selection did not survive a real model language reload")
         }
+        pump(0.10)
+        if namedNativeControl(content, role: "AXPopUpButton", name: model.items[0].displayName) == nil {
+            fail("The Save enum control kept its old native name after a language reload")
+        }
+
+        model.search = "pagination-fixture"
+        model.submitSearch()
+        pumpUntil { !model.querying && model.total == 201 }
+        for language in [TrainerPresentationLanguage.en, .zhCN] {
+            localization.language = language
+            pumpUntil { !model.querying && model.total == 201 }
+            pump(0.10)
+            let previousName = Hades2GameModule.resolveText(key: "hades2.saveEditor.previousPage", localization: localization)
+            let nextName = Hades2GameModule.resolveText(key: "hades2.saveEditor.nextPage", localization: localization)
+            guard let next = namedNativeControl(content, role: "AXButton", name: nextName),
+                  let previous = namedNativeControl(content, role: "AXButton", name: previousName),
+                  next.enabled, !previous.enabled,
+                  next.help == nextName,
+                  previous.help == previousName,
+                  next.press() else {
+                fail("Save page actions have missing names/help or incorrect initial availability")
+            }
+            pumpUntil { !model.querying && model.offset == 100 }
+            guard let currentPrevious = namedNativeControl(content, role: "AXButton", name: previousName),
+                  currentPrevious.enabled,
+                  currentPrevious.press() else {
+                fail("The named previous-page action did not become available")
+            }
+            pumpUntil { !model.querying && model.offset == 0 }
+        }
+        localization.language = .en
+        model.search = "ash"
+        model.submitSearch()
+        pumpUntil { !model.querying }
 
         model.selectDomain(.advanced)
         pump(0.20)
@@ -1494,7 +1539,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated, main_path]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", ROOT / "tests/fixtures/swift/NativeAccessibility.swift", generated, main_path]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],

@@ -1229,6 +1229,7 @@ struct Hades2TrainerView: View {
                 Spacer()
                 TrainerShortcutBadge(text: model.shortcutText(.boonRarityEnabled))
                 TrainerToggleControl(
+                    title: text("hades2.rarity.title"),
                     isOn: model.boonRarityEnabled,
                     enabled: model.canEditDesired,
                     tint: state.indicatorColor,

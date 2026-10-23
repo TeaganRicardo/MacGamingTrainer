@@ -22,6 +22,8 @@
 "host.input.maximumValue" = "{0}上限";
 "host.lock" = "锁定";
 "host.unlock" = "解锁";
+"host.lockValue" = "锁定{0}";
+"host.unlockValue" = "解锁{0}";
 "host.resource.searchPlaceholder" = "搜索名称或资源 ID";
 "host.search.clear" = "清除搜索";
 "host.resource.noMatches" = "没有匹配项目";

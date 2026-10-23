@@ -93,6 +93,7 @@ final class GenerateAction: NSObject {
 @main struct Main {
  @MainActor static func main() throws {
   _ = NSApplication.shared
+  enableNativeAccessibility()
   let python=URL(fileURLWithPath:CommandLine.arguments[1])
   let worker=URL(fileURLWithPath:CommandLine.arguments[2]); let temporary=worker.deletingLastPathComponent()
   let log=worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
@@ -124,6 +125,19 @@ final class GenerateAction: NSObject {
   let traitTargetName=Hades2GameModule.resolveText(key:"hades2.traits.targetLevel",localization:localization)
   check(fields(host).contains(where:{$0.isEditable && !$0.isEnabled && $0.accessibilityLabel()==traitTargetName}),
         "the unavailable trait target-level input lost its semantic native name")
+  for language in [TrainerPresentationLanguage.en, .zhCN] {
+   localization.language=language; pump()
+   for key in ["hades2.feature.moneyMultiplier", "hades2.feature.resourceMultiplier", "hades2.rarity.title"] {
+    let name=Hades2GameModule.resolveText(key:key,localization:localization)
+    check(nativeAccessibilityControls(host).contains { element in
+     ["AXCheckBox", "AXSwitch"].contains(element.role ?? "") && element.label==name
+    }, "a native feature switch lost its semantic name: \(name)")
+   }
+   let healthName=Hades2GameModule.resolveText(key:"hades2.vital.health",localization:localization)
+   let lockName=localization.localized("host.lockValue",arguments:[healthName])
+   check(namedNativeControl(host,role:"AXButton",name:lockName) != nil,
+         "the native lock action lost its target name: \(lockName)")
+  }
   guard var money=fields(host).first(where:{$0.isEditable && $0.stringValue == "123"}) else { fatalError("money text field not found: \(fields(host).map(\.stringValue))") }
   check(window.makeFirstResponder(money), "could not focus money field"); pump()
   try? FileManager.default.removeItem(at:log)
@@ -424,7 +438,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
     binary = td / "text_edit"
-    subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(generated), str(main), "-o", str(binary)], check=True)
+    subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
     home = td / "home"; home.mkdir()
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
     subprocess.run([str(binary), PYTHON, str(worker)], env=env, check=True, timeout=45)

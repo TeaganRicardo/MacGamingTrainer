@@ -96,6 +96,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                 TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
                     .id(selection)
                 TrainerLockButton(
+                    title: title,
                     locked: locked,
                     enabled: enabled && !selection.isEmpty,
                     action: onLock

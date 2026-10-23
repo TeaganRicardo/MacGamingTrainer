@@ -22,6 +22,8 @@
 "host.input.maximumValue" = "Maximum {0}";
 "host.lock" = "Lock";
 "host.unlock" = "Unlock";
+"host.lockValue" = "Lock {0}";
+"host.unlockValue" = "Unlock {0}";
 "host.resource.searchPlaceholder" = "Search name or resource ID";
 "host.search.clear" = "Clear search";
 "host.resource.noMatches" = "No matching items";

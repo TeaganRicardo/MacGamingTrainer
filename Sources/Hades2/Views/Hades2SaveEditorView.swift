@@ -438,6 +438,7 @@ struct Hades2SaveEditorView: View {
         let draft = draftBinding(for: entry)
         if entry.valueType == "boolean" {
             TrainerToggleControl(
+                title: entry.displayName,
                 isOn: stagedValue(for: entry)?.base as? Bool ?? false,
                 enabled: !model.busy,
                 helpText: entry.displayName,
@@ -448,7 +449,7 @@ struct Hades2SaveEditorView: View {
             )
         } else if entry.valueType == "enum" && !entry.choices.isEmpty {
             Picker(
-                text("hades2.saveEditor.value"),
+                entry.displayName,
                 selection: Binding<String>(
                     get: { stagedValue(for: entry)?.base as? String ?? "" },
                     set: { choice in
@@ -533,10 +534,14 @@ struct Hades2SaveEditorView: View {
                 Image(systemName: "chevron.left")
             }
             .disabled(model.busy || model.offset == 0)
+            .accessibilityLabel(text("hades2.saveEditor.previousPage"))
+            .help(text("hades2.saveEditor.previousPage"))
             Button { model.nextPage() } label: {
                 Image(systemName: "chevron.right")
             }
             .disabled(model.busy || model.offset + Hades2SaveEditorModel.pageSize >= model.total)
+            .accessibilityLabel(text("hades2.saveEditor.nextPage"))
+            .help(text("hades2.saveEditor.nextPage"))
         }
         .buttonStyle(.borderless)
     }

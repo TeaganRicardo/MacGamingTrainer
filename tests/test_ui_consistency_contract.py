@@ -90,8 +90,7 @@ assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' in view
 assert 'model.shortcutText(.disableAll))", systemImage: "power"' not in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "if hasContextualControls(for: trait)" not in view
-assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
-assert '.accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))' in lock_button
+assert 'localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title])' in lock_button
 assert "TrainerPrimaryActionButton(" in status
 assert ".buttonStyle(.borderedProminent)" not in status
 

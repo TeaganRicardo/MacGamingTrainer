@@ -475,6 +475,8 @@
     "hades2.saveEditor.childCount": "{0} children",
     "hades2.saveEditor.ambiguousPath": "Duplicate physical key · cannot open",
     "hades2.saveEditor.pageSummary": "{0}–{1} of {2}",
+    "hades2.saveEditor.previousPage": "Previous Page",
+    "hades2.saveEditor.nextPage": "Next Page",
     "hades2.saveEditor.review": "Review Changes",
     "hades2.saveEditor.investigate.details": "Investigate scene",
     "hades2.saveEditor.investigate.conditions": "Authored conditions",

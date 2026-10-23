@@ -18,7 +18,7 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
-            TrainerLockButton(locked: locked, enabled: editable, action: onLock)
+            TrainerLockButton(title: title, locked: locked, enabled: editable, action: onLock)
         } content: {
             HStack(spacing: 2) {
                 TrainerTextField(title: "—", text: $current, accessibilityLabel: localization.localized("host.input.currentValue", arguments: [title]), onEditingChanged: TrainerTextField.editingTracker(focus, equals: currentField), onCommit: onCurrentCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
@@ -77,7 +77,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
-            TrainerLockButton(locked: locked, enabled: editable && lockEnabled, action: onLock)
+            TrainerLockButton(title: title, locked: locked, enabled: editable && lockEnabled, action: onLock)
         } content: {
             TrainerTextField(title: placeholder, text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -129,7 +129,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
-            TrainerLockButton(locked: locked, enabled: isEditable, action: onLock)
+            TrainerLockButton(title: title, locked: locked, enabled: isEditable, action: onLock)
         } content: {
             HStack(spacing: 3) {
                 TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
@@ -177,6 +177,7 @@ struct TrainerMultiplierMetricCard<Field: Hashable>: View {
 }
 
 struct TrainerInlineStatEditor<Field: Hashable>: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     @Binding var text: String
     let focus: Binding<Field?>
@@ -201,6 +202,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
                     Text(suffix).foregroundStyle(.secondary).frame(width: 18)
                 }
                 TrainerToggleControl(
+                    title: localization.localized("host.lockValue", arguments: [title]),
                     isOn: locked,
                     enabled: isEditable,
                     onChange: onLockChange
