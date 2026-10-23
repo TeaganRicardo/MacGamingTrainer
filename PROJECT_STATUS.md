@@ -37,16 +37,11 @@ Retain these unperformed scope families in the consolidated user-run pass; detai
 - Shared input/focus/commit, transient feedback/recovery access, bilingual layout and game-management placement, including affected narrow-window/accessibility behavior.
 - Current runtime observation, unrelated external value updates, mounted-effect/menu handoff, generation changes and reconnect, plus perceived latency/FPS. Offline performance measurements do not establish native frame cost or FPS improvement.
 
-### Runtime-observation performance continuation
+### Consolidated QA candidate
 
-- Fixed source: `d0fa25a8c7254cbde9e2aafce9640d8d27a9ecbe`, tree-identical to merged baseline `faaa1ebf77af73779ba9f249e4ac22d71c264486`. Resolve the live remote tip separately for new work.
-- Package: `MacGamingTrainer-0.3.0-b6-d0fa25a8-rc.zip`.
-- ZIP SHA-256: `b646a3e1b557f67e521629478e70df552fa14450649f8abab22cb9f27cb84f81`.
-- Exact-source convergence: [Linux](https://github.com/TeaganRicardo/MacGamingTrainer/actions/runs/38718472130), [macOS/mutation/package/provenance](https://github.com/TeaganRicardo/MacGamingTrainer/actions/runs/38718487236), [reference module](https://github.com/TeaganRicardo/MacGamingTrainer/actions/runs/38718508214). Download checksum/provenance and extracted strict signing were verified in the owning handoff.
-- User-local package/procedure: `/Users/gao/Downloads/MacGamingTrainer-rev110-d0fa25a8/README.md`.
-- Historical status: this revision-110 package was the frozen artifact selected when the earlier performance gate was written. It is retained as exact-source evidence, not as the current runtime revision.
-- On 2026-10-17 the user reported completing real-game perceived-performance testing on the current product line and explicitly authorized continuing #470. That clears the earlier performance-continuation gate only; it does not silently certify unrelated feature families or unreported owner/reconnect/rendering scenarios.
-- Live `main` at the start of #470 completion was `86e91fa2a701026a51671fef1cb3c8a2e8c2e83c`, resident revision 113. The #470 completion candidate changes resident observation semantics and therefore advances the resident revision again; its exact-head runtime-observation/reconnect/perceived-latency acceptance remains user-run after automated/review convergence.
+[#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429) owns the selected final source, local package/checksum, toolchain provenance and consolidated user-run procedure. Earlier fixed artifacts remain historical evidence in their owning handoffs; use the selected candidate for the pending families above.
+
+On 2026-10-17 the user reported completing perceived-performance testing on the then-current product line and authorized continuing #470. That cleared the earlier continuation gate; later runtime-observation, owner/reconnect and rendering scenarios still require their recorded user-run observations.
 
 ## Execution authorization
 
