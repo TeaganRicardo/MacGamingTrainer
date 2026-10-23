@@ -110,7 +110,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
             pump()
         }
         func remove(_ id: String, remaining: Int) {
-            let identifier = "hades2.saveEditor.remove." + id
+            let identifier = "saveEditor.remove." + id
             guard let control = nativeAccessibilityControls(root).first(where: { $0.identifier == identifier }),
                   control.enabled, control.press() else { fatalError("native per-action remove missing: \(id)") }
             until("native action removal did not finish: \(id)") {

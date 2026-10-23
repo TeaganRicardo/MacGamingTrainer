@@ -733,7 +733,7 @@ struct Hades2SaveEditorView: View {
                 .buttonStyle(.borderless)
                 .help(text("hades2.saveEditor.basket.remove"))
                 .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
-                .accessibilityIdentifier("hades2.saveEditor.remove." + action.entryID)
+                .accessibilityIdentifier("saveEditor.remove." + action.entryID)
                 .disabled(model.busy)
             }
             editFailure(action.editorEntry)
