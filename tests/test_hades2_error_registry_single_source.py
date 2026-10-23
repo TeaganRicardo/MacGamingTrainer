@@ -97,7 +97,6 @@ CASES = (
     ("set_trait_rarity", "Trait rarity recompute did not reach the requested rarity", "hades2.error.traitRarityNoEffect", ()),
     ("remove_trait", "Trait removal is unavailable for the selected target", "hades2.error.traitRemovalUnavailable", ()),
     ("remove_trait", "Trait removal capability is unknown", "hades2.error.traitRemovalCapabilityUnknown", ()),
-    ("remove_trait", "Native trait removal left a matching instance mounted", "hades2.error.traitRemovalNoEffect", ()),
     ("remove_trait", "Direct trait removal left the selected instance mounted", "hades2.error.traitRemovalNoEffect", ()),
     ("set_trait_remaining_uses", "Temporary effect duration editing is unavailable for the selected target", "hades2.error.traitDurationUnavailable", ()),
     ("set_trait_remaining_uses", "Temporary effect duration did not reach the requested remaining uses", "hades2.error.traitDurationNoEffect", ()),

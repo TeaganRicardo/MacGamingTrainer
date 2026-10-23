@@ -154,7 +154,6 @@ assert 'feature = "damageEnabled"' in feature_generator
 assert "value = value ~= 1" in feature_generator
 assert 'if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end' in lua
 assert "M.damageMultiplier = 1" in lua[lua.index("local function disable()"):lua.index("local function anyDesired()")]
-assert "revision = 120" in lua
 assert len(set(action_order)) == len(action_order)
 assert "Color.clear" not in badge
 assert "if let text, !text.isEmpty" in badge

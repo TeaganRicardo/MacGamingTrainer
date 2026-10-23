@@ -136,7 +136,7 @@ EnemyData = {
 }
 PresetEventArgs = {}
 ScreenData = {}
-MapState = { RoomRequiredObjects = {} }
+MapState = { RoomRequiredObjects = {}, HealthBufferSources = {}, TemporaryHealthBufferSources = {} }
 FrameState = {}
 PersistentKeepsakeKeys = { "DoorHealReserve", "CustomTrayText" }
 MetaUpgradeCardData = {
@@ -195,6 +195,10 @@ local calls = {
   validateMana = 0,
   weaponAnim = 0,
   costumeSetup = 0,
+  expire = 0,
+  activated = 0,
+  weaponRefresh = 0,
+  armorSetup = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
@@ -204,6 +208,55 @@ local failArcanaAddAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
+local failRemoveAfterMutation = false
+
+DeepCopyTable = function(value)
+  if type(value) ~= "table" then return value end
+  local result = {}
+  for key, item in pairs(value) do result[key] = DeepCopyTable(item) end
+  return result
+end
+
+UpdateHeroTraitDictionary = function()
+  local hero = CurrentRun.Hero
+  hero.TraitDictionary = {}
+  hero.FirstTraitWithPropertyCache = hero.FirstTraitWithPropertyCache or {}
+  for _, trait in ipairs(hero.Traits) do
+    hero.TraitDictionary[trait.Name] = hero.TraitDictionary[trait.Name] or {}
+    table.insert(hero.TraitDictionary[trait.Name], trait)
+    for key in pairs(trait) do
+      if hero.FirstTraitWithPropertyCache[key] == nil then
+        hero.FirstTraitWithPropertyCache[key] = trait
+      end
+    end
+  end
+end
+
+CheckActivatedTraits = function() calls.activated = calls.activated + 1 end
+AddLinkedWeapons = function(names) return names end
+RecordTraitPropertyChange = function(name, property)
+  local registry = SessionState.PropertyChangeList.WeaponChanges
+  registry[property.WeaponName] = registry[property.WeaponName] or {}
+  local weapon = registry[property.WeaponName]
+  weapon[property.WeaponProperty] = weapon[property.WeaponProperty] or {}
+  property.ParentTraitName = name
+  table.insert(weapon[property.WeaponProperty], property)
+end
+ProcessHeroTraitChanges = function(trait, reverse)
+  assert(trait.PropertyChanges == nil, "survivor unit/Lua properties were replayed")
+  assert(reverse == true and trait.ForceWeaponRefreshOnRemove,
+    "repair must use native weapon-only refresh")
+  calls.weaponRefresh = calls.weaponRefresh + 1
+  local hero = CurrentRun.Hero
+  hero.WeaponEffectValue = 0
+  for _, properties in pairs(SessionState.PropertyChangeList.WeaponChanges) do
+    for _, changes in pairs(properties) do
+      for _, property in ipairs(changes) do
+        hero.WeaponEffectValue = hero.WeaponEffectValue + property.ChangeValue
+      end
+    end
+  end
+end
 
 local rarityValue = {
   Common = 1,
@@ -222,6 +275,7 @@ end
 
 IsGodTrait = function(name, args)
   return string.find(name or "", "Ordinary", 1, true) == 1
+    or name == "ArmorBoon" or name == "EncounterStartDefenseBuffBoon"
 end
 
 GetAllUpgradeableGodTraits = function()
@@ -297,12 +351,82 @@ AddTraitToHero = function(args)
   return trait
 end
 
+-- The supported native armor owner stores current amounts by source name.
+-- These are the native AddHealthBuffer/RemoveHealthBufferSource assignments,
+-- including the latter's unconditional temporary-source teardown.
+AddHealthBuffer = function(amount, source, args)
+  MapState.HealthBufferSources[source] = amount
+  if args and args.Temporary then MapState.TemporaryHealthBufferSources[source] = true end
+  local total = 0
+  for _, value in pairs(MapState.HealthBufferSources) do total = total + value end
+  CurrentRun.Hero.HealthBuffer = total
+end
+
+HephaestusArmor = function(hero, args)
+  calls.armorSetup = calls.armorSetup + 1
+  local owner = hero.Traits[1]
+  owner.CurrentArmor = args.Amount
+  AddHealthBuffer(args.Amount, owner.Name, { Silent = true })
+end
+EncounterStartTempArmor = function(hero, args)
+  calls.armorSetup = calls.armorSetup + 1
+  local owner = hero.Traits[1]
+  owner.CurrentArmor = args.Amount
+  AddHealthBuffer(args.Amount, owner.Name, { Silent = true, Temporary = true })
+end
+
+RemoveHealthBufferSource = function(source)
+  MapState.HealthBufferSources[source] = nil
+  MapState.TemporaryHealthBufferSources[source] = nil
+  local total = 0
+  for _, value in pairs(MapState.HealthBufferSources) do total = total + value end
+  CurrentRun.Hero.HealthBuffer = total
+  FrameState.RequestUpdateHealthUI = true
+end
+
 RemoveTraitData = function(hero, target, args)
   calls.directRemove = calls.directRemove + 1
   lastDirectRemoveArgs = args
   if not skipDirectRemoval then
     removeMatching(function(trait) return trait == target end)
+    -- Native registries are name-indexed, even for exact object removal.
+    for _, role in ipairs({
+      { "AddIncomingDamageModifiers", "IncomingDamageModifiers" },
+      { "AddOutgoingDamageModifiers", "OutgoingDamageModifiers" },
+      { "AddOutgoingCritModifiers", "OutgoingCritModifiers" },
+      { "AddOutgoingDoubleDamageModifiers", "OutgoingDoubleDamageModifiers" },
+      { "AddOutgoingLifestealModifiers", "OutgoingLifestealModifiers" },
+    }) do
+      if target[role[1]] and hero[role[2]] then
+        for index, modifier in ipairs(hero[role[2]]) do
+          if modifier.Name == target.Name then table.remove(hero[role[2]], index); break end
+        end
+      end
+    end
+    if target.PropertyChanges and SessionState.PropertyChangeList then
+      for _, weapon in pairs(SessionState.PropertyChangeList.WeaponChanges) do
+        for key, changes in pairs(weapon) do
+          local kept = {}
+          for _, change in ipairs(changes) do
+            if change.ParentTraitName ~= target.Name then kept[#kept + 1] = change end
+          end
+          weapon[key] = kept
+        end
+      end
+    end
+    if target.OnExpire and not (args and args.SkipExpire) then
+      calls.expire = calls.expire + 1
+      hero.ReservedByBoon = nil
+    end
+    if target.OverrideWeaponFireNames and not (args and args.SkipActivatedTraitUpdate) then
+      hero.CastOverride = nil
+    end
+    UpdateHeroTraitDictionary()
+    -- TraitLogic.lua:1242 always invokes this, even when a same-name
+    -- ordinary armor boon survives the exact object removal.
+    RemoveHealthBufferSource(target.Name)
   end
+  if failRemoveAfterMutation then error("synthetic removal acknowledgement failure") end
 end
 
 RemoveTrait = function(hero, name)
@@ -365,7 +489,6 @@ end
 SetupCostume = function()
   calls.costumeSetup = calls.costumeSetup + 1
 end
-AddHealthBuffer = function() end
 IsTraitActive = function() return true end
 
 RemoveLastStand = function(hero, name)
@@ -644,6 +767,232 @@ do
   eq(result.actionOutcome, "completed", "native level receipt")
 end
 
+-- Removing one selected ordinary boon must preserve a differently-valued
+-- same-name instance, even when list order changes after selection.
+do
+  local first = newTrait("OrdinaryRemove", 501, 2, "Rare")
+  local second = newTrait("OrdinaryRemove", 502, 4, "Epic")
+  first.EffectValue, second.EffectValue = 20, 70
+  setTraits(first, second)
+  local row = findRow("OrdinaryRemove", 501)
+  CurrentRun.Hero.Traits = { second, first }
+  local beforeNative, beforeDirect = calls.nativeRemove, calls.directRemove
+  local params = paramsFrom(row, "selected-ordinary-remove")
+  local result = M.dispatch("remove_trait", params)
+  eq(#CurrentRun.Hero.Traits, 1, "selected removal deleted a same-name sibling")
+  eq(CurrentRun.Hero.Traits[1], second, "selected removal changed sibling identity")
+  eq(second.StackNum, 4, "selected removal changed sibling level")
+  eq(second.Rarity, "Epic", "selected removal changed sibling rarity")
+  eq(second.EffectValue, 70, "selected removal changed sibling effect")
+  eq(calls.nativeRemove, beforeNative, "selected removal reached name-level teardown")
+  eq(calls.directRemove, beforeDirect + 1, "selected removal skipped object teardown")
+  eq(row.removalCapability, "singleInstanceForce", "selected removal capability")
+  check(row.removalScopeAllMatching == false, "selected removal advertised a broader scope")
+  eq(#result.currentRunTraits, 1, "selected removal did not refresh inventory")
+  eq(result.currentRunTraits[1].instanceId, "502", "selected removal observed wrong sibling")
+  eq(result.actionOutcome, "completed", "selected removal receipt")
+  local replay = M.dispatch("remove_trait", params)
+  check(replay.duplicate == true, "completed selected removal was not deduplicated")
+  eq(calls.directRemove, beforeDirect + 1, "completed selected removal replayed")
+  check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
+    "selected removal triggered expiration")
+end
+
+-- Native name-indexed cleanup can remove the wrong modifier and every weapon
+-- property record. Preserve the surviving live modifier (including transient
+-- state), rebuild its weapon effect, and never replay its Lua property changes.
+do
+  local first = newTrait("OrdinaryEffectRemoval", 511, 2, "Rare", {
+    AddOutgoingDamageModifiers = { Multiplier = 1.2 },
+    PropertyChanges = {
+      { WeaponName = "WeaponStaff", WeaponProperty = "Damage", ChangeType = "Add", ChangeValue = 20 },
+      { LuaProperty = "MaxHealth", ChangeType = "Add", ChangeValue = 10 },
+    },
+    OverrideWeaponFireNames = { WeaponCast = "WeaponCastAnywhere" },
+    OnExpire = { FunctionName = "TraitUnreserveMana" },
+  })
+  local second = newTrait("OrdinaryEffectRemoval", 512, 4, "Epic", {
+    AddOutgoingDamageModifiers = { Multiplier = 1.7 },
+    PropertyChanges = {
+      { WeaponName = "WeaponStaff", WeaponProperty = "Damage", ChangeType = "Add", ChangeValue = 70 },
+      { LuaProperty = "MaxHealth", ChangeType = "Add", ChangeValue = 30 },
+    },
+    OverrideWeaponFireNames = { WeaponCast = "WeaponCastAnywhere" },
+    OnExpire = { FunctionName = "TraitUnreserveMana" },
+  })
+  setTraits(first, second)
+  local hero = CurrentRun.Hero
+  local survivingModifier = { Name = first.Name, Multiplier = 1.2, RemainingUses = 3 }
+  hero.OutgoingDamageModifiers = {
+    survivingModifier, { Name = second.Name, Multiplier = 1.7, RemainingUses = 8 },
+  }
+  hero.FirstTraitWithPropertyCache = { AddOutgoingDamageModifiers = second }
+  hero.ReservedByBoon, hero.CastOverride = true, "WeaponCastAnywhere"
+  SessionState.PropertyChangeList = { WeaponChanges = {}, ProjectileChanges = {}, EffectChanges = {} }
+  MapState.EquippedWeapons = { WeaponStaff = true }
+  for _, trait in ipairs(hero.Traits) do
+    RecordTraitPropertyChange(trait.Name, DeepCopyTable(trait.PropertyChanges[1]))
+  end
+  local row = findRow(second.Name, second.Id)
+  -- The selection ID, rather than the current list ordinal, owns the action.
+  hero.Traits = { second, first }
+  local healthBefore, expiryBefore = hero.MaxHealth, calls.expire
+  local result = M.dispatch("remove_trait", paramsFrom(row, "selected-effects-remove"))
+  eq(#hero.Traits, 1, "effect removal deleted a sibling")
+  eq(hero.Traits[1], first, "effect removal retained the wrong object")
+  eq(#hero.OutgoingDamageModifiers, 1, "modifier count after selected removal")
+  eq(hero.OutgoingDamageModifiers[1], survivingModifier, "surviving live modifier was rebuilt or removed")
+  eq(survivingModifier.RemainingUses, 3, "surviving modifier transient state reset")
+  eq(hero.WeaponEffectValue, 20, "surviving weapon property was lost or duplicated")
+  eq(hero.MaxHealth, healthBefore, "surviving Lua properties were applied again")
+  eq(hero.FirstTraitWithPropertyCache.AddOutgoingDamageModifiers, first, "property cache retained removed instance")
+  eq(hero.CastOverride, "WeaponCastAnywhere", "selected removal reversed a surviving cast override")
+  eq(calls.expire, expiryBefore, "selected removal expired a surviving name-owned source")
+  eq(hero.ReservedByBoon, true, "selected removal lost surviving mana reservation")
+  eq(result.currentRunTraits[1].instanceId, "511", "effect removal observation lost sibling")
+
+  local remaining = findRow(first.Name, first.Id)
+  M.dispatch("remove_trait", paramsFrom(remaining, "last-ordinary-remove"))
+  eq(#hero.Traits, 0, "last ordinary instance stayed mounted")
+  eq(calls.expire, expiryBefore + 1, "last ordinary removal skipped native expiration teardown")
+  eq(hero.ReservedByBoon, nil, "last ordinary removal retained mana reservation")
+  eq(hero.CastOverride, nil, "last ordinary removal retained native cast override")
+  hero.OutgoingDamageModifiers = nil
+  hero.FirstTraitWithPropertyCache = nil
+  SessionState.PropertyChangeList = nil
+  MapState.EquippedWeapons = nil
+end
+
+-- Ordinary Hephaestus armor keeps its native name-owned current pool after
+-- exact sibling removal. Neither renewable nor temporary armor is reacquired.
+do
+  for index, name in ipairs({ "ArmorBoon", "EncounterStartDefenseBuffBoon" }) do
+    for direction = 1, 2 do
+      defineRarities(name)
+      local temporary = name == "EncounterStartDefenseBuffBoon"
+      local survivor = newTrait(name, 530 + index * 10 + direction * 100, 2, "Rare", {
+        CostumeTrait = true, CurrentArmor = 12, Invincible = true,
+        IsRenewableArmor = temporary,
+        SetupFunction = not temporary
+          and { Name = "HephaestusArmor", Args = { Amount = 100, Source = "Renewable" } } or nil,
+        OnEncounterStartFunction = temporary
+          and { Name = "EncounterStartTempArmor", Args = { Amount = 100, Duration = 7 } } or nil,
+      })
+      local selected = newTrait(name, 531 + index * 10 + direction * 100, 5, "Epic", {
+        CostumeTrait = true, CurrentArmor = 77, Invincible = true,
+        IsRenewableArmor = temporary,
+      })
+      if direction == 1 then setTraits(survivor, selected) else setTraits(selected, survivor) end
+      MapState.HealthBufferSources = { UnrelatedArmor = 9 }
+      MapState.TemporaryHealthBufferSources = { UnrelatedArmor = true }
+      AddHealthBuffer(survivor.CurrentArmor, name, { Temporary = temporary })
+      -- CostumeLogic.OnHealthBufferDamage writes the consumed owner's remaining
+      -- CurrentArmor back to this shared name. Preserve that live amount, not
+      -- the 100 acquisition amount or the selected peer's stale 77.
+      survivor.CurrentArmor = survivor.CurrentArmor - 5
+      MapState.HealthBufferSources[name] = survivor.CurrentArmor
+      if direction == 2 then MapState.HealthBufferSources[name] = selected.CurrentArmor end
+      CurrentRun.Hero.HealthBuffer = MapState.HealthBufferSources[name] + 9
+      FrameState.RequestUpdateHealthUI = false
+      local beforeSetup, beforeAcquire = calls.armorSetup, calls.arcanaAdd
+      local row = findRow(name, selected.Id)
+      eq(row.family, "olympianHermes", "native ordinary armor owner")
+      M.dispatch("remove_trait", paramsFrom(row, "ordinary-armor-remove-" .. index .. "-" .. direction))
+      eq(CurrentRun.Hero.Traits[1], survivor, "ordinary armor survivor object changed")
+      eq(survivor.CurrentArmor, 7, "ordinary armor replenished consumed survivor armor")
+      eq(MapState.HealthBufferSources[name], 7, "ordinary removal lost surviving armor source")
+      eq(MapState.TemporaryHealthBufferSources[name], temporary or nil,
+        "ordinary removal lost temporary armor ownership")
+      eq(MapState.HealthBufferSources.UnrelatedArmor, 9, "ordinary armor changed unrelated source")
+      eq(MapState.TemporaryHealthBufferSources.UnrelatedArmor, true,
+        "ordinary armor changed unrelated temporary flag")
+      eq(CurrentRun.Hero.HealthBuffer, 16, "ordinary armor total was lost or reacquired")
+      eq(FrameState.RequestUpdateHealthUI, true, "ordinary armor repair did not refresh health UI")
+      eq(calls.armorSetup, beforeSetup, "ordinary armor removal replayed refill setup")
+      eq(calls.arcanaAdd, beforeAcquire, "ordinary armor removal reacquired trait")
+
+      local remaining = findRow(name, survivor.Id)
+      M.dispatch("remove_trait", paramsFrom(remaining, "ordinary-armor-last-remove-" .. index .. "-" .. direction))
+      eq(MapState.HealthBufferSources[name], nil, "last ordinary armor removal retained source")
+      eq(MapState.TemporaryHealthBufferSources[name], nil, "last armor removal retained temporary flag")
+      eq(CurrentRun.Hero.HealthBuffer, 9, "last armor removal changed unrelated armor total")
+    end
+  end
+  MapState.HealthBufferSources, MapState.TemporaryHealthBufferSources = {}, {}
+  CurrentRun.Hero.HealthBuffer = 0
+end
+
+-- The native temporary coroutine keeps its original captured owner and expiry.
+-- Removal must not re-arm that duration or restore a source already absent.
+do
+  local name = "EncounterStartDefenseBuffBoon"
+  local selected = newTrait(name, 581, 3, "Epic", { CostumeTrait = true, CurrentArmor = 77 })
+  local survivor = newTrait(name, 582, 1, "Rare", { CostumeTrait = true, CurrentArmor = 7 })
+  setTraits(selected, survivor)
+  MapState.HealthBufferSources = { [name] = 77, UnrelatedArmor = 9 }
+  MapState.TemporaryHealthBufferSources = { [name] = true }
+  CurrentRun.Hero.HealthBuffer = 86
+  local originalExpiry = function()
+    -- Native EncounterStartTempArmorThread captures this selected sourceTrait
+    -- and the name before waiting. Its unchanged callback still expires the pool.
+    selected.CurrentArmor = 0
+    RemoveHealthBufferSource(name)
+  end
+  M.dispatch("remove_trait", paramsFrom(findRow(name, selected.Id), "armor-existing-expiry"))
+  eq(survivor.CurrentArmor, 7, "ordinary armor changed surviving current amount")
+  eq(MapState.HealthBufferSources[name], 7, "ordinary armor retained the removed owner's source amount")
+  eq(MapState.TemporaryHealthBufferSources[name], true, "temporary armor flag lost")
+  originalExpiry()
+  eq(MapState.HealthBufferSources[name], nil, "original temporary armor expiry was extended")
+  eq(MapState.TemporaryHealthBufferSources[name], nil, "original expiry left temporary flag")
+  eq(CurrentRun.Hero.HealthBuffer, 9, "original expiry lost unrelated armor")
+
+  local nextSelected = newTrait(name, 583, 3, "Epic", { CostumeTrait = true, CurrentArmor = 0 })
+  setTraits(nextSelected, survivor)
+  M.dispatch("remove_trait", paramsFrom(findRow(name, nextSelected.Id), "armor-expired-source"))
+  eq(survivor.CurrentArmor, 7, "inactive armor removal rewrote survivor current amount")
+  eq(MapState.HealthBufferSources[name], nil, "ordinary armor revived an expired name source")
+  eq(MapState.TemporaryHealthBufferSources[name], nil, "ordinary armor revived temporary ownership")
+  eq(CurrentRun.Hero.HealthBuffer, 9, "inactive armor removal changed unrelated pool")
+  MapState.HealthBufferSources, MapState.TemporaryHealthBufferSources = {}, {}
+  CurrentRun.Hero.HealthBuffer = 0
+end
+
+-- A single native source follows the first surviving armor-bearing owner.
+-- Additional peers retain their own current values; removal invents no pool
+-- allocator and does not sum same-name acquisition amounts.
+do
+  local first = newTrait("ArmorBoon", 591, 1, "Rare", { CostumeTrait = true, CurrentArmor = 3 })
+  local next = newTrait("ArmorBoon", 592, 2, "Epic", { CostumeTrait = true, CurrentArmor = 7 })
+  local selected = newTrait("ArmorBoon", 593, 3, "Heroic", { CostumeTrait = true, CurrentArmor = 77 })
+  setTraits(selected, first, next)
+  MapState.HealthBufferSources = { ArmorBoon = 77, UnrelatedArmor = 9 }
+  MapState.TemporaryHealthBufferSources = {}
+  CurrentRun.Hero.HealthBuffer = 86
+  M.dispatch("remove_trait", paramsFrom(findRow(selected.Name, selected.Id), "armor-first-survivor"))
+  eq(MapState.HealthBufferSources.ArmorBoon, 3, "ordinary armor lost first surviving owner precedence")
+  eq(first.CurrentArmor, 3, "ordinary armor changed first survivor current amount")
+  eq(next.CurrentArmor, 7, "ordinary armor allocated or reset another survivor's armor")
+  eq(CurrentRun.Hero.HealthBuffer, 12, "ordinary armor summed same-name owner amounts")
+  MapState.HealthBufferSources, MapState.TemporaryHealthBufferSources = {}, {}
+  CurrentRun.Hero.HealthBuffer = 0
+end
+
+-- Replacing the selected object with a same-name peer never retargets a stale
+-- one-shot request, even when the displayed count/level/rarity still match.
+do
+  local selected = newTrait("OrdinarySelectionLost", 521, 1, "Rare")
+  local sibling = newTrait("OrdinarySelectionLost", 522, 1, "Rare")
+  setTraits(selected, sibling)
+  local row = findRow(selected.Name, selected.Id)
+  setTraits(newTrait(selected.Name, 523, 1, "Rare"), sibling)
+  local before = calls.directRemove
+  expectError("Trait instance is no longer present", function()
+    M.dispatch("remove_trait", paramsFrom(row, "missing-selected-removal"))
+  end)
+  eq(calls.directRemove, before, "stale selection retargeted a same-name peer")
+end
+
 -- A normal God boon may use CostumeTrait as an implementation detail (for
 -- example Hephaestus armor). Native sell/Pom ownership must win over that
 -- inheritance marker so ordinary management capabilities are not stolen by the
@@ -658,7 +1007,7 @@ do
   eq(row.family, "olympianHermes", "ordinary CostumeTrait boon owner family")
   eq(row.levelCapability, "increaseOne", "ordinary CostumeTrait level capability")
   eq(row.rarityCapability, "setExact", "ordinary CostumeTrait rarity capability")
-  eq(row.removalCapability, "nameLevelAllMatching", "ordinary CostumeTrait removal capability")
+  eq(row.removalCapability, "singleInstanceForce", "ordinary CostumeTrait removal capability")
 end
 
 -- Artemis direct example: native Pom eligibility deliberately says false, so
@@ -810,22 +1159,6 @@ do
     "Icarus armor removal did not suppress expiration")
 end
 
--- Native SellTraits-equivalent removal is explicitly name-level/all-matching.
-do
-  local first = newTrait("OrdinaryRemove", 501, 1, "Rare")
-  local second = newTrait("OrdinaryRemove", 502, 1, "Rare")
-  setTraits(first, second)
-  local row = findRow("OrdinaryRemove", 501)
-  eq(row.sameNameCount, 2, "native removal duplicate count")
-  eq(row.removalCapability, "nameLevelAllMatching", "native removal capability")
-  check(row.removalScopeAllMatching == true, "native removal scope not explicit")
-  local beforeCalls = calls.nativeRemove
-  local result = M.dispatch("remove_trait", paramsFrom(row, "native-remove"))
-  eq(calls.nativeRemove, beforeCalls + 1, "native removal callback count")
-  eq(#CurrentRun.Hero.Traits, 0, "native removal did not clean every same-name instance")
-  eq(#result.currentRunTraits, 0, "native removal observed inventory not empty")
-end
-
 -- Direct Icarus removal is single-instance and executes RemoveTraitData cleanup
 -- with SkipExpire so no one-shot expiration/reward path is replayed.
 do
@@ -959,6 +1292,64 @@ do
     M.dispatch("remove_trait", params)
   end)
   eq(calls.directRemove, beforeRemove + 1, "outcome-unknown direct removal replayed")
+end
+
+-- A late ordinary teardown acknowledgement retains repaired sibling effects
+-- and terminal unknown trust; neither the same nor a fresh request replays it.
+do
+  local first = newTrait("OrdinaryRemoveUnknown", 1111, 1, "Rare", {
+    AddOutgoingDamageModifiers = { Multiplier = 1.2 },
+  })
+  local second = newTrait("OrdinaryRemoveUnknown", 1112, 2, "Epic", {
+    AddOutgoingDamageModifiers = { Multiplier = 1.8 },
+  })
+  setTraits(first, second)
+  local survivor = { Name = first.Name, Multiplier = 1.2, RemainingUses = 2 }
+  CurrentRun.Hero.OutgoingDamageModifiers = { survivor, { Name = second.Name, Multiplier = 1.8 } }
+  local row = findRow(second.Name, second.Id)
+  local params = paramsFrom(row, "ordinary-remove-unknown")
+  local before = calls.directRemove
+  failRemoveAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function() M.dispatch("remove_trait", params) end)
+  eq(calls.directRemove, before + 1, "unknown removal did not execute once")
+  eq(CurrentRun.Hero.Traits[1], first, "unknown removal lost surviving object")
+  eq(CurrentRun.Hero.OutgoingDamageModifiers[1], survivor, "unknown removal lost surviving modifier")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  local fresh = paramsFrom(row, "ordinary-remove-fresh-after-unknown")
+  expectError("MGT_OUTCOME_UNKNOWN", function() M.dispatch("remove_trait", fresh) end)
+  eq(calls.directRemove, before + 1, "unknown removal replayed under a new request ID")
+end
+
+-- Late ordinary armor teardown repairs the surviving source once before
+-- preserving outcome-unknown; same and fresh request IDs cannot replay it.
+do
+  local name = "ArmorBoon"
+  local selected = newTrait(name, 1131, 4, "Epic", { CostumeTrait = true, CurrentArmor = 77 })
+  local survivor = newTrait(name, 1132, 2, "Rare", { CostumeTrait = true, CurrentArmor = 7 })
+  setTraits(selected, survivor)
+  MapState.HealthBufferSources = { [name] = 77, UnrelatedArmor = 9 }
+  MapState.TemporaryHealthBufferSources = {}
+  CurrentRun.Hero.HealthBuffer = 86
+  local row = findRow(name, selected.Id)
+  local params = paramsFrom(row, "ordinary-armor-unknown")
+  local before, beforeSetup = calls.directRemove, calls.armorSetup
+  failRemoveAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function() M.dispatch("remove_trait", params) end)
+  eq(calls.directRemove, before + 1, "unknown armor removal did not execute once")
+  eq(CurrentRun.Hero.Traits[1], survivor, "unknown armor removal changed surviving object")
+  eq(survivor.CurrentArmor, 7, "unknown armor removal replenished or lost current armor")
+  eq(MapState.HealthBufferSources[name], 7, "unknown armor removal lost surviving source")
+  eq(CurrentRun.Hero.HealthBuffer, 16, "unknown armor removal lost total projection")
+  eq(calls.armorSetup, beforeSetup, "unknown armor repair replayed setup")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("remove_trait", paramsFrom(row, "ordinary-armor-fresh-after-unknown"))
+  end)
+  eq(calls.directRemove, before + 1, "unknown armor removal replayed")
 end
 
 -- Direct strategies with acquisition/expiration lifecycle markers fail closed;
@@ -1551,7 +1942,9 @@ print("hades2_live_trait_runtime_behavior_ok")
 
 TERMINAL_CASES = [
     ('-- A post-mutation exception makes the result outcome-unknown.', '-- Direct-special stale snapshots use the same preflight seam'),
-    ('-- The runtime verifies removal cleanup instead of trusting the callback return.', '-- Direct strategies with acquisition/expiration lifecycle markers fail closed;'),
+    ('-- The runtime verifies removal cleanup instead of trusting the callback return.', '-- A late ordinary teardown acknowledgement retains repaired sibling effects'),
+    ('-- A late ordinary teardown acknowledgement retains repaired sibling effects', '-- Late ordinary armor teardown repairs the surviving source once before'),
+    ('-- Late ordinary armor teardown repairs the surviving source once before', '-- Direct strategies with acquisition/expiration lifecycle markers fail closed;'),
     ('-- A post-mutation failure still finishes the distinct owner cleanup steps so', '-- Keepsake ownership is the selected native LastAwardTrait'),
     ('-- Late native acknowledgement is outcome-unknown and never replayed.', '-- Keepsake rank is the runtime rarity model.'),
     ('-- If owner rebuild mounts the replacement and acknowledges late, the request is', '-- If native EquipKeepsake mutates then acknowledges late, restore persistent'),

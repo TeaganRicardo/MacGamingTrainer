@@ -1538,9 +1538,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     /// Remove the observed live target through the capability selected by the
-    /// Hades runtime. Native sell removal remains name-level/all-matching;
-    /// bounded force removal is single-instance and only exists for an audited
-    /// direct strategy.
+    /// Hades runtime. Ordinary boons use exact instance teardown; special
+    /// lifecycle actions retain their game-owned cancellation/owner semantics.
     func removeTrait(_ trait: CurrentRunTrait) {
         guard canMutateTraits, trait.canRemove else { return }
         send(
