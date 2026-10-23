@@ -125,7 +125,8 @@ def rows(root, language="zh-CN", game_path=None):
             outcome = _get(run, "RunResult")
             labels = _RESULTS.get(outcome) if type(outcome) in (int, float) else None
             add("RunResult", ("结果", "Result"),
-                labels[0 if zh else 1] if labels else ("未识别结果" if zh else "Unidentified result"), "string")
+                labels[0 if zh else 1] if labels else ("未识别结果" if zh else "Unidentified result"),
+                "string", (str(outcome), *(labels or ())))
             for key, label in (
                 ("GameplayTime", ("挑战时间（秒）", "Run time (seconds)")),
                 ("ShrinePointsCache", ("恐惧值", "Fear")),

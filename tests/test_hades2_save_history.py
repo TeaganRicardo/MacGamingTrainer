@@ -69,6 +69,13 @@ assert not any(k.startswith("_") for g in page["entities"] for r in g["items"] f
 small = w.query(domain="entities", scope="records", language="en", limit=1)
 assert len(small["entities"]) == 1 and small["hasMore"]
 assert small["entities"][0]["items"] == groups[small["entities"][0]["id"]]["items"]
+for language, needle in (("en", "Underworld"), ("zh-CN", "Underworld"),
+                         ("en", "未通关"), ("zh-CN", "冥界")):
+    result = w.query(domain="entities", scope="records", search=needle, language=language)
+    assert any(g["id"] == "history:run:1" for g in result["entities"]), "displayed run outcome is not searchable"
+unknown, _ = workspace({"RunHistory": table({1: table({"RunResult": 777})})})
+assert any(g["id"] == "history:run:1" for g in unknown.query(
+    domain="entities", scope="records", search="777", language="en")["entities"])
 entry = groups["history:run:1"]["items"][0]
 try:
     w.stage(entry["id"], "set", 0)
