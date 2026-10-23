@@ -74,6 +74,11 @@ struct Hades2ShortcutStore {
     }
 
     mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> ShortcutAction? {
+        // "Disable all" is a panic chord. It is reserved, so no other action can
+        // claim it and displace the panic key to some arbitrary free slot.
+        if action != .disableAll, newChord == Self.defaultLayout()[.disableAll] {
+            return .disableAll
+        }
         if let other = ShortcutAction.allCases.first(where: {
             $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers
         }) {
@@ -283,10 +288,15 @@ struct Hades2ShortcutStore {
     private mutating func rebuildResolvedLayout() {
         let defaultLayout = Self.defaultLayout()
         var next: [ShortcutAction: HotkeyChord] = [:]
+        // The panic chord is allocated first and its token marked used, so
+        // neither an override nor a fallback allocation can take it away.
+        let reserved = Self.defaultLayout()[.disableAll]!
+        next[.disableAll] = reserved
         var used = Set(overrides.values.map(Self.token))
+        used.insert(Self.token(reserved))
 
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            if let explicit = overrides[action] {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            if let explicit = overrides[action], Self.token(explicit) != Self.token(reserved) {
                 next[action] = explicit
                 continue
             }

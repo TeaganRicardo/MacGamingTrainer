@@ -160,7 +160,9 @@ struct TrainerMultiplierMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
-            EmptyView()
+            // Reserve the lock button's footprint so this card keeps the same
+            // header height as its locked siblings in the same grid row.
+            Color.clear.frame(width: 26, height: 24)
         } content: {
             HStack(spacing: 3) {
                 TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))

@@ -118,6 +118,12 @@ let defaults = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(matchesDerivedDefaults(defaults))
 precondition(unique(defaults))
 precondition(defaults.chord(.disableAll) == disableAllDefault)
+// The panic chord is reserved: another action cannot claim it and push the
+// panic key onto some arbitrary free slot.
+var reservedStore = Hades2ShortcutStore(defaults: makeDefaults())
+precondition(reservedStore.set(.spawnPickup, chord: disableAllDefault) == .disableAll,
+             "the disable-all chord must be reserved")
+precondition(reservedStore.chord(.disableAll) == disableAllDefault)
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)
 let common: [ShortcutAction] = [.invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney,
