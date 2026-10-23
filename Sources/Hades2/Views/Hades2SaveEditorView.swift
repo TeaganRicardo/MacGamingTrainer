@@ -45,14 +45,16 @@ struct Hades2SaveEditorView: View {
             Divider()
             documentSelection
             Divider()
-            if let failure = model.failure {
-                TrainerInlineNotice(color: theme.warning) {
-                    Text(localization.string(failure))
-                        .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(model.operationFailures.keys.sorted(by: { $0.rawValue < $1.rawValue }), id: \.rawValue) { command in
+                if let failure = model.operationFailures[command] {
+                    TrainerInlineNotice(color: theme.warning) {
+                        Text(localization.string(failure))
+                            .font(.caption)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.top, theme.controlPadding)
                 }
-                .padding(.horizontal, theme.rowHorizontalPadding)
-                .padding(.top, theme.controlPadding)
             }
             workbenchToolbar
             if let queryFailure = model.queryFailure {
@@ -138,9 +140,11 @@ struct Hades2SaveEditorView: View {
             }
         }
         .onChange(of: model.editRevision) { _, _ in
-            if let entryID = model.reconciledEntryID {
-                drafts.removeValue(forKey: entryID)
-                expandedEffects.remove(entryID)
+            if let entryIDs = model.reconciledEntryIDs {
+                for entryID in entryIDs {
+                    drafts.removeValue(forKey: entryID)
+                    expandedEffects.remove(entryID)
+                }
             } else {
                 drafts.removeAll()
             }
@@ -388,30 +392,33 @@ struct Hades2SaveEditorView: View {
             .padding(.horizontal, theme.rowHorizontalPadding)
             .padding(.vertical, theme.sectionSpacing)
         } else {
-            HStack(spacing: 14) {
-                Text(fieldTitle(entry, in: entity))
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .help(entry.rawID)
-                if entry.editable && !entry.mutationKinds.isEmpty {
-                    editorControl(entry)
-                } else if entry.valueType != "table" {
-                    Text(valueText(entry.value))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                HStack(spacing: 14) {
+                    Text(fieldTitle(entry, in: entity))
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
+                        .help(entry.rawID)
+                    if entry.editable && !entry.mutationKinds.isEmpty {
+                        editorControl(entry)
+                    } else if entry.valueType != "table" {
+                        Text(valueText(entry.value))
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    if !entry.editable &&
+                        (entry.discoveryReasonCode != nil || entry.discoveryReason != nil) {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.secondary)
+                            .help(discoveryReason(
+                                entry,
+                                fallback: entry.discoveryReason ??
+                                    text("hades2.saveEditor.discovery.reason.readOnly")
+                            ))
+                    }
                 }
-                if !entry.editable &&
-                    (entry.discoveryReasonCode != nil || entry.discoveryReason != nil) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .help(discoveryReason(
-                            entry,
-                            fallback: entry.discoveryReason ??
-                                text("hades2.saveEditor.discovery.reason.readOnly")
-                        ))
-                }
+                editFailure(entry)
             }
             .padding(.horizontal, theme.rowHorizontalPadding)
             .padding(.vertical, theme.inlineRowVerticalPadding)
@@ -428,6 +435,17 @@ struct Hades2SaveEditorView: View {
             return String(entry.displayName.dropLast((" · " + entity.title).count))
         }
         return entry.displayName
+    }
+
+    @ViewBuilder
+    private func editFailure(_ entry: Hades2SaveEditorEntry) -> some View {
+        if let failure = model.editFailures[entry.id] {
+            Text(localization.string(failure))
+                .font(.caption)
+                .foregroundStyle(theme.warning)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(entry.displayName + ": " + localization.string(failure))
+        }
     }
 
     @ViewBuilder
@@ -715,8 +733,10 @@ struct Hades2SaveEditorView: View {
                 .buttonStyle(.borderless)
                 .help(text("hades2.saveEditor.basket.remove"))
                 .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
+                .accessibilityIdentifier("hades2.saveEditor.remove." + action.entryID)
                 .disabled(model.busy)
             }
+            editFailure(action.editorEntry)
             HStack(spacing: 6) {
                 Text(reviewValue(action.before, for: action))
                 .foregroundStyle(.secondary)

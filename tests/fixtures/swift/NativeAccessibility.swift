@@ -21,7 +21,11 @@ struct NativeAccessibilityControl {
 
     var role: String? { value("accessibilityRole") as? String }
     var label: String? { value("accessibilityLabel") as? String }
+    // AppKit exposes static text through AXValue, including its authored
+    // accessibility label. Interactive controls retain their separate label.
+    var text: String? { label ?? value("accessibilityValue") as? String }
     var help: String? { value("accessibilityHelp") as? String }
+    var identifier: String? { value("accessibilityIdentifier") as? String }
     var enabled: Bool { boolean("isAccessibilityEnabled") }
     func press() -> Bool { boolean("accessibilityPerformPress") }
     var children: [Any] { value("accessibilityChildren") as? [Any] ?? [] }
@@ -45,7 +49,9 @@ func nativeAccessibilityControls(_ root: Any) -> [NativeAccessibilityControl] {
 }
 
 func namedNativeControl(_ root: Any, role: String, name: String) -> NativeAccessibilityControl? {
-    nativeAccessibilityControls(root).first { $0.role == role && $0.label == name }
+    nativeAccessibilityControls(root).first {
+        $0.role == role && (role == "AXStaticText" ? $0.text : $0.label) == name
+    }
 }
 
 func enableNativeAccessibility() {
