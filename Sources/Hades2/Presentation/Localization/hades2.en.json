@@ -573,7 +573,9 @@
     "hades2.shortcut.decreaseGameSpeed": "Decrease Game Speed",
     "hades2.shortcut.increaseGameSpeed": "Increase Game Speed",
     "hades2.workbench.search": "Search functions…",
-    "hades2.workbench.searchEmpty": "No matching functions."
+    "hades2.workbench.searchEmpty": "No matching functions.",
+    "hades2.saveEditor.investigate.block.questContextReadOnly": "Quest presentation and reward history is read-only; use the supported status action for its linked completion record.",
+    "hades2.saveEditor.investigate.block.questSourceUnresolved": "The native quest definition or an inherited owner is missing, duplicated or cyclic. Original records are preserved; eligibility is unknown."
   },
   "language": "en"
 }

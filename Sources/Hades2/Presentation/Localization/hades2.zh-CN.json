@@ -573,7 +573,9 @@
     "hades2.shortcut.decreaseGameSpeed": "降低游戏速度",
     "hades2.shortcut.increaseGameSpeed": "提高游戏速度",
     "hades2.workbench.search": "搜索功能…",
-    "hades2.workbench.searchEmpty": "未找到匹配的功能。"
+    "hades2.workbench.searchEmpty": "未找到匹配的功能。",
+    "hades2.saveEditor.investigate.block.questContextReadOnly": "任务展示与奖励历史仅供查看；修改状态请使用已验证的任务状态操作，该操作会同步完成记录。",
+    "hades2.saveEditor.investigate.block.questSourceUnresolved": "原生任务定义或继承来源缺失、重复或存在循环。原记录已保留，无法推断资格。"
   },
   "language": "zh-CN"
 }

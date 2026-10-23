@@ -658,6 +658,8 @@ class Hades2SaveWorkspace:
             english_name = english.get(name) or ("Quest · " + name)
             row = {
                 "id": "quest:" + name,
+                "entityId": "quest:" + name,
+                "entityName": localized,
                 "domain": "progression",
                 "rawId": name,
                 "path": ["GameState", "QuestStatus", name],
@@ -879,6 +881,9 @@ class Hades2SaveWorkspace:
                         raise
             if search.strip():
                 rows.extend(self._known_absent_quest_rows(language))
+            rows.extend(self._narrative_investigation().quest_rows(
+                root, language, include_absent=bool(search.strip())
+            ))
         if scope in ("all", "growth", "records"):
             progression = save_long_term.rows(
                 root, "progression", language, game_path=self._game_path
@@ -913,6 +918,9 @@ class Hades2SaveWorkspace:
                     limit=100000, language=language,
                     permissions=self._dialogue_write_decisions(),
                 )
+                rows.extend(self._narrative_investigation().spoken_rows(
+                    self.document.lua_state, results["items"], language
+                ))
                 verified_people = {}
                 for scene in results["items"]:
                     # The source-bound narrative index must prove the native

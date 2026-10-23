@@ -171,6 +171,9 @@ def _row(*, entry_id, domain, key, path, label, english, value,
         row["blockReasonCode"] = block_reason_code
     if owner_state:
         row["ownerState"] = owner_state
+    if entry_id.startswith("quest:"):
+        row["entityId"] = entry_id
+        row["entityName"] = label
     return row
 
 

@@ -9,6 +9,7 @@ not predictions of future dialogue eligibility.
 from collections import defaultdict, OrderedDict
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 
@@ -339,7 +340,7 @@ def _load_native(source, expected_hash):
         'buildVerification': 'unverified',
         'limitation': 'The complete installed script/localization set has no supported-build digest manifest.',
     }
-    result = {'status': 'available', 'scenes': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}},
+    result = {'status': 'available', 'scenes': {}, 'quests': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}},
               'errors': source['errors'], 'sourceIdentity': source['identity'], 'sourceProvenance': provenance}
     if observed_hash is None or observed_hash != expected_hash:
         result['status'] = 'missing' if observed_hash is None else 'mismatch'
@@ -387,6 +388,7 @@ def _load_native(source, expected_hash):
     candidates = set(STORY_RESET_TEXT_IDS)
     candidates.update(events)
     scenes = defaultdict(list)
+    quests = defaultdict(list)
     for owner, filename, digest, raw in source['inputs']:
         if owner != 'Scripts' or raw is None:
             continue
@@ -394,6 +396,19 @@ def _load_native(source, expected_hash):
         parents = {}
         pairs = _braces(masked, parents)
         assignments = list(_ASSIGN.finditer(masked))
+        # Quest definitions are immediate members of the named native owner.
+        # Nested progress/voice tables with a matching key are not definitions.
+        quest_owners = {match.start(1) for match in re.finditer(
+            r'\bOverwriteTableKeys\s*\(\s*QuestData\s*,\s*(\{)', masked)}
+        quest_owners.update(match.start(2) for match in assignments if match.group(1) == 'QuestData')
+        for match in assignments:
+            opening = match.start(2)
+            if parents.get(opening) not in quest_owners or opening not in pairs:
+                continue
+            quests[match.group(1)].append({
+                'file': filename, 'line': raw.count('\n', 0, match.start()) + 1,
+                'script': raw[opening:pairs[opening] + 1],
+            })
         # Authored scene identity belongs to an immediate TextLineSets entry.
         # StoryReset and localized Event IDs are supplementary evidence, not
         # admission gates: many real native scenes have neither association.
@@ -429,7 +444,7 @@ def _load_native(source, expected_hash):
             scenes[name].append({'file': filename, 'line': raw.count('\n', 0, match.start()) + 1,
                                  'script': body, 'search': active_body, 'cues': cues,
                                  'partner': partner})
-    result.update(scenes=dict(scenes), events=dict(events),
+    result.update(scenes=dict(scenes), quests=dict(quests), events=dict(events),
                   text={lang: dict(index) for lang, index in by_language.items()})
     return result
 
@@ -484,6 +499,191 @@ class NativeDialogueInvestigation:
                 else:
                     values[key] = value
         return values, ambiguous
+
+    def quest_rows(self, save_root, language, *, include_absent=False):
+        """Read lifecycle companions beside the existing physical quest action."""
+        self._refresh()
+        from .localization import official_display_names
+        from .save_native_ids import QUEST_IDS
+        zh = language == 'zh-CN'
+        try:
+            state = save_root['GameState']
+        except (KeyError, TypeError, AmbiguousLuaKeyError):
+            state = None
+        try:
+            statuses = state.get('QuestStatus')
+            status_owner_error = None if isinstance(statuses, LuaTable) else 'unknown'
+        except AmbiguousLuaKeyError:
+            statuses, status_owner_error = None, 'ambiguous'
+        except (AttributeError, TypeError):
+            statuses, status_owner_error = None, 'unknown'
+        observed = {key for key, _ in statuses.entries() if isinstance(key, str)} if isinstance(statuses, LuaTable) else set()
+        names = (observed | (set(self.native['quests']) & QUEST_IDS if include_absent else set())) & QUEST_IDS
+        localized = official_display_names(names, language, game_path=self.game_path)
+        english = official_display_names(names, 'en', game_path=self.game_path)
+
+        def observation(owner, name):
+            try:
+                value = state.get(owner) if isinstance(state, LuaTable) else None
+                if not isinstance(value, LuaTable):
+                    return None, 'unsupportedOwner'
+                value = value.get(name)
+            except AmbiguousLuaKeyError:
+                return None, 'ambiguousOwner'
+            return (value, None) if value is None or type(value) is bool else (None, 'unsupportedOwner')
+
+        rows = []
+        for name in sorted(names):
+            title = localized.get(name) or ('任务 · ' if zh else 'Quest · ') + name
+            en = english.get(name) or 'Quest · ' + name
+            try:
+                status = statuses.get(name) if isinstance(statuses, LuaTable) else None
+                status = status_owner_error or (status if status in ('Unlocked', 'Complete', 'CashedOut') else 'absent' if status is None else 'unknown')
+            except AmbiguousLuaKeyError:
+                status = 'ambiguous'
+            common = {'entityId': 'quest:' + name, 'entityName': title,
+                      'editable': False, 'mutationKinds': [], 'choices': [],
+                      'group': '命运清单' if zh else 'Fated List quests', '_browseReadOnly': True,
+                      '_search': (name, title, en, *(source['script'] for source in self.native['quests'].get(name, ()))),
+                      'reasonCode': 'questContextReadOnly',
+                      'reason': ('这些记录包含展示和奖励流程的关联状态，仅供查看。' if zh else
+                                 'These records include presentation and reward lifecycle state and are read-only.')}
+            rows.append({**common, 'id': 'investigate:quest:' + name, 'domain': 'investigate',
+                         'rawId': 'quest:' + name, 'path': ['GameState', 'QuestStatus', name],
+                         'name': '任务状态与原生条件' if zh else 'Quest state and authored conditions',
+                         'englishName': 'Quest state and authored conditions', 'valueType': 'string', 'value': status,
+                         'snippet': {
+                             'absent': ('状态未记录', 'Status unrecorded'),
+                             'Unlocked': ('已解锁', 'Unlocked'), 'Complete': ('已完成', 'Complete'),
+                             'CashedOut': ('已领取奖励', 'Reward claimed'),
+                             'ambiguous': ('记录存在歧义', 'Ambiguous record'),
+                             'unknown': ('未识别状态', 'Unidentified state'),
+                         }[status][0 if zh else 1]})
+            for owner, labels in (
+                ('QuestsCompleted', ('完成记录', 'Completion record')),
+                ('QuestsViewed', ('已查看', 'Viewed')),
+                ('QuestsUpdated', ('更新提示', 'Update marker')),
+                ('PlayedQuestInterstitials', ('已播放任务过场', 'Quest interstitial played')),
+            ):
+                value, reason = observation(owner, name)
+                rows.append({**common, 'id': 'questObservation:' + owner + ':' + name,
+                             'domain': 'questObservation', 'rawId': owner,
+                             'path': ['GameState', owner, name], 'name': labels[0 if zh else 1],
+                             'englishName': labels[1], 'value': value, 'valueType': 'boolean',
+                             'reasonCode': reason or 'questContextReadOnly',
+                             'reason': (('记录存在歧义或格式不受支持；原数据已保留。' if zh else
+                                         'Ambiguous or unsupported record; original data is preserved.') if reason else common['reason'])})
+        return rows
+
+    def spoken_rows(self, save_root, scenes, language):
+        """Join native cue-count observations to the source-proven NPC entity."""
+        zh = language == 'zh-CN'
+        rows, seen = [], set()
+        for scene in scenes:
+            if not scene.get('entityId'):
+                continue
+            for line in self._text_records(scene['rawId']):
+                cue = '/VO/' + line['cueId']
+                identity = scene['entityId'] + ':' + cue
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                try:
+                    state = save_root['GameState']
+                    speech = state.get('SpeechRecord')
+                    if not isinstance(speech, LuaTable):
+                        continue
+                    count = speech.get(cue)
+                    if count is None:
+                        continue
+                    reason = None if type(count) is bool or (type(count) in (int, float) and math.isfinite(count) and count >= 0 and count == int(count)) else 'unsupportedOwner'
+                except (KeyError, TypeError, AmbiguousLuaKeyError):
+                    count, reason = None, 'ambiguousOwner'
+                phrases = line['zhCN' if zh else 'en']
+                english = line['en']
+                title = next(iter(phrases), '未翻译台词' if zh else 'Untranslated line')
+                en = next(iter(english), 'Untranslated line')
+                rows.append({
+                    'id': 'speech:' + identity, 'domain': 'speechHistory', 'rawId': cue,
+                    'entityId': scene['entityId'], 'entityName': scene['entityName'],
+                    'path': ['GameState', 'SpeechRecord', cue],
+                    'name': ('语音记录 · ' if zh else 'Speech history · ') + title[:100],
+                    'englishName': 'Speech history · ' + en[:100],
+                    'value': count if reason is None else None,
+                    'valueType': 'boolean' if type(count) is bool else 'number',
+                    'editable': False, 'mutationKinds': [], 'choices': [], '_browseReadOnly': True,
+                    'group': '语音历史' if zh else 'Speech history',
+                    'reasonCode': reason or 'speechHistoryReadOnly',
+                    'reason': (('语音计数与挑战和场景历史共同维护，仅供查看。' if zh else
+                                'Speech counts are maintained with run and room history and are read-only.') if reason is None else
+                               ('记录存在歧义或格式不受支持；原数据已保留。' if zh else
+                                'Ambiguous or unsupported record; original data is preserved.')),
+                    '_search': (cue, title, en),
+                })
+        return rows
+
+    def quest_detail(self, save_root, name, language):
+        self._refresh(force=True)
+        rows = self.quest_rows(save_root, language, include_absent=True)
+        overview = next((row for row in rows if row['id'] == 'investigate:quest:' + name), None)
+        if overview is None:
+            raise ValueError('Save Editor native quest identity is unknown.')
+        definitions, visited, active, unresolved = [], set(), set(), []
+
+        def collect(identity):
+            if identity in active:
+                unresolved.append(identity)
+                return
+            if identity in visited:
+                return
+            visited.add(identity)
+            active.add(identity)
+            sources = self.native['quests'].get(identity, ())
+            if len(sources) != 1:
+                unresolved.append(identity)
+                active.remove(identity)
+                return
+            source = sources[0]
+            fields = _parse_lua_table(source['script'])
+            if not isinstance(fields, dict):
+                unresolved.append(identity)
+                active.remove(identity)
+                return
+            authored = []
+            for field in ('UnlockGameStateRequirements', 'CompleteGameStateRequirements', 'SetupEvents'):
+                if field in fields['fields']:
+                    title = ('解锁条件' if language == 'zh-CN' else 'Unlock conditions') if field.startswith('Unlock') else (
+                        '完成条件' if language == 'zh-CN' else 'Completion conditions')
+                    if field == 'SetupEvents':
+                        title = '阶段条件（由原生运行时选择）' if language == 'zh-CN' else 'Stage conditions (selected by native runtime)'
+                    if identity != name:
+                        title += ('（继承定义）' if language == 'zh-CN' else ' (inherited definition)')
+                    authored.append({'line': source['line'], 'scope': identity + ' · ' + field,
+                                     'tree': {'kind': 'and', 'text': title, 'evidence': 'unknown',
+                                              'children': [_requirement_nodes(fields['fields'][field], save_root)]}})
+            inheritance = fields['fields'].get('InheritFrom')
+            definitions.append({'file': source['file'], 'line': source['line'], 'partner': False,
+                                'requirements': authored, 'cueIDs': []})
+            if isinstance(inheritance, dict):
+                for parent in inheritance['members']:
+                    parent_id = _scalar(parent)
+                    if isinstance(parent_id, str):
+                        collect(parent_id)
+                    else:
+                        unresolved.append('dynamic inheritance')
+            active.remove(identity)
+
+        collect(name)
+        block_code = 'questContextReadOnly'
+        if unresolved:
+            block_code = 'questSourceUnresolved'
+        return {'scene': 'quest:' + name, 'status': overview['value'],
+                'sourceStatus': self.native['status'], 'sourceIdentity': self.native['sourceIdentity'],
+                'sourceProvenance': self.native['sourceProvenance'], 'sourceErrors': self.native['errors'],
+                'reason': overview['reason'], 'blockReasonCode': block_code,
+                'canStage': False, 'stageID': '', 'character': overview['entityName'],
+                'definitions': definitions, 'sourceResolution': 'unresolved' if unresolved or not definitions else 'resolved',
+                'unresolvedOwners': unresolved, 'lines': [], 'futureEligibility': 'unknown', 'language': language}
 
     def _names(self, scene):
         native = self.native
@@ -609,6 +809,8 @@ class NativeDialogueInvestigation:
                 'sourceErrors': self.native['errors']}
 
     def detail(self, save_root, scene, language, permissions):
+        if scene.startswith('quest:'):
+            return self.quest_detail(save_root, scene[len('quest:'):], language)
         # Detail is deliberate evidence retrieval rather than typeahead. Force
         # byte capture/hash here so presented native context is integrity-bound
         # even if filesystem metadata was preserved unusually.
