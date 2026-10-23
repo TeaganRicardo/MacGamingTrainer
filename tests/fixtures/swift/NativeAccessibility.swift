@@ -25,6 +25,12 @@ struct NativeAccessibilityControl {
     var enabled: Bool { boolean("isAccessibilityEnabled") }
     func press() -> Bool { boolean("accessibilityPerformPress") }
     var children: [Any] { value("accessibilityChildren") as? [Any] ?? [] }
+    var frame: NSRect {
+        let selector = NSSelectorFromString("accessibilityFrame")
+        guard object.responds(to: selector) else { return .zero }
+        typealias Getter = @convention(c) (AnyObject, Selector) -> NSRect
+        return unsafeBitCast(object.method(for: selector), to: Getter.self)(object, selector)
+    }
 }
 
 func nativeAccessibilityControls(_ root: Any) -> [NativeAccessibilityControl] {

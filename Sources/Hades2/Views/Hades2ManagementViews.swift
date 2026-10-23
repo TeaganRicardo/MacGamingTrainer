@@ -238,22 +238,125 @@ struct Hades2ManagementUtilities: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerManagementActions) private var managementActions
+    @Environment(\.trainerTheme) private var theme
+    let openProfiles: () -> Void
+    let openSaveEditor: () -> Void
+    let openDiagnostics: () -> Void
+
+    private func text(_ key: String) -> String {
+        Hades2GameModule.resolveText(key: key, localization: localization)
+    }
+
+    private var canUseBackend: Bool {
+        model.backendAvailable && model.protocolCompatible && !model.exiting
+    }
+
+    private var canStartBackendAction: Bool { canUseBackend && !model.busy }
+
+    private var canChangeSignature: Bool {
+        canStartBackendAction && !model.connected && model.pid == nil
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button { model.shortcutSettingsPresented = true } label: {
-                Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")
-            }
-            Button { model.openLog() } label: {
-                Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")
-            }
-            if let openSaveManagement = managementActions.openSaveManagement {
-                Button(action: openSaveManagement) {
-                    Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")
+        VStack(alignment: .leading, spacing: theme.sheetSpacing) {
+            managementGroup("hades2.manage.daily") {
+                actionButtons {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.saveEditor.title"),
+                        systemImage: "externaldrive.badge.gearshape",
+                        enabled: canUseBackend,
+                        action: openSaveEditor
+                    )
+                    if let openSaveManagement = managementActions.openSaveManagement {
+                        TrainerSecondaryActionButton(
+                            title: localization.localized("host.saveManagement"),
+                            systemImage: "externaldrive",
+                            enabled: canUseBackend,
+                            action: openSaveManagement
+                        )
+                    }
+                    HStack(spacing: theme.compactControlSpacing) {
+                        TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
+                        TrainerSecondaryActionButton(
+                            title: localization.localized("host.disableAll"),
+                            systemImage: "power",
+                            enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
+                            action: model.disableAll
+                        )
+                    }
                 }
-                .disabled(!model.backendAvailable)
             }
-            Spacer()
+            Divider()
+            managementGroup("hades2.manage.settings") {
+                actionButtons {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.manage.profiles"),
+                        systemImage: "slider.horizontal.3",
+                        enabled: canStartBackendAction,
+                        action: openProfiles
+                    )
+                    TrainerSecondaryActionButton(
+                        title: localization.localized("host.shortcutSettings"),
+                        systemImage: "keyboard",
+                        enabled: !model.exiting,
+                        action: { model.shortcutSettingsPresented = true }
+                    )
+                }
+            }
+            Divider()
+            managementGroup("hades2.manage.maintenance") {
+                actionButtons {
+                    TrainerSecondaryActionButton(
+                        title: localization.localized("host.viewLog"),
+                        systemImage: "doc.text.magnifyingglass",
+                        action: model.openLog
+                    )
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.manage.diagnostics"),
+                        systemImage: "stethoscope",
+                        enabled: canStartBackendAction,
+                        action: openDiagnostics
+                    )
+                }
+                Text(text("hades2.manage.signatureExplanation"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                actionButtons {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.manage.prepareSigning"),
+                        systemImage: "signature",
+                        enabled: canChangeSignature,
+                        action: model.prepareDebugging
+                    )
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.manage.restoreSigning"),
+                        systemImage: "arrow.uturn.backward.circle",
+                        enabled: canChangeSignature,
+                        action: model.restoreOriginalSignature
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .trainerPanel()
+    }
+
+    private func managementGroup<Content: View>(
+        _ titleKey: String, @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: theme.controlPadding) {
+            Text(text(titleKey))
+                .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            content()
+        }
+    }
+
+    private func actionButtons<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: theme.controlPadding) { content() }
+            VStack(alignment: .leading, spacing: theme.controlPadding) { content() }
         }
     }
 }

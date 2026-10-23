@@ -58,7 +58,8 @@ for raw in sys.stdin:
  if command=='set_chaos_gate_desired': state['chaosGateProbability']=params['probability']
  if command=='load_profile': state['money']=200
  if command=='disconnect': state['connected']=False
- print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':17,'gameID':args.game,'ok':True,'result':state}),flush=True)
+ result={'sources':[],'targets':[],'defaultSource':None} if command=='save_editor_inventory' else state
+ print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':17,'gameID':args.game,'ok':True,'result':result}),flush=True)
 """
 HARNESS = r"""
 import AppKit
@@ -115,9 +116,13 @@ final class GenerateAction: NSObject {
   check(model.canSetResource && workerStartCount()==1,
         "duplicate initial observation restarted the Backend worker")
   let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
+  let toolWindows=TrainerToolWindowStore()
+  var backupPresentations=0
   let host=NSHostingView(rootView:TrainerShell { EmptyView() } content: {
    Hades2TrainerView(model:model)
-  }.environmentObject(localization))
+  }.environmentObject(localization)
+    .environment(\.trainerToolWindows,toolWindows.actions(localization:localization,theme:.standard))
+    .environment(\.trainerManagementActions,TrainerManagementActions(openSaveManagement:{backupPresentations += 1})))
   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1400,height:2600),styleMask:[.titled],backing:.buffered,defer:false)
   window.contentView=host; host.layoutSubtreeIfNeeded(); pump(0.5)
   check(!fields(host).contains(where:{$0.isEditable && $0.accessibilityLabel()=="—"}),
@@ -149,6 +154,11 @@ final class GenerateAction: NSObject {
   func waitForCommand(_ command: String, count: Int) {
    wait("\(command) did not complete \(count) requests") { commands(command).count==count && !model.busy }
    pump()
+  }
+  func managementAction(_ key:String) -> NativeAccessibilityControl {
+   let name=Hades2GameModule.resolveText(key:key,localization:localization)
+   guard let action=namedNativeControl(host,role:"AXButton",name:name) else { fatalError("management action missing: \(name)") }
+   return action
   }
   // Selected-material observations refresh idle controls without taking over
   // a native draft. Losing that owner abandons its draft before selecting the
@@ -425,6 +435,74 @@ final class GenerateAction: NSObject {
   nameHost.rootView=AnyView(EmptyView()); pump()
   check(renamed.count==2, "removing the backup editor committed an abandoned draft")
   nameWindow.close()
+  // Management navigation uses its own capability. Opening an existing Save
+  // document only focuses its window, even while a runtime request is busy.
+  model.connected=true; model.pid=nil; pump()
+  let saveTitle=Hades2GameModule.resolveText(key:"hades2.saveEditor.title",localization:localization)
+  check(managementAction("hades2.saveEditor.title").press(),"Save entry did not open its native tool")
+  wait { commands("save_editor_inventory").count==1 }
+  guard let saveWindow=NSApp.windows.first(where:{$0.title==saveTitle}) else { fatalError("Save entry did not use the independent tool-window owner") }
+  let saveRequests=commands("save_editor_inventory").count
+  model.refreshFromHost(); wait { model.busy }
+  check(managementAction("hades2.saveEditor.title").enabled,
+        "an unrelated runtime request disabled the existing Save tool's focus entry")
+  check(managementAction("hades2.saveEditor.title").press(),"busy Save focus action was rejected")
+  check(managementAction("host.shortcutSettings").enabled && managementAction("host.viewLog").enabled,
+        "runtime busy state disabled local settings or logs")
+  check(managementAction("host.saveManagement").enabled && managementAction("host.saveManagement").press()
+        && backupPresentations==1,"the Host-owned backup entry inherited a runtime mutation lock")
+  wait { !model.busy }; pump()
+  check(NSApp.windows.first(where:{$0.title==saveTitle}) === saveWindow
+        && commands("save_editor_inventory").count==saveRequests,
+        "reopening Save while runtime-busy recreated or re-read its document")
+  saveWindow.performClose(nil); pump()
+  model.connected=false; model.pid=nil; pump()
+  check(!managementAction("host.disableAll").enabled,
+        "Disable All remained available without a runtime connection")
+  check(managementAction("hades2.manage.prepareSigning").enabled
+        && managementAction("hades2.manage.restoreSigning").enabled,
+        "stopped-game signature maintenance required an unrelated connection")
+  check(managementAction("host.shortcutSettings").enabled && managementAction("host.viewLog").enabled,
+        "disconnection disabled local settings or logs")
+  model.pid=909; pump()
+  check(!managementAction("hades2.manage.prepareSigning").enabled
+        && !managementAction("hades2.manage.restoreSigning").enabled,
+        "signature maintenance remained available for a known running game")
+  model.exiting=true; pump()
+  check(!managementAction("hades2.manage.profiles").enabled
+        && !managementAction("hades2.saveEditor.title").enabled
+        && !managementAction("host.shortcutSettings").enabled
+        && managementAction("host.viewLog").enabled,
+        "exit cleanup left management mutations available or hid diagnostic logs")
+  model.exiting=false; model.pid=nil; model.connected=true; pump()
+  // The same nine native actions remain present exactly once and inside their
+  // host at narrow and regular widths in both languages. This checks layout
+  // bounds; rendered hierarchy and VoiceOver acceptance remain user-run.
+  let managementKeys=["hades2.saveEditor.title","host.saveManagement","host.disableAll",
+                      "hades2.manage.profiles","host.shortcutSettings","host.viewLog",
+                      "hades2.manage.diagnostics","hades2.manage.prepareSigning","hades2.manage.restoreSigning"]
+  for width:CGFloat in [420,760] {
+   for language in [TrainerPresentationLanguage.en,.zhCN] {
+    localization.language=language; pump()
+    let layoutHost=NSHostingView(rootView:Hades2ManagementUtilities(model:model,
+      openProfiles:{},openSaveEditor:{},openDiagnostics:{})
+      .environmentObject(localization)
+      .environment(\.trainerManagementActions,TrainerManagementActions(openSaveManagement:{}))
+      .frame(width:width))
+    let layoutWindow=NSWindow(contentRect:NSRect(x:0,y:0,width:width,height:1000),styleMask:[.titled],backing:.buffered,defer:false)
+    layoutWindow.contentView=layoutHost; layoutHost.layoutSubtreeIfNeeded(); pump()
+    let bounds=layoutWindow.convertToScreen(layoutHost.convert(layoutHost.bounds,to:nil)).insetBy(dx:-1,dy:-1)
+    for key in managementKeys {
+     let label=Hades2GameModule.resolveText(key:key,localization:localization)
+     let matches=nativeAccessibilityControls(layoutHost).filter{$0.role=="AXButton" && $0.label==label}
+     check(matches.count==1,"a management action was missing or duplicated at width \(width): \(label)")
+     check(matches[0].frame.width>0 && matches[0].frame.height>0 && bounds.contains(matches[0].frame),
+           "a management action overflowed its native host at width \(width): \(label)")
+    }
+    layoutWindow.close()
+   }
+  }
+  try? FileManager.default.removeItem(at:log)
   session.stop(); pump(); window.close()
   print("runtime_text_edit_completion_ok")
  }

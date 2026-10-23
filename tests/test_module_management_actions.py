@@ -43,17 +43,16 @@ game_management = hades_view[
     hades_view.index("private var management"):
     hades_view.index("private func featureRow")
 ]
-assert "Hades2ManagementUtilities(model: model)" in game_management
+assert "Hades2ManagementUtilities(" in game_management
 assert "model.openLog()" not in game_management
 
 for token in (
     "struct Hades2ManagementUtilities",
     "@Environment(\\.trainerManagementActions) private var managementActions",
-    'Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")',
-    'Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")',
-    'Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")',
+    'title: localization.localized("host.shortcutSettings")',
+    'title: localization.localized("host.viewLog")',
+    'title: localization.localized("host.saveManagement")',
     "managementActions.openSaveManagement",
-    ".disabled(!model.backendAvailable)",
 ):
     assert token in management, token
 
