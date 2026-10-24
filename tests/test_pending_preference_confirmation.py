@@ -12,7 +12,7 @@ from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError
 from games.hades2.persistence import PersistenceError
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
-from games.hades2.schema import TOGGLES
+from games.hades2.schema import TOGGLES, default_boon_rarity
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 
@@ -30,12 +30,7 @@ class PendingResidentSession(FakeResidentSession):
             'damageMultiplier': 1.0,
             'moneyMultiplier': 2.0,
             'resourceMultiplier': 2.0,
-            'boonRarity': {
-                'target': 'Epic',
-                'multiplier': 100.0,
-                'forceLegendary': False,
-                'forceDuo': False,
-            },
+            'boonRarity': default_boon_rarity(),
             'nextRoomReward': None,
             'runtimeDiagnostics': {},
             'healthLocked': False,
@@ -113,7 +108,7 @@ class PendingResidentSession(FakeResidentSession):
         if command == 'set_boon_rarity':
             self.state['boonRarity'] = {
                 'target': params.get('target'),
-                'multiplier': float(params.get('multiplier', 100.0)),
+                'multiplier': 100.0,
                 'forceLegendary': bool(params.get('forceLegendary')),
                 'forceDuo': bool(params.get('forceDuo')),
             }

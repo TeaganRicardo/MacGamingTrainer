@@ -53,3 +53,35 @@ struct TrainerIconLabel: View {
         }
     }
 }
+
+struct TrainerLabeledControlRow<Controls: View>: View {
+    let title: String
+    let icon: String
+    let tint: Color
+    let emphasized: Bool
+    let opacity: Double
+    let helpText: String
+    let controls: Controls
+
+    init(title: String, icon: String, tint: Color, emphasized: Bool,
+         opacity: Double = 1, helpText: String = "", @ViewBuilder controls: () -> Controls) {
+        self.title = title
+        self.icon = icon
+        self.tint = tint
+        self.emphasized = emphasized
+        self.opacity = opacity
+        self.helpText = helpText
+        self.controls = controls()
+    }
+
+    var body: some View {
+        TrainerRow(opacity: opacity) {
+            HStack(spacing: 16) {
+                TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                    .help(helpText)
+                Spacer(minLength: 8)
+                controls
+            }
+        }
+    }
+}

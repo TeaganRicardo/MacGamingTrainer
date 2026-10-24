@@ -284,7 +284,6 @@
     "hades2.rarity.duo": "强制双重",
     "hades2.rarity.legendary": "强制传奇",
     "hades2.rarity.minimum": "最低稀有度",
-    "hades2.rarity.multiplier": "稀有度概率倍率",
     "hades2.rarity.title": "{term:officialTerms.boon}稀有度控制",
     "hades2.receipt.accepted": "{0}已受理，等待游戏处理",
     "hades2.shortcut.applyNextRoomReward": "设置下一房奖励",

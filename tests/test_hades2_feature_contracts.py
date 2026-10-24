@@ -18,6 +18,7 @@ feature_generator = read('Tools/generate_hades2_feature_bindings.py')
 feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
 gathering = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
 occurrence = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
+rarity = read('Sources/Hades2/Views/Hades2BoonRarityPanel.swift')
 badge = read('Sources/Core/UI/Primitives/TrainerBadge.swift')
 lua = read('Backend/games/hades2/runtime/hades.lua')
 
@@ -122,7 +123,7 @@ parts = [
     common,
     source_section(view, "private var gameSpeedPanel: some View {", "private var presentedContent:"),
     source_section(view, "private var damageMetric: some View {", "private var boonRarityPanel:"),
-    source_section(view, "private var boonRarityPanel: some View {", "private var nextRoomRewardPanel:"),
+    rarity,
     source_section(view, "private var currentRunEffectsPanel: some View {", "private func exactItemLabel("),
     source_section(view, "private var boonAcquisitionPanel: some View {", "private var currentRunEffectsPanel:"),
     source_section(view, "private var resourcePanel: some View {", "private var rewardSpawningPanel:"),

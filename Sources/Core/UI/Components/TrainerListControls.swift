@@ -1,6 +1,25 @@
 import AppKit
 import SwiftUI
 
+struct TrainerResetButton: View {
+    let title: String
+    let enabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.uturn.backward")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 26, height: 24)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+}
+
 struct TrainerSectionButton: View {
     let title: String
     let detail: String?

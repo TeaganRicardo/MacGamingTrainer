@@ -115,7 +115,7 @@ def is_valid_next_occurrence_target(value):
 
 def default_boon_rarity():
     return {
-        'target':'Epic',
+        'target':'Heroic',
         'multiplier':100.0,
         'forceLegendary':False,
         'forceDuo':False,

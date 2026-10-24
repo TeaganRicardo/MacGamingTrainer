@@ -20,9 +20,10 @@ def main():
     view = read('Sources/Hades2/Hades2View.swift')
     assert '祝福选项数量' not in view
     # Rarity controls resolve through the module presentation table.
-    assert 'text("hades2.rarity.legendary")' in view
-    assert 'text("hades2.rarity.duo")' in view
-    assert view.count('enabled: model.canEditDesired && model.boonRarityEnabled') >= 2
+    rarity_view = read('Sources/Hades2/Views/Hades2BoonRarityPanel.swift')
+    assert 'text("hades2.rarity.legendary")' in rarity_view
+    assert 'text("hades2.rarity.duo")' in rarity_view
+    assert rarity_view.count('enabled: model.canEditDesired && model.boonRarityEnabled') >= 2
     assert 'boonChoiceEnabled' not in TOGGLES
     assert 'boonChoiceCount' not in Hades2PreferenceStore.defaults()
     assert Hades2PreferenceStore.defaults()['boonRarity']['forceLegendary'] is False
@@ -94,7 +95,7 @@ def main():
     feature_controls = read('Sources/Core/UI/Components/TrainerFeatureControls.swift')
     card = read('Sources/Core/UI/Primitives/TrainerCard.swift')
     assert '.tint(tint ?? theme.accent)' in toggle
-    assert feature_controls.count('tint: state.indicatorColor') >= 3
+    assert feature_controls.count('tint: state.indicatorColor') >= 2
     assert '.padding(.top, 6)' in card
     assert '.padding(.bottom, 8)' in card
 

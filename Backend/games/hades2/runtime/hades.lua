@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 121 then
+if previousModule and previousModule.revision ~= 122 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 121 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 121,
+    version = 1, revision = 122,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -36,7 +36,7 @@ if __MacGamingTrainerV1 == nil then
     resourceMultiplier = 2,
     -- END GENERATED DURABLE FEATURE STATE
     -- true means force one currently eligible special boon into the native pool.
-    boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
+    boonRarityTarget = "Heroic", boonForceLegendary = false, boonForceDuo = false,
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
     nextRoomRewardRoutedRooms = {}, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
@@ -1102,7 +1102,6 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseBoonRarity()
     M.boonRarityEnabled = false
-    releaseHook("GetRarityChances")
     releaseHook("SetTraitsOnLoot")
   end
   local function releaseNextRoomReward()
@@ -1628,7 +1627,7 @@ if __MacGamingTrainerV1 == nil then
     if M.infiniteAmmo and not owns("UpdateWeaponAmmo") then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
         and type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then releaseMiniGames() end
-    if M.boonRarityEnabled and (not owns("GetRarityChances") or not owns("SetTraitsOnLoot")) then releaseBoonRarity() end
+    if M.boonRarityEnabled and not owns("SetTraitsOnLoot") then releaseBoonRarity() end
     if (M.infiniteMoney or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled or next(M.resourceLocks))
         and (not owns("AddResource") or not owns("SpendResource")) then releaseEconomyRuntime() end
     if (M.infiniteRerolls or M.rerollsLock ~= nil) and not owns("UpdateRerollUI") then releaseRerollsRuntime() end
@@ -7774,7 +7773,7 @@ if __MacGamingTrainerV1 == nil then
       hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
       autoMiniGames = M.desiredFeatures.autoMiniGames,
       boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
-      boonRarity = { target = M.boonRarityTarget, multiplier = M.boonRarityMultiplier * 100,
+      boonRarity = { target = M.boonRarityTarget, multiplier = 100,
         forceLegendary = M.boonForceLegendary, forceDuo = M.boonForceDuo },
       -- Identity is current-run only. D00 proved `trait.Id` is assigned by
       -- GetTraitUniqueId and is NOT stable across run reload or restart, so the
@@ -7818,7 +7817,7 @@ if __MacGamingTrainerV1 == nil then
         castHook = owns("SetEffectProperty") and owns("SetWeaponProperty"), castRuntime = M.castControl.diagnostics(),
         hexRuntime = M.hexRuntime or jsonNull,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
-        boonRarityHooks = { chances = owns("GetRarityChances"), options = owns("SetTraitsOnLoot") },
+        boonRarityHooks = { options = owns("SetTraitsOnLoot") },
         nextRoomRewardHook = owns("ChooseRoomReward") and owns("StartRoom"),
         nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors or jsonNull,
         nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
@@ -8379,19 +8378,7 @@ if __MacGamingTrainerV1 == nil then
     return true
   end
   local function installBoonRarity()
-    requireFunctions("boon rarity control", { "GetRarityChances", "SetTraitsOnLoot", "GetEligibleUpgrades" })
-    if not owns("GetRarityChances") then
-      installHook("GetRarityChances", function(original, loot, ...)
-        local chances = original(loot, ...)
-        if M.boonRarityEnabled and type(chances) == "table" and finite(M.boonRarityMultiplier) then
-          local multiplier = math.max(0, M.boonRarityMultiplier)
-          for _, rarity in ipairs({ "Rare", "Epic", "Heroic" }) do
-            if finite(chances[rarity]) then chances[rarity] = math.max(0, math.min(1, chances[rarity] * multiplier)) end
-          end
-        end
-        return chances
-      end)
-    end
+    requireFunctions("boon rarity control", { "SetTraitsOnLoot", "GetEligibleUpgrades" })
     if not owns("SetTraitsOnLoot") then
       installHook("SetTraitsOnLoot", function(original, lootData, args, ...)
         local packed = table.pack(original(lootData, args, ...))
@@ -9054,8 +9041,8 @@ if __MacGamingTrainerV1 == nil then
     },
     boonRarityEnabled = {
       install = installBoonRarity, release = releaseBoonRarity, available = function() return true end,
-      support = function() return type(GetRarityChances) == "function" and type(SetTraitsOnLoot) == "function" and type(GetEligibleUpgrades) == "function" end,
-      active = function() return M.boonRarityEnabled and owns("GetRarityChances") and owns("SetTraitsOnLoot") end,
+      support = function() return type(SetTraitsOnLoot) == "function" and type(GetEligibleUpgrades) == "function" end,
+      active = function() return M.boonRarityEnabled and owns("SetTraitsOnLoot") end,
     },
     forceEnableRerolls = {
       install = installForceEnableRerolls, release = releaseForceEnableRerolls, available = function() return true end,
@@ -10259,13 +10246,10 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_boon_rarity" then
       local target = params.target or M.boonRarityTarget
-      local multiplier = params.multiplier or (M.boonRarityMultiplier * 100)
       if target ~= "Common" and target ~= "Rare" and target ~= "Epic" and target ~= "Heroic" then error("Unknown boon rarity target") end
-      if not finite(multiplier) or multiplier < 0 or multiplier > 1000 then error("Rarity multiplier must be 0..1000 percent") end
       if params.forceLegendary ~= nil and type(params.forceLegendary) ~= "boolean" then error("forceLegendary must be boolean") end
       if params.forceDuo ~= nil and type(params.forceDuo) ~= "boolean" then error("forceDuo must be boolean") end
       M.boonRarityTarget = target
-      M.boonRarityMultiplier = multiplier / 100
       if params.forceLegendary ~= nil then M.boonForceLegendary = params.forceLegendary end
       if params.forceDuo ~= nil then M.boonForceDuo = params.forceDuo end
       if M.desiredFeatures.boonRarityEnabled then reconcileDesired(true, "boonRarityEnabled") end

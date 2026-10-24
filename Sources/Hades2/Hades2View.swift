@@ -8,7 +8,7 @@ private typealias ViewState<Value> = SwiftUI.State<Value>
 struct Hades2TrainerView: View {
     private enum EditField: Hashable {
         case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge
-        case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier, boonRarity, gameSpeed
+        case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier, gameSpeed
         case grasp, dodge, crit, chargeSpeed, moveSpeed, sprintSpeed, dashSpeed, attackSpeed, manaRegen, enemyDamage, enemyHealth
         case traitRemainingUses
         case element(String)
@@ -88,8 +88,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var enemyDamage = "100"
     @ViewState<String> private var enemyHealth = "100"
     @ViewState<Bool> private var statsInitialized = false
-    @ViewState<String> private var boonRarityFactor = "100"
-    @ViewState<Bool> private var boonConfigInitialized = false
     @ViewState<[String: String]> private var elementInputs = [:]
     @ViewState<Bool> private var elementsInitialized = false
 
@@ -763,14 +761,11 @@ struct Hades2TrainerView: View {
         TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: "shippingbox.fill") {
             resourcePanel
             Hades2GatheringPanel(model: model)
-            HStack(spacing: 12) {
-                TrainerIconLabel(
-                    title: text("hades2.garden.title"),
-                    icon: "leaf.fill",
-                    tint: model.canMatureGarden ? theme.accent : theme.inactive,
-                    emphasized: model.canMatureGarden
-                )
-                Spacer()
+            TrainerLabeledControlRow(
+                title: text("hades2.garden.title"), icon: "leaf.fill",
+                tint: model.canMatureGarden ? theme.accent : theme.inactive,
+                emphasized: model.canMatureGarden
+            ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
                     enabled: model.canMatureGarden, width: theme.compactActionWidth) {
@@ -778,7 +773,7 @@ struct Hades2TrainerView: View {
                 }
                 .help(text(model.canMatureGarden ? "hades2.garden.help" : "hades2.garden.unavailable"))
             }
-            .trainerPanel()
+            .trainerGroupedRows()
         }
     }
 
@@ -829,9 +824,11 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var gameSpeedPanel: some View {
         if model.featureSupport["gameSpeed"] == true {
-            HStack(spacing: 10) {
-                Text(text("hades2.gameSpeed.title")).font(.headline)
-                Spacer(minLength: 12)
+            TrainerLabeledControlRow(
+                title: text("hades2.gameSpeed.title"), icon: "speedometer",
+                tint: model.canEditDesired ? theme.accent : theme.inactive,
+                emphasized: model.canEditDesired
+            ) {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
@@ -854,7 +851,7 @@ struct Hades2TrainerView: View {
                 .frame(width: 200)
                 TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
             }
-            .trainerPanel()
+            .trainerGroupedRows()
         }
     }
 
@@ -897,7 +894,6 @@ struct Hades2TrainerView: View {
 
     private var configSnapshot: Hades2ViewConfigSnapshot {
         Hades2ViewConfigSnapshot(
-            boonRarityMultiplier: model.boonRarityMultiplier,
             nextRoomReward: model.nextRoomReward,
             nextOccurrenceTarget: model.nextOccurrenceTarget,
             elements: model.elements,
@@ -1032,12 +1028,6 @@ struct Hades2TrainerView: View {
     }
 
     private func syncConfigSnapshot(_ snapshot: Hades2ViewConfigSnapshot) {
-        if !boonConfigInitialized {
-            boonRarityFactor = compactNumber(snapshot.boonRarityMultiplier)
-            boonConfigInitialized = true
-        } else if focusedField != .boonRarity {
-            boonRarityFactor = compactNumber(snapshot.boonRarityMultiplier)
-        }
         model.selectedNextRoomReward = snapshot.nextRoomReward ?? ""
         model.selectedNextOccurrenceTarget = snapshot.nextOccurrenceTarget ?? ""
         syncElementInputs(snapshot.elements)
@@ -1110,8 +1100,6 @@ struct Hades2TrainerView: View {
         multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
         moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
         materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
-        boonRarityFactor = "100"
-        boonConfigInitialized = false
         graspLimit = ""
         dodgeChance = ""
         critChance = ""
@@ -1216,81 +1204,15 @@ struct Hades2TrainerView: View {
     }
 
     private var boonRarityPanel: some View {
-        let state = model.featurePresentation(.boonRarityEnabled, enabled: model.boonRarityEnabled)
-            .trainerControlState(using: theme, localization: localization)
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                TrainerIconLabel(
-                    title: text("hades2.rarity.title"),
-                    icon: "star.circle.fill",
-                    tint: state.indicatorColor,
-                    emphasized: state.isOn
-                )
-                Spacer()
-                TrainerShortcutBadge(text: model.shortcutText(.boonRarityEnabled))
-                TrainerToggleControl(
-                    title: text("hades2.rarity.title"),
-                    isOn: model.boonRarityEnabled,
-                    enabled: model.canEditDesired,
-                    tint: state.indicatorColor,
-                    onChange: { model.feature(.boonRarityEnabled, value: $0) }
-                )
-            }
-            HStack(spacing: 12) {
-                Text(text("hades2.rarity.minimum")).foregroundStyle(.secondary)
-                Picker(text("hades2.rarity.minimum"), selection: Binding(get: { model.boonRarityTarget }, set: { model.setBoonRarity(target: $0, multiplier: boonRarityFactor, forceLegendary: model.boonForceLegendary, forceDuo: model.boonForceDuo) })) {
-                    Text(text("hades2.rarity.Common")).tag("Common")
-                    Text(text("hades2.rarity.Rare")).tag("Rare")
-                    Text(text("hades2.rarity.Epic")).tag("Epic")
-                    Text(text("hades2.rarity.Heroic")).tag("Heroic")
-                }.labelsHidden().frame(width: 150).disabled(!model.canEditDesired)
-                Spacer()
-                Text(text("hades2.rarity.multiplier")).foregroundStyle(.secondary)
-                TrainerNumberField(
-                    text: $boonRarityFactor,
-                    placeholder: "100",
-                    accessibilityLabel: text("hades2.rarity.multiplier"),
-                    width: 72,
-                    enabled: model.canEditDesired,
-                    onEditingChanged: tracking(.boonRarity),
-                    onCommit: completing(.boonRarity)
-                )
-                Text("%").foregroundStyle(.secondary)
-            }
-            Divider()
-            HStack(spacing: 18) {
-                HStack(spacing: 8) {
-                    TrainerCheckboxControl(
-                        title: text("hades2.rarity.legendary"),
-                        isOn: model.boonForceLegendary,
-                        enabled: model.canEditDesired && model.boonRarityEnabled,
-                        onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: $0, forceDuo: model.boonForceDuo) }
-                    )
-                    TrainerShortcutBadge(text: model.shortcutText(.forceLegendary))
-                }
-                HStack(spacing: 8) {
-                    TrainerCheckboxControl(
-                        title: text("hades2.rarity.duo"),
-                        isOn: model.boonForceDuo,
-                        enabled: model.canEditDesired && model.boonRarityEnabled,
-                        onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: model.boonForceLegendary, forceDuo: $0) }
-                    )
-                    TrainerShortcutBadge(text: model.shortcutText(.forceDuo))
-                }
-                Spacer()
-            }
-        }.trainerPanel()
+        Hades2BoonRarityPanel(model: model)
     }
 
     private var nextRoomRewardPanel: some View {
-        HStack(spacing: 14) {
-            TrainerIconLabel(
-                title: text("hades2.nextRoom.title"),
-                icon: "door.left.hand.open",
-                tint: model.canEditDesired ? theme.accent : theme.inactive,
-                emphasized: model.canEditDesired
-            )
-            Spacer()
+        TrainerLabeledControlRow(
+            title: text("hades2.nextRoom.title"), icon: "door.left.hand.open",
+            tint: model.canEditDesired ? theme.accent : theme.inactive,
+            emphasized: model.canEditDesired
+        ) {
             Picker(text("hades2.nextRoom.title"), selection: $model.selectedNextRoomReward) {
                 Text(text("hades2.nextRoom.noOverride")).tag("")
                 Section(text("hades2.nextRoom.standard")) {
@@ -1316,25 +1238,22 @@ struct Hades2TrainerView: View {
             ) {
                 model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward)
             }
-        }.trainerPanel()
+        }.trainerGroupedRows()
     }
 
     private var nextOccurrencePanel: some View {
         let characters = model.occurrenceTargets.filter { $0.kind == "character" }
         let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
-        return HStack(spacing: 14) {
-            TrainerIconLabel(
-                title: text("hades2.occurrence.title"),
-                icon: "figure.walk.motion",
-                tint: model.canEditDesired ? theme.accent : theme.inactive,
-                emphasized: model.canEditDesired
-            )
+        return TrainerLabeledControlRow(
+            title: text("hades2.occurrence.title"), icon: "figure.walk.motion",
+            tint: model.canEditDesired ? theme.accent : theme.inactive,
+            emphasized: model.canEditDesired
+        ) {
             if model.nextOccurrenceTarget != nil {
                 Text(text("hades2.occurrence.pending"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
             Picker(text("hades2.occurrence.title"), selection: $model.selectedNextOccurrenceTarget) {
                 Text(text("hades2.occurrence.noRequest")).tag("")
                 if !characters.isEmpty {
@@ -1368,18 +1287,20 @@ struct Hades2TrainerView: View {
                 )
             }
         }
-        .trainerPanel()
+        .trainerGroupedRows()
     }
 
     private var resourcePanel: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // The two gain multipliers are one family; keep them adjacent so the
-            // shared "gain" meaning is visible instead of split around the editor.
-            multiplierRow(text("hades2.feature.moneyMultiplier"), enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
-                text: $moneyFactor, feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
-            multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
-            Divider()
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
+            VStack(spacing: 1) {
+                // The two gain multipliers are one family; keep them adjacent so the
+                // shared "gain" meaning is visible instead of split around the editor.
+                multiplierRow(text("hades2.feature.moneyMultiplier"), enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
+                    text: $moneyFactor, feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
+                multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
+                    text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
+            }
+            .trainerGroupedRows()
             TrainerResourceEditor(
                 title: text("hades2.resource.materials"),
                 icon: "diamond.fill",
@@ -1406,16 +1327,14 @@ struct Hades2TrainerView: View {
                 onEditingChanged: tracking(.material),
                 onCommit: completing(.resource(selectedMaterial))
             )
+            .trainerPanel()
         }
-        .trainerPanel()
     }
 
     private var rewardSpawningPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 1) {
             spawnRow(title: text("hades2.spawn.olympianBoons"), icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
-            Divider()
             spawnRow(title: text("hades2.spawn.pickupRewards"), icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
-            Divider()
             spawnRow(
                 title: text("hades2.spawn.characterRewards"),
                 icon: "moon.stars.fill",
@@ -1428,7 +1347,7 @@ struct Hades2TrainerView: View {
                 actionEnabled: model.canPerformSelectedSpecialReward,
                 onAction: model.performSpecialReward
             )
-        }.trainerPanel()
+        }.trainerGroupedRows()
     }
 
     private var boonAcquisitionPanel: some View {
@@ -1629,7 +1548,7 @@ struct Hades2TrainerView: View {
     }
 
     private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
-        TrainerCompactMultiplierRow(
+        TrainerFeatureMultiplierRow(
             title: title,
             icon: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill",
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme, localization: localization),

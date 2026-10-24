@@ -13,6 +13,7 @@ import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
+from games.hades2.schema import default_boon_rarity
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
@@ -81,7 +82,7 @@ def reset_payload(god_mode=False):
         'status':'ready','scene':'run','capabilities':{'setFeature':True},
         'desiredFeatures':desired,'activeFeatures':active,'dormantFeatures':{},'featureErrors':{},
         'damageMultiplier':1.0,'moneyMultiplier':2.0,'resourceMultiplier':2.0,'gameSpeed':1.0,
-        'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
+        'boonRarity':default_boon_rarity(),
         'nextRoomReward':None,'stats':{},'resources':[],'elements':[],'boons':[],'rewards':[],
     }
 

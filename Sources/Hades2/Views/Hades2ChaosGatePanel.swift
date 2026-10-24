@@ -35,6 +35,7 @@ struct Hades2ChaosGatePanel: View {
             },
             onReset: { model.setChaosGateProbability(nil) }
         )
+        .trainerGroupedRows()
         .onAppear { synchronize() }
         .onChange(of: model.chaosGateProbability) { _, _ in synchronize() }
         .onChange(of: model.editGeneration) { _, _ in synchronize() }

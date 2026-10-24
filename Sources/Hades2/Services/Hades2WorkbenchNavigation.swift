@@ -96,7 +96,7 @@ enum Hades2WorkbenchCatalog {
                       "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
                       "hades2.traits.remove", "hades2.traits.removeAllMatching",
                       "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
-                      "hades2.rarity.minimum", "hades2.rarity.multiplier", "hades2.section.elements"]),
+                      "hades2.rarity.minimum", "hades2.section.elements"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)
                 + ["hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative"]),
             (.rooms, ["hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",

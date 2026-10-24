@@ -14,7 +14,7 @@ struct Hades2RuntimeIssuePresentation: Hashable {
 
 enum Hades2RuntimeTextEdit {
     case vital(String, field: String), resource(String), rerolls, element(String)
-    case stat(String), counter(String), multiplier(String), gameSpeed, boonRarity
+    case stat(String), counter(String), multiplier(String), gameSpeed
     case gathering(Hades2GatheringFamily), chaosGate
 }
 
@@ -173,8 +173,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var damageEnabled = false
     @Published var damageMultiplier = Hades2MultiplierKey.damageMultiplier.defaultValue
     @Published var gameSpeed = Hades2MultiplierKey.gameSpeed.defaultValue
-    @Published var boonRarityTarget = "Epic"
-    @Published var boonRarityMultiplier = 100.0
+    @Published var boonRarityTarget = "Heroic"
     // These wire keys now mean force one currently eligible special boon
     // into the native three-choice pool.
     @Published var boonForceLegendary = false
@@ -941,7 +940,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func applyBoonRarity(_ rarity: Hades2BoonRaritySnapshot) {
         if let value = rarity.target { boonRarityTarget = value }
-        if let value = rarity.multiplier { boonRarityMultiplier = value }
         if let value = rarity.forceLegendary { boonForceLegendary = value }
         if let value = rarity.forceDuo { boonForceDuo = value }
     }
@@ -1183,10 +1181,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .gameSpeed:
             current = gameSpeed; range = Self.gameSpeedInputRange; available = canEditDesired
             apply = { self.setGameSpeed($0) }
-        case .boonRarity:
-            current = boonRarityMultiplier; range = 0...1000; available = canEditDesired
-            apply = { self.setBoonRarity(target: self.boonRarityTarget, multiplier: $0,
-                forceLegendary: self.boonForceLegendary, forceDuo: self.boonForceDuo) }
         case let .gathering(family):
             current = gatheringProbabilities[family]; range = 0...100; available = canEditDesired
             apply = { if let probability = Double($0) { self.setGatheringProbability(family, probability: probability) } }
@@ -1352,15 +1346,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.lockElement(element: element, locked: locked), title: locked ? "hades2.op.lockElement" : "hades2.op.unlockElement")
     }
 
-    func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
-        guard canEditDesired, ["Common", "Rare", "Epic", "Heroic"].contains(target),
-              let value = Double(multiplier), value.isFinite, (0...1000).contains(value) else { return }
-        boonRarityTarget = target; boonRarityMultiplier = value; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
+    func setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
+        guard canEditDesired, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
+        boonRarityTarget = target; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
         let requestID = UUID()
         pendingBoonRarityRequestID = requestID
         var rejectedObservedRarity: Hades2BoonRaritySnapshot?
         sendEdit(
-            request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
+            request: .setBoonRarity(target: target, forceLegendary: forceLegendary, forceDuo: forceDuo),
             title: "hades2.op.updateBoonRarity",
             onReply: { reply in
                 if !reply.success, let state = reply.state {
@@ -1742,7 +1735,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             let targetEnabled = !boonForceLegendary
             setBoonRarity(
                 target: boonRarityTarget,
-                multiplier: String(boonRarityMultiplier),
                 forceLegendary: targetEnabled,
                 forceDuo: boonForceDuo
             ) { [weak self] success in
@@ -1756,7 +1748,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             let targetEnabled = !boonForceDuo
             setBoonRarity(
                 target: boonRarityTarget,
-                multiplier: String(boonRarityMultiplier),
                 forceLegendary: boonForceLegendary,
                 forceDuo: targetEnabled
             ) { [weak self] success in

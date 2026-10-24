@@ -11,7 +11,7 @@ from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
-from games.hades2.schema import TOGGLES
+from games.hades2.schema import TOGGLES, default_boon_rarity
 from core.process_time_warp import ProcessTimeWarpError
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
@@ -50,12 +50,7 @@ class FakeTransport:
             "damageMultiplier": 1.0,
             "moneyMultiplier": 2.0,
             "resourceMultiplier": 2.0,
-            "boonRarity": {
-                "target": "Epic",
-                "multiplier": 100.0,
-                "forceLegendary": False,
-                "forceDuo": False,
-            },
+            "boonRarity": default_boon_rarity(),
             "nextRoomReward": None,
             "stats": {},
             "resources": [],

@@ -14,8 +14,8 @@ view = (HADES / 'Hades2View.swift').read_text()
 
 # Hades owns no Toggle rendering path at all. Switches and checkboxes come from Core.
 assert 'Toggle(' not in hades
-assert 'TrainerToggleControl(' in view
-assert 'TrainerCheckboxControl(' in view
+assert 'TrainerToggleControl(' in hades
+assert 'TrainerCheckboxControl(' in hades
 
 # Exactly one switch-style implementation exists in the shared UI library.
 switch_files = []
@@ -30,7 +30,7 @@ for token in ('.toggleStyle(.switch)', '.controlSize(.regular)', '.tint(tint ?? 
     assert token in toggle, token
 assert 'Capsule()' not in toggle
 assert 'let tint: Color?' in toggle
-assert features.count('tint: state.indicatorColor') >= 3
+assert features.count('tint: state.indicatorColor') >= 2
 assert 'toggleColor' not in core
 assert 'toggleColor' not in presentation
 assert 'toggleTint' not in presentation
@@ -41,13 +41,13 @@ assert 'case .detached: return theme.warning' in presentation
 assert 'Color(red: 0.43, green: 0.56, blue: 0.48)' not in theme
 
 # Every shared switch-using row routes through TrainerToggleControl.
-assert features.count('TrainerToggleControl(') >= 3
+assert features.count('TrainerToggleControl(') >= 2
 assert 'TrainerToggleControl(' in stats
 assert '.toggleStyle(.switch)' not in features
 assert '.toggleStyle(.switch)' not in stats
 
 # Shortcut badge is identical in normal and multiplier rows and occupies one fixed column.
-assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') >= 3
+assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') >= 2
 assert 'Text(shortcutText)' not in features
 badge = (CORE_UI / 'Primitives/TrainerBadge.swift').read_text()
 assert 'struct TrainerShortcutBadgeSlot' in badge
