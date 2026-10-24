@@ -209,7 +209,7 @@ def rows(root, language="zh-CN", game_path=None):
                 identifiers = [key for key, _ in traits.entries() if isinstance(key, str)]
                 names = official_display_names(identifiers, language, game_path=game_path)
                 english = names if not zh else official_display_names(identifiers, "en", game_path=game_path)
-                for position, (identifier, count) in enumerate(traits.entries(), 1):
+                for identifier, count in traits.entries():
                     if identifier in seen_traits:
                         continue
                     seen_traits.add(identifier)
@@ -227,7 +227,7 @@ def rows(root, language="zh-CN", game_path=None):
         projected, seen = [], set()
         identities = [key for key, _ in stats.entries() if isinstance(key, str)]
         names = official_display_names(identities, language, game_path=game_path)
-        for position, (identity, record) in enumerate(stats.entries(), 1):
+        for identity, record in stats.entries():
             if not isinstance(identity, str) or not isinstance(record, LuaTable):
                 raise ValueError("malformed lifetime history")
             if identity in seen:
@@ -264,7 +264,7 @@ def rows(root, language="zh-CN", game_path=None):
             identities = [key for key, _ in records.entries() if isinstance(key, str)]
             names = official_display_names(identities, language, game_path=game_path)
             english = names if not zh else official_display_names(identities, "en", game_path=game_path)
-            for position, (key, count) in enumerate(records.entries(), 1):
+            for key, count in records.entries():
                 if key in seen:
                     continue
                 seen.add(key)

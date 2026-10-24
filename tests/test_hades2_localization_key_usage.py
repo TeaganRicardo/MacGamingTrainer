@@ -23,7 +23,7 @@ DYNAMIC_PREFIXES = {
     "hades2.saveEditor.workbench.section.",
     "hades2.saveEditor.investigate.block.",
     "hades2.saveEditor.discovery.reason.",
-    "hades2.saveEditor.investigate.path.",
+    "hades2.saveEditor.group.",
 }
 
 
@@ -290,13 +290,9 @@ def dynamic_key_references(sources):
     ))
     block_codes = dialogue_block_codes | investigation_block_codes | investigation_fallbacks
 
-    path_start = save_investigation.index("def _observed_path")
-    path_end = save_investigation.index("def _requirement_nodes", path_start)
-    path_body = save_investigation[path_start:path_end]
-    path_evidence = set(re.findall(
-        r"return\s+['\"]([A-Za-z][A-Za-z0-9]*)['\"]\s*,",
-        path_body,
-    ))
+    grouping = sources["Sources/Hades2/Views/Hades2SaveEditorEntityGrouping.swift"][0]
+    result_groups = set(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', require_capture(
+        r'let order = \[(.*?)\]', grouping, "Save Editor result groups", re.DOTALL)))
 
     suffixes = {
         "hades2.occurrence.target.": occurrence_ids,
@@ -310,7 +306,7 @@ def dynamic_key_references(sources):
         "hades2.saveEditor.workbench.section.": workbench_sections,
         "hades2.saveEditor.investigate.block.": block_codes,
         "hades2.saveEditor.discovery.reason.": discovery_reasons,
-        "hades2.saveEditor.investigate.path.": path_evidence,
+        "hades2.saveEditor.group.": result_groups,
     }
     for prefix, values in suffixes.items():
         if not values:

@@ -44,7 +44,7 @@ def entity_page(rows, *, search, offset, limit, aliases=None):
         group["_terms"].update(
             str(item).casefold() for item in (
                 identity, title, row["id"], row["rawId"],
-                row["name"], row["englishName"], row.get("group"),
+                row["name"], row["englishName"], row.get("group"), row.get("hostName"),
                 *aliases.get(row["id"], ()),
                 *row.get("_search", ())
             ) if item is not None

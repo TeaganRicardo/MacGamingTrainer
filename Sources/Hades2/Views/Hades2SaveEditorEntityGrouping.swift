@@ -43,14 +43,14 @@ enum Hades2SaveEditorEntityGrouping {
         var groups: [String: [Hades2SaveEditorEntry]] = [:]
         for entry in entity.entries {
             // The domain is a stable owner; translated headings never own drafts.
-            let owner = entry.id.hasPrefix("gift:") ? "gifts" : entry.domain
+            let owner = entry.id.hasPrefix("gift:") ? "gifts" : entry.domain + (entry.hostID.map { ":" + $0 } ?? "")
             if groups[owner] == nil { order.append(owner) }
             groups[owner, default: []].append(entry)
         }
         return order.map { owner in
             let entries = groups[owner]!
             return Hades2SaveEditorFieldGroup(
-                id: owner, title: order.count > 1 ? entries.first?.group : nil, entries: entries
+                id: owner, title: entries.first?.hostName ?? (order.count > 1 ? entries.first?.group : nil), entries: entries
             )
         }
     }

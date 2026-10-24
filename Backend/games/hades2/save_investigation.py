@@ -775,10 +775,16 @@ class NativeDialogueInvestigation:
             'entityName': localized[language] if native_person else None,
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
             'content': [_clean_display_name(phrase) for row in lines for phrase in row[translated_key]],
+            'playbackKnown': bool(sources) or scene in STORY_RESET_TEXT_IDS,
             'sourceIdentity': self.native['sourceIdentity'],
             'reason': reason, 'blockReasonCode': block_code,
             'canStage': can_stage, 'stageID': 'dialogueReset:' + scene if can_stage else '',
         }
+
+    def scene_row(self, save_root, scene, language, permissions):
+        self._refresh()
+        records, ambiguous = self._records(save_root)
+        return self._summary_row(scene, language, records, ambiguous, permissions)
 
     def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all", include_unobserved=False):
         self._refresh()

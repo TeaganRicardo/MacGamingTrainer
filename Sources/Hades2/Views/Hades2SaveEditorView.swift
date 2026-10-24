@@ -389,7 +389,7 @@ struct Hades2SaveEditorView: View {
                     }
                 }
                 ForEach(Array(entry.content.enumerated()), id: \.offset) { _, line in
-                    if line != entity.title {
+                    if line != entity.title && line != entry.hostName {
                         Text(line)
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -401,9 +401,6 @@ struct Hades2SaveEditorView: View {
                     Text(discoveryReason(entry, fallback: reason))
                         .font(.caption)
                         .foregroundStyle(theme.warning)
-                }
-                if let warning = entry.warning {
-                    Text(warning).font(.caption).foregroundStyle(theme.warning)
                 }
                 editFailure(entry)
             }
@@ -457,6 +454,12 @@ struct Hades2SaveEditorView: View {
             Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
                 .accessibilityIdentifier("saveEditor.editValue." + entry.id)
                 .disabled(model.busy)
+        } else if entry.id.hasPrefix("dialogueReset:") {
+            Button(entry.displayName) {
+                model.stage(entryID: entry.id, operation: "set", value: false)
+            }
+            .accessibilityIdentifier("saveEditor.reset." + entry.rawID)
+            .disabled(model.busy)
         } else if entry.valueType == "boolean" {
             TrainerToggleControl(
                 title: entry.displayName,
@@ -674,6 +677,12 @@ struct Hades2SaveEditorView: View {
                 .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
                 .accessibilityIdentifier("saveEditor.remove." + action.entryID)
                 .disabled(model.busy)
+            }
+            if let host = action.hostName, !action.content.contains(host) {
+                Text(host).font(.callout).textSelection(.enabled)
+            }
+            ForEach(Array(action.content.enumerated()), id: \.offset) { _, line in
+                Text(line).font(.callout).textSelection(.enabled)
             }
             editFailure(action.editorEntry)
             HStack(spacing: 6) {

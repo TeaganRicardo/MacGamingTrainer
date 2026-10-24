@@ -125,6 +125,8 @@ struct Hades2SaveEditorAction: Identifiable, Equatable {
     var typedAfter: Hades2SaveTypedValue? = nil
     var beforePresent = true
     var afterPresent = true
+    var hostName: String? = nil
+    var content: [String] = []
 
     var id: String { entryID }
 
@@ -198,6 +200,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     var typedValue: Hades2SaveTypedValue? = nil
     var warning: String? = nil
     var content: [String] = []
+    var hostID: String? = nil
+    var hostName: String? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -207,6 +211,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.displayName == rhs.displayName
             && lhs.englishName == rhs.englishName
             && lhs.content == rhs.content
+            && lhs.hostID == rhs.hostID
+            && lhs.hostName == rhs.hostName
             && lhs.value == rhs.value
             && lhs.valueType == rhs.valueType
             && lhs.editable == rhs.editable
@@ -1280,7 +1286,9 @@ final class Hades2SaveEditorModel: ObservableObject {
                 typedBefore: row["typedBefore"].flatMap(Hades2SaveTypedValue.init),
                 typedAfter: row["typedAfter"].flatMap(Hades2SaveTypedValue.init),
                 beforePresent: row["beforePresent"] as? Bool ?? true,
-                afterPresent: row["afterPresent"] as? Bool ?? true
+                afterPresent: row["afterPresent"] as? Bool ?? true,
+                hostName: row["hostName"] as? String,
+                content: row["content"] as? [String] ?? []
             ))
         }
         guard decodedEffectCount == effectCount else { return false }
@@ -1385,7 +1393,9 @@ final class Hades2SaveEditorModel: ObservableObject {
                 ?? (row["reason"] as? String),
             typedValue: row["typedValue"].flatMap(Hades2SaveTypedValue.init),
             warning: row["warning"] as? String,
-            content: row["content"] as? [String] ?? []
+            content: row["content"] as? [String] ?? [],
+            hostID: row["hostId"] as? String,
+            hostName: row["hostName"] as? String
         )
     }
 

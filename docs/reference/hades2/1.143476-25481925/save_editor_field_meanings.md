@@ -14,6 +14,24 @@ The investigation used the supported source archive referenced by `ui_terminolog
 
 The generator follows actual special-action targets rather than assigning a zero special-action field to every known NPC. Non-NPC targets retain their own object/familiar identity and readable native names; Hermes, Selene and Chaos action sources join their respective characters.
 
+Native host headings distinguish 27 physical counters across 11 people. Context labels live in `save_long_term._INTERACTION_CONTEXTS`; actor reuse is included rather than inferring a context from `_Story`, `_Field` or a number. Supporting native definitions are:
+
+| Person | Native host/context evidence |
+| --- | --- |
+| Arachne | `RoomDataF.lua:3270`; `NPCData_Arachne.lua:3477`; `NarrativeData.lua:1830` |
+| Artemis | `DeathLoopData.lua:764`; `NPCData_Artemis.lua:1828`; `NarrativeData.lua:1856,1887` |
+| Cerberus | `RoomDataI.lua:3297`; `NPCData_Hades.lua:6306,6625` |
+| Chronos | `NPCData_Chronos.lua:89,1513,1539,1909`; `NarrativeData.lua:5171,5220`; `RoomDataI.lua:4433` |
+| Hades | `RoomDataI.lua:3198,4174`; `NPCData_Hades.lua:73,5325,5357`; `NarrativeData.lua:2140` |
+| Hecate | `DeathLoopData.lua:653,9244`; `NarrativeData.lua:310`; `RoomDataI.lua:4377` |
+| Hypnos | `DeathLoopData.lua:603`; `NPCData_Hypnos.lua:609,849,1030,1172` |
+| Narcissus | `RoomDataG.lua:2844`; `NPCData_Narcissus.lua:2983` |
+| Nyx | `NarrativeData.lua:7447,7457`; `NPCData.lua:6085`; `EncounterData_Story.lua:2258` |
+| Zagreus | `NarrativeData.lua:7518,7541`; `NPCData.lua:7784,9318` |
+| Zeus | `NPCData.lua:5903,9491`; `RoomDataQ.lua:2348,3033` |
+
+Dialogue source presentation is shared by search and Changes. Authored scene ownership is required before localization content becomes an ordinary playback field; Event-only voice entries do not create a `TextLinesRecord` path. Eligible native resets remain direct actions beside their scene and keep the existing companion-owner validation. Ordinary quest results omit the diagnostic authored-condition summary, and gift/reward rows omit routine implementation subtitles.
+
 Mutation-site SHA-256 evidence:
 
 - `GiftLogic.lua`: `b08efe43b6beb0f5bf621af8937e2cccdead8e46eca8cfd00d2d00150bbb3964`
@@ -21,4 +39,4 @@ Mutation-site SHA-256 evidence:
 - `RunData.lua`: `604497cb405551a4364ee9d5bb22ee35731c545ce3cef06a53dc4b6ab6e4b86e`
 - `HubPresentation.lua`: `5415582f5e0b9051f1ae43bf047d2a8c7390eea53e31ae8ad6fcf4daa4279ff9`
 
-Temporary fixtures reproduce combined owner/action search failing before the fix, a salute field missing its recognizable purpose, and invisible prerequisite text producing unrelated dialogue matches. The owning regression tests cover bilingual action/owner search, tutorial names, absent native handlers, complete entity paging and preservation of typed Advanced access. Native-control journeys cover input, directly visible Changes/effects, Apply, re-read and recoverable backups; see the [usability procedure](../../../engineering/hades2-save-editor-usability-gate.md). Source tracing and fixture success do not establish rendered or real-game acceptance.
+Temporary fixtures reproduce combined owner/action search failing before the fix, a salute field missing its recognizable purpose, invisible prerequisite text producing unrelated dialogue matches, fabricated voice-event playback fields, lost scene identity in Changes, and the missing direct reset action. The owning regression tests cover bilingual action/owner/context search, tutorial names, absent native handlers, complete entity paging, reset companions and preservation of typed Advanced access. Native-control journeys cover input, directly visible Changes/effects, Apply, re-read and recoverable backups; see the [usability procedure](../../../engineering/hades2-save-editor-usability-gate.md). Source tracing and fixture success do not establish rendered or real-game acceptance.

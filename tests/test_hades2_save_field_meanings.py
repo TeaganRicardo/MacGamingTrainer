@@ -17,13 +17,14 @@ def table(values):
 with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory:
     game = Path(directory)
     for language, names in {
-        "en": {"NPC_Hecate_01": "Hecate", "NPC_Apollo_Story_01": "Apollo",
+        "en": {"NPC_Hecate_01": "Hecate", "NPC_Hecate_Story_01": "Hecate", "NPC_Apollo_Story_01": "Apollo",
                "FrogFamiliar": "Frinos", "Shrine": "Oath of the Unseen",
                "NPCUseTextSpecial": "Salute", "FamiliarUseTextSpecial": "Confide",
                "Objective_NemesisBet": "Win the wager", "DashStrike": "Dash-Strike",
+               "TimeChallengeValue": "TimeChallengeValue",
                "Objective_WeaponStaffDash": "{$Keywords.DashStrike}{!Icons.ObjectiveSeparator}Press {RU} then {A2}",
                "Objective_WeaponStaffSwing5": "{!Icons.Omega} Attack{!Icons.ObjectiveSeparator}Hold {A2}"},
-        "zh-CN": {"NPC_Hecate_01": "赫卡忒", "NPC_Apollo_Story_01": "阿波罗",
+        "zh-CN": {"NPC_Hecate_01": "赫卡忒", "NPC_Hecate_Story_01": "赫卡忒", "NPC_Apollo_Story_01": "阿波罗",
                   "FrogFamiliar": "弗利诺斯", "Shrine": "无形者之誓",
                   "NPCUseTextSpecial": "致意", "FamiliarUseTextSpecial": "倾诉",
                   "Objective_NemesisBet": "赢得赌约", "DashStrike": "突袭",
@@ -36,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
             '{ Id = "' + key + '" DisplayName = "' + value + '" }'
             for key, value in names.items()), encoding="utf-8")
     state = table({"Resources": table({}), "Flags": table({}),
-        "NPCInteractions": table({"NPC_Hecate_01": 3}),
+        "NPCInteractions": table({"NPC_Hecate_01": 3, "NPC_Hecate_Story_01": 9}),
         "SpecialInteractRecord": table({"NPC_Hecate_01": 4, "FrogFamiliar": 5, "Shrine": 1}),
         "ObjectivesCompleted": table({"NemesisBet": 2})})
     root = table({"GameState": state, "CurrentRun": table({})})
@@ -49,6 +50,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
     fields = {row["id"]: row for row in person["items"]}
     assert "Conversations" in fields["interaction:NPC_Hecate_01"]["name"]
     assert "Salute" in fields["specialInteraction:NPC_Hecate_01"]["name"]
+    assert fields["interaction:NPC_Hecate_01"]["hostId"] == "NPC_Hecate_01"
+    assert fields["interaction:NPC_Hecate_Story_01"]["hostId"] == "NPC_Hecate_Story_01"
+    assert fields["interaction:NPC_Hecate_01"]["hostName"] != fields["interaction:NPC_Hecate_Story_01"]["hostName"]
+    assert fields["interaction:NPC_Hecate_Story_01"]["value"] == 9
+    context = workspace.query(domain="entities", search="赫卡忒 捉迷藏", language="en")
+    assert any(group["id"] == "person:Hecate" for group in context["entities"])
     assert "Special interactions" not in str(fields)
     # Apollo's story object has no special handler. It must not acquire a
     # fabricated zero-valued salute just because it is a known NPC.
@@ -62,6 +69,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
                if row["id"] == "specialInteraction:Shrine")
     objective = workspace.query(domain="entities", scope="records", search="赢得赌约", language="en")
     assert any(row["id"] == "objective:NemesisBet" for group in objective["entities"] for row in group["items"])
+    countdown = workspace.query(domain="entities", scope="records", search="TimeChallengeValue", language="en")
+    assert next(row for group in countdown["entities"] for row in group["items"]
+                if row["id"] == "objective:TimeChallengeValue")["name"] == "Objective completions · Timed challenge countdown"
     for query, identity, label in (("突袭", "WeaponStaffDash", "Dash-Strike"),
                                     ("Ω 攻击", "WeaponStaffSwing5", "Ω Attack")):
         objective = workspace.query(domain="entities", scope="records", search=query, language="en")

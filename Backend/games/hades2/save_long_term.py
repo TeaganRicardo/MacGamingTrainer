@@ -51,6 +51,37 @@ _INTERACTION_OWNERS = {
     "RunHistoryScreen": ("RunHistoryScreen_Title", "过往成果", "Past Deeds"),
     "NPC_Cerberus_Story_01": ("NPC_Cerberus_Field_01", "刻耳柏洛斯", "Cerberus"),
 }
+# These native hosts share a person but own different saved counters. Contexts
+# cover every use of the host, including actors reused in memories and endings.
+_INTERACTION_CONTEXTS = {
+    "NPC_Arachne_01": ("BiomeF", "厄瑞玻斯", "Erebus"),
+    "NPC_Arachne_Home_01": ("Crossroads", "三岔路口", "Crossroads"),
+    "NPC_Artemis_01": ("Crossroads", "三岔路口", "Crossroads"),
+    "NPC_Artemis_Field_01": (None, "途中授予祝福", "Boon encounter"),
+    "NPC_Cerberus_Field_01": ("BiomeI", "塔耳塔罗斯", "Tartarus"),
+    "NPC_Cerberus_Story_01": (None, "冥府重逢", "House reunion"),
+    "NPC_Chronos_01": (None, "早期邂逅与时间异象", "Earlier encounters & time anomalies"),
+    "NPC_Chronos_Story_01": (None, "往事与终局", "Memories & finale"),
+    "NPC_Chronos_02": (None, "结局后的邂逅", "Encounters after the ending"),
+    "NPC_Hades_Field_01": ("BiomeI", "塔耳塔罗斯", "Tartarus"),
+    "NPC_Hades_Story_01": (None, "终局剧情", "Finale scene"),
+    "NPC_Hades_02": (None, "回忆与重逢", "Memories & reunion"),
+    "NPC_Hecate_01": (None, "三岔路口与往事", "Crossroads & memories"),
+    "NPC_Hecate_Story_01": (None, "捉迷藏与终局", "Hide-and-seek & finale"),
+    "NPC_Hypnos_01": ("Crossroads", "三岔路口", "Crossroads"),
+    "NPC_Hypnos_02": (None, "梦境第一层", "First dream layer"),
+    "NPC_Hypnos_03": (None, "梦境第二层", "Second dream layer"),
+    "NPC_Hypnos_04": (None, "最终梦境与苏醒", "Final dream & awakening"),
+    "NPC_Hypnos_DreamRun": (None, "梦境挑战", "Dream runs"),
+    "NPC_Narcissus_01": ("BiomeG", "俄刻阿诺斯", "Oceanus"),
+    "NPC_Narcissus_Field_01": (None, "与回声相会", "Visiting Echo"),
+    "NPC_Nyx_01": (None, "往事中的噩梦", "Nightmare memory"),
+    "NPC_Nyx_Story_01": (None, "重逢与混沌邂逅", "Reunion & Chaos visits"),
+    "NPC_Zagreus_Past_01": (None, "跨越时间的梦中会面", "Dreams across time"),
+    "NPC_Zagreus_01": (None, "终局重逢", "Reunion in the ending"),
+    "NPC_Zeus_01": (None, "对战堤丰", "Typhon battle"),
+    "NPC_Zeus_Story_01": ("BiomePalace", "宙斯圣殿", "The Palace of Zeus"),
+}
 for _familiar in ("Cat", "Raven", "Hound", "Polecat"):
     for _context in ("LockedInRun", "UnlockedInHub"):
         _SPECIAL_ACTIONS[_familiar + "FamiliarSpecialInteract" + _context] = (None, "爱抚", "Pet")
@@ -166,8 +197,11 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
                 native[name] = labels[identity]
             if identity in english_labels:
                 en[name] = english_labels[identity]
-        if "TimeChallengeValue" in names and "TimeChallengeValue" not in native:
-            native["TimeChallengeValue"] = "限时挑战倒计时" if language == "zh-CN" else "Timed challenge countdown"
+        if "TimeChallengeValue" in names:
+            if native.get("TimeChallengeValue") in (None, "TimeChallengeValue"):
+                native["TimeChallengeValue"] = "限时挑战倒计时" if language == "zh-CN" else "Timed challenge countdown"
+            if en.get("TimeChallengeValue") in (None, "TimeChallengeValue"):
+                en["TimeChallengeValue"] = "Timed challenge countdown"
     result = []
     for name in sorted(names):
         issue, value, kind = owner_state, 0, "integer"
@@ -204,6 +238,11 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
             block_reason_code="ambiguousOwner" if issue == "ambiguous" else "unsupportedOwner" if issue else None,
             entity_id=entity,
             entity_name=(title if title != name else _npc_person(name)) if person else None)
+        if person and name in _INTERACTION_CONTEXTS:
+            identity, chinese_context, english_context = _INTERACTION_CONTEXTS[name]
+            labels = official_display_names((identity,), language, game_path=game_path) if identity else {}
+            row["hostId"] = name
+            row["hostName"] = labels.get(identity) or (chinese_context if language == "zh-CN" else english_context)
         if name not in known:
             row["rawTyped"] = True
             row["reason"] = ("此已保存字段用途未编目；按实际类型修改，不重放互动事件。" if language == "zh-CN" else

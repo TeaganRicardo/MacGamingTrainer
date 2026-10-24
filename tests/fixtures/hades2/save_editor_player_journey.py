@@ -56,8 +56,8 @@ def document(amount, marker):
         state["QuestStatus"] = table({"QuestHelpDora": "Unlocked", "QuestUnlockMoros": "Complete"})
         state["QuestsViewed"] = table({"QuestHelpDora": False})
         state["QuestsCompleted"] = table({"QuestHelpDora": False})
-        state["TextLinesRecord"] = table({"UnverifiedScene": False})
-        state["TextLinesChoiceRecord"] = table({"UnverifiedScene": " Choice A "})
+        state["TextLinesRecord"] = table({"UnverifiedScene": False, "HecatePostTrueEnding01": True})
+        state["TextLinesChoiceRecord"] = table({"UnverifiedScene": " Choice A ", "HecatePostTrueEnding01": "Earlier choice"})
         state["SpeechRecord"] = table({"/VO/Unknown_0001": 3.0, "/VO/Legacy_0001": True})
         state["GiftRecord"] = table({"Hecate": table({1.0: "GiftPoints", "GiftPoints": 7.0}),
                                      "Odysseus": table({"GiftPoints": 3.0})})
@@ -77,6 +77,7 @@ def document(amount, marker):
         current["ResourcesGained"] = table({"GiftPoints": 4.0})
         current["GiftRecord"] = table({"Hecate": table({"GiftPoints": 1.0})})
         current["GiftResourceRecord"] = table({"GiftPoints": 1.0})
+        current["TextLinesRecord"] = table({"HecatePostTrueEnding01": True})
     values = [table({"GameState": state, "CurrentRun": current})]
     if os.environ.get("MGT_SAVE_CONTAINER_FIXTURE") == "1":
         header.timestamp = 18446744073709551615
@@ -152,6 +153,9 @@ def main():
         (scripts / "NPCData_Hecate.lua").write_text('''UnitSetData = {
  NPC_Hecate_01 = {
   InteractTextLineSets = {
+   HecatePostTrueEnding01 = {
+    { Cue = "/VO/Hecate_9999", Text = "A resettable scene" },
+   },
    UnverifiedScene = {
     { Cue = "/VO/Unknown_0001", Text = "Integer speech fixture" },
    },
@@ -162,7 +166,7 @@ def main():
   }
  }
 }''')
-        reset = b'StoryResetData = { TextLines = { "HecateJourney01" } }'
+        reset = b'StoryResetData = { TextLines = { "HecateJourney01", "HecatePostTrueEnding01" } }'
         (scripts / "StoryResetData.lua").write_bytes(reset)
         (scripts / "QuestData.lua").write_text('''QuestData = {
  QuestUnlockMoros = { RewardResourceName = "GiftPoints", RewardResourceAmount = 3 },
@@ -189,6 +193,7 @@ def main():
             directory.mkdir()
             (directory / f"Journey.{language}.sjson").write_text('''{ Texts = [
  { Id = "Unknown_0001" DisplayName = "Integer speech fixture" Event = "HecateJourney01" }
+ { Id = "Hecate_9999" DisplayName = "A resettable scene" Event = "HecatePostTrueEnding01" }
  { Id = "Legacy_0001" DisplayName = "Boolean speech fixture" Event = "HecateJourney01" }
 ] }''')
     module = Path(sys.modules[Hades2Adapter.__module__].__file__).parent

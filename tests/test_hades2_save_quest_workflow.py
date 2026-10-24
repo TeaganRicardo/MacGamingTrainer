@@ -84,9 +84,9 @@ OverwriteTableKeys( QuestData, {
     assert fields["questObservation:QuestsViewed:QuestUnlockMoros"]["value"] is True
     assert fields["questObservation:QuestsUpdated:QuestUnlockMoros"]["value"] is False
     assert fields["questObservation:PlayedQuestInterstitials:QuestUnlockMoros"]["value"] is True
-    context = fields["investigate:quest:QuestUnlockMoros"]
-    assert context["domain"] == "investigate" and not context["editable"]
-    detail = work.investigate(context["id"], language="en")
+    assert not any(row["domain"] == "investigate" for row in fields.values())
+    context_id = "investigate:quest:QuestUnlockMoros"
+    detail = work.investigate(context_id, language="en")
     assert detail["scene"] == "quest:QuestUnlockMoros" and not detail["canStage"]
     assert detail["futureEligibility"] == "unknown" and detail["sourceResolution"] == "resolved"
     assert len(detail["definitions"]) == 2  # direct owner plus explicitly named base
@@ -104,14 +104,14 @@ OverwriteTableKeys( QuestData, {
     assert person_fields["gift:Moros:GiftPoints"]["value"] == 2
     spoken = next(row for row in person["items"] if row["domain"] == "speechHistory")
     assert spoken["value"] == 3 and "我们又见面了" in spoken["name"] and spoken["editable"]
-    assert any(row["domain"] == "investigate" for row in person["items"])
+    assert person_fields["dialogue:MorosFirstMeeting"]["content"] == ["我们又见面了"]
     # Each observed lifecycle remains distinguishable, including absent source
     # identities on deliberate search, without inventing a writable unlock.
     for name, expected in (("QuestHelpDora", "CashedOut"), ("QuestGiftNectar", "Complete"), ("QuestCatchFish", "absent")):
         page = work.query(domain="entities", scope="story", search=name, language="en")
         group = next(g for g in page["entities"] if g["id"] == "quest:" + name)
-        row = next(r for r in group["items"] if r["id"] == "investigate:quest:" + name)
-        assert row["value"] == expected
+        row = next((r for r in group["items"] if r["id"] == "quest:" + name), None)
+        assert (row["value"] if row and row["value"] is not None else "absent") == expected
     # Existing quest action still owns its completion companion, rather than
     # treating presentation/voice history as independent edit controls.
     work.stage("quest:QuestUnlockMoros", "setEnum", "Complete")
@@ -130,7 +130,7 @@ OverwriteTableKeys( QuestData, {
     observation = next(r for g in page["entities"] for r in g["items"]
                        if r["id"] == "questObservation:QuestsViewed:QuestUnlockMoros")
     assert observation["value"] is None and observation["reasonCode"] == "ambiguousOwner"
-    assert not observation["editable"] and work.investigate(context["id"], "en")["canStage"] is False
+    assert not observation["editable"] and work.investigate(context_id, "en")["canStage"] is False
     state["SpeechRecord"] = LuaTable(0, 2, [("/VO/Moros_0001", 3), ("/VO/Moros_0001", 4)])
     page = work.query(domain="entities", scope="story", search="Moros", language="en")
     spoken = next(row for group in page["entities"] for row in group["items"] if row["domain"] == "speechHistory")
@@ -139,7 +139,7 @@ OverwriteTableKeys( QuestData, {
     # are unresolved; a nested look-alike never grants a quest definition.
     quest_source = scripts / "QuestData.lua"
     quest_source.write_text(quest_source.read_text() + '\nOverwriteTableKeys(QuestData, {\n QuestUnlockMoros = { CompleteGameStateRequirements = {} },\n})\n')
-    unresolved = work.investigate(context["id"], "en")
+    unresolved = work.investigate(context_id, "en")
     assert unresolved["sourceResolution"] == "unresolved" and unresolved["blockReasonCode"] == "questSourceUnresolved"
     assert unresolved["sourceIdentity"] != detail["sourceIdentity"]
     assert not unresolved["canStage"] and unresolved["stageID"] == ""

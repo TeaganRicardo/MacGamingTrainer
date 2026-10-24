@@ -698,6 +698,18 @@ struct Main {
                 != ["Character interactions", "Gift quantities", "Dialogue"] {
             fail("Save Editor headings mixed categories or physical field owners")
         }
+        var hub = sample("interaction:NPC_Artemis_01", "relationships", "NPC_Artemis_01",
+                         "Conversations · Artemis", entityID: "person:Artemis", entityName: "Artemis")
+        hub.hostID = "NPC_Artemis_01"; hub.hostName = "Crossroads"
+        var field = sample("interaction:NPC_Artemis_Field_01", "relationships", "NPC_Artemis_Field_01",
+                           "Conversations · Artemis", entityID: "person:Artemis", entityName: "Artemis")
+        field.hostID = "NPC_Artemis_Field_01"; field.hostName = "Boon encounter"
+        let hostGroups = Hades2SaveEditorEntityGrouping.fields(in:
+            Hades2SaveEditorEntityGrouping.entities(from: [hub, field])[0])
+        if hostGroups.count != 2 || hostGroups[0].id == hostGroups[1].id
+            || hostGroups.map(\.title) != ["Crossroads", "Boon encounter"] {
+            fail("native hosts with identical labels have no distinct context headings")
+        }
         let englishWeapons = Hades2SaveEditorEntityGrouping.entities(from: [
             sample("weapon:WeaponDagger", "weapons", "WeaponDagger", "Sister Blades",
                    entityID: "weapon:WeaponDagger", entityName: "Sister Blades"),
