@@ -126,7 +126,6 @@ private func fields(_ view: NSView) -> [NSTextField] { (view as? NSTextField).ma
         require(model.pendingCount == 8, "container action count wrong")
         let stagedTarget = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
         require(stagedTarget == targetBefore, "Stage changed disk bytes")
-        press(root, "hades2.saveEditor.workbench.reviewApply")
         press(root, "hades2.saveEditor.apply")
         until("container Apply failed") { !model.busy && !model.querying && model.pendingCount == 0 && model.lastApplyReceipt != nil }
         let installedSource = try Data(contentsOf: base.appendingPathComponent("saves/Profile1.sav"))

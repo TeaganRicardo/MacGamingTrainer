@@ -14,7 +14,15 @@ def table(mapping):
     return LuaTable(0, len(mapping), list(mapping.items()))
 
 
-def workspace(state, game_path="/nonexistent/mgt-history-fixture"):
+names_fixture = tempfile.TemporaryDirectory(prefix="mgt-history-labels-")
+for language, boon, fish in (("en", "Historic Boon", "Silver Carp"), ("zh-CN", "旧日祝福", "银鲤")):
+    (Path(names_fixture.name) / ("Names." + language + ".sjson")).write_text(
+        'Id = "UnknownHistoricBoon" DisplayName = "' + boon + '"\n'
+        'Id = "KnownBoon" DisplayName = "' + boon + '"\n'
+        'Id = "UnknownFish" DisplayName = "' + fish + '"\n', encoding="utf-8")
+
+
+def workspace(state, game_path=names_fixture.name):
     state.update({"Resources": table({}), "Flags": table({})})
     root = table({"GameState": table(state), "CurrentRun": table({})})
     session = SimpleNamespace(document=SimpleNamespace(lua_state=root), relative_path="Profile1.sav")

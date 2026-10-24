@@ -155,9 +155,6 @@ private func fields(_ view: NSView) -> [NSTextField] {
         }
         func apply(_ expected: Int) {
             require(model.pendingCount == expected, "unexpected independently removable Advanced action count")
-            if namedNativeControl(root, role: "AXButton", name: text("hades2.saveEditor.apply")) == nil {
-                press(root, "hades2.saveEditor.workbench.reviewApply")
-            }
             press(root, "hades2.saveEditor.apply")
             until("Advanced Apply did not verify and refresh") { !model.busy && !model.querying && model.pendingCount == 0 && model.lastApplyReceipt != nil }
             require(model.lastApplyReceipt!.source == "main/Profile1.sav" && model.lastApplyReceipt!.target == "main/Profile2.sav"
@@ -203,13 +200,11 @@ private func fields(_ view: NSView) -> [NSTextField] {
 
         membership("hades2.saveEditor.advanced.addMember", key: "Added", value: "{\"luaType\":\"number\",\"value\":42}")
         let initialAdded = model.pendingActions.first!
-        press(root, "hades2.saveEditor.workbench.reviewApply")
         guard let removeAdded = nativeAccessibilityControls(root).first(where: { $0.identifier == "saveEditor.remove." + initialAdded.entryID }),
               removeAdded.press() else { fatalError("new member action has no native per-action removal") }
         until("new member action removal did not finish") { !model.busy && model.pendingCount == 0 }
         membership("hades2.saveEditor.advanced.addMember", key: "Added", value: "{\"luaType\":\"number\",\"value\":42}")
         let added = model.pendingActions.first!
-        press(root, "hades2.saveEditor.workbench.reviewApply")
         typed(added.editorEntry, "{\"luaType\":\"boolean\",\"value\":false}")
         membership("hades2.saveEditor.advanced.removeMember", key: "1")
         typed(search("Nil"), "{\"luaType\":\"nil\",\"value\":null}")

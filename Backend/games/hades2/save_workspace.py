@@ -909,9 +909,9 @@ class Hades2SaveWorkspace:
                         raise
             if search.strip():
                 rows.extend(self._known_absent_quest_rows(language))
-            rows.extend(self._narrative_investigation().quest_rows(
+            rows.extend(row for row in self._narrative_investigation().quest_rows(
                 root, language, include_absent=bool(search.strip())
-            ))
+            ) if row["domain"] != "investigate")
             rows.extend(save_quest_rewards.rows(root, language, self._narrative_investigation(),
                 self._game_path, include_absent=bool(search.strip())))
         if scope in ("all", "growth", "records"):
@@ -928,19 +928,23 @@ class Hades2SaveWorkspace:
             rows.extend(row for row in save_equipment.rows(
                 root, language, game_path=self._game_path
             ) if row["id"] != "familiarSelection")
-        return rows
+        # Uncatalogued physical fields retain their typed Advanced editor;
+        # the ordinary workbench presents fields with an identified purpose.
+        return [row for row in rows if not row.get("rawTyped")]
 
     def _entity_query(self, *, scope, search, offset, limit, language):
         if scope not in SAVE_EDITOR_SCOPES:
             raise ValueError("Save Editor browse scope is invalid.")
         rows = self._entity_source_rows(language, scope, search)
         aliases = {}
+        scenes = {}
         if search.strip():
             other = "en" if language == "zh-CN" else "zh-CN"
             for alias in self._entity_source_rows(other, scope, search):
                 aliases[alias["id"]] = (
                     alias.get("name"), alias.get("englishName"),
                     alias.get("entityName"), alias.get("group"),
+                    alias.get("hostName"),
                 )
             # Authored context groups the character; actual record fields
             # retain their typed physical owner, independently of source text.
@@ -953,31 +957,32 @@ class Hades2SaveWorkspace:
                 rows.extend(self._narrative_investigation().spoken_rows(
                     self.document.lua_state, results["items"], language
                 ))
-                verified_people = {}
                 for scene in results["items"]:
                     # The source-bound narrative index must prove the native
                     # NPC identity before its dialogue can join a person's
                     # durable mutation descriptors.
-                    if scene.get("entityId"):
-                        verified_people[scene["rawId"]] = (
-                            scene["entityId"], scene["entityName"],
-                            scene.get("snippet") or "",
-                        )
-                    scene["_search"] = (search,)
-                    if scene.get("snippet"):
-                        prefix = "对话" if language == "zh-CN" else "Dialogue"
-                        scene["name"] = prefix + " · " + scene["snippet"][:100]
-                    rows.append(scene)
+                    scenes[scene["rawId"]] = scene
+                    # A recognized scene is the same editable playback record,
+                    # with its text already present; it needs no detail drilldown.
+                    if scene.get("content") and scene["playbackKnown"]:
+                        playback = save_narrative.entry_row(
+                            self.document.lua_state, "dialogue:" + scene["rawId"], language, self._game_path)
+                        if not any(row["id"] == playback["id"] for row in rows):
+                            rows.append(playback)
+                        if scene["canStage"]:
+                            rows.append(save_narrative.entry_row(
+                                self.document.lua_state, scene["stageID"], language, self._game_path))
                 for row in rows:
                     if row["domain"] != "dialogue":
                         continue
-                    person = verified_people.get(row["rawId"])
-                    if person is None:
+                    scene = scenes.get(row["rawId"])
+                    if scene is None:
                         continue
-                    row["entityId"], row["entityName"] = person[:2]
-                    if person[2]:
-                        prefix = "对话记录" if language == "zh-CN" else "Dialogue history"
-                        row["name"] = prefix + " · " + person[2][:100]
+                    self._present_dialogue_row(row, scene, language)
+                    row["_search"] = (search,)
+        rows = [row for row in rows if row["domain"] != "dialogue"
+                or (scenes.get(row["rawId"], {}).get("content")
+                    and scenes[row["rawId"]]["playbackKnown"])]
         page = entity_page(rows, search=search, offset=offset, limit=limit,
                            aliases=aliases)
         return {
@@ -987,6 +992,22 @@ class Hades2SaveWorkspace:
             "scope": scope,
             **page,
         }
+
+    @staticmethod
+    def _present_dialogue_row(row, scene, language):
+        if not scene.get("content") or not scene["playbackKnown"]:
+            return
+        if scene.get("entityId"):
+            row["entityId"], row["entityName"] = scene["entityId"], scene["entityName"]
+        else:
+            row["entityId"], row["entityName"] = "scene:" + row["rawId"], scene["content"][0]
+        labels = {"dialogue": ("已播放", "Played"),
+                  "dialogueReset": ("重置剧情", "Reset scene"),
+                  "dialogueChoice": ("选择记录", "Choice record")}
+        label = labels[row["id"].partition(":")[0]]
+        row["name"], row["englishName"] = label[0 if language == "zh-CN" else 1], label[1]
+        row["hostId"], row["hostName"] = row["rawId"], scene["content"][0]
+        row["content"] = scene["content"] if row["id"].startswith("dialogue:") else []
 
     def query(
         self,
@@ -1225,6 +1246,15 @@ class Hades2SaveWorkspace:
             rows = self._player_stat_rows(language)
         elif prefix in ("flag", "dialogue", "dialogueReset", "dialogueChoice", "quest", "questObservation", "speech"):
             rows = [save_narrative.entry_row(root, entry_id, language, self._game_path)]
+            if prefix in ("dialogue", "dialogueReset", "dialogueChoice"):
+                scene = self._narrative_investigation().scene_row(
+                    root, rows[0]["rawId"], language, self._dialogue_write_decisions())
+                self._present_dialogue_row(rows[0], scene, language)
+            elif prefix == "speech":
+                scenes = self._narrative_investigation().query(
+                    root, search=rows[0]["rawId"], offset=0, limit=100000,
+                    language=language, permissions=self._dialogue_write_decisions())["items"]
+                rows = self._narrative_investigation().spoken_rows(root, scenes, language) or rows
         elif prefix in ("interaction", "specialInteraction", "gift", "card", "objective"):
             rows = save_long_term.rows(
                 root, descriptor["domain"], language, game_path=self._game_path, include_absent=True
@@ -1402,14 +1432,15 @@ class Hades2SaveWorkspace:
                 return result
 
         if identity.startswith("linked:dialogue:"):
-            # Companion-owner identities are technical implementation detail.
-            # The originating action already names the scene; child rows only
-            # need to explain that another dialogue-history owner is affected.
-            result["name"] = (
-                "关联对话历史记录"
-                if language == "zh-CN"
-                else "Linked dialogue history record"
-            )
+            owner = identity[len("linked:dialogue:"):].rpartition(":")[0] or "GameState.TextLinesChoiceRecord"
+            labels = {
+                "GameState.TextLinesChoiceRecord": ("剧情选择", "Scene choice"),
+                "CurrentRun.TextLinesRecord": ("当前挑战 · 已播放剧情", "Current run · Played scene"),
+                "CurrentRun.HubTextLinesRecord": ("当前挑战 · 营地对话", "Current run · Hub dialogue"),
+                "CurrentRun.TextLinesChoiceRecord": ("当前挑战 · 剧情选择", "Current run · Scene choice"),
+                "CurrentRun.CurrentRoom.TextLinesRecord": ("当前区域 · 已播放剧情", "Current room · Played scene"),
+            }
+            result["name"] = labels[owner][0 if language == "zh-CN" else 1]
             return result
 
         if identity.startswith("linked:"):
@@ -1689,6 +1720,8 @@ class Hades2SaveWorkspace:
                 "constraints": dict(row.get("constraints") or {}),
                 "choices": list(row.get("choices") or ()),
                 "choiceNames": dict(row.get("choiceNames") or {}),
+                "content": row.get("content", []),
+                "hostName": row.get("hostName"),
                 **({"beforePresent": intent["beforePresent"], "afterPresent": True} if intent["domain"] in ("history", "resources") else {}),
                 "effects": [
                     self._present_linked_effect(effect, language)

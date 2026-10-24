@@ -28,7 +28,7 @@ _FLAG_DESCRIPTORS = {
     "UsedSlowAgainstChronos": ("story", "曾对克洛诺斯使用减速", "Has used slowdown against Chronos"),
 }
 _GROUP_NAMES = {
-    "story": ("剧情条件", "Narrative conditions"),
+    "story": ("剧情记录", "Story records"),
     "progress": ("成长记录", "Progression records"),
     "interface": ("提示与界面记录", "Tutorial and presentation records"),
     "quest": ("命运清单", "Fated List quests"),
@@ -315,6 +315,8 @@ def entry_row(root, entry_id, language='zh-CN', game_path=None):
     result.pop('before', None)
     if entity:
         result.update(entityId=entity, entityName=entity_name)
+    if prefix == 'flag' and name not in _FLAG_DESCRIPTORS:
+        result['rawTyped'] = True
     if item['valueType'] == 'boolean':
         result['choices'] = [False, True] if prefix != 'dialogueReset' else [False]
     if prefix == 'quest':

@@ -209,29 +209,31 @@ def rows(root, language="zh-CN", game_path=None):
                 identifiers = [key for key, _ in traits.entries() if isinstance(key, str)]
                 names = official_display_names(identifiers, language, game_path=game_path)
                 english = names if not zh else official_display_names(identifiers, "en", game_path=game_path)
-                for position, (identifier, count) in enumerate(traits.entries(), 1):
+                for identifier, count in traits.entries():
                     if identifier in seen_traits:
                         continue
                     seen_traits.add(identifier)
                     if not isinstance(identifier, str) or count is None:
                         continue
-                    name = names.get(identifier) or ("未识别祝福 {}" if zh else "Unidentified trait {}").format(position)
-                    en = english.get(identifier) or "Unidentified trait {}".format(position)
+                    name = names.get(identifier) or identifier
+                    en = english.get(identifier) or identifier
                     add("trait:" + identifier, ("祝福 · " + name, "Trait · " + en), count,
                         terms=(identifier, name, en), field_path=path + ["TraitCache", identifier])
+                    if identifier not in names:
+                        projected[-1]["rawTyped"] = True
         return projected
 
     def lifetime(stats):
         projected, seen = [], set()
         identities = [key for key, _ in stats.entries() if isinstance(key, str)]
         names = official_display_names(identities, language, game_path=game_path)
-        for position, (identity, record) in enumerate(stats.entries(), 1):
+        for identity, record in stats.entries():
             if not isinstance(identity, str) or not isinstance(record, LuaTable):
                 raise ValueError("malformed lifetime history")
             if identity in seen:
                 continue
             seen.add(identity)
-            title = names.get(identity) or ("未识别祝福 {}" if zh else "Unidentified trait {}").format(position)
+            title = names.get(identity) or identity
             title = ("累计 · " if zh else "Lifetime · ") + title
             for key, label in _TRAIT_MEASURES.items():
                 value = _get(record, key)
@@ -239,6 +241,8 @@ def rows(root, language="zh-CN", game_path=None):
                     projected.append(_row(root, "history:trait:" + identity, title, key, label, value,
                         ["GameState", "LifetimeTraitStats", identity, key], language,
                         kind="number" if key.startswith("FastestTime") else "integer", terms=(identity, names.get(identity))))
+                    if identity not in names:
+                        projected[-1]["rawTyped"] = True
         return projected
 
     owner("RunHistory", runs)
@@ -260,15 +264,17 @@ def rows(root, language="zh-CN", game_path=None):
             identities = [key for key, _ in records.entries() if isinstance(key, str)]
             names = official_display_names(identities, language, game_path=game_path)
             english = names if not zh else official_display_names(identities, "en", game_path=game_path)
-            for position, (key, count) in enumerate(records.entries(), 1):
+            for key, count in records.entries():
                 if key in seen:
                     continue
                 seen.add(key)
                 if isinstance(key, str) and count is not None:
-                    name = names.get(key) or ("未识别对象 {}" if zh else "Unidentified entity {}").format(position)
-                    en = english.get(key) or "Unidentified entity {}".format(position)
+                    name = names.get(key) or key
+                    en = english.get(key) or key
                     projected.append(_row(root, "history:collection:" + owner_name, titles[0 if zh else 1],
                         key, (name, en), count, ["GameState", owner_name, key], language, terms=(key,)))
+                    if key not in names:
+                        projected[-1]["rawTyped"] = True
             return projected
         owner(owner_name, counts)
     return result

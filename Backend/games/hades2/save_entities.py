@@ -14,6 +14,11 @@ def _meaningful(value):
     )
 
 
+def matches_search(search, terms):
+    terms = tuple(str(term).casefold() for term in terms if term is not None)
+    return all(any(word in term for term in terms) for word in search.casefold().split())
+
+
 def entity_page(rows, *, search, offset, limit, aliases=None):
     """Filter/rank/page complete entities, never independent physical fields.
 
@@ -39,7 +44,8 @@ def entity_page(rows, *, search, offset, limit, aliases=None):
         group["_terms"].update(
             str(item).casefold() for item in (
                 identity, title, row["id"], row["rawId"],
-                row["name"], row["englishName"], *aliases.get(row["id"], ()),
+                row["name"], row["englishName"], row.get("group"), row.get("hostName"),
+                *aliases.get(row["id"], ()),
                 *row.get("_search", ())
             ) if item is not None
         )
@@ -48,7 +54,7 @@ def entity_page(rows, *, search, offset, limit, aliases=None):
     matches = []
     for group in grouped.values():
         if needle:
-            if not any(needle in term for term in group["_terms"]):
+            if not matches_search(needle, group["_terms"]):
                 continue
         elif not group["_populated"] or not (group["_writable"] or group["_browseReadOnly"]):
             # Default browse favors present, actionable state. Deliberate

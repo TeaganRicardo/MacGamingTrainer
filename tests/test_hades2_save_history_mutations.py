@@ -10,6 +10,7 @@ from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2.save_provider import Hades2SaveProvider
 from games.hades2 import save_advanced
 
 
@@ -23,6 +24,12 @@ class HistoryMutationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='mgt-history-mutations-')
         self.addCleanup(self.temp.cleanup)
         self.folder = Path(self.temp.name).resolve()
+        self.game = self.folder / 'native-game'
+        self.game.mkdir()
+        (self.game / 'History.en.sjson').write_text('\n'.join(
+            'Id = "' + identity + '" DisplayName = "' + label + '"'
+            for identity, label in [('UnknownBoon', 'Historic Boon'), ('UnknownFish', 'Silver Carp'),
+                                    ('UnknownShade', 'Quiet Shade')]), encoding='utf-8')
         self.saves = self.folder / 'saves'; self.saves.mkdir()
         self.path = self.saves / 'Profile1.sav'
         self.state = table({
@@ -41,6 +48,7 @@ class HistoryMutationTests(unittest.TestCase):
         spec = SaveManagementSpec((SaveRootSpec('main', str(self.saves), ('Profile*.sav',)),), None,
                                   True, 'stoppedOnly', True)
         self.service = CoreSaveService('hades2', spec, self.folder / 'data', lambda: False)
+        self.service.provider = Hades2SaveProvider(game_path=self.game)
         self.editor = self.open()
 
     def write(self):

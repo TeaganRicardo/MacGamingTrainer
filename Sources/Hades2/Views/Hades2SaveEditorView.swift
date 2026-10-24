@@ -21,8 +21,6 @@ struct Hades2SaveEditorView: View {
 
     @State private var section: Hades2SaveWorkbenchSection = .all
     @State private var drafts: [String: String] = [:]
-    @State private var reviewExpanded = false
-    @State private var expandedEffects: Set<String> = []
     @State private var confirmingSource = false
     @State private var advancedEditingEntry: Hades2SaveEditorEntry?
 
@@ -70,7 +68,7 @@ struct Hades2SaveEditorView: View {
             Divider()
             inlineResults
                 .id(model.workspaceID)
-                .frame(height: reviewExpanded ? 445 : 610)
+                .frame(height: model.pendingCount > 0 ? 445 : 610)
             if model.total > Hades2SaveEditorModel.pageSize {
                 Divider()
                 pagingControls
@@ -79,12 +77,8 @@ struct Hades2SaveEditorView: View {
             }
             if model.pendingCount > 0 {
                 Divider()
-                changesBar
-                if reviewExpanded {
-                    Divider()
-                    reviewDrawer
-                        .frame(height: 190)
-                }
+                reviewDrawer
+                    .frame(height: 240)
             }
             if let receipt = model.lastApplyReceipt {
                 Divider()
@@ -137,17 +131,10 @@ struct Hades2SaveEditorView: View {
             if model.pendingCount > 0 { confirmingSource = true }
             else { model.openSelection() }
         }
-        .onChange(of: model.pendingCount) { previous, current in
-            if previous > 0 && current == 0 {
-                expandedEffects.removeAll()
-                reviewExpanded = false
-            }
-        }
         .onChange(of: model.editRevision) { _, _ in
             if let entryIDs = model.reconciledEntryIDs {
                 for entryID in entryIDs {
                     drafts.removeValue(forKey: entryID)
-                    expandedEffects.remove(entryID)
                 }
             } else {
                 drafts.removeAll()
@@ -156,9 +143,7 @@ struct Hades2SaveEditorView: View {
         .onChange(of: model.workspaceID) { _, _ in
             advancedEditingEntry = nil
             drafts.removeAll()
-            expandedEffects.removeAll()
             section = .all
-            reviewExpanded = false
         }
     }
 
@@ -177,17 +162,6 @@ struct Hades2SaveEditorView: View {
                 ProgressView().controlSize(.small)
             }
             Spacer()
-            Menu {
-                Text(model.sourceRootID + "/" + model.sourceRelativePath)
-                if let snapshotID = model.snapshotID { Text(snapshotID) }
-                Text(model.sourceSHA256)
-                Text(text("hades2.saveEditor.workbench.sourceHint"))
-            } label: {
-                Image(systemName: "info.circle")
-            }
-            .disabled(model.profile.isEmpty)
-            .help(text("hades2.saveEditor.workbench.sourceHint"))
-
             Button {
                 guard !model.busy else { return }
                 model.selectedSourceID = loadedSourceID
@@ -276,6 +250,10 @@ struct Hades2SaveEditorView: View {
             )
             .disabled(model.busy || model.profile.isEmpty)
 
+            if model.querying {
+                ProgressView().controlSize(.small)
+            }
+
             Picker(
                 text("hades2.saveEditor.workbench.section.all"),
                 selection: Binding(
@@ -331,23 +309,43 @@ struct Hades2SaveEditorView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(entities) { entity in
-                            VStack(alignment: .leading, spacing: 0) {
-                                if entity.entries.count > 1 {
-                                    Text(entity.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .padding(.horizontal, theme.rowHorizontalPadding)
-                                        .padding(.top, 16)
-                                        .padding(.bottom, 6)
-                                }
-                                ForEach(entity.entries) { entry in
-                                    inlineEntry(entry, in: entity)
-                                    Divider().padding(.leading, theme.rowHorizontalPadding)
+                    LazyVStack(alignment: .leading, spacing: theme.pageSpacing) {
+                        ForEach(Hades2SaveEditorEntityGrouping.sections(from: entities)) { resultSection in
+                            TrainerSection(title: text(resultSection.titleKey), icon: resultSection.icon) {
+                                ForEach(resultSection.entities) { entity in
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(entity.title)
+                                            .font(.headline)
+                                            .accessibilityAddTraits(.isHeader)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.horizontal, theme.rowHorizontalPadding)
+                                            .padding(.vertical, theme.sectionSpacing)
+                                            .trainerSurface(.subtle)
+                                        ForEach(Hades2SaveEditorEntityGrouping.fields(in: entity)) { fields in
+                                            if let title = fields.title {
+                                                Text(title)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(.secondary)
+                                                    .accessibilityAddTraits(.isHeader)
+                                                    .padding(.horizontal, theme.rowHorizontalPadding)
+                                                    .padding(.top, theme.sectionSpacing)
+                                            }
+                                            ForEach(fields.entries) { entry in
+                                                if entry.id != fields.entries.first?.id {
+                                                    Divider().padding(.horizontal, theme.rowHorizontalPadding)
+                                                }
+                                                inlineEntry(entry, in: entity)
+                                            }
+                                        }
+                                    }
+                                    .trainerSurface(.panel, cornerRadius: theme.panelCornerRadius)
+                                    .trainerGroupedRows()
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.vertical, theme.sectionSpacing)
                 }
             }
         }
@@ -363,35 +361,14 @@ struct Hades2SaveEditorView: View {
                 .padding(.horizontal, theme.rowHorizontalPadding)
                 .padding(.vertical, theme.inlineRowVerticalPadding)
         } else if entry.domain == "investigate" {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: theme.sectionSpacing) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(fieldTitle(entry, in: entity))
-                            .font(.callout)
-                            .textSelection(.enabled)
-                        if let snippet = entry.investigationSnippet, !snippet.isEmpty {
-                            Text(snippet)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    Spacer(minLength: 8)
-                    Button(text("hades2.saveEditor.investigate.details")) {
-                        model.inspect(entry)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(model.busy)
+            VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                Text(fieldTitle(entry, in: entity))
+                    .font(.callout)
+                ForEach(Array(entry.content.enumerated()), id: \.offset) { _, line in
+                    Text(line).font(.callout).textSelection(.enabled)
                 }
-                if let detailError = model.detailFailure,
-                   model.selectedInvestigationID == entry.rawID {
-                    Text(localization.string(detailError))
-                        .font(.caption)
-                        .foregroundStyle(theme.warning)
-                }
-                if let detail = model.investigationDetail, detail.scene == entry.rawID {
-                    investigationDetailView(detail)
-                        .padding(.leading, 12)
+                if entry.content.isEmpty, let snippet = entry.investigationSnippet {
+                    Text(snippet).font(.callout).textSelection(.enabled)
                 }
             }
             .padding(.horizontal, theme.rowHorizontalPadding)
@@ -403,7 +380,6 @@ struct Hades2SaveEditorView: View {
                         .font(.callout)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
-                        .help(entry.rawID)
                     if entry.editable && !entry.mutationKinds.isEmpty {
                         editorControl(entry)
                     } else if entry.valueType != "table" {
@@ -412,19 +388,20 @@ struct Hades2SaveEditorView: View {
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                     }
-                    if !entry.editable &&
-                        (entry.discoveryReasonCode != nil || entry.discoveryReason != nil) {
-                        Image(systemName: "info.circle")
+                }
+                ForEach(Array(entry.content.enumerated()), id: \.offset) { _, line in
+                    if line != entity.title && line != entry.hostName {
+                        Text(line)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
-                            .help(discoveryReason(
-                                entry,
-                                fallback: entry.discoveryReason ??
-                                    text("hades2.saveEditor.discovery.reason.readOnly")
-                            ))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
                     }
                 }
-                if let warning = entry.warning {
-                    Text(warning).font(.caption).foregroundStyle(theme.warning)
+                if !entry.editable, let reason = entry.discoveryReason {
+                    Text(discoveryReason(entry, fallback: reason))
+                        .font(.caption)
+                        .foregroundStyle(theme.warning)
                 }
                 editFailure(entry)
             }
@@ -436,6 +413,9 @@ struct Hades2SaveEditorView: View {
     private func fieldTitle(
         _ entry: Hades2SaveEditorEntry, in entity: Hades2SaveEditorEntity
     ) -> String {
+        if entry.displayName == entity.title {
+            return text("hades2.saveEditor.value")
+        }
         if entry.displayName.hasPrefix(entity.title + " · ") {
             return String(entry.displayName.dropFirst((entity.title + " · ").count))
         }
@@ -475,6 +455,12 @@ struct Hades2SaveEditorView: View {
             Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
                 .accessibilityIdentifier("saveEditor.editValue." + entry.id)
                 .disabled(model.busy)
+        } else if entry.id.hasPrefix("dialogueReset:") {
+            Button(entry.displayName) {
+                model.stage(entryID: entry.id, operation: "set", value: false)
+            }
+            .accessibilityIdentifier("saveEditor.reset." + entry.rawID)
+            .disabled(model.busy)
         } else if entry.valueType == "boolean" {
             TrainerToggleControl(
                 title: entry.displayName,
@@ -620,95 +606,6 @@ struct Hades2SaveEditorView: View {
 
 
 
-    private func investigationDetailView(_ detail: Hades2SaveInvestigationDetail) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if !detail.lines.isEmpty {
-                ForEach(detail.lines) { line in
-                    VStack(alignment: .leading, spacing: 5) {
-                        if !line.speaker.isEmpty {
-                            Text(line.speaker)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        let lines = localization.language == .en ? line.english : line.chinese
-                        if lines.isEmpty {
-                            Text(text("hades2.saveEditor.investigate.untranslated"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(lines, id: \.self) { sentence in
-                                Text(sentence)
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 3)
-                }
-            }
-            if detail.canStage && !detail.stageID.isEmpty {
-                Button(text("hades2.saveEditor.investigate.clearRecord")) {
-                    model.stage(entryID: detail.stageID, operation: "set", value: false)
-                }
-                .disabled(model.busy)
-            }
-            if !detail.definitions.isEmpty {
-                DisclosureGroup(text("hades2.saveEditor.investigate.conditions")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(detail.definitions) { source in
-                            ForEach(source.requirements) { requirement in
-                                Hades2NarrativeConditionView(
-                                    node: requirement.tree, label: text
-                                )
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-                }
-            }
-            DisclosureGroup(text("hades2.saveEditor.workbench.technical")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(detail.scene).font(.caption.monospaced())
-                    Text(text("hades2.saveEditor.investigate.future"))
-                        .font(.caption)
-                    ForEach(detail.definitions) { source in
-                        Text("\(source.file):\(source.line)")
-                            .font(.caption.monospaced())
-                    }
-                    if !detail.canStage {
-                        Text(text(
-                            "hades2.saveEditor.investigate.block."
-                                + (detail.blockReasonCode ?? "invalidOwner")
-                        ))
-                        .font(.caption)
-                    }
-                }
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var changesBar: some View {
-        HStack(spacing: theme.sectionSpacing) {
-            Text(text("hades2.saveEditor.workbench.changes", arguments: [
-                String(model.pendingCount)
-            ]))
-            .font(.callout)
-            Spacer()
-            TrainerPrimaryActionButton(
-                title: text("hades2.saveEditor.workbench.reviewApply"),
-                enabled: !model.busy
-            ) {
-                reviewExpanded.toggle()
-                if reviewExpanded { model.review() }
-            }
-        }
-        .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, theme.inlineRowVerticalPadding)
-    }
-
     private var reviewDrawer: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
@@ -739,7 +636,7 @@ struct Hades2SaveEditorView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             ScrollView {
-                LazyVStack(spacing: 8) {
+                VStack(spacing: 8) {
                     ForEach(model.pendingActions) { action in
                         stagedAction(action)
                     }
@@ -782,6 +679,12 @@ struct Hades2SaveEditorView: View {
                 .accessibilityIdentifier("saveEditor.remove." + action.entryID)
                 .disabled(model.busy)
             }
+            if let host = action.hostName, !action.content.contains(host) {
+                Text(host).font(.callout).textSelection(.enabled)
+            }
+            ForEach(Array(action.content.enumerated()), id: \.offset) { _, line in
+                Text(line).font(.callout).textSelection(.enabled)
+            }
             editFailure(action.editorEntry)
             HStack(spacing: 6) {
                 Text(action.domain == "advanced"
@@ -794,21 +697,9 @@ struct Hades2SaveEditorView: View {
                      ? typedReviewValue(action.typedAfter, present: action.afterPresent)
                      : reviewValue(action.after, for: action))
                 Spacer()
-                if !action.effects.isEmpty {
-                    Button(text("hades2.saveEditor.basket.linkedEffects", arguments: [
-                        String(action.effects.count)
-                    ])) {
-                        if expandedEffects.contains(action.id) {
-                            expandedEffects.remove(action.id)
-                        } else {
-                            expandedEffects.insert(action.id)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                }
             }
             .font(.caption.monospacedDigit())
-            if expandedEffects.contains(action.id) {
+            if !action.effects.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(action.effects) { effect in
                         HStack(spacing: 6) {
@@ -978,39 +869,5 @@ struct Hades2SaveEditorView: View {
         guard let value else { return "—" }
         if let bool = value.base as? Bool { return bool ? "true" : "false" }
         return String(describing: value.base)
-    }
-}
-
-private struct Hades2NarrativeConditionView: View {
-    let node: Hades2NarrativeCondition
-    let label: (String, [String]) -> String
-
-    var body: some View {
-        if node.children.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(node.label)
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
-                Text(label("hades2.saveEditor.investigate.path." + node.evidence, []))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if let observation = node.observation {
-                    Text(label("hades2.saveEditor.investigate.path.observation", [observation]))
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            DisclosureGroup(node.label) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(node.children) { child in
-                        Hades2NarrativeConditionView(node: child, label: label)
-                    }
-                }
-            }
-            .font(.caption)
-        }
     }
 }
