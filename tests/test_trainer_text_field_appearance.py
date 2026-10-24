@@ -53,7 +53,7 @@ struct MetricFixture: View {
     @State private var stat = "55"
     @State private var inline = "66"
     @State private var multiplier = "77"
-    @State private var compact = "88"
+    @State private var gain = "88"
 
     private func title(_ zh: String, _ en: String) -> String {
         localization.language == .en ? en : zh
@@ -80,7 +80,7 @@ struct MetricFixture: View {
             TrainerFeatureMultiplierRow(title: title("倍率", "Multiplier"), icon: "circle",
                 state: state, text: $multiplier, shortcutText: nil, action: {})
             TrainerFeatureMultiplierRow(title: title("增益倍率", "Gain multiplier"), icon: "circle",
-                state: state, text: $compact, shortcutText: nil, action: {})
+                state: state, text: $gain, shortcutText: nil, action: {})
         }
     }
 }
@@ -146,9 +146,9 @@ struct Main {
                 let inputs = Dictionary(uniqueKeysWithValues: fields(in: metrics).map { ($0.stringValue, $0) })
                 let expected = language == .en
                     ? ["11": "Current Energy", "22": "Maximum Energy", "33": "Amount", "44": "Counter",
-                       "55": "Stat", "66": "Inline", "77": "Multiplier", "88": "Compact"]
+                       "55": "Stat", "66": "Inline", "77": "Multiplier", "88": "Gain multiplier"]
                     : ["11": "当前能量", "22": "能量上限", "33": "数量", "44": "计数",
-                       "55": "属性", "66": "行内属性", "77": "倍率", "88": "紧凑倍率"]
+                       "55": "属性", "66": "行内属性", "77": "倍率", "88": "增益倍率"]
                 check(inputs.count == expected.count, "shared metric fixture did not mount every numeric input")
                 for (value, name) in expected {
                     check(inputs[value]?.accessibilityLabel() == name,
