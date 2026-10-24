@@ -9,6 +9,8 @@ NAVIGATION = (ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift").
 
 def view_block(name: str) -> str:
     marker = f"private var {name}: some View {{"
+    if name == "boonRarityPanel":
+        return (ROOT / "Sources/Hades2/Views/Hades2BoonRarityPanel.swift").read_text()
     start = VIEW.index(marker)
     candidates = [
         position for position in (

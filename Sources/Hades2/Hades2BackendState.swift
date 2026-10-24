@@ -16,7 +16,6 @@ struct Hades2StatSnapshot {
 
 struct Hades2BoonRaritySnapshot {
     let target: String?
-    let multiplier: Double?
     let forceLegendary: Bool?
     let forceDuo: Bool?
 }
@@ -128,7 +127,6 @@ struct Hades2StatePatch {
         if let row = payload["boonRarity"] as? [String: Any] {
             boonRarity = Hades2BoonRaritySnapshot(
                 target: row["target"] as? String,
-                multiplier: Self.number(row["multiplier"]),
                 forceLegendary: row["forceLegendary"] as? Bool,
                 forceDuo: row["forceDuo"] as? Bool
             )

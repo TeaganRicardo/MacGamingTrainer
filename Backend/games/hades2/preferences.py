@@ -261,10 +261,10 @@ class Hades2PreferenceStore:
             value=normalize_desired_feature_value(key,raw.get(key))
             if value is not None:result[key]=value
         rarity=raw.get('boonRarity')
+        # Keep the serialized v17 field neutral when loading older probability settings.
         if isinstance(rarity,dict):
-            target=rarity.get('target');mult=rarity.get('multiplier')
+            target=rarity.get('target')
             if target in BOON_RARITY_TARGETS:result['boonRarity']['target']=target
-            if type(mult) in (int,float) and not isinstance(mult,bool) and math.isfinite(mult) and 0<=mult<=1000:result['boonRarity']['multiplier']=float(mult)
             if type(rarity.get('forceLegendary')) is bool:result['boonRarity']['forceLegendary']=rarity['forceLegendary']
             if type(rarity.get('forceDuo')) is bool:result['boonRarity']['forceDuo']=rarity['forceDuo']
         result['statLocks']=_normalize_stat_locks(raw.get('statLocks'))

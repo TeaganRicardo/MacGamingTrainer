@@ -30,7 +30,6 @@ struct Hades2ViewStatSnapshot: Equatable {
 }
 
 struct Hades2ViewConfigSnapshot: Equatable {
-    let boonRarityMultiplier: Double
     let nextRoomReward: String?
     let nextOccurrenceTarget: String?
     let elements: [ElementCount]

@@ -133,7 +133,6 @@ struct Main {
         model.damageMultiplier = 2.75
         model.moneyMultiplier = 3.5
         model.resourceMultiplier = 4.25
-        model.boonRarityMultiplier = 135.5
         model.gameSpeed = 1.3
         model.elements = [ElementCount(id: "Fire", name: "火", count: 4.5, locked: false)]
 

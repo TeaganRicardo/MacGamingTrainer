@@ -121,6 +121,66 @@ final class GenerateAction: NSObject {
   check(model.canSetResource && workerStartCount()==1,
         "duplicate initial observation restarted the Backend worker")
   let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
+  if journey == "controls" {
+   let backdrop=Color(nsColor: .magenta)
+   let reference=ImageRenderer(content:TrainerRow { Color.clear.frame(height:40) }
+    .trainerGroupedRows().frame(width:900).background(backdrop))
+   let referenceImage=NSBitmapImageRep(cgImage:reference.cgImage!)
+   let referenceCorner=referenceImage.colorAt(x:1,y:1)!.usingColorSpace(.deviceRGB)!
+   for language in [TrainerPresentationLanguage.en, .zhCN] {
+    localization.language=language
+    for (content, expectedHeight) in [
+     (AnyView(Hades2ChaosGatePanel(model:model)), CGFloat(64)),
+     (AnyView(Hades2GatheringPanel(model:model)), CGFloat(324)),
+     (AnyView(Hades2BoonRarityPanel(model:model)), CGFloat(129))
+    ] {
+     let root=content.environmentObject(localization)
+      .frame(width:900).fixedSize(horizontal:false,vertical:true).background(Color(nsColor: .magenta))
+     let rowHost=NSHostingView(rootView:root)
+     let size=rowHost.fittingSize
+     let rowWindow=NSWindow(contentRect:NSRect(origin:.zero,size:size),styleMask:[.titled],backing:.buffered,defer:false)
+     rowWindow.isReleasedWhenClosed=false
+     rowWindow.contentView=rowHost; rowHost.layoutSubtreeIfNeeded(); pump()
+     check(abs(size.height - expectedHeight) < 1,
+           "controls differ from the Host's 64-point row height: \(size), expected \(expectedHeight)")
+     // ImageRenderer includes SwiftUI layer clipping, which AppKit's view-only
+     // cacheDisplay omits for these layer-backed hosts.
+     let renderer=ImageRenderer(content:root)
+     let image=NSBitmapImageRep(cgImage:renderer.cgImage!)
+     let corner=image.colorAt(x:1,y:1)!.usingColorSpace(.deviceRGB)!
+     check(abs(corner.redComponent-referenceCorner.redComponent)
+         + abs(corner.greenComponent-referenceCorner.greenComponent)
+         + abs(corner.blueComponent-referenceCorner.blueComponent) < 0.03,
+           "control panel corners differ from the Host: \(corner), expected \(referenceCorner)")
+     if expectedHeight == 129 {
+      check(model.boonRarityTarget == "Heroic", "minimum rarity did not default to Heroic")
+      check(fields(rowHost).allSatisfy { !$0.isEditable }, "retired probability editor is still mounted")
+      let title=Hades2GameModule.resolveText(key:"hades2.rarity.title",localization:localization)
+      guard let toggle=namedNativeControl(rowHost,role:"AXCheckBox",name:title) else { fatalError("rarity switch missing") }
+      check(toggle.press(), "rarity switch could not be activated")
+      wait { model.boonRarityEnabled && !model.busy }
+      let forceName=Hades2GameModule.resolveText(key:"hades2.rarity.legendary",localization:localization)
+      guard let force=namedNativeControl(rowHost,role:"AXCheckBox",name:forceName) else { fatalError("force legendary missing") }
+      check(force.press(), "force legendary could not be activated")
+      wait { model.boonForceLegendary && !model.busy }
+      check(model.boonRarityTarget == "Heroic", "force setting changed the minimum rarity")
+      check(abs(toggle.frame.midY-force.frame.midY) > 32, "force controls did not remain below the minimum row")
+      let duoName=Hades2GameModule.resolveText(key:"hades2.rarity.duo",localization:localization)
+      guard let duo=namedNativeControl(rowHost,role:"AXCheckBox",name:duoName) else { fatalError("force duo missing") }
+      check(duo.press(), "force duo could not be activated")
+      wait { model.boonForceDuo && !model.busy }
+      check(duo.press(), "force duo could not be disabled")
+      wait { !model.boonForceDuo && !model.busy }
+      check(force.press(), "force legendary could not be disabled")
+      wait { !model.boonForceLegendary && !model.busy }
+      check(toggle.press(), "rarity switch could not be disabled")
+      wait { !model.boonRarityEnabled && !model.busy }
+     }
+     rowWindow.close()
+    }
+   }
+   session.stop(); phase("controls:complete"); return
+  }
   let toolWindows=TrainerToolWindowStore()
   var backupPresentations=0
   let host=NSHostingView(rootView:TrainerShell { EmptyView() } content: {
@@ -422,7 +482,6 @@ final class GenerateAction: NSObject {
   check(model.completeTextEdit(.gameSpeed,text:"10.04",generation:generation)=="1.0", "speed was rounded into the valid range before validation")
   pump(0.45); check(commands("set_desired").count==speedCount, "invalid speed was submitted")
   complete(.gameSpeed,"2.36",command:"set_desired"); check(model.gameSpeed==2.4, "speed precision did not normalize once")
-  complete(.boonRarity,"101.5",command:"set_boon_rarity_desired")
   complete(.gathering(.mining),"35.5",command:"set_gathering_desired")
   complete(.chaosGate,"65.5",command:"set_chaos_gate_desired")
   let oneShots=commands().filter { ["spawn_reward","generate_gathering","restore","save_editor_apply"].contains($0["command"] as? String ?? "") }
@@ -539,7 +598,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     binary = td / "text_edit"
     subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
     # Keep independent native journeys within their existing execution budget.
-    for journey in ("editing", "management"):
+    for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls").split(","):
         fixture = td / journey; fixture.mkdir()
         worker = fixture / "worker.py"; worker.write_text(WORKER)
         home = fixture / "home"; home.mkdir()

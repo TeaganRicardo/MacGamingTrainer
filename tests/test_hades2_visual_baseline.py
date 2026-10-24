@@ -29,7 +29,7 @@ for token in ('Capsule()', 'RoundedRectangle(', '.background('):
     assert token not in all_hades, f'game module still draws reusable visual primitive: {token}'
 
 for component in (
-    'TrainerFeatureToggleRow(', 'TrainerMultiplierMetricCard(', 'TrainerCompactMultiplierRow(',
+    'TrainerFeatureToggleRow(', 'TrainerMultiplierMetricCard(', 'TrainerFeatureMultiplierRow(',
     'TrainerResourceEditor(', 'TrainerGroupedOptionPicker(',
 'TrainerVitalMetricCard(', 'TrainerAmountMetricCard(',
     'TrainerCounterMetricCard(', 'TrainerStatMetricCard(',
@@ -47,18 +47,19 @@ assert 'Capsule()' not in toggle
 assert '.toggleStyle(.switch)' in toggle
 assert '.controlSize(.regular)' in toggle
 assert '.tint(tint ?? theme.accent)' in toggle
-assert features.count('tint: state.indicatorColor') >= 3
+assert features.count('tint: state.indicatorColor') >= 2
 assert '.animation(.easeInOut(duration: 0.16), value: isOn)' in toggle
-assert 'HStack(spacing: 16)' in features
-assert 'TrainerIconLabel(' in features
+assert 'HStack(spacing: 16)' in row
+assert features.count('TrainerLabeledControlRow(') == 2
+assert 'TrainerIconLabel(' in row
 assert '.frame(width: 40, height: 40)' in row
 assert 'theme.rowHorizontalPadding' in row
 assert 'theme.rowMinimumHeight' in row
 assert '.background(theme.panel)' in row
 
 # Normal and multiplier rows share the exact same shortcut badge slot and switch.
-assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') >= 3
-assert features.count('TrainerToggleControl(') >= 3
+assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') == 2
+assert features.count('TrainerToggleControl(') == 2
 assert 'Text(shortcutText)' not in features
 
 # Compact metric-card and stat geometry stays on the old baseline.

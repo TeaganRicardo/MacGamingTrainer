@@ -60,6 +60,7 @@ struct Hades2GatheringPanel: View {
                 )
             }
         }
+        .trainerGroupedRows()
         .onAppear { synchronize() }
         .onChange(of: model.gatheringProbabilities) { previous, current in
             synchronize(Hades2GatheringFamily.allCases.filter { previous[$0] != current[$0] })

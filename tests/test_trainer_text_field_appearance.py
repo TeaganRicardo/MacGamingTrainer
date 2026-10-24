@@ -79,7 +79,7 @@ struct MetricFixture: View {
                 supported: true, available: true, editable: true, onLockChange: { _ in })
             TrainerFeatureMultiplierRow(title: title("倍率", "Multiplier"), icon: "circle",
                 state: state, text: $multiplier, shortcutText: nil, action: {})
-            TrainerCompactMultiplierRow(title: title("紧凑倍率", "Compact"), icon: "circle",
+            TrainerFeatureMultiplierRow(title: title("增益倍率", "Gain multiplier"), icon: "circle",
                 state: state, text: $compact, shortcutText: nil, action: {})
         }
     }

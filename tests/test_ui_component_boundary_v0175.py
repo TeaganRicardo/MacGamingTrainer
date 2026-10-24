@@ -23,7 +23,7 @@ for path in view_files:
 
 required = (
     'TrainerFeatureToggleRow', 'TrainerMultiplierMetricCard',
-    'TrainerCompactMultiplierRow',
+    'TrainerFeatureMultiplierRow',
     'TrainerResourceEditor', 'TrainerGroupedOptionPicker',
     'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',

@@ -183,10 +183,19 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
     var body: some View {
         Group {
             if inline {
-                HStack(spacing: 12) {
-                    titleLabel
-                    optionPicker
-                    actionControls
+                if let title, let icon {
+                    TrainerLabeledControlRow(title: title, icon: icon, tint: state.indicatorColor,
+                                             emphasized: state.isOn) {
+                        optionPicker
+                        actionControls
+                    }
+                } else {
+                    TrainerRow {
+                        HStack(spacing: 16) {
+                            optionPicker
+                            actionControls
+                        }
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: title == nil ? 0 : 10) {

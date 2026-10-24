@@ -158,7 +158,8 @@ for key in (
 # through Hades2GatheringFamily rather than five duplicated view literals.
 gathering = (HADES / "Views/Hades2GatheringPanel.swift").read_text()
 occurrence_setting = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
-visible_ui = "\n".join((view, management_view, gathering, occurrence_setting))
+rarity = (HADES / "Views/Hades2BoonRarityPanel.swift").read_text()
+visible_ui = "\n".join((view, management_view, gathering, occurrence_setting, rarity))
 common_section = view[view.index("private var commonSection: some View {"):view.index("private var boonsSection: some View {")]
 assert "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common_section
 assert "action.commonFeatureIcon" in common_section

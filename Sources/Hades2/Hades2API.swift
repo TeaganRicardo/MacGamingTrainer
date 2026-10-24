@@ -21,7 +21,7 @@ enum Hades2Request {
     case setStat(stat: String, locked: Bool, value: Any?)
     case setElement(element: String, amount: Int)
     case lockElement(element: String, locked: Bool)
-    case setBoonRarity(target: String, multiplier: Double, forceLegendary: Bool, forceDuo: Bool)
+    case setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool)
     case setNextRoomReward(String?)
     case setNextOccurrence(String?)
     case spawnReward(String)
@@ -168,8 +168,9 @@ enum Hades2Request {
             return ["element": element, "amount": amount]
         case .lockElement(let element, let locked):
             return ["element": element, "locked": locked]
-        case .setBoonRarity(let target, let multiplier, let forceLegendary, let forceDuo):
-            return ["target": target, "multiplier": multiplier, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
+        case .setBoonRarity(let target, let forceLegendary, let forceDuo):
+            // Keep the v17 payload shape; the retired probability value is neutral.
+            return ["target": target, "multiplier": 100, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
         case .setNextRoomReward(let reward):
             return ["reward": reward ?? NSNull()]
         case .setNextOccurrence(let target):

@@ -1,6 +1,6 @@
 # MacGamingTrainer operational state
 
-Updated: 2026-10-23
+Updated: 2026-10-24
 
 [AGENTS.md](AGENTS.md) routes development; [#124](https://github.com/TeaganRicardo/MacGamingTrainer/issues/124) owns current priority and dependencies. This file owns compatibility, operating limitations and manual-acceptance evidence. Detailed completed implementation evidence remains in the owning issues/PRs and Git history.
 
@@ -22,6 +22,8 @@ Updated: 2026-10-23
 - #433 retains an unlocated historical LLDB test stall. #491 corrected a separately reproduced aggregate test-watchdog ownership defect; it did not establish that the historical stall is fixed. A new relevant reproduction can change its priority; the historical observation alone is not a blanket merge blocker.
 
 ## Accepted and pending real-game behavior
+
+The 2026-10-24 control correction uses Host row geometry/clipping for Hades single-line operations. Boon rarity is a single-line minimum selector and switch, defaulting to Heroic for fresh intent, with Force Legendary/Duo below. The probability multiplier is retired and old stored values normalize to neutral; native rarity chances are no longer hooked. The [control ownership audit](docs/reference/hades2/shared_ui_controls.md) records remaining native control composition and fixture coverage. Rendered app and native loot-menu acceptance remain user-run.
 
 The user accepted the focused revision-96 / #392 / PR #393 patch on 2026-10-08: native prompt/backing lifetime and narrative-choice presentation. QA source `24e06cbab2e7049aef923d674a71ddf77d958fac` has the same resident source as merged baseline `46c99d8479a2c650961a1d51c0791b46b1fa7831`, SHA-256 `4fad5a44efbb4608267ffef9440f63100eed8f50b0199aa79bd9237f24117c8c`.
 

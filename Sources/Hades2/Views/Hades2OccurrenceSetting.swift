@@ -24,56 +24,41 @@ struct Hades2OccurrenceSetting: View {
     var onGenerate: (() -> Void)? = nil
 
     var body: some View {
-        TrainerRow {
-            HStack(spacing: 12) {
-                TrainerIconLabel(
-                    title: title,
-                    icon: icon,
-                    tint: hasOverride ? theme.accent : theme.inactive,
-                    emphasized: hasOverride
+        TrainerLabeledControlRow(
+            title: title, icon: icon,
+            tint: hasOverride ? theme.accent : theme.inactive,
+            emphasized: hasOverride, helpText: probabilityHelp
+        ) {
+            TrainerTextField(
+                title: nativeLabel,
+                text: $input,
+                accessibilityLabel: title + " " + probabilityLabel,
+                onEditingChanged: onEditingChanged,
+                onCommit: onCommit,
+                alignment: .center
+            )
+            .frame(width: 82)
+            .disabled(!enabled)
+            .help(probabilityHelp)
+            Text(input.isEmpty ? "" : "%")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            if hasOverride {
+                TrainerResetButton(title: resetLabel, enabled: enabled, action: onReset)
+            } else {
+                Color.clear.frame(width: 26, height: 24)
+            }
+            if let onGenerate, let generateLabel {
+                TrainerShortcutBadgeSlot(text: generateShortcutText)
+                TrainerSecondaryActionButton(
+                    title: generateLabel,
+                    enabled: canGenerate,
+                    width: theme.compactActionWidth,
+                    helpText: generateHelp,
+                    accessibilityLabel: title + " " + generateLabel,
+                    action: onGenerate
                 )
-                .help(probabilityHelp)
-                Spacer(minLength: 8)
-                TrainerTextField(
-                    title: nativeLabel,
-                    text: $input,
-                    accessibilityLabel: title + " " + probabilityLabel,
-                    onEditingChanged: onEditingChanged,
-                    onCommit: onCommit,
-                    alignment: .center
-                )
-                .frame(width: 82)
-                .disabled(!enabled)
-                .help(probabilityHelp)
-                Text(input.isEmpty ? "" : "%")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-                if hasOverride {
-                    Button(action: onReset) {
-                        Image(systemName: "arrow.uturn.backward")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 26, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!enabled)
-                    .help(resetLabel)
-                    .accessibilityLabel(resetLabel)
-                } else {
-                    Color.clear.frame(width: 26, height: 24)
-                }
-                if let onGenerate, let generateLabel {
-                    TrainerShortcutBadgeSlot(text: generateShortcutText)
-                    TrainerSecondaryActionButton(
-                        title: generateLabel,
-                        enabled: canGenerate,
-                        width: theme.compactActionWidth,
-                        helpText: generateHelp,
-                        accessibilityLabel: title + " " + generateLabel,
-                        action: onGenerate
-                    )
-                }
             }
         }
     }
