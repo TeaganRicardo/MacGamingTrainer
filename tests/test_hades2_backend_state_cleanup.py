@@ -166,7 +166,7 @@ struct Main {
         model.damageMultiplier = 3.0
         model.moneyMultiplier = 4.0
         model.resourceMultiplier = 5.0
-        model.boonRarityTarget = "Legendary"
+        model.boonRarityTarget = "Epic"
         model.boonForceLegendary = true
         model.boonForceDuo = true
         model.moneyMultiplierEnabled = true
@@ -342,6 +342,7 @@ struct Main {
               "durable feature intent was cleared")
         check(model.moneyMultiplier == 4.0 && model.resourceMultiplier == 5.0,
               "durable multiplier intent was cleared")
+        check(model.boonRarityTarget == "Epic",
               "durable boon rarity intent was cleared")
         check(
             model.boonForceLegendary
