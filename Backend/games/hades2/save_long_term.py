@@ -85,7 +85,7 @@ _INTERACTION_CONTEXTS = {
     "NPC_Nyx_01": (None, "往事中的噩梦", "Nightmare memory"),
     "NPC_Nyx_Story_01": (None, "重逢与混沌邂逅", "Reunion & Chaos visits"),
     "SpellDrop": ("SpellScreenMenu_Title", "月之礼赠", "Gifts of the Moon"),
-    "NPC_Selene_01": ("Crossroads", "三岔路口", "Crossroads"),
+    "NPC_Selene_01": (None, "当面会面", "In-person encounter"),
     "NPC_Zagreus_Past_01": (None, "跨越时间的梦中会面", "Dreams across time"),
     "NPC_Zagreus_01": (None, "终局重逢", "Reunion in the ending"),
     "NPC_Zeus_01": (None, "对战堤丰", "Typhon battle"),
