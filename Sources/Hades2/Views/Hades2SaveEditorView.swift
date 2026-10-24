@@ -344,7 +344,8 @@ struct Hades2SaveEditorView: View {
                             }
                         }
                     }
-                    .padding(theme.panelPadding)
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.vertical, theme.sectionSpacing)
                 }
             }
         }
