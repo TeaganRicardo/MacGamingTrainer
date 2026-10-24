@@ -22,6 +22,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
                "NPCUseTextSpecial": "Salute", "FamiliarUseTextSpecial": "Confide",
                "Objective_NemesisBet": "Win the wager", "DashStrike": "Dash-Strike",
                "TimeChallengeValue": "TimeChallengeValue",
+               "ChallengeSwitch_Value": "{$Amount}{!Icons.Currency}",
                "Objective_WeaponStaffDash": "{$Keywords.DashStrike}{!Icons.ObjectiveSeparator}Press {RU} then {A2}",
                "Objective_WeaponStaffSwing5": "{!Icons.Omega} Attack{!Icons.ObjectiveSeparator}Hold {A2}"},
         "zh-CN": {"NPC_Hecate_01": "赫卡忒", "NPC_Hecate_Story_01": "赫卡忒", "NPC_Apollo_Story_01": "阿波罗",
@@ -56,6 +57,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
     assert fields["interaction:NPC_Hecate_Story_01"]["value"] == 9
     context = workspace.query(domain="entities", search="赫卡忒 捉迷藏", language="en")
     assert any(group["id"] == "person:Hecate" for group in context["entities"])
+    for person, offer, actor in (("Hermes", "HermesUpgrade", "NPC_Hermes_01"),
+                                 ("Selene", "SpellDrop", "NPC_Selene_01")):
+        rows = workspace.query(domain="relationships", language="en", limit=200)["items"]
+        contexts = {row["rawId"]: row["hostName"] for row in rows
+                    if row["id"].startswith("specialInteraction:") and row["rawId"] in (offer, actor)}
+        assert contexts[offer] != contexts[actor]
     assert "Special interactions" not in str(fields)
     # Apollo's story object has no special handler. It must not acquire a
     # fabricated zero-valued salute just because it is a known NPC.
@@ -86,9 +93,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-field-meanings-") as directory
     assert state["SpecialInteractRecord"]["NPC_Hecate_01"] == 4
     workspace.cancel()
     state["SpecialInteractRecord"]["FutureInteraction"] = "stored value"
+    state["NPCInteractions"]["NPC_HorseAndChariot_01"] = 3
+    state["NPCInteractions"]["NPC_LeopardGuest"] = 4
     state["Flags"]["FutureFlag"] = True
     state["LifetimeTraitStats"] = table({"FutureTrait": table({"UseCount": 2})})
-    for needle in ("FutureInteraction", "FutureFlag", "FutureTrait"):
+    for needle in ("FutureInteraction", "FutureFlag", "FutureTrait", "NPC_HorseAndChariot_01", "NPC_LeopardGuest"):
         ordinary = workspace.query(domain="entities", search=needle, language="en")
         assert ordinary["total"] == 0, "unidentified data was given a misleading ordinary label"
     raw = workspace.query(domain="advanced", path=["GameState", "SpecialInteractRecord"], language="en")

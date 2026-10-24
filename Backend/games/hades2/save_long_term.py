@@ -50,7 +50,11 @@ _INTERACTION_OWNERS = {
     "MusicPlayerScreen": (None, "乐师阴魂", "Musician shade"),
     "RunHistoryScreen": ("RunHistoryScreen_Title", "过往成果", "Past Deeds"),
     "NPC_Cerberus_Story_01": ("NPC_Cerberus_Field_01", "刻耳柏洛斯", "Cerberus"),
+    "NPC_Melinoe_Story_01": ("PlayerUnit", "墨利诺厄", "Melinoë"),
 }
+# These neutral scenery actors have no native dialogue sets. Existing physical
+# values stay typed-editable in Advanced rather than gaining invented counters.
+_CONVERSATION_HOSTS = NPC_INTERACTION_IDS - {"NPC_HorseAndChariot_01", "NPC_LeopardGuest"}
 # These native hosts share a person but own different saved counters. Contexts
 # cover every use of the host, including actors reused in memories and endings.
 _INTERACTION_CONTEXTS = {
@@ -68,6 +72,8 @@ _INTERACTION_CONTEXTS = {
     "NPC_Hades_02": (None, "回忆与重逢", "Memories & reunion"),
     "NPC_Hecate_01": (None, "三岔路口与往事", "Crossroads & memories"),
     "NPC_Hecate_Story_01": (None, "捉迷藏与终局", "Hide-and-seek & finale"),
+    "HermesUpgrade": (None, "祝福选择", "Boon selection"),
+    "NPC_Hermes_01": (None, "当面会面", "In-person encounter"),
     "NPC_Hypnos_01": ("Crossroads", "三岔路口", "Crossroads"),
     "NPC_Hypnos_02": (None, "梦境第一层", "First dream layer"),
     "NPC_Hypnos_03": (None, "梦境第二层", "Second dream layer"),
@@ -75,8 +81,11 @@ _INTERACTION_CONTEXTS = {
     "NPC_Hypnos_DreamRun": (None, "梦境挑战", "Dream runs"),
     "NPC_Narcissus_01": ("BiomeG", "俄刻阿诺斯", "Oceanus"),
     "NPC_Narcissus_Field_01": (None, "与回声相会", "Visiting Echo"),
+    "NPC_Melinoe_Story_01": (None, "童年", "Childhood"),
     "NPC_Nyx_01": (None, "往事中的噩梦", "Nightmare memory"),
     "NPC_Nyx_Story_01": (None, "重逢与混沌邂逅", "Reunion & Chaos visits"),
+    "SpellDrop": ("SpellScreenMenu_Title", "月之礼赠", "Gifts of the Moon"),
+    "NPC_Selene_01": ("Crossroads", "三岔路口", "Crossroads"),
     "NPC_Zagreus_Past_01": (None, "跨越时间的梦中会面", "Dreams across time"),
     "NPC_Zagreus_01": (None, "终局重逢", "Reunion in the ending"),
     "NPC_Zeus_01": (None, "对战堤丰", "Typhon battle"),
@@ -198,9 +207,9 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
             if identity in english_labels:
                 en[name] = english_labels[identity]
         if "TimeChallengeValue" in names:
-            if native.get("TimeChallengeValue") in (None, "TimeChallengeValue"):
+            if native.get("TimeChallengeValue") in (None, "", "TimeChallengeValue"):
                 native["TimeChallengeValue"] = "限时挑战倒计时" if language == "zh-CN" else "Timed challenge countdown"
-            if en.get("TimeChallengeValue") in (None, "TimeChallengeValue"):
+            if en.get("TimeChallengeValue") in (None, "", "TimeChallengeValue"):
                 en["TimeChallengeValue"] = "Timed challenge countdown"
     result = []
     for name in sorted(names):
@@ -258,7 +267,7 @@ def rows(root, domain, language="zh-CN", game_path=None, *, include_absent=False
     result = []
     zh = language == "zh-CN"
     if domain == "relationships":
-        result.extend(_counter_rows(state, "NPCInteractions", "interaction", NPC_INTERACTION_IDS,
+        result.extend(_counter_rows(state, "NPCInteractions", "interaction", _CONVERSATION_HOSTS,
             domain, language, game_path, "对话次数", "Conversations", person=True))
         result.extend(_counter_rows(state, "SpecialInteractRecord", "specialInteraction", SPECIAL_INTERACTION_FUNCTIONS,
             domain, language, game_path, "SpecialInteractRecord", "SpecialInteractRecord", person=True))
