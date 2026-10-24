@@ -315,6 +315,8 @@ def entry_row(root, entry_id, language='zh-CN', game_path=None):
     result.pop('before', None)
     if entity:
         result.update(entityId=entity, entityName=entity_name)
+    if prefix == 'flag' and name not in _FLAG_DESCRIPTORS:
+        result['rawTyped'] = True
     if item['valueType'] == 'boolean':
         result['choices'] = [False, True] if prefix != 'dialogueReset' else [False]
     if prefix == 'quest':

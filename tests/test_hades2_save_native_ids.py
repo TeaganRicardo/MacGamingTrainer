@@ -11,8 +11,9 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.save_native_ids import (
     QUEST_IDS, RESOURCE_IDS, NPC_INTERACTION_IDS, OBJECTIVE_IDS,
-    STORY_RESET_TEXT_IDS,
+    STORY_RESET_TEXT_IDS, SPECIAL_INTERACTION_FUNCTIONS, OBJECTIVE_LOCALIZATION_IDS,
 )
+from games.hades2.save_long_term import _SPECIAL_ACTIONS
 
 assert "QuestHelpOdysseus" in QUEST_IDS
 assert "DreamPoints" in RESOURCE_IDS
@@ -24,6 +25,9 @@ assert not ({"FutureUnit", "NPC_Giftable"} & NPC_INTERACTION_IDS)
 assert "UnknownObjective" not in OBJECTIVE_IDS
 assert "HecatePostTrueEnding01" in STORY_RESET_TEXT_IDS
 assert "UnverifiedScene" not in STORY_RESET_TEXT_IDS
+assert set(handler for handlers in SPECIAL_INTERACTION_FUNCTIONS.values() for handler in handlers) <= _SPECIAL_ACTIONS.keys()
+assert SPECIAL_INTERACTION_FUNCTIONS["FrogFamiliar"] == ("FrogFamiliarSpecialInteractUnlockedInHub", "PetFamiliarFrog")
+assert OBJECTIVE_LOCALIZATION_IDS["GiftPrompt"] == "Objective_GiveGift"
 
 with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
     scripts = Path(temp)
@@ -36,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         encoding="utf-8",
     )
     (scripts / "ObjectiveData.lua").write_text(
-        'ObjectiveData =\n{\n\tGiftPrompt = {},\n}\n'
+        'ObjectiveData =\n{\n\tGiftPrompt = { Description = "Objective_GiveGift" },\n}\n'
         'ObjectiveSetData =\n{\n\tFCastTutorial =\n\t{\n\t\tObjectives =\n'
         '\t\t{\n\t\t\t{\n\t\t\t\t"WeaponCast",\n\t\t\t}\n\t\t},\n\t},\n}\n',
         encoding="utf-8",
@@ -46,15 +50,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         encoding="utf-8",
     )
     (scripts / "NPCData_Hecate.lua").write_text(
-        'UnitSetData.NPC_Hecate =\n{\n\tNPC_Hecate_01 =\n\t{\n\t},\n'
-        '\tNPC_Giftable =\n\t{\n\t},\n}\n',
+        'UnitSetData.NPC_Hecate =\n{\n\tNPC_Hecate_01 =\n\t{\n'
+        '\t\tInheritFrom = { "NPC_Giftable" },\n\t},\n'
+        '\tNPC_Giftable =\n\t{\n\t\tSpecialInteractFunctionName = "SpecialInteractSalute",\n\t},\n'
+        '\tNPC_Child_01 =\n\t{\n\t\tInheritFrom = { "NPC_Giftable" },\n'
+        '\t\tSpecialInteractFunctionName = "HugZagreus",\n\t},\n'
+        '\t-- NPC_Commented_01 = { SpecialInteractFunctionName = "FakeHandler" },\n}\n',
         encoding="utf-8",
     )
     native_sources = {path: path.read_bytes() for path in scripts.glob("*.lua")}
     expected = {
         "QUEST_IDS": frozenset({"QuestExample"}),
         "RESOURCE_IDS": frozenset({"DreamPoints"}),
-        "NPC_INTERACTION_IDS": frozenset({"NPC_Hecate_01"}),
+        "NPC_INTERACTION_IDS": frozenset({"NPC_Hecate_01", "NPC_Child_01"}),
         "OBJECTIVE_IDS": frozenset({"GiftPrompt", "WeaponCast"}),
         "STORY_RESET_TEXT_IDS": frozenset({"HecatePostTrueEnding01", "HecatePostEpilogue01"}),
     }
@@ -71,6 +79,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         exec(compile(generated, "<native-save-identity-catalog>", "exec"), namespace)
         for name, ids in expected.items():
             assert namespace[name] == ids, (name, newline)
+        assert namespace["SPECIAL_INTERACTION_FUNCTIONS"] == {
+            "NPC_Giftable": ("SpecialInteractSalute",),
+            "NPC_Hecate_01": ("SpecialInteractSalute",),
+            "NPC_Child_01": ("HugZagreus",),
+        }
+        assert namespace["OBJECTIVE_LOCALIZATION_IDS"] == {"GiftPrompt": "Objective_GiveGift"}
         for name in ("QuestData.lua", "ResourceData.lua", "ObjectiveData.lua", "StoryResetData.lua"):
             raw_sha = hashlib.sha256((scripts / name).read_bytes()).hexdigest()
             assert f"{name} SHA-256 {raw_sha}" in generated, (name, newline)

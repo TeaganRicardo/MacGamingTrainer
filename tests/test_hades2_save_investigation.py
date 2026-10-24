@@ -198,6 +198,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     # must find her scenes even when none of their dialogue contains that name.
     localized = finding.query(root, search='涅墨西斯', offset=0, limit=100, language='zh-CN', permissions={})
     assert {'NemesisPostTrueEnding01', 'NemesisBathHouseRepeatable01'} <= {row['rawId'] for row in localized['items']}
+    assert finding.query(root, search='HecateMissing', offset=0, limit=100, language='en', permissions={})['total'] == 0, (
+        'an invisible technical prerequisite was presented as a matching dialogue')
     assert finding.query(root, search='我的父亲', offset=0, limit=10, language='zh-CN', permissions={})['total'] == 1
     # A zh-CN-only Event/Id is still discoverable; its English counterpart
     # is explicitly missing, not silently copied or synthesized.

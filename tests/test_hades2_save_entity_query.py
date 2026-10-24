@@ -59,4 +59,13 @@ dupes = [row("a", "Shared", entity="weapon:Dagger", title="Same"),
 grouped = entity_page(dupes, search="same", offset=0, limit=10)
 assert [item["id"] for item in grouped["entities"]] == ["weapon:Dagger", "weapon:Torch"]
 assert sum(len(item["items"]) for item in grouped["entities"]) == 2
+
+# A player combines an owner and a field name, rather than reproducing the
+# punctuation/order of the displayed title. Every word must match the entity.
+found = entity_page([*multi, other], search="Nemesis Field 111", offset=0, limit=10)
+assert [item["id"] for item in found["entities"]] == ["person:Nemesis"], (
+    "search cannot combine a character name with the field being edited"
+)
+assert len(found["entities"][0]["items"]) == 112
+assert entity_page([*multi, other], search="Nemesis absentword", offset=0, limit=10)["total"] == 0
 print("save entity pagination, identity and cross-language search: PASS")

@@ -13,9 +13,10 @@ import math
 from pathlib import Path
 import re
 
-from .localization import _sjson_unescape
+from .localization import _sjson_unescape, _clean_display_name
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import STORY_RESET_TEXT_IDS
+from .save_entities import matches_search
 
 _SUPPORTED_STORY_SHA = "58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e"
 _ASSIGN = re.compile(r"(?m)^[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(?:\r?\n[ \t]*)?(\{)")
@@ -773,6 +774,7 @@ class NativeDialogueInvestigation:
             'entityId': 'person:' + person if native_person else None,
             'entityName': localized[language] if native_person else None,
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
+            'content': [_clean_display_name(phrase) for row in lines for phrase in row[translated_key]],
             'sourceIdentity': self.native['sourceIdentity'],
             'reason': reason, 'blockReasonCode': block_code,
             'canStage': can_stage, 'stageID': 'dialogueReset:' + scene if can_stage else '',
@@ -793,15 +795,12 @@ class NativeDialogueInvestigation:
             if needle:
                 person, npc, localized = self._names(scene)
                 corpus = (scene, person, npc, *localized.values())
-                if not any(needle in token.casefold() for token in corpus):
-                    definitions = self.native['scenes'].get(scene, ())
-                    # Authored requirement paths, named predicates and scene
-                    # associations remain searchable without rewriting them.
-                    if not any(needle in definition['search'].casefold() for definition in definitions):
-                        lines = self._text_records(scene)
-                        if not any(needle in (line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
-                                              + ' ' + ' '.join(line['events'])).casefold() for line in lines):
-                            continue
+                if not matches_search(needle, corpus):
+                    lines = self._text_records(scene)
+                    if not matches_search(needle, (*corpus,
+                        *(line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
+                          + ' ' + ' '.join(line['events']) for line in lines))):
+                        continue
             row = self._summary_row(scene, language, records, ambiguous, permissions)
             if state_filter == "all" or row["status"] == state_filter:
                 rows.append(row)

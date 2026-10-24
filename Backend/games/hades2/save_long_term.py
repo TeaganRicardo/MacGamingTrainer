@@ -9,9 +9,64 @@ from . import save_advanced, save_arcana, save_relationships
 from .save_mutation_utils import owner as lua_owner
 from .localization import official_display_names
 from .save_document import AmbiguousLuaKeyError, LuaTable
-from .save_native_ids import NPC_INTERACTION_IDS, OBJECTIVE_IDS
+from .save_native_ids import (NPC_INTERACTION_IDS, OBJECTIVE_IDS,
+                             SPECIAL_INTERACTION_FUNCTIONS, OBJECTIVE_LOCALIZATION_IDS)
 
 _MAX = 9_007_199_254_740_991
+
+# Labels describe the handlers reached after GiftLogic records the action.
+# Several actions can share a counter (Dora's salute/decorating, for example).
+_SPECIAL_ACTIONS = {
+    "SpecialInteractSalute": ("NPCUseTextSpecial", "致意", "Salute"),
+    "SpecialInteractSaluteInterrupt": ("NPCUseTextSpecial", "致意", "Salute"),
+    "SpecialInteractSaluteBroker": ("SpecialInteractShade", "致意", "Salute"),
+    "SpecialInteractShade": ("SpecialInteractShade", "致意", "Salute"),
+    "SpecialInteractThreatenChronos": ("ChronosUseTextSpecial", "警告", "Warn"),
+    "HugPersephone": ("PersephoneUseTextSpecial", "问候", "Greet"),
+    "HugZagreus": ("ZagreusUseTextSpecial", "问候", "Greet"),
+    "AttemptPetCerberusThread": ("UseCerberusSpecial_True", "爱抚", "Pet"),
+    "UseArtemisJoinSong": ("ArtemisSingingUseTextSpecial", "合唱", "Join In"),
+    "UseCosmeticsShop": ("DoraUseTextSpecial", "装饰", "Decorate"),
+    "PlantAdmirePresentation": ("GardenPlotSpecial", "欣赏", "Admire"),
+    "UseGhostEavesdropper": ("UseGhostEavesdropper", "致意", "Salute"),
+    "UseExorcisedGhostsPreRun": ("UseExorcisedGhostsPreRun", "致意", "Salute"),
+    "UseGhostInspectPoint": ("UseGhostInspectPoint", "致意", "Salute"),
+    "SpecialInteractChangeNextRunRNG": ("WorldUpgradeChangeNextRunRNG", "命运无常", "Acceptance of Another Fate"),
+    "UseHadesFountain": (None, "饮用喷泉", "Drink from the fountain"),
+    "SpecialInteractDieHardFanShade": ("SpecialInteractShade", "致意", "Salute"),
+    "SpecialInteractDieHardFanShadeSendToElysium": (None, "送别", "Send-off"),
+    "PetFamiliarFrog": (None, "爱抚", "Pet"),
+    "FrogFamiliarSpecialInteractUnlockedInHub": ("FamiliarUseTextSpecial", "倾诉", "Confide"),
+}
+
+_INTERACTION_OWNERS = {
+    "BartenderShade01": ("Bartender", "灵魂调配师", "Spirit Mixer"),
+    "CrossroadsFountainWall01": ("Fountain", "泉水", "Fountain"),
+    "DieHardFanShade": (None, "忠实观众阴魂", "Devoted fan shade"),
+    "GameStatsScreen": ("GameStatsScreen_Title", "归档轶事", "Archived Trivia"),
+    "GhostInspectPoint": (None, "阴魂", "Shades"),
+    "HubGardenPlot": ("GardenPlots", "土壤", "Soil Plots"),
+    "Market": ("Broker", "残魂商人", "Wretched Broker"),
+    "MusicPlayerScreen": (None, "乐师阴魂", "Musician shade"),
+    "RunHistoryScreen": ("RunHistoryScreen_Title", "过往成果", "Past Deeds"),
+    "NPC_Cerberus_Story_01": ("NPC_Cerberus_Field_01", "刻耳柏洛斯", "Cerberus"),
+}
+for _familiar in ("Cat", "Raven", "Hound", "Polecat"):
+    for _context in ("LockedInRun", "UnlockedInHub"):
+        _SPECIAL_ACTIONS[_familiar + "FamiliarSpecialInteract" + _context] = (None, "爱抚", "Pet")
+
+
+def _special_label(name, language, game_path):
+    labels = []
+    for handler in SPECIAL_INTERACTION_FUNCTIONS.get(name, ()):
+        identity, chinese, english = _SPECIAL_ACTIONS[handler]
+        native = official_display_names((identity,), language, game_path=game_path) if identity else {}
+        label = native.get(identity) or (chinese if language == "zh-CN" else english)
+        if label not in labels:
+            labels.append(label)
+    if not labels:
+        return "SpecialInteractRecord"
+    return " / ".join(labels) + ("次数" if language == "zh-CN" else " count")
 
 
 def linked_cache_label(raw_id, language, game_path=None):
@@ -45,6 +100,8 @@ def _display(ids, language, game_path):
 
 
 def _npc_person(native_id):
+    if native_id in ("HermesUpgrade", "SpellDrop", "TrialUpgrade"):
+        return {"HermesUpgrade": "Hermes", "SpellDrop": "Selene", "TrialUpgrade": "Chaos"}[native_id]
     if not native_id.startswith("NPC_"):
         return native_id
     name = native_id[len("NPC_"):]
@@ -95,6 +152,22 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
     if isinstance(collection, LuaTable):
         names.update(name for name, _ in collection.entries() if type(name) is str)
     native, en = _display(names, language, game_path)
+    for name in names & _INTERACTION_OWNERS.keys():
+        identity, owner_chinese, owner_english = _INTERACTION_OWNERS[name]
+        labels, english_labels = _display((identity,) if identity else (), language, game_path)
+        native[name] = labels.get(identity) or (owner_chinese if language == "zh-CN" else owner_english)
+        en[name] = english_labels.get(identity) or owner_english
+    if prefix == "objective":
+        ids = tuple(OBJECTIVE_LOCALIZATION_IDS.get(name, "Objective_" + name) for name in names)
+        labels, english_labels = _display(ids, language, game_path)
+        for name in names:
+            identity = OBJECTIVE_LOCALIZATION_IDS.get(name, "Objective_" + name)
+            if identity in labels:
+                native[name] = labels[identity]
+            if identity in english_labels:
+                en[name] = english_labels[identity]
+        if "TimeChallengeValue" in names and "TimeChallengeValue" not in native:
+            native["TimeChallengeValue"] = "限时挑战倒计时" if language == "zh-CN" else "Timed challenge countdown"
     result = []
     for name in sorted(names):
         issue, value, kind = owner_state, 0, "integer"
@@ -115,15 +188,22 @@ def _counter_rows(state, field, prefix, known, domain, language, game_path, chin
                 else:
                     issue, value = "unsupported", None
         title = native.get(name) or name
+        chinese_label, english_label = chinese, english
+        if prefix == "specialInteraction":
+            chinese_label = _special_label(name, language, game_path)
+            english_label = _special_label(name, "en", game_path)
+        entity = "person:" + _npc_person(name) if person and (name.startswith("NPC_") or name in ("HermesUpgrade", "SpellDrop", "TrialUpgrade")) else (
+            "familiar:" + name if person and name.endswith("Familiar") else
+            "object:" + name if person else None)
         row = _row(prefix + ":" + name, domain, name, ["GameState", field, name],
-            (chinese if language == "zh-CN" else english) + " · " + title,
-            english + " · " + (en.get(name) or name), value, kind,
+            (chinese_label if language == "zh-CN" else english_label) + " · " + title,
+            english_label + " · " + (en.get(name) or name), value, kind,
             group=("角色互动" if language == "zh-CN" else "Character interactions") if person else
                   ("目标统计" if language == "zh-CN" else "Objective counters"),
             editable=issue is None, owner_state=issue,
             block_reason_code="ambiguousOwner" if issue == "ambiguous" else "unsupportedOwner" if issue else None,
-            entity_id="person:" + _npc_person(name) if person else None,
-            entity_name=title if title != name else _npc_person(name) if person else None)
+            entity_id=entity,
+            entity_name=(title if title != name else _npc_person(name)) if person else None)
         if name not in known:
             row["rawTyped"] = True
             row["reason"] = ("此已保存字段用途未编目；按实际类型修改，不重放互动事件。" if language == "zh-CN" else
@@ -140,9 +220,9 @@ def rows(root, domain, language="zh-CN", game_path=None, *, include_absent=False
     zh = language == "zh-CN"
     if domain == "relationships":
         result.extend(_counter_rows(state, "NPCInteractions", "interaction", NPC_INTERACTION_IDS,
-            domain, language, game_path, "互动次数", "Interactions", person=True))
-        result.extend(_counter_rows(state, "SpecialInteractRecord", "specialInteraction", NPC_INTERACTION_IDS,
-            domain, language, game_path, "特殊互动次数", "Special interactions", person=True))
+            domain, language, game_path, "对话次数", "Conversations", person=True))
+        result.extend(_counter_rows(state, "SpecialInteractRecord", "specialInteraction", SPECIAL_INTERACTION_FUNCTIONS,
+            domain, language, game_path, "SpecialInteractRecord", "SpecialInteractRecord", person=True))
 
         result.extend(save_relationships.rows(root, language, game_path))
 
@@ -211,7 +291,7 @@ def apply_intent(root, intent):
         special = entry_id.startswith("specialInteraction:")
         name = entry_id[len("specialInteraction:"):] if special else entry_id[len("interaction:"):]
         owner = lua_owner(root, ["GameState", "SpecialInteractRecord" if special else "NPCInteractions"], create=True)
-        if name not in NPC_INTERACTION_IDS:
+        if name not in (SPECIAL_INTERACTION_FUNCTIONS if special else NPC_INTERACTION_IDS):
             owner[name] = after
             return
         if after == 0:

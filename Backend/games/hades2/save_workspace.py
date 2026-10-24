@@ -928,13 +928,16 @@ class Hades2SaveWorkspace:
             rows.extend(row for row in save_equipment.rows(
                 root, language, game_path=self._game_path
             ) if row["id"] != "familiarSelection")
-        return rows
+        # Uncatalogued physical fields retain their typed Advanced editor;
+        # the ordinary workbench presents fields with an identified purpose.
+        return [row for row in rows if not row.get("rawTyped")]
 
     def _entity_query(self, *, scope, search, offset, limit, language):
         if scope not in SAVE_EDITOR_SCOPES:
             raise ValueError("Save Editor browse scope is invalid.")
         rows = self._entity_source_rows(language, scope, search)
         aliases = {}
+        scenes = {}
         if search.strip():
             other = "en" if language == "zh-CN" else "zh-CN"
             for alias in self._entity_source_rows(other, scope, search):
@@ -953,31 +956,37 @@ class Hades2SaveWorkspace:
                 rows.extend(self._narrative_investigation().spoken_rows(
                     self.document.lua_state, results["items"], language
                 ))
-                verified_people = {}
                 for scene in results["items"]:
                     # The source-bound narrative index must prove the native
                     # NPC identity before its dialogue can join a person's
                     # durable mutation descriptors.
-                    if scene.get("entityId"):
-                        verified_people[scene["rawId"]] = (
-                            scene["entityId"], scene["entityName"],
-                            scene.get("snippet") or "",
-                        )
-                    scene["_search"] = (search,)
-                    if scene.get("snippet"):
-                        prefix = "对话" if language == "zh-CN" else "Dialogue"
-                        scene["name"] = prefix + " · " + scene["snippet"][:100]
-                    rows.append(scene)
+                    scenes[scene["rawId"]] = scene
+                    # A recognized scene is the same editable playback record,
+                    # with its text already present; it needs no detail drilldown.
+                    if scene.get("content"):
+                        playback = save_narrative.entry_row(
+                            self.document.lua_state, "dialogue:" + scene["rawId"], language, self._game_path)
+                        if not any(row["id"] == playback["id"] for row in rows):
+                            rows.append(playback)
                 for row in rows:
                     if row["domain"] != "dialogue":
                         continue
-                    person = verified_people.get(row["rawId"])
-                    if person is None:
+                    scene = scenes.get(row["rawId"])
+                    if scene is None:
                         continue
-                    row["entityId"], row["entityName"] = person[:2]
-                    if person[2]:
-                        prefix = "对话记录" if language == "zh-CN" else "Dialogue history"
-                        row["name"] = prefix + " · " + person[2][:100]
+                    if scene.get("entityId"):
+                        row["entityId"], row["entityName"] = scene["entityId"], scene["entityName"]
+                    elif scene.get("content"):
+                        row["entityId"], row["entityName"] = "scene:" + row["rawId"], scene["content"][0]
+                    row["_search"] = (search,)
+                    if scene.get("snippet"):
+                        prefix = ("已播放" if language == "zh-CN" else "Played") if row["id"].startswith("dialogue:") else (
+                            "选择记录" if language == "zh-CN" else "Choice record")
+                        row["name"] = prefix
+                        if row["id"].startswith("dialogue:"):
+                            row["content"] = scene["content"]
+        rows = [row for row in rows if row["domain"] != "dialogue"
+                or scenes.get(row["rawId"], {}).get("content")]
         page = entity_page(rows, search=search, offset=offset, limit=limit,
                            aliases=aliases)
         return {

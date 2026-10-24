@@ -197,6 +197,7 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let discoveryReason: String?
     var typedValue: Hades2SaveTypedValue? = nil
     var warning: String? = nil
+    var content: [String] = []
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -205,6 +206,7 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.path == rhs.path
             && lhs.displayName == rhs.displayName
             && lhs.englishName == rhs.englishName
+            && lhs.content == rhs.content
             && lhs.value == rhs.value
             && lhs.valueType == rhs.valueType
             && lhs.editable == rhs.editable
@@ -601,7 +603,9 @@ final class Hades2SaveEditorModel: ObservableObject {
         // Return has already submitted this term. A later SwiftUI onChange
         // must not cancel its immediate query and re-delay the lookup.
         guard lastRequestedSearch != search else { return }
+        guard !profile.isEmpty, workspaceID != nil else { return }
         invalidateQuery()
+        querying = true
         let work = DispatchWorkItem { [weak self] in self?.query(offset: 0) }
         scheduledSearch = work
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(280), execute: work)
@@ -1380,7 +1384,8 @@ final class Hades2SaveEditorModel: ObservableObject {
                 ?? (row["blockReasonDiagnostic"] as? String)
                 ?? (row["reason"] as? String),
             typedValue: row["typedValue"].flatMap(Hades2SaveTypedValue.init),
-            warning: row["warning"] as? String
+            warning: row["warning"] as? String,
+            content: row["content"] as? [String] ?? []
         )
     }
 

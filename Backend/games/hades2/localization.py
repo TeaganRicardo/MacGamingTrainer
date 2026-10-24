@@ -67,6 +67,7 @@ def _load_official_display_names(language, game_path=None):
     display_pattern = re.compile(r'\bDisplayName\s*=\s*"((?:\\.|[^"\\])*)"')
     inherit_pattern = re.compile(r'\bInheritFrom\s*=\s*(?:\{\s*)?"((?:\\.|[^"\\])*)"')
     inherited_from = {}
+    objectives = {}
     for path in files:
         try:
             text = path.read_text(encoding='utf-8-sig', errors='replace')
@@ -79,6 +80,8 @@ def _load_official_display_names(language, game_path=None):
             display = display_pattern.search(text, match.end(), end)
             if display and identifier not in names:
                 names[identifier] = _clean_display_name(display.group(1))
+                if identifier.startswith('Objective_'):
+                    objectives[identifier] = display.group(1)
             inherit = inherit_pattern.search(text, match.end(), end)
             if inherit and identifier not in inherited_from:
                 inherited_from[identifier] = _sjson_unescape(inherit.group(1))
@@ -106,6 +109,14 @@ def _load_official_display_names(language, game_path=None):
 
     for identifier in inherited_from:
         resolve(identifier)
+
+    for identifier, objective in objectives.items():
+        # Tutorial labels precede their controller instructions. Preserve the
+        # named action, keyword references and Omega identity in the editor.
+        title = objective.split('{!Icons.ObjectiveSeparator}', 1)[0]
+        title = re.sub(r'\{\$Keywords\.([A-Za-z0-9_]+)\}',
+                       lambda match: names.get(match.group(1), ''), title)
+        names[identifier] = _clean_display_name(title.replace('{!Icons.Omega}', 'Ω'))
 
     _OFFICIAL_TEXT_CACHE[cache_key] = names
     return names

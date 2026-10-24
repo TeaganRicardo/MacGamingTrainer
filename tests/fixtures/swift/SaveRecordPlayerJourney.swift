@@ -145,9 +145,6 @@ private func fields(_ view: NSView) -> [NSTextField] {
         let stagedTarget = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
         require(stagedTarget == initialTarget,
                 "ordinary record staging wrote before explicit Apply")
-        if namedNativeControl(root, role: "AXButton", name: text("hades2.saveEditor.apply")) == nil {
-            press("hades2.saveEditor.workbench.reviewApply")
-        }
         until("ordinary Changes did not load") { !model.busy }
         let bounty = model.pendingActions.first { $0.entryID == "history:run:1:ActiveBounty" }!
         let input = fields(root).first { $0.isEditable && $0.accessibilityLabel() == bounty.name }!
@@ -177,9 +174,9 @@ private func fields(_ view: NSView) -> [NSTextField] {
         let reopenedBounty = search("ActiveBounty", bounty.entryID, in: reopened, root: reopenedWindow.contentView!)
         require(reopenedBounty.value == AnyHashable("  revised  "), "reopening stripped ordinary text whitespace")
         let installedRoot = reopenedWindow.contentView!
-        let unknown = search("FutureNPC", "interaction:FutureNPC", in: reopened, root: installedRoot)
-        require(unknown.editable && unknown.valueType == "string", "unknown observed interaction lost its reliable actual type")
-        assertWarning(unknown, in: installedRoot)
+        let searchInput = fields(installedRoot).first { $0.placeholderString == text("hades2.saveEditor.workbench.search") }!
+        edit(searchInput, "FutureNPC", submit: true)
+        until("unidentified data leaked into ordinary results") { !reopened.querying && reopened.items.isEmpty }
         let gift = search("Hecate", "gift:Hecate:GiftPoints", in: reopened, root: installedRoot)
         assertWarning(gift, in: installedRoot)
         let giftInput = fields(installedRoot).first { $0.isEditable && $0.accessibilityLabel() == gift.displayName }!
@@ -199,7 +196,6 @@ private func fields(_ view: NSView) -> [NSTextField] {
             else { fatalError("installed record action missing: \(key)") }
             pump()
         }
-        installedPress("hades2.saveEditor.workbench.reviewApply")
         until("gift/reward Changes review did not finish") { !reopened.busy }
         let giftInChanges = fields(installedRoot).last { $0.isEditable && $0.accessibilityLabel() == gift.displayName }!
         edit(giftInChanges, "10")
@@ -208,13 +204,10 @@ private func fields(_ view: NSView) -> [NSTextField] {
         let claimAction = reopened.pendingActions.first { $0.entryID == claim.id }!
         require(giftAction.effects.count == 1 && claimAction.effects.count == 5,
                 "gift/reward Changes omitted a proven physical owner")
-        installedPress("hades2.saveEditor.basket.linkedEffects", [String(giftAction.effects.count)])
         for effect in giftAction.effects {
             require(namedNativeControl(installedRoot, role: "AXStaticText", name: effect.name!) != nil,
                     "actual Changes hid gift aggregate effects")
         }
-        installedPress("hades2.saveEditor.basket.linkedEffects", [String(giftAction.effects.count)])
-        installedPress("hades2.saveEditor.basket.linkedEffects", [String(claimAction.effects.count)])
         for effect in claimAction.effects {
             require(namedNativeControl(installedRoot, role: "AXStaticText", name: effect.name!) != nil,
                     "actual Changes hid reward resource/lifetime/CurrentRun effects")

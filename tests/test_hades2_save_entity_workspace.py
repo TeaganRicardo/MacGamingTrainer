@@ -112,12 +112,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-entity-source-") as directory:
     assert workspace._investigation.native["status"] == "available"
     assert linked["total"] >= 1
     person = next(group for group in linked["entities"] if group["id"] == "person:Nemesis")
-    assert {"interaction:NPC_Nemesis_01", "dialogue:NemesisPostTrueEnding01",
-            "investigate:NemesisPostTrueEnding01"}.issubset(
+    assert {"interaction:NPC_Nemesis_01", "dialogue:NemesisPostTrueEnding01"}.issubset(
                 {row["id"] for row in person["items"]})
     assert all("NemesisPostTrueEnding01" not in row["name"] for row in person["items"]
                if row["domain"] in ("dialogue", "investigate"))
-    scene = next(row for row in person["items"] if row["domain"] == "investigate")
-    assert scene["editable"] is False and scene["snippet"] == "I remember this"
+    scene = next(row for row in person["items"] if row["id"] == "dialogue:NemesisPostTrueEnding01")
+    assert scene["editable"] and scene["content"] == ["I remember this"]
+    assert not any(row["domain"] == "investigate" for row in person["items"])
 
 print("Hades source-owned entity query and staging contract: PASS")

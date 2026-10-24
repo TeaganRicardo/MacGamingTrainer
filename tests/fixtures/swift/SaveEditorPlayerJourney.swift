@@ -73,13 +73,13 @@ private func fields(_ view: NSView) -> [NSTextField] {
         require(model.sourceRelativePath == "Profile1.sav" && model.sourceSHA256 == originalSHA,
                 "choosing a write target replaced the originally read source")
 
-        func edit(_ field: NSTextField, _ value: String, submit: Bool = false) {
+        func edit(_ field: NSTextField, _ value: String, submit: Bool = false, finish: Bool = true) {
             field.scrollToVisible(field.bounds)
             require(window.makeFirstResponder(field), "could not focus native Save input")
             guard let editor = field.currentEditor() as? NSTextView else { fatalError("native Save field editor missing") }
             editor.selectAll(nil); editor.insertText(value, replacementRange: editor.selectedRange())
             if submit { editor.doCommand(by: #selector(NSResponder.insertNewline(_:))) }
-            window.makeFirstResponder(nil)
+            if finish { window.makeFirstResponder(nil) }
             pump()
         }
         func search(_ query: String) {
@@ -118,11 +118,34 @@ private func fields(_ view: NSView) -> [NSTextField] {
             }
         }
         func showChanges() {
-            press("hades2.saveEditor.workbench.reviewApply")
             until("Changes review did not expose explicit Apply") {
                 namedNativeControl(root, role: "AXButton", name: text("hades2.saveEditor.apply")) != nil
             }
         }
+
+        // Typeahead must complete while the native field editor keeps focus.
+        // A combined owner/action query also works across the other locale.
+        let searchInput = fields(root).first { $0.placeholderString == text("hades2.saveEditor.workbench.search") }!
+        edit(searchInput, "Hecate Salute", finish: false)
+        until("owner/action typeahead did not find Hecate") {
+            !model.querying && model.search == "Hecate Salute" && model.entityResults.contains { $0.id == "person:Hecate" }
+        }
+        require(searchInput.currentEditor() != nil, "typeahead stole the active search draft")
+        require(namedNativeControl(root, role: "AXStaticText", name: text("hades2.saveEditor.group.characters")) != nil,
+                "results have no visible character section heading")
+        require(!nativeAccessibilityControls(root).contains {
+            $0.role == "AXDisclosureTriangle" || $0.label == text("hades2.saveEditor.investigate.details")
+                || $0.label == text("hades2.saveEditor.workbench.technical")
+        }, "ordinary Save information still requires an expansion control")
+        edit(searchInput, "赫卡忒 致意", finish: false)
+        until("cross-language owner/action search failed") {
+            !model.querying && model.entityResults.contains { $0.id == "person:Hecate" }
+        }
+        edit(searchInput, "no-matching-save-field", finish: false)
+        until("unmatched typeahead kept stale results") { !model.querying && model.items.isEmpty }
+        guard let clear = nativeAccessibilityControls(root).first(where: { $0.identifier == "trainer.search.clear" }), clear.press()
+        else { fatalError("native search clear did not dispatch") }
+        until("clearing search did not restore browse results") { model.search.isEmpty && !model.querying && !model.items.isEmpty }
 
         // A simple resource journey crosses the actual search/inline/Changes/
         // Apply controls and the real codec/filesystem transaction exactly once.
@@ -180,11 +203,10 @@ private func fields(_ view: NSView) -> [NSTextField] {
         remove("card:ChanneledCast:Level", remaining: 2)
         require(model.pendingEffectCount == 7 && model.pendingPhysicalChangeCount == 9,
                 "removing direct intent did not recompute the surviving linked projection")
-        press("hades2.saveEditor.basket.linkedEffects", ["7"])
         for effect in model.pendingActions.first!.effects {
             guard let name = effect.name, !name.isEmpty else { fatalError("linked effect has no presentation name") }
             require(nativeAccessibilityControls(root).contains { $0.text == name },
-                    "linked physical effect was not available on demand")
+                    "linked physical effect was not directly visible")
         }
 
         // A later physical target and active-profile change do not rebase the

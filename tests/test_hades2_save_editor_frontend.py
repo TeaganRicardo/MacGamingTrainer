@@ -663,11 +663,14 @@ struct Main {
         }
         let grouped = Hades2SaveEditorEntityGrouping.entities(from: [
             sample("interaction:Nemesis", "relationships", "Nemesis", "Interactions · Nemesis",
+                   group: "Character interactions",
                    entityID: "person:Nemesis", entityName: "Nemesis"),
             sample("gift:Nemesis:Nectar", "relationships", "Nemesis / Nectar", "Nemesis · Nectar",
+                   group: "Gift quantities",
                    entityID: "person:Nemesis", entityName: "Nemesis"),
             sample("investigate:NemesisPostTrueEnding01", "investigate",
                    "NemesisPostTrueEnding01", "Nemesis · NemesisPostTrueEnding01",
+                   group: "Dialogue",
                    entityID: "person:Nemesis", entityName: "Nemesis"),
             sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast",
                    "Sorceress · Unlocked", entityID: "arcana:ChanneledCast", entityName: "Sorceress"),
@@ -687,6 +690,13 @@ struct Main {
             || grouped[2].title != "Arcana · ManaOverTime" || grouped[2].entries.count != 2
             || grouped[3].title != "Ashes" || grouped[3].entries.count != 1 {
             fail("Save Editor entity grouping lost physical edit descriptors")
+        }
+        let sections = Hades2SaveEditorEntityGrouping.sections(from: grouped)
+        if sections.map(\.id) != ["characters", "resources", "arcana"]
+            || sections[0].entities.map(\.id) != ["person:Nemesis"]
+            || Hades2SaveEditorEntityGrouping.fields(in: grouped[0]).map(\.title)
+                != ["Character interactions", "Gift quantities", "Dialogue"] {
+            fail("Save Editor headings mixed categories or physical field owners")
         }
         let englishWeapons = Hades2SaveEditorEntityGrouping.entities(from: [
             sample("weapon:WeaponDagger", "weapons", "WeaponDagger", "Sister Blades",

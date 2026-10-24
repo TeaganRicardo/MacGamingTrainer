@@ -152,6 +152,9 @@ def main():
         (scripts / "NPCData_Hecate.lua").write_text('''UnitSetData = {
  NPC_Hecate_01 = {
   InteractTextLineSets = {
+   UnverifiedScene = {
+    { Cue = "/VO/Unknown_0001", Text = "Integer speech fixture" },
+   },
    HecateJourney01 = {
   { Cue = "/VO/Unknown_0001", Text = "Integer speech fixture" },
   { Cue = "/VO/Legacy_0001", Text = "Boolean speech fixture" },
