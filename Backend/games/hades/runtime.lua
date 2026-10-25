@@ -245,7 +245,7 @@ local function adoptScheduledMovement()
     seen[thread] = true
     for original, name in pairs(nativeMovementFunctions) do
       local level = movementFrame(thread, original)
-      if level then
+      if level and not movementFrame(thread, runtime.hooks[name]) then
         -- Bedroom's native body always addresses CurrentRun.Hero; the other
         -- owners retain their run or object id in the suspended Lua frame.
         local matches = name == "BedroomIntermissionApproach"

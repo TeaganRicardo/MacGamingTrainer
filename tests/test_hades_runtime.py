@@ -1842,6 +1842,30 @@ function DisplayLocationText() end
 function CheckLocationUnlock() end
 '''
 scheduler_cases = {
+    'menu_bootstrap_wrapped_surface': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+local pendingRun = CurrentRun
+CurrentRun = nil
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+CurrentRun = pendingRun
+SetupHeroObject(CurrentRun)
+near(unit.properties.Speed, 675)
+thread(RoomEntranceSurface, CurrentRun, { HeroEndPoint = 456 })
+near(unit.properties.Speed, 115)
+assert(runtime.movementOwners[unit].depth == 1)
+runtime.status()
+assert(runtime.movementOwners[unit].depth == 1, "adoption duplicated the normal wrapper's movement owner")
+notify("WithinDistance456")
+local co = assert(_threads[1].thread)
+resume(co, _workingThreads)
+near(unit.properties.Speed, 675)
+assert(runtime.movementOwners[unit] == nil)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+''',
     'active_move': r'''
 local unit = CurrentRun.Hero
 CurrentRun.BlockTimerFlags = {}
