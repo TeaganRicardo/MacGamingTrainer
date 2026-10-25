@@ -1,6 +1,6 @@
 # MacGamingTrainer
 
-MacGamingTrainer is a native macOS trainer host with game-specific modules. The unified App includes **Hades II** and an initial **Hades** module. Switching the displayed game keeps other game contexts connected, with their pending operations and tool windows intact. Only the displayed trainer responds to global shortcuts.
+MacGamingTrainer is a native macOS trainer host with game-specific modules. The unified App includes **Hades II** and an initial **Hades** module, selected from the left sidebar. Switching the displayed game keeps other game contexts connected, with their pending operations and tool windows intact. Only the displayed trainer responds to global shortcuts.
 
 ## Build
 

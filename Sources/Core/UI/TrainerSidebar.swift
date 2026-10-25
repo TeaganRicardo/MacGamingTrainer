@@ -1,7 +1,19 @@
 import SwiftUI
 
+private struct TrainerGameLibraryKey: EnvironmentKey {
+    static var defaultValue: AnyView { AnyView(EmptyView()) }
+}
+
+extension EnvironmentValues {
+    var trainerGameLibrary: AnyView {
+        get { self[TrainerGameLibraryKey.self] }
+        set { self[TrainerGameLibraryKey.self] = newValue }
+    }
+}
+
 struct TrainerSidebar<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerGameLibrary) private var gameLibrary
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
@@ -59,6 +71,7 @@ struct TrainerSidebar<Actions: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            gameLibrary
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
