@@ -950,6 +950,115 @@ function DropHeroToRoomPosition( heroId, lightId, heroDestination, disableCollis
 	RemoveTimerBlock( CurrentRun, "MoveHeroToRoomPosition" )
 end
 
+function RoomEntranceE_Intro( currentRun, currentRoom )
+
+	HideCombatUI("Surface")
+	ZeroMouseTether("RoomEntrance")
+	local roomIntroSequenceDuration = currentRoom.IntroSequenceDuration or RoomData.BaseRoom.IntroSequenceDuration or 0.0
+
+	FadeOut({ Color = Color.Black, Duration = 0 })
+	AdjustFullscreenBloom({ Name = "LightningStrike", Duration = 0 })
+	AdjustFullscreenBloom({ Name = "WrathPhase2", Duration = 0.1, Delay = 0 })
+
+	AdjustRadialBlurStrength({ Fraction = 1.5, Duration = 0 })
+	AdjustRadialBlurDistance({ Fraction = 0.125, Duration = 0 })
+	AdjustRadialBlurStrength({ Fraction = 0, Duration = 0.03, Delay=0 })
+	AdjustRadialBlurDistance({ Fraction = 0, Duration = 0.03, Delay=0 })
+
+	AdjustFullscreenBloom({ Name = "Off", Duration = 5.0, Delay = 0.1 })
+
+	SetVolume({ Id = OutdoorAmbientSoundId, Value = 0.0, Duration = 5 })
+	OutdoorAmbientSoundId = nil
+
+	wait(0.03)
+
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	local initialSpeed = GetUnitDataValue({ Id = currentRun.Hero.ObjectId, Property = "Speed", Destination})
+	SetUnitProperty({ DestinationId = currentRun.Hero.ObjectId, Property = "CollideWithObstacles", Value = false })
+
+	if TextLinesRecord["PersephoneFirstMeeting"] == nil then
+		SetUnitProperty({ Property = "StartGraphic", Value = nil, DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusWalk2", DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusWalkStop2", DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "Speed", Value = 115, DestinationId = currentRun.Hero.ObjectId })
+	else
+		roomIntroSequenceDuration = 0.95
+	end
+
+	AdjustZoom({ Fraction = CurrentRun.CurrentRoom.IntroZoomFraction or 0.7, Duration = 0.0 })
+	FadeIn({ Duration = 4.9 })
+	PanCamera({ Id = currentRoom.CameraEndPoint, Duration = roomIntroSequenceDuration, EaseIn = 0.0, EaseOut = 0.0 })
+	FullScreenFadeInAnimation()
+
+	thread( PlayVoiceLines, currentRoom.EnterVoiceLines, true )
+	thread( PlayVoiceLines, GlobalVoiceLines[currentRoom.EnterGlobalVoiceLines], true )
+
+	if currentRoom.HeroEndPoint ~= nil then
+		Move({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Mode = "Precise" })
+
+		local notifyName = "WithinDistance"..currentRoom.HeroEndPoint
+		NotifyWithinDistance({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Distance = 30, Notify = notifyName })
+		waitUntil( notifyName )
+	end
+	Stop({ Id = currentRun.Hero.ObjectId })
+
+	if TextLinesRecord["PersephoneFirstMeeting"] == nil then
+		currentRoom.DisableWeapons = true -- This makes the room disable the dash as well
+	else
+		thread( ResetPlayerMoveData, currentRun, initialSpeed, 2.0 )
+	end
+
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = true, DestinationId = currentRun.Hero.ObjectId })
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+
+	LockCamera({ Id = currentRun.Hero.ObjectId, Duration = 2.0 })
+	UnzeroMouseTether("RoomEntrance")
+
+	thread( DisplaySurfaceLocationText, currentRun, currentRoom )
+
+end
+
+function RoomEntranceSurface( currentRun, currentRoom )
+	HideCombatUI("Surface")
+	AdjustZoom({ Fraction = CurrentRun.CurrentRoom.IntroZoomFraction or 0.7, Duration = 0.0 })
+	FadeIn({ Duration = 5.5 })
+	PanCamera({ Id = currentRoom.CameraEndPoint, Duration = roomIntroSequenceDuration, EaseIn = 0.0, EaseOut = 0.0 })
+	FullScreenFadeInAnimation( "RoomTransitionOutBlack" )
+
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	local initialSpeed = GetUnitDataValue({ Id = currentRun.Hero.ObjectId, Property = "Speed", Destination})
+	SetUnitProperty({ DestinationId = currentRun.Hero.ObjectId, Property = "CollideWithObstacles", Value = false })
+
+	if TextLinesRecord["PersephoneFirstMeeting"] == nil then
+		SetUnitProperty({ Property = "StartGraphic", Value = nil, DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusWalk2", DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusWalkStop2", DestinationId = currentRun.Hero.ObjectId })
+		SetUnitProperty({ Property = "Speed", Value = 115, DestinationId = currentRun.Hero.ObjectId })
+	end
+
+	thread( PlayVoiceLines, currentRoom.EnterVoiceLines, true )
+	thread( PlayVoiceLines, GlobalVoiceLines[currentRoom.EnterGlobalVoiceLines], true )
+
+	if currentRoom.HeroEndPoint ~= nil then
+		Move({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Mode = "Precise" })
+
+		local notifyName = "WithinDistance"..currentRoom.HeroEndPoint
+		NotifyWithinDistance({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Distance = 30, Notify = notifyName })
+		waitUntil( notifyName )
+	end
+	Stop({ Id = currentRun.Hero.ObjectId })
+
+	if TextLinesRecord["PersephoneFirstMeeting"] == nil then
+		thread( ResetPlayerMoveData, currentRun, initialSpeed, 2.0 )
+	end
+
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = true, DestinationId = currentRun.Hero.ObjectId })
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+
+	LockCamera({ Id = currentRun.Hero.ObjectId, Duration = 2.0 })
+	UnzeroMouseTether("RoomEntrance")
+end
+
 function MoveHeroToRoomPosition( args )
 	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
 	local heroId = CurrentRun.Hero.ObjectId
@@ -1084,7 +1193,15 @@ function AddTraitData(unit, trait, args)
   table.insert(unit.Traits, copy(trait))
   ApplyUnitPropertyChanges(unit, trait.PropertyChanges, true)
 end
-function thread(fn, ...) if fn == UpdateHealthUI then fn(...) end end
+local pendingReset
+function thread(fn, ...)
+  if fn == UpdateHealthUI then fn(...)
+  elseif fn == ResetPlayerMoveData then
+    local args = table.pack(...)
+    pendingReset = coroutine.create(function() fn(table.unpack(args, 1, args.n)) end)
+    assert(coroutine.resume(pendingReset))
+  end
+end
 function SetThingProperty() end
 function AddInputBlock() end
 function RemoveInputBlock() end
@@ -1100,7 +1217,6 @@ function Halt() end
 function AngleTowardTarget() end
 function NotifyWithinDistance() end
 function waitUntil(name) coroutine.yield(name) end
-local pendingReset
 function RoomEntranceHades(run)
   -- RoomPresentation.lua:560-582: native snapshot/scripted speed/restore lifetime.
   local initialSpeed = GetUnitDataValue({ Id = run.Hero.ObjectId, Property = "Speed" })
@@ -1111,16 +1227,23 @@ function RoomEntranceHades(run)
 end
 StartDeathLoopPresentation = RoomEntranceHades
 function BedroomIntermissionApproach() return RoomEntranceHades(CurrentRun) end
-local function surfaceEntry(run, room)
-  -- RoomPresentation.lua:695-727,767-790: reset continues in its own coroutine.
-  local initialSpeed = GetUnitDataValue({ Id = run.Hero.ObjectId, Property = "Speed" })
-  SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = 115 })
-  if room.WithReset then
-    pendingReset = coroutine.create(function() ResetPlayerMoveData(run, initialSpeed, 2) end)
-    assert(coroutine.resume(pendingReset))
-  end
-end
-RoomEntranceE_Intro, RoomEntranceSurface = surfaceEntry, surfaceEntry
+TextLinesRecord, GlobalVoiceLines = {}, {}
+Color = { White = {}, Black = {} }
+RoomData = { BaseRoom = { IntroSequenceDuration = 0 } }
+function HideCombatUI() end
+function ZeroMouseTether() end
+function UnzeroMouseTether() end
+function FadeOut() end
+function FadeIn() end
+function PanCamera() end
+function AdjustFullscreenBloom() end
+function AdjustRadialBlurStrength() end
+function AdjustRadialBlurDistance() end
+function SetVolume() end
+function AdjustZoom() end
+function LockCamera() end
+function FullScreenFadeInAnimation() end
+function PlayVoiceLines() end
 function ExitToHadesPresentation(run)
   SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = 130 })
 end
@@ -1268,12 +1391,46 @@ finish(entrance)
 near(unit.properties.Speed, 540)
 
 runtime.configure({ moveSpeedMultiplier = 1.25 })
-RoomEntranceSurface(CurrentRun, { WithReset = true })
+RoomEntranceSurface(CurrentRun, {})
 near(unit.properties.Speed, 115)
 runtime.disable_all()
 near(unit.properties.Speed, 115)
 finish(pendingReset)
 near(unit.properties.Speed, 540)
+
+-- The post-meeting Surface branch neither changes speed nor starts a reset.
+TextLinesRecord.PersephoneFirstMeeting = true
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+RoomEntranceSurface(CurrentRun, {})
+near(unit.properties.Speed, 675)
+assert(runtime.movementOwners[unit] == nil, "Surface retained an owner without a native reset")
+runtime.status()
+runtime.configure({ moveSpeedMultiplier = 2 })
+near(unit.properties.Speed, 1080)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+local surfaceWalk = coroutine.create(function() RoomEntranceSurface(CurrentRun, { HeroEndPoint = 460 }) end)
+assert(coroutine.resume(surfaceWalk))
+near(unit.properties.Speed, 540)
+finish(surfaceWalk)
+near(unit.properties.Speed, 675)
+assert(runtime.movementOwners[unit] == nil)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+
+-- E_Intro has the opposite reset condition and retains its native deferred walk.
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+finish(coroutine.create(function() RoomEntranceE_Intro(CurrentRun, {}) end))
+assert(runtime.movementOwners[unit].held and runtime.movementOwners[unit].resetPending)
+near(unit.properties.Speed, 540)
+runtime.configure({ moveSpeedMultiplier = 2 })
+near(unit.properties.Speed, 540)
+finish(pendingReset)
+near(unit.properties.Speed, 1080)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+TextLinesRecord.PersephoneFirstMeeting = nil
 
 runtime.configure({ moveSpeedMultiplier = 1.25 })
 SetupPlayerUnitInFlashback()
@@ -1286,7 +1443,7 @@ runtime.disable_all()
 near(unit.properties.Speed, 540)
 
 runtime.configure({ moveSpeedMultiplier = 1.25 })
-RoomEntranceE_Intro(CurrentRun, {})
+finish(coroutine.create(function() RoomEntranceE_Intro(CurrentRun, {}) end))
 near(unit.properties.Speed, 115)
 runtime.disable_all()
 near(unit.properties.Speed, 115)
@@ -1321,3 +1478,548 @@ proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + 
 assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
 assert proc.stdout.strip() == 'hades_runtime_native_max_health_and_movement_ok', proc.stdout
 print(proc.stdout.strip())
+
+
+native_scheduler = r'''
+
+-- Main.lua's real coroutine registrations and resume completion surround the
+-- unmodified movement owners; these engine/stack helpers have no speed policy.
+_worldTime, _screenTime = 0, 0
+_threads, _workingThreads, _eventListeners = {}, {}, {}
+_events, _eventTimeoutRecord = {}, {}
+_threadStack, _activeThread = nil, nil
+function NewStack()
+  local values = {}
+  return {
+    push = function(self, value) values[#values + 1] = value end,
+    pop = function(self) return table.remove(values) end,
+    peek = function(self) return values[#values] end,
+  }
+end
+function DebugMessage() end
+function UnblockCombatUI() end
+function AdjustColorGrading() end
+function DisplaySurfaceLocationText() end
+-- Shipped Main.lua SHA256 6aab9af9cbaf499aef3adb7e4ac622efc530db652dcf8e80d44e85cc74a7453e
+
+function wait( duration, tag )
+	if duration == nil or duration <= 0 then
+		return
+	end
+	--ProfileZoneEnd({})
+	coroutine.yield({ wait = duration, tag = tag, threadInfo = lastGoodThreadInfo })
+end
+
+function waitUntil( event, tag )
+	assert( event )
+	-- no need to wait, event already happened
+	if _events[event] ~= nil then
+		_events[event] = nil
+		return
+	end
+	--ProfileZoneEnd({})
+	coroutine.yield({ wait = -1, event = event, tag = tag, threadInfo = lastGoodThreadInfo })
+end
+
+function resume( thread, threadTable )
+
+	if _threadStack == nil then
+		_threadStack = NewStack()
+	end
+	_threadStack:push( thread )
+	_activeThread = thread
+
+	--ProfileZoneStart({ Name = tostring(thread) })
+	local status, info = coroutine.resume( thread )
+	--ProfileZoneEnd({})
+	if not status then
+		DebugMessage({ Text = info })
+		assert( status, info )
+	end
+	local wait = info and info.wait
+	local screenTime = info and info.screenTime
+	local event = info and info.event
+
+	_threadStack:pop()
+	_activeThread = _threadStack:peek()
+
+	if status and wait ~= nil then
+		if wait > 0 then
+
+			local resumeTime
+			if screenTime then
+				resumeTime = wait + _screenTime
+			else
+				resumeTime = wait + _worldTime
+			end
+
+			table.insert( threadTable, { resumeTime = resumeTime, screenTime = screenTime, thread = thread, tag = info.tag, threadInfo = info.threadInfo } )
+			return "wait"
+		elseif wait < 0 then
+			assert( event )
+			local eventListener = _eventListeners[event]
+			if eventListener == nil then
+				eventListener = {}
+			end
+			table.insert( eventListener, { Event = event, Thread = thread, Tag = info.tag, ThreadInfo = info.threadInfo } )
+			_eventListeners[event] = eventListener
+			return "waitUntil"
+		end
+	end
+
+	return "done"
+
+end
+
+function notify( event, wasTimeout )
+
+	_eventTimeoutRecord[event] = wasTimeout
+	local eventListeners = _eventListeners[event]
+	if eventListeners ~= nil then
+		_eventListeners[event] = nil
+		for index, listener in pairs( eventListeners ) do
+			resume( listener.Thread, _workingThreads )
+		end
+	else
+		_eventListeners[event] = nil
+		-- no one is waiting, store it in case someone asks
+		_events[event] = true
+	end
+
+end
+
+function thread( func, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, ... )
+	local args = { arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, ... }
+	local co = coroutine.create( function () func( unpackTableArgs(args) ) end )
+
+	if verboseLogging then
+		debug.sethook( co, newFunctionCall, "cr" )
+	end
+	local status = resume( co, _threads )
+
+end
+
+-- Based off reference impl. from https://www.lua.org/pil/5.1.html
+-- Handles tables with nil elements
+
+function unpackTableArgs(tbl)
+	local startIndex = 1
+	local accumulator = 0
+	local length = 0
+	for _ in pairs(tbl) do
+		length = length + 1
+	end
+	if length == 0 then
+		return nil
+	end
+	return unpackTableArgsInternal(tbl, startIndex, accumulator, length)
+end
+
+function unpackTableArgsInternal(tbl, index, accumulator, tbl_count)
+	if accumulator == tbl_count then
+		return nil
+	end
+	if tbl[index] ~= nil then
+		accumulator = accumulator + 1
+	end
+	return tbl[index], unpackTableArgsInternal(tbl, index + 1, accumulator, tbl_count)
+end
+
+-- Shipped RoomPresentation.lua SHA256 2d164457578215cff1488d044d9c2826ec79fe2dd652445e58933beae4f69300
+
+function RoomEntranceHades( currentRun, currentRoom )
+	local hadesId = 510857
+	if currentRoom.Encounter.Name == "BossHadesPeaceful" then
+		hadesId = 552710
+	end
+
+	HideCombatUI("BossEntrance")
+	ZeroMouseTether("BossEntrance")
+	local roomIntroSequenceDuration = currentRoom.IntroSequenceDuration or RoomData.BaseRoom.IntroSequenceDuration or 0.0
+
+	FadeOut({ Color = Color.White, Duration = 0 })
+	AdjustFullscreenBloom({ Name = "LightningStrike", Duration = 0 })
+	AdjustFullscreenBloom({ Name = "WrathPhase2", Duration = 0.1, Delay = 0 })
+
+	AdjustRadialBlurStrength({ Fraction = 1.5, Duration = 0 })
+	AdjustRadialBlurDistance({ Fraction = 0.125, Duration = 0 })
+	AdjustRadialBlurStrength({ Fraction = 0, Duration = 0.03, Delay=0 })
+	AdjustRadialBlurDistance({ Fraction = 0, Duration = 0.03, Delay=0 })
+
+	AdjustFullscreenBloom({ Name = "Off", Duration = 5.0, Delay = 0.1 })
+
+	SetVolume({ Id = OutdoorAmbientSoundId, Value = 0.0, Duration = 5 })
+	OutdoorAmbientSoundId = nil
+
+	wait(0.03)
+
+	AdjustZoom({ Fraction = CurrentRun.CurrentRoom.IntroZoomFraction or 0.7, Duration = 0.0 })
+	FadeIn({ Duration = 5.5 })
+	LockCamera({ Id = hadesId, Duration = roomIntroSequenceDuration })
+	FullScreenFadeInAnimation()
+	AdjustColorGrading({ Name = "Rain", Duration = 0 })
+	AdjustColorGrading({ Name = "Off", Duration = 4 })
+
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	local initialSpeed = GetUnitDataValue({ Id = currentRun.Hero.ObjectId, Property = "Speed" })
+	SetUnitProperty({ DestinationId = currentRun.Hero.ObjectId, Property = "CollideWithObstacles", Value = false })
+
+	SetUnitProperty({ Property = "StartGraphic", Value = nil, DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusWalk", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = 130, DestinationId = currentRun.Hero.ObjectId })
+
+	thread( PlayVoiceLines, currentRoom.EnterVoiceLines, true )
+	thread( PlayVoiceLines, GlobalVoiceLines[currentRoom.EnterGlobalVoiceLines], true )
+
+	if currentRoom.HeroEndPoint ~= nil then
+		Move({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Mode = "Precise" })
+
+		local notifyName = "WithinDistance"..currentRoom.HeroEndPoint
+		NotifyWithinDistance({ Id = currentRun.Hero.ObjectId, DestinationId = currentRoom.HeroEndPoint, Distance = 30, Notify = notifyName })
+		waitUntil( notifyName )
+	end
+	Stop({ Id = currentRun.Hero.ObjectId })
+
+	SetUnitProperty({ Property = "StartGraphic", Value = "ZagreusStart", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusRun", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusStop", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = initialSpeed, DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = true, DestinationId = currentRun.Hero.ObjectId })
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+
+	wait( 0.3 )
+	--LockCamera({ Id = currentRun.Hero.ObjectId, Duration = 2.0 })
+	UnzeroMouseTether("BossEntrance")
+	UnblockCombatUI("BossEntrance")
+end
+
+function StartDeathLoopPresentation( currentRun )
+
+	AddInputBlock({ Name = "DeathWalkBlock" })
+	ZeroMouseTether("DeathPresentation")
+	TeleportCursor({ OffsetX = ScreenCenterX, OffsetY = ScreenCenterY })
+
+	-- unit
+	local initialSpeed = GetUnitDataValue({ Id = currentRun.Hero.ObjectId, Property = "Speed", Destination})
+	SetUnitProperty({ Property = "Speed", Value = 0, DestinationId = currentRun.Hero.ObjectId })
+	SetGoalAngle({ Id = currentRun.Hero.ObjectId, Angle = 45 })
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = false, DestinationId = currentRun.Hero.ObjectId })
+
+	PanCamera({ Id = 391310, Duration = 0.01 })
+	AdjustZoom({ Fraction = 1.0 })
+	local cameraClamps = CurrentDeathAreaRoom.CameraClamps or GetDefaultClampIds()
+	DebugAssert({ Condition = #cameraClamps ~= 1, Text = "Exactly one camera clamp on a map is non-sensical" })
+
+	SetSoundCueValue({ Names = { "Drums" }, Id = MusicId, Value = 0 })
+
+	wait(0.1)
+	FadeIn({ Duration = 0.5 })
+	SetAnimation({ DestinationId = currentRun.Hero.ObjectId, Name = "Blank" })
+
+	-- audio
+	local prevRoom = GetPreviousRoom( currentRun )
+	if prevRoom == nil or not prevRoom.SkipEnteredDeathAreaVoiceLines then
+		thread( PlayVoiceLines, GlobalVoiceLines.EnteredDeathAreaVoiceLines )
+	end
+	SetAudioEffectState({ Name = "Reverb", Value = 1.0 })
+	StartRoomAmbience( currentRun, CurrentDeathAreaRoom )
+	StartCustomDeathAreaAmbience()
+
+	local heroDestination = SpawnObstacle({ Name = "InvisibleTarget", DestinationId = currentRun.Hero.ObjectId, OffsetX = 400, OffsetY = -260 })
+	PanCamera({ Id = 391309, Duration = 6.0, EaseOut = 1.0 })
+
+	if GetCompletedRuns() <= 1 then
+		wait(1.0)
+	else
+		wait(0.7)
+	end
+
+	AdjustZoom({ Fraction = CurrentDeathAreaRoom.ZoomFraction or 1.0, LerpTime = CurrentDeathAreaRoom.ZoomLerpTime })
+
+	SetAnimation({ DestinationId = currentRun.Hero.ObjectId, Name = "ZagreusDeadWalk" })
+	SetUnitProperty({ Property = "Speed", Value = 95, DestinationId = currentRun.Hero.ObjectId })
+
+	Move({ Id = currentRun.Hero.ObjectId, DestinationId = heroDestination, Mode = "Precise" })
+	ToggleControl({ Names = { "Rush" }, Enabled = true })
+
+	local notifyName = "DashToSkip"
+
+	NotifyOnControlPressed({ Names = { "Rush" }, Notify = notifyName, Timeout = 5.22 })
+	waitUntil( notifyName )
+	if not _eventTimeoutRecord[notifyName] then
+		Stop({ Id = currentRun.Hero.ObjectId })
+		FireWeaponFromUnit({ Weapon = "RushWeapon", Id = currentRun.Hero.ObjectId })
+		CreateAnimation({ Name = "BloodPoolSkipSplash", DestinationId = CurrentRun.Hero.ObjectId })
+		CreateAnimation({ Name = "DeathAreaBloodSplashStairs", DestinationId = 423935 })
+		-- Finish pan quickly
+		PanCamera({ Id = 391309, Duration = 0.74, Retarget = true, FromCurrentLocation = true })
+		wait(0.22)
+	else
+		DebugPrint({ Text = "Zag Arrived" })
+		Stop({ Id = currentRun.Hero.ObjectId })
+		wait(0.74)
+	end
+	DebugPrint({ Text = "Input Restored" })
+	RemoveInputBlock({ Name = "DeathWalkBlock" })
+
+	SetUnitProperty({ Property = "Speed", Value = initialSpeed, DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = true, DestinationId = currentRun.Hero.ObjectId })
+	UnzeroMouseTether( "DeathPresentation" )
+	SetCameraClamp({ Ids = cameraClamps, SoftClamp = 0.8 })
+	if CurrentDeathAreaRoom.CameraWalls then
+		CreateCameraWalls({ })
+	end
+
+	thread( DisplayLocationText, nil, { Text = "Location_Home", Delay = 0.65, Color = Color.White, FadeColor = Color.Red } )
+	thread( CheckLocationUnlock, nil, { Biome = "DeathArea", CheckPlayerUnitEntry = true } )
+
+	-- Early Access
+	--[[
+	if GetConfigOptionValue({ Name = "KioskMode" }) and GetCompletedRuns() + 1 >= GetConfigOptionValue({ Name = "KioskModeNumLives" }) then
+		-- Demo end
+		PlaySound({ Name = "/Music/VictoryStinger" })
+		OpenMenu({ Name = "AnnouncementScreen", MessageId = "KioskModeEnd" })
+	elseif currentRun.Cleared then
+		-- if you cleared the run successfully
+		PlaySound({ Name = "/Music/VictoryStinger" })
+		if GameState.Flags.HardMode then
+			OpenMenu({ Name = "AnnouncementScreen", MessageId = "RunCleared_Message02" })
+		else
+			OpenMenu({ Name = "AnnouncementScreen", MessageId = "RunCleared_Message01" })
+		end
+	end
+	]]--
+
+end
+
+-- Shipped EventPresentation.lua SHA256 a9f80aca0a98d1e143fe11026aa7e13632a8eaf5037eed51f524eedab391760b
+
+function BedroomIntermissionApproach( source, args )
+
+	wait( 0.35 )
+
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	local initialSpeed = GetUnitDataValue({ Id = CurrentRun.Hero.ObjectId, Property = "Speed", Destination})
+	SetUnitProperty({ DestinationId = CurrentRun.Hero.ObjectId, Property = "CollideWithObstacles", Value = false })
+	SetUnitProperty({ Property = "StartGraphic", Value = nil, DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusWalk", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = 130, DestinationId = CurrentRun.Hero.ObjectId })
+
+	Move({ Id = CurrentRun.Hero.ObjectId, DestinationId = 422258, Mode = "Precise" })
+
+	local notifyName = "ApproachStopped"
+	NotifyOnStopped({ Id = CurrentRun.Hero.ObjectId, Notify = notifyName })
+	waitUntil( notifyName )
+
+	SetUnitProperty({ Property = "StartGraphic", Value = "ZagreusStart", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusRun", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = initialSpeed, DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "CollideWithObstacles", Value = true, DestinationId = CurrentRun.Hero.ObjectId })
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+
+	wait( 0.1 )
+
+	AngleTowardTarget({ Id = CurrentRun.Hero.ObjectId, DestinationId = 422138 })
+end
+
+CurrentDeathAreaRoom = { CameraClamps = { 1, 2 } }
+function NotifyOnStopped() end
+function TeleportCursor() end
+function SetGoalAngle() end
+function DebugAssert() end
+function SetSoundCueValue() end
+function GetPreviousRoom() end
+function SetAudioEffectState() end
+function StartRoomAmbience() end
+function StartCustomDeathAreaAmbience() end
+function SpawnObstacle() return 400 end
+function GetCompletedRuns() return 2 end
+function ToggleControl() end
+function NotifyOnControlPressed() end
+function DebugPrint() end
+function SetCameraClamp() end
+function DisplayLocationText() end
+function CheckLocationUnlock() end
+'''
+scheduler_cases = {
+    'active_move': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 594
+thread(function()
+  MoveHeroToRoomPosition({ DestinationId = 456, UseDefaultSpeed = true })
+  wait(3)
+end)
+local co = assert(_eventListeners.WithinDistance456[1].Thread)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 540)
+notify("WithinDistance456")
+assert(coroutine.status(co) == "suspended", "the outer native coroutine should still be waiting")
+near(unit.properties.Speed, 742.5)
+assert(runtime.movementOwners[unit] == nil, "a completed Move retained the outer coroutine")
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_hades': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+CurrentRun.CurrentRoom = { Encounter = { Name = "BossHades" }, HeroEndPoint = 456 }
+bind(unit)
+unit.properties.Speed = 594
+thread(RoomEntranceHades, CurrentRun, CurrentRun.CurrentRoom)
+local co = assert(_threads[1].thread)
+_threads = {}
+resume(co, _threads)
+assert(_eventListeners.WithinDistance456[1].Thread == co)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 130)
+notify("WithinDistance456")
+near(unit.properties.Speed, 594)
+resume(co, _threads)
+near(unit.properties.Speed, 742.5)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_surface_reset_handoff': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 594
+thread(RoomEntranceSurface, CurrentRun, { HeroEndPoint = 456 })
+assert(_eventListeners.WithinDistance456[1].Thread)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 115)
+notify("WithinDistance456")
+local co = assert(_threads[1].thread)
+assert(runtime.movementOwners[unit].resetPending, "Surface did not hand ownership to its native reset")
+near(unit.properties.Speed, 115)
+resume(co, _workingThreads)
+near(unit.properties.Speed, 742.5)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_surface_postmeeting': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+TextLinesRecord.PersephoneFirstMeeting = true
+bind(unit)
+unit.properties.Speed = 594
+thread(RoomEntranceSurface, CurrentRun, { HeroEndPoint = 456 })
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 594)
+notify("WithinDistance456")
+near(unit.properties.Speed, 742.5)
+assert(runtime.movementOwners[unit] == nil)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_intro_reset_handoff': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+TextLinesRecord.PersephoneFirstMeeting = true
+bind(unit)
+unit.properties.Speed = 594
+thread(RoomEntranceE_Intro, CurrentRun, { HeroEndPoint = 456 })
+local co = assert(_threads[1].thread)
+_threads = {}
+resume(co, _threads)
+assert(_eventListeners.WithinDistance456[1].Thread == co)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 594)
+notify("WithinDistance456")
+co = assert(_threads[1].thread)
+assert(runtime.movementOwners[unit].resetPending)
+resume(co, _workingThreads)
+near(unit.properties.Speed, 742.5)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_intro_persistent_walk': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 594
+thread(RoomEntranceE_Intro, CurrentRun, { HeroEndPoint = 456 })
+local co = assert(_threads[1].thread)
+_threads = {}
+resume(co, _threads)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 115)
+notify("WithinDistance456")
+assert(runtime.movementOwners[unit].held)
+runtime.disable_all()
+near(unit.properties.Speed, 115)
+SetupHeroObject(CurrentRun)
+near(unit.properties.Speed, 540)
+''',
+    'active_bedroom': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 594
+thread(BedroomIntermissionApproach)
+local co = assert(_threads[1].thread)
+_threads = {}
+resume(co, _threads)
+assert(_eventListeners.ApproachStopped[1].Thread == co)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 130)
+notify("ApproachStopped")
+resume(co, _threads)
+near(unit.properties.Speed, 742.5)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'active_death_loop': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 594
+thread(StartDeathLoopPresentation, CurrentRun)
+local co = assert(_threads[1].thread)
+_threads = {}
+resume(co, _threads)
+resume(co, _threads)
+assert(_eventListeners.DashToSkip[1].Thread == co)
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 95)
+notify("DashToSkip", true)
+resume(co, _threads)
+near(unit.properties.Speed, 742.5)
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+    'deferred_reset': r'''
+local unit = CurrentRun.Hero
+CurrentRun.BlockTimerFlags = {}
+bind(unit)
+unit.properties.Speed = 115
+thread(ResetPlayerMoveData, CurrentRun, 594, 2)
+local co = assert(_threads[1].thread)
+-- The real update loop can expose a coroutine in both queue snapshots.
+_workingThreads[1] = _threads[1]
+local runtime = assert(load(SOURCE))()
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 115)
+resume(co, _workingThreads)
+near(unit.properties.Speed, 742.5)
+assert(runtime.movementOwners[unit] == nil, "the same native wait was adopted twice")
+runtime.disable_all()
+near(unit.properties.Speed, 594)
+''',
+}
+for name, case in scheduler_cases.items():
+    script = (harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0]
+              + native_setup + native_owners + native_scheduler + case)
+    proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + script], text=True, capture_output=True)
+    assert proc.returncode == 0, name + ': ' + proc.stdout + '\n' + proc.stderr
+print('hades_runtime_native_scheduler_adoption_ok')

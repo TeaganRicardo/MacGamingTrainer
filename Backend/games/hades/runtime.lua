@@ -223,6 +223,58 @@ local function finishMovement(owner)
     end
   end
 end
+local nativeMovementFunctions = {}
+local adoptedMovement = setmetatable({}, { __mode = "k" })
+local movementAdoptionPending = false
+local function movementFrame(thread, original)
+  local level = 1
+  while true do
+    local info = debug.getinfo(thread, level, "f")
+    if not info then return end
+    if info.func == original then return level end
+    level = level + 1
+  end
+end
+local function adoptScheduledMovement()
+  local unit = hero()
+  if not movementAdoptionPending or not unit then return end
+  movementAdoptionPending = false
+  local seen = {}
+  local function adopt(thread)
+    if seen[thread] then return end
+    seen[thread] = true
+    for original, name in pairs(nativeMovementFunctions) do
+      local level = movementFrame(thread, original)
+      if level then
+        -- Bedroom's native body always addresses CurrentRun.Hero; the other
+        -- owners retain their run or object id in the suspended Lua frame.
+        local matches = name == "BedroomIntermissionApproach"
+        local index = 1
+        while not matches do
+          local key, value = debug.getlocal(thread, level, index)
+          if not key then break end
+          matches = ((name == "MoveHeroToRoomPosition" or name == "DropHeroToRoomPosition")
+              and key == "heroId" and value == unit.ObjectId)
+            or (key == "currentRun" and value == CurrentRun)
+          index = index + 1
+        end
+        if matches then
+          local owner = beginMovement(unit)
+          if name == "RoomEntranceE_Intro" or name == "RoomEntranceSurface" then owner.held = true end
+          adoptedMovement[thread] = { original = original, name = name, owner = owner }
+          return
+        end
+      end
+    end
+  end
+  -- Main.lua registers timed waits with .thread and event waits with .Thread.
+  for _, queue in ipairs({ _threads or {}, _workingThreads or {} }) do
+    for _, record in pairs(queue) do adopt(record.thread) end
+  end
+  for _, listeners in pairs(_eventListeners or {}) do
+    for _, record in pairs(listeners) do adopt(record.Thread) end
+  end
+end
 local function hook(name, wrap)
   local current = rawget(_G, name)
   if type(current) == "function" and not runtime.hooks[name] then
@@ -282,9 +334,27 @@ local function installHooks()
       return table.unpack(result, 1, result.n)
     end
   end)
+  hook("resume", function(original)
+    return function(thread, ...)
+      local result = table.pack(original(thread, ...))
+      local adopted = adoptedMovement[thread]
+      if adopted and not movementFrame(thread, adopted.original) then
+        adoptedMovement[thread] = nil
+        local owner = adopted.owner
+        if adopted.name == "RoomEntranceSurface" then
+          if not owner.resetPending then owner.held = nil; finishMovement(owner) end
+        elseif adopted.name ~= "RoomEntranceE_Intro" then
+          finishMovement(owner)
+        end
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
   for _, name in ipairs({ "DropHeroToRoomPosition", "MoveHeroToRoomPosition", "RoomEntranceHades",
       "StartDeathLoopPresentation", "BedroomIntermissionApproach" }) do
     hook(name, function(original)
+      nativeMovementFunctions[original] = name
+      movementAdoptionPending = true
       return function(...)
         local unit = hero()
         local first = ...
@@ -298,36 +368,53 @@ local function installHooks()
       end
     end)
   end
-  -- Surface/flashback walks outlive their entry function; their native reset or
-  -- the next SetupHeroObject ends ownership of the scripted speed.
+  -- Scripted walks can outlive their entry function until a native reset or
+  -- SetupHeroObject. Surface's post-meeting branch has no deferred reset.
   for _, name in ipairs({ "RoomEntranceE_Intro", "RoomEntranceSurface", "ExitToHadesPresentation",
       "GardenScenePan", "SetupPlayerUnitInFlashback" }) do
     hook(name, function(original)
+      if name == "RoomEntranceE_Intro" or name == "RoomEntranceSurface" then
+        nativeMovementFunctions[original] = name
+        movementAdoptionPending = true
+      end
       return function(...)
         local unit = hero()
         local first = ...
         if (name == "RoomEntranceE_Intro" or name == "RoomEntranceSurface" or name == "ExitToHadesPresentation")
             and first ~= CurrentRun then unit = nil end
+        local owner, acquired
         if unit then
-          local owner = runtime.movementOwners[unit]
+          owner = runtime.movementOwners[unit]
           if not owner or owner.run ~= CurrentRun or owner.objectId ~= unit.ObjectId or not owner.held then
             owner = beginMovement(unit)
             owner.held = true
+            acquired = true
           end
         end
-        return original(...)
+        local result = table.pack(original(...))
+        if name == "RoomEntranceSurface" and acquired and not owner.resetPending then
+          owner.held = nil
+          finishMovement(owner)
+        end
+        return table.unpack(result, 1, result.n)
       end
     end)
   end
   for _, name in ipairs({ "ResetPlayerMoveData", "RestorePlayerUnitAfterFlashback" }) do
     hook(name, function(original)
+      if name == "ResetPlayerMoveData" then
+        nativeMovementFunctions[original] = name
+        movementAdoptionPending = true
+      end
       return function(...)
         local unit = hero()
         local first = ...
         if name == "ResetPlayerMoveData" and first ~= CurrentRun then unit = nil end
         local owner = unit and runtime.movementOwners[unit]
         if owner and (owner.run ~= CurrentRun or owner.objectId ~= unit.ObjectId) then owner = nil end
+        if owner and name == "ResetPlayerMoveData" then owner.resetPending = true end
         local result = table.pack(original(...))
+        if owner and name == "ResetPlayerMoveData" then owner.resetPending = nil end
         if owner and owner.held then owner.held = nil; finishMovement(owner) end
         return table.unpack(result, 1, result.n)
       end
@@ -419,6 +506,7 @@ local function installHooks()
       return original(...)
     end
   end)
+  adoptScheduledMovement()
 end
 
 function runtime.status()
