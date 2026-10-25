@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "hades",
   "displayName": "Hades",
-  "protocolVersion": 1,
+  "protocolVersion": 2,
   "backend": {"adapter": "games.hades.adapter:HadesAdapter"},
   "frontend": {
     "sourceDirectory": "Sources/Hades",
@@ -15,9 +15,25 @@
     "debuggerEntitlement": true,
     "entitlements": "Backend/games/hades/trainer-entitlements.plist"
   },
+  "residentRuntime": {
+    "source": "runtime.lua",
+    "previousRevisionPattern": "existing\\.revision\\s*~=\\s*(\\d+)",
+    "moduleRevisionPattern": "revision\\s*=\\s*(\\d+)"
+  },
   "targetApplication": {
     "processName": "Game.macOS",
     "bundleIdentifier": "",
     "executablePathSuffix": "Hades/Game.macOS.app/Contents/MacOS/Game.macOS"
+  },
+  "saveManagement": {
+    "roots": [{
+      "id": "main",
+      "path": "~/Library/Application Support/Supergiant Games/Hades",
+      "include": ["Profile*.sav", "Profile*.sjson", "Profile*.ctrls", "activeProfile"]
+    }],
+    "provider": "games.hades.save_provider:HadesSaveProvider",
+    "hotBackup": true,
+    "restorePolicy": "stoppedOnly",
+    "stagedRestore": true
   }
 }

@@ -122,6 +122,7 @@ final class Session {
 }
 final class ExitHarness {
     var connected = true
+    var backendAvailable = true
     let session = Session()
     var failures: Set<String> = []
     func send(_ command: String, operation: String, announceSuccess: Bool,
@@ -147,7 +148,12 @@ final class ExitHarness {
         let offline = ExitHarness()
         offline.connected = false
         offline.prepareForTermination { offline.session.events.append("complete") }
-        precondition(offline.session.events == ["flush", "stop", "complete"])
+        precondition(offline.session.events == ["disable_all", "disconnect", "flush", "stop", "complete"])
+        let unavailable = ExitHarness()
+        unavailable.connected = false
+        unavailable.backendAvailable = false
+        unavailable.prepareForTermination { unavailable.session.events.append("complete") }
+        precondition(unavailable.session.events == ["flush", "stop", "complete"])
     }
 }
 '''

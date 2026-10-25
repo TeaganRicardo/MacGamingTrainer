@@ -1,38 +1,583 @@
-local trainerFlag = "MacGamingTrainer.Hades"
-local runtime = {}
-
-function runtime.status()
-  local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
-  local ready = type(hero) == "table" and type(hero.ObjectId) == "number"
-  local flags = ready and hero.InvulnerableFlags or nil
-  return {
-    heroReady = ready,
-    invincible = type(flags) == "table" and flags[trainerFlag] == true,
-    health = ready and tonumber(hero.Health) or 0,
-    maxHealth = ready and tonumber(hero.MaxHealth) or 0,
-    money = ready and tonumber(CurrentRun.Money) or 0,
-  }
+local existing = rawget(_G, "MacGamingTrainerHades")
+if existing then
+  if existing.revision ~= 1 then error("hades.error.restartRequired") end
+  return existing
 end
 
-function runtime.set_invincibility(enabled)
-  assert(type(enabled) == "boolean", "hades.error.invalidValue")
-  assert(runtime.status().heroReady, "hades.error.heroNotReady")
-  assert(type(CurrentRun.Hero.InvulnerableFlags) == "table"
-    and type(CurrentRun.InvulnerableFlags) == "table"
-    and type(SetPlayerInvulnerable) == "function"
-    and type(SetPlayerVulnerable) == "function", "hades.error.unsupportedRuntime")
-  if enabled then
-    SetPlayerInvulnerable(trainerFlag)
-  else
+local trainerFlag = "MacGamingTrainer.Hades"
+local defaults = {
+  invincibility = false, moneyNoDecrease = false, rerollsNoDecrease = false,
+  fullGodGauge = false, damageMultiplier = 1, moveSpeedMultiplier = 1,
+  attackSpeedMultiplier = 1, dashBonus = 0,
+}
+local resourceNames = {
+  "MetaPoints", "Gems", "SuperGems", "LockKeys", "SuperLockKeys", "GiftPoints", "SuperGiftPoints",
+}
+local runtime = {
+  version = 1, revision = 1,
+  features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
+  nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
+}
+runtime.generationId = tostring(runtime)
+for name, value in pairs(defaults) do runtime.features[name] = value end
+local arrayType = {}
+local mainThread = {}
+local function array() return setmetatable({}, arrayType) end
+local function finite(value)
+  return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+local function hero()
+  local value = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+  if type(value) == "table" and type(value.ObjectId) == "number" then return value end
+end
+local function requireHero()
+  local value = hero()
+  assert(value, "hades.error.heroNotReady")
+  return value
+end
+local function sameOwner(run, unit)
+  return CurrentRun == run and hero() == unit
+end
+local function instanceId(trait)
+  if not runtime.instanceIds[trait] then
+    runtime.nextInstanceId = runtime.nextInstanceId + 1
+    runtime.instanceIds[trait] = tostring(runtime.nextInstanceId)
+  end
+  return runtime.instanceIds[trait]
+end
+local function traitGroups(unit)
+  local groups, names = {}, {}
+  for _, trait in pairs(unit.Traits or {}) do
+    local group
+    for _, candidate in ipairs(groups) do
+      if candidate.name == trait.Name and AreTraitsIdentical(candidate.trait, trait) then
+        group = candidate
+        break
+      end
+    end
+    if not group then
+      group = { name = trait.Name, trait = trait, members = {} }
+      groups[#groups + 1] = group
+      names[trait.Name] = (names[trait.Name] or 0) + 1
+    end
+    group.members[#group.members + 1] = trait
+    if trait.Rarity then
+      if group.rarity and group.rarity ~= trait.Rarity then group.mixedRarity = true end
+      group.rarity = group.rarity or trait.Rarity
+      if not group.trait.Rarity then group.trait = trait end
+    end
+  end
+  for _, group in ipairs(groups) do
+    local ids = {}
+    for _, trait in ipairs(group.members) do ids[#ids + 1] = instanceId(trait) end
+    table.sort(ids)
+    group.instanceId = "trait:" .. group.name .. ":" .. table.concat(ids, ",")
+    group.rarity = group.rarity or "Common"
+    if names[group.name] > 1 or group.mixedRarity then
+      group.limitation = "duplicateName"
+    elseif type(TraitData) ~= "table" or not TraitData[group.name] then
+      group.limitation = "unknownTrait"
+    else
+      local source = TraitData[group.name]
+      for _, trait in ipairs(group.members) do
+        if trait.Slot == "Keepsake" or trait.Slot == "Assist"
+            or source.Slot == "Keepsake" or source.Slot == "Assist" then
+          group.limitation = "specialOwner"
+          break
+        elseif trait.SetupFunction or trait.OnExpire or trait.RemainingUses or trait.LastCurseName
+            or trait.LastBlessingName or trait.IsWeaponEnchantment then
+          group.limitation = "specialLifecycle"
+        end
+      end
+    end
+  end
+  return groups
+end
+local function damageModifier(unit)
+  local modifiers = unit.OutgoingDamageModifiers or {}
+  for _, modifier in pairs(modifiers) do
+    if modifier.Name == trainerFlag then return modifier end
+  end
+end
+local function removeDamageModifier(unit)
+  local modifiers = unit.OutgoingDamageModifiers or {}
+  for index, modifier in pairs(modifiers) do
+    if modifier.Name == trainerFlag then modifiers[index] = nil; return end
+  end
+end
+local suspendProperties
+local function nativeChange(unit, change)
+  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.unsupportedRuntime")
+  ApplyUnitPropertyChanges(unit, { change }, false)
+end
+local function attackChanges(factor)
+  assert(type(TraitData) == "table" and type(TraitData.HermesWeaponTrait) == "table",
+    "hades.error.unsupportedRuntime")
+  local changes = {}
+  for _, source in ipairs(TraitData.HermesWeaponTrait.PropertyChanges or {}) do
+    if source.ChangeType == "Multiply" then
+      local change = {}
+      for key, value in pairs(source) do change[key] = value end
+      change.ChangeValue = factor
+      changes[#changes + 1] = change
+    end
+  end
+  return changes
+end
+local function applyAttack(unit, factor)
+  if factor == 1 then return end
+  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.unsupportedRuntime")
+  ApplyUnitPropertyChanges(unit, attackChanges(factor), false)
+end
+local function fillGauge(unit)
+  if runtime.features.fullGodGauge and not runtime.fillingGauge and not unit.IsDead and not unit.SuperActive
+      and type(IsSuperValid) == "function" and IsSuperValid()
+      and finite(unit.SuperMeterLimit) and type(BuildSuperMeter) == "function" then
+    runtime.fillingGauge = true
+    BuildSuperMeter(CurrentRun, math.max(0, unit.SuperMeterLimit - (unit.SuperMeter or 0)))
+    runtime.fillingGauge = false
+  end
+end
+local function mount(unit, rebuilt)
+  local mounted = runtime.mounted
+  if rebuilt or not mounted or mounted.unit ~= unit or mounted.objectId ~= unit.ObjectId then
+    mounted = { unit = unit, objectId = unit.ObjectId, move = 1, attack = 1, dash = 0 }
+    runtime.mounted = mounted
+  end
+  local desired = runtime.features
+  if desired.invincibility then
+    assert(type(unit.InvulnerableFlags) == "table" and type(CurrentRun.InvulnerableFlags) == "table"
+      and type(SetPlayerInvulnerable) == "function", "hades.error.unsupportedRuntime")
+    if not unit.InvulnerableFlags[trainerFlag] then SetPlayerInvulnerable(trainerFlag) end
+  elseif type(unit.InvulnerableFlags) == "table" and unit.InvulnerableFlags[trainerFlag] then
+    assert(type(SetPlayerVulnerable) == "function", "hades.error.unsupportedRuntime")
     SetPlayerVulnerable(trainerFlag)
   end
+  local damage = damageModifier(unit)
+  if desired.damageMultiplier == 1 then
+    if damage then removeDamageModifier(unit) end
+  elseif damage then
+    damage.GlobalMultiplier = desired.damageMultiplier
+  else
+    assert(type(AddOutgoingDamageModifier) == "function", "hades.error.unsupportedRuntime")
+    AddOutgoingDamageModifier(unit, { Name = trainerFlag, GlobalMultiplier = desired.damageMultiplier, Multiplicative = true })
+  end
+  if mounted.move ~= desired.moveSpeedMultiplier then
+    nativeChange(unit, { UnitProperty = "Speed", ChangeValue = desired.moveSpeedMultiplier / mounted.move, ChangeType = "Multiply" })
+    mounted.move = desired.moveSpeedMultiplier
+  end
+  if mounted.attack ~= desired.attackSpeedMultiplier then
+    applyAttack(unit, mounted.attack / desired.attackSpeedMultiplier)
+    mounted.attack = desired.attackSpeedMultiplier
+  end
+  if mounted.dash ~= desired.dashBonus then
+    assert(type(WeaponSets) == "table" and type(WeaponSets.HeroRushWeapons) == "table", "hades.error.unsupportedRuntime")
+    nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
+      ChangeValue = desired.dashBonus - mounted.dash, ChangeType = "Add" })
+    mounted.dash = desired.dashBonus
+  end
+  fillGauge(unit)
+end
+suspendProperties = function(unit)
+  local mounted = runtime.mounted
+  if not mounted or mounted.unit ~= unit or mounted.objectId ~= unit.ObjectId then return end
+  if mounted.move ~= 1 then
+    nativeChange(unit, { UnitProperty = "Speed", ChangeValue = 1 / mounted.move, ChangeType = "Multiply" })
+    mounted.move = 1
+  end
+  if mounted.attack ~= 1 then
+    applyAttack(unit, mounted.attack)
+    mounted.attack = 1
+  end
+  if mounted.dash ~= 0 then
+    nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
+      ChangeValue = -mounted.dash, ChangeType = "Add" })
+    mounted.dash = 0
+  end
+end
+local function hook(name, wrap)
+  local current = rawget(_G, name)
+  if type(current) == "function" and not runtime.hooks[name] then
+    local replacement = wrap(current)
+    runtime.hooks[name] = replacement
+    _G[name] = replacement
+  end
+end
+local function installHooks()
+  if type(SaveIgnores) == "table" then SaveIgnores.MacGamingTrainerHades = true end
+  hook("Save", function(original)
+    return function(...)
+      SaveIgnores.MacGamingTrainerHades = true
+      local removed = {}
+      local function removeField(owner, key)
+        if owner and owner[key] ~= nil then
+          removed[#removed + 1] = { owner = owner, key = key, value = owner[key] }
+          owner[key] = nil
+        end
+      end
+      local function strip(run)
+        if type(run) ~= "table" then return end
+        removeField(run.InvulnerableFlags, trainerFlag)
+        local unit = run.Hero
+        if type(unit) ~= "table" then return end
+        removeField(unit.InvulnerableFlags, trainerFlag)
+        for index, modifier in pairs(unit.OutgoingDamageModifiers or {}) do
+          if modifier.Name == trainerFlag then removeField(unit.OutgoingDamageModifiers, index) end
+        end
+      end
+      strip(CurrentRun)
+      for _, run in pairs(type(GameState) == "table" and GameState.RunHistory or {}) do strip(run) end
+      -- Main.lua Save is synchronous; restore projections even when luabins.save raises.
+      local result = table.pack(pcall(original, ...))
+      for _, field in ipairs(removed) do field.owner[field.key] = field.value end
+      if not result[1] then error(result[2], 0) end
+      return table.unpack(result, 2, result.n)
+    end
+  end)
+  hook("SetupHeroObject", function(original)
+    return function(...)
+      runtime.propertyDepth = runtime.propertyDepth + 1
+      local result = table.pack(original(...))
+      runtime.propertyDepth = runtime.propertyDepth - 1
+      local unit = hero()
+      if unit then mount(unit, true) end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  for _, name in ipairs({ "AddTraitToHero", "RemoveWeaponTrait", "EquipPlayerWeapon" }) do
+    hook(name, function(original)
+      return function(...)
+        local run, unit = CurrentRun, hero()
+        if runtime.propertyDepth == 0 and unit then suspendProperties(unit) end
+        runtime.propertyDepth = runtime.propertyDepth + 1
+        local result = table.pack(original(...))
+        runtime.propertyDepth = runtime.propertyDepth - 1
+        if runtime.propertyDepth == 0 and unit and sameOwner(run, unit) then mount(unit, false) end
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+  end
+  hook("SpendMoney", function(original)
+    return function(amount, ...)
+      local run, unit = CurrentRun, hero()
+      local protect = runtime.features.moneyNoDecrease and unit and finite(amount) and amount > 0
+      local result = table.pack(original(amount, ...))
+      if protect and sameOwner(run, unit) then
+        run.Money = run.Money + amount
+        UpdateMoneyUI(run.Money)
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  local function rerollHook(name, getRun, getCost)
+    hook(name, function(original)
+      return function(...)
+        local args = table.pack(...)
+        local run, unit = getRun(args), hero()
+        local key = coroutine.running() or mainThread
+        local previous = runtime.rerollLeases[key]
+        local cost = getCost(args)
+        if runtime.features.rerollsNoDecrease and run and unit and finite(cost) and cost > 0 then
+          runtime.rerollLeases[key] = { run = run, unit = unit, before = run.NumRerolls or 0, cost = cost }
+        end
+        local result = table.pack(original(table.unpack(args, 1, args.n)))
+        runtime.rerollLeases[key] = previous
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+  end
+  rerollHook("AttemptBoonLootReroll", function() return CurrentRun end, function() return 1 end)
+  rerollHook("AttemptPanelReroll", function() return CurrentRun end, function(args) return args[2] and args[2].Cost end)
+  rerollHook("AttemptReroll", function(args) return args[1] end, function() return 1 end)
+  hook("UpdateRerollUI", function(original)
+    return function(value, ...)
+      local lease = runtime.rerollLeases[coroutine.running() or mainThread]
+      if lease and not lease.restored and sameOwner(lease.run, lease.unit)
+          and lease.run.NumRerolls == lease.before - lease.cost then
+        lease.run.NumRerolls = lease.run.NumRerolls + lease.cost
+        value = lease.run.NumRerolls
+        lease.restored = true
+      end
+      return original(value, ...)
+    end
+  end)
+  hook("BuildSuperMeter", function(original)
+    return function(run, amount, ...)
+      local unit = hero()
+      if runtime.features.fullGodGauge and unit and run == CurrentRun and not unit.SuperActive
+          and finite(unit.SuperMeterLimit) then amount = math.max(amount or 0, unit.SuperMeterLimit - (unit.SuperMeter or 0)) end
+      return original(run, amount, ...)
+    end
+  end)
+  hook("UpdateSuperMeterUI", function(original)
+    return function(...)
+      local unit = hero()
+      if unit then fillGauge(unit) end
+      return original(...)
+    end
+  end)
+  hook("StopSuper", function(original)
+    return function(...)
+      local run, unit = CurrentRun, hero()
+      local result = table.pack(original(...))
+      if unit and sameOwner(run, unit) then fillGauge(unit) end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("PostEncounterDrainSuper", function(original)
+    return function(...)
+      if runtime.features.fullGodGauge then return end
+      return original(...)
+    end
+  end)
+end
+
+function runtime.status()
+  installHooks()
+  local unit = hero()
+  local ready = unit ~= nil
+  local resources, traits, features = {}, array(), {}
+  for name, value in pairs(runtime.features) do features[name] = value end
+  for _, name in ipairs(resourceNames) do
+    resources[name] = type(GameState) == "table" and type(GameState.Resources) == "table" and tonumber(GameState.Resources[name]) or 0
+  end
+  if ready then
+    for _, group in ipairs(traitGroups(unit)) do
+      local limitation = group.limitation
+      traits[#traits + 1] = {
+        instanceId = group.instanceId, name = group.name, rarity = group.rarity,
+        level = #group.members, canEdit = limitation == nil, canRemove = limitation == nil,
+        limitation = limitation or "",
+      }
+    end
+  end
+  return {
+    heroReady = ready, heroId = ready and (runtime.generationId .. ":" .. instanceId(CurrentRun) .. ":" .. instanceId(unit) .. ":" .. tostring(unit.ObjectId)) or "",
+    invincible = ready and type(unit.InvulnerableFlags) == "table" and unit.InvulnerableFlags[trainerFlag] == true or false,
+    health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
+    money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
+    godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
+    features = features, resources = resources, traits = traits,
+  }
+end
+local function validateFeature(name, value)
+  assert(defaults[name] ~= nil, "hades.error.invalidValue")
+  local default = defaults[name]
+  if type(default) == "boolean" then
+    assert(type(value) == "boolean", "hades.error.invalidValue")
+  elseif name == "dashBonus" then
+    assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 20, "hades.error.invalidValue")
+  else
+    assert(finite(value) and value >= 0.1 and value <= 100, "hades.error.invalidValue")
+  end
+end
+function runtime.configure(features)
+  assert(type(features) == "table", "hades.error.invalidValue")
+  for name, value in pairs(features) do validateFeature(name, value) end
+  installHooks()
+  for name, value in pairs(features) do runtime.features[name] = value end
+  local unit = hero()
+  if unit then mount(unit, false) end
   return runtime.status()
 end
-
-function runtime.json(value)
-  return string.format('{"heroReady":%s,"invincible":%s,"health":%.17g,"maxHealth":%.17g,"money":%.17g}',
-    tostring(value.heroReady), tostring(value.invincible), value.health or 0,
-    value.maxHealth or 0, value.money or 0)
+function runtime.set_feature(name, value)
+  validateFeature(name, value)
+  installHooks()
+  runtime.features[name] = value
+  local unit = hero()
+  if unit then mount(unit, false) end
+  return runtime.status()
 end
-
+function runtime.set_invincibility(enabled)
+  requireHero()
+  return runtime.set_feature("invincibility", enabled)
+end
+function runtime.disable_all()
+  for name, value in pairs(defaults) do runtime.features[name] = value end
+  local unit = hero()
+  if unit then mount(unit, false) end
+  return runtime.status()
+end
+function runtime.set_value(field, value)
+  local unit = requireHero()
+  assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 1000000000, "hades.error.invalidValue")
+  if field == "health" then
+    assert(value >= 1 and value <= unit.MaxHealth, "hades.error.invalidValue")
+    unit.Health = value
+    UpdateHealthUI()
+  elseif field == "maxHealth" then
+    assert(value >= 1, "hades.error.invalidValue")
+    unit.MaxHealth = value
+    unit.Health = math.min(unit.Health, value)
+    UpdateHealthUI()
+  elseif field == "money" then
+    CurrentRun.Money = value
+    UpdateMoneyUI(value)
+  elseif field == "rerolls" then
+    CurrentRun.NumRerolls = value
+    UpdateRerollUI(value)
+  else error("hades.error.invalidValue") end
+  return runtime.status()
+end
+function runtime.heal()
+  local unit = requireHero()
+  Heal(unit, { HealAmount = math.max(0, unit.MaxHealth - unit.Health), Silent = true,
+    AttackerName = trainerFlag })
+  UpdateHealthUI()
+  return runtime.status()
+end
+function runtime.set_resource(name, value)
+  requireHero()
+  local known = false
+  for _, resource in ipairs(resourceNames) do if name == resource then known = true end end
+  assert(known and finite(value) and value == math.floor(value) and value >= 0 and value <= 1000000000,
+    "hades.error.invalidValue")
+  assert(type(GameState) == "table" and type(GameState.Resources) == "table", "hades.error.unsupportedRuntime")
+  GameState.Resources[name] = value
+  UpdateResourceUI(name, value)
+  return runtime.status()
+end
+local function validateTrait(unit, name, rarity, level)
+  assert(type(name) == "string" and type(TraitData) == "table" and type(TraitData[name]) == "table",
+    "hades.error.invalidValue")
+  local source = TraitData[name]
+  assert(type(rarity) == "string" and ((source.RarityLevels and source.RarityLevels[rarity])
+    or (not source.RarityLevels and rarity == "Common")), "hades.error.invalidValue")
+  assert(finite(level) and level == math.floor(level) and level >= 1 and level <= 100, "hades.error.invalidValue")
+  if source.RequiredWeapon then
+    assert(unit.Weapons and unit.Weapons[source.RequiredWeapon], "hades.error.traitWeaponRequired")
+  end
+  if source.RequiredWeapons then
+    local equipped = false
+    for _, name in ipairs(source.RequiredWeapons) do if unit.Weapons and unit.Weapons[name] then equipped = true end end
+    assert(equipped, "hades.error.traitWeaponRequired")
+  end
+  return source
+end
+local function addTraits(unit, name, rarity, level, preserved)
+  local processed = GetProcessedTraitData({ Unit = unit, TraitName = name, Rarity = rarity })
+  if preserved then processed.AccumulatedFountainDamageBonus = preserved.AccumulatedFountainDamageBonus end
+  AddTraitToHero({ TraitData = processed })
+  for _ = 2, level do AddTraitToHero({ TraitName = name }) end
+end
+local function equipOwnedTrait(unit, name, source, rarity, level)
+  assert(level == 1, "hades.error.invalidValue")
+  local assist = source.Slot == "Assist"
+  local ownerKey = assist and "LastAssistTrait" or "LastAwardTrait"
+  local equip = assist and EquipAssist or EquipKeepsake
+  local unequip = assist and UnequipAssist or UnequipKeepsake
+  assert(type(equip) == "function" and type(unequip) == "function", "hades.error.unsupportedRuntime")
+  local previous
+  for _, trait in pairs(unit.Traits or {}) do
+    if trait.Slot == source.Slot then
+      assert(not previous, "hades.error.unsupportedTrait")
+      previous = trait
+    end
+  end
+  local rank = GetRarityValue(rarity)
+  local currentRank = GetKeepsakeLevel(name)
+  local progressOwner, progressValue
+  if source.KeepsakeRarityGameStateRequirements then
+    local requirements = source.KeepsakeRarityGameStateRequirements[rank]
+    local requirement = requirements and requirements.AssistUpgradeLevel
+    if assist and requirement and requirement.Name == name then
+      for key in pairs(requirements) do assert(key == "AssistUpgradeLevel", "hades.error.unsupportedTrait") end
+      progressOwner, progressValue = GameState.AssistUnlocks, requirement.Level
+    else
+      assert(rank == currentRank, "hades.error.unsupportedTrait")
+    end
+  elseif rank ~= currentRank then
+    assert(source.ChamberThresholds, "hades.error.unsupportedTrait")
+    progressOwner, progressValue = GameState.KeepsakeChambers, 0
+    for index = 1, rank - 1 do
+      assert(finite(source.ChamberThresholds[index]), "hades.error.unsupportedTrait")
+      progressValue = progressValue + source.ChamberThresholds[index]
+    end
+  end
+  if previous and previous.Name == name and previous.Rarity == rarity
+      and GameState[ownerKey] == name and rank == currentRank then return end
+  suspendProperties(unit)
+  runtime.propertyDepth = runtime.propertyDepth + 1
+  if previous then unequip(unit, previous.Name) end
+  if progressOwner then progressOwner[name] = progressValue end
+  GameState[ownerKey] = name
+  if assist then EquipReferencedWeapons(source) end
+  equip(unit, name)
+  if assist then
+    for _, trait in pairs(unit.Traits or {}) do
+      if trait.Name == name then AddAssistWeapons(unit, trait); break end
+    end
+  end
+  runtime.propertyDepth = runtime.propertyDepth - 1
+  mount(unit, false)
+end
+function runtime.add_trait(name, rarity, level)
+  local unit = requireHero()
+  local source = validateTrait(unit, name, rarity, level)
+  if source.Slot == "Keepsake" or source.Slot == "Assist" then
+    equipOwnedTrait(unit, name, source, rarity, level)
+    return runtime.status()
+  end
+  if source.Slot then
+    for _, trait in pairs(unit.Traits or {}) do
+      assert(trait.Slot ~= source.Slot or trait.Name == name, "hades.error.traitSlotOccupied")
+    end
+  end
+  suspendProperties(unit)
+  addTraits(unit, name, rarity, level)
+  mount(unit, false)
+  return runtime.status()
+end
+local function selectedTrait(unit, id)
+  for _, group in ipairs(traitGroups(unit)) do
+    if group.instanceId == id then
+      assert(not group.limitation, "hades.error.unsupportedTrait")
+      return group.trait
+    end
+  end
+  error("hades.error.staleTrait")
+end
+function runtime.remove_trait(id)
+  local unit = requireHero()
+  local trait = selectedTrait(unit, id)
+  suspendProperties(unit)
+  RemoveWeaponTrait(trait.Name)
+  mount(unit, false)
+  return runtime.status()
+end
+function runtime.update_trait(id, rarity, level)
+  local unit = requireHero()
+  local trait = selectedTrait(unit, id)
+  validateTrait(unit, trait.Name, rarity, level)
+  suspendProperties(unit)
+  RemoveWeaponTrait(trait.Name)
+  addTraits(unit, trait.Name, rarity, level, trait)
+  mount(unit, false)
+  return runtime.status()
+end
+local function escape(value)
+  return '"' .. value:gsub('[%z\1-\31\\"]', function(character)
+    if character == '"' then return '\\"' end
+    if character == '\\' then return '\\\\' end
+    return string.format('\\u%04x', string.byte(character))
+  end) .. '"'
+end
+function runtime.json(value)
+  local kind = type(value)
+  if kind == "string" then return escape(value) end
+  if kind == "boolean" then return tostring(value) end
+  if kind == "number" then return finite(value) and string.format("%.17g", value) or "null" end
+  if kind == "nil" then return "null" end
+  assert(kind == "table", "hades.error.unsupportedRuntime")
+  local values = {}
+  if getmetatable(value) == arrayType then
+    for _, item in ipairs(value) do values[#values + 1] = runtime.json(item) end
+    return "[" .. table.concat(values, ",") .. "]"
+  end
+  for key, item in pairs(value) do values[#values + 1] = escape(tostring(key)) .. ":" .. runtime.json(item) end
+  table.sort(values)
+  return "{" .. table.concat(values, ",") .. "}"
+end
+_G.MacGamingTrainerHades = runtime
+installHooks()
 return runtime
