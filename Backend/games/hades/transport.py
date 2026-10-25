@@ -182,6 +182,7 @@ class HadesLuaTransport:
             raise failure('runtime_not_ready', 'runtimeNotReady')
         finally:
             if not leased:
+                self._stop(time.monotonic() + 3)
                 self.target.BreakpointDelete(breakpoint.GetID())
 
     def execute(self, source, *, mutating=False):
@@ -245,11 +246,11 @@ class HadesLuaTransport:
                 raise failure('lua_error', 'debuggerCall', text)
             return json.loads(text)
         finally:
-            if breakpoint is not None:
-                self.target.BreakpointDelete(breakpoint.GetID())
             if self.alive():
                 try:
                     self._stop(time.monotonic() + 3)
+                    if breakpoint is not None:
+                        self.target.BreakpointDelete(breakpoint.GetID())
                     self._restore_focus()
                     if scratch is not None:
                         self.process.DeallocateMemory(scratch)
