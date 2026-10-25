@@ -27,7 +27,7 @@ for forbidden in ("TrainerSaveManagerModel(", "TrainerSaveManagerView("):
 
 # The Host sidebar no longer injects Save Management. Hades also contributes no
 # shortcut/log copies there, so every moved utility has exactly one game-area entry.
-host_sidebar = host[host.index("TrainerSidebar("):host.index("} content: {")]
+host_sidebar = host[host.index("TrainerSidebar {"):host.index("} content: {")]
 assert "host.saveManagement" not in host_sidebar
 assert "saveManagerPresented = true" not in host_sidebar
 

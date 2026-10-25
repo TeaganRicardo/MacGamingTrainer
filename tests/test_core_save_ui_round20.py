@@ -68,7 +68,7 @@ for token in (
 ):
     assert token in host, token
 
-sidebar = host[host.index("TrainerSidebar("):host.index("} content: {")]
+sidebar = host[host.index("TrainerSidebar {"):host.index("} content: {")]
 assert 'host.saveManagement' not in sidebar
 assert "saveManagerPresented = true" not in sidebar
 
