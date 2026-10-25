@@ -23,8 +23,13 @@ import SwiftUI
         let python = URL(fileURLWithPath: CommandLine.arguments[2])
         let firstSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
         let secondSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
-        let first = FirstFixtureModel(session: firstSession, backendScriptURL: server)
-        let second = SecondFixtureModel(session: secondSession, backendScriptURL: server)
+        func log(_ game: String, _ message: String) {
+            FileHandle.standardError.write(Data(("\(game): \(ProcessInfo.processInfo.systemUptime) \(message)\n").utf8))
+        }
+        let first = FirstFixtureModel(session: firstSession, backendScriptURL: server,
+                                      log: { log("first", $0) })
+        let second = SecondFixtureModel(session: secondSession, backendScriptURL: server,
+                                       log: { log("second", $0) })
         let firstContext = TrainerGameContext<FirstFixtureGameModule>(model: first, session: firstSession)
         let secondContext = TrainerGameContext<SecondFixtureGameModule>(model: second, session: secondSession)
         let application = TrainerApplicationCoordinator(contexts: [
