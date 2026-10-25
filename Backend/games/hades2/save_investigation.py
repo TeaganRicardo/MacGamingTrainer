@@ -796,10 +796,13 @@ class NativeDialogueInvestigation:
         else:
             candidates = {name for name, value in records.items() if value is True}
         needle = search.casefold().strip()
-        rows = []
+        matches = []
         for scene in candidates:
+            state = self._data(scene, records, ambiguous)
+            if state_filter != "all" and state != state_filter:
+                continue
+            person, npc, localized = self._names(scene)
             if needle:
-                person, npc, localized = self._names(scene)
                 corpus = (scene, person, npc, *localized.values())
                 if not matches_search(needle, corpus):
                     lines = self._text_records(scene)
@@ -807,11 +810,12 @@ class NativeDialogueInvestigation:
                         *(line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
                           + ' ' + ' '.join(line['events']) for line in lines))):
                         continue
-            row = self._summary_row(scene, language, records, ambiguous, permissions)
-            if state_filter == "all" or row["status"] == state_filter:
-                rows.append(row)
-        rows.sort(key=lambda row: (row['status'] != 'recorded', row['group'].casefold(), row['rawId']))
-        return {'total': len(rows), 'items': rows[offset:offset + limit], 'sourceStatus': self.native['status'],
+            group = person or ('Other dialogue' if language == 'en' else '其他对话')
+            matches.append((state != 'recorded', group.casefold(), scene))
+        matches.sort()
+        rows = [self._summary_row(scene, language, records, ambiguous, permissions)
+                for _, _, scene in matches[offset:offset + limit]]
+        return {'total': len(matches), 'items': rows, 'sourceStatus': self.native['status'],
                 'sourceIdentity': self.native['sourceIdentity'], 'sourceProvenance': self.native['sourceProvenance'],
                 'sourceErrors': self.native['errors']}
 
