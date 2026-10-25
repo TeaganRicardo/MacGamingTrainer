@@ -1,6 +1,17 @@
 import AppKit
 import SwiftUI
 
+private struct TrainerGamePageVisibilityKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var trainerGamePageVisible: Bool {
+        get { self[TrainerGamePageVisibilityKey.self] }
+        set { self[TrainerGamePageVisibilityKey.self] = newValue }
+    }
+}
+
 struct TrainerGamePages: View {
     @ObservedObject var application: TrainerApplicationCoordinator
 
@@ -8,6 +19,7 @@ struct TrainerGamePages: View {
         ZStack(alignment: .topLeading) {
             ForEach(application.contexts) { context in
                 context.content
+                    .environment(\.trainerGamePageVisible, context.id == application.selectedGameID)
                     .opacity(context.id == application.selectedGameID ? 1 : 0)
                     .allowsHitTesting(context.id == application.selectedGameID)
                     .accessibilityHidden(context.id != application.selectedGameID)

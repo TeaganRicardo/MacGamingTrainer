@@ -18,6 +18,7 @@ import SwiftUI
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.finishLaunching()
+        enableNativeAccessibility()
         let server = URL(fileURLWithPath: CommandLine.arguments[1])
         let python = URL(fileURLWithPath: CommandLine.arguments[2])
         let firstSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
@@ -68,12 +69,25 @@ import SwiftUI
         guard let draftField = fields(pageWindow.contentView!).first(where: { $0.stringValue == "First draft" }) else {
             preconditionFailure("First game editor was not mounted")
         }
+        func gameButton(_ id: String) -> NativeAccessibilityControl {
+            guard let button = nativeAccessibilityControls(pageWindow).first(where: {
+                $0.identifier == "host.game.\(id)"
+            }) else { preconditionFailure("Game is missing from the sidebar: \(id)") }
+            return button
+        }
+        let firstGameFrame = gameButton("first_fixture").frame
+        let secondGameFrame = gameButton("second_fixture").frame
+        precondition(firstGameFrame.maxX < draftField.accessibilityFrame().minX &&
+                     abs(firstGameFrame.minX - secondGameFrame.minX) < 1 &&
+                     firstGameFrame.minY > secondGameFrame.minY,
+                     "Game choices must form a vertical list in the left sidebar")
         precondition(pageWindow.makeFirstResponder(draftField))
         let editor = draftField.currentEditor() as! NSTextView
         editor.selectAll(nil)
         editor.insertText("unfinished draft", replacementRange: editor.selectedRange())
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
-        application.selectedGameID = "second_fixture"
+        precondition(gameButton("second_fixture").press())
+        wait { application.selectedGameID == "second_fixture" }
         precondition(first.connected && second.connected && first.enabled)
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: app)
         precondition(first.activations > 0 && second.activations > 0, "Hidden game lost lifecycle subscription")
@@ -84,7 +98,8 @@ import SwiftUI
         recordPID(secondSession, "secondAfter")
         wait { pids.count == 4 }
         precondition(pids["first"] == pids["firstAfter"] && pids["second"] == pids["secondAfter"])
-        application.selectedGameID = "first_fixture"
+        precondition(gameButton("first_fixture").press())
+        wait { application.selectedGameID == "first_fixture" }
         precondition(application.context(id: "first_fixture")?.typed(as: FirstFixtureGameModule.self) === firstContext)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
         precondition(fields(pageWindow.contentView!).contains { $0 === draftField && $0.stringValue == "unfinished draft" },
@@ -163,7 +178,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
     main.write_text(HARNESS)
     binary = project / "test"
     subprocess.run(["swiftc", "-parse-as-library", *map(str, sorted((project / "Sources/Core").rglob("*.swift"))),
-                    *map(str, frontends), str(generated), str(main), "-o", str(binary)], check=True)
+                    *map(str, frontends), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
+                    str(generated), str(main), "-o", str(binary)], check=True)
     env = {**os.environ, "HOME": str(project / "home"), "PYTHONDONTWRITEBYTECODE": "1"}
     Path(env["HOME"]).mkdir()
     subprocess.run([str(binary), str(project / "Backend/core/server.py"), sys.executable],

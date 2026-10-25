@@ -4,6 +4,7 @@ struct Hades2SidebarActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
+    @Environment(\.trainerGamePageVisible) private var pageVisible
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -39,6 +40,9 @@ struct Hades2SidebarActions: View {
         .onChange(of: model.currentIssues) { _, issues in
             if issues.isEmpty { model.closeFeedbackDetails() }
         }
+        .onChange(of: pageVisible) { _, visible in
+            if !visible { model.closeFeedbackDetails() }
+        }
     }
 }
 
@@ -46,6 +50,7 @@ struct Hades2HeaderActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
+    @Environment(\.trainerGamePageVisible) private var pageVisible
     @State private var resultsPresented = false
 
     private var results: [Hades2WorkbenchEntry] {
@@ -98,7 +103,11 @@ struct Hades2HeaderActions: View {
             .padding(8)
         }
         .onChange(of: model.workbenchSearch) { _, query in
+            guard pageVisible else { return }
             resultsPresented = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        .onChange(of: pageVisible) { _, visible in
+            if !visible { resultsPresented = false }
         }
     }
 }
