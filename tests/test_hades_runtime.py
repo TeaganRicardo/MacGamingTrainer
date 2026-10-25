@@ -29,7 +29,7 @@ SaveIgnores = {}
 local savedState, saveFailure
 function Save()
   assert(SaveIgnores.MacGamingTrainerHades, "resident closures entered the native save")
-  savedState = { run = copy(CurrentRun), history = copy(GameState.RunHistory) }
+  savedState = { run = copy(CurrentRun), history = copy(GameState.RunHistory), gameState = copy(GameState) }
   if saveFailure then error("native serializer failed") end
   return "saved", nil, 8
 end
@@ -517,8 +517,13 @@ assert(#unit.LastStands == 2 and unit.MaxLastStands == 2 and unit.LastStands[1].
 assert(unit.LastStands[2].Name == "NativeDeathDefiance")
 assert(CurrentRun.TraitCache.ReincarnationTrait == 1)
 local keepsakeId = runtime.status().traits[2].instanceId
+GameState.KeepsakeChambers.ReincarnationTrait = 29
 runtime.add_trait("ReincarnationTrait", "Rare", 1)
 assert(#unit.LastStands == 2 and unit.MaxLastStands == 2 and runtime.status().traits[2].instanceId == keepsakeId)
+assert(GameState.KeepsakeChambers.ReincarnationTrait == 29, "reselection reset native keepsake progress")
+RemoveLastStand(unit, "ReincarnationTrait")
+runtime.add_trait("ReincarnationTrait", "Rare", 1)
+assert(#unit.LastStands == 1 and unit.MaxLastStands == 2, "reselection replenished a consumed Lucky Tooth")
 expectError("invalidValue", function() runtime.add_trait("ReincarnationTrait", "Rare", 2) end)
 runtime.add_trait("KeepsakeTrait", "Epic", 1)
 assert(GameState.LastAwardTrait == "KeepsakeTrait" and GameState.KeepsakeChambers.KeepsakeTrait == 75)
@@ -539,6 +544,8 @@ assert(#unit.AssistWeapons == 1 and unit.AssistWeapons[1].TraitName == "OtherAss
 assert(unit.Weapons.SwordWeapon and runtime.status().traits[1].instanceId == ordinaryBoon)
 Save()
 assert(savedState.run.Hero.AssistWeapons[1].TraitName == "OtherAssistTrait")
+assert(savedState.gameState.LastAwardTrait == "KeepsakeTrait" and savedState.gameState.LastAssistTrait == "OtherAssistTrait")
+assert(savedState.gameState.KeepsakeChambers.KeepsakeTrait == 75 and savedState.gameState.AssistUnlocks.OtherAssistTrait == 0)
 -- RunManager.lua:251-252 re-equips the selected owners on a fresh run.
 local previousHero = unit
 CurrentRun.Hero = newHero(999)
