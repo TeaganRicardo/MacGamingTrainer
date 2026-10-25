@@ -14,10 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let application else { return .terminateNow }
         guard !terminationInFlight else { return .terminateLater }
         terminationInFlight = true
-        application.prepareForTermination { [weak self] allow in
+        application.prepareForTermination { [weak self] in
             DispatchQueue.main.async {
                 self?.terminationInFlight = false
-                NSApp.reply(toApplicationShouldTerminate: allow)
+                NSApp.reply(toApplicationShouldTerminate: true)
             }
         }
         return .terminateLater

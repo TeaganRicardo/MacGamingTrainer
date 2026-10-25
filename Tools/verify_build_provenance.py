@@ -11,6 +11,8 @@ from macos_toolchain_identity import (
     collect_macos_toolchain,
     verify_recorded_macos_toolchain,
 )
+from module_support import app_spec_from_manifest
+from resident_runtime import parse_resident_runtime_declaration
 from write_build_provenance import git_value, require_product_identity, sha256_file, product_module_ids
 
 
@@ -51,7 +53,7 @@ def verify_provenance(
     bundle_build = manifest.get("bundleBuild")
     if not isinstance(product_version, str) or not isinstance(bundle_build, str):
         raise RuntimeError("provenance product identity is invalid")
-    require_product_identity(repo_root, product_version, bundle_build)
+    source_plist = require_product_identity(repo_root, product_version, bundle_build)
 
     source = require_object(manifest.get("source"), "provenance source")
     expected_tree = git_value(repo_root, f"{expected_source_sha}^{{tree}}")
@@ -125,8 +127,32 @@ def verify_provenance(
 
     if module_id == 'all':
         runtimes = require_object(manifest.get('residentRuntimes'), 'provenance residentRuntimes')
-        if set(runtimes) - set(ids):
-            raise RuntimeError('provenance resident runtime has an undeclared module')
+        product = json.loads((repo_root / 'app.json').read_text(encoding='utf-8'))
+        app = app_spec_from_manifest(product, 'product', 'Product', source_plist['CFBundleExecutable'])
+        expected_residents = {}
+        for game_id in ids:
+            module_manifest = repo_root / 'Backend/games' / game_id / 'module.json'
+            declaration = json.loads(module_manifest.read_text(encoding='utf-8')).get('residentRuntime')
+            if declaration is None:
+                continue
+            spec = parse_resident_runtime_declaration(
+                declaration, manifest_path=module_manifest,
+                source_exists=lambda path: path.is_file() and not path.is_symlink(),
+            )
+            expected_residents[game_id] = {
+                'source': spec.runtime_path.relative_to(repo_root).as_posix(),
+                'packagedPath': (f'{app.display_name}.app/Contents/Resources/'
+                                 f'Backend/games/{game_id}/{spec.source}'),
+            }
+        if set(runtimes) != set(expected_residents):
+            raise RuntimeError('provenance resident runtime module set differs from module declarations')
+        for game_id, paths in expected_residents.items():
+            resident = require_object(runtimes[game_id], f'provenance resident runtime {game_id}')
+            for field, expected_path in paths.items():
+                if resident.get(field) != expected_path:
+                    raise RuntimeError(
+                        f'provenance resident runtime {field} differs from declared module: {game_id}'
+                    )
         resident_values = list(runtimes.values())
     else:
         resident_values = [manifest['residentRuntime']] if 'residentRuntime' in manifest else []

@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
-host = (ROOT/'Sources/Core/Host/TrainerHost.swift').read_text()
+host = (ROOT/'Sources/Core/Host/TrainerGameContext.swift').read_text()
 save_model = (ROOT/'Sources/Core/Save/TrainerSaveManagerModel.swift').read_text()
 lua = (ROOT/'Backend/games/hades2/runtime/hades.lua').read_text()
 

@@ -45,7 +45,7 @@ Core/Host does not own Hades command names, Hades desired/active/dormant semanti
 
 `reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs, LLDB, Lua, or an optional sidecar.
 
-Selecting a different game only changes presentation. It never disconnects another game, stops its worker, cancels its requests or releases its documents/lease. Runtime actions and tool windows retain their originating game context. Quit coordinates every context and waits for pending writes before termination cleanup.
+Selecting a different game only changes presentation. It never disconnects another game, stops its worker, cancels its requests or releases its documents/lease. Runtime actions and tool windows retain their originating game context. Quit freezes new user actions, waits for pending writes, and rechecks each context before irreversible best-effort finalization. Once finalization begins, module hooks complete cleanup without cancelling the App after another context has already shut down.
 
 ## 2. State sources of truth
 

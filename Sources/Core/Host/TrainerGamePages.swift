@@ -36,6 +36,7 @@ struct TrainerGamePages: View {
                 }
             }
         }
+        .disabled(application.terminationRequested)
         .onChange(of: application.selectedGameID) { _, _ in
             NSApp.mainWindow?.makeFirstResponder(nil)
         }

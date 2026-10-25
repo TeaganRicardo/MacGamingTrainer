@@ -266,6 +266,7 @@ class HadesLuaTransport:
         self.process = None
         self.pid = None
         self.addresses = {}
+        self.focus_original = None
 
     def close(self):
         try:

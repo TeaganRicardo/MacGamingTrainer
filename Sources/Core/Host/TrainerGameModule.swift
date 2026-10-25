@@ -59,7 +59,7 @@ struct TrainerGamePresentation: Hashable {
 }
 
 /// The App owns application lifecycle. A game model only prepares its own
-/// runtime for termination and reports whether the host may quit.
+/// runtime for committed termination after the Host has drained all contexts.
 protocol TrainerHostModel: ObservableObject {
     var backendAvailable: Bool { get }
     var busy: Bool { get }
@@ -83,7 +83,7 @@ protocol TrainerHostModel: ObservableObject {
     func hostTargetLifetimeChanged(running: Bool)
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation)
     func restartBackendFromHost()
-    func prepareForTermination(completion: @escaping (Bool) -> Void)
+    func prepareForTermination(completion: @escaping () -> Void)
 }
 
 extension TrainerHostModel {

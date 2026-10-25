@@ -59,7 +59,7 @@ def generate(manifest, output: Path, *, catalog=False):
         for item in manifests:
             module = item.frontend.module_type
             text += (
-                f'        if application.selectedGameID == {module}.descriptor.id,\n'
+                f'        if !application.terminationRequested && application.selectedGameID == {module}.descriptor.id,\n'
                 f'           let context = application.context(id: {module}.descriptor.id)?.typed(as: {module}.self) {{\n'
                 f'            {module}.makeManagementCommands(model: context.model, localization: localization)\n'
                 '        }\n'

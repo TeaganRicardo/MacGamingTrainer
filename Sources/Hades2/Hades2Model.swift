@@ -1885,19 +1885,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         logSink.append(line, source: source)
     }
 
-    private func detachForTermination(completion: @escaping (Bool) -> Void) {
+    private func detachForTermination(completion: @escaping () -> Void) {
         guard connected else {
             finishExit(completion: completion)
             return
         }
         sendBarrier(.disconnect, title: "hades2.op.exitDetach", announceSuccess: false) { [weak self] _ in
-            guard let self else { completion(true); return }
+            guard let self else { completion(); return }
             self.finishExit(completion: completion)
         }
     }
 
-    func prepareForTermination(completion: @escaping (Bool) -> Void) {
-        guard !exiting else { completion(true); return }
+    func prepareForTermination(completion: @escaping () -> Void) {
+        guard !exiting else { completion(); return }
         exiting = true
         invalidateTextEdits()
         guard backendSession.isRunning else {
@@ -1909,23 +1909,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // The resident owns its hooks; a Host feature mirror cannot determine
         // whether cleanup is needed. Durable reset remains persistence-only.
         sendBarrier(.resetDesired, title: "hades2.op.exitReset", announceSuccess: false) { [weak self] _ in
-            guard let self else { completion(true); return }
+            guard let self else { completion(); return }
             guard self.connected else {
                 self.detachForTermination(completion: completion)
                 return
             }
             self.sendBarrier(.disableAll, title: "hades2.op.exitCleanup", announceSuccess: false) { [weak self] _ in
-                guard let self else { completion(true); return }
+                guard let self else { completion(); return }
                 self.detachForTermination(completion: completion)
             }
         }
     }
 
-    private func finishExit(completion: @escaping (Bool) -> Void) {
+    private func finishExit(completion: @escaping () -> Void) {
         invalidateTextEdits()
         shuttingDown = true
         backendSession.stop(suppressTerminationError: true)
-        completion(true)
+        completion()
     }
 }
 

@@ -68,18 +68,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         send("set_invincibility", params: ["value": enabled], operation: "hades.invincibility")
     }
 
-    func prepareForTermination(completion: @escaping (Bool) -> Void) {
+    func prepareForTermination(completion: @escaping () -> Void) {
         guard connected else {
+            session.flushDiagnostics()
             session.stop(suppressTerminationError: true)
-            completion(true)
+            completion()
             return
         }
-        send("disable_all", operation: "host.disableAll", announceSuccess: false) { [weak self] success in
-            guard let self else { completion(true); return }
-            guard success else { completion(false); return }
-            self.send("disconnect", operation: "host.disconnectGame", announceSuccess: false) { [weak self] success in
-                if success { self?.session.stop(suppressTerminationError: true) }
-                completion(success)
+        send("disable_all", operation: "host.disableAll", announceSuccess: false) { [weak self] _ in
+            guard let self else { completion(); return }
+            self.send("disconnect", operation: "host.disconnectGame", announceSuccess: false) { [weak self] _ in
+                self?.session.flushDiagnostics()
+                self?.session.stop(suppressTerminationError: true)
+                completion()
             }
         }
     }

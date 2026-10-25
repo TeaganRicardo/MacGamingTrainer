@@ -76,6 +76,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     for module in ('OneModule', 'TwoModule'):
         assert f'TrainerGameContext<{module}>()' in generated
         assert f'{module}.makeManagementCommands(model: context.model' in generated
+        assert f'if !application.terminationRequested && application.selectedGameID == {module}.descriptor.id,' in generated
     assert 'typealias ActiveGameModule' not in generated
     assert 'targetExecutablePathSuffix: "one/Game.macOS"' in generated
 

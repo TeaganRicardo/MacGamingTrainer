@@ -90,13 +90,21 @@ import SwiftUI
         precondition(fields(pageWindow.contentView!).contains { $0 === draftField && $0.stringValue == "unfinished draft" },
                      "Page selection discarded a view-local input draft")
         precondition(window.contentView === document && window.isVisible)
+        first.postponeTermination = true
         var terminated: Bool?
-        application.prepareForTermination { terminated = $0 }
+        application.prepareForTermination { terminated = true }
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
         precondition(terminated == nil && firstSession.isStarted && secondSession.isStarted,
                      "Quit bypassed a tool-window write barrier")
+        precondition(application.terminationRequested && !firstContext.toolWindows.interactionEnabled)
         mayClose = true
         first.refreshFromHost()
+        wait { first.pendingTermination != nil && !second.busy }
+        second.setEnabled(false)
+        precondition(second.busy)
+        first.finishPostponedTermination()
+        precondition(terminated == nil && secondSession.isStarted,
+                     "Later context's newly busy operation was interrupted")
         wait { terminated == true && !firstSession.isStarted && !secondSession.isStarted }
         precondition(closes == 1)
         pageWindow.close()
@@ -117,8 +125,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
         destination = project / "Backend/games" / name
         shutil.copytree(FIXTURE / "backend", destination)
         adapter = destination / "adapter.py"
-        adapter.write_text("import os\n" + adapter.read_text().replace(
-            "'enabled': self.enabled}", "'enabled': self.enabled, 'pid': os.getpid()}"))
+        adapter.write_text("import os, time\n" + adapter.read_text().replace(
+            "'enabled': self.enabled}", "'enabled': self.enabled, 'pid': os.getpid()}").replace(
+            "if command == 'set_enabled':", "if command == 'set_enabled':\n            time.sleep(0.3)"))
         manifest = json.loads((destination / "module.json").read_text())
         manifest["id"] = name
         manifest["displayName"] = word + " Fixture"
@@ -133,6 +142,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
         source.parent.mkdir(parents=True)
         source.write_text((FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
             "ReferenceFixture", word + "Fixture").replace(
+            "    func prepareForTermination(completion: @escaping () -> Void) {",
+            "    @Published var postponeTermination = false\n    var pendingTermination: (() -> Void)?\n"
+            "    func finishPostponedTermination() {\n        backendSession.stop()\n        let done = pendingTermination\n"
+            "        pendingTermination = nil\n        done?()\n    }\n"
+            "    func prepareForTermination(completion: @escaping () -> Void) {\n"
+            "        if postponeTermination { pendingTermination = completion; return }").replace(
             "    func setEnabled(_ value: Bool)",
             "    @Published var activations = 0\n    func hostDidBecomeActive() { activations += 1 }\n    func setEnabled(_ value: Bool)").replace(
             "    @ObservedObject var model:",

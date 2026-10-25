@@ -273,7 +273,7 @@ guard waitUntil(2.0, { !model.connected && !model.enabled && !model.busy }) else
 }
 
 var canTerminate: Bool? = nil
-model.prepareForTermination { canTerminate = $0 }
+model.prepareForTermination { canTerminate = true }
 guard waitUntil(2.0, { canTerminate == true }) else {
     fail("fixture termination did not complete")
 }
