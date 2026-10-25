@@ -41,6 +41,14 @@ phase emitters themselves are not an optimization.
 | Time Warp | Production native warped clock function in a private portable fixture: never enabled, active 2×, enabled then reset to 1.0. Each CPU sample averages 100000 calls after three warmups. OS clock/dyld binding stubs are explicit; real hook frequency, contention, binding and game FPS remain unobserved. |
 | LLDB helper | Existing production execute/stop/boundary/drain/resume and memory/breakpoint work against a private compiled helper, three fresh attachments. Real Lua/game code and supported-game identity are absent. These timings cannot be added to offline Host totals as an end-to-end game estimate. |
 
+Dialogue queries reuse normalized names and bilingual text for the current
+candidate identities while their captured native source remains unchanged.
+Save record state, ambiguity, permissions and page rows are evaluated on each
+query. Removed candidates leave that query index; source replacement invalidates
+it through the existing freshness/capture owner. The first query and the first
+query after refresh include construction of this metadata, so keep them in the
+comparison rather than reporting only already-indexed timings.
+
 Records correlate by `request_id`; sidecar records include `method`, count and
 actual UTF-8 request/reply sizes, including liveness. Fixture resident CPU phases
 join the same identity. Each result is classified as a full observation or
