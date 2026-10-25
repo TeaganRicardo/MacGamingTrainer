@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hades",
+  "displayName": "Hades",
+  "protocolVersion": 1,
+  "backend": {"adapter": "games.hades.adapter:HadesAdapter"},
+  "frontend": {
+    "sourceDirectory": "Sources/Hades",
+    "moduleType": "HadesGameModule",
+    "minimumMacOS": "14.0"
+  },
+  "steamAppId": "1145360",
+  "buildRequirements": {
+    "lldbPython": true,
+    "debuggerEntitlement": true,
+    "entitlements": "Backend/games/hades/trainer-entitlements.plist"
+  },
+  "targetApplication": {
+    "processName": "Game.macOS",
+    "bundleIdentifier": "",
+    "executablePathSuffix": "Hades/Game.macOS.app/Contents/MacOS/Game.macOS"
+  }
+}

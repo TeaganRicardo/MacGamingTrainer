@@ -36,6 +36,8 @@ BACKEND_MODULE_BOUNDARY_PATHS = {
 MODULE_EXACT_PATHS = {
     ".github/workflows/module-build-matrix.yml",
     "ACTIVE_GAME_ID",
+    "app.json",
+    "Tools/product_support.py",
     "Backend/games/__init__.py",
     "Info.plist",
     "Sources/App.swift",
@@ -98,7 +100,7 @@ def needs_module_build_for_path(path: str) -> bool:
         or path.startswith(MODULE_PREFIXES)
     ):
         return True
-    return path.startswith("Backend/games/") and path.endswith("/module.json")
+    return path.startswith(("Backend/games/", "Sources/"))
 
 
 def is_linux_portable_only(
@@ -107,6 +109,8 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
+    if path.startswith("Backend/games/"):
+        return False
     if path.startswith("Backend/"):
         return not path.endswith("/module.json") and not path.endswith(".plist")
     if path.startswith("tests/"):

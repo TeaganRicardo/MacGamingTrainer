@@ -1844,18 +1844,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func installHotkeys() {
         hotkeys = nil
-        let instance = GlobalHotkeys { [weak self] actionID in
+        let instance = GlobalHotkeys(gameID: Hades2GameModule.descriptor.id,
+                                     registrationChanged: { [weak self] failure in
+            if let failure { self?.shortcutIssue = .registration(failure) }
+            else { self?.clearShortcutIssue() }
+        }) { [weak self] actionID in
             guard let self, let action = ShortcutAction(rawValue: actionID) else { return }
             self.performShortcut(action)
         }
         let bindings = ShortcutAction.allCases.map { action in
             HotkeyBinding(actionID: action.rawValue, chord: shortcutChord(action))
         }
-        if let failure = instance.register(bindings) {
-            shortcutIssue = .registration(failure)
-        } else {
-            clearShortcutIssue()
-        }
+        instance.register(bindings)
         hotkeys = instance
     }
 

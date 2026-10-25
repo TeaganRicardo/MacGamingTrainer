@@ -28,11 +28,17 @@
   "nativeLibraries": [
     {
       "source": "native/EffectBlockQuery.c",
-      "filename": "libMGTNativeEffectQuery.dylib"
+      "filename": "libMGTNativeEffectQuery.dylib",
+      "architectures": [
+        "arm64"
+      ]
     },
     {
       "source": "native/CommandMailbox.c",
-      "filename": "libMGTCommandMailbox.dylib"
+      "filename": "libMGTCommandMailbox.dylib",
+      "architectures": [
+        "arm64"
+      ]
     }
   ],
   "app": {

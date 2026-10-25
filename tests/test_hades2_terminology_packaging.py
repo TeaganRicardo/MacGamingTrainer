@@ -64,7 +64,7 @@ def test_present_but_invalid_bundle_is_not_hidden_by_source_fallback():
             raise AssertionError("invalid bundled terminology was silently replaced by source data")
 
 
-def test_packaging_and_verification_include_only_the_hades_resource():
+def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
     build = (ROOT / "build.sh").read_text(encoding="utf-8")
     macos_workflow = (ROOT / ".github/workflows/build2-macos.yml").read_text(encoding="utf-8")
     module_matrix = (ROOT / ".github/workflows/module-build-matrix.yml").read_text(encoding="utf-8")
@@ -92,16 +92,13 @@ def test_packaging_and_verification_include_only_the_hades_resource():
         table = ROOT / f"Sources/Hades2/Presentation/Localization/hades2.{language}.json"
         assert table.is_file(), f"missing packaged Hades presentation table: {table}"
 
-    # Build 2 owns the production Hades build and proves the Hades-only
-    # terminology and presentation resources are present there.
-    assert "./build.sh hades2" in macos_workflow
+    # The unified production package includes the module-owned resources.
+    assert "./build.sh --all" in macos_workflow
     assert 'test -f "$app/Contents/Resources/ui_terminology.json"' in macos_workflow
     assert 'test -f "$app/Contents/Resources/hades2.zh-CN.json"' in macos_workflow
     assert 'test -f "$app/Contents/Resources/hades2.en.json"' in macos_workflow
 
-    # The module matrix exists only to prove the independent reference fixture.
-    # It must not duplicate the Hades build, and the Hades-only resources must
-    # not leak into that packaged module.
+    # Independently built modules exclude resources owned by other games.
     assert "- reference_fixture" in module_matrix
     assert "- hades2" not in module_matrix
     assert 'test ! -e "$app/Contents/Resources/ui_terminology.json"' in module_matrix
@@ -113,7 +110,7 @@ for _test in (
     test_bundled_resource_wins_over_source_tree_fallback,
     test_development_execution_falls_back_to_source_reference,
     test_present_but_invalid_bundle_is_not_hidden_by_source_fallback,
-    test_packaging_and_verification_include_only_the_hades_resource,
+    test_product_contains_hades_resources_and_isolated_modules_exclude_them,
 ):
     _test()
 

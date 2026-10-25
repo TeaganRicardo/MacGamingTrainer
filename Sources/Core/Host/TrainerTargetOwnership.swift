@@ -23,7 +23,7 @@ final class TrainerTargetOwnership {
         close(descriptor)
     }
 
-    static func acquire(directory: URL, processName: String, bundleIdentifier: String) throws -> Acquisition {
+    static func acquire(directory: URL, processName: String, bundleIdentifier: String, executablePathSuffix: String = "") throws -> Acquisition {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
@@ -31,7 +31,8 @@ final class TrainerTargetOwnership {
         // Copies/versions of the Trainer share the target identity rather than
         // the Trainer's executable path or bundle ID. Process name is the
         // fallback for modules whose target has no app bundle identity.
-        let identity = bundleIdentifier.isEmpty ? "process:\(processName)" : "bundle:\(bundleIdentifier)"
+        let identity = !bundleIdentifier.isEmpty ? "bundle:\(bundleIdentifier)" :
+            (!executablePathSuffix.isEmpty ? "executable:\(executablePathSuffix)" : "process:\(processName)")
         let filename = Data(identity.utf8).base64EncodedString()
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "+", with: "-") + ".lock"

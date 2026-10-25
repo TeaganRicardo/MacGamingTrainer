@@ -38,7 +38,7 @@ assert "forceLegendary" in model and "forceDuo" in model
 
 global_hotkeys = (ROOT / "Sources/Core/Input/GlobalHotkeys.swift").read_text()
 assert "handlerInstallStatus" in global_hotkeys
-assert "guard handlerInstallStatus == noErr, handler != nil else" in global_hotkeys
+assert "guard registry.handlerInstallStatus == noErr else" in global_hotkeys
 assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
 assert "TrainerHotkeyRegistrationConflict" in global_hotkeys
 assert "case listenerInitialization(status: Int32)" in global_hotkeys

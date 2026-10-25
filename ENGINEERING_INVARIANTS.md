@@ -7,18 +7,16 @@ Consult the sections relevant to the changed responsibility. `AGENTS.md` owns th
 ## 1. Ownership map
 
 ```text
-App
-  -> one TrainerBackendSession
-  -> TrainerHostView
-       -> TrainerTargetProcessMonitor
-       -> TrainerConnectionPolicy
-       -> optional TrainerSaveManagerModel
-       -> selected TrainerGameModule
-            -> game model/API
+App (catalog, visible game, shared hotkey routing, all-context quit)
+  -> persistent TrainerGameContext per game
+       -> one TrainerBackendSession / worker
+       -> TrainerTargetProcessMonitor + TrainerConnectionPolicy
+       -> optional TrainerSaveManagerModel + tool windows
+       -> TrainerHostView (retained across page selection)
+       -> TrainerGameModule model/API
             -> game backend adapter/router
             -> game transport/persistence
             -> optional game-owned runtime adapter
-                 -> debugger sidecar / native helper / engine runtime / no sidecar
 ```
 
 ### Core / Host owns
@@ -26,7 +24,7 @@ App
 - app shell and shared visual/interaction primitives;
 - generic hotkey capture/registration and generic feedback vocabulary;
 - target-process observation and automatic/manual connection policy;
-- the single backend worker session, JSONL request ordering, queueing, timeout and protocol verification;
+- one backend worker session per game, JSONL request ordering, queueing, timeout and protocol verification;
 - generic optional-sidecar process lifecycle, bounded JSONL framing/request identity, reply timeout, interruption cleanup, crash handling and terminal outcome-unknown trust semantics;
 - debugger-agnostic Process Time Warp controller mechanics;
 - optional cross-game save snapshot/restore/rollback/staging infrastructure;
@@ -46,6 +44,8 @@ Core/Host does not own Hades command names, Hades desired/active/dormant semanti
 - game-specific UI composition.
 
 `reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs, LLDB, Lua, or an optional sidecar.
+
+Selecting a different game only changes presentation. It never disconnects another game, stops its worker, cancels its requests or releases its documents/lease. Runtime actions and tool windows retain their originating game context. Quit coordinates every context and waits for pending writes before termination cleanup.
 
 ## 2. State sources of truth
 

@@ -16,7 +16,7 @@ Backend/games/<id>/
   ...game-local services/transport...
 ```
 
-It should not require edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`.
+Register the game ID in the product module list in `app.json`. Ordinary module additions require no edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`. The build generates the typed catalog and management-command composition from that list.
 
 Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
@@ -24,7 +24,9 @@ Hades II is the reference implementation, not a requirement that other games cop
 
 The app has one product SemVer, owned by the root `Info.plist`. Game modules do not repeat that version in `module.json` while they are built and distributed as part of the same app.
 
-The selected module manifest owns `app.displayName` and `app.bundleIdentifier` for its output. Build tooling writes these into `CFBundleDisplayName`, `CFBundleName`, and `CFBundleIdentifier` in the packaged plist and derives `dist/<displayName>.app` from the same validated manifest. The root `Info.plist` must not declare those fields; validation rejects their reintroduction. This preserves the Hades II identity and permits a different module to have its own app identity. The root `Info.plist` owns `CFBundleExecutable`; build tooling uses that name for the binary and output verification requires the packaged executable at that path. Product SemVer and bundle build remain root-owned.
+`app.json` owns the unified product's display name, bundle identifier, included game IDs and Host architectures. `Info.plist` owns product SemVer, bundle build and executable name. Default `./build.sh` (or `./build.sh --all`) builds that product. `MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh` selects an unmanaged output directory when a cloud/FileProvider directory adds bundle metadata that invalidates strict signing; the default remains `dist/`. `./build.sh <game-id>` is an isolated diagnostic build used by module contract tests; it has a distinct diagnostic identity and contains exactly that module.
+
+Each module declares its frontend source/type, minimum macOS, optional resources and build requirements. A native library can declare its own architectures independently of the Host/Python architecture; target-injected code must match its game, and code also loaded by a producer must support that producer. Native ABI and supported-image checks remain game-owned.
 
 `Tools/write_build_provenance.py` owns artifact and sidecar naming. Its local mode requires a clean source checkout; CI mode verifies the executing PR head or push commit. The reference fixture's temporary module copies must match their tracked `ContractFixtures/reference_module` sources and appear as declared generated inputs in provenance. For a module declaring `residentRuntime`, provenance hashes the declared source and packaged ZIP member rather than copying a digest from status prose.
 
@@ -46,9 +48,9 @@ It stays outside normal runtime module paths, so discovery never exposes it as a
 
 The proof requires:
 
-- shared source graph = `Sources/App.swift + Sources/Core/** + selected frontend`;
+- shared source graph = `Sources/App.swift + Sources/Core/** + selected frontends`;
 - no Hades/reference-fixture branch in Core, App, or build source selection;
-- packaged output contains exactly the selected game module;
+- isolated diagnostic output contains exactly its selected game module; unified output contains exactly the product module list;
 - a module without `saveManagement` generates `supportsSaveManagement: false` and receives `save_unsupported` for `core.save.*`;
 - both Hades II and the fixture consume the shared Host/UI seam;
 - macOS semantic typecheck/build/codesign succeeds for both modules.
@@ -59,10 +61,16 @@ The fixture is architecture evidence, not a semantic template. It intentionally 
 
 `Core/UI` owns game-agnostic visual primitives and composites. A game maps its own semantics into neutral visual inputs; Core must not learn Hades concepts such as God Mode, boon rarity, resources, or CurrentRun.
 
-The App/Host supplies the common shell, sidebar, header, connection status, backend session, and theme. Game modules compose those shared interfaces instead of recreating Host behavior locally.
+The unified App keeps one persistent `TrainerGameContext` per bundled game. Selecting another game changes only the visible page: connected games, backend workers, process observations, pending requests, Save workspaces and tool windows continue independently. The page stack retains each view identity so view-local drafts survive selection. `TrainerGameContext` owns event-driven connection coordination independently of page visibility; game models receive the same injected session for their lifetime.
+
+Each context retains its target ownership lease. App quit waits until all contexts and tool windows can close, then runs every module's termination hook. A tool window's requests always address its original context, regardless of the selected page. The shared hotkey registry assigns App-wide event identities and registers only the displayed game's bindings. Selection unregisters the old bindings before installing the new ones; hidden games remain fully connected. Queued shortcut callbacks recheck their game scope. Two games may reuse a chord; conflicts within the displayed game or with OS registrations remain visible.
+
+A target without a bundle ID declares an `executablePathSuffix` to distinguish it from other executables with the same generic name. Target monitors and ownership use that identity; game adapters additionally verify their supported native image before executing game commands.
+
+The App/Host supplies the common shell, sidebar, header, connection status, per-game backend session, and theme. Game modules compose those shared interfaces instead of recreating Host behavior locally.
 
 - Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS/debugger requirements, and declared app bundle resources belong to the build tooling. Presentation labels/icons/header text remain in Swift.
-- A module may declare optional `nativeLibraries` with module-relative C `source` and a `filename`. Shared tooling compiles these for the selected architectures and signs them inside that module's `native/` directory. Other modules require no library, engine API, layout profile or debugger; library ABI and target-image compatibility remain game-owned.
+- A module may declare optional `nativeLibraries` with module-relative C `source` and a `filename`. Shared tooling compiles these for their declared architectures (or the Host architectures when omitted) and signs them inside that module's `native/` directory. Other modules require no library, engine API, layout profile or debugger; library ABI and target-image compatibility remain game-owned.
 - An optional runtime sidecar is a game-owned adapter over Core's generic child-process/JSONL lifecycle seam. Core may own process lifetime, bounded framing, request/reply identity, reply timeout/interruption cleanup, crash handling and terminal outcome-unknown trust semantics; the game owns whether a sidecar exists, its launch command, handshake and method vocabulary, risk classification, error presentation, debugger/engine bridge and runtime semantics. A game that needs no sidecar adds none.
 - `ProcessTimeWarpController` is Core-owned because its helper ABI/install/set/verify behavior is debugger-agnostic. A concrete debugger driver remains game-owned until a second real implementation proves a smaller shared driver seam; LLDB is not a Core requirement.
 - `TrainerGameModule.managedBackupEditor` is an optional tool-content factory, absent by default. Save Management passes a verified neutral snapshot identity to a module that supplies it; the module chooses supported documents and write targets and reuses its Host-owned backend session. `TrainerToolWindowStore` owns independent native windows and focuses an already-open entry before invoking its factory again. Content supplies its close policy and cleanup; closing a tool does not close the main window. Core does not interpret profile names, save codecs or semantic editor commands. The reference module keeps the absent action.

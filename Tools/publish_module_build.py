@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from clean_signing_metadata import clean_signing_metadata
+
 
 def _verify_signature(app):
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
@@ -16,6 +18,7 @@ def _verify_signature(app):
 
 def _copy_app(source, destination):
     subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
+    clean_signing_metadata(destination, destination.parent)
 
 
 def _module_id(app):

@@ -123,7 +123,7 @@ assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-lates
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
-assert './build.sh hades2' in build2
+assert './build.sh --all' in build2
 
 module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
@@ -133,6 +133,7 @@ assert "needs.scope.outputs.needs_module == 'true' && 'macos-26' || 'ubuntu-late
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
 assert "needs.scope.outputs.needs_module == 'false'" in module_matrix
 assert '- reference_fixture' in module_matrix
+assert '- hades\n' in module_matrix
 assert '- hades2' not in module_matrix, 'Hades II build is already owned by Build 2 macOS'
 assert './build.sh "${{ matrix.game }}"' in module_matrix
 
@@ -169,12 +170,12 @@ for step in (
         f"Build 2 heavy convergence step is not dispatch-only: {step}"
     )
 assert "Run macOS-only contract suite" in build2
-assert "Build Hades II trainer" in build2
+assert "Build unified trainer" in build2
 assert "Verify package" in build2
 
 for step in (
-    "Retain reference module artifact and source provenance",
-    "Verify reference artifact checksum and declared inputs",
+    "Retain isolated module artifact and source provenance",
+    "Verify isolated artifact checksum and declared inputs",
     "actions/upload-artifact@",
 ):
     pos = module_matrix.index(step)

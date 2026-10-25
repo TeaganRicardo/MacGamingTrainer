@@ -51,14 +51,14 @@ assert "model.revealRecoveryCopies()" in view
 assert 'model.recoveryPaths.joined(separator: "\\n")' in view
 
 for token in (
-    "@StateObject private var saveManager: TrainerSaveManagerModel",
+    "@ObservedObject private var saveManager: TrainerSaveManagerModel",
     "Module.descriptor.supportsSaveManagement",
     "TrainerSaveManagerView(model: saveManager",
-    "init(model: Module.Model, session: TrainerBackendSession)",
+    "init(context: TrainerGameContext<Module>)",
 ):
     assert token in host, token
 
-assert "TrainerHostView<ActiveGameModule>(model: model, session: backendSession)" in app
+assert "TrainerGamePages(application: application)" in app
 for token in (
     "private var managementActions: TrainerManagementActions",
     "TrainerManagementActions(openSaveManagement:",

@@ -11,7 +11,7 @@ from macos_toolchain_identity import (
     collect_macos_toolchain,
     verify_recorded_macos_toolchain,
 )
-from write_build_provenance import git_value, require_product_identity, sha256_file
+from write_build_provenance import git_value, require_product_identity, sha256_file, product_module_ids
 
 
 def require_object(value: object, name: str) -> dict[str, object]:
@@ -92,14 +92,29 @@ def verify_provenance(
 
     if manifest.get("moduleId") != module_id:
         raise RuntimeError("provenance module ID differs from expected module")
-    module_manifest = repo_root / "Backend" / "games" / module_id / "module.json"
-    module_input = require_object(build_inputs.get("moduleManifest"), "provenance moduleManifest")
-    expected_module_input = {
-        "path": module_manifest.relative_to(repo_root).as_posix(),
-        "sha256": sha256_file(module_manifest),
-    }
-    if module_input != expected_module_input:
-        raise RuntimeError("provenance module manifest differs from current source")
+    if module_id == 'all':
+        ids = product_module_ids(repo_root)
+        if manifest.get('moduleIds') != list(ids):
+            raise RuntimeError('provenance module set differs from app.json')
+        expected_product = {'path': 'app.json', 'sha256': sha256_file(repo_root / 'app.json')}
+        if build_inputs.get('productManifest') != expected_product:
+            raise RuntimeError('provenance product manifest differs from current source')
+        expected_modules = [
+            {'path': f'Backend/games/{game_id}/module.json',
+             'sha256': sha256_file(repo_root / 'Backend/games' / game_id / 'module.json')}
+            for game_id in ids
+        ]
+        if build_inputs.get('moduleManifests') != expected_modules:
+            raise RuntimeError('provenance module manifests differ from current source')
+    else:
+        module_manifest = repo_root / "Backend" / "games" / module_id / "module.json"
+        module_input = require_object(build_inputs.get("moduleManifest"), "provenance moduleManifest")
+        expected_module_input = {
+            "path": module_manifest.relative_to(repo_root).as_posix(),
+            "sha256": sha256_file(module_manifest),
+        }
+        if module_input != expected_module_input:
+            raise RuntimeError("provenance module manifest differs from current source")
 
     python_runtime = manifest.get("pythonRuntime")
     runtime_declaration = repo_root / "Tools" / "python_runtime.json"
@@ -108,8 +123,14 @@ def verify_provenance(
         if runtime.get("sourceSha256") != sha256_file(runtime_declaration):
             raise RuntimeError("provenance Python runtime declaration differs from current source")
 
-    resident_runtime = manifest.get("residentRuntime")
-    if resident_runtime is not None:
+    if module_id == 'all':
+        runtimes = require_object(manifest.get('residentRuntimes'), 'provenance residentRuntimes')
+        if set(runtimes) - set(ids):
+            raise RuntimeError('provenance resident runtime has an undeclared module')
+        resident_values = list(runtimes.values())
+    else:
+        resident_values = [manifest['residentRuntime']] if 'residentRuntime' in manifest else []
+    for resident_runtime in resident_values:
         resident = require_object(resident_runtime, "provenance residentRuntime")
         source_path = resident.get("source")
         if not isinstance(source_path, str) or not source_path:

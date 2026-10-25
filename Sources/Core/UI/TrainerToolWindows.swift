@@ -50,6 +50,12 @@ final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate
     }
     private var entries: [String: Entry] = [:]
 
+    var canCloseAll: Bool { entries.values.allSatisfy { $0.content.canClose() } }
+
+    func closeAll() {
+        for entry in Array(entries.values) { entry.window.performClose(nil) }
+    }
+
     func actions(localization: TrainerLocalizationStore, theme: TrainerTheme) -> TrainerToolWindowActions {
         TrainerToolWindowActions { [weak self] id, title, content in
             self?.open(id: id, title: title, localization: localization, theme: theme, content: content)

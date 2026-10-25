@@ -5,19 +5,17 @@ import SwiftUI
 struct TrainerHostView<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @ObservedObject var model: Module.Model
-    @StateObject private var targetMonitor: TrainerTargetProcessMonitor
-    @StateObject private var saveManager: TrainerSaveManagerModel
-    @StateObject private var toolWindows = TrainerToolWindowStore()
-    @State private var connectionPolicy = TrainerConnectionPolicy()
+    private let context: TrainerGameContext<Module>
+    @ObservedObject private var model: Module.Model
+    @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
+    @ObservedObject private var saveManager: TrainerSaveManagerModel
+    private var toolWindows: TrainerToolWindowStore { context.toolWindows }
 
-    init(model: Module.Model, session: TrainerBackendSession) {
-        self.model = model
-        _saveManager = StateObject(wrappedValue: TrainerSaveManagerModel(session: session))
-        _targetMonitor = StateObject(wrappedValue: TrainerTargetProcessMonitor(
-            processName: Module.descriptor.targetProcessName,
-            bundleIdentifier: Module.descriptor.targetBundleIdentifier
-        ))
+    init(context: TrainerGameContext<Module>) {
+        self.context = context
+        _model = ObservedObject(wrappedValue: context.model)
+        _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
+        _saveManager = ObservedObject(wrappedValue: context.saveManager)
     }
 
     private var managementActions: TrainerManagementActions {
@@ -32,17 +30,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 }
             }
         })
-    }
-
-    /// Register the selected module's presentation namespace before the first
-    /// render. Core stores only the resolver closure, so the shell resolves
-    /// module tokens without knowing the module's vocabulary, and switching
-    /// language re-resolves them live.
-    private func registerModulePresentation(_ localization: TrainerLocalizationStore) {
-        localization.registerModulePresentation(prefix: Module.presentationKeyPrefix) {
-            key, arguments, language in
-            Module.presentationText(key: key, arguments: arguments, language: language)
-        }
     }
 
     var body: some View {
@@ -62,7 +49,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                     backendAvailable: model.backendAvailable,
                     actionsEnabled: model.hostActionsEnabled,
                     onRefresh: model.refreshFromHost,
-                    onPrimary: handlePrimaryConnectionAction,
+                    onPrimary: context.toggleConnection,
                     onRestart: model.restartBackendFromHost,
                     targetRunning: targetMonitor.isRunning,
                     onLaunch: model.launchActionFromHost
@@ -80,116 +67,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             Module.makeFeedback(model: model)
         }
         .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
-        .onAppear {
-            registerModulePresentation(localization)
-            targetMonitor.refresh()
-            model.hostTargetLifetimeChanged(observation: targetMonitor.targetObservation)
-            connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: targetMonitor.targetObservation) { previous, observed in
-            // One published snapshot carries both presence and launch intent.
-            // Notify modules before consuming the Host's connection grant so
-            // game-owned readiness from an earlier process cannot be reused.
-            let pidChanged = previous.processIdentifier != observed.processIdentifier
-            if observed.launchGeneration != previous.launchGeneration ||
-               pidChanged ||
-               (previous.isRunning && !observed.isRunning) {
-                model.hostTargetLifetimeChanged(observation: observed)
-            }
-            if previous.isRunning && observed.isRunning && pidChanged &&
-               observed.launchGeneration == previous.launchGeneration {
-                // Refresh/activation can discover a replacement PID even if the
-                // OS launch notification was missed. Invalidate the old
-                // connection without granting an unobserved background attach.
-                connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)
-            }
-            connectionPolicy.observeTarget(
-                running: observed.isRunning,
-                launchGeneration: observed.launchGeneration,
-                allowDiscoveryConnect: false
-            )
-            if !observed.isRunning, Module.descriptor.supportsSaveManagement, model.backendAvailable {
-                saveManager.applyStagedIfPossible()
-            }
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: targetMonitor.activationGeneration) { _, _ in
-            // Target activation can arrive before this app's resign-active
-            // notification. Record the opportunity only; consume it when the
-            // trainer itself becomes foreground again.
-            connectionPolicy.targetActivated()
-        }
-        .onChange(of: model.backendAvailable) { _, available in
-            if available {
-                connectionPolicy.backendBecameAvailable()
-                if Module.descriptor.supportsSaveManagement, !targetMonitor.isRunning {
-                    saveManager.applyStagedIfPossible()
-                }
-            } else {
-                connectionPolicy.backendBecameUnavailable()
-            }
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: model.busy) { _, _ in
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: model.connected) { _, connected in
-            connectionPolicy.connectionChanged(connected: connected)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            targetMonitor.refresh()
-            // Repair policy state synchronously even when the published
-            // isRunning value did not change and SwiftUI therefore emits no
-            // onChange callback.
-            connectionPolicy.observeTarget(
-                running: targetMonitor.isRunning,
-                launchGeneration: targetMonitor.launchGeneration,
-                allowDiscoveryConnect: false
-            )
-            reconcileAutomaticConnection()
-            model.hostDidBecomeActive()
-        }
-    }
-
-    private func handlePrimaryConnectionAction() {
-        connectionPolicy.userWillToggleConnection(currentlyConnected: model.connected)
-        model.toggleConnectionFromHost()
-    }
-
-    /// Lifecycle events may first recover a missing backend and then connect once
-    /// that backend reports available. There is no polling/retry timer: target
-    /// launch/activation and backend lifecycle transitions are the only triggers.
-    private func reconcileAutomaticConnection() {
-        if connectionPolicy.consumeTargetExitRefreshIfEligible(
-            backendAvailable: model.backendAvailable,
-            busy: model.busy,
-            connected: model.connected
-        ) {
-            model.refreshFromHost()
-            return
-        }
-
-        // A true target-process launch grants one background connect chance
-        // that survives transient Host/backend busy states until consumed.
-        // Target activation never grants this, so active gameplay cannot gain
-        // a surprise LLDB attach merely from Alt-Tab.
-        guard connectionPolicy.backgroundConnectionAllowed || NSApp.isActive else { return }
-        if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
-            backendAvailable: model.backendAvailable,
-            busy: model.busy,
-            actionsEnabled: model.hostActionsEnabled
-        ) {
-            model.restartBackendFromHost()
-            return
-        }
-        let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed
-        guard connectionPolicy.consumeAutomaticConnectIfEligible(
-            backendAvailable: model.backendAvailable,
-            busy: model.busy,
-            connected: model.connected,
-            actionsEnabled: model.hostActionsEnabled
-        ) else { return }
-        model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)
+        .onAppear { context.registerPresentation(localization) }
     }
 }

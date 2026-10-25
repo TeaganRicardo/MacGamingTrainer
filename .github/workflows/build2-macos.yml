@@ -131,14 +131,14 @@ jobs:
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: python3 Tools/mutation_gate.py
 
-      - name: Build Hades II trainer
+      - name: Build unified trainer
         if: needs.scope.outputs.needs_macos == 'true'
-        run: ./build.sh hades2
+        run: ./build.sh --all
 
       - name: Verify package
         if: needs.scope.outputs.needs_macos == 'true'
         run: |
-          app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
+          app="$(python3 Tools/verify_module_build.py all --print-app)"
           expected_version="${{ steps.version.outputs.version }}"
           expected_build="${{ steps.version.outputs.build }}"
           test -d "$app"
@@ -150,8 +150,7 @@ jobs:
           test -f "$app/Contents/Resources/ui_terminology.json"
           test -f "$app/Contents/Resources/hades2.zh-CN.json"
           test -f "$app/Contents/Resources/hades2.en.json"
-          count=$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')
-          test "$count" = "1"
+          test -f "$app/Contents/Resources/Backend/games/hades/module.json"
           codesign --verify --deep --strict "$app"
 
       - name: Package release candidate
@@ -159,7 +158,7 @@ jobs:
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p artifacts
-          app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
+          app="$(python3 Tools/verify_module_build.py all --print-app)"
           artifact="artifacts/$(python3 Tools/write_build_provenance.py \
             --print-artifact-name \
             --product-version "${{ steps.version.outputs.version }}" \
@@ -171,7 +170,7 @@ jobs:
             --product-version "${{ steps.version.outputs.version }}" \
             --bundle-build "${{ steps.version.outputs.build }}" \
             --repo-root "$GITHUB_WORKSPACE" \
-            --module-id hades2 \
+            --module-id all \
             --workflow-source .github/workflows/build2-macos.yml
 
       - name: Verify release provenance and checksum
@@ -187,7 +186,7 @@ jobs:
             --artifact "artifacts/${{ steps.package.outputs.artifact_name }}" \
             --repo-root "$GITHUB_WORKSPACE" \
             --expected-source-sha "${{ steps.version.outputs.source_sha }}" \
-            --module-id hades2 \
+            --module-id all \
             --expected-checkout clean \
             --expected-generated-copies 0 \
             --expected-workflow "Build 2 macOS" \

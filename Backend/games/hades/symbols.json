@@ -1,0 +1,37 @@
+{
+  "uuid": "BA8CE510-EB7F-3E65-96B6-574608EA4550",
+  "architecture": "x86_64",
+  "steamBuildID": "10929685",
+  "symbols": {
+    "_ZN3sgg13ConfigOptions20RequireFocusToUpdateE": {
+      "rva": 28618475
+    },
+    "_ZN3sgg13ScriptManager13LUA_INTERFACEE": {
+      "rva": 5517480
+    },
+    "_ZN3sgg3App6UpdateEf": {
+      "rva": 3035488,
+      "prefix": "554889e54157415641554154534881ec"
+    },
+    "luaL_loadbufferx": {
+      "rva": 102881,
+      "prefix": "554889e54883ec10488d45f048893048"
+    },
+    "lua_gettop": {
+      "rva": 10157,
+      "prefix": "554889e5488b4710488b4f20482b0148"
+    },
+    "lua_pcallk": {
+      "rva": 14312,
+      "prefix": "554889e54157415641554154534883ec"
+    },
+    "lua_settop": {
+      "rva": 10182,
+      "prefix": "554889e585f67836488b4710488b4f20"
+    },
+    "lua_tolstring": {
+      "rva": 11485,
+      "prefix": "554889e54157415653504989d64189f7"
+    }
+  }
+}

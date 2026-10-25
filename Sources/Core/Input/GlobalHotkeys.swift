@@ -44,68 +44,136 @@ enum TrainerHotkeyRegistrationFailure: Equatable {
     case registrationConflicts([TrainerHotkeyRegistrationConflict])
 }
 
-final class GlobalHotkeys {
-    private var references: [EventHotKeyRef] = []
+private final class TrainerGlobalHotkeyRegistry {
+    static let shared = TrainerGlobalHotkeyRegistry()
+    private let signature: OSType = 0x4D475452
     private var handler: EventHandlerRef?
-    private var handlerInstallStatus: OSStatus = noErr
-    private var eventActions: [UInt32: String] = [:]
-    let action: (String) -> Void
+    private(set) var handlerInstallStatus: OSStatus = noErr
+    private var nextEventID: UInt32 = 0
+    private var actions: [UInt32: () -> Void] = [:]
+    private var references: [UInt32: EventHotKeyRef] = [:]
+    private(set) var selectedGameID: String?
+    private var owners: [UUID: WeakOwner] = [:]
 
-    init(action: @escaping (String) -> Void) {
-        self.action = action
+    private final class WeakOwner {
+        weak var value: GlobalHotkeys?
+        init(_ value: GlobalHotkeys) { self.value = value }
+    }
+
+    func add(_ owner: GlobalHotkeys, id: UUID) { owners[id] = WeakOwner(owner) }
+    func remove(id: UUID) { owners.removeValue(forKey: id) }
+
+    func selectGame(_ id: String?) {
+        guard selectedGameID != id else { return }
+        selectedGameID = id
+        let current = owners.values.compactMap(\.value)
+        for owner in current { owner.unregister() }
+        for owner in current { owner.updateRegistration() }
+    }
+
+    private init() {
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         handlerInstallStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, context -> OSStatus in
-            guard let context = context, let event = event else { return OSStatus(eventNotHandledErr) }
-            var id = EventHotKeyID()
+            guard let context, let event else { return OSStatus(eventNotHandledErr) }
+            var identity = EventHotKeyID()
             let result = GetEventParameter(
                 event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                nil, MemoryLayout<EventHotKeyID>.size, nil, &id
+                nil, MemoryLayout<EventHotKeyID>.size, nil, &identity
             )
             guard result == noErr else { return result }
-            let owner = Unmanaged<GlobalHotkeys>.fromOpaque(context).takeUnretainedValue()
-            guard let mapped = owner.eventActions[id.id] else { return OSStatus(eventNotHandledErr) }
-            let action = owner.action
-            DispatchQueue.main.async { action(mapped) }
+            let registry = Unmanaged<TrainerGlobalHotkeyRegistry>.fromOpaque(context).takeUnretainedValue()
+            guard identity.signature == registry.signature,
+                  let action = registry.actions[identity.id] else { return OSStatus(eventNotHandledErr) }
+            DispatchQueue.main.async(execute: action)
             return noErr
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 
-    func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
-        guard handlerInstallStatus == noErr, handler != nil else {
-            return .listenerInitialization(status: handlerInstallStatus)
+    func register(_ chord: HotkeyChord, action: @escaping () -> Void) -> (UInt32?, OSStatus) {
+        nextEventID += 1
+        let id = nextEventID
+        var reference: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            chord.keyCode, chord.modifiers, EventHotKeyID(signature: signature, id: id),
+            GetApplicationEventTarget(), 0, &reference
+        )
+        guard status == noErr, let reference else { return (nil, status) }
+        references[id] = reference
+        actions[id] = action
+        return (id, noErr)
+    }
+
+    func unregister(_ ids: [UInt32]) {
+        for id in ids {
+            if let reference = references.removeValue(forKey: id) { UnregisterEventHotKey(reference) }
+            actions.removeValue(forKey: id)
         }
-        references.forEach { UnregisterEventHotKey($0) }
-        references.removeAll()
-        eventActions.removeAll()
+    }
+}
+
+final class GlobalHotkeys {
+    private let registry = TrainerGlobalHotkeyRegistry.shared
+    private let ownerID = UUID()
+    private let gameID: String
+    private var registeredIDs: [UInt32] = []
+    private var bindings: [HotkeyBinding] = []
+    private let registrationChanged: (TrainerHotkeyRegistrationFailure?) -> Void
+    let action: (String) -> Void
+
+    static func selectGame(_ id: String?) { TrainerGlobalHotkeyRegistry.shared.selectGame(id) }
+
+    init(gameID: String,
+         registrationChanged: @escaping (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
+         action: @escaping (String) -> Void) {
+        self.gameID = gameID
+        self.registrationChanged = registrationChanged
+        self.action = action
+        registry.add(self, id: ownerID)
+    }
+
+    @discardableResult
+    func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
+        self.bindings = bindings
+        return updateRegistration()
+    }
+
+    fileprivate func unregister() {
+        registry.unregister(registeredIDs)
+        registeredIDs.removeAll()
+    }
+
+    @discardableResult
+    fileprivate func updateRegistration() -> TrainerHotkeyRegistrationFailure? {
+        unregister()
+        guard registry.selectedGameID == gameID else { return nil }
+        guard registry.handlerInstallStatus == noErr else {
+            let failure = TrainerHotkeyRegistrationFailure.listenerInitialization(status: registry.handlerInstallStatus)
+            registrationChanged(failure)
+            return failure
+        }
         var failures: [TrainerHotkeyRegistrationConflict] = []
-        for (index, binding) in bindings.enumerated() {
-            var reference: EventHotKeyRef?
-            let eventID = UInt32(index + 1)
-            let result = RegisterEventHotKey(
-                binding.chord.keyCode,
-                binding.chord.modifiers,
-                EventHotKeyID(signature: 0x4D475452, id: eventID),
-                GetApplicationEventTarget(),
-                0,
-                &reference
-            )
-            if result == noErr, let reference {
-                references.append(reference)
-                eventActions[eventID] = binding.actionID
+        let perform = action
+        let scope = gameID
+        for binding in bindings {
+            let (id, status) = registry.register(binding.chord) { [weak registry] in
+                guard registry?.selectedGameID == scope else { return }
+                perform(binding.actionID)
+            }
+            if let id {
+                registeredIDs.append(id)
             } else {
                 failures.append(TrainerHotkeyRegistrationConflict(
-                    actionID: binding.actionID,
-                    chordText: binding.chord.displayText,
-                    status: result
+                    actionID: binding.actionID, chordText: binding.chord.displayText, status: status
                 ))
             }
         }
-        guard !failures.isEmpty else { return nil }
-        return .registrationConflicts(failures)
+        let failure: TrainerHotkeyRegistrationFailure? = failures.isEmpty ? nil : .registrationConflicts(failures)
+        registrationChanged(failure)
+        return failure
     }
 
     deinit {
-        references.forEach { UnregisterEventHotKey($0) }
-        if let handler { RemoveEventHandler(handler) }
+        registry.unregister(registeredIDs)
+        registry.remove(id: ownerID)
     }
 }

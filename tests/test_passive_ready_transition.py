@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
-host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
+host = (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
 contract = (ROOT / 'Sources/Core/Host/TrainerGameModule.swift').read_text()
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 command_binding = (ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift').read_text()
@@ -32,11 +32,11 @@ assert '@Published private(set) var isRunning' not in monitor
 assert '@Published private(set) var launchGeneration' not in monitor
 launch_note = monitor[monitor.index('NSWorkspace.didLaunchApplicationNotification'):monitor.index('NSWorkspace.didActivateApplicationNotification')]
 assert 'targetObservation = TrainerTargetObservation(' in launch_note
-assert '.onChange(of: targetMonitor.targetObservation)' in host
+assert 'targetMonitor.$targetObservation.dropFirst().sink' in host
 assert '.onChange(of: targetMonitor.isRunning)' not in host
 assert '.onChange(of: targetMonitor.launchGeneration)' not in host
-launch_start = host.index('.onChange(of: targetMonitor.targetObservation)')
-launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
+launch_start = host.index('    private func targetChanged(')
+launch_end = host.index('    private func applicationBecameActive()', launch_start)
 launch_block = host[launch_start:launch_end]
 assert 'previous.processIdentifier != observed.processIdentifier' in launch_block, (
     'PID-only target replacement must refresh the module lifecycle'
@@ -67,16 +67,16 @@ assert 'connectionPolicy.targetActivated()' in host
 # Target activation only records an opportunity. It must not consume that
 # opportunity immediately because NSWorkspace target-activation can race the
 # trainer's own didResignActive transition.
-activation_start = host.index('.onChange(of: targetMonitor.activationGeneration)')
-activation_end = host.index('.onChange(of: model.backendAvailable)', activation_start)
+activation_start = host.index('targetMonitor.$activationGeneration.dropFirst().sink')
+activation_end = host.index('saveManager.objectWillChange', activation_start)
 activation_block = host[activation_start:activation_end]
 assert 'connectionPolicy.targetActivated()' in activation_block
 assert 'reconcileAutomaticConnection()' not in activation_block
 
 # Trainer activation is the only place that repairs a potentially missed target
 # snapshot before consuming pending debugger work.
-foreground_start = host.index('NSApplication.didBecomeActiveNotification')
-foreground_end = host.index('\n    }\n\n    private func handlePrimaryConnectionAction', foreground_start)
+foreground_start = host.index('    private func applicationBecameActive()')
+foreground_end = host.index('    private func reconcileAutomaticConnection()', foreground_start)
 host_foreground = host[foreground_start:foreground_end]
 for token in (
     'targetMonitor.refresh()',
