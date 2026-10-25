@@ -57,6 +57,55 @@ for target in ({'heroId': 'old:run:hero'}, None):
     else:
         raise AssertionError('an obsolete or absent hero identity reached the mutation')
 
+native_fixture = '''
+SaveIgnores = {}
+GameState = { Resources = {} }
+CurrentRun = { Hero = { ObjectId = 40000, Health = 50, MaxHealth = 50, Traits = {} }, Money = 25 }
+function UpdateMoneyUI() end
+'''
+
+
+class LuaStateTransport:
+    pid = 42
+
+    def __init__(self):
+        self.history = []
+
+    def alive(self):
+        return True
+
+    def execute(self, source, *, mutating):
+        assert mutating
+        harness = native_fixture
+        for previous in self.history:
+            harness += '\n(function()\n' + previous + '\nend)();\n'
+        harness += '\nlocal ok,result=pcall(function()\n' + source + '\nend)\n'
+        harness += 'if not ok then assert(CurrentRun.Money==25); io.stderr:write(result); os.exit(1) end; print(result)'
+        result = subprocess.run([lua, '-'], input=harness, capture_output=True, text=True)
+        if result.returncode:
+            assert 'hades.error.staleTarget' in result.stderr, result.stderr
+            raise AdapterError('stale_target', 'hades.error.staleTarget')
+        self.history.append(source)
+        return json.loads(result.stdout)
+
+
+reset_transport = LuaStateTransport()
+reset_worker = HadesLLDBWorker(reset_transport)
+before_reset = reset_worker.dispatch('status', {})
+assert reset_worker.dispatch('status', {})['target'] == before_reset['target']
+reset_transport.history.clear()
+after_reset = reset_worker.dispatch('status', {})
+try:
+    reset_worker.dispatch('set_value', {'field': 'money', 'value': 500, 'target': before_reset['target']})
+except AdapterError as error:
+    assert error.code == 'stale_target'
+else:
+    raise AssertionError('a draft from before the Lua reset mutated the replacement hero')
+assert after_reset['target'] != before_reset['target']
+assert reset_worker.dispatch('status', {})['target'] == after_reset['target']
+edited = reset_worker.dispatch('set_value', {'field': 'money', 'value': 500, 'target': after_reset['target']})
+assert edited['money'] == 500
+
 value = '中"\\\n\09'
 encoded = lua_literal(value)
 probe = 'local v=' + encoded + '; assert(#v==8); assert(string.byte(v,1)==228); assert(string.byte(v,7)==0); print("escaped")'

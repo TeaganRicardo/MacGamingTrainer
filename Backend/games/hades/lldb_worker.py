@@ -33,12 +33,11 @@ class HadesLLDBWorker:
             transport = HadesLuaTransport()
         self.transport = transport
         self.source = Path(__file__).with_name('runtime.lua').read_text()
-        self.generation_id = uuid.uuid4().hex
         self.features = dict(DEFAULT_FEATURES)
 
     def _invoke(self, method='status', arguments=(), *, target=None):
         source = 'local runtime = (function()\n' + self.source + '\nend)()\n'
-        source += ('if not runtime.bootstrapId then runtime.bootstrapId=' + lua_literal(self.generation_id)
+        source += ('if not runtime.bootstrapId then runtime.bootstrapId=' + lua_literal(uuid.uuid4().hex)
                    + ';runtime.generationId=runtime.bootstrapId;runtime.configure('
                    + lua_literal(self.features) + ') end\n')
         if target is not None:

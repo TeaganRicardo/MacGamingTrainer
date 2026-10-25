@@ -1,7 +1,10 @@
 import logging
+from dataclasses import replace
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
@@ -10,6 +13,7 @@ import core.protocol as protocol_module
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
+from core.registry import create_adapter
 from core.save_restore import SaveRollbackError
 
 
@@ -196,5 +200,35 @@ finally:
 assert probe_restore['ok'] is False
 assert probe_restore['error']['code'] == 'save_busy'
 assert (saves / 'Profile1.sav').read_bytes() == b'probe-current'
+
+identity_adapter = create_adapter('hades')
+identity_saves = base / 'identity-saves'; identity_saves.mkdir()
+identity_file = identity_saves / 'Profile1.sav'
+identity_file.write_bytes(b'identity-original')
+declared = identity_adapter.context.save_management
+identity_adapter.context = replace(identity_adapter.context, save_management=replace(
+    declared, roots=(replace(declared.roots[0], path=str(identity_saves)),)))
+identity_router = JsonlRequestRouter(identity_adapter, save_data_root=base / 'identity-data')
+process_rows = SimpleNamespace(returncode=0, stdout='/tmp/AnotherGame/Game.macOS\n')
+with patch.object(protocol_module.subprocess, 'run', return_value=process_rows):
+    snapshot = identity_router.save_service.backup()
+    assert snapshot['hot'] is False, 'An unrelated generic-name process was treated as the target game'
+    identity_file.write_bytes(b'identity-changed')
+    restored = identity_router.save_service.restore(snapshot['id'], preserve_current=False)
+    assert restored.get('staged') is not True
+    assert identity_file.read_bytes() == b'identity-original'
+    process_rows.stdout = '/tmp/Steam/common/Hades/Game.macOS.app/Contents/MacOS/Game.macOS\n'
+    assert identity_router.save_service.backup()['hot'] is True
+    identity_file.write_bytes(b'identity-running')
+    assert identity_router.save_service.restore(snapshot['id'])['staged'] is True
+    assert identity_file.read_bytes() == b'identity-running'
+    process_rows.returncode = 2
+    try:
+        identity_router.save_service.backup()
+    except protocol_module.SaveBusyError:
+        pass
+    else:
+        raise AssertionError('A failed executable-path query was treated as a stopped target')
+identity_router.close()
 
 print('core_save_protocol_ok')

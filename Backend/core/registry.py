@@ -45,6 +45,7 @@ def create_adapter(game_id: str, root: Path = _ROOT):
         public_metadata=manifest.public_metadata(),
         process_name=manifest.process_name,
         save_management=manifest.save_management,
+        executable_path_suffix=manifest.executable_path_suffix,
     )
     # Do not catch TypeError here: a TypeError raised *inside* a valid adapter
     # constructor is a real module bug and must not be misreported as a bad

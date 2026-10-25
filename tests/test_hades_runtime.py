@@ -327,10 +327,10 @@ function AddAssistWeapons(unit, trait)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 1 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 2 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 2 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 3 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -439,7 +439,8 @@ assert(unit.SuperMeter == 25, "native Call cap was discarded")
 unit.superCap = nil
 
 runtime.set_value("health", 75)
-runtime.set_value("maxHealth", 60)
+unit.MaxHealth = 60
+runtime.set_value("health", 60)
 assert(unit.Health == 60 and unit.MaxHealth == 60 and updates.health == 60)
 runtime.set_value("money", 7)
 runtime.set_value("rerolls", 9)
@@ -633,3 +634,690 @@ lines = proc.stdout.splitlines()
 state = json.loads(lines[-2])
 assert state['heroReady'] is False and state['traits'] == [] and state['features']['moveSpeedMultiplier'] == 1
 print(lines[-1])
+
+
+# Exact supported-build Lua owners; engine calls and bookkeeping remain fixtures.
+native_owners = r'''
+-- Shipped UpgradeManager.lua SHA256 307a3521f37dba7a9ecff7080a13fd132f9338e4d16cdd04dbe47ddbda87ccee
+
+function ApplyUnitPropertyChanges( unit, propertyChanges, applyLuaUpgrades, reverse )
+
+	if propertyChanges == nil then
+		return
+	end
+
+	for k, propertyChange in ipairs( propertyChanges ) do
+		ApplyUnitPropertyChange( unit, propertyChange, applyLuaUpgrades, reverse )
+	end
+end
+
+function ApplyUnitPropertyChange( unit, propertyChange, applyLuaUpgrades, reverse )
+	if propertyChange.LegalUnits ~= nil then
+		if not Contains( propertyChange.LegalUnits, unit.Name ) then
+			return
+		end
+	elseif unit.SkipModifiers then
+		return
+	end
+
+	if propertyChange.TraitName ~= nil then
+		if not HeroHasTrait(propertyChange.TraitName) then
+			return
+		end
+	end
+
+	local changeValue = propertyChange.ChangeValue
+	if reverse then
+		if type(changeValue) == "number" then
+			if propertyChange.ChangeType == "Multiply" then
+				changeValue = 1 / changeValue
+			elseif propertyChange.ChangeType == "Add" then
+				changeValue = 0 - changeValue
+			end
+		elseif type(changeValue) == "boolean" then
+			changeValue = not changeValue
+		else
+			return
+		end
+	end
+
+	if propertyChange.ThingProperty ~= nil then
+		SetThingProperty({ DestinationId = unit.ObjectId, Property = propertyChange.ThingProperty, Value = changeValue, ValueChangeType = propertyChange.ChangeType })
+	end
+	if propertyChange.LifeProperty ~= nil then
+		ApplyLifePropertyChange( unit, propertyChange, changeValue )
+	end
+	if propertyChange.UnitProperty ~= nil then
+		SetUnitProperty({ DestinationId = unit.ObjectId, Property = propertyChange.UnitProperty, Value = changeValue, ValueChangeType = propertyChange.ChangeType })
+	end
+
+	if applyLuaUpgrades and propertyChange.LuaProperty ~= nil and ( unit[propertyChange.LuaProperty] ~= nil or propertyChange.ChangeType == "Absolute" ) then
+		local delta = nil
+		if propertyChange.LuaProperty == "MaxHealth" and propertyChange.MaintainDelta and unit.Health ~= nil and unit.MaxHealth ~= nil then
+			delta = changeValue
+		end
+
+		if propertyChange.LuaTable ~= nil then
+			if propertyChange.ChangeType == "Absolute" then
+				unit[propertyChange.LuaTable][propertyChange.LuaProperty] = changeValue
+			elseif propertyChange.ChangeType == "Multiply" then
+				unit[propertyChange.LuaTable][propertyChange.LuaProperty] = unit[propertyChange.LuaTable][propertyChange.LuaProperty] * changeValue
+			elseif propertyChange.ChangeType == "Add" then
+				unit[propertyChange.LuaTable][propertyChange.LuaProperty] = unit[propertyChange.LuaTable][propertyChange.LuaProperty] + changeValue
+			elseif type(changeValue) == "boolean" then
+				unit[propertyChange.LuaTable][propertyChange.LuaProperty] = not unit[propertyChange.LuaTable][propertyChange.LuaProperty]
+			end
+		else
+			if propertyChange.ChangeType == "Absolute" then
+				unit[propertyChange.LuaProperty] = changeValue
+			elseif propertyChange.ChangeType == "Multiply" then
+				unit[propertyChange.LuaProperty] = unit[propertyChange.LuaProperty] * changeValue
+			elseif propertyChange.ChangeType == "Add" then
+				unit[propertyChange.LuaProperty] = unit[propertyChange.LuaProperty] + changeValue
+			elseif type(changeValue) == "boolean" then
+				unit[propertyChange.LuaProperty] = not unit[propertyChange.LuaProperty]
+			end
+		end
+
+		if propertyChange.LuaProperty == "MaxHealth" then
+			if ( changeValue < 0 and propertyChange.ChangeType == "Add" ) or ( propertyChange.ChangeType == "Multiply" and changeValue < 1 ) then
+				local currentHealth = unit.Health
+				local maxHealth = unit.MaxHealth
+				if currentHealth ~= nil and maxHealth ~= nil then
+
+					if propertyChange.MaintainDelta then
+						if propertyChange.ChangeType == "Add" then
+							if delta < 0 then
+								Damage( unit, { DamageAmount = math.abs(delta), MinHealth = 1, Silent = true, PureDamage = true } )
+							else
+								Heal( unit, { HealAmount = delta, SourceName = "MaxLifeChange", Silent = true})
+							end
+							currentHealth = math.max( 1, currentHealth + delta )
+						else
+							currentHealth = currentHealth * changeValue
+							Damage( unit, { DamageAmount = math.abs(unit.Health - currentHealth), MinHealth = 1, Silent = true, PureDamage = true } )
+						end
+					end
+
+					if currentHealth > maxHealth then
+						unit.Health = maxHealth
+					end
+				end
+			elseif not propertyChange.BlockHealing then
+				if ( changeValue > 0 and propertyChange.ChangeType == "Add" ) then
+					Heal( unit, { HealAmount = changeValue, Silent = true })
+				elseif ( changeValue > 1 and propertyChange.ChangeType == "Multiply" ) then
+					local currentHealth = unit.Health
+					if currentHealth ~= nil then
+						Heal( unit, { HealAmount = currentHealth * (changeValue - 1), Silent = true })
+					end
+				end
+			end
+		end
+		if propertyChange.LuaProperty == "MaxHealth" or propertyChange.LuaProperty == "Health" then
+			ValidateMaxHealth( propertyChange.BlockHealing )
+			thread( UpdateHealthUI )
+		end
+		if propertyChange.LuaProperty == "SuperMeterLimit" or propertyChange.LuaProperty == "SuperCost" then
+			DestroySuperMeter()
+			ShowSuperMeter()
+		end
+	end
+
+	if propertyChange.WeaponName ~= nil then
+		ApplyWeaponPropertyChange( unit, propertyChange.WeaponName, propertyChange, reverse)
+	end
+
+	if propertyChange.WeaponNames ~= nil then
+		for k, weaponName in pairs( propertyChange.WeaponNames ) do
+			ApplyWeaponPropertyChange( unit, weaponName, propertyChange, reverse)
+		end
+	end
+
+end
+
+-- Shipped RoomManager.lua SHA256 ca379fe0708af778007aef929822e4cfe8cf3a47dd2a3d37bf57e582ddb1b924
+
+function GetMaxHealthUpgradeIncrement( value )
+	local expectedMaxHealth = HeroData.DefaultHero.MaxHealth
+	for i, trait in pairs(CurrentRun.Hero.Traits) do
+		if trait.PropertyChanges ~= nil then
+			for k, propertyChange in pairs( trait.PropertyChanges ) do
+				if propertyChange.LuaProperty == "MaxHealth" then
+					expectedMaxHealth = expectedMaxHealth + propertyChange.ChangeValue
+				end
+			end
+		end
+	end
+
+	expectedMaxHealth = expectedMaxHealth + GetNumMetaUpgrades("HealthMetaUpgrade") * MetaUpgradeData.HealthMetaUpgrade.ChangeValue + value
+	expectedMaxHealth = round(expectedMaxHealth * GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true }))
+
+	return expectedMaxHealth - CurrentRun.Hero.MaxHealth
+end
+
+function ValidateMaxHealth( blockHealing )
+	local expectedMaxHealth = HeroData.DefaultHero.MaxHealth
+	for i, trait in pairs(CurrentRun.Hero.Traits) do
+		if trait.PropertyChanges ~= nil then
+			for k, propertyChange in pairs( trait.PropertyChanges ) do
+				if propertyChange.LuaProperty == "MaxHealth" then
+					expectedMaxHealth = expectedMaxHealth + propertyChange.ChangeValue
+				end
+			end
+		end
+	end
+	expectedMaxHealth = expectedMaxHealth + GetNumMetaUpgrades("HealthMetaUpgrade") * MetaUpgradeData.HealthMetaUpgrade.ChangeValue
+	expectedMaxHealth = round(expectedMaxHealth * GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true }))
+	if expectedMaxHealth ~= CurrentRun.Hero.MaxHealth then
+		local delta = expectedMaxHealth - CurrentRun.Hero.MaxHealth
+		CurrentRun.Hero.MaxHealth = round( CurrentRun.Hero.MaxHealth + delta )
+		if not blockHealing then
+			CurrentRun.Hero.Health = round( CurrentRun.Hero.Health + delta )
+		end
+	end
+end
+
+function AddMaxHealth( healthGained, source, args )
+	args = args or {}
+	if args.Thread then
+		args.Thread = false
+		thread( AddMaxHealth, healthGained, source, args )
+		return
+	end
+	local startingHealth = CurrentRun.Hero.MaxHealth
+	wait( args.Delay )
+	healthGained = round(healthGained)
+	local traitName = "RoomRewardMaxHealthTrait"
+	if args.NoHealing then
+		traitName = "RoomRewardEmptyMaxHealthTrait"
+	end
+
+	local healthTraitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = traitName })
+	healthTraitData.PropertyChanges[1].ChangeValue = healthGained
+	AddTraitToHero({ TraitData = healthTraitData })
+	healthGained = round(healthGained * GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true }))
+	if not( args.Silent ) then
+		MaxHealthIncreaseText({ MaxHealthGained = CurrentRun.Hero.MaxHealth - startingHealth , SpecialText = "MaxHealthIncrease" })
+	end
+end
+
+-- Shipped TraitScripts.lua SHA256 473b3a2df05923bdbfe123e35047ff86ee44db4c7f4e3881e1812461d43ee3a6
+
+function GetTotalHeroTraitValue(propertyName, args)
+	args = args or {}
+	local offset = 0
+	local output = 0
+	local hero = args.Hero or CurrentRun.Hero
+
+	if args.IsMultiplier then
+		offset = 1
+		output = 1
+	end
+
+	for k, trait in pairs( hero.Traits ) do
+		if trait[propertyName] ~= nil then
+			output = output + (trait[propertyName] - offset)
+		end
+	end
+	return output
+end
+
+function AddTraitToHero(args)
+	local traitData = args.TraitData
+	if traitData == nil then
+		traitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = args.TraitName, Rarity = args.Rarity })
+	end
+
+	GameState.LastPickedTraitName = traitData.Name
+
+	if not args.PreProcessedForDisplay then
+		ExtractValues(CurrentRun.Hero, traitData, traitData)
+	end
+
+	if traitData.Slot and CurrentRun.CurrentRoom then
+		CurrentRun.CurrentRoom.AcquiredSlot = traitData.Slot
+	end
+	-- traits may have information that acts on weapons, so we must first equip all associated weapons to the player
+	EquipReferencedWeapons( traitData )
+	AddTraitData( CurrentRun.Hero, traitData, args )
+
+	EquipSpecialWeapons( CurrentRun.Hero, traitData )
+	AddAssistWeapons( CurrentRun.Hero, traitData )
+	for weaponName, v in pairs( CurrentRun.Hero.Weapons ) do
+		AddWallSlamWeapons( CurrentRun.Hero, traitData )
+		AddOnDamageWeapons(CurrentRun.Hero, weaponName, traitData)
+		AddOnFireWeapons(CurrentRun.Hero, weaponName, traitData)
+		if traitData.UpgradeHeroWeapon ~= nil and Contains(traitData.UpgradeHeroWeapon.WeaponNames, weaponName) then
+			AddHeroWeaponUpgrade(weaponName, traitData.UpgradeHeroWeapon.UpgradeName)
+		end
+	end
+
+	if ( traitData.EnemyPropertyChanges or traitData.AddEnemyOnDeathWeapons ) and ActiveEnemies ~= nil then
+		for enemyId, enemy in pairs( ActiveEnemies ) do
+			EquipReferencedEnemyWeapons( currentRun, traitData, enemy )
+			ApplyEnemyTrait( CurrentRun, traitData, enemy )
+		end
+	end
+
+	if traitData.AddShout then
+		if traitData.AddShout.Cost then
+			CurrentRun.Hero.SuperCost = traitData.AddShout.Cost
+		else
+			CurrentRun.Hero.SuperCost = 25
+		end
+		ShowSuperMeter()
+	end
+end
+
+-- Shipped RoomPresentation.lua SHA256 2d164457578215cff1488d044d9c2826ec79fe2dd652445e58933beae4f69300
+
+function DropHeroToRoomPosition( heroId, lightId, heroDestination, disableCollision, dropDelay, landDelay, speedAdjustment )
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	AddTimerBlock( CurrentRun, "MoveHeroToRoomPosition" )
+	wait( dropDelay )
+	SetThingProperty({ DestinationId = CurrentRun.Hero.ObjectId, Property = "SuppressSounds", Value = true, DataValue = false })
+	if disableCollision then
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithObstacles", Value = false })
+	end
+	if speedAdjustment then
+		SetUnitProperty({ DestinationId = heroId, Property = "Speed", Value = speedAdjustment })
+	end
+	SetAlpha({ Id = heroId, Fraction = 1.0 })
+	if( lightId ~= nil ) then
+		SetAlpha({ Id = lightId, Fraction = 1.0 })
+	end
+	SetAnimation({ Name = "ZagreusHeroLanding_Air", DestinationId = heroId })
+	SetThingProperty({ DestinationId = heroId, Property = "TouchdownGraphic", Value = "ZagreusHeroLanding_ReturnToIdle" })
+	AdjustZLocation({ Id = heroId, Distance = 1500, Duration = 0 })
+	wait(0.02)
+	AdjustZLocation({ Id = heroId, Distance = 1500, Duration = 1.0 })
+	Move({ Id = heroId, DestinationId = heroDestination, Mode = "Precise" })
+	PlaySound({ Name = "/SFX/Player Sounds/ZagreusWhooshDropIn", Id = heroId, Delay = 0.5 })
+	thread( DustLanding, 1.62 )
+	wait( landDelay )
+	Stop({ Id = heroId })
+	AngleTowardTarget({ Id = heroId, DestinationId = 553377 })
+	SetThingProperty({ DestinationId = CurrentRun.Hero.ObjectId, Property = "SuppressSounds", Value = false, DataValue = false })
+	if disableCollision then
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithObstacles", Value = true })
+	end
+	if speedAdjustment then
+		SetUnitProperty({ DestinationId = heroId, Property = "Speed", Value = 540 })
+	end
+	thread( DoRumble, { { ScreenPreWait = 0.02, LeftFraction = 0.2, Duration = 0.15 }, } )
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+	RemoveTimerBlock( CurrentRun, "MoveHeroToRoomPosition" )
+end
+
+function MoveHeroToRoomPosition( args )
+	AddInputBlock({ Name = "MoveHeroToRoomPosition" })
+	local heroId = CurrentRun.Hero.ObjectId
+
+	local initialSpeed = GetUnitDataValue({ Id = heroId, Property = "Speed" })
+	local defaultSpeed = 540
+	if args.UseDefaultSpeed and initialSpeed ~= defaultSpeed then
+		SetUnitProperty({ Property = "Speed", Value = defaultSpeed, DestinationId = heroId })
+	end
+
+	if args.DisableCollision then
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithObstacles", Value = false })
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithUnits", Value = false })
+	end
+
+	Move({ Id = heroId, DestinationId = args.DestinationId, SuccessDistance = args.NodeSuccessDistance or 32, StopAtEnd = true })
+	local notifyName = "WithinDistance"..args.DestinationId
+
+	NotifyWithinDistance({ Id = heroId, DestinationId = args.DestinationId, Distance = 45, Notify = notifyName, Timeout = args.Timeout or 5.0 })
+	waitUntil( notifyName )
+	Stop({ Id = heroId })
+	if args.DisableCollision then
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithObstacles", Value = true })
+		SetUnitProperty({ DestinationId = heroId, Property = "CollideWithUnits", Value = true })
+	end
+
+	if args.UseDefaultSpeed and initialSpeed ~= defaultSpeed then
+		SetUnitProperty({ Property = "Speed", Value = initialSpeed, DestinationId = heroId })
+		Halt({ Id = heroId })
+	end
+
+	if args.AngleTowardsIdOnEnd ~= nil then
+		AngleTowardTarget({ Id = heroId, DestinationId = args.AngleTowardsIdOnEnd })
+	end
+
+	RemoveInputBlock({ Name = "MoveHeroToRoomPosition" })
+end
+
+function ResetPlayerMoveData( currentRun, initialSpeed, delay )
+	wait(delay)
+	SetUnitProperty({ Property = "StartGraphic", Value = "ZagreusStart", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusRun", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusStop", DestinationId = currentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = initialSpeed, DestinationId = currentRun.Hero.ObjectId })
+end
+
+function SetupPlayerUnitInFlashback()
+	SetUnitProperty({ Property = "StartGraphic", Value = nil, DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusWalk", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusWalkStop", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = 110, DestinationId = CurrentRun.Hero.ObjectId })
+	SetThingProperty({ Property = "Graphic", Value = "ZagreusIdle", DestinationId = CurrentRun.Hero.ObjectId })
+end
+
+function RestorePlayerUnitAfterFlashback()
+	SetThingProperty({ Property = "Graphic", Value = "ZagreusIdle", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "StartGraphic", Value = "ZagreusStart", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "MoveGraphic", Value = "ZagreusRun", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "StopGraphic", Value = "ZagreusStop", DestinationId = CurrentRun.Hero.ObjectId })
+	SetThingProperty({ Property = "Graphic", Value = "ZagreusIdle", DestinationId = CurrentRun.Hero.ObjectId })
+	SetUnitProperty({ Property = "Speed", Value = 540, DestinationId = CurrentRun.Hero.ObjectId })
+end
+
+-- Shipped RunManager.lua SHA256 4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e
+
+function AddTimerBlock( run, flag )
+	if flag == nil then
+		flag = "Generic"
+	end
+	run.BlockTimerFlags[flag] = true
+end
+
+function RemoveTimerBlock( run, flag )
+	if flag == nil then
+		flag = "Generic"
+	end
+	run.BlockTimerFlags[flag] = nil
+end
+'''
+native_setup = r'''
+
+-- Engine/bookkeeping stubs surround the unmodified native owner functions below.
+HeroData = { DefaultHero = { MaxHealth = 50 } }
+MetaUpgradeData = { HealthMetaUpgrade = { ChangeValue = 5 } }
+function GetNumMetaUpgrades() return CurrentRun.Hero.metaHealth or 0 end
+function round(value) return math.floor(value + 0.5) end
+TraitData.RoomRewardMaxHealthTrait = { Name = "RoomRewardMaxHealthTrait", Hidden = true, PropertyChanges = {
+  { LuaProperty = "MaxHealth", BaseValue = 25, ChangeType = "Add" },
+} }
+TraitData.RoomRewardEmptyMaxHealthTrait = { Name = "RoomRewardEmptyMaxHealthTrait", Hidden = true, PropertyChanges = {
+  { LuaProperty = "MaxHealth", BaseValue = 25, ChangeType = "Add", BlockHealing = true },
+} }
+TraitData.HealthBonusTrait = { Name = "HealthBonusTrait", PropertyChanges = {
+  { LuaProperty = "MaxHealth", ChangeValue = 20, ChangeType = "Add" },
+} }
+TraitData.SwordCursedLifeStealTrait = { Name = "SwordCursedLifeStealTrait", MaxHealthMultiplier = 0.4,
+  PropertyChanges = { { LuaProperty = "MaxHealth", ChangeValue = 0.4, ChangeType = "Multiply" } },
+}
+local processedTrait = GetProcessedTraitData
+function GetProcessedTraitData(args)
+  local trait = processedTrait(args)
+  for _, change in ipairs(trait.PropertyChanges or {}) do change.ChangeValue = change.ChangeValue or change.BaseValue end
+  return trait
+end
+local engineObjects = {}
+local function bind(unit) engineObjects[unit.ObjectId] = unit.properties end
+local fixtureSetup = SetupHeroObject
+function SetupHeroObject(run)
+  local result = table.pack(fixtureSetup(run))
+  bind(run.Hero)
+  return table.unpack(result, 1, result.n)
+end
+function SetUnitProperty(args)
+  if args.Property ~= "Speed" then return end
+  local properties = assert(engineObjects[args.DestinationId])
+  if args.ValueChangeType == "Multiply" then properties.Speed = properties.Speed * args.Value
+  elseif args.ValueChangeType == "Add" then properties.Speed = properties.Speed + args.Value
+  else properties.Speed = args.Value end
+end
+function GetUnitDataValue(args) return assert(engineObjects[args.Id])[args.Property] end
+function UpdateHealthUI()
+  assert(CurrentRun.Hero.MaxHealth >= 1 and CurrentRun.Hero.Health >= 0, "native health UI observed a negative vital")
+  updates.health = CurrentRun.Hero.Health
+end
+function ExtractValues() end
+function EquipSpecialWeapons() end
+function AddWallSlamWeapons() end
+function AddOnDamageWeapons() end
+function AddOnFireWeapons() end
+function AddTraitData(unit, trait, args)
+  -- TraitScripts.lua:864,917-921: persistence precedes native property application.
+  table.insert(unit.Traits, copy(trait))
+  ApplyUnitPropertyChanges(unit, trait.PropertyChanges, true)
+end
+function thread(fn, ...) if fn == UpdateHealthUI then fn(...) end end
+function SetThingProperty() end
+function AddInputBlock() end
+function RemoveInputBlock() end
+function AddTimerBlock() end
+function RemoveTimerBlock() end
+function SetAlpha() end
+function SetAnimation() end
+function AdjustZLocation() end
+function Move() end
+function PlaySound() end
+function Stop() end
+function Halt() end
+function AngleTowardTarget() end
+function NotifyWithinDistance() end
+function waitUntil(name) coroutine.yield(name) end
+local pendingReset
+function RoomEntranceHades(run)
+  -- RoomPresentation.lua:560-582: native snapshot/scripted speed/restore lifetime.
+  local initialSpeed = GetUnitDataValue({ Id = run.Hero.ObjectId, Property = "Speed" })
+  SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = 130 })
+  waitUntil("hades-entry")
+  SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = initialSpeed })
+  return "entrance", nil, 7
+end
+StartDeathLoopPresentation = RoomEntranceHades
+function BedroomIntermissionApproach() return RoomEntranceHades(CurrentRun) end
+local function surfaceEntry(run, room)
+  -- RoomPresentation.lua:695-727,767-790: reset continues in its own coroutine.
+  local initialSpeed = GetUnitDataValue({ Id = run.Hero.ObjectId, Property = "Speed" })
+  SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = 115 })
+  if room.WithReset then
+    pendingReset = coroutine.create(function() ResetPlayerMoveData(run, initialSpeed, 2) end)
+    assert(coroutine.resume(pendingReset))
+  end
+end
+RoomEntranceE_Intro, RoomEntranceSurface = surfaceEntry, surfaceEntry
+function ExitToHadesPresentation(run)
+  SetUnitProperty({ DestinationId = run.Hero.ObjectId, Property = "Speed", Value = 130 })
+end
+function GardenScenePan()
+  SetUnitProperty({ DestinationId = CurrentRun.Hero.ObjectId, Property = "Speed", Value = 115 })
+end
+local function finish(co)
+  while coroutine.status(co) ~= "dead" do
+    local result = table.pack(coroutine.resume(co))
+    assert(result[1], result[2])
+  end
+end
+local function nativeHeart(amount, noHealing)
+  finish(coroutine.create(function() AddMaxHealth(amount, "RoomRewardMaxHealthDrop", { Silent = true, NoHealing = noHealing }) end))
+end
+
+'''
+native_cases = r'''
+
+CurrentRun.Hero.Health, CurrentRun.Hero.MaxHealth = 20, 50
+CurrentRun.BlockTimerFlags = {}
+bind(CurrentRun.Hero)
+local initialLanding = coroutine.create(function()
+  DropHeroToRoomPosition(CurrentRun.Hero.ObjectId, nil, 123, true, 1, 2, 50)
+end)
+assert(coroutine.resume(initialLanding))
+local runtime = assert(load(SOURCE))()
+local unit = CurrentRun.Hero
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 540)
+assert(coroutine.resume(initialLanding))
+near(unit.properties.Speed, 50)
+finish(initialLanding)
+near(unit.properties.Speed, 675)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+unit.MaxHealth = 1000
+runtime.set_value("maxHealth", 50)
+assert(unit.MaxHealth == 50 and unit.Health == 20 and #unit.Traits == 0,
+  "a zero-contribution edit left a stale maximum projection")
+runtime.set_value("maxHealth", 1000)
+assert(unit.MaxHealth == 1000 and unit.Health == 20, "an absolute maximum edit healed current health")
+assert(unit.Traits[1].Name == "RoomRewardEmptyMaxHealthTrait" and unit.Traits[1].PropertyChanges[1].ChangeValue == 950)
+nativeHeart(25)
+assert(unit.MaxHealth == 1025 and unit.Health == 45, "a native heart discarded the edited maximum baseline")
+ValidateMaxHealth()
+assert(unit.MaxHealth == 1025 and unit.Health == 45)
+local traitCount = #unit.Traits
+runtime.set_value("maxHealth", 1025)
+assert(#unit.Traits == traitCount, "an unchanged absolute edit added a reward")
+runtime.set_value("maxHealth", 10)
+assert(unit.MaxHealth == 10 and unit.Health == 10, "a decreased maximum did not clamp current health")
+nativeHeart(25)
+assert(unit.MaxHealth == 35 and unit.Health == 35)
+AddTraitToHero({ TraitName = "HealthBonusTrait" })
+assert(unit.MaxHealth == 55 and unit.Health == 55, "native trait acquisition discarded the edited baseline")
+AddTraitToHero({ TraitName = "SwordCursedLifeStealTrait" })
+runtime.set_value("maxHealth", 1)
+assert(unit.MaxHealth == 1 and unit.Health == 1, "a curse multiplier made a decreased maximum negative")
+runtime.set_value("maxHealth", 1001)
+assert(unit.MaxHealth == 1001 and unit.Health == 1)
+nativeHeart(25)
+assert(unit.MaxHealth == 1011 and unit.Health == 11, "native multiplier semantics changed after the edit")
+unit.metaHealth = 3
+ValidateMaxHealth()
+assert(unit.MaxHealth == 1017 and unit.Health == 17, "native mirror recomputation lost the run contribution")
+runtime.set_feature("invincibility", true)
+runtime.set_feature("damageMultiplier", 3)
+runtime.disable_all()
+assert(unit.MaxHealth == 1017 and unit.Health == 17, "Disable All reverted a committed numeric edit")
+Save()
+for _, trait in pairs(savedState.run.Hero.Traits) do
+  assert(TraitData[trait.Name], "numeric persistence requires a Trainer-only trait definition")
+end
+assert(savedState.run.Hero.InvulnerableFlags["MacGamingTrainer.Hades"] == nil)
+local liveRun = CurrentRun
+CurrentRun = copy(savedState.run)
+CurrentRun.Hero.MaxHealth = 1
+ValidateMaxHealth(true)
+assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 17,
+  "native recomputation of the saved run required Trainer state")
+CurrentRun = liveRun
+
+-- An engine landing writes an absolute 540 after yielding. Trainer ownership
+-- begins before that native lifetime and resumes after its final write.
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 675)
+local landing = coroutine.create(function() DropHeroToRoomPosition(unit.ObjectId, nil, 123, true, 1, 2, 50) end)
+local ok, delay = coroutine.resume(landing)
+assert(ok and delay == 1)
+near(unit.properties.Speed, 540)
+ok, delay = coroutine.resume(landing)
+assert(ok and delay == 0.02)
+near(unit.properties.Speed, 50)
+runtime.configure({ moveSpeedMultiplier = 2 })
+near(unit.properties.Speed, 50)
+finish(landing)
+near(unit.properties.Speed, 1080)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+local moving = coroutine.create(function() MoveHeroToRoomPosition({ DestinationId = 456, UseDefaultSpeed = true }) end)
+ok, delay = coroutine.resume(moving)
+assert(ok and delay == "WithinDistance456")
+near(unit.properties.Speed, 540)
+runtime.disable_all()
+finish(moving)
+near(unit.properties.Speed, 540)
+
+unit.properties.Speed = 594
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+near(unit.properties.Speed, 742.5)
+moving = coroutine.create(function() MoveHeroToRoomPosition({ DestinationId = 457, UseDefaultSpeed = true }) end)
+assert(coroutine.resume(moving))
+near(unit.properties.Speed, 540)
+runtime.disable_all()
+finish(moving)
+near(unit.properties.Speed, 594)
+unit.properties.Speed = 540
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+local firstMove = coroutine.create(function() MoveHeroToRoomPosition({ DestinationId = 458, UseDefaultSpeed = true }) end)
+local secondMove = coroutine.create(function() MoveHeroToRoomPosition({ DestinationId = 459, UseDefaultSpeed = true }) end)
+assert(coroutine.resume(firstMove))
+assert(coroutine.resume(secondMove))
+runtime.configure({ moveSpeedMultiplier = 2 })
+finish(firstMove)
+near(unit.properties.Speed, 540)
+finish(secondMove)
+near(unit.properties.Speed, 1080)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+local entrance = coroutine.create(function()
+  local a, b, c = RoomEntranceHades(CurrentRun)
+  assert(a == "entrance" and b == nil and c == 7, "movement wrapper changed native return slots")
+end)
+assert(coroutine.resume(entrance))
+near(unit.properties.Speed, 130)
+runtime.disable_all()
+near(unit.properties.Speed, 130)
+finish(entrance)
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+RoomEntranceSurface(CurrentRun, { WithReset = true })
+near(unit.properties.Speed, 115)
+runtime.disable_all()
+near(unit.properties.Speed, 115)
+finish(pendingReset)
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+SetupPlayerUnitInFlashback()
+near(unit.properties.Speed, 110)
+runtime.configure({ moveSpeedMultiplier = 2 })
+near(unit.properties.Speed, 110)
+RestorePlayerUnitAfterFlashback()
+near(unit.properties.Speed, 1080)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+RoomEntranceE_Intro(CurrentRun, {})
+near(unit.properties.Speed, 115)
+runtime.disable_all()
+near(unit.properties.Speed, 115)
+SetupHeroObject(CurrentRun)
+near(unit.properties.Speed, 540)
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+ExitToHadesPresentation(CurrentRun)
+near(unit.properties.Speed, 130)
+SetupHeroObject(CurrentRun)
+near(unit.properties.Speed, 675)
+runtime.disable_all()
+near(unit.properties.Speed, 540)
+
+runtime.configure({ moveSpeedMultiplier = 1.25 })
+local oldRun, oldUnit = CurrentRun, unit
+landing = coroutine.create(function() DropHeroToRoomPosition(oldUnit.ObjectId, nil, 123, true, 1, 2, 50) end)
+assert(coroutine.resume(landing))
+CurrentRun = { Hero = newHero(800), Money = 0, NumRerolls = 0, InvulnerableFlags = {}, CurrentRoom = {}, BlockTimerFlags = {} }
+bind(CurrentRun.Hero)
+SetupHeroObject(CurrentRun)
+near(CurrentRun.Hero.properties.Speed, 675)
+finish(landing)
+near(CurrentRun.Hero.properties.Speed, 675)
+near(oldUnit.properties.Speed, 540)
+runtime.disable_all()
+near(CurrentRun.Hero.properties.Speed, 540)
+print("hades_runtime_native_max_health_and_movement_ok")
+
+'''
+native_harness = harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0] + native_setup + native_owners + native_cases
+proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + native_harness], text=True, capture_output=True)
+assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
+assert proc.stdout.strip() == 'hades_runtime_native_max_health_and_movement_ok', proc.stdout
+print(proc.stdout.strip())

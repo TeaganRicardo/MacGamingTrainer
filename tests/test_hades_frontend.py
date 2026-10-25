@@ -50,10 +50,10 @@ func fields(in view: NSView) -> [NSTextField] {
 func pump(_ seconds: TimeInterval = 0.1) {
     RunLoop.current.run(until: Date().addingTimeInterval(seconds))
 }
-func wait(_ condition: () -> Bool) {
+func wait(_ message: String = "fixture request did not complete", _ condition: () -> Bool) {
     let deadline = Date().addingTimeInterval(5)
     while !condition() && Date() < deadline { pump(0.02) }
-    check(condition(), "fixture request did not complete")
+    check(condition(), message)
 }
 @main struct Main {
     @MainActor static func main() throws {
@@ -74,6 +74,11 @@ func wait(_ condition: () -> Bool) {
         func setFixtureError(_ error: String?) throws {
             var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
             state["fixtureError"]=error
+            try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
+        }
+        func setConnection(_ connected: Bool, heroReady: Bool) throws {
+            var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+            state["connected"]=connected;state["heroReady"]=heroReady
             try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
         }
         let defaults=InMemoryDefaults()
@@ -144,6 +149,23 @@ func wait(_ condition: () -> Bool) {
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
         check(fields(in:host).contains { $0.accessibilityLabel()=="生命值" },"language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
+        for connected in [true,false] {
+            try setConnection(connected,heroReady:false)
+            model.refreshFromHost();wait { !model.busy && model.connected==connected && !model.heroReady }
+            check(model.hostActionsEnabled && !model.canMutate,"offline shortcut fixture retained a hero")
+            let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
+            model.performShortcut(HadesShortcutAction.disableAll.rawValue)
+            wait("Disable All shortcut did not dispatch without a hero (connected=\(connected))") {
+                !model.busy && commands().filter { $0["command"] as? String == "disable_all" }.count==disabled+1
+            }
+            check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
+                "Disable All feedback did not distinguish native cleanup from detached desired reset")
+            let afterDisable=commands().count
+            model.performShortcut(HadesShortcutAction.heal.rawValue);pump()
+            check(commands().count==afterDisable,"a hero shortcut ran without a hero")
+        }
+        try setConnection(true,heroReady:true)
+        model.refreshFromHost();wait { !model.busy && model.canMutate }
         for key in ["hades.error.outcomeUnknown","hades.error.restartRequired","hades.error.debuggerProtocol"] {
             try setFixtureError(key)
             model.refreshFromHost();wait { !model.busy && model.backendStatus.error==key }

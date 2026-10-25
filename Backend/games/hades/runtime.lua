@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 1 then error("hades.error.restartRequired") end
+  if existing.revision ~= 2 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -14,9 +14,10 @@ local resourceNames = {
   "MetaPoints", "Gems", "SuperGems", "LockKeys", "SuperLockKeys", "GiftPoints", "SuperGiftPoints",
 }
 local runtime = {
-  version = 1, revision = 1,
+  version = 1, revision = 2,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
+  movementOwners = setmetatable({}, { __mode = "k" }),
 }
 runtime.generationId = tostring(runtime)
 for name, value in pairs(defaults) do runtime.features[name] = value end
@@ -162,7 +163,10 @@ local function mount(unit, rebuilt)
     assert(type(AddOutgoingDamageModifier) == "function", "hades.error.unsupportedRuntime")
     AddOutgoingDamageModifier(unit, { Name = trainerFlag, GlobalMultiplier = desired.damageMultiplier, Multiplicative = true })
   end
-  if mounted.move ~= desired.moveSpeedMultiplier then
+  local movement = runtime.movementOwners[unit]
+  local scriptedMovement = movement and movement.run == CurrentRun and movement.objectId == unit.ObjectId
+  scriptedMovement = scriptedMovement or (CurrentRun.BlockTimerFlags and CurrentRun.BlockTimerFlags.MoveHeroToRoomPosition)
+  if not scriptedMovement and mounted.move ~= desired.moveSpeedMultiplier then
     nativeChange(unit, { UnitProperty = "Speed", ChangeValue = desired.moveSpeedMultiplier / mounted.move, ChangeType = "Multiply" })
     mounted.move = desired.moveSpeedMultiplier
   end
@@ -193,6 +197,30 @@ suspendProperties = function(unit)
     nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
       ChangeValue = -mounted.dash, ChangeType = "Add" })
     mounted.dash = 0
+  end
+end
+local function beginMovement(unit)
+  local owner = runtime.movementOwners[unit]
+  if not owner or owner.run ~= CurrentRun or owner.objectId ~= unit.ObjectId then
+    local mounted = runtime.mounted
+    if mounted and mounted.unit == unit and mounted.objectId == unit.ObjectId and mounted.move ~= 1 then
+      nativeChange(unit, { UnitProperty = "Speed", ChangeValue = 1 / mounted.move, ChangeType = "Multiply" })
+      mounted.move = 1
+    end
+    owner = { run = CurrentRun, unit = unit, objectId = unit.ObjectId, depth = 0 }
+    runtime.movementOwners[unit] = owner
+  end
+  owner.depth = owner.depth + 1
+  return owner
+end
+local function finishMovement(owner)
+  if runtime.movementOwners[owner.unit] ~= owner then return end
+  owner.depth = owner.depth - 1
+  if owner.depth == 0 then
+    runtime.movementOwners[owner.unit] = nil
+    if sameOwner(owner.run, owner.unit) and owner.unit.ObjectId == owner.objectId then
+      mount(owner.unit, false)
+    end
   end
 end
 local function hook(name, wrap)
@@ -236,14 +264,75 @@ local function installHooks()
   end)
   hook("SetupHeroObject", function(original)
     return function(...)
+      local unit = hero()
+      if unit then runtime.movementOwners[unit] = nil end
       runtime.propertyDepth = runtime.propertyDepth + 1
       local result = table.pack(original(...))
       runtime.propertyDepth = runtime.propertyDepth - 1
-      local unit = hero()
+      unit = hero()
       if unit then mount(unit, true) end
       return table.unpack(result, 1, result.n)
     end
   end)
+  hook("RemoveTimerBlock", function(original)
+    return function(run, flag, ...)
+      local unit = hero()
+      local result = table.pack(original(run, flag, ...))
+      if flag == "MoveHeroToRoomPosition" and unit and sameOwner(run, unit) then mount(unit, false) end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  for _, name in ipairs({ "DropHeroToRoomPosition", "MoveHeroToRoomPosition", "RoomEntranceHades",
+      "StartDeathLoopPresentation", "BedroomIntermissionApproach" }) do
+    hook(name, function(original)
+      return function(...)
+        local unit = hero()
+        local first = ...
+        if name == "DropHeroToRoomPosition" and unit and first ~= unit.ObjectId then unit = nil end
+        if (name == "RoomEntranceHades" or name == "StartDeathLoopPresentation")
+            and first ~= CurrentRun then unit = nil end
+        local owner = unit and beginMovement(unit)
+        local result = table.pack(original(...))
+        if owner then finishMovement(owner) end
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+  end
+  -- Surface/flashback walks outlive their entry function; their native reset or
+  -- the next SetupHeroObject ends ownership of the scripted speed.
+  for _, name in ipairs({ "RoomEntranceE_Intro", "RoomEntranceSurface", "ExitToHadesPresentation",
+      "GardenScenePan", "SetupPlayerUnitInFlashback" }) do
+    hook(name, function(original)
+      return function(...)
+        local unit = hero()
+        local first = ...
+        if (name == "RoomEntranceE_Intro" or name == "RoomEntranceSurface" or name == "ExitToHadesPresentation")
+            and first ~= CurrentRun then unit = nil end
+        if unit then
+          local owner = runtime.movementOwners[unit]
+          if not owner or owner.run ~= CurrentRun or owner.objectId ~= unit.ObjectId or not owner.held then
+            owner = beginMovement(unit)
+            owner.held = true
+          end
+        end
+        return original(...)
+      end
+    end)
+  end
+  for _, name in ipairs({ "ResetPlayerMoveData", "RestorePlayerUnitAfterFlashback" }) do
+    hook(name, function(original)
+      return function(...)
+        local unit = hero()
+        local first = ...
+        if name == "ResetPlayerMoveData" and first ~= CurrentRun then unit = nil end
+        local owner = unit and runtime.movementOwners[unit]
+        if owner and (owner.run ~= CurrentRun or owner.objectId ~= unit.ObjectId) then owner = nil end
+        local result = table.pack(original(...))
+        if owner and owner.held then owner.held = nil; finishMovement(owner) end
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+  end
   for _, name in ipairs({ "AddTraitToHero", "RemoveWeaponTrait", "EquipPlayerWeapon" }) do
     hook(name, function(original)
       return function(...)
@@ -407,8 +496,20 @@ function runtime.set_value(field, value)
     UpdateHealthUI()
   elseif field == "maxHealth" then
     assert(value >= 1, "hades.error.invalidValue")
-    unit.MaxHealth = value
-    unit.Health = math.min(unit.Health, value)
+    local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
+    assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
+    local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
+    if change ~= 0 then
+      local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
+      trait.PropertyChanges[1].ChangeValue = change
+      -- ApplyUnitPropertyChange clamps health before its multiplier-aware
+      -- validation. Keep that intermediate maximum positive on large decreases.
+      unit.MaxHealth = math.max(unit.MaxHealth, value - change)
+      AddTraitToHero({ TraitData = trait })
+    else
+      ValidateMaxHealth(true)
+    end
+    unit.Health = math.max(0, math.min(unit.Health, unit.MaxHealth))
     UpdateHealthUI()
   elseif field == "money" then
     CurrentRun.Money = value
