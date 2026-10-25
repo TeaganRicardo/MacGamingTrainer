@@ -126,15 +126,17 @@ final class BackendProcess {
         let readers = DispatchGroup()
         let cancellation = Pipe()
         #else
+        // Drain before returning a level-triggered notification. Deferring the
+        // read queues repeated callbacks for the same bytes and starves delivery.
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            self?.readQueue.async { [weak self] in
+            self?.readQueue.sync { [weak self] in
                 guard let self, self.stdoutHandlerEnabled, self.output === handle,
                       let data = self.readPipeIfReadableLocked(handle) else { return }
                 self.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
             }
         }
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            self?.readQueue.async { [weak self] in
+            self?.readQueue.sync { [weak self] in
                 guard let self, self.stderrHandlerEnabled, self.errorOutput === handle else { return }
                 self.readStderrIfReadableLocked(handle)
             }
@@ -270,7 +272,7 @@ final class BackendProcess {
             stderrHandlerEnabled = true
         }
         handle.readabilityHandler = { [weak self] handle in
-            self?.readQueue.async { [weak self] in
+            self?.readQueue.sync { [weak self] in
                 guard let self, self.stderrHandlerEnabled, self.errorOutput === handle else { return }
                 self.readStderrIfReadableLocked(handle)
             }
