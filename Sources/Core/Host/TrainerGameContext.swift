@@ -152,6 +152,7 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
     nonisolated let descriptor: GameModuleDescriptor
     nonisolated var id: String { descriptor.id }
     let content: AnyView
+    private let collapsedSidebarCard: (@escaping () -> Void) -> AnyView
     private let storage: Any
     private let connectedValue: () -> Bool
     private let canTerminateValue: () -> Bool
@@ -163,6 +164,7 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
         descriptor = Module.descriptor
         storage = context
         content = AnyView(TrainerHostView(context: context))
+        collapsedSidebarCard = { onSelect in AnyView(TrainerCollapsedGameCard(context: context, onSelect: onSelect)) }
         connectedValue = { context.model.connected }
         canTerminateValue = { context.canTerminate }
         terminate = context.model.prepareForTermination
@@ -173,6 +175,8 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
 
     var connected: Bool { connectedValue() }
     var canTerminate: Bool { canTerminateValue() }
+
+    func makeCollapsedSidebarCard(onSelect: @escaping () -> Void) -> AnyView { collapsedSidebarCard(onSelect) }
 
     func typed<Module: TrainerGameModule>(as module: Module.Type) -> TrainerGameContext<Module>? {
         storage as? TrainerGameContext<Module>

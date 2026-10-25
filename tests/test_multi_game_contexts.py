@@ -75,6 +75,14 @@ import SwiftUI
             }) else { preconditionFailure("Game is missing from the sidebar: \(id)") }
             return button
         }
+        func visibleSections() -> [String] {
+            nativeAccessibilityControls(pageWindow).compactMap(\.identifier).filter { $0.hasPrefix("test.sections.") }
+        }
+        precondition(visibleSections() == ["test.sections.first_fixture"], "Inactive game sections were expanded")
+        precondition(!nativeAccessibilityControls(pageWindow).contains {
+            $0.role == "AXStaticText" && $0.text == localization.localized("host.gameLibrary") &&
+                $0.frame.maxX < draftField.accessibilityFrame().minX
+        }, "Game cards must not introduce a library heading")
         let firstGameFrame = gameButton("first_fixture").frame
         let secondGameFrame = gameButton("second_fixture").frame
         precondition(firstGameFrame.maxX < draftField.accessibilityFrame().minX &&
@@ -88,6 +96,7 @@ import SwiftUI
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
         precondition(gameButton("second_fixture").press())
         wait { application.selectedGameID == "second_fixture" }
+        wait { visibleSections() == ["test.sections.second_fixture"] }
         precondition(first.connected && second.connected && first.enabled)
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: app)
         precondition(first.activations > 0 && second.activations > 0, "Hidden game lost lifecycle subscription")
@@ -100,6 +109,7 @@ import SwiftUI
         precondition(pids["first"] == pids["firstAfter"] && pids["second"] == pids["secondAfter"])
         precondition(gameButton("first_fixture").press())
         wait { application.selectedGameID == "first_fixture" }
+        wait { visibleSections() == ["test.sections.first_fixture"] }
         precondition(application.context(id: "first_fixture")?.typed(as: FirstFixtureGameModule.self) === firstContext)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
         precondition(fields(pageWindow.contentView!).contains { $0 === draftField && $0.stringValue == "unfinished draft" },
@@ -157,6 +167,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
         source.parent.mkdir(parents=True)
         source.write_text((FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
             "ReferenceFixture", word + "Fixture").replace(
+            f"static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n        EmptyView()",
+            f'static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n'
+            f'        Button("{word} sections") {{ }}.accessibilityIdentifier("test.sections.{name}")').replace(
             "    func prepareForTermination(completion: @escaping () -> Void) {",
             "    @Published var postponeTermination = false\n    var pendingTermination: (() -> Void)?\n"
             "    func finishPostponedTermination() {\n        backendSession.stop()\n        let done = pendingTermination\n"

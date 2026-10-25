@@ -19,6 +19,7 @@ struct TrainerGamePages: View {
         ZStack(alignment: .topLeading) {
             ForEach(application.contexts) { context in
                 context.content
+                    .environment(\.trainerSidebarAdditionalCards, additionalCards(for: context))
                     .environment(\.trainerGamePageVisible, context.id == application.selectedGameID)
                     .opacity(context.id == application.selectedGameID ? 1 : 0)
                     .allowsHitTesting(context.id == application.selectedGameID)
@@ -26,49 +27,25 @@ struct TrainerGamePages: View {
                     .zIndex(context.id == application.selectedGameID ? 1 : 0)
             }
         }
-        .environment(\.trainerGameLibrary, AnyView(TrainerGameLibrary(application: application)))
         .disabled(application.terminationRequested)
         .onChange(of: application.selectedGameID) { _, _ in
             NSApp.mainWindow?.makeFirstResponder(nil)
         }
     }
-}
 
-private struct TrainerGameLibrary: View {
-    @ObservedObject var application: TrainerApplicationCoordinator
-    @Environment(\.trainerTheme) private var theme
-    @EnvironmentObject private var localization: TrainerLocalizationStore
+    private func additionalCards(for context: AnyTrainerGameContext) -> TrainerSidebarAdditionalCards {
+        let before = application.contexts.prefix { $0.id != context.id }
+        let after = application.contexts.drop { $0.id != context.id }.dropFirst()
+        return TrainerSidebarAdditionalCards(
+            before: AnyView(collapsedCards(before)), after: AnyView(collapsedCards(after))
+        )
+    }
 
-    var body: some View {
-        if application.contexts.count > 1 {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(localization.localized("host.gameLibrary"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                ForEach(application.contexts) { context in
-                    Button {
-                        application.selectedGameID = context.id
-                    } label: {
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(context.connected ? theme.success : theme.inactive)
-                                .frame(width: 6, height: 6)
-                            Text(context.descriptor.displayName)
-                            Spacer()
-                            if application.selectedGameID == context.id {
-                                Image(systemName: "checkmark").foregroundStyle(theme.accent)
-                            }
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(application.selectedGameID == context.id ? theme.mutedFill : .clear,
-                                    in: RoundedRectangle(cornerRadius: theme.compactCornerRadius))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("host.game.\(context.id)")
-                    .accessibilityAddTraits(application.selectedGameID == context.id ? .isSelected : [])
+    @ViewBuilder private func collapsedCards(_ contexts: ArraySlice<AnyTrainerGameContext>) -> some View {
+        if !contexts.isEmpty {
+            VStack(spacing: 12) {
+                ForEach(Array(contexts)) { context in
+                    context.makeCollapsedSidebarCard { application.selectedGameID = context.id }
                 }
             }
         }

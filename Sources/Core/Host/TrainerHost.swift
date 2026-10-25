@@ -34,27 +34,29 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
 
     var body: some View {
         TrainerShell {
-            TrainerSidebar(
-                descriptor: Module.descriptor,
-                presentation: Module.presentation,
-                connected: model.connected,
-                busy: model.busy,
-                targetRunning: targetMonitor.isRunning,
-                operationToken: model.operation,
-                statusToken: model.statusTitle,
-                detailToken: model.connectionDetailText
-            ) {
-                TrainerConnectionStatusCard(
+            TrainerSidebar {
+                TrainerSidebarCard(
+                    descriptor: Module.descriptor,
+                    presentation: Module.presentation,
                     connected: model.connected,
-                    backendAvailable: model.backendAvailable,
-                    actionsEnabled: model.hostActionsEnabled,
-                    onRefresh: model.refreshFromHost,
-                    onPrimary: context.toggleConnection,
-                    onRestart: model.restartBackendFromHost,
+                    busy: model.busy,
                     targetRunning: targetMonitor.isRunning,
-                    onLaunch: model.launchActionFromHost
-                )
-                Module.makeSidebarActions(model: model)
+                    operationToken: model.operation,
+                    statusToken: model.statusTitle,
+                    detailToken: model.connectionDetailText
+                ) {
+                    TrainerConnectionStatusCard(
+                        connected: model.connected,
+                        backendAvailable: model.backendAvailable,
+                        actionsEnabled: model.hostActionsEnabled,
+                        onRefresh: model.refreshFromHost,
+                        onPrimary: context.toggleConnection,
+                        onRestart: model.restartBackendFromHost,
+                        targetRunning: targetMonitor.isRunning,
+                        onLaunch: model.launchActionFromHost
+                    )
+                    Module.makeSidebarActions(model: model)
+                }
             }
         } content: {
             VStack(alignment: .leading, spacing: theme.pageSpacing) {
@@ -68,5 +70,26 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
         .onAppear { context.registerPresentation(localization) }
+    }
+}
+
+struct TrainerCollapsedGameCard<Module: TrainerGameModule>: View {
+    @ObservedObject private var model: Module.Model
+    @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
+    let onSelect: () -> Void
+
+    init(context: TrainerGameContext<Module>, onSelect: @escaping () -> Void) {
+        _model = ObservedObject(wrappedValue: context.model)
+        _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
+        self.onSelect = onSelect
+    }
+
+    var body: some View {
+        TrainerSidebarCard(
+            descriptor: Module.descriptor, presentation: Module.presentation,
+            connected: model.connected, busy: model.busy, targetRunning: targetMonitor.isRunning,
+            operationToken: model.operation, statusToken: model.statusTitle,
+            detailToken: model.connectionDetailText, selected: false, onSelect: onSelect
+        ) { EmptyView() }
     }
 }
