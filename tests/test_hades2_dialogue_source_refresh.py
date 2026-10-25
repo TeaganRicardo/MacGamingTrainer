@@ -122,6 +122,56 @@ class DialogueSourceRefresh(unittest.TestCase):
         self.root['GameState']['TextLinesRecord'] = LuaTable(0, 2, [(SCENE, True), (SCENE, False)])
         self.assertEqual([row['rawId'] for row in self.query(state_filter='ambiguous')['items']], [SCENE])
 
+    def test_warm_search_reuses_metadata_and_observes_current_save(self):
+        records = self.root['GameState']['TextLinesRecord']
+        for index in range(40):
+            records[f'HistoryDialogue{index}'] = True
+        self.assertEqual(self.query(search='Original English')['total'], 1)
+        # Only the selected page needs full presentation after the source's
+        # search metadata is warm, even when the next query uses another locale.
+        with patch.object(self.finding, '_names', wraps=self.finding._names) as names, \
+             patch.object(self.finding, '_text_records', wraps=self.finding._text_records) as lines:
+            result = self.query(search='原文', language='zh-CN', limit=1)
+        self.assertEqual([row['rawId'] for row in result['items']], [SCENE])
+        self.assertLessEqual(names.call_count, 1)
+        self.assertLessEqual(lines.call_count, 1)
+
+        records[SCENE] = False
+        absent = self.query(search='Original English', state_filter='notRecorded',
+                            permissions={SCENE: {'allowed': True}})
+        self.assertEqual(absent['items'][0]['status'], 'notRecorded')
+        self.assertFalse(absent['items'][0]['canStage'])
+        records[SCENE] = True
+        self.assertTrue(self.query(search='Original English',
+                                  permissions={SCENE: {'allowed': True}})['items'][0]['canStage'])
+        self.assertFalse(self.query(search='Original English')['items'][0]['canStage'])
+        self.root['GameState']['TextLinesRecord'] = table(**{OTHER: True})
+        self.assertEqual([row['rawId'] for row in self.query()['items']], [OTHER])
+        self.assertEqual(self.query(search='HistoryDialogue')['total'], 0)
+
+    def test_warm_search_refreshes_changed_bilingual_source_without_detail(self):
+        self.assertEqual(self.query(search='Original English')['total'], 1)
+        replace_preserving_time(self.english, translation('First', 'Replacement English'))
+        replace_preserving_time(self.chinese, translation('First', '替换文本'))
+        self.assertEqual(self.query(search='Original English')['total'], 0)
+        self.assertEqual(self.query(search='原文')['total'], 0)
+        self.assertEqual(self.query(search='Replacement 替换文本')['items'][0]['rawId'], SCENE)
+        self.npc.write_text(authored(OTHER, 'Second'), encoding='utf-8')
+        self.english.write_text(translation('Second', 'New scene wording'), encoding='utf-8')
+        self.chinese.unlink()
+        self.assertEqual(self.query(search='替换文本')['total'], 0)
+        self.assertEqual(self.query(search='New scene wording')['items'][0]['rawId'], OTHER)
+
+    def test_first_empty_browse_only_projects_text_for_its_page(self):
+        records = self.root['GameState']['TextLinesRecord']
+        for index in range(40):
+            records[f'HistoryDialogue{index}'] = True
+        with patch.object(self.finding, '_text_records', wraps=self.finding._text_records) as lines:
+            result = self.query(limit=1)
+        self.assertEqual(result['total'], 41)
+        self.assertEqual(len(result['items']), 1)
+        self.assertEqual(lines.call_count, 1)
+
     def test_partial_and_mismatched_evidence_is_reported_truthfully(self):
         original = self.query()
         self.assertEqual(original['sourceProvenance']['storyResetVerification'], 'matched')

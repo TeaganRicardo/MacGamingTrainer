@@ -16,7 +16,6 @@ import re
 from .localization import _sjson_unescape, _clean_display_name
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import STORY_RESET_TEXT_IDS
-from .save_entities import matches_search
 
 _SUPPORTED_STORY_SHA = "58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e"
 _ASSIGN = re.compile(r"(?m)^[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(?:\r?\n[ \t]*)?(\{)")
@@ -484,6 +483,7 @@ class NativeDialogueInvestigation:
         self.expected_hash = expected_hash
         self.native = None
         self._native_signature = None
+        self._query_index = {}
         self._refresh(force=True)
 
     def _refresh(self, *, force=False):
@@ -492,7 +492,10 @@ class NativeDialogueInvestigation:
             if current == self._native_signature:
                 return False
         source = _capture_native(self.game_path)
-        self.native = _cached(source, self.expected_hash)
+        native = _cached(source, self.expected_hash)
+        if self.native is not native:
+            self._query_index = {}
+        self.native = native
         self._native_signature = source['signature']
         return True
 
@@ -795,21 +798,30 @@ class NativeDialogueInvestigation:
             candidates = set(records) | set(self.native['events']) | set(self.native['scenes']) | set(STORY_RESET_TEXT_IDS)
         else:
             candidates = {name for name, value in records.items() if value is True}
-        needle = search.casefold().strip()
+        # Retain only source-derived names/text for current candidates. Save
+        # state, permissions and presentation rows are rebuilt for every query.
+        self._query_index = {scene: metadata for scene, metadata in self._query_index.items()
+                             if scene in candidates}
+        words = search.casefold().split()
         matches = []
         for scene in candidates:
             state = self._data(scene, records, ambiguous)
             if state_filter != "all" and state != state_filter:
                 continue
-            person, npc, localized = self._names(scene)
-            if needle:
-                corpus = (scene, person, npc, *localized.values())
-                if not matches_search(needle, corpus):
-                    lines = self._text_records(scene)
-                    if not matches_search(needle, (*corpus,
-                        *(line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
-                          + ' ' + ' '.join(line['events']) for line in lines))):
-                        continue
+            metadata = self._query_index.get(scene)
+            if metadata is None and words:
+                person, npc, localized = self._names(scene)
+                lines = self._text_records(scene)
+                corpus = ' '.join((scene, person, npc, *localized.values(),
+                    *(line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
+                      + ' ' + ' '.join(line['events']) for line in lines))).casefold()
+                metadata = self._query_index[scene] = person, corpus
+            if metadata is None:
+                person, _, _ = self._names(scene)
+            else:
+                person, corpus = metadata
+                if words and not all(word in corpus for word in words):
+                    continue
             group = person or ('Other dialogue' if language == 'en' else '其他对话')
             matches.append((state != 'recorded', group.casefold(), scene))
         matches.sort()
