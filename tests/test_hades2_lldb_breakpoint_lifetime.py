@@ -32,7 +32,7 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
     # These contracts use independent targets and do not share native state.
     # Give each its own bounded worker instead of making a later contract
     # inherit compilation, debugger startup and earlier scenarios' elapsed time.
-    for scenario in ("expressions", "detach", "unknown"):
+    for scenario in ("startup", "expressions", "detach", "unknown"):
         environment["MGT_LLDB_LIFECYCLE_SCENARIO"] = scenario
         try:
             with phase('worker.run.' + scenario):
@@ -104,6 +104,19 @@ def assert_progress(counter):
         current = int.from_bytes(counter[:], sys.byteorder)
         assert current > previous, "detached target stopped making native progress"
         previous = current
+
+
+def check_startup(executable, progress):
+    child, debugger, transport, _addresses = attach_helper(executable, 0, diagnostics=True)
+    try:
+        assert any(thread.GetName() == "MainThread" for thread in transport.process), (
+            "fixture attached before its main thread initialized",
+            [thread.GetName() for thread in transport.process],
+        )
+        transport.detach()
+        assert_progress(progress)
+    finally:
+        cleanup(child, debugger, transport, diagnostics=True)
 
 
 def check_expressions(executable, progress):
@@ -231,13 +244,18 @@ def check_unknown(executable, _progress):
         cleanup(child, debugger, transport, diagnostics=True)
 
 scenario = os.environ["MGT_LLDB_LIFECYCLE_SCENARIO"]
-check = {"expressions": check_expressions, "detach": check_detach, "unknown": check_unknown}[scenario]
+check = {"startup": check_startup, "expressions": check_expressions, "detach": check_detach, "unknown": check_unknown}[scenario]
 
 with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temporary:
     temporary = Path(temporary)
     source = temporary / "helper.c"
     executable = temporary / "helper"
-    source.write_text(HELPER_SOURCE + PROGRESS_SOURCE, encoding="utf-8")
+    startup_delay = """
+__attribute__((constructor)) static void delay_fixture_startup(void) {
+  usleep(500000);
+}
+""" if scenario == "startup" else ""
+    source.write_text(HELPER_SOURCE + PROGRESS_SOURCE + startup_delay, encoding="utf-8")
     with phase('fixture.compile'):
         subprocess.run(
             ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
