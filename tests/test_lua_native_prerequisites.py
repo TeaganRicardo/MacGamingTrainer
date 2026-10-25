@@ -14,7 +14,7 @@ class LuaNativePrerequisiteTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="mgt-native-preflight-contract-")
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.lua = self.root / "lua"
         self.lua.write_text("#!/bin/sh\nprintf 'Lua 5.2'\n", encoding="utf-8")
         self.lua.chmod(0o755)
