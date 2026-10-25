@@ -63,6 +63,7 @@ jobs:
       matrix:
         game:
           - reference_fixture
+          - hades
 
     steps:
       - name: Require scope classification
@@ -95,7 +96,7 @@ jobs:
         run: python3 Tools/macos_toolchain_identity.py
 
       - name: Install reference fixture
-        if: needs.scope.outputs.needs_module == 'true'
+        if: needs.scope.outputs.needs_module == 'true' && matrix.game == 'reference_fixture'
         run: |
           mkdir -p Backend/games/reference_fixture Sources/ReferenceFixture
           cp -R ContractFixtures/reference_module/backend/. Backend/games/reference_fixture/
@@ -118,7 +119,7 @@ jobs:
           test "$count" = "1"
           codesign --verify --deep --strict "$app"
 
-      - name: Retain reference module artifact and source provenance
+      - name: Retain isolated module artifact and source provenance
         id: package
         if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
         run: |
@@ -131,26 +132,35 @@ jobs:
             --product-version "$version" --bundle-build "$build" \
             --repo-root "$GITHUB_WORKSPACE")"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$artifact"
+          copy_args=()
+          if [[ "${{ matrix.game }}" == "reference_fixture" ]]; then
+            copy_args=(--generated-copy ContractFixtures/reference_module/backend:Backend/games/reference_fixture
+                       --generated-copy ContractFixtures/reference_module/frontend:Sources/ReferenceFixture)
+          fi
           python3 Tools/write_build_provenance.py \
             --artifact "$artifact" --product-version "$version" --bundle-build "$build" \
             --repo-root "$GITHUB_WORKSPACE" --module-id "${{ matrix.game }}" \
             --name-label "${{ matrix.game }}" \
-            --workflow-source .github/workflows/module-build-matrix.yml \
-            --generated-copy ContractFixtures/reference_module/backend:Backend/games/reference_fixture \
-            --generated-copy ContractFixtures/reference_module/frontend:Sources/ReferenceFixture
+            --workflow-source .github/workflows/module-build-matrix.yml "${copy_args[@]}"
 
-      - name: Verify reference artifact checksum and declared inputs
+      - name: Verify isolated artifact checksum and declared inputs
         if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           (cd artifacts && shasum -a 256 -c "${{ steps.package.outputs.sidecar_name }}")
+          checkout=clean
+          copies=0
+          if [[ "${{ matrix.game }}" == "reference_fixture" ]]; then
+            checkout=declared-generated
+            copies=2
+          fi
           python3 Tools/verify_build_provenance.py \
             --provenance "artifacts/${{ steps.package.outputs.provenance_name }}" \
             --artifact "artifacts/${{ steps.package.outputs.artifact_name }}" \
             --repo-root "$GITHUB_WORKSPACE" \
             --expected-source-sha "$HEAD_SHA" \
-            --module-id reference_fixture \
-            --expected-checkout declared-generated \
-            --expected-generated-copies 2 \
+            --module-id "${{ matrix.game }}" \
+            --expected-checkout "$checkout" \
+            --expected-generated-copies "$copies" \
             --expected-workflow "Module build matrix" \
             --expected-event workflow_dispatch \
             --expected-workflow-source .github/workflows/module-build-matrix.yml \

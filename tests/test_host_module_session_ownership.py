@@ -16,8 +16,8 @@ for path in production_swift + fixture_swift:
         ))
 
 owners = [path for path, _line in calls]
-assert owners == ["Sources/App.swift"], (
-    "TrainerBackendSession construction must have exactly one App owner; "
+assert owners == ["Sources/Core/Host/TrainerGameContext.swift"], (
+    "TrainerBackendSession construction must have one persistent game-context owner; "
     f"found {calls}"
 )
 

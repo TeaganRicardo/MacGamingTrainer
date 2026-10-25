@@ -14,8 +14,8 @@ def build_libraries(manifest, module, staging, *, clang, sdk, architectures, min
         destination = module / 'native' / library['filename']
         destination.parent.mkdir(parents=True, exist_ok=True)
         binaries = []
-        for architecture in architectures:
-            binary = staging / f"{library['filename']}.{architecture}"
+        for architecture in library.get('architectures') or architectures:
+            binary = staging / f"{module.name}-{library['filename']}.{architecture}"
             subprocess.run([
                 clang, '-dynamiclib', '-isysroot', sdk, '-arch', architecture,
                 f'-mmacosx-version-min={minimum_macos}', '-std=c11', '-Wall', '-Wextra',

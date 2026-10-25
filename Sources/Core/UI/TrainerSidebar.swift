@@ -1,6 +1,24 @@
 import SwiftUI
 
-struct TrainerSidebar<Actions: View>: View {
+struct TrainerSidebarAdditionalCards {
+    let before: AnyView
+    let after: AnyView
+}
+
+private struct TrainerSidebarAdditionalCardsKey: EnvironmentKey {
+    static var defaultValue: TrainerSidebarAdditionalCards {
+        .init(before: AnyView(EmptyView()), after: AnyView(EmptyView()))
+    }
+}
+
+extension EnvironmentValues {
+    var trainerSidebarAdditionalCards: TrainerSidebarAdditionalCards {
+        get { self[TrainerSidebarAdditionalCardsKey.self] }
+        set { self[TrainerSidebarAdditionalCardsKey.self] = newValue }
+    }
+}
+
+struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let descriptor: GameModuleDescriptor
@@ -11,6 +29,8 @@ struct TrainerSidebar<Actions: View>: View {
     let operationToken: TrainerTextToken
     let statusToken: TrainerTextToken
     let detailToken: TrainerTextToken
+    let selected: Bool
+    let onSelect: () -> Void
     let actions: Actions
 
     init(
@@ -22,6 +42,8 @@ struct TrainerSidebar<Actions: View>: View {
         operationToken: TrainerTextToken,
         statusToken: TrainerTextToken,
         detailToken: TrainerTextToken,
+        selected: Bool = true,
+        onSelect: @escaping () -> Void = {},
         @ViewBuilder actions: () -> Actions
     ) {
         self.descriptor = descriptor
@@ -32,6 +54,8 @@ struct TrainerSidebar<Actions: View>: View {
         self.operationToken = operationToken
         self.statusToken = statusToken
         self.detailToken = detailToken
+        self.selected = selected
+        self.onSelect = onSelect
         self.actions = actions()
     }
 
@@ -58,8 +82,8 @@ struct TrainerSidebar<Actions: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
+            Button(action: onSelect) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title2)
@@ -68,11 +92,33 @@ struct TrainerSidebar<Actions: View>: View {
                     Spacer()
                     statusIndicator
                 }
-                actions.buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
-            .padding(14)
-            .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+            .buttonStyle(.plain)
+            .focusEffectDisabled()
+            .accessibilityLabel(descriptor.displayName)
+            .accessibilityValue(localization.string(statusToken))
+            .accessibilityIdentifier("host.game.\(descriptor.id)")
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            actions.buttonStyle(.plain)
+        }
+        .padding(14)
+        .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+    }
+}
 
+struct TrainerSidebar<Card: View>: View {
+    @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerSidebarAdditionalCards) private var additionalCards
+    let card: Card
+
+    init(@ViewBuilder card: () -> Card) { self.card = card() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            additionalCards.before
+            card
+            additionalCards.after
             Spacer()
         }
         .padding(18)

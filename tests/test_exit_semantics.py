@@ -58,7 +58,7 @@ final class ExitHarness {
                 model.failReset = failure == "reset"
                 model.failCleanup = failure == "cleanup"
                 var finished = false
-                model.prepareForTermination { finished = $0 }
+                model.prepareForTermination { finished = true }
                 precondition(model.commands == [.resetDesired, .disableAll, .disconnect],
                     "\(family)/\(failure): verified connection skipped resident teardown: \(model.commands)")
                 precondition(finished && model.backendSession.stopped)
@@ -66,11 +66,11 @@ final class ExitHarness {
         }
         let disconnected = ExitHarness()
         disconnected.connected = false
-        disconnected.prepareForTermination { _ in }
+        disconnected.prepareForTermination { }
         precondition(disconnected.commands == [.resetDesired])
         let stopped = ExitHarness()
         stopped.backendSession.isRunning = false
-        stopped.prepareForTermination { _ in }
+        stopped.prepareForTermination { }
         precondition(stopped.commands.isEmpty && stopped.backendSession.stopped)
     }
 }

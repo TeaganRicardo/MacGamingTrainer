@@ -57,6 +57,7 @@ class AppResource:
 class NativeLibrary:
     source: str
     filename: str
+    architectures: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -227,7 +228,7 @@ def load_manifest(game_id: str) -> BuildManifest:
     module_dir = path.parent.resolve()
     for index, item in enumerate(native_value):
         field = f'nativeLibraries[{index}]'
-        if not isinstance(item, dict) or set(item) != {'source', 'filename'}:
+        if not isinstance(item, dict) or not {'source', 'filename'} <= set(item) or set(item) - {'source', 'filename', 'architectures'}:
             raise ManifestError(f'{field} must contain exactly source and filename.')
         source = _safe_relative_path(item['source'], f'{field}.source')
         source_path = (module_dir / source).resolve()
@@ -239,7 +240,11 @@ def load_manifest(game_id: str) -> BuildManifest:
         if filename in filenames:
             raise ManifestError(f'nativeLibraries has duplicate filename: {filename}.')
         filenames.add(filename)
-        native_libraries.append(NativeLibrary(source, filename))
+        library_arches = item.get('architectures', [])
+        if (not isinstance(library_arches, list) or any(arch not in _SUPPORTED_SWIFT_ARCHES for arch in library_arches)
+                or len(set(library_arches)) != len(library_arches)):
+            raise ManifestError(f'{field}.architectures must contain unique arm64/x86_64 values.')
+        native_libraries.append(NativeLibrary(source, filename, tuple(library_arches)))
 
     return BuildManifest(runtime, frontend_spec, app_spec, requirements, tuple(app_resources), tuple(native_libraries), raw)
 
@@ -270,7 +275,8 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
             for resource in manifest.app_resources
         ],
         'nativeLibraries': [
-            {'source': library.source, 'filename': library.filename}
+            {'source': library.source, 'filename': library.filename,
+             **({'architectures': list(library.architectures)} if library.architectures else {})}
             for library in manifest.native_libraries
         ],
     }

@@ -25,7 +25,7 @@ sys.path.insert(0, str(root/'Backend'))
 from core.module_manifest import GameModuleManifest
 
 assert {field.name for field in fields(GameModuleManifest)} == {
-    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path','save_management'
+    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path','save_management','executable_path_suffix'
 }
 for token in ('FrontendBuildSpec','AppBuildSpec','BuildRequirements','architectures','bundle_identifier','entitlements'):
     assert token in tool_support, token
@@ -35,7 +35,7 @@ assert '-target arm64-apple-macosx14.0' not in build
 assert 'Tools/validate_game_module.py' in build
 assert 'Tools/generate_game_binding.py' in build
 assert 'cp -R "$ROOT/Backend/core"' in build
-assert 'cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
+assert 'cp -R "$ROOT/Backend/games/$game_id"' in build
 assert "subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)" in build
 assert 'cp -X' not in build and 'cp -RX' not in build
 assert 'Tools/clean_signing_metadata.py' in build
@@ -43,7 +43,7 @@ assert '"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"' in bu
 assert build.index('clean_signing_metadata.py') < build.index('codesign --force --sign - --entitlements')
 assert build.index('"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"') < build.index('codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"')
 assert 'DIST="${GENERATED_DIR}/dist"' in build
-assert 'PUBLISH_DIST="${ROOT}/dist"' in build
+assert 'PUBLISH_DIST="${MGT_BUILD_OUTPUT_DIR:-${ROOT}/dist}"' in build
 assert '"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"' in build
 assert build.count('[[ ! -L "$PUBLISH_DIST" ]]') >= 2
 assert build.index('[[ ! -L "$PUBLISH_DIST" ]]') < build.index('"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"')

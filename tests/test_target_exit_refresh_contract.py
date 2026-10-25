@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 policy = (ROOT / 'Sources/Core/Host/TrainerConnectionPolicy.swift').read_text()
-host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
+host = (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
 
 assert 'targetExitRefreshRequested' in policy
 assert 'consumeTargetExitRefreshIfEligible' in policy

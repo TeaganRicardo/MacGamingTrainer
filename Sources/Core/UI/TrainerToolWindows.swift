@@ -42,6 +42,13 @@ extension EnvironmentValues {
     }
 }
 
+private struct TrainerToolWindowRoot: View {
+    @ObservedObject var store: TrainerToolWindowStore
+    let content: AnyView
+
+    var body: some View { content.disabled(!store.interactionEnabled) }
+}
+
 @MainActor
 final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate {
     private struct Entry {
@@ -49,6 +56,20 @@ final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate
         let content: TrainerToolWindowContent
     }
     private var entries: [String: Entry] = [:]
+    @Published private(set) var interactionEnabled = true
+
+    func setInteractionEnabled(_ enabled: Bool) {
+        interactionEnabled = enabled
+        if !enabled {
+            for entry in entries.values { entry.window.makeFirstResponder(nil) }
+        }
+    }
+
+    var canCloseAll: Bool { entries.values.allSatisfy { $0.content.canClose() } }
+
+    func closeAll() {
+        for entry in Array(entries.values) { entry.window.performClose(nil) }
+    }
 
     func actions(localization: TrainerLocalizationStore, theme: TrainerTheme) -> TrainerToolWindowActions {
         TrainerToolWindowActions { [weak self] id, title, content in
@@ -74,7 +95,7 @@ final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate
         window.isReleasedWhenClosed = false
         window.title = title
         window.delegate = self
-        let root = content.view
+        let root = TrainerToolWindowRoot(store: self, content: content.view)
             .environmentObject(localization)
             .trainerTheme(theme)
             .tint(theme.accent)

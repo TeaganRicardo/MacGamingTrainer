@@ -19,11 +19,10 @@ PYTHON_RUNTIME_MANIFEST="${ROOT}/Tools/python_runtime.json"
 CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
 [[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
 
-DEFAULT_GAME_ID="$(tr -d '[:space:]' < "$ROOT/ACTIVE_GAME_ID")"
-ACTIVE_GAME_ID="${1:-${MGT_GAME_ID:-$DEFAULT_GAME_ID}}"
-[[ -n "$ACTIVE_GAME_ID" ]] || { echo "No game module selected. Pass ./build.sh <game-id> or set ACTIVE_GAME_ID." >&2; exit 1; }
+BUILD_SELECTION="${1:-${MGT_GAME_ID:-all}}"
+[[ "$BUILD_SELECTION" != "--all" ]] || BUILD_SELECTION="all"
 if [[ $# -gt 1 ]]; then
-    echo "Usage: ./build.sh [game-id]" >&2
+    echo "Usage: ./build.sh [--all|game-id]" >&2
     exit 2
 fi
 
@@ -90,7 +89,7 @@ HOST_PYTHON_ROOT="$(prepare_python_runtime "$HOST_ARCH")"
 PYTHON="$HOST_PYTHON_ROOT/bin/python3"
 
 NORMALIZED_MANIFEST="$GENERATED_DIR/module.normalized.json"
-"$PYTHON" "$MODULE_VALIDATOR" "$ACTIVE_GAME_ID" --json > "$NORMALIZED_MANIFEST"
+"$PYTHON" "$ROOT/Tools/product_support.py" "$BUILD_SELECTION" > "$NORMALIZED_MANIFEST"
 
 manifest_field() {
     "$PYTHON" - "$NORMALIZED_MANIFEST" "$1" <<'PY'
@@ -111,8 +110,9 @@ else:
 PY
 }
 
-FRONTEND_DIR_REL="$(manifest_field frontend.sourceDirectory)"
-FRONTEND_MODULE_TYPE="$(manifest_field frontend.moduleType)"
+read -r -a GAME_IDS <<< "$(manifest_field moduleIDs)"
+ACTIVE_GAME_ID="${GAME_IDS[0]}"
+GAME_SELECTION_CSV="$(IFS=,; echo "${GAME_IDS[*]}")"
 ARCHITECTURES_RAW="$(manifest_field frontend.architectures)"
 MIN_MACOS="$(manifest_field frontend.minimumMacOS)"
 APP_BUNDLE_ID="$(manifest_field app.bundleIdentifier)"
@@ -121,10 +121,7 @@ EXECUTABLE="$(manifest_field app.executable)"
 REQUIRES_LLDB="$(manifest_field buildRequirements.lldbPython)"
 REQUIRES_DEBUGGER_ENTITLEMENT="$(manifest_field buildRequirements.debuggerEntitlement)"
 ENTITLEMENTS_REL="$(manifest_field buildRequirements.entitlements)"
-FRONTEND_DIR="$ROOT/$FRONTEND_DIR_REL"
 
-[[ -n "$FRONTEND_DIR_REL" && -d "$FRONTEND_DIR" ]] || { echo "Missing selected frontend source directory: $FRONTEND_DIR" >&2; exit 1; }
-[[ -n "$FRONTEND_MODULE_TYPE" ]] || { echo "Missing frontend module type." >&2; exit 1; }
 [[ -n "$APP_NAME" && "$APP_NAME" != *'/'* ]] || { echo "Invalid app display name from module manifest." >&2; exit 1; }
 [[ -n "$APP_BUNDLE_ID" ]] || { echo "Missing app bundle identifier." >&2; exit 1; }
 [[ -n "$MIN_MACOS" ]] || MIN_MACOS="14.0"
@@ -140,7 +137,7 @@ for arch in "${ARCHITECTURES[@]}"; do
 done
 
 DIST="${GENERATED_DIR}/dist"
-PUBLISH_DIST="${ROOT}/dist"
+PUBLISH_DIST="${MGT_BUILD_OUTPUT_DIR:-${ROOT}/dist}"
 APP="${DIST}/${APP_NAME}.app"
 PUBLISH_APP="${PUBLISH_DIST}/${APP_NAME}.app"
 [[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
@@ -165,9 +162,9 @@ if [[ "$REQUIRES_LLDB" == "1" ]]; then
 fi
 
 GENERATED_SWIFT="$GENERATED_DIR/ActiveGame.generated.swift"
-"$PYTHON" "$BINDING_GENERATOR" "$ACTIVE_GAME_ID" "$GENERATED_SWIFT"
-grep -q "typealias ActiveGameModule = ${FRONTEND_MODULE_TYPE}" "$GENERATED_SWIFT" || {
-    echo "Generated active game binding is invalid." >&2; exit 1;
+"$PYTHON" "$BINDING_GENERATOR" "$GAME_SELECTION_CSV" "$GENERATED_SWIFT" --catalog
+grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT" || {
+    echo "Generated game catalog is invalid." >&2; exit 1;
 }
 
 rm -rf "$APP"
@@ -232,7 +229,10 @@ PY
 
 SWIFT_SOURCES=("$ROOT/Sources/App.swift")
 while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/Sources/Core" -type f -name '*.swift' | sort)
-while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$FRONTEND_DIR" -type f -name '*.swift' | sort)
+while IFS= read -r directory; do
+    [[ -d "$ROOT/$directory" ]] || { echo "Missing frontend directory: $directory" >&2; exit 1; }
+    while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/$directory" -type f -name '*.swift' | sort)
+done < <("$PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["frontend"]["sourceDirectories"]))' "$NORMALIZED_MANIFEST")
 SWIFT_SOURCES+=("$GENERATED_SWIFT")
 [[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
 
@@ -274,12 +274,14 @@ else
     "$LIPO" -create "${ARCH_BINARIES[@]}" -output "${CONTENTS}/MacOS/${EXECUTABLE}"
 fi
 
-# Package generic backend core + only the selected game module. Preserve
+# Package generic backend core and the selected game module set. Preserve
 # permitted xattrs; clean only FinderInfo/ResourceFork before signing.
 cp -R "$ROOT/Backend/core" "$BACKEND/core"
 mkdir -p "$BACKEND/games"
 cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
-cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
+for game_id in "${GAME_IDS[@]}"; do
+    cp -R "$ROOT/Backend/games/$game_id" "$BACKEND/games/$game_id"
+done
 "$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources" <<'PY'
 import json, subprocess, sys
 from pathlib import Path
@@ -304,17 +306,18 @@ PY
 # HOME is isolated so build verification cannot touch developer or runner state.
 BACKEND_SMOKE_HOME="$GENERATED_DIR/backend-smoke-home"
 mkdir -p "$BACKEND_SMOKE_HOME"
-PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "$ACTIVE_GAME_ID" <<'PY'
+PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "${GAME_IDS[@]}" <<'PY'
 import sys
 from core.registry import create_adapter
 
-adapter = create_adapter(sys.argv[1])
-try:
-    metadata = adapter.metadata()
-    if metadata.get("id") != sys.argv[1]:
-        raise SystemExit(f"Backend adapter identity mismatch: {metadata!r}")
-finally:
-    adapter.close()
+for game_id in sys.argv[1:]:
+    adapter = create_adapter(game_id)
+    try:
+        metadata = adapter.metadata()
+        if metadata.get("id") != game_id:
+            raise SystemExit(f"Backend adapter identity mismatch: {metadata!r}")
+    finally:
+        adapter.close()
 PY
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
@@ -360,9 +363,19 @@ codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
 codesign --verify --strict "$TIME_WARP_DYLIB"
 cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
 
-"$PYTHON" "$ROOT/Tools/build_module_native.py" "$NORMALIZED_MANIFEST" \
-    "$BACKEND/games/$ACTIVE_GAME_ID" "$GENERATED_DIR" --clang "$CLANG" --sdk "$SDK" \
-    --minimum-macos "$MIN_MACOS" --architectures "${ARCHITECTURES[@]}"
+for game_id in "${GAME_IDS[@]}"; do
+    module_manifest="$GENERATED_DIR/$game_id.normalized.json"
+    "$PYTHON" "$MODULE_VALIDATOR" "$game_id" --json > "$module_manifest"
+    "$PYTHON" "$ROOT/Tools/build_module_native.py" "$module_manifest" \
+        "$BACKEND/games/$game_id" "$GENERATED_DIR" --clang "$CLANG" --sdk "$SDK" \
+        --minimum-macos "$MIN_MACOS" --architectures "${ARCHITECTURES[@]}"
+done
+"$PYTHON" - "$NORMALIZED_MANIFEST" "${CONTENTS}/Resources/GAME_MODULES.json" <<'PY'
+import json, sys
+from pathlib import Path
+selection = json.loads(Path(sys.argv[1]).read_text())
+Path(sys.argv[2]).write_text(json.dumps(selection['moduleIDs']) + '\n')
+PY
 
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
@@ -413,8 +426,20 @@ while IFS= read -r runtime_code; do
 done < <(find "$PYTHON_RESOURCES" -type f \( -name 'python3*' -o -name '*.so' -o -name '*.dylib' \) | sort)
 
 if [[ -n "$ENTITLEMENTS_REL" ]]; then
-    ENTITLEMENTS="$ROOT/$ENTITLEMENTS_REL"
-    [[ -f "$ENTITLEMENTS" ]] || { echo "Missing module entitlements: $ENTITLEMENTS" >&2; exit 1; }
+    ENTITLEMENTS="$GENERATED_DIR/product-entitlements.plist"
+    "$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "$ENTITLEMENTS" <<'PY'
+import json, plistlib, sys
+from pathlib import Path
+manifest, root, destination = map(Path, sys.argv[1:])
+merged = {}
+for relative in json.loads(manifest.read_text())['buildRequirements']['entitlements']:
+    values = plistlib.loads((root / relative).read_bytes())
+    for key, value in values.items():
+        if key in merged and merged[key] != value:
+            raise SystemExit(f'Incompatible module entitlement: {key}')
+        merged[key] = value
+destination.write_bytes(plistlib.dumps(merged))
+PY
     codesign --force --sign - --entitlements "$ENTITLEMENTS" --timestamp=none "$APP"
 else
     codesign --force --sign - --timestamp=none "$APP"
@@ -432,13 +457,13 @@ fi
 mkdir -p "$PUBLISH_DIST"
 [[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
 "$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"
-"$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$PUBLISH_DIST" >/dev/null
+"$PYTHON" "$ROOT/Tools/verify_module_build.py" "$BUILD_SELECTION" --dist-dir "$PUBLISH_DIST" >/dev/null
 
 cat <<MSG
 Built:
   $PUBLISH_APP
-Game module:
-  $ACTIVE_GAME_ID
+Game modules:
+  ${GAME_IDS[*]}
 Architectures:
   ${ARCHITECTURES[*]}
 

@@ -39,22 +39,16 @@ jobs:
             echo "Tag $tag already exists." >&2
             exit 1
           fi
-          revision=$(python3 - <<'PY'
-          import re
+          modules=$(python3 - <<'PY'
+          import json
           from pathlib import Path
-          from Tools.resident_runtime import DEFAULT_MODULE_RE
-
-          source = Path("Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-          match = re.search(DEFAULT_MODULE_RE, source)
-          if match is None:
-              raise SystemExit("resident runtime revision not found")
-          print(match.group(1))
+          print(', '.join(json.loads(Path('app.json').read_text())['modules']))
           PY
           )
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
           echo "sha_short=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch convergence checks for release version push
@@ -182,7 +176,7 @@ jobs:
             --artifact "$artifact" \
             --repo-root "$GITHUB_WORKSPACE" \
             --expected-source-sha "$GITHUB_SHA" \
-            --module-id hades2 \
+            --module-id all \
             --expected-checkout clean \
             --expected-generated-copies 0 \
             --expected-workflow "Build 2 macOS" \
@@ -203,10 +197,10 @@ jobs:
 
           Source: $GITHUB_SHA
           Bundle build: ${{ steps.version.outputs.build }}
-          Resident runtime revision: ${{ steps.version.outputs.revision }}
+          Included modules: ${{ steps.version.outputs.modules }}
           Primary artifact SHA-256: $digest
 
-          Linux contracts, Build 2 macOS, and Module build matrix all completed successfully via explicit workflow_dispatch on this exact source SHA before publication. Real-game acceptance of resident revision ${{ steps.version.outputs.revision }} remains separate from automated convergence and packaging verification.
+          Linux contracts, Build 2 macOS, and Module build matrix all completed successfully via explicit workflow_dispatch on this exact source SHA before publication. Actual-game acceptance for each included module remains separate from automated convergence and packaging verification.
           EOF
           gh release create "${{ steps.version.outputs.tag }}" \
             "${{ steps.package.outputs.artifact }}" \

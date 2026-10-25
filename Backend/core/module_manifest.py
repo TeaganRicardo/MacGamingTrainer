@@ -116,6 +116,7 @@ class GameModuleManifest:
     bundle_identifier: str
     source_path: Path
     save_management: Optional[SaveManagementSpec] = None
+    executable_path_suffix: str = ''
 
     @classmethod
     def load(cls, path: Union[str, Path]) -> 'GameModuleManifest':
@@ -147,9 +148,15 @@ class GameModuleManifest:
         process_name = target_application.get('processName')
         if not isinstance(process_name, str) or not process_name.strip() or len(process_name) > 120:
             raise ManifestError('targetApplication.processName must be a non-empty string.')
-        bundle_identifier = target_application.get('bundleIdentifier')
-        if not isinstance(bundle_identifier, str) or not bundle_identifier.strip() or len(bundle_identifier) > 255:
-            raise ManifestError('targetApplication.bundleIdentifier must be a non-empty string.')
+        bundle_identifier = target_application.get('bundleIdentifier', '')
+        if not isinstance(bundle_identifier, str) or len(bundle_identifier) > 255:
+            raise ManifestError('targetApplication.bundleIdentifier must be a string of at most 255 characters.')
+        executable_suffix = target_application.get('executablePathSuffix', '')
+        if (not isinstance(executable_suffix, str) or '\\' in executable_suffix
+                or executable_suffix.startswith('/') or '..' in Path(executable_suffix).parts):
+            raise ManifestError('targetApplication.executablePathSuffix must be a contained relative path.')
+        if not bundle_identifier.strip() and not executable_suffix.strip():
+            raise ManifestError('targetApplication requires bundleIdentifier or executablePathSuffix.')
 
         return cls(
             id=game_id,
@@ -160,6 +167,7 @@ class GameModuleManifest:
             bundle_identifier=bundle_identifier.strip(),
             source_path=source,
             save_management=_parse_save_management(data, game_id),
+            executable_path_suffix=executable_suffix.strip(),
         )
 
     def public_metadata(self) -> dict:
@@ -172,6 +180,8 @@ class GameModuleManifest:
                 'bundleIdentifier': self.bundle_identifier,
             },
         }
+        if self.executable_path_suffix:
+            metadata['targetApplication']['executablePathSuffix'] = self.executable_path_suffix
         if self.save_management is not None:
             metadata['saveManagement'] = {
                 'supported': True,

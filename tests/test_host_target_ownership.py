@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
 assert SWIFTC, "swiftc is required for Host ownership behavior"
 
-app_source = (ROOT / "Sources/App.swift").read_text()
-start = app_source.index("    init() {") + len("    init() {")
+app_source = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text()
+start = app_source.index("    convenience init() {") + len("    convenience init() {")
 end = start
 level = 1
 while level:
@@ -21,7 +21,9 @@ while level:
     elif app_source[end] == "}":
         level -= 1
     end += 1
-app_initializer = app_source[start:end - 1]
+app_initializer = app_source[start:end - 1].replace("Module.descriptor", "ActiveGameModule.descriptor").replace(
+    "self.init(model: Module.makeModel(session: session), session: session)",
+    "self.backendSession = session\n        self._model = StateObject(wrappedValue: ActiveGameModule.makeModel(session: session))")
 startup_source = (ROOT / "Sources/Core/Host/TrainerApplicationStartup.swift").read_text().replace("import AppKit\n", "")
 strings = {}
 for language in ("zh-CN", "en"):
@@ -101,6 +103,7 @@ final class NSAlert {
 struct Descriptor {
     var targetProcessName: String { processName }
     var targetBundleIdentifier: String { targetBundle }
+    var targetExecutablePathSuffix: String { "" }
 }
 struct StateObject<T> { let wrappedValue: T }
 final class TrainerBackendSession {}
@@ -113,6 +116,7 @@ enum ActiveGameModule {
 }
 ''' + startup_source + r'''
 @MainActor final class HostHarness {
+    let ownership: TrainerTargetOwnership
     let backendSession: TrainerBackendSession
     let _model: StateObject<Int>
     init() {

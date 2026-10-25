@@ -1,15 +1,32 @@
 import Foundation
 import SwiftUI
 
-struct GameModuleDescriptor: Identifiable, Hashable {
+struct GameModuleDescriptor: Identifiable, Hashable, Sendable {
     let id: String
     let displayName: String
     let backendGameID: String
     let targetProcessName: String
     let targetBundleIdentifier: String
+    let targetExecutablePathSuffix: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
     let supportsSaveManagement: Bool
+
+    init(id: String, displayName: String, backendGameID: String,
+         targetProcessName: String, targetBundleIdentifier: String,
+         targetExecutablePathSuffix: String = "",
+         expectedHostProtocolVersion: Int, expectedModuleProtocolVersion: Int,
+         supportsSaveManagement: Bool) {
+        self.id = id
+        self.displayName = displayName
+        self.backendGameID = backendGameID
+        self.targetProcessName = targetProcessName
+        self.targetBundleIdentifier = targetBundleIdentifier
+        self.targetExecutablePathSuffix = targetExecutablePathSuffix
+        self.expectedHostProtocolVersion = expectedHostProtocolVersion
+        self.expectedModuleProtocolVersion = expectedModuleProtocolVersion
+        self.supportsSaveManagement = supportsSaveManagement
+    }
 }
 
 struct TrainerManagementActions {
@@ -42,7 +59,7 @@ struct TrainerGamePresentation: Hashable {
 }
 
 /// The App owns application lifecycle. A game model only prepares its own
-/// runtime for termination and reports whether the host may quit.
+/// runtime for committed termination after the Host has drained all contexts.
 protocol TrainerHostModel: ObservableObject {
     var backendAvailable: Bool { get }
     var busy: Bool { get }
@@ -66,7 +83,7 @@ protocol TrainerHostModel: ObservableObject {
     func hostTargetLifetimeChanged(running: Bool)
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation)
     func restartBackendFromHost()
-    func prepareForTermination(completion: @escaping (Bool) -> Void)
+    func prepareForTermination(completion: @escaping () -> Void)
 }
 
 extension TrainerHostModel {

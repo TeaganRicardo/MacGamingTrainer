@@ -37,12 +37,14 @@ final class TrainerTargetProcessMonitor: ObservableObject {
 
     private let processName: String
     private let bundleIdentifier: String
+    private let executablePathSuffix: String
     private let workspace: NSWorkspace
     private var observers: [NSObjectProtocol] = []
 
-    init(processName: String, bundleIdentifier: String, workspace: NSWorkspace = .shared) {
+    init(processName: String, bundleIdentifier: String, executablePathSuffix: String = "", workspace: NSWorkspace = .shared) {
         self.processName = processName
         self.bundleIdentifier = bundleIdentifier
+        self.executablePathSuffix = executablePathSuffix
         self.workspace = workspace
         let current = currentRunningApplication()
         targetObservation = TrainerTargetObservation(
@@ -114,13 +116,17 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         if !bundleIdentifier.isEmpty,
            let application = NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleIdentifier)
-            .first {
+            .first(where: matches) {
             return application
         }
         return workspace.runningApplications.first(where: matches)
     }
 
     private func matches(_ app: NSRunningApplication) -> Bool {
+        if !executablePathSuffix.isEmpty {
+            guard let path = app.executableURL?.standardizedFileURL.path,
+                  path.hasSuffix("/" + executablePathSuffix) else { return false }
+        }
         if !bundleIdentifier.isEmpty, app.bundleIdentifier == bundleIdentifier {
             return true
         }

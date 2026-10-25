@@ -94,6 +94,19 @@ final class GenerateAction: NSObject {
  init(_ model: Hades2TrainerModel) { self.model=model }
  @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
 }
+@MainActor final class PageVisibility: ObservableObject {
+ @Published var visible = true
+}
+struct HeaderFixture: View {
+ @ObservedObject var model: Hades2TrainerModel
+ @ObservedObject var visibility: PageVisibility
+ var body: some View {
+  VStack {
+   Hades2SidebarActions(model:model)
+   Hades2HeaderActions(model:model)
+  }.environment(\.trainerGamePageVisible,visibility.visible)
+ }
+}
 @main struct Main {
  @MainActor static func main() throws {
   let journey=CommandLine.arguments[3]
@@ -121,6 +134,31 @@ final class GenerateAction: NSObject {
   check(model.canSetResource && workerStartCount()==1,
         "duplicate initial observation restarted the Backend worker")
   let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
+  if journey == "navigation" {
+   let visibility=PageVisibility()
+   let host=NSHostingView(rootView:HeaderFixture(model:model,visibility:visibility).environmentObject(localization))
+   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:700,height:700),styleMask:[.titled],backing:.buffered,defer:false)
+   window.isReleasedWhenClosed=false
+   window.contentView=host; window.makeKeyAndOrderFront(nil); host.layoutSubtreeIfNeeded(); pump()
+   func hasPopover() -> Bool {
+    NSApp.windows.contains { $0.isVisible && $0.accessibilityRole() == .popover }
+   }
+   model.workbenchSearch="Invincibility"
+   wait("search results did not open") { hasPopover() }
+   visibility.visible=false
+   wait("a hidden game retained its search popover") { !hasPopover() }
+   check(model.workbenchSearch=="Invincibility", "hiding the page erased its search input")
+   model.workbenchSearch="Gold"; pump()
+   check(!hasPopover(), "a background search change reopened a hidden popover")
+   visibility.visible=true; pump()
+   check(!hasPopover() && model.workbenchSearch=="Gold", "returning to the page lost input or reopened stale results")
+   model.error="host.operationFailed"; pump(); model.showFeedbackDetails()
+   wait("feedback details did not open") { model.feedbackDetailsPresented && hasPopover() }
+   visibility.visible=false
+   wait("a hidden game retained its feedback popover") { !model.feedbackDetailsPresented && !hasPopover() }
+   check(!model.currentIssues.isEmpty, "hiding feedback erased the underlying issue")
+   session.stop(); window.close(); phase("navigation:complete"); return
+  }
   if journey == "controls" {
    let backdrop=Color(nsColor: .magenta)
    let reference=ImageRenderer(content:TrainerRow { Color.clear.frame(height:40) }
@@ -598,7 +636,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     binary = td / "text_edit"
     subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
     # Keep independent native journeys within their existing execution budget.
-    for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls").split(","):
+    for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls,navigation").split(","):
         fixture = td / journey; fixture.mkdir()
         worker = fixture / "worker.py"; worker.write_text(WORKER)
         home = fixture / "home"; home.mkdir()

@@ -13,11 +13,11 @@ sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(BACKEND))
 
 from core.module_manifest import ManifestError
-from module_support import load_manifest
+from product_support import load_selection
 
 
 def expected_app_path(game_id, dist_dir):
-    manifest = load_manifest(game_id)
+    manifest = load_selection(game_id)
     return Path(dist_dir).resolve() / f'{manifest.app.display_name}.app', manifest
 
 
@@ -29,7 +29,7 @@ def verify_python_runtime(resources, manifest):
         raise ValueError(f'Python runtime metadata is missing or unsafe: {metadata_path}')
     source = json.loads(source_path.read_text(encoding='utf-8'))
     packaged = json.loads(metadata_path.read_text(encoding='utf-8'))
-    architectures = list(manifest.frontend.architectures) or [platform.machine()]
+    architectures = list(manifest.architectures)
     if any(arch not in ('arm64', 'x86_64') for arch in architectures):
         raise ValueError(f'Python runtime has unsupported target architecture: {architectures}')
     expected = {
@@ -66,36 +66,39 @@ def verify_module_build(game_id, dist_dir):
     info_path = contents / 'Info.plist'
     game_marker = resources / 'ACTIVE_GAME_ID'
     games_dir = resources / 'Backend/games'
-    manifest_path = games_dir / game_id / 'module.json'
-    if not info_path.is_file() or not game_marker.is_file() or not manifest_path.is_file():
+    if not info_path.is_file() or not game_marker.is_file():
         raise ValueError(f'Expected app is missing selected module/build metadata: {app}')
     with info_path.open('rb') as stream:
         info = plistlib.load(stream)
-    if info.get('CFBundleIdentifier') != manifest.app.bundle_identifier:
-        raise ValueError(f'Bundle identifier mismatch in {info_path}')
-    if info.get('CFBundleName') != manifest.app.display_name:
-        raise ValueError(f'Bundle name mismatch in {info_path}')
-    if info.get('CFBundleDisplayName') != manifest.app.display_name:
-        raise ValueError(f'Bundle display name mismatch in {info_path}')
-    if info.get('CFBundleExecutable') != manifest.app.executable:
-        raise ValueError(f'Bundle executable mismatch in {info_path}')
+    for key, expected in {
+        'CFBundleIdentifier': manifest.app.bundle_identifier,
+        'CFBundleName': manifest.app.display_name,
+        'CFBundleDisplayName': manifest.app.display_name,
+        'CFBundleExecutable': manifest.app.executable,
+    }.items():
+        if info.get(key) != expected:
+            raise ValueError(f'{key} mismatch in {info_path}')
     executable = contents / 'MacOS' / manifest.app.executable
     if not executable.is_file() or executable.is_symlink():
         raise ValueError(f'Expected packaged executable is missing or unsafe: {executable}')
-    if game_marker.read_text(encoding='utf-8').strip() != game_id:
+    if game_marker.read_text(encoding='utf-8').strip() != manifest.ids[0]:
         raise ValueError(f'Selected module marker mismatch in {game_marker}')
-    with manifest_path.open(encoding='utf-8') as stream:
-        packaged_module = json.load(stream)
-    if packaged_module.get('id') != game_id:
-        raise ValueError(f'Packaged module identity mismatch in {manifest_path}')
-    module_manifests = list(games_dir.rglob('module.json'))
-    if module_manifests != [manifest_path]:
-        raise ValueError(f'Expected exactly the selected module manifest in {app}; found {module_manifests}')
+    expected_paths = {games_dir / module.id / 'module.json' for module in manifest.modules}
+    if set(games_dir.rglob('module.json')) != expected_paths:
+        raise ValueError(f'Expected exactly the selected module manifests in {app}')
+    for module in manifest.modules:
+        packaged = games_dir / module.id / 'module.json'
+        if packaged.is_symlink() or packaged.read_bytes() != module.runtime.source_path.read_bytes():
+            raise ValueError(f'Packaged module differs from source: {packaged}')
+    marker = resources / 'GAME_MODULES.json'
+    if manifest.product and (not marker.is_file() or json.loads(marker.read_text()) != list(manifest.ids)):
+        raise ValueError(f'Packaged module set differs from product: {marker}')
     verify_python_runtime(resources, manifest)
-    for library in manifest.native_libraries:
-        native = games_dir / game_id / 'native' / library.filename
-        if not native.is_file() or native.is_symlink():
-            raise ValueError(f'Declared module native library is missing or unsafe: {native}')
+    for module in manifest.modules:
+        for library in module.native_libraries:
+            native = games_dir / module.id / 'native' / library.filename
+            if not native.is_file() or native.is_symlink():
+                raise ValueError(f'Declared module native library is missing or unsafe: {native}')
     return app
 
 

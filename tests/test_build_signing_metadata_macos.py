@@ -93,7 +93,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
         'codesign', '--verify', '--deep', '--strict', str(app),
     ], check=True)
 
+    # A file-provider/copy can attach signing-prohibited metadata after staging.
+    subprocess.run(['xattr', '-w', 'com.apple.FinderInfo', 'F' * 32, str(resource)], check=True)
     published = publish_app(app, Path(temporary) / 'published', 'Metadata Test')
+    assert 'com.apple.FinderInfo' in subprocess.check_output(['xattr', str(resource)], text=True)
     published_resource = published / resource.relative_to(app)
     published_attributes = set(subprocess.check_output(
         ['xattr', str(published_resource)], text=True

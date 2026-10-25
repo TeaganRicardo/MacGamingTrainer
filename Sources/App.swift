@@ -3,7 +3,7 @@ import SwiftUI
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    var model: (any TrainerHostModel)?
+    var application: TrainerApplicationCoordinator?
     private var terminationInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -11,13 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let model else { return .terminateNow }
+        guard let application else { return .terminateNow }
         guard !terminationInFlight else { return .terminateLater }
         terminationInFlight = true
-        model.prepareForTermination { [weak self] allow in
+        application.prepareForTermination { [weak self] in
             DispatchQueue.main.async {
                 self?.terminationInFlight = false
-                NSApp.reply(toApplicationShouldTerminate: allow)
+                NSApp.reply(toApplicationShouldTerminate: true)
             }
         }
         return .terminateLater
@@ -31,10 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
 private struct WindowCloseBridge: NSViewRepresentable {
     let delegate: AppDelegate
-    let model: any TrainerHostModel
+    let application: TrainerApplicationCoordinator
+    let title: String
 
     final class HookView: NSView {
         weak var closeDelegate: AppDelegate?
+        var title = ""
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             configureWindow()
@@ -42,58 +44,58 @@ private struct WindowCloseBridge: NSViewRepresentable {
 
         func configureWindow() {
             window?.delegate = closeDelegate
-            window?.title = "\(ActiveGameModule.descriptor.displayName) · Mac Gaming Trainer"
+            window?.title = title
             window?.titlebarAppearsTransparent = true
             window?.backgroundColor = .clear
         }
     }
 
     func makeNSView(context: Context) -> HookView {
-        delegate.model = model
+        delegate.application = application
         let view = HookView()
         view.closeDelegate = delegate
+        view.title = title
         return view
     }
 
     func updateNSView(_ view: HookView, context: Context) {
-        delegate.model = model
+        delegate.application = application
         view.closeDelegate = delegate
+        view.title = title
         view.configureWindow()
     }
 }
 
 @main struct TrainerApplication: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    private let backendSession: TrainerBackendSession
-    @StateObject private var model: ActiveGameModule.Model
+    @StateObject private var application: TrainerApplicationCoordinator
     @StateObject private var localization = TrainerLocalizationStore()
 
     init() {
-        TrainerApplicationStartup.requireOwnership(
-            targetProcessName: ActiveGameModule.descriptor.targetProcessName,
-            targetBundleIdentifier: ActiveGameModule.descriptor.targetBundleIdentifier
-        )
-        let backendSession = TrainerBackendSession()
-        self.backendSession = backendSession
-        _model = StateObject(wrappedValue: ActiveGameModule.makeModel(session: backendSession))
+        _application = StateObject(wrappedValue: TrainerApplicationCoordinator(
+            contexts: TrainerGameCatalog.makeContexts()
+        ))
     }
 
     var body: some Scene {
         Window("Mac Gaming Trainer", id: "main") {
-            TrainerHostView<ActiveGameModule>(model: model, session: backendSession)
+            TrainerGamePages(application: application)
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
                 .preferredColorScheme(.dark)
                 .environmentObject(localization)
-                .background(WindowCloseBridge(delegate: delegate, model: model).frame(width: 0, height: 0))
-                .onAppear { delegate.model = model }
+                .background(WindowCloseBridge(
+                    delegate: delegate, application: application,
+                    title: "\(application.context(id: application.selectedGameID)?.descriptor.displayName ?? "") · Mac Gaming Trainer"
+                ).frame(width: 0, height: 0))
+                .onAppear { delegate.application = application }
         }
         .defaultSize(width: 1160, height: 860)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
             TrainerLanguageCommands(localization: localization)
-            ActiveGameModule.makeManagementCommands(model: model, localization: localization)
+            TrainerGameCatalogCommands(application: application, localization: localization)
         }
     }
 }

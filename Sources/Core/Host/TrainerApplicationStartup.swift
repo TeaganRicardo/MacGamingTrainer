@@ -5,10 +5,7 @@ import Foundation
 /// Keep the lease until process exit, including asynchronous shutdown cleanup.
 @MainActor
 enum TrainerApplicationStartup {
-    private static var owner: TrainerTargetOwnership?
-
-    static func requireOwnership(targetProcessName: String, targetBundleIdentifier: String) {
-        guard owner == nil else { return }
+    static func requireOwnership(targetProcessName: String, targetBundleIdentifier: String, executablePathSuffix: String = "") -> TrainerTargetOwnership {
         let localization = TrainerLocalizationStore()
         do {
             let support = try FileManager.default.url(
@@ -18,10 +15,10 @@ enum TrainerApplicationStartup {
             let directory = support.appendingPathComponent("MacGamingTrainer/TargetOwners", isDirectory: true)
             switch try TrainerTargetOwnership.acquire(
                 directory: directory, processName: targetProcessName,
-                bundleIdentifier: targetBundleIdentifier
+                bundleIdentifier: targetBundleIdentifier, executablePathSuffix: executablePathSuffix
             ) {
             case .acquired(let lease):
-                owner = lease
+                return lease
             case .occupied(let pid):
                 if let pid, let existing = NSRunningApplication(processIdentifier: pid),
                    existing.bundleIdentifier == Bundle.main.bundleIdentifier,

@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     dist = repo / 'dist'
 
     dist.symlink_to(outside, target_is_directory=True)
-    with patch.object(publisher, '_verify_signature'):
+    with patch.object(publisher, 'clean_signing_metadata'), patch.object(publisher, '_verify_signature'):
         try:
             publisher.publish_app(staged, dist, 'Selected')
         except (ValueError, OSError):
@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     existing_game = existing_app / 'Contents/Resources/ACTIVE_GAME_ID'
     existing_game.parent.mkdir(parents=True)
     existing_game.write_text('other_module\n')
-    with patch.object(publisher, '_verify_signature'):
+    with patch.object(publisher, 'clean_signing_metadata'), patch.object(publisher, '_verify_signature'):
         try:
             publisher.publish_app(staged, dist, 'Selected')
         except ValueError as error:
@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
         dist.symlink_to(outside, target_is_directory=True)
         return result
 
-    with patch.object(publisher, '_verify_signature'), patch.object(publisher, '_copy_app', side_effect=swap_dist_after_copy):
+    with patch.object(publisher, 'clean_signing_metadata'), patch.object(publisher, '_verify_signature'), patch.object(publisher, '_copy_app', side_effect=swap_dist_after_copy):
         try:
             publisher.publish_app(staged, dist, 'Selected')
         except (ValueError, OSError):
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     assert (moved_dist / 'Selected.app/keep.txt').read_text() == 'existing app must survive'
     dist.unlink()
     moved_dist.rename(dist)
-    with patch.object(publisher, '_verify_signature'):
+    with patch.object(publisher, 'clean_signing_metadata'), patch.object(publisher, '_verify_signature'):
         result = publisher.publish_app(staged, dist, 'Selected')
     assert result == dist / 'Selected.app'
     assert (result / 'Info.plist').read_text() == 'temporary fixture'

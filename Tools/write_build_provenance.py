@@ -310,6 +310,54 @@ def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id:
     return app_root
 
 
+def product_module_ids(repo_root: Path) -> tuple[str, ...]:
+    product = json.loads((repo_root / 'app.json').read_text())
+    ids = product.get('modules')
+    if (not isinstance(ids, list) or not ids
+            or any(not isinstance(value, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', value) for value in ids)
+            or len(set(ids)) != len(ids)):
+        raise RuntimeError('app.json modules must contain unique game IDs')
+    return tuple(ids)
+
+
+def require_packaged_product_identity(repo_root: Path, artifact: Path,
+                                      source_plist: dict[str, object]) -> str:
+    product = json.loads((repo_root / 'app.json').read_text())
+    ids = product_module_ids(repo_root)
+    app = app_spec_from_manifest(product, 'product', 'Product', source_plist['CFBundleExecutable'])
+    app_root = f'{app.display_name}.app'
+    resources = f'{app_root}/Contents/Resources'
+    with zipfile.ZipFile(artifact) as archive:
+        names = archive.namelist()
+        marker = f'{resources}/GAME_MODULES.json'
+        if names.count(marker) != 1 or json.loads(archive.read(marker)) != list(ids):
+            raise RuntimeError('packaged module set differs from app.json')
+        manifests = [name for name in names if '/Contents/Resources/Backend/games/' in name
+                     and name.endswith('/module.json')]
+        expected = [f'{resources}/Backend/games/{game_id}/module.json' for game_id in ids]
+        if sorted(manifests) != sorted(expected):
+            raise RuntimeError('artifact must contain exactly the product module manifests')
+        for game_id, packaged in zip(ids, expected):
+            source = repo_root / 'Backend/games' / game_id / 'module.json'
+            if archive.read(packaged) != source.read_bytes():
+                raise RuntimeError(f'packaged module differs from source: {game_id}')
+        info_path = f'{app_root}/Contents/Info.plist'
+        if names.count(info_path) != 1:
+            raise RuntimeError('artifact must contain exactly one product Info.plist')
+        info = plistlib.loads(archive.read(info_path))
+        expected_info = {
+            'CFBundleIdentifier': app.bundle_identifier,
+            'CFBundleName': app.display_name,
+            'CFBundleDisplayName': app.display_name,
+            'CFBundleExecutable': app.executable,
+            'CFBundleShortVersionString': source_plist['CFBundleShortVersionString'],
+            'CFBundleVersion': source_plist['CFBundleVersion'],
+        }
+        if any(info.get(key) != value for key, value in expected_info.items()):
+            raise RuntimeError('packaged product Info.plist differs from source')
+    return app_root
+
+
 def build_manifest(
     artifact: Path,
     product_version: str,
@@ -386,7 +434,23 @@ def build_manifest(
         if env.get("RUNNER_OS") == "macOS":
             manifest["toolchain"] = collect_macos_toolchain(env)
 
-    if module_id:
+    if module_id == 'all':
+        app_root = require_packaged_product_identity(repo_root, artifact, source_plist)
+        ids = product_module_ids(repo_root)
+        manifest['moduleId'] = 'all'
+        manifest['moduleIds'] = list(ids)
+        manifest['buildInputs']['productManifest'] = tracked_source_identity(repo_root, 'app.json')
+        manifest['buildInputs']['moduleManifests'] = [
+            tracked_source_identity(repo_root, f'Backend/games/{game_id}/module.json') for game_id in ids
+        ]
+        runtime = python_runtime_identity(repo_root, artifact, app_root)
+        if runtime is not None:
+            manifest['pythonRuntime'] = runtime
+        manifest['residentRuntimes'] = {
+            game_id: identity for game_id in ids
+            if (identity := resident_identity(repo_root, artifact, game_id, app_root)) is not None
+        }
+    elif module_id:
         app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
         module_manifest = repo_root / "Backend/games" / module_id / "module.json"

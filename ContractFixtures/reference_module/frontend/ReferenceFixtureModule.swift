@@ -53,9 +53,9 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         send("set_enabled", params: ["value": value], operation: value ? "host.feature.enable" : "host.feature.disable")
     }
 
-    func prepareForTermination(completion: @escaping (Bool) -> Void) {
+    func prepareForTermination(completion: @escaping () -> Void) {
         backendSession.stop(suppressTerminationError: true)
-        completion(true)
+        completion()
     }
 
     private func startBackend() {

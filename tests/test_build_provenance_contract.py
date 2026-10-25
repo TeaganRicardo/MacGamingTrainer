@@ -725,6 +725,129 @@ else:
                 self.assertNotEqual(provenance.returncode, 0)
                 self.assertIn('Info.plist', provenance.stderr)
 
+    def test_unified_product_records_and_verifies_every_module(self):
+        product = {
+            'schemaVersion': 1,
+            'app': {'bundleIdentifier': 'com.example.product', 'displayName': 'Unified'},
+            'modules': ['one', 'two'], 'architectures': ['arm64'],
+        }
+        (self.root / 'app.json').write_text(json.dumps(product))
+        for game_id in product['modules']:
+            module = self.root / 'Backend/games' / game_id
+            module.mkdir(parents=True)
+            (module / 'module.json').write_text(json.dumps({'id': game_id, 'displayName': game_id}))
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'product modules'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+        def package(ids):
+            with zipfile.ZipFile(self.artifact, 'w') as archive:
+                resources = 'Unified.app/Contents/Resources'
+                archive.writestr(resources + '/GAME_MODULES.json', json.dumps(ids))
+                archive.writestr('Unified.app/Contents/Info.plist', self.packaged_info('Unified', 'com.example.product'))
+                for game_id in ids:
+                    archive.writestr(resources + f'/Backend/games/{game_id}/module.json',
+                                     (self.root / 'Backend/games' / game_id / 'module.json').read_bytes())
+        package(['one', 'two'])
+        env = {**self.env, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+               'GITHUB_WORKFLOW': 'Build 2 macOS', 'GITHUB_REPOSITORY': 'example/trainer',
+               'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
+        result = self.run_tool('--module-id', 'all', env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        provenance = json.loads(self.provenance_path().read_text())
+        self.assertEqual(provenance['moduleIds'], ['one', 'two'])
+        self.assertEqual([value['path'] for value in provenance['buildInputs']['moduleManifests']],
+                         ['Backend/games/one/module.json', 'Backend/games/two/module.json'])
+        verify_args = [sys.executable, str(VERIFY_SCRIPT), '--provenance', str(self.provenance_path()),
+                       '--artifact', str(self.artifact), '--repo-root', str(self.root),
+                       '--expected-source-sha', git(self.root, 'rev-parse', 'HEAD'),
+                       '--module-id', 'all', '--expected-checkout', 'clean']
+        verified = subprocess.run(verify_args, text=True, capture_output=True)
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        second = self.root / 'Backend/games/two/module.json'
+        original = second.read_bytes()
+        second.write_text('{"id":"two","changed":true}')
+        rejected = subprocess.run(verify_args, text=True, capture_output=True)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('module manifests', rejected.stderr)
+        second.write_bytes(original)
+        package(['one'])
+        missing = self.run_tool('--module-id', 'all', env=env)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn('module set', missing.stderr)
+
+    def test_unified_resident_records_match_each_module_declaration(self):
+        ids = ['one', 'two', 'without_runtime']
+        (self.root / 'app.json').write_text(json.dumps({
+            'schemaVersion': 1,
+            'app': {'bundleIdentifier': 'com.example.product', 'displayName': 'Unified'},
+            'modules': ids, 'architectures': ['arm64'],
+        }))
+        sources = {'one': 'runtime/one.lua', 'two': 'resident/two.lua'}
+        for game_id in ids:
+            module = self.root / 'Backend/games' / game_id
+            module.mkdir(parents=True)
+            declaration = {'id': game_id, 'displayName': game_id}
+            if game_id in sources:
+                source = module / sources[game_id]
+                source.parent.mkdir()
+                source.write_text(f'{game_id} resident runtime\n')
+                declaration['residentRuntime'] = {'source': sources[game_id]}
+            (module / 'module.json').write_text(json.dumps(declaration))
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'declared resident runtimes'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+        resources = 'Unified.app/Contents/Resources'
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr(resources + '/GAME_MODULES.json', json.dumps(ids))
+            archive.writestr('Unified.app/Contents/Info.plist',
+                             self.packaged_info('Unified', 'com.example.product'))
+            for game_id in ids:
+                module = self.root / 'Backend/games' / game_id
+                archive.writestr(resources + f'/Backend/games/{game_id}/module.json',
+                                 (module / 'module.json').read_bytes())
+                if game_id in sources:
+                    archive.writestr(resources + f'/Backend/games/{game_id}/{sources[game_id]}',
+                                     (module / sources[game_id]).read_bytes())
+        env = {**self.env, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+               'GITHUB_WORKFLOW': 'Build 2 macOS', 'GITHUB_REPOSITORY': 'example/trainer',
+               'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
+        result = self.run_tool('--module-id', 'all', env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        original = json.loads(self.provenance_path().read_text())
+        self.assertEqual(set(original['residentRuntimes']), {'one', 'two'})
+
+        def verify(payload):
+            self.provenance_path().write_text(json.dumps(payload))
+            return subprocess.run([
+                sys.executable, str(VERIFY_SCRIPT), '--provenance', str(self.provenance_path()),
+                '--artifact', str(self.artifact), '--repo-root', str(self.root),
+                '--expected-source-sha', git(self.root, 'rev-parse', 'HEAD'),
+                '--module-id', 'all', '--expected-checkout', 'clean',
+            ], text=True, capture_output=True)
+
+        valid = verify(original)
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        for variant in ('empty', 'partial', 'undeclared', 'swapped', 'source', 'packagedPath'):
+            with self.subTest(variant=variant):
+                changed = json.loads(json.dumps(original))
+                runtimes = changed['residentRuntimes']
+                if variant == 'empty':
+                    runtimes.clear()
+                elif variant == 'partial':
+                    del runtimes['two']
+                elif variant == 'undeclared':
+                    runtimes['without_runtime'] = runtimes['one']
+                elif variant == 'swapped':
+                    runtimes['one'], runtimes['two'] = runtimes['two'], runtimes['one']
+                elif variant == 'source':
+                    for field in ('source', 'sourceSha256', 'packagedSha256'):
+                        runtimes['one'][field] = runtimes['two'][field]
+                else:
+                    runtimes['one']['packagedPath'] = runtimes['two']['packagedPath']
+                rejected = verify(changed)
+                self.assertNotEqual(rejected.returncode, 0, rejected.stdout)
+                self.assertIn('resident runtime', rejected.stderr)
+
 
 if __name__ == '__main__':
     program = unittest.main(exit=False)

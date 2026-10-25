@@ -55,8 +55,8 @@ assert_scope(
     ["Backend/games/hades2/adapter.py"],
     docs_only=False,
     linux=True,
-    macos=False,
-    module_build=False,
+    macos=True,
+    module_build=True,
 )
 
 for shared_backend_seam in (
@@ -104,7 +104,7 @@ assert_scope(
     docs_only=False,
     linux=True,
     macos=True,
-    module_build=False,
+    module_build=True,
 )
 assert_scope(
     ["Sources/Core/UI/TrainerTheme.swift"],
@@ -132,7 +132,7 @@ assert_scope(
     docs_only=False,
     linux=True,
     macos=True,
-    module_build=False,
+    module_build=True,
 )
 assert_scope(
     ["tests/test_hades2_run_log_watcher.py"],

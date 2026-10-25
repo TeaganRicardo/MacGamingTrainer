@@ -88,7 +88,7 @@ assert "host.viewRuntimeLog" not in sidebar_actions
 # Commands are outside the View environment tree, so the existing Host store is
 # injected explicitly through the game-module seam rather than recreated.
 assert "makeManagementCommands(model: Model, localization: TrainerLocalizationStore)" in protocol
-assert "makeManagementCommands(model: model, localization: localization)" in app
+assert "TrainerGameCatalogCommands(application: application, localization: localization)" in app
 assert "Hades2ManagementCommands(model: model, localization: localization)" in game_module
 assert "@ObservedObject private var localization: TrainerLocalizationStore" in host_actions
 

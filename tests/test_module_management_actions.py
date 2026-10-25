@@ -15,7 +15,7 @@ fixture = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureMo
 assert "struct TrainerManagementActions" in module_contract
 assert "let openSaveManagement: (() -> Void)?" in module_contract
 assert "trainerManagementActions" in module_contract
-assert "@StateObject private var saveManager: TrainerSaveManagerModel" in host
+assert "@ObservedObject private var saveManager: TrainerSaveManagerModel" in host
 # Constructor argument layout is not ownership evidence; native module/session
 # fixtures and the module build matrix exercise the optional editor hook.
 assert "Module.descriptor.supportsSaveManagement" in host
@@ -27,7 +27,7 @@ for forbidden in ("TrainerSaveManagerModel(", "TrainerSaveManagerView("):
 
 # The Host sidebar no longer injects Save Management. Hades also contributes no
 # shortcut/log copies there, so every moved utility has exactly one game-area entry.
-host_sidebar = host[host.index("TrainerSidebar("):host.index("} content: {")]
+host_sidebar = host[host.index("TrainerSidebar {"):host.index("} content: {")]
 assert "host.saveManagement" not in host_sidebar
 assert "saveManagerPresented = true" not in host_sidebar
 

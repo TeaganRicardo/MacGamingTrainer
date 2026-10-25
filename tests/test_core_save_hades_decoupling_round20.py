@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 backend = ROOT / "Backend/games/hades2"
 sources = ROOT / "Sources/Hades2"
-host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
+host = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text(encoding="utf-8")
 
 assert not (backend / "save_service.py").exists(), "Hades save service must be removed"
 

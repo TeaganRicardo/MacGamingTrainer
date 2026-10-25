@@ -53,8 +53,8 @@ print('cross_game_isolation_ok')
 build = (ROOT / 'build.sh').read_text()
 assert 'SWIFT_SOURCES=("$ROOT/Sources/App.swift")' in build
 assert 'find "$ROOT/Sources/Core" -type f -name' in build
-assert 'find "$FRONTEND_DIR" -type f -name' in build
-assert build.index('find "$ROOT/Sources/Core"') < build.index('find "$FRONTEND_DIR"')
+assert 'find "$ROOT/$directory" -type f -name' in build
+assert build.index('find "$ROOT/Sources/Core"') < build.index('find "$ROOT/$directory"')
 for forbidden in ('case "$ACTIVE_GAME_ID"', 'if [[ "$ACTIVE_GAME_ID"', 'hades2)', 'reference_fixture)'):
     assert forbidden not in build, forbidden
 

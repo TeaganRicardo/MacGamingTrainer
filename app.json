@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "bundleIdentifier": "com.gao.macgamingtrainer",
+    "displayName": "Mac Gaming Trainer"
+  },
+  "architectures": ["arm64"],
+  "minimumMacOS": "14.0",
+  "modules": ["hades2", "hades"]
+}
