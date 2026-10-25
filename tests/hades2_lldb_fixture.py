@@ -4,7 +4,6 @@ Fake Lua functions isolate debugger cost; this fixture never attaches to a game.
 Import only under the Xcode Python ABI.
 """
 import subprocess
-import time
 from hades2_lldb_worker_support import phase
 
 from games.hades2 import transport as transport_module
@@ -99,6 +98,7 @@ int main(int argc, char **argv) {
   delay_ms = argc > 1 ? atoi(argv[1]) : 0;
   tick_interval_us = argc > 2 ? atoi(argv[2]) : 0;
   volatile int value = 0;
+  write(STDOUT_FILENO, "ready\n", 6);
   for (;;) {
     value = tick(value);
     if (value > 1000000) value = 0;
@@ -133,11 +133,12 @@ def symbol_address(module, target, name):
 
 
 def attach_helper(executable, delay, *, tick_interval_us=0, diagnostics=False):
-    child = subprocess.Popen([str(executable), str(delay), str(tick_interval_us)])
+    child = subprocess.Popen([str(executable), str(delay), str(tick_interval_us)], stdout=subprocess.PIPE)
     debugger = None
     transport = None
     try:
-        time.sleep(0.05)
+        with phase('fixture.waitForMain', enabled=diagnostics), child.stdout as output:
+            assert output.readline() == b"ready\n", "native fixture exited before main initialized"
         with phase('debugger.create', enabled=diagnostics):
             transport = Hades2LuaTransport()
             transport.mailbox_mode = "lldb"  # This fixture measures the debugger control plane.
