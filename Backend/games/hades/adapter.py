@@ -118,7 +118,7 @@ class HadesAdapter(GameAdapter):
                 raise invalid_value()
             return {'trait': identifier, 'rarity': rarity, 'level': level}
         identifier = params.get('instanceId')
-        if not isinstance(identifier, str) or not identifier or len(identifier) > 128:
+        if not isinstance(identifier, str) or not identifier:
             raise invalid_value()
         result = {'instanceId': identifier}
         if command == 'update_trait':

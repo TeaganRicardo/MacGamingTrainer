@@ -17,6 +17,8 @@ Multipliers accept 0.1–100 and additional dashes accept 0–20. Additional das
 
 Hades I stores an upgraded boon as several same-name trait records while presenting one boon in its HUD. A current-boon row therefore represents that native group. Its identity includes the actual current group members; replacing the group invalidates the old token. Mixed-rarity and special-owner effects report a concrete lifecycle limitation. They do not authorize deleting unrelated effects by a stale name.
 
+Acquiring a Keepsake or Companion uses its native equipment owner, replaces the previous item and records the selected rarity's progression. Lucky Tooth receives its native extra life; Companions receive their native assist weapon. Reacquiring the same equipped item and rarity preserves consumed uses. Ordinary Keepsake rank maps to native chamber thresholds; Companion rank maps to the selected assist's upgrade record. Narrative requirements are not fabricated.
+
 ## Ownership and recovery
 
 Durable desired settings live under the module's own `MacGamingTrainer/hades` directory. Reconnecting applies them to a compatible runtime; hero setup remounts them after native per-room state resets. Manual detach preserves desired intent. Disable All and application termination reset desired settings and attempt resident cleanup. A failed preference write is reported while resident cleanup still runs.

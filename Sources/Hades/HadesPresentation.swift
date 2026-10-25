@@ -94,6 +94,7 @@ enum HadesPresentation {
             "hades.error.shortcutRegistration": .init(zhCN: "部分快捷键注册失败，请检查快捷键设置。", en: "Some shortcuts could not register. Check shortcut settings."),
             "hades.error.shortcutModifier": .init(zhCN: "请使用包含 Control、Option 或 Command 的组合键。", en: "Include Control, Option or Command in the shortcut."),
             "hades.catalogHelp": .init(zhCN: "直接获取所选祝福，保留其原生武器与位置要求。", en: "Acquires the selected boon with its native weapon and slot requirements."),
+            "hades.equipmentAcquireHelp": .init(zhCN: "信物与伴偶会切换当前装备，并保存所选稀有度对应的进度。", en: "Keepsakes and Companions replace the equipped item and save progression for the selected rarity."),
         ]
         return pairs[key]?.resolve(for: language) ?? key
     }

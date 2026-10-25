@@ -162,7 +162,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func prepareForTermination(completion: @escaping () -> Void) {
-        guard connected else {
+        guard backendAvailable else {
             session.flushDiagnostics()
             session.stop(suppressTerminationError: true)
             completion()

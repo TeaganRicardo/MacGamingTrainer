@@ -252,6 +252,10 @@ private struct HadesCatalogView: View {
                         }
                         Text(selected.description(language: localization.language.rawValue)).font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        if selected.kind == "keepsake" || selected.kind == "companion" {
+                            Text(text("hades.equipmentAcquireHelp")).font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         HStack(spacing: 12) {
                             Picker(text("hades.rarity"), selection: $rarity) {
                                 ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }

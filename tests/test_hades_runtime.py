@@ -37,7 +37,9 @@ function UpdateHealthUI() updates.health = CurrentRun.Hero.Health end
 function UpdateMoneyUI(value) updates.money = value end
 function UpdateResourceUI(name, value) updates[name] = value end
 function UpdateRerollUI(value) updates.rerolls = value end
-GameState = { Resources = { MetaPoints = 17, Gems = 9 }, LifetimeResourcesGained = { MetaPoints = 200 }, RunHistory = {} }
+function UpdateSuperMeterUI() updates.gauge = CurrentRun.Hero.SuperMeter end
+GameState = { Resources = { MetaPoints = 17, Gems = 9 }, LifetimeResourcesGained = { MetaPoints = 200 }, RunHistory = {},
+  KeepsakeChambers = {}, AssistUnlocks = {} }
 WeaponSets = { HeroRushWeapons = { "RushWeapon", "RamWeapon" } }
 TraitData = {
   HermesWeaponTrait = { PropertyChanges = {
@@ -54,7 +56,24 @@ TraitData = {
   SetupTrait = { Name = "SetupTrait", SetupFunction = "NativeSetup", RarityLevels = { Common = {} } },
   LegendaryTrait = { Name = "LegendaryTrait", RarityLevels = { Legendary = {} } },
   DuoTrait = { Name = "DuoTrait", IsDuoBoon = true, Frame = "Duo", RarityLevels = { Legendary = {} } },
-  KeepsakeTrait = { Name = "KeepsakeTrait", Slot = "Keepsake", RarityLevels = { Common = {} } },
+  KeepsakeTrait = { Name = "KeepsakeTrait", Slot = "Keepsake", ChamberThresholds = { 25, 50 },
+    RarityLevels = { Common = {}, Rare = {}, Epic = {} } },
+  ReincarnationTrait = { Name = "ReincarnationTrait", Slot = "Keepsake", ChamberThresholds = { 25, 50 },
+    KeepsakeLastStandHealAmount = 50, RarityLevels = { Common = {}, Rare = {}, Epic = {} } },
+  FuryAssistTrait = { Name = "FuryAssistTrait", Slot = "Assist", AddAssist = { WeaponName = "FuryAssistWeapon" },
+    RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {}, Legendary = {} },
+    KeepsakeRarityGameStateRequirements = {
+      { AssistUpgradeLevel = { Name = "FuryAssistTrait", Level = 0 } },
+      { AssistUpgradeLevel = { Name = "FuryAssistTrait", Level = 1 } },
+      { AssistUpgradeLevel = { Name = "FuryAssistTrait", Level = 2 } },
+      { AssistUpgradeLevel = { Name = "FuryAssistTrait", Level = 3 } },
+      { AssistUpgradeLevel = { Name = "FuryAssistTrait", Level = 4 } },
+    } },
+  OtherAssistTrait = { Name = "OtherAssistTrait", Slot = "Assist", AddAssist = { WeaponName = "OtherAssistWeapon" },
+    RarityLevels = { Common = {} },
+    KeepsakeRarityGameStateRequirements = { { AssistUpgradeLevel = { Name = "OtherAssistTrait", Level = 0 } } } },
+  StoryKeepsakeTrait = { Name = "StoryKeepsakeTrait", Slot = "Keepsake", RarityLevels = { Common = {}, Rare = {} },
+    KeepsakeRarityGameStateRequirements = { {}, { RequiredTextLines = { "StoryFlag" } } } },
 }
 local nativeModifier = { Name = "NativeDamage", GlobalMultiplier = 1.3 }
 local function newHero(id)
@@ -62,10 +81,11 @@ local function newHero(id)
     ObjectId = id, Health = 30, MaxHealth = 100, InvulnerableFlags = { NativeMenu = true },
     Traits = {}, Weapons = { SwordWeapon = true }, OutgoingDamageModifiers = { copy(nativeModifier) },
     SuperMeter = 20, SuperMeterLimit = 100,
+    LastStands = { { Name = "NativeDeathDefiance" } }, MaxLastStands = 1,
     properties = { Speed = 540, ClipSize = 2, ChargeTime = 2, Duration = 0.4 },
   }
 end
-CurrentRun = { Hero = newHero(10), Money = 100, NumRerolls = 3, InvulnerableFlags = { NativeMenu = true } }
+CurrentRun = { Hero = newHero(10), Money = 100, NumRerolls = 3, InvulnerableFlags = { NativeMenu = true }, CurrentRoom = {} }
 function SetPlayerInvulnerable(flag)
   CurrentRun.Hero.InvulnerableFlags[flag] = true
   CurrentRun.InvulnerableFlags[flag] = true
@@ -129,9 +149,39 @@ function IsSuperValid() return CurrentRun.Hero.hasCall == true end
 function BuildSuperMeter(run, amount)
   if not IsSuperValid() or run.Hero.SuperActive then return end
   run.Hero.SuperMeter = math.min(run.Hero.SuperMeter + amount, run.Hero.SuperMeterLimit, run.Hero.superCap or math.huge)
+  UpdateSuperMeterUI()
 end
 function StopSuper() CurrentRun.Hero.SuperActive = false end
-function PostEncounterDrainSuper() CurrentRun.Hero.SuperMeter = 0 end
+function thread() end
+function wait(delay) coroutine.yield(delay) end
+function IsSuperAvailable(unit) return unit.SuperMeter > 0 end
+function PostEncounterDrainSuperPresentation() end
+SuperUI = { PostEncounterDrainRates = { { Threshold = 0, Rate = 1 } } }
+RoomThreadName = "RoomThread"
+-- ShoutScripts.lua:274-301: a coroutine started before enabling the feature still calls global UI updates.
+function PostEncounterDrainSuper()
+  local elapsed = 0
+  thread(PostEncounterDrainSuperPresentation, IsSuperAvailable(CurrentRun.Hero))
+  while CurrentRun.Hero.SuperMeter > 0 and (CurrentRun.CurrentRoom.ChallengeEncounter == nil
+      or not CurrentRun.CurrentRoom.ChallengeEncounter.InProgress) do
+    local drainRate = 1
+    for i, thresholdData in ipairs(SuperUI.PostEncounterDrainRates) do
+      if elapsed >= thresholdData.Threshold and (SuperUI.PostEncounterDrainRates[i + 1] == nil
+          or elapsed < SuperUI.PostEncounterDrainRates[i + 1].Threshold) then
+        drainRate = 1 / thresholdData.Rate
+        break
+      end
+    end
+    CurrentRun.Hero.SuperMeter = CurrentRun.Hero.SuperMeter - 1
+    UpdateSuperMeterUI()
+    elapsed = elapsed + drainRate
+    wait(drainRate, RoomThreadName)
+  end
+  if CurrentRun.Hero.SuperMeter < 0 then
+    CurrentRun.Hero.SuperMeter = 0
+    UpdateSuperMeterUI()
+  end
+end
 function IsGodTrait(name) return name == "ZeusTrait" or name == "AthenaTrait" or name == "PoseidonTrait" end
 function AreTraitsIdentical(a, b)
   if a.ForBoonInfo or b.ForBoonInfo then return false end
@@ -151,6 +201,9 @@ function GetProcessedTraitData(args)
   local result = copy(TraitData[args.TraitName])
   -- Native ProcessTraitData only gives the first level an explicit rarity.
   if result.RarityLevels and result.RarityLevels[args.Rarity] then result.Rarity = args.Rarity end
+  if result.KeepsakeLastStandHealAmount then
+    result.KeepsakeLastStandHealAmount = result.KeepsakeLastStandHealAmount * ({ Common = 1, Rare = 1.5, Epic = 2 })[args.Rarity]
+  end
   return result
 end
 function AddTraitToHero(args)
@@ -167,6 +220,110 @@ function RemoveWeaponTrait(name)
   for index = #unit.Traits, 1, -1 do
     if unit.Traits[index].Name == name then table.remove(unit.Traits, index) end
   end
+end
+
+function GetRarityValue(rarity)
+  for index, name in ipairs({ "Common", "Rare", "Epic", "Heroic", "Legendary" }) do
+    if name == rarity then return index end
+  end
+  return 1
+end
+function GetRarityKey(index) return ({ "Common", "Rare", "Epic", "Heroic", "Legendary" })[index] end
+function IsGameStateEligible(run, requirements)
+  if requirements.AssistUpgradeLevel then
+    local required = requirements.AssistUpgradeLevel
+    return GameState.AssistUnlocks[required.Name] ~= nil and GameState.AssistUnlocks[required.Name] >= required.Level
+  end
+  return not requirements.RequiredTextLines
+end
+-- KeepsakeScripts.lua:1-29, 80-130: these owners also maintain permanent selection and revival state.
+function GetKeepsakeLevel(traitName)
+  local level = 1
+  if TraitData[traitName].KeepsakeRarityGameStateRequirements then
+    for i, requirements in ipairs(TraitData[traitName].KeepsakeRarityGameStateRequirements) do
+      if IsGameStateEligible(CurrentRun, requirements) then level = i end
+    end
+    return level
+  end
+  if not GameState.KeepsakeChambers[traitName] or TraitData[traitName].ChamberThresholds == nil then return level end
+  local threshold = 0
+  for _, value in pairs(TraitData[traitName].ChamberThresholds) do
+    threshold = threshold + value
+    if threshold > GameState.KeepsakeChambers[traitName] then break end
+    level = level + 1
+  end
+  return level
+end
+function AddTrait(unit, name, rarity)
+  unit.Traits[#unit.Traits + 1] = GetProcessedTraitData({ Unit = unit, TraitName = name, Rarity = rarity })
+end
+function RemoveTrait(unit, name)
+  for index, trait in ipairs(unit.Traits) do
+    if trait.Name == name then
+      table.remove(unit.Traits, index)
+      for key, assist in ipairs(unit.AssistWeapons or {}) do
+        if assist.TraitName == name then table.remove(unit.AssistWeapons, key); break end
+      end
+      return
+    end
+  end
+end
+function GetTotalHeroTraitValue(key)
+  local value = 0
+  for _, trait in pairs(CurrentRun.Hero.Traits) do value = value + (trait[key] or 0) end
+  return value
+end
+function AddLastStand(args)
+  local unit = args.Unit or CurrentRun.Hero
+  if args.IncreaseMax then unit.MaxLastStands = (unit.MaxLastStands or 0) + 1 end
+  table.insert(unit.LastStands, 1, args)
+end
+function RemoveLastStand(unit, name)
+  for index, lastStand in pairs(unit.LastStands) do
+    if lastStand.Name == name then table.remove(unit.LastStands, index); return end
+  end
+end
+function EquipKeepsake(heroUnit, traitName, args)
+  local unit = heroUnit or CurrentRun.Hero
+  traitName = traitName or GameState.LastAwardTrait
+  if traitName == nil then return end
+  AddTrait(unit, traitName, GetRarityKey(GetKeepsakeLevel(traitName)), args)
+  if not CurrentRun.Hero.IsDead then
+    CurrentRun.TraitCache = CurrentRun.TraitCache or {}
+    CurrentRun.TraitCache[traitName] = CurrentRun.TraitCache[traitName] or 1
+  end
+  if traitName == "ReincarnationTrait" then
+    AddLastStand({ Name = "ReincarnationTrait", InsertAtEnd = true, IncreaseMax = true,
+      Icon = "ExtraLifeSkelly", WeaponName = "LastStandReincarnateShield",
+      HealAmount = GetTotalHeroTraitValue("KeepsakeLastStandHealAmount") })
+  end
+end
+function UnequipKeepsake(heroUnit, traitName)
+  local unit = heroUnit or CurrentRun.Hero
+  RemoveTrait(unit, traitName)
+  if traitName == "ReincarnationTrait" then
+    RemoveLastStand(unit, "ReincarnationTrait")
+    unit.MaxLastStands = unit.MaxLastStands - 1
+  end
+  if traitName == "HadesShoutKeepsake" then RemoveTrait(CurrentRun.Hero, "HadesShoutTrait") end
+end
+function EquipAssist(heroUnit, traitName, args)
+  local unit = heroUnit or CurrentRun.Hero
+  traitName = traitName or GameState.LastAssistTrait
+  if traitName == nil then return end
+  AddTrait(unit, traitName, GetRarityKey(GetKeepsakeLevel(traitName)), args)
+end
+function UnequipAssist(heroUnit, traitName) RemoveTrait(heroUnit or CurrentRun.Hero, traitName) end
+function EquipReferencedWeapons(trait)
+  if trait.AddAssist then CurrentRun.Hero.Weapons[trait.AddAssist.WeaponName] = true end
+end
+function AddAssistWeapons(unit, trait)
+  if not trait.AddAssist then return end
+  unit.AssistWeapons = unit.AssistWeapons or {}
+  for _, data in pairs(unit.AssistWeapons) do if data.TraitName == trait.Name then return end end
+  local assist = copy(trait.AddAssist)
+  assist.TraitName = trait.Name
+  table.insert(unit.AssistWeapons, assist)
 end
 
 local runtime = assert(load(SOURCE))()
@@ -249,6 +406,21 @@ assert(CurrentRun.NumRerolls == 5, "native gains were swallowed")
 assert(AttemptReroll(CurrentRun, { CanBeRerolled = true }) == "door" and CurrentRun.NumRerolls == 5)
 assert(AttemptReroll(CurrentRun, nil) == nil and CurrentRun.NumRerolls == 5)
 
+unit.hasCall, unit.SuperMeter = true, 10
+local existingDrain = coroutine.create(PostEncounterDrainSuper)
+assert(coroutine.resume(existingDrain))
+assert(unit.SuperMeter == 9)
+runtime.set_feature("fullGodGauge", true)
+assert(unit.SuperMeter == 100)
+assert(coroutine.resume(existingDrain))
+assert(unit.SuperMeter == 100 and updates.gauge == 100, "already-running native drain bypassed full gauge")
+unit.SuperActive, unit.SuperMeter = true, 30
+assert(coroutine.resume(existingDrain))
+assert(unit.SuperMeter == 29 and updates.gauge == 29, "active Call's native drain was refilled")
+unit.SuperActive, unit.SuperMeter = false, 0
+runtime.set_feature("fullGodGauge", false)
+assert(coroutine.resume(existingDrain) and coroutine.status(existingDrain) == "dead")
+unit.hasCall, unit.SuperMeter = nil, 20
 runtime.set_feature("fullGodGauge", true)
 assert(unit.SuperMeter == 20, "unavailable Call was fabricated")
 unit.hasCall = true
@@ -337,9 +509,48 @@ runtime.add_trait("SetupTrait", "Common", 1)
 assert(setupCalls == 1 and runtime.status().traits[1].limitation == "specialLifecycle")
 expectError("unsupportedTrait", function() runtime.remove_trait(runtime.status().traits[1].instanceId) end)
 RemoveWeaponTrait("SetupTrait")
-runtime.add_trait("KeepsakeTrait", "Common", 1)
-assert(runtime.status().traits[1].limitation == "specialOwner")
-RemoveWeaponTrait("KeepsakeTrait")
+runtime.add_trait("ZeusTrait", "Rare", 1)
+local ordinaryBoon = runtime.status().traits[1].instanceId
+runtime.add_trait("ReincarnationTrait", "Rare", 1)
+assert(GameState.LastAwardTrait == "ReincarnationTrait" and GameState.KeepsakeChambers.ReincarnationTrait == 25)
+assert(#unit.LastStands == 2 and unit.MaxLastStands == 2 and unit.LastStands[1].HealAmount == 75)
+assert(unit.LastStands[2].Name == "NativeDeathDefiance")
+assert(CurrentRun.TraitCache.ReincarnationTrait == 1)
+local keepsakeId = runtime.status().traits[2].instanceId
+runtime.add_trait("ReincarnationTrait", "Rare", 1)
+assert(#unit.LastStands == 2 and unit.MaxLastStands == 2 and runtime.status().traits[2].instanceId == keepsakeId)
+expectError("invalidValue", function() runtime.add_trait("ReincarnationTrait", "Rare", 2) end)
+runtime.add_trait("KeepsakeTrait", "Epic", 1)
+assert(GameState.LastAwardTrait == "KeepsakeTrait" and GameState.KeepsakeChambers.KeepsakeTrait == 75)
+assert(#unit.LastStands == 1 and unit.MaxLastStands == 1 and unit.LastStands[1].Name == "NativeDeathDefiance")
+assert(runtime.status().traits[2].rarity == "Epic" and runtime.status().traits[2].limitation == "specialOwner")
+assert(runtime.status().traits[1].instanceId == ordinaryBoon and unit.Weapons.SwordWeapon)
+expectError("unsupportedTrait", function() runtime.add_trait("StoryKeepsakeTrait", "Rare", 1) end)
+assert(GameState.LastAwardTrait == "KeepsakeTrait" and GameState.KeepsakeChambers.StoryKeepsakeTrait == nil)
+runtime.add_trait("FuryAssistTrait", "Legendary", 1)
+assert(GameState.LastAssistTrait == "FuryAssistTrait" and GameState.AssistUnlocks.FuryAssistTrait == 4)
+assert(#unit.AssistWeapons == 1 and unit.AssistWeapons[1].TraitName == "FuryAssistTrait" and unit.Weapons.FuryAssistWeapon)
+assert(GameState.LastAwardTrait == "KeepsakeTrait" and #unit.Traits == 3)
+runtime.add_trait("FuryAssistTrait", "Legendary", 1)
+assert(#unit.AssistWeapons == 1 and #unit.Traits == 3)
+runtime.add_trait("OtherAssistTrait", "Common", 1)
+assert(GameState.LastAssistTrait == "OtherAssistTrait" and GameState.AssistUnlocks.OtherAssistTrait == 0)
+assert(#unit.AssistWeapons == 1 and unit.AssistWeapons[1].TraitName == "OtherAssistTrait")
+assert(unit.Weapons.SwordWeapon and runtime.status().traits[1].instanceId == ordinaryBoon)
+Save()
+assert(savedState.run.Hero.AssistWeapons[1].TraitName == "OtherAssistTrait")
+-- RunManager.lua:251-252 re-equips the selected owners on a fresh run.
+local previousHero = unit
+CurrentRun.Hero = newHero(999)
+EquipKeepsake(CurrentRun.Hero, GameState.LastAwardTrait)
+EquipAssist(CurrentRun.Hero, GameState.LastAssistTrait)
+assert(#CurrentRun.Hero.Traits == 2 and CurrentRun.Hero.Traits[1].Rarity == "Epic")
+assert(CurrentRun.Hero.Traits[2].Name == "OtherAssistTrait")
+CurrentRun.Hero = previousHero
+UnequipKeepsake(unit, GameState.LastAwardTrait)
+UnequipAssist(unit, GameState.LastAssistTrait)
+GameState.LastAwardTrait, GameState.LastAssistTrait = nil, nil
+runtime.remove_trait(ordinaryBoon)
 runtime.add_trait("PoseidonTrait", "Rare", 1)
 AddTraitToHero({ TraitName = "PoseidonTrait", Rarity = "Heroic" })
 traits = runtime.status().traits
@@ -366,7 +577,8 @@ near(unit.properties.Duration, 0.4)
 assert(unit.properties.ClipSize == 2 and not runtime.status().invincible)
 assert(unit.InvulnerableFlags.NativeScene and CurrentRun.InvulnerableFlags.NativeScene)
 assert(unit.OutgoingDamageModifiers[1].Name == "NativeDamage" and unit.OutgoingDamageModifiers[2] == nil)
-PostEncounterDrainSuper()
+local normalDrain = coroutine.create(PostEncounterDrainSuper)
+while coroutine.status(normalDrain) ~= "dead" do assert(coroutine.resume(normalDrain)) end
 assert(unit.SuperMeter == 0)
 SpendMoney(2, "normal")
 assert(CurrentRun.Money == 5)

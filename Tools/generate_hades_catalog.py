@@ -16,7 +16,9 @@ RESOURCE_TEXT_IDS = {
     'GiftPoints': 'GiftPoint', 'SuperGems': 'SuperGem',
     'SuperGiftPoints': 'SuperGiftPoint', 'SuperLockKeys': 'SuperLockKey',
 }
-EVIDENCE_SCRIPTS = ('RunManager.lua', 'RoomManager.lua', 'TraitScripts.lua', 'UIScripts.lua')
+EVIDENCE_SCRIPTS = ('RunManager.lua', 'RoomManager.lua', 'TraitScripts.lua', 'UIScripts.lua',
+                    'KeepsakeScripts.lua', 'AwardMenuScripts.lua', 'ShoutScripts.lua',
+                    'Main.lua', 'Combat.lua')
 
 EXTRACT = r'''
 GlobalVoiceLines = {}; HeroVoiceLines = {}; Color = {}; GameData = {}; ConstantsData = {}

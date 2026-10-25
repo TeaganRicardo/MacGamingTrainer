@@ -73,6 +73,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     params = {'resource': 'Gems', 'value': 123, 'target': {'heroId': 'generation:run:hero'}}
     adapter.dispatch('set_resource', params, 'edit')
     assert runtime.events[-1] == ('set_resource', params)
+    long_token = 'trait:AmmoBoltTrait:' + ','.join(map(str, range(1, 101)))
+    adapter.dispatch('remove_trait', {'instanceId': long_token, 'target': params['target']}, 'level-100-remove')
+    assert runtime.events[-1] == ('remove_trait', {'instanceId': long_token, 'target': params['target']})
     adapter.dispatch('disable_all', {}, 'disable')
     assert store.load() == DEFAULT_FEATURES
     adapter.dispatch('disconnect', {}, 'detach')

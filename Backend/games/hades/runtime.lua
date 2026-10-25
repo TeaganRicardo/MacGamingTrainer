@@ -130,10 +130,12 @@ local function applyAttack(unit, factor)
   ApplyUnitPropertyChanges(unit, attackChanges(factor), false)
 end
 local function fillGauge(unit)
-  if runtime.features.fullGodGauge and not unit.IsDead and not unit.SuperActive
+  if runtime.features.fullGodGauge and not runtime.fillingGauge and not unit.IsDead and not unit.SuperActive
       and type(IsSuperValid) == "function" and IsSuperValid()
       and finite(unit.SuperMeterLimit) and type(BuildSuperMeter) == "function" then
+    runtime.fillingGauge = true
     BuildSuperMeter(CurrentRun, math.max(0, unit.SuperMeterLimit - (unit.SuperMeter or 0)))
+    runtime.fillingGauge = false
   end
 end
 local function mount(unit, rebuilt)
@@ -307,6 +309,13 @@ local function installHooks()
       return original(run, amount, ...)
     end
   end)
+  hook("UpdateSuperMeterUI", function(original)
+    return function(...)
+      local unit = hero()
+      if unit then fillGauge(unit) end
+      return original(...)
+    end
+  end)
   hook("StopSuper", function(original)
     return function(...)
       local run, unit = CurrentRun, hero()
@@ -451,9 +460,64 @@ local function addTraits(unit, name, rarity, level, preserved)
   AddTraitToHero({ TraitData = processed })
   for _ = 2, level do AddTraitToHero({ TraitName = name }) end
 end
+local function equipOwnedTrait(unit, name, source, rarity, level)
+  assert(level == 1, "hades.error.invalidValue")
+  local assist = source.Slot == "Assist"
+  local ownerKey = assist and "LastAssistTrait" or "LastAwardTrait"
+  local equip = assist and EquipAssist or EquipKeepsake
+  local unequip = assist and UnequipAssist or UnequipKeepsake
+  assert(type(equip) == "function" and type(unequip) == "function", "hades.error.unsupportedRuntime")
+  local previous
+  for _, trait in pairs(unit.Traits or {}) do
+    if trait.Slot == source.Slot then
+      assert(not previous, "hades.error.unsupportedTrait")
+      previous = trait
+    end
+  end
+  local rank = GetRarityValue(rarity)
+  local currentRank = GetKeepsakeLevel(name)
+  local progressOwner, progressValue
+  if source.KeepsakeRarityGameStateRequirements then
+    local requirements = source.KeepsakeRarityGameStateRequirements[rank]
+    local requirement = requirements and requirements.AssistUpgradeLevel
+    if assist and requirement and requirement.Name == name then
+      for key in pairs(requirements) do assert(key == "AssistUpgradeLevel", "hades.error.unsupportedTrait") end
+      progressOwner, progressValue = GameState.AssistUnlocks, requirement.Level
+    else
+      assert(rank == currentRank, "hades.error.unsupportedTrait")
+    end
+  elseif rank ~= currentRank then
+    assert(source.ChamberThresholds, "hades.error.unsupportedTrait")
+    progressOwner, progressValue = GameState.KeepsakeChambers, 0
+    for index = 1, rank - 1 do
+      assert(finite(source.ChamberThresholds[index]), "hades.error.unsupportedTrait")
+      progressValue = progressValue + source.ChamberThresholds[index]
+    end
+  end
+  if previous and previous.Name == name and previous.Rarity == rarity
+      and GameState[ownerKey] == name and rank == currentRank then return end
+  suspendProperties(unit)
+  runtime.propertyDepth = runtime.propertyDepth + 1
+  if previous then unequip(unit, previous.Name) end
+  if progressOwner then progressOwner[name] = progressValue end
+  GameState[ownerKey] = name
+  if assist then EquipReferencedWeapons(source) end
+  equip(unit, name)
+  if assist then
+    for _, trait in pairs(unit.Traits or {}) do
+      if trait.Name == name then AddAssistWeapons(unit, trait); break end
+    end
+  end
+  runtime.propertyDepth = runtime.propertyDepth - 1
+  mount(unit, false)
+end
 function runtime.add_trait(name, rarity, level)
   local unit = requireHero()
   local source = validateTrait(unit, name, rarity, level)
+  if source.Slot == "Keepsake" or source.Slot == "Assist" then
+    equipOwnedTrait(unit, name, source, rarity, level)
+    return runtime.status()
+  end
   if source.Slot then
     for _, trait in pairs(unit.Traits or {}) do
       assert(trait.Slot ~= source.Slot or trait.Name == name, "hades.error.traitSlotOccupied")
