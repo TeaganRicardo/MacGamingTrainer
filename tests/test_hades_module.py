@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,8 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
 from games.hades.adapter import HadesAdapter
+from games.hades.preferences import HadesPreferenceStore
+from games.hades.recovery import HadesRecoveryJournal
 
 
 class Runtime:
@@ -18,7 +21,7 @@ class Runtime:
         self.connected = False
         self.invincible = False
 
-    def connect(self, pid, executable):
+    def connect(self, pid, executable, features=None):
         self.calls.append(('connect', pid, executable))
         self.connected = True
         return self.status()
@@ -33,6 +36,13 @@ class Runtime:
         self.invincible = value
         return self.status()
 
+    def command(self, method, params):
+        if method == 'set_feature':
+            assert params['feature'] == 'invincibility'
+            return self.set_invincibility(params['value'])
+        assert method == 'disable_all'
+        return self.set_invincibility(False)
+
     def disconnect(self):
         self.calls.append(('disconnect',))
         self.connected = False
@@ -44,8 +54,10 @@ class Runtime:
 
 
 context = GameAdapterContext('hades', 'Hades', 1, ROOT / 'Backend/games/hades', {})
+test_data = tempfile.TemporaryDirectory(prefix='hades-module-')
+preferences = HadesPreferenceStore(Path(test_data.name) / 'preferences.json')
 runtime = Runtime()
-adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'))
+adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=preferences)
 assert adapter.dispatch('status', {}, 's0')['connected'] is False
 assert runtime.calls == [], 'offline status must not launch a debugger'
 assert adapter.dispatch('connect', {}, 'c1')['connected'] is True
@@ -91,7 +103,7 @@ class Sidecar:
 
 
 sidecar = Sidecar()
-client = HadesRuntimeClient(sidecar)
+client = HadesRuntimeClient(sidecar, recovery=HadesRecoveryJournal(Path(test_data.name) / 'runtime.json'), identity=lambda pid: str(pid))
 client.connect(42, '/tmp/Hades/Game.macOS')
 try:
     client.set_invincibility(True)
@@ -113,7 +125,7 @@ assert client.connect(43, '/tmp/Hades/Game.macOS')['connected']
 assert replacement.calls[0][0] == 'connect', 'a new process gets a new connection, never a replay'
 
 
-no_game = HadesAdapter(context, runtime=Runtime(), locate_process=lambda: None)
+no_game = HadesAdapter(context, runtime=Runtime(), locate_process=lambda: None, preferences=preferences)
 try:
     no_game.dispatch('connect', {}, 'missing')
 except AdapterError as error:
@@ -158,3 +170,4 @@ proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + 
 assert proc.returncode == 0, proc.stderr
 print(proc.stdout.strip())
 print('hades_module_ok')
+test_data.cleanup()

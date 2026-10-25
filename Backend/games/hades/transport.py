@@ -195,7 +195,7 @@ class HadesLuaTransport:
         try:
             thread, state, breakpoint = self._boundary()
             error = lldb.SBError()
-            capacity = 4096
+            capacity = 262144
             scratch = self.process.AllocateMemory(len(payload) + 1 + capacity,
                 lldb.ePermissionsReadable | lldb.ePermissionsWritable, error)
             if error.Fail() or not scratch:
@@ -233,7 +233,10 @@ class HadesLuaTransport:
                 self.tainted = True
                 raise failure('outcome_unknown', 'outcomeUnknown', str(error))
             if result.GetValueAsSigned() != 0:
-                for key in ('heroNotReady', 'unsupportedRuntime', 'invalidValue'):
+                if 'hades.error.restartRequired' in text:
+                    raise failure('restart_required', 'restartRequired', text)
+                for key in ('heroNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
+                            'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied'):
                     if 'hades.error.' + key in text:
                         raise failure('runtime_not_ready', key, text)
                 if mutating:
