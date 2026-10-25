@@ -155,35 +155,28 @@ class HadesLuaTransport:
         if self.process.WriteMemory(focus, b'\x00', error) != 1 or error.Fail():
             raise failure('memory_error', 'debuggerCall', str(error))
         breakpoint = self.target.BreakpointCreateByAddress(self.addresses['_ZN3sgg3App6UpdateEf'])
-        leased = False
-        try:
+        self._resume(deadline, breakpoint_expected=True)
+        while time.monotonic() < deadline:
+            self._drain()
+            if not self.alive():
+                raise failure('not_connected', 'notConnected')
+            if self.process.GetState() != lldb.eStateStopped:
+                time.sleep(.005)
+                continue
+            matches = [thread for thread in self.process
+                       if thread.GetStopReason() == lldb.eStopReasonBreakpoint
+                       and thread.GetStopReasonDataAtIndex(0) == breakpoint.GetID()]
+            if not matches:
+                raise failure('unexpected_stop', 'unexpectedStop')
+            thread = matches[0]
+            state = self.process.ReadPointerFromMemory(
+                self.addresses['_ZN3sgg13ScriptManager13LUA_INTERFACEE'], error,
+            )
+            if thread.GetName() == 'MainThread' and state and error.Success():
+                breakpoint.SetEnabled(False)
+                return thread, state
             self._resume(deadline, breakpoint_expected=True)
-            while time.monotonic() < deadline:
-                self._drain()
-                if not self.alive():
-                    raise failure('not_connected', 'notConnected')
-                if self.process.GetState() != lldb.eStateStopped:
-                    time.sleep(.005)
-                    continue
-                matches = [thread for thread in self.process
-                           if thread.GetStopReason() == lldb.eStopReasonBreakpoint
-                           and thread.GetStopReasonDataAtIndex(0) == breakpoint.GetID()]
-                if not matches:
-                    raise failure('unexpected_stop', 'unexpectedStop')
-                thread = matches[0]
-                state = self.process.ReadPointerFromMemory(
-                    self.addresses['_ZN3sgg13ScriptManager13LUA_INTERFACEE'], error,
-                )
-                if thread.GetName() == 'MainThread' and state and error.Success():
-                    breakpoint.SetEnabled(False)
-                    leased = True
-                    return thread, state, breakpoint
-                self._resume(deadline, breakpoint_expected=True)
-            raise failure('runtime_not_ready', 'runtimeNotReady')
-        finally:
-            if not leased:
-                self._stop(time.monotonic() + 3)
-                self.target.BreakpointDelete(breakpoint.GetID())
+        raise failure('runtime_not_ready', 'runtimeNotReady')
 
     def execute(self, source, *, mutating=False):
         if self.tainted:
@@ -192,9 +185,8 @@ class HadesLuaTransport:
         if len(payload) > 65536:
             raise ValueError('Hades Lua request exceeds 64 KiB')
         scratch = None
-        breakpoint = None
         try:
-            thread, state, breakpoint = self._boundary()
+            thread, state = self._boundary()
             error = lldb.SBError()
             capacity = 262144
             scratch = self.process.AllocateMemory(len(payload) + 1 + capacity,
@@ -246,18 +238,22 @@ class HadesLuaTransport:
                 raise failure('lua_error', 'debuggerCall', text)
             return json.loads(text)
         finally:
+            primary_error = sys.exc_info()[1]
             if self.alive():
                 try:
                     self._stop(time.monotonic() + 3)
-                    if breakpoint is not None:
-                        self.target.BreakpointDelete(breakpoint.GetID())
+                    self.target.DeleteAllBreakpoints()
                     self._restore_focus()
                     if scratch is not None:
                         self.process.DeallocateMemory(scratch)
                     self._resume(time.monotonic() + 3)
-                except Exception:
+                except Exception as error:
                     self.tainted = True
-                    raise
+                    detail = getattr(error, 'diagnostic', None) or str(error)
+                    if primary_error is not None:
+                        original = getattr(primary_error, 'diagnostic', None) or str(primary_error)
+                        detail = original + '; cleanup: ' + detail
+                    raise failure('outcome_unknown', 'outcomeUnknown', detail) from error
 
     def detach(self):
         if self.alive():
