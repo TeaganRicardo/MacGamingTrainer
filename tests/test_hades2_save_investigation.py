@@ -231,6 +231,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert finding.query(root, search='PreTrueEnding01', offset=0, limit=10, language='en', permissions={})['items'][0]['status'] == 'notRecorded'
     assert finding.query(root, search='Nemesis', offset=1, limit=1, language='en', permissions={})['total'] == found['total']
 
+    # Small pages must not construct every matching dialogue's full content.
+    # Compare complete output as well as the projection budget so filtering,
+    # bilingual order and out-of-range pages retain their public behavior.
+    for language in ('en', 'zh-CN'):
+        for search, state_filter in (
+            ('', 'all'), ('Nemesis', 'all'), ('我的父亲', 'all'),
+            ('Nemesis', 'recorded'), ('Nemesis', 'notRecorded'),
+            ('NemesisOnlyLocalizationEvent01', 'unknown'),
+        ):
+            arguments = dict(search=search, language=language, permissions={}, state_filter=state_filter)
+            complete = finding.query(root, offset=0, limit=100_000, **arguments)
+            for offset in (0, 1, complete['total'] + 1):
+                with patch.object(finding, '_summary_row', wraps=finding._summary_row) as summaries:
+                    page = finding.query(root, offset=offset, limit=1, **arguments)
+                assert page == dict(complete, items=complete['items'][offset:offset + 1])
+                assert summaries.call_count == len(page['items']), (
+                    'off-page dialogue summaries were materialized',
+                    search, state_filter, summaries.call_count, len(page['items']),
+                )
+
     nemesis = finding.detail(root, 'NemesisPostTrueEnding01', 'en', {})
     assert [item['cueId'] for item in nemesis['lines'][:2]] == ['Nemesis_0407', 'Nemesis_0408']
     assert nemesis['status'] == 'recorded' and nemesis['futureEligibility'] == 'unknown'
