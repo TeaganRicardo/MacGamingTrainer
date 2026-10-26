@@ -20,6 +20,7 @@ class Runtime:
         self.calls = []
         self.connected = False
         self.invincible = False
+        self.speed = 1.0
 
     def connect(self, pid, executable, features=None):
         self.calls.append(('connect', pid, executable))
@@ -30,6 +31,13 @@ class Runtime:
         return {'connected': self.connected, 'heroReady': self.connected,
                 'invincible': self.invincible, 'health': 50, 'maxHealth': 100,
                 'money': 25, 'pid': 42 if self.connected else None}
+
+    def current_game_speed(self):
+        return self.speed
+
+    def set_game_speed(self, value):
+        self.speed = value
+        return value
 
     def set_invincibility(self, value):
         self.calls.append(('set_invincibility', value))
@@ -45,6 +53,7 @@ class Runtime:
 
     def disconnect(self):
         self.calls.append(('disconnect',))
+        self.speed = 1.0
         self.connected = False
         return self.status()
 

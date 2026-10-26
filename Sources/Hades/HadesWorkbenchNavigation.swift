@@ -76,6 +76,7 @@ enum HadesWorkbenchCatalog {
         let other: [(HadesWorkbenchSection, [String])] = [
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
+            (.common, ["host.timeWarp.title"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
                       "hades.level", "hades.apply", "hades.remove"]),
             (.resources, ["hades.resources"]),
@@ -84,7 +85,7 @@ enum HadesWorkbenchCatalog {
         let fixed = other.flatMap { section, keys in
             keys.map { HadesWorkbenchEntry(id: $0, titleKey: $0, section: section) }
         }
-        let numbers = HadesFeature.allCases.filter { !$0.isToggle }.map {
+        let numbers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }.map {
             HadesWorkbenchEntry(id: "numeric.\($0.rawValue)", titleKey: $0.key, section: .values)
         }
         return actions + fixed + numbers

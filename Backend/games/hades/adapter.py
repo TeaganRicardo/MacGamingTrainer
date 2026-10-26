@@ -5,7 +5,8 @@ import subprocess
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
-from .schema import DEFAULT_FEATURES, ONE_SHOT_COMMANDS, RESOURCE_IDS, feature_value, invalid_value, number
+from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
+                     RESOURCE_IDS, preference_value, invalid_value, number)
 
 
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
@@ -33,7 +34,9 @@ class HadesAdapter(GameAdapter):
         self.locate_process = locate_process
         self.connected = False
         self.preferences = preferences or HadesPreferenceStore()
-        self.features = dict(DEFAULT_FEATURES)
+        self.features = dict(DEFAULT_PREFERENCES)
+        self._game_speed_actual = None
+        self._game_speed_error = None
 
     def dispatch(self, command, params, request_id):
         if command == 'catalog':
@@ -51,34 +54,87 @@ class HadesAdapter(GameAdapter):
             if target is None:
                 raise AdapterError('game_not_running', 'hades.error.notRunning')
             self.features = self.preferences.load()
-            return self._observe(self.runtime.connect(*target, features=self.features))
+            self._game_speed_actual = None
+            self._game_speed_error = None
+            runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
+            state = self.runtime.connect(*target, features=runtime_features)
+            self.connected = state['connected']
+            self._reconcile_game_speed()
+            if not self.connected:
+                state = {**self._offline(), 'features': self.features}
+            return self._observe(state)
         if command == 'status':
-            return self._observe(self.runtime.status()) if self.connected else {**self._offline(), 'features': self.features}
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
+            state = self.runtime.status()
+            if not state.get('connected'):
+                self._game_speed_actual = None
+                self._game_speed_error = None
+            return self._observe(state)
         if command == 'disconnect':
-            return self._observe(self.runtime.disconnect())
+            try:
+                state = self.runtime.disconnect()
+            except AdapterError as error:
+                self._record_game_speed_error(error)
+                raise
+            self._game_speed_actual = getattr(self.runtime, 'game_speed_actual', 1.0)
+            self._game_speed_error = None
+            return self._observe(state)
         if command == 'set_invincibility':
             command, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
         if command == 'set_feature':
             name = params.get('feature')
-            value = feature_value(name, params.get('value'))
+            value = preference_value(name, params.get('value'))
             if not self.connected:
                 raise AdapterError('not_connected', 'hades.error.notConnected')
             candidate = {**self.features, name: value}
             self.preferences.save(candidate)
             self.features = candidate
+            if name == 'gameSpeed':
+                try:
+                    self._game_speed_actual = self.runtime.set_game_speed(value)
+                    self._game_speed_error = None
+                except AdapterError as error:
+                    self._record_game_speed_error(error)
+                    raise
+                state = self.runtime.status() if self.connected else {**self._offline(), 'features': self.features}
+                return self._observe(state)
             return self._observe(self.runtime.command(command, {'feature': name, 'value': value}))
         if command == 'disable_all':
             persistence_error = None
             try:
-                self.preferences.save(DEFAULT_FEATURES)
+                self.preferences.save(DEFAULT_PREFERENCES)
             except AdapterError as error:
                 persistence_error = error
-            self.features = dict(DEFAULT_FEATURES)
-            state = (self._observe(self.runtime.command('disable_all', {})) if self.connected
-                     else {**self._offline(), 'features': self.features})
+            self.features = dict(DEFAULT_PREFERENCES)
+            runtime_error = None
+            speed_error = None
+            state = {**self._offline(), 'features': self.features}
+            if self.connected:
+                try:
+                    state = self.runtime.command('disable_all', {})
+                except AdapterError as error:
+                    runtime_error = error
+                    if not getattr(self.runtime, 'connected', True):
+                        self.connected = False
+                if self.connected:
+                    try:
+                        self._game_speed_actual = self.runtime.set_game_speed(1.0)
+                        self._game_speed_error = None
+                    except AdapterError as error:
+                        speed_error = error
+                        self._record_game_speed_error(error)
+                else:
+                    self._game_speed_actual = None
+            else:
+                self._game_speed_actual = None
             if persistence_error:
                 raise persistence_error
-            return state
+            if runtime_error:
+                raise runtime_error
+            if speed_error:
+                raise speed_error
+            return self._observe(state)
         if command in ONE_SHOT_COMMANDS:
             if not self.connected:
                 raise AdapterError('not_connected', 'hades.error.notConnected')
@@ -128,8 +184,55 @@ class HadesAdapter(GameAdapter):
             result.update({'rarity': rarity, 'level': number(params.get('level'), 1, 100, integer=True)})
         return result
 
+    def _reconcile_game_speed(self):
+        if not self.connected:
+            return
+        try:
+            actual = self.runtime.current_game_speed()
+            self._game_speed_actual = actual
+            desired = self.features['gameSpeed']
+            if abs(actual - desired) > 0.000001:
+                self._game_speed_actual = self.runtime.set_game_speed(desired)
+            self._game_speed_error = None
+        except AdapterError as error:
+            self._record_game_speed_error(error)
+            if error.code in ('outcome_unknown', 'restart_required') or not getattr(self.runtime, 'connected', True):
+                self.connected = False
+
+    def _record_game_speed_error(self, error):
+        self._game_speed_error = {
+            'presentation': error.presentation,
+            'arguments': list(getattr(error, 'arguments', ()) or ()),
+        }
+        if error.code == 'time_warp_verify_failed' and error.arguments:
+            try:
+                observed = float(error.arguments[-1])
+                if 0 <= observed <= 10:
+                    self._game_speed_actual = observed
+            except (TypeError, ValueError):
+                pass
+        if error.code in ('outcome_unknown', 'restart_required') or not getattr(self.runtime, 'connected', True):
+            self._game_speed_actual = None
+            if not getattr(self.runtime, 'connected', True):
+                self.connected = False
+
+    def _game_speed_projection(self):
+        error = self._game_speed_error or {}
+        actual = self._game_speed_actual
+        return {
+            'desired': self.features.get('gameSpeed', 1.0),
+            'actual': actual,
+            'active': None if actual is None else abs(actual - 1.0) > 0.000001,
+            'errorPresentation': error.get('presentation'),
+            'errorArguments': [str(value) for value in error.get('arguments', ())],
+        }
+
     def _observe(self, state):
         self.connected = state['connected']
+        features = state.get('features')
+        features = dict(features) if isinstance(features, dict) else {}
+        features['gameSpeed'] = self._game_speed_projection()
+        state['features'] = features
         return state
 
     @staticmethod

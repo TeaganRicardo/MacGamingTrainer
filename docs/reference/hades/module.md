@@ -13,6 +13,7 @@ This presentation update uses existing native actions. It does not imply Hades I
 | Domain | Behavior |
 | --- | --- |
 | Combat | Invincibility, non-consuming Obols and rerolls, full God Gauge while an Aid is available, damage/movement/attack-speed multipliers, additional dashes |
+| Game speed (candidate) | Process-owned Time Warp setting 0–10×, separate from resident Lua effects; the native helper requires an x86_64 slice for the supported Intel target |
 | Boon rarity (new) | On/off minimum Heroic preference for future normal Olympian/Hermes offers and rerolls; does not alter eligibility, fixed rarity, existing offers, Chaos, Hammer or Pom selection |
 | Hero values | Set health, maximum health, Obols and rerolls; heal to current maximum |
 | Permanent resources | Edit the seven native resource owners declared by `schema.py` and the generated catalog |
@@ -27,6 +28,8 @@ Hades I stores an upgraded boon as several same-name trait records while present
 Acquiring a Keepsake or Companion uses its native equipment owner, replaces the previous item and records the selected rarity's progression. Lucky Tooth receives its native extra life; Companions receive their native assist weapon. Reacquiring the same equipped item and rarity preserves consumed uses. Ordinary Keepsake rank maps to native chamber thresholds; Companion rank maps to the selected assist's upgrade record. Narrative requirements are not fabricated.
 
 ## Ownership and recovery
+
+The game-speed control uses the debugger-side Process Time Warp helper and preserves desired versus observed applied speed separately. The native helper is built with both Host and x86_64 target slices. A manual disconnect attempts to reset time to 1× before detaching; an unacknowledged reset retains the same-process recovery interlock. This capability is awaiting user-run native game acceptance; portable tests and a signed diagnostic build do not establish gameplay efficacy.
 
 Durable desired settings live under the module's own `MacGamingTrainer/hades` directory. Reconnecting applies them to a compatible runtime; hero setup remounts them after native per-room state resets. Manual detach preserves desired intent. Disable All and application termination reset desired settings and attempt resident cleanup. Offline Disable All reports that in-game cleanup needs reconnection or a game restart. A failed preference write is reported while resident cleanup still runs. Native scripted movement temporarily owns speed; its completion or native reset remounts the current movement multiplier. Committed numeric edits remain after Disable All.
 

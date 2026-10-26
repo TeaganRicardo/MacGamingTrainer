@@ -7,7 +7,7 @@ import time
 
 from core.adapter import AdapterError
 
-sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True).strip())
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False).strip())
 import lldb
 
 
@@ -96,6 +96,10 @@ class HadesLuaTransport:
             self.detach()
             raise
 
+    def stop(self, deadline):
+        """Expose the transport's existing bounded stop to Core-owned helpers."""
+        self._stop(deadline)
+
     def _stop(self, deadline):
         if not self.alive():
             raise failure('not_connected', 'notConnected')
@@ -130,6 +134,10 @@ class HadesLuaTransport:
                 raise failure('not_connected', 'notConnected')
             time.sleep(.005)
         raise failure('resume_timeout', 'resumeFailed')
+
+    def resume(self, deadline):
+        """Expose the transport's existing bounded resume to Core-owned helpers."""
+        self._resume(deadline)
 
     def _restore_focus(self):
         if self.focus_original is None:

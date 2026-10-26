@@ -143,6 +143,11 @@
 "host.timeWarp.error.memoryAllocationFailed" = "无法为 Time Warp image allowlist 分配目标内存。";
 "host.timeWarp.error.memoryWriteFailed" = "无法写入 Time Warp image allowlist。";
 
+"host.timeWarp.title" = "游戏速度";
+"host.timeWarp.hint" = "将游戏时间调整为暂停（0×）至 10×；1× 为正常速度。";
+"host.timeWarp.actual" = "当前生效：{0}×";
+"host.timeWarp.pending" = "连接后将应用目标速度；当前生效：{0}×。";
+
 "host.save.edit" = "编辑存档";
 
 // Trainer-owned feedback controls; paired in en/Host.strings.

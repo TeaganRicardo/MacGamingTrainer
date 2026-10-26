@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 
 from core.adapter import AdapterError
-from .schema import DEFAULT_FEATURES, feature_document
+from .schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES, preference_document
 
 
 class HadesPreferenceStore:
@@ -16,24 +16,28 @@ class HadesPreferenceStore:
         try:
             document = json.loads(self.path.read_text())
         except FileNotFoundError:
-            return dict(DEFAULT_FEATURES)
+            return dict(DEFAULT_PREFERENCES)
         except (OSError, ValueError) as error:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed', diagnostic=str(error)) from error
         if not isinstance(document, dict) or document.get('schemaVersion') != 1:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
         features = document.get('features')
-        # Pre-rarity schemaVersion 1 was an exact eight-key feature document.
-        # Preserve that deployed contract while keeping all other malformed
-        # documents under the existing strict validation.
-        if isinstance(features, dict) and set(features) == set(DEFAULT_FEATURES) - {'boonRarityEnabled'}:
-            features = {**features, 'boonRarityEnabled': False}
+        # Migrate the original eight-key and post-rarity nine-key preference
+        # documents without relaxing validation of any other schemaVersion 1
+        # payload. Process speed is owned by Core, not the resident Lua table.
+        if isinstance(features, dict):
+            keys = set(features)
+            if keys == set(DEFAULT_FEATURES) - {'boonRarityEnabled'}:
+                features = {**features, 'boonRarityEnabled': False, 'gameSpeed': 1.0}
+            elif keys == set(DEFAULT_FEATURES):
+                features = {**features, 'gameSpeed': 1.0}
         try:
-            return feature_document(features)
+            return preference_document(features)
         except AdapterError as error:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed') from error
 
     def save(self, features):
-        document = {'schemaVersion': 1, 'features': feature_document(features)}
+        document = {'schemaVersion': 1, 'features': preference_document(features)}
         temporary = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)

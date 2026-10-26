@@ -1,11 +1,11 @@
 import Foundation
 
 enum HadesFeature: String, CaseIterable, Identifiable {
-    case invincibility, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled
+    case invincibility, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled, gameSpeed
     case damageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
 
     var id: String { rawValue }
-    var key: String { "hades.\(rawValue)" }
+    var key: String { self == .gameSpeed ? "host.timeWarp.title" : "hades.\(rawValue)" }
     var isToggle: Bool { Self.allCases.prefix(5).contains(self) }
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
     var icon: String {
@@ -15,6 +15,7 @@ enum HadesFeature: String, CaseIterable, Identifiable {
         case .rerollsNoDecrease: return "arrow.triangle.2.circlepath"
         case .fullGodGauge: return "bolt.heart.fill"
         case .boonRarityEnabled: return "sparkles"
+        case .gameSpeed: return "speedometer"
         case .damageMultiplier: return "burst.fill"
         case .moveSpeedMultiplier: return "figure.run"
         case .attackSpeedMultiplier: return "bolt.fill"
@@ -25,13 +26,59 @@ enum HadesFeature: String, CaseIterable, Identifiable {
 
 enum HadesFeatureValue: Decodable, Equatable {
     case boolean(Bool), number(Double)
+    case gameSpeed(desired: Double, actual: Double?, active: Bool?,
+                   errorPresentation: String?, errorArguments: [String])
+
+    private enum Keys: String, CodingKey {
+        case desired, actual, active, errorPresentation, errorArguments
+    }
+
     init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: Keys.self),
+           let desired = try? container.decode(Double.self, forKey: .desired) {
+            let actual = try container.decodeIfPresent(Double.self, forKey: .actual)
+            let active = try container.decodeIfPresent(Bool.self, forKey: .active)
+            let error = try container.decodeIfPresent(String.self, forKey: .errorPresentation)
+            let arguments = try container.decodeIfPresent([String].self, forKey: .errorArguments) ?? []
+            self = .gameSpeed(desired: desired, actual: actual, active: active,
+                              errorPresentation: error, errorArguments: arguments)
+            return
+        }
         let value = try decoder.singleValueContainer()
         if let boolean = try? value.decode(Bool.self) { self = .boolean(boolean) }
         else { self = .number(try value.decode(Double.self)) }
     }
-    var bool: Bool { if case let .boolean(value) = self { return value }; return false }
-    var number: Double? { if case let .number(value) = self { return value }; return nil }
+
+    var bool: Bool {
+        switch self {
+        case let .boolean(value): return value
+        case let .gameSpeed(_, _, active, _, _): return active ?? false
+        case .number(_): return false
+        }
+    }
+
+    var number: Double? {
+        switch self {
+        case let .number(value): return value
+        case let .gameSpeed(desired, _, _, _, _): return desired
+        case .boolean(_): return nil
+        }
+    }
+
+    var actualNumber: Double? {
+        if case let .gameSpeed(_, actual, _, _, _) = self { return actual }
+        return nil
+    }
+
+    var errorPresentation: String? {
+        if case let .gameSpeed(_, _, _, error, _) = self { return error }
+        return nil
+    }
+
+    var errorArguments: [String] {
+        if case let .gameSpeed(_, _, _, _, arguments) = self { return arguments }
+        return []
+    }
 }
 
 struct HadesHeroTarget: Decodable, Equatable {

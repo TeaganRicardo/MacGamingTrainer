@@ -8,12 +8,14 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError, GameAdapterContext
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
-from games.hades.schema import DEFAULT_FEATURES
+from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES
 
 
 class Runtime:
     def __init__(self):
         self.events = []
+        self.speed = 1.0
+        self.speed_error = None
         self.state = {'connected': True, 'pid': 42, 'heroReady': True,
                       'heroId': 'generation:run:hero', 'target': {'heroId': 'generation:run:hero'},
                       'features': dict(DEFAULT_FEATURES), 'health': 50, 'maxHealth': 100,
@@ -27,6 +29,19 @@ class Runtime:
     def status(self):
         return dict(self.state)
 
+    def current_game_speed(self):
+        self.events.append(('current_game_speed', {}))
+        if self.speed_error:
+            raise self.speed_error
+        return self.speed
+
+    def set_game_speed(self, value):
+        self.events.append(('set_game_speed', value))
+        if self.speed_error:
+            raise self.speed_error
+        self.speed = value
+        return value
+
     def command(self, name, params):
         self.events.append((name, params))
         if name == 'set_feature':
@@ -36,6 +51,8 @@ class Runtime:
         return self.status()
 
     def disconnect(self):
+        self.events.append(('disconnect', {}))
+        self.speed = 1.0
         self.state['connected'] = False
         return self.status()
 
@@ -51,11 +68,14 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     legacy = dict(DEFAULT_FEATURES)
     legacy.pop('boonRarityEnabled')
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
-    assert store.load() == {**legacy, 'boonRarityEnabled': False}, 'old preferences cannot load after feature addition'
+    assert store.load() == {**legacy, 'boonRarityEnabled': False, 'gameSpeed': 1.0}, 'original preferences did not migrate'
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': DEFAULT_FEATURES}))
+    assert store.load() == {**DEFAULT_FEATURES, 'gameSpeed': 1.0}, 'post-rarity preferences did not migrate'
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
     assert offline['catalog'] and 'connected' not in offline and runtime.events == []
     adapter.dispatch('connect', {}, 'connect')
-    assert runtime.events[-1][1]['boonRarityEnabled'] is False
+    assert next(event for event in runtime.events if event[0] == 'connect')[1]['boonRarityEnabled'] is False
+    assert 'gameSpeed' not in next(event for event in runtime.events if event[0] == 'connect')[1]
     adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on')
     assert store.load()['boonRarityEnabled'] is True
     assert runtime.events[-1] == ('set_feature', {'feature': 'boonRarityEnabled', 'value': True})
@@ -70,6 +90,10 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert len(runtime.events) == calls and store.load()['boonRarityEnabled'] is True
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
+    state = adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 2.5}, 'speed-up')
+    assert runtime.speed == 2.5 and store.load()['gameSpeed'] == 2.5
+    assert state['features']['gameSpeed']['actual'] == 2.5
+    assert state['features']['gameSpeed']['active'] is True
     before = store.path.read_bytes()
     calls = len(runtime.events)
     for bad in (True, -1, float('nan'), float('inf')):
@@ -94,10 +118,12 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     adapter.dispatch('remove_trait', {'instanceId': long_token, 'target': params['target']}, 'level-100-remove')
     assert runtime.events[-1] == ('remove_trait', {'instanceId': long_token, 'target': params['target']})
     adapter.dispatch('disable_all', {}, 'disable')
-    assert store.load() == DEFAULT_FEATURES
+    assert store.load() == DEFAULT_PREFERENCES and runtime.speed == 1.0
+    adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 4.0}, 'speed-before-detach')
     adapter.dispatch('disconnect', {}, 'detach')
+    assert runtime.speed == 1.0
     adapter.dispatch('disable_all', {}, 'offline-disable')
-    assert store.load() == DEFAULT_FEATURES
+    assert store.load() == DEFAULT_PREFERENCES
     assert json.loads(store.path.read_text())['schemaVersion'] == 1
 
     class UnwritablePreferences:
@@ -112,6 +138,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         assert error.code == 'preferences_failed'
     else:
         raise AssertionError('cleanup hid the failed durable reset')
-    assert runtime.events[-1] == ('disable_all', {}), 'disk failure blocked resident cleanup'
+    assert ('disable_all', {}) in runtime.events, 'disk failure blocked resident cleanup'
+    assert runtime.events[-1] == ('set_game_speed', 1.0), 'Disable All skipped speed reset after persistence failure'
 
 print('hades_command_validation_preferences_and_target_ownership_ok')
