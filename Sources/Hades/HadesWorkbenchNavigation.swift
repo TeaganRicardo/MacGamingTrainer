@@ -48,6 +48,7 @@ enum HadesWorkbenchCatalog {
         .moneyNoDecrease,
         .rerollsNoDecrease,
         .fullGodGauge,
+        .boonRarityEnabled,
         .disableAll,
     ]
 
@@ -55,6 +56,7 @@ enum HadesWorkbenchCatalog {
         orderedShortcutActions.filter { action in
             switch action {
             case .heal: section == .values
+            case .boonRarityEnabled: section == .boons
             case .disableAll: section == .management
             default: section == .common
             }
@@ -66,7 +68,9 @@ enum HadesWorkbenchCatalog {
             HadesWorkbenchEntry(
                 id: "shortcut.\(action.rawValue)",
                 titleKey: action.key,
-                section: action == .heal ? .values : (action == .disableAll ? .management : .common)
+                section: action == .heal ? .values
+                    : (action == .disableAll ? .management
+                       : (action == .boonRarityEnabled ? .boons : .common))
             )
         }
         let other: [(HadesWorkbenchSection, [String])] = [

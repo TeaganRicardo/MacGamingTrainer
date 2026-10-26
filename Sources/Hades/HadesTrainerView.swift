@@ -23,7 +23,9 @@ struct HadesTrainerView: View {
             opacity: model.heroReady ? 1 : 0.6,
             indicatorColor: enabled ? theme.accent : theme.inactive,
             helpText: feature == .fullGodGauge ? text("hades.fullGodGaugeHelp")
-                : (feature == .invincibility ? text("hades.invincibilityHelp") : text("hades.noConsumptionHelp")),
+                : (feature == .invincibility ? text("hades.invincibilityHelp")
+                   : (feature == .boonRarityEnabled ? text("hades.boonRarityHelp")
+                      : text("hades.noConsumptionHelp"))),
             isWarning: false
         )
     }
@@ -112,7 +114,7 @@ struct HadesTrainerView: View {
         TrainerSection(title: text(HadesWorkbenchSection.common.titleKey),
                        icon: HadesWorkbenchSection.common.icon) {
             VStack(spacing: 1) {
-                ForEach(HadesFeature.allCases.filter(\.isToggle)) { feature in
+                ForEach(HadesFeature.allCases.filter { $0.isToggle && $0 != .boonRarityEnabled }) { feature in
                     TrainerFeatureToggleRow(
                         title: text(feature.key), icon: feature.icon, state: state(feature),
                         shortcutText: HadesShortcutAction(rawValue: feature.rawValue).map(model.shortcutText)
@@ -128,6 +130,15 @@ struct HadesTrainerView: View {
     private var boonsSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.boons.titleKey),
                        icon: HadesWorkbenchSection.boons.icon) {
+            TrainerFeatureToggleRow(
+                title: text(HadesFeature.boonRarityEnabled.key),
+                icon: HadesFeature.boonRarityEnabled.icon,
+                state: state(.boonRarityEnabled),
+                shortcutText: model.shortcutText(.boonRarityEnabled)
+            ) {
+                model.setFeature(.boonRarityEnabled, value: !model.isEnabled(.boonRarityEnabled))
+            }
+            .trainerGroupedRows()
             HadesCurrentTraitsPanel(model: model)
             HadesCatalogView(model: model)
         }

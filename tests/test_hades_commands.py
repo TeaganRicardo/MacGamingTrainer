@@ -48,9 +48,26 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     store = HadesPreferenceStore(Path(directory) / 'preferences.json')
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
+    legacy = dict(DEFAULT_FEATURES)
+    legacy.pop('boonRarityEnabled')
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
+    assert store.load() == {**legacy, 'boonRarityEnabled': False}, 'old preferences cannot load after feature addition'
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
     assert offline['catalog'] and 'connected' not in offline and runtime.events == []
     adapter.dispatch('connect', {}, 'connect')
+    assert runtime.events[-1][1]['boonRarityEnabled'] is False
+    adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on')
+    assert store.load()['boonRarityEnabled'] is True
+    assert runtime.events[-1] == ('set_feature', {'feature': 'boonRarityEnabled', 'value': True})
+    calls = len(runtime.events)
+    for bad in (1, 'true', None):
+        try:
+            adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': bad}, 'rarity-invalid')
+        except AdapterError as error:
+            assert error.code == 'invalid_value'
+        else:
+            raise AssertionError('invalid rarity toggle reached runtime')
+    assert len(runtime.events) == calls and store.load()['boonRarityEnabled'] is True
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
     before = store.path.read_bytes()

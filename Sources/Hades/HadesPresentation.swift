@@ -54,6 +54,10 @@ enum HadesPresentation {
             "hades.moneyNoDecrease": .init(zhCN: "卡戎金币不消耗", en: "No Obol Consumption"),
             "hades.rerollsNoDecrease": .init(zhCN: "重掷次数不消耗", en: "No Reroll Consumption"),
             "hades.fullGodGauge": .init(zhCN: "神力槽常满", en: "Full God Gauge"),
+            "hades.boonRarityEnabled": .init(zhCN: "祝福最低英雄稀有度", en: "Minimum Heroic Boon Rarity"),
+            "hades.boonRarityHelp": .init(
+                zhCN: "启用后，新生成或重掷的奥林匹斯和赫尔墨斯祝福优先英雄稀有度。保留合法传奇概率、原生资格及强制普通规则；不改变混沌、锤子或已经生成的选项。",
+                en: "New or rerolled Olympian and Hermes offers prefer Heroic. Preserves eligible Legendary rolls, native availability and Force Common; does not alter Chaos, Hammers or existing offers."),
             "hades.damageMultiplier": .init(zhCN: "伤害倍率", en: "Damage Multiplier"),
             "hades.moveSpeedMultiplier": .init(zhCN: "移动速度倍率", en: "Movement Speed"),
             "hades.attackSpeedMultiplier": .init(zhCN: "攻击速度倍率", en: "Attack Speed"),

@@ -117,7 +117,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
             "workbench order drifted or exposed an unimplemented rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.disableAll],"shortcut order drifted from the visible workbench")
+            .rerollsNoDecrease,.fullGodGauge,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -135,6 +135,18 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             "Chinese workbench feature lookup failed")
         check(searchFunctions("gem").contains { $0.section == .resources && $0.resource != nil },
             "resource search did not include bilingual catalog names")
+        check(searchFunctions("稀有度").contains { $0.id == "shortcut.boonRarityEnabled"
+            && $0.section == .boons }, "boon rarity function not localized to the effect area")
+        let mutations = commands().filter { $0["command"] as? String == "set_feature" }.count
+        model.performShortcut(HadesShortcutAction.boonRarityEnabled.rawValue)
+        wait("boon rarity shortcut did not dispatch a supported native feature") {
+            !model.busy && commands().filter { $0["command"] as? String == "set_feature" }.count == mutations + 1
+        }
+        let rarityRequest = commands().last { $0["command"] as? String == "set_feature" }
+        let rarityArgs = rarityRequest?["params"] as? [String:Any]
+        check(rarityArgs?["feature"] as? String == "boonRarityEnabled"
+              && rarityArgs?["value"] as? Bool == true,
+              "boon rarity shortcut lost the boolean feature semantics")
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)

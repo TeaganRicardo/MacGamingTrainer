@@ -21,8 +21,14 @@ class HadesPreferenceStore:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed', diagnostic=str(error)) from error
         if not isinstance(document, dict) or document.get('schemaVersion') != 1:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
+        features = document.get('features')
+        # Pre-rarity schemaVersion 1 was an exact eight-key feature document.
+        # Preserve that deployed contract while keeping all other malformed
+        # documents under the existing strict validation.
+        if isinstance(features, dict) and set(features) == set(DEFAULT_FEATURES) - {'boonRarityEnabled'}:
+            features = {**features, 'boonRarityEnabled': False}
         try:
-            return feature_document(document.get('features'))
+            return feature_document(features)
         except AdapterError as error:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed') from error
 

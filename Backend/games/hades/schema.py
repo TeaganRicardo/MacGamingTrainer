@@ -8,6 +8,7 @@ DEFAULT_FEATURES = {
     'moneyNoDecrease': False,
     'rerollsNoDecrease': False,
     'fullGodGauge': False,
+    'boonRarityEnabled': False,
     'damageMultiplier': 1,
     'moveSpeedMultiplier': 1,
     'attackSpeedMultiplier': 1,
