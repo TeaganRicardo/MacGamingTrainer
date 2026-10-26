@@ -72,23 +72,37 @@ with tempfile.TemporaryDirectory(prefix='hades-recovery-') as directory:
     else:
         raise AssertionError('in-flight backend crash evidence was discarded')
 
-with tempfile.TemporaryDirectory(prefix='hades-recovery-response-') as directory:
-    journal = HadesRecoveryJournal(Path(directory) / 'pending.json')
-    class UnknownResponse(Sidecar):
-        def request(self, method, params, **options):
-            if method == 'connect':
-                return super().request(method, params, **options)
-            self.calls.append((method, params))
-            return {'error': {'code': 'outcome_unknown', 'presentation': 'hades.error.outcomeUnknown'}}
-    sidecar = UnknownResponse()
-    client = HadesRuntimeClient(sidecar, recovery=journal, identity=lambda pid: 'first')
-    client.connect(42, '/tmp/Hades/Game.macOS')
-    try:
-        client.command('add_trait', {})
-    except AdapterError:
-        pass
-    assert not client.connected and journal.path.exists()
-    client.identity = lambda pid: 'second'
-    assert client.connect(42, '/tmp/Hades/Game.macOS')['connected']
+for malformed in (False, True):
+    with tempfile.TemporaryDirectory(prefix='hades-recovery-response-') as directory:
+        journal = HadesRecoveryJournal(Path(directory) / 'pending.json')
+        class UnsafeResponse(Sidecar):
+            def request(self, method, params, **options):
+                if method == 'connect':
+                    return super().request(method, params, **options)
+                self.calls.append((method, params))
+                if malformed:
+                    return {'result': {'connected': 'invalid'}}
+                return {'error': {'code': 'outcome_unknown', 'presentation': 'hades.error.outcomeUnknown'}}
+        sidecar = UnsafeResponse()
+        client = HadesRuntimeClient(sidecar, recovery=journal, identity=lambda pid: 'first')
+        client.connect(42, '/tmp/Hades/Game.macOS')
+        try:
+            client.command('add_trait', {})
+        except AdapterError as error:
+            assert error.code == ('debugger_protocol' if malformed else 'outcome_unknown')
+        else:
+            raise AssertionError('an unsafe reply retained runtime trust')
+        assert not client.connected and journal.path.exists()
+        replacement = Sidecar()
+        restarted = HadesRuntimeClient(replacement, recovery=journal, identity=lambda pid: 'first')
+        try:
+            restarted.connect(42, '/tmp/Hades/Game.macOS')
+        except AdapterError as error:
+            assert error.code == 'restart_required'
+        else:
+            raise AssertionError('backend restart bypassed an unsafe native reply')
+        assert replacement.calls == []
+        client.identity = lambda pid: 'second'
+        assert client.connect(42, '/tmp/Hades/Game.macOS')['connected']
 
 print('hades_native_request_crash_recovery_and_pid_reuse_ok')

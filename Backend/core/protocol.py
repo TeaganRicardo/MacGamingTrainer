@@ -45,22 +45,27 @@ from core.save_service import CoreSaveService
 _CORE_SAVE_PREFIX = 'core.save.'
 
 
-def _target_process_running(process_name):
+def _target_process_running(process_name, executable_path_suffix=''):
     if not process_name:
         return False
     try:
+        command = (['/bin/ps', '-axo', 'comm='] if executable_path_suffix
+                   else ['/usr/bin/pgrep', '-x', process_name])
         result = subprocess.run(
-            ['/usr/bin/pgrep', '-x', process_name],
-            stdout=subprocess.DEVNULL,
+            command,
+            stdout=subprocess.PIPE if executable_path_suffix else subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            text=True,
             timeout=2,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。') from error
     if result.returncode == 0:
+        if executable_path_suffix:
+            return any(row.strip().endswith('/' + executable_path_suffix) for row in result.stdout.splitlines())
         return True
-    if result.returncode == 1:
+    if result.returncode == 1 and not executable_path_suffix:
         return False
     raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。')
 
@@ -74,7 +79,8 @@ class JsonlRequestRouter:
             adapter.game_id,
             getattr(context, 'save_management', None),
             Path(save_data_root) if save_data_root is not None else Path.home() / 'Library/Application Support/MacGamingTrainer',
-            target_running_probe or (lambda: _target_process_running(getattr(context, 'process_name', ''))),
+            target_running_probe or (lambda: _target_process_running(
+                getattr(context, 'process_name', ''), getattr(context, 'executable_path_suffix', ''))),
         )
 
         adapter.bind_save_service(self.save_service)

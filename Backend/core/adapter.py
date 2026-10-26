@@ -47,6 +47,7 @@ class GameAdapterContext:
     public_metadata: Mapping[str, Any]
     process_name: str = ''
     save_management: Any = None
+    executable_path_suffix: str = ''
 
 
 class GameAdapter(ABC):

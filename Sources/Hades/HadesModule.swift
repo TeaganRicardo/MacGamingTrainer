@@ -152,8 +152,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func installShortcuts() {
         hotkeys.register(HadesShortcutAction.allCases.map { HotkeyBinding(actionID: $0.rawValue, chord: shortcuts.chord($0)) })
     }
-    private func performShortcut(_ rawValue: String) {
-        guard canMutate, !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue) else {
+    func performShortcut(_ rawValue: String) {
+        guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
+              (action == .disableAll ? hostActionsEnabled : canMutate) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .heal { heal() }
@@ -183,8 +184,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         localError = ""
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
                      timeout: command == "connect" ? 130 : 20, completion: { [weak self] ok in
-            if announceSuccess && ok {
-                self?.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
+            if announceSuccess, ok, let self {
+                let pendingCleanup = command == "disable_all" && !self.connected
+                self.feedback = TrainerFeedbackNotice(
+                    text: TrainerTextToken(key: pendingCleanup ? "hades.disableAllPending" : "host.backend.notice.completed"),
+                    tone: pendingCleanup ? .warning : .success)
             }
             completion?(ok)
         })
