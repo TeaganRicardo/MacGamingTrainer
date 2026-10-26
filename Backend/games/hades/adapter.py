@@ -5,8 +5,8 @@ import subprocess
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
-from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
-                     RESOURCE_IDS, preference_value, invalid_value, number)
+from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, FISH_BIOMES, FISH_QUALITIES,
+                     ONE_SHOT_COMMANDS, RESOURCE_IDS, preference_value, invalid_value, number)
 
 
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
@@ -161,6 +161,19 @@ class HadesAdapter(GameAdapter):
             if not isinstance(resource, str) or resource not in RESOURCE_IDS:
                 raise invalid_value()
             return {'resource': resource, 'value': number(params.get('value'), integer=True)}
+        if command == 'add_resource':
+            resource = params.get('resource')
+            if not isinstance(resource, str) or resource not in RESOURCE_IDS:
+                raise invalid_value()
+            return {'resource': resource, 'amount': number(params.get('amount'), 1, 1_000_000, integer=True)}
+        if command == 'record_fish':
+            biome = params.get('biome')
+            quality = params.get('quality')
+            if not isinstance(biome, str) or biome not in FISH_BIOMES:
+                raise invalid_value()
+            if not isinstance(quality, str) or quality not in FISH_QUALITIES:
+                raise invalid_value()
+            return {'biome': biome, 'quality': quality}
         if command == 'add_trait':
             identifier = params.get('trait')
             entry = get_entry(identifier) if isinstance(identifier, str) else None

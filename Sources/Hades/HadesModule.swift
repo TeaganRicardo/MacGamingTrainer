@@ -109,6 +109,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
         sendToHero("set_resource", params: ["resource": resource, "value": value], target: target, operation: "hades.resources")
     }
+    func addResource(_ resource: String, amount: Int, target: HadesHeroTarget?) {
+        sendToHero("add_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.resourceGain")
+    }
+    func recordFish(biome: String, quality: String, target: HadesHeroTarget?) {
+        sendToHero("record_fish", params: ["biome": biome, "quality": quality], target: target, operation: "hades.recordFish")
+    }
     func heal() { sendToHero("heal", target: target, operation: "hades.heal") }
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
         sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")

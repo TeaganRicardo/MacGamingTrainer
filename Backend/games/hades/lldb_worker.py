@@ -89,6 +89,8 @@ class HadesLLDBWorker:
                 'disable_all': (), 'heal': (),
                 'set_value': (params.get('field'), params.get('value')),
                 'set_resource': (params.get('resource'), params.get('value')),
+                'add_resource': (params.get('resource'), params.get('amount')),
+                'record_fish': (params.get('biome'), params.get('quality')),
                 'add_trait': (params.get('trait'), params.get('rarity'), params.get('level')),
                 'update_trait': (params.get('instanceId'), params.get('rarity'), params.get('level')),
                 'remove_trait': (params.get('instanceId'),),

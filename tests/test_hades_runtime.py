@@ -349,10 +349,10 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 3 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 4 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -2111,6 +2111,70 @@ near(unit.properties.Speed, 742.5)
 assert(runtime.movementOwners[unit] == nil, "the same native wait was adopted twice")
 runtime.disable_all()
 near(unit.properties.Speed, 594)
+''',
+    'native_resource_gain_and_fish_recording': r'''
+local resourceCalls = {}
+local failAddResource = false
+function AddResource(name, amount, source, args)
+  resourceCalls[#resourceCalls + 1] = { name, amount, source, args }
+  GameState.Resources[name] = (GameState.Resources[name] or 0) + amount
+  GameState.LifetimeResourcesGained[name] = (GameState.LifetimeResourcesGained[name] or 0) + amount
+  UpdateResourceUI(name, GameState.Resources[name])
+  if failAddResource then error("native callback failed after balance update") end
+end
+FishingData = {
+  BiomeFish = {
+    Tartarus = {
+      Good = { { Name = "Fish_Tartarus_Common_01" } },
+      Perfect = { { Name = "Fish_Tartarus_Rare_01" } },
+    },
+  },
+}
+function GetFish(biome, quality)
+  return FishingData.BiomeFish[biome][quality][1].Name
+end
+local failRecordFish = false
+function RecordFish(name)
+  GameState.TotalCaughtFish = GameState.TotalCaughtFish or {}
+  GameState.TotalCaughtFish[name] = (GameState.TotalCaughtFish[name] or 0) + 1
+  if failRecordFish then error("native fish ledger failed after lifetime update") end
+  GameState.CaughtFish = GameState.CaughtFish or {}
+  GameState.CaughtFish[name] = (GameState.CaughtFish[name] or 0) + 1
+  CurrentRun.CaughtFish = CurrentRun.CaughtFish or {}
+  CurrentRun.CaughtFish[name] = (CurrentRun.CaughtFish[name] or 0) + 1
+end
+
+local runtime = assert(load(SOURCE))()
+local resourceBefore = GameState.Resources.MetaPoints
+local lifetimeBefore = GameState.LifetimeResourcesGained.MetaPoints
+runtime.add_resource("MetaPoints", 10)
+assert(GameState.Resources.MetaPoints == resourceBefore + 10)
+assert(GameState.LifetimeResourcesGained.MetaPoints == lifetimeBefore + 10)
+assert(resourceCalls[1][1] == "MetaPoints" and resourceCalls[1][2] == 10 and resourceCalls[1][3] == "Debug")
+
+local fishName = "Fish_Tartarus_Common_01"
+runtime.record_fish("Tartarus", "Good")
+assert(GameState.TotalCaughtFish[fishName] == 1)
+assert(GameState.CaughtFish[fishName] == 1)
+assert(CurrentRun.CaughtFish[fishName] == 1)
+
+expectError("hades.error.invalidValue", function() runtime.add_resource("UnknownResource", 1) end)
+expectError("hades.error.invalidValue", function() runtime.add_resource("Gems", 0) end)
+expectError("hades.error.invalidValue", function() runtime.record_fish("UnknownBiome", "Good") end)
+expectError("hades.error.invalidValue", function() runtime.record_fish("Tartarus", "Legendary") end)
+assert(#resourceCalls == 1, "invalid resource commands reached the native owner")
+
+failAddResource = true
+local beforeFailedGain = GameState.Resources.Gems
+expectError("hades.error.outcomeUnknown", function() runtime.add_resource("Gems", 5) end)
+assert(GameState.Resources.Gems == beforeFailedGain + 5, "fixture did not reproduce a partial native gain")
+failAddResource = false
+
+failRecordFish = true
+local beforeFailedFish = GameState.TotalCaughtFish[fishName]
+expectError("hades.error.outcomeUnknown", function() runtime.record_fish("Tartarus", "Good") end)
+assert(GameState.TotalCaughtFish[fishName] == beforeFailedFish + 1,
+  "fixture did not reproduce a partial native fish ledger update")
 ''',
 }
 for name, case in scheduler_cases.items():

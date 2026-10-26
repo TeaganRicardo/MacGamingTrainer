@@ -15,6 +15,10 @@ struct HadesTrainerView: View {
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
+    @State private var resourceGrantID = "MetaPoints"
+    @State private var resourceGrantAmount = HadesNumberDraft(value: 100)
+    @State private var fishBiome = "Tartarus"
+    @State private var fishQuality = "Good"
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
     private var error: String { model.localError.isEmpty ? model.backendStatus.error : model.localError }
@@ -239,6 +243,23 @@ struct HadesTrainerView: View {
         }
     }
 
+    private var canGrantResource: Bool {
+        guard model.canMutate, model.resourceCatalog.contains(where: { $0.id == resourceGrantID }),
+              let amount = Double(resourceGrantAmount.text), amount.isFinite,
+              amount.rounded() == amount, amount >= 1, amount <= 1_000_000 else { return false }
+        return true
+    }
+
+    private func grantResource() {
+        guard let amount = Double(resourceGrantAmount.text), amount.isFinite,
+              amount.rounded() == amount, amount >= 1, amount <= 1_000_000 else {
+            model.rejectInvalidValue()
+            return
+        }
+        model.addResource(resourceGrantID, amount: Int(amount),
+                          target: resourceGrantAmount.target ?? model.target)
+    }
+
     private var resourcesSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.resources.titleKey),
                        icon: HadesWorkbenchSection.resources.icon) {
@@ -255,6 +276,79 @@ struct HadesTrainerView: View {
                 }
             }
             .trainerGroupedRows()
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Picker(text("hades.resources"), selection: $resourceGrantID) {
+                        ForEach(model.resourceCatalog) { resource in
+                            Text(resource.name(language: localization.language.rawValue)).tag(resource.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+
+                    TrainerNumberField(
+                        text: Binding(get: { resourceGrantAmount.text },
+                                      set: { resourceGrantAmount.update($0) }),
+                        accessibilityLabel: text("hades.gainAmount"), width: 72,
+                        enabled: model.canMutate, alignment: .center,
+                        onEditingChanged: { active in
+                            if active { resourceGrantAmount.begin(target: model.target) }
+                            else { resourceGrantAmount.end() }
+                        },
+                        onCommit: { completed in
+                            guard completed.changed else { return completed.text }
+                            guard let amount = Double(completed.text), amount.isFinite,
+                                  amount.rounded() == amount, amount >= 1, amount <= 1_000_000 else {
+                                model.rejectInvalidValue()
+                                return completed.text
+                            }
+                            return HadesNumberDraft.format(amount)
+                        }
+                    )
+                    TrainerSecondaryActionButton(
+                        title: text("hades.gain"), systemImage: "plus.circle.fill",
+                        enabled: canGrantResource, action: grantResource
+                    )
+                }
+                Text(text("hades.resourceGainHelp"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                HStack(spacing: 8) {
+                    Picker(text("hades.fishingBiome"), selection: $fishBiome) {
+                        Text(text("hades.fishBiome.Tartarus")).tag("Tartarus")
+                        Text(text("hades.fishBiome.Asphodel")).tag("Asphodel")
+                        Text(text("hades.fishBiome.Elysium")).tag("Elysium")
+                        Text(text("hades.fishBiome.Styx")).tag("Styx")
+                        Text(text("hades.fishBiome.Secrets")).tag("Secrets")
+                        Text(text("hades.fishBiome.Surface")).tag("Surface")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+
+                    Picker(text("hades.fishingResult"), selection: $fishQuality) {
+                        Text(text("hades.fishResult.Good")).tag("Good")
+                        Text(text("hades.fishResult.Perfect")).tag("Perfect")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+
+                    TrainerSecondaryActionButton(
+                        title: text("hades.recordFish"), systemImage: "fish.fill",
+                        enabled: model.canMutate,
+                        action: { model.recordFish(biome: fishBiome, quality: fishQuality, target: model.target) }
+                    )
+                }
+                Text(text("hades.fishRecordHelp"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
         }
     }
 

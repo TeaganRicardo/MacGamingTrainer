@@ -79,7 +79,7 @@ enum HadesWorkbenchCatalog {
             (.common, ["host.timeWarp.title"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
                       "hades.level", "hades.apply", "hades.remove"]),
-            (.resources, ["hades.resources"]),
+            (.resources, ["hades.resources", "hades.resourceGain", "hades.recordFish"]),
             (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings"]),
         ]
         let fixed = other.flatMap { section, keys in

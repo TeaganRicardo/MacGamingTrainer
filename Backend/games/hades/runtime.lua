@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 3 then error("hades.error.restartRequired") end
+  if existing.revision ~= 4 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -21,7 +21,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 3,
+  version = 1, revision = 4,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -655,6 +655,37 @@ function runtime.set_resource(name, value)
   assert(type(GameState) == "table" and type(GameState.Resources) == "table", "hades.error.unsupportedRuntime")
   GameState.Resources[name] = value
   UpdateResourceUI(name, value)
+  return runtime.status()
+end
+
+function runtime.add_resource(name, amount)
+  requireHero()
+  local known = false
+  for _, resource in ipairs(resourceNames) do if name == resource then known = true end end
+  assert(known and finite(amount) and amount == math.floor(amount) and amount >= 1 and amount <= 1000000,
+    "hades.error.invalidValue")
+  assert(type(AddResource) == "function", "hades.error.unsupportedRuntime")
+  -- AddResource updates the permanent balance, lifetime-gain ledger, native callbacks and UI.
+  -- A native error can occur after those effects have begun, so never report it as safely retryable.
+  local ok = pcall(AddResource, name, amount, "Debug")
+  assert(ok, "hades.error.outcomeUnknown")
+  return runtime.status()
+end
+
+function runtime.record_fish(biome, quality)
+  requireHero()
+  assert(type(biome) == "string" and type(quality) == "string", "hades.error.invalidValue")
+  assert(type(FishingData) == "table" and type(FishingData.BiomeFish) == "table",
+    "hades.error.unsupportedRuntime")
+  local biomeData = FishingData.BiomeFish[biome]
+  local pool = biomeData and biomeData[quality]
+  assert(type(pool) == "table" and #pool > 0, "hades.error.invalidValue")
+  assert(type(GetFish) == "function" and type(RecordFish) == "function", "hades.error.unsupportedRuntime")
+  local fishName = GetFish(biome, quality)
+  assert(type(fishName) == "string" and fishName ~= "", "hades.error.invalidValue")
+  -- RecordFish updates three independent native counters. Treat a partial native failure as unknown.
+  local ok = pcall(RecordFish, fishName)
+  assert(ok, "hades.error.outcomeUnknown")
   return runtime.status()
 end
 local function validateTrait(unit, name, rarity, level)

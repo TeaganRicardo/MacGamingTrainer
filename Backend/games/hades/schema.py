@@ -19,8 +19,10 @@ DEFAULT_FEATURES = {
 DEFAULT_PREFERENCES = {**DEFAULT_FEATURES, 'gameSpeed': 1.0}
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
-ONE_SHOT_COMMANDS = frozenset(('set_value', 'heal', 'set_resource', 'add_trait',
-                               'update_trait', 'remove_trait'))
+FISH_BIOMES = frozenset(('Tartarus', 'Asphodel', 'Elysium', 'Styx', 'Secrets', 'Surface'))
+FISH_QUALITIES = frozenset(('Good', 'Perfect'))
+ONE_SHOT_COMMANDS = frozenset(('set_value', 'heal', 'set_resource', 'add_resource',
+                               'record_fish', 'add_trait', 'update_trait', 'remove_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_invincibility',
                                        'configure', 'disable_all'}
 
