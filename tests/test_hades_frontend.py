@@ -120,9 +120,15 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             .rerollsNoDecrease,.fullGodGauge,.disableAll],"shortcut order drifted from the visible workbench")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
-                TrainerPresentationLanguage.allCases.map { HadesPresentation.text(key,language:$0) }
+                TrainerPresentationLanguage.allCases.map {
+                    HadesGameModule.resolveText(key:key,language:$0,localization:localization)
+                }
             }
         }
+        check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
+            "Host-owned function names were not localized in search")
+        check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",
+            "Host management label leaked raw localization key")
         check(searchFunctions("invincibility").contains { $0.section == .common && $0.id == "shortcut.invincibility" },
             "English workbench feature lookup failed")
         check(searchFunctions("无敌").contains { $0.id == "shortcut.invincibility" },
@@ -229,6 +235,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
     (folder / 'main.swift').write_text(HARNESS)
+    for language in ('en', 'zh-CN'):
+        destination = folder / f'{language}.lproj'
+        destination.mkdir()
+        shutil.copy2(ROOT / 'Resources/Localization' / f'{language}.lproj' / 'Host.strings',
+                     destination / 'Host.strings')
     (folder / 'state.json').write_text(json.dumps({'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': []}))

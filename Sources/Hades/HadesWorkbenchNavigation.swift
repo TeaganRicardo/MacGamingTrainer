@@ -143,7 +143,7 @@ struct HadesHeaderActions: View {
     private var results: [HadesWorkbenchEntry] {
         HadesWorkbenchCatalog.matches(model.workbenchSearch, resources: model.resourceCatalog) { key in
             TrainerPresentationLanguage.allCases.map {
-                HadesPresentation.text(key, language: $0)
+                HadesGameModule.resolveText(key: key, language: $0, localization: localization)
             }
         }
     }
@@ -152,7 +152,7 @@ struct HadesHeaderActions: View {
         if let resource = entry.resource {
             return resource.name(language: localization.language.rawValue)
         }
-        return HadesPresentation.text(entry.titleKey, language: localization.language)
+        return HadesGameModule.resolveText(key: entry.titleKey, localization: localization)
     }
 
     private func locate(_ entry: HadesWorkbenchEntry) {
@@ -181,8 +181,8 @@ struct HadesHeaderActions: View {
                             ForEach(results) { entry in
                                 TrainerSectionButton(
                                     title: label(entry),
-                                    detail: HadesPresentation.text(entry.section.titleKey,
-                                                                   language: localization.language),
+                                    detail: HadesGameModule.resolveText(
+                                        key: entry.section.titleKey, localization: localization),
                                     systemImage: entry.section.icon
                                 ) {
                                     locate(entry)
