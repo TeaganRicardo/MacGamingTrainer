@@ -377,7 +377,7 @@ def manifest() -> list[Mutation]:
         Mutation(
             ident="terminology-metadata-provenance",
             invariant="governed native terminology keeps its localization identity metadata",
-            path=ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json",
+            path=ROOT / json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))["supportedBuild"]["referenceDirectory"] / "ui_terminology.json",
             old='"id": "GodBoon",',
             new='"id": "",',
             test="tests/test_hades2_official_terminology.py",

@@ -186,8 +186,9 @@ def render_words(items):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scripts", type=Path, help="Installed Content/Scripts directory")
-    parser.add_argument("--version", default="1.143476")
-    parser.add_argument("--steam-build", default="25481925")
+    supported = json.loads((Path(__file__).resolve().parents[1] / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))["supportedBuild"]
+    parser.add_argument("--version", default="1." + supported["bundleVersion"])
+    parser.add_argument("--steam-build", default=supported["steamBuildID"])
     args = parser.parse_args()
 
     quests_source, quest_hash = read(args.scripts / "QuestData.lua")

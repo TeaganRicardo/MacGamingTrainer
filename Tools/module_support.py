@@ -12,6 +12,7 @@ if str(BACKEND) not in sys.path:
 
 from core.module_manifest import GameModuleManifest, ManifestError
 from core.protocol import HOST_PROTOCOL_VERSION
+from supported_build import validate_supported_build, resolved_resource_source
 from resident_runtime import (
     DECLARATION_KEY,
     ResidentRuntimeDeclarationError,
@@ -121,6 +122,10 @@ def load_manifest(game_id: str) -> BuildManifest:
     runtime = GameModuleManifest.load(path)
     runtime.validate_backend_layout(ROOT / 'Backend')
     raw = json.loads(path.read_text(encoding='utf-8'))
+    try:
+        supported = validate_supported_build(path, root=ROOT)
+    except (ValueError, OSError) as error:
+        raise ManifestError(str(error)) from error
 
     with (ROOT / 'Info.plist').open('rb') as stream:
         root_plist = plistlib.load(stream)
@@ -201,7 +206,9 @@ def load_manifest(game_id: str) -> BuildManifest:
         field = f'appResources[{index}]'
         if not isinstance(item, dict) or set(item) != {'source', 'destination'}:
             raise ManifestError(f'{field} must contain exactly source and destination.')
-        source = _safe_relative_path(item.get('source'), f'{field}.source')
+        source = _safe_relative_path(
+            resolved_resource_source(item.get('source', ''), supported), f'{field}.source'
+        )
         destination = _safe_relative_path(item.get('destination'), f'{field}.destination')
         source_path = (ROOT / source).resolve()
         if not source_path.is_file() or ROOT.resolve() not in source_path.parents:
@@ -253,6 +260,7 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
     return {
         **manifest.runtime.public_metadata(),
         'hostProtocolVersion': HOST_PROTOCOL_VERSION,
+        **({'supportedBuild': manifest.raw['supportedBuild']} if 'supportedBuild' in manifest.raw else {}),
         'backend': {'adapter': manifest.runtime.adapter},
         'frontend': {
             'sourceDirectory': manifest.frontend.source_directory,

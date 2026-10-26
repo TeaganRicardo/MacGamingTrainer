@@ -39,6 +39,7 @@ HOME = Path.home()
 STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
 _RAW_MODULE = json.loads((MODULE_DIR / 'module.json').read_text(encoding='utf-8'))
 STEAM_APP_ID = _RAW_MODULE.get('steamAppId')
+SUPPORTED_BUILD = _RAW_MODULE['supportedBuild']
 if not isinstance(STEAM_APP_ID, str) or not STEAM_APP_ID.isdigit():
     raise RuntimeError('Hades II module manifest is missing a valid steamAppId.')
 GAME_SPEC = GameSpec.macos_app_bundle(

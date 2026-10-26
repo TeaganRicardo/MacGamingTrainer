@@ -1,4 +1,5 @@
-/* Hades II 1.143476 / Steam 25481925, arm64 only. No engine mutations. */
+/* Hades II supported image is selected by the generated module identity header. */
+#include "SupportedBuildIdentity.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -243,7 +244,7 @@ static int configureImage(uintptr_t base, ReadMemory read, void *context, const 
     if (header[1] != 0x100000c) return rejectedAt(stage, "header_cpu", INSTALL_TARGET_HEADER);
     if (header[3] != 2) return rejectedAt(stage, "header_filetype", INSTALL_TARGET_HEADER);
     if (header[5] > 65536) return rejectedAt(stage, "header_table_size", INSTALL_TARGET_HEADER);
-    static const uint8_t expected[16] = { 0x35,0xcd,0x2e,0x50,0x2d,0x78,0x3a,0x63,0x83,0x5b,0x3e,0xb1,0x22,0x4c,0x6d,0x65 };
+    static const uint8_t expected[16] = { MGT_SUPPORTED_GAME_UUID_BYTES };
     uintptr_t cursor = base + sizeof(header), end = cursor + header[5];
     int uuidMatches = 0;
     for (uint32_t index = 0; index < header[4]; ++index) {
@@ -300,7 +301,7 @@ EXPORT const char *MGTNativeEffectQueryStatusMessage(int status) {
         case INSTALL_WRONG_THREAD: return "Native query registration requires Darwin MainThread";
         case INSTALL_STACK_UNAVAILABLE: return "Native query registration cannot reserve Lua stack space";
         case INSTALL_TARGET_HEADER: return "Native query target header is unreadable or is not a supported arm64 executable";
-        case INSTALL_TARGET_UUID: return "Native query target UUID does not match Hades II 1.143476";
+        case INSTALL_TARGET_UUID: return "Native query target UUID does not match " MGT_SUPPORTED_GAME_DESCRIPTION;
         case INSTALL_UNIT_BINDING: return "Native query target binding mismatch: FindUnit";
         case INSTALL_UNIT_UNREADABLE: return "Native query target binding is unreadable: FindUnit";
     }

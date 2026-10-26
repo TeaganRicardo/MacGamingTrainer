@@ -71,7 +71,7 @@ assert normalized['saveManagement'] == {
 assert 'ui' not in normalized
 assert normalized['appResources'] == [
     {
-        'source': 'docs/reference/hades2/1.143476-25481925/ui_terminology.json',
+        'source': manifest['supportedBuild']['referenceDirectory'] + '/ui_terminology.json',
         'destination': 'ui_terminology.json',
     },
     {

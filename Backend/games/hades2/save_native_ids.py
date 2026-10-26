@@ -1,4 +1,4 @@
-"""Native Save Editor identities, generated from Hades II 1.143476 / Steam 25481925.
+"""Native Save Editor identities generated for the module-declared supported build.
 
 QuestData.lua SHA-256 df9888d6586e0f8644e31db093bf35452bc3ac057d0f144be2f2f1e8d1e64336
 ResourceData.lua SHA-256 94b2dc9edc22c34b213ab78dea42f2dc76c80cbcfde14104cbe772b254a29b03
@@ -93,7 +93,7 @@ OBJECTIVE_IDS = frozenset((
     "WeaponTorchCharged", "WeaponTorchCharged_Supay", "WeaponTorchSpecial", "WeaponTorchSpecialCharged",
 ))
 
-# Native StoryResetData.TextLines from target 1.143476 / Steam 25481925.
+# Native StoryResetData.TextLines from the module-declared source snapshot.
 # StoryResetData.lua SHA-256 58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e
 # A native-authored reset target is necessary, not sufficient, to authorize an
 # individual edit: companion narrative/gift/run owners are validated separately.

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -8,7 +9,7 @@ SCRIPT = ROOT / "Tools/ci_docs_only.py"
 REFERENCE_ROOT = "docs/reference/hades2/1.139672-24556151"
 REFERENCE_DATA = f"{REFERENCE_ROOT}/catalog_legality.csv"
 GENERATED_DATA = f"{REFERENCE_ROOT}/generated/loot.csv"
-TERMINOLOGY_RESOURCE = "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+TERMINOLOGY_RESOURCE = json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["supportedBuild"]["referenceDirectory"] + "/ui_terminology.json"
 
 spec = importlib.util.spec_from_file_location("ci_docs_only", SCRIPT)
 module = importlib.util.module_from_spec(spec)
@@ -147,6 +148,13 @@ assert_scope(
     linux=True,
     macos=False,
     module_build=False,
+)
+assert_scope(
+    ["Tools/supported_build.py"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
 )
 assert_scope(
     ["Tools/ci_docs_only.py"],

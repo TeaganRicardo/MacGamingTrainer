@@ -173,7 +173,7 @@ def generate(content, lua):
                  for language, records in localized.items()}
         if all(names.values()):
             trait_names[identifier] = names
-    return {'schemaVersion': 1, 'game': 'hades', 'steamBuildID': '10929685',
+    return {'schemaVersion': 1, 'game': 'hades', 'steamBuildID': json.loads((ROOT / 'Backend/games/hades/module.json').read_text(encoding='utf-8'))['supportedBuild']['steamBuildID'],
         'sourceEvidence': {
             'files': {path.relative_to(content).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                       for path in sorted(paths)},

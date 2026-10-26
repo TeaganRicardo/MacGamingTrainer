@@ -5,8 +5,8 @@ This directory stores versioned research/reference snapshots extracted from inst
 Status rules:
 
 - `1.139672-24556151/` is the retained **frozen census/research snapshot**. Historical roadmap identifiers inside its research notes are traceability only; current planning authority is GitHub issue #124.
-- `1.143476-25481925/` contains target-build compatibility evidence and the current production terminology snapshot, revalidated against the installed build's bilingual `DisplayName` sources.
-- The packaged `1.143476-25481925/ui_terminology.json` is the intentional production exception: Hades II packages it through module `appResources` as the terminology-governance source. The old `1.139672-24556151/ui_terminology.json` remains historical evidence and is no longer packaged.
+- `1.143476-25481925/` preserves the source evidence for that verified build. Which snapshot is the active production dependency is declared by `Backend/games/hades2/module.json.supportedBuild.referenceDirectory`; do not infer it from this prose.
+- The terminology file under the module-declared `supportedBuild.referenceDirectory` is an intentional production dependency, packaged via `appResources`' `@supportedBuild/ui_terminology.json` reference. The earlier census terminology snapshot stays historical and is not packaged.
 - Generated inventories, matrices, and research ledgers are evidence. They do not override current production code, `ENGINEERING_INVARIANTS.md`, or current issue sequencing.
 
 The frozen 1.139672 snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
@@ -35,7 +35,7 @@ This bundle supports the historical frozen catalog/census snapshot. Its terminol
 
 It contains the current build's full `Content/Scripts` tree, non-localization Game SJSON sources, English and Simplified Chinese text trees, substitutions, Steam/app metadata, and per-file hashes. The production terminology snapshot embeds hashes for the six localization files it consumes and records the comparison of 46 native term IDs and values: 43 exact `DisplayName` matches, three icon-prefix-normalized labels, and zero wording mismatches.
 
-For catalog/census work on build 1.139672 / 24556151, use the historical GitHub snapshot and its matching private bundle. For current terminology verification, use `1.143476-25481925/ui_terminology.json` and the current-build evidence bundle. Only revisit the target Mac when the evidence bundle lacks required material or the supported build changes.
+For catalog/census work on build 1.139672 / 24556151, use the historical GitHub snapshot and its matching private bundle. For supported-build terminology verification, resolve `supportedBuild.referenceDirectory` from the module manifest and use that snapshot's matching evidence bundle. Only revisit the target Mac when the evidence bundle lacks required material or the supported build changes.
 
 ## Usage
 

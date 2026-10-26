@@ -12,6 +12,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from supported_build import resolved_resource_source
+
 ROOT = Path(__file__).resolve().parents[1]
 MODULES_RELATIVE = Path("Backend/games")
 
@@ -136,7 +138,11 @@ def _app_resource_sources(records) -> tuple[str, ...]:
                 raise ModuleInventoryError(
                     f"module {game_id}: appResources[{index}].source must be a non-empty string"
                 )
-            sources.add(source.strip())
+            try:
+                source = resolved_resource_source(source.strip(), data.get('supportedBuild'))
+            except (ValueError, KeyError) as error:
+                raise ModuleInventoryError(f'module {game_id}: {error}') from error
+            sources.add(source)
     return tuple(sorted(sources))
 
 

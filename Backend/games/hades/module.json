@@ -3,7 +3,9 @@
   "id": "hades",
   "displayName": "Hades",
   "protocolVersion": 2,
-  "backend": {"adapter": "games.hades.adapter:HadesAdapter"},
+  "backend": {
+    "adapter": "games.hades.adapter:HadesAdapter"
+  },
   "frontend": {
     "sourceDirectory": "Sources/Hades",
     "moduleType": "HadesGameModule",
@@ -26,14 +28,29 @@
     "executablePathSuffix": "Hades/Game.macOS.app/Contents/MacOS/Game.macOS"
   },
   "saveManagement": {
-    "roots": [{
-      "id": "main",
-      "path": "~/Library/Application Support/Supergiant Games/Hades",
-      "include": ["Profile*.sav", "Profile*.sjson", "Profile*.ctrls", "activeProfile"]
-    }],
+    "roots": [
+      {
+        "id": "main",
+        "path": "~/Library/Application Support/Supergiant Games/Hades",
+        "include": [
+          "Profile*.sav",
+          "Profile*.sjson",
+          "Profile*.ctrls",
+          "activeProfile"
+        ]
+      }
+    ],
     "provider": "games.hades.save_provider:HadesSaveProvider",
     "hotBackup": true,
     "restorePolicy": "stoppedOnly",
     "stagedRestore": true
+  },
+  "supportedBuild": {
+    "architecture": "x86_64",
+    "contentBuildInfo": "38284",
+    "steamBuildID": "10929685",
+    "uuid": "BA8CE510-EB7F-3E65-96B6-574608EA4550",
+    "originalExecutableSHA256": "f69aab08ba6d12da66252a198d3c6c6606fc9de2e1b277458fae442526a75279",
+    "referenceDirectory": "docs/reference/hades"
   }
 }

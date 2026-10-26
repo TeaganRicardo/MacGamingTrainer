@@ -36,7 +36,8 @@ for status, reason in (
     (-1, 'Native query registration requires Darwin MainThread'),
     (-2, 'Native query registration cannot reserve Lua stack space'),
     (-3, 'Native query target Mach-O header or load commands are unreadable or invalid (header_read)'),
-    (-4, 'Native query target UUID does not match Hades II 1.143476'),
+    (-4, 'Native query target UUID does not match Hades II 1.' +
+        json.loads((ROOT / 'Backend/games/hades2/module.json').read_text())['supportedBuild']['bundleVersion']),
     (-100, 'Native query target binding mismatch: lua_gettop'),
     (-200, 'Native query target binding is unreadable: lua_gettop'),
 ):

@@ -5,9 +5,10 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Backend"))
 from games.hades2 import preparation
+from games.hades2.config import SUPPORTED_BUILD
 
 
-with tempfile.TemporaryDirectory(prefix="mgt-verified-build-25481925-") as directory:
+with tempfile.TemporaryDirectory(prefix="mgt-verified-build-") as directory:
     root = Path(directory)
     game = root / "Hades II.app"
     executable = game / "Contents/MacOS/Hades II"
@@ -15,11 +16,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-verified-build-25481925-") as direc
     executable.write_bytes(b"verified target fixture")
     (game / "Contents/Info.plist").write_bytes(
         b"<?xml version='1.0'?><plist version='1.0'><dict>"
-        b"<key>CFBundleVersion</key><string>143476</string>"
+        b"<key>CFBundleVersion</key><string>" + SUPPORTED_BUILD["bundleVersion"].encode() + b"</string>"
         b"</dict></plist>"
     )
     manifest = root / "appmanifest_1145350.acf"
-    manifest.write_text('"buildid" "25481925"', encoding="utf-8")
+    manifest.write_text(f'"buildid" "{SUPPORTED_BUILD["steamBuildID"]}"', encoding="utf-8")
 
     old_values = {
         "GAME": preparation.GAME,
@@ -34,12 +35,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-verified-build-25481925-") as direc
         minimum_architecture="arm64",
     )
     preparation.STEAM_SPEC = SimpleNamespace(manifest_path=manifest)
-    preparation._uuid = lambda _path: "35CD2E50-2D78-3A63-835B-3EB1224C6D65"
+    preparation._uuid = lambda _path: SUPPORTED_BUILD["uuid"]
     try:
         identity = preparation.compatibility()
-        assert identity["version"] == "143476"
-        assert identity["steam_build"] == "25481925"
-        assert identity["uuid"] == "35CD2E50-2D78-3A63-835B-3EB1224C6D65"
+        assert identity["version"] == SUPPORTED_BUILD["bundleVersion"]
+        assert identity["steam_build"] == SUPPORTED_BUILD["steamBuildID"]
+        assert identity["uuid"] == SUPPORTED_BUILD["uuid"]
         assert identity["compatible"] is True
         assert identity["warnings"] == []
     finally:
@@ -49,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-verified-build-25481925-") as direc
 symbols = __import__("json").loads(
     (Path(__file__).resolve().parents[1] / "Backend/games/hades2/symbols.json").read_text()
 )
-assert symbols["uuid"] == "35CD2E50-2D78-3A63-835B-3EB1224C6D65"
+assert "uuid" not in symbols, "symbols must not duplicate module supportedBuild identity"
 assert symbols["symbols"]["_ZN3sgg5World6UpdateEf"]["rva"] == 2463044
 assert symbols["symbols"]["_ZN3sgg5World6UpdateEf"]["prefix"] == "ff0307d1ef3b126ded33136deb2b146d"
 

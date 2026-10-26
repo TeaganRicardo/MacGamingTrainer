@@ -18,6 +18,7 @@ def failure(code, key, detail=None):
 class HadesLuaTransport:
     def __init__(self):
         self.manifest = json.loads(Path(__file__).with_name('symbols.json').read_text())
+        self.supported_build = json.loads(Path(__file__).with_name('module.json').read_text())['supportedBuild']
         lldb.SBDebugger.Initialize()
         self.debugger = lldb.SBDebugger.Create()
         self.debugger.SetAsync(True)
@@ -75,8 +76,8 @@ class HadesLuaTransport:
         try:
             image = self.target.GetModuleAtIndex(0)
             image_path = Path(str(image.GetFileSpec())).resolve()
-            if (image.GetUUIDString() != self.manifest['uuid']
-                    or not self.target.GetTriple().startswith('x86_64-')
+            if (image.GetUUIDString() != self.supported_build['uuid']
+                    or not self.target.GetTriple().startswith(self.supported_build['architecture'] + '-')
                     or image_path != Path(executable).resolve()):
                 raise failure('incompatible', 'unsupportedBuild')
             base = image.GetObjectFileHeaderAddress().GetLoadAddress(self.target)
