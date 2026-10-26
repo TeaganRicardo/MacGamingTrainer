@@ -24,6 +24,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var shortcutRevision = 0
     @Published private(set) var feedback: TrainerFeedbackNotice?
     @Published var shortcutSettingsPresented = false
+    @Published var workbenchSearch = ""
+    @Published var numericControlsExpanded = false
 
     private let session: TrainerBackendSession
     private let logSink: TrainerLogSink
@@ -150,7 +152,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func resetShortcuts() { shortcuts.reset(); shortcutRevision += 1; installShortcuts() }
     private func installShortcuts() {
-        hotkeys.register(HadesShortcutAction.allCases.map { HotkeyBinding(actionID: $0.rawValue, chord: shortcuts.chord($0)) })
+        hotkeys.register(HadesWorkbenchCatalog.orderedShortcutActions.map { HotkeyBinding(actionID: $0.rawValue, chord: shortcuts.chord($0)) })
     }
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
@@ -254,7 +256,7 @@ struct HadesGameModule: TrainerGameModule {
     static func makeModel(session: TrainerBackendSession) -> HadesTrainerModel { HadesTrainerModel(session: session) }
     static func makeContent(model: HadesTrainerModel) -> HadesTrainerView { HadesTrainerView(model: model) }
     static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
-    static func makeHeaderActions(model: HadesTrainerModel) -> some View { EmptyView() }
+    static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }
     static func makeFeedback(model: HadesTrainerModel) -> HadesOperationFeedback { HadesOperationFeedback(model: model) }
     static func makeManagementCommands(model: HadesTrainerModel, localization: TrainerLocalizationStore) -> HadesManagementCommands {
         HadesManagementCommands(model: model, localization: localization)

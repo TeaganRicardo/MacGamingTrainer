@@ -105,18 +105,46 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         let custom=HotkeyChord(keyCode:99,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F3")
         check(store.set(.invincibility,chord:custom)==nil,"valid shortcut failed")
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==custom,"shortcut override was not persisted")
-        check(store.set(.disableAll,chord:custom) == .disableAll,"panic shortcut was reassigned")
+        check(store.set(.disableAll,chord:custom) == .invincibility,"Disable All conflict was not detected")
+        let another=HotkeyChord(keyCode:98,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F4")
+        check(store.set(.disableAll,chord:another)==nil,"Disable All is incorrectly hardcoded")
+        check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==another,"Disable All override was not persisted")
         store.reset()
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==HadesShortcutAction.invincibility.defaultChord,"shortcut reset failed")
 
         let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
         localization.language = .en
+        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
+            "workbench order drifted or exposed an unimplemented rooms panel")
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.moneyNoDecrease,
+            .rerollsNoDecrease,.fullGodGauge,.disableAll],"shortcut order drifted from the visible workbench")
+        func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
+            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
+                TrainerPresentationLanguage.allCases.map { HadesPresentation.text(key,language:$0) }
+            }
+        }
+        check(searchFunctions("invincibility").contains { $0.section == .common && $0.id == "shortcut.invincibility" },
+            "English workbench feature lookup failed")
+        check(searchFunctions("无敌").contains { $0.id == "shortcut.invincibility" },
+            "Chinese workbench feature lookup failed")
+        check(searchFunctions("gem").contains { $0.section == .resources && $0.resource != nil },
+            "resource search did not include bilingual catalog names")
+        check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
+            "numeric search did not target expanded run metrics")
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
         let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
         window.contentView=host;host.frame=NSRect(x:0,y:0,width:1150,height:2400)
         host.layoutSubtreeIfNeeded();pump()
-        guard let field=fields(in:host).first(where:{$0.accessibilityLabel()=="Life"}),
+        check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.money",language:.en) },
+              "Obol metric missing from the compact run dashboard")
+        model.numericControlsExpanded=true;host.layoutSubtreeIfNeeded();pump()
+        check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.damageMultiplier",language:.en) },
+              "expanded run dashboard lost damage multiplier")
+        model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
+        let currentLife=localization.localized("host.input.currentValue",arguments:[
+            HadesPresentation.text("hades.health",language:.en)])
+        guard let field=fields(in:host).first(where:{$0.accessibilityLabel()==currentLife}),
               let coordinator=field.delegate as? TrainerTextField.Coordinator else { fatalError("native health control missing") }
         check(field.stringValue=="50","native control did not show observation")
         coordinator.begin();field.stringValue="70"
@@ -147,7 +175,10 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         _=model.setNumber(.damageMultiplier,text:"nan");pump()
         check(commands().count==count,"invalid multiplier crossed the backend boundary")
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
-        check(fields(in:host).contains { $0.accessibilityLabel()=="生命值" },"language switch failed to relabel native fields")
+        let currentLifeCN=localization.localized("host.input.currentValue",arguments:[
+            HadesPresentation.text("hades.health",language:.zhCN)])
+        check(fields(in:host).contains { $0.accessibilityLabel()==currentLifeCN },
+            "language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)

@@ -2,6 +2,12 @@
 
 The module targets the Intel Steam image declared in `Backend/games/hades/symbols.json`. It owns its LLDB sidecar, resident Lua, desired settings, command validation, catalog and UI. Hades II runtime and preference data are independent.
 
+## Workbench presentation
+
+Hades I now follows Hades II's ordered workbench navigation: compact and expandable Run Data, Common toggles, unified Boons & Effects (selected current-group editing and exact acquisition), Resources & Gathering, and Management. The current seven permanent resources remain visible as direct rows. The Rooms & Rewards section is reserved but deliberately not shown until source-backed native room controls are delivered by #572; a label or disabled dummy action would falsely imply coverage. Whole-workbench bilingual search resolves existing features, numeric controls, resources and management destinations. The single visible-order registry drives default shortcuts and shortcut settings, including a customizable Disable All binding.
+
+This presentation update uses existing native actions. It does not imply Hades I has the Hades II-only gathering, room, boon or management capabilities: the gaps and their Hades-native implementation are explicitly owned by #571–#573. Native game effects, save/recovery and user acceptance retain their original owners.
+
 ## Supported actions
 
 | Domain | Behavior |
