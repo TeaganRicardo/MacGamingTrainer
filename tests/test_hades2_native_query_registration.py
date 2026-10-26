@@ -11,6 +11,8 @@ from types import SimpleNamespace
 from lua_native_prerequisites import require_lua52_native
 
 ROOT = Path(__file__).resolve().parents[1]
+SUPPORTED_MODULE = json.loads((ROOT / 'Backend/games/hades2/module.json').read_text(encoding='utf-8'))
+SUPPORTED_GAME = SUPPORTED_MODULE['supportedBuild']
 _, compiler, lua_flags = require_lua52_native('Native query expression', language='c++')
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
@@ -36,8 +38,8 @@ for status, reason in (
     (-1, 'Native query registration requires Darwin MainThread'),
     (-2, 'Native query registration cannot reserve Lua stack space'),
     (-3, 'Native query target Mach-O header or load commands are unreadable or invalid (header_read)'),
-    (-4, 'Native query target UUID does not match Hades II 1.' +
-        json.loads((ROOT / 'Backend/games/hades2/module.json').read_text())['supportedBuild']['bundleVersion']),
+    (-4, f"Native query target UUID does not match {SUPPORTED_MODULE['displayName']} "
+         f"1.{SUPPORTED_GAME['bundleVersion']} {SUPPORTED_GAME['architecture']}"),
     (-100, 'Native query target binding mismatch: lua_gettop'),
     (-200, 'Native query target binding is unreadable: lua_gettop'),
 ):

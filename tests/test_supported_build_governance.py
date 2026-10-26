@@ -42,7 +42,9 @@ hades_catalog = json.loads((game_root / "hades/catalog.json").read_text(encoding
 assert hades_catalog["steamBuildID"] == hades["steamBuildID"]
 
 header = game_root / "hades2" / hades2["nativeUUIDHeader"]
-assert header.read_text(encoding="utf-8") == native_header(hades2, game_name="Hades II")
+assert header.read_text(encoding="utf-8") == native_header(
+    hades2, game_name=json.loads((game_root / "hades2/module.json").read_text())["displayName"]
+)
 for source in ("EffectBlockQuery.c", "CommandMailbox.c"):
     c = (game_root / "hades2/native" / source).read_text(encoding="utf-8")
     assert '#include "SupportedBuildIdentity.h"' in c
