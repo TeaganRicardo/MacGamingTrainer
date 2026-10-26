@@ -7,7 +7,7 @@ import time
 
 from core.adapter import AdapterError
 
-sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True).strip())
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False).strip())
 import lldb
 
 

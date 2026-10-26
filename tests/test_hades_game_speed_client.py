@@ -21,6 +21,7 @@ class Sidecar:
         self.calls = []
         self.speed = 1.0
         self.fail_speed_unknown = False
+        self.fail_detach_unknown = False
 
     def request(self, method, params, **options):
         self.calls.append((method, params, options))
@@ -35,6 +36,10 @@ class Sidecar:
             return {'result': {'connected': True, 'pid': 42, 'gameSpeed': self.speed}}
         if method == 'disconnect':
             self.speed = 1.0
+            if self.fail_detach_unknown:
+                self.terminal = True
+                self.started = False
+                raise SidecarTerminalError('native speed reset acknowledgement lost', outcome_unknown=True)
             return {'result': {'connected': False, 'pid': None}}
         return {'result': {'connected': True, 'pid': 42, 'heroReady': True}}
 
@@ -61,6 +66,8 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-client-') as temp:
     assert client.game_speed_actual == 2.5
     client.disconnect()
     assert client.game_speed_actual == 1.0 and not client.connected
+    detach_request = next(call for call in sidecar.calls if call[0] == 'disconnect')
+    assert detach_request[2]['outcome_unknown_on_loss'] is True, 'native speed reset detach must be risk-classified'
 
     unknown_sidecar = Sidecar()
     unknown_client = HadesRuntimeClient(
@@ -84,5 +91,28 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-client-') as temp:
     else:
         raise AssertionError('uncertain speed mutation was automatically retried')
     assert len(unknown_sidecar.calls) == sent
+
+    lost_detach_sidecar = Sidecar()
+    lost_detach_client = HadesRuntimeClient(
+        lost_detach_sidecar,
+        recovery=HadesRecoveryJournal(Path(temp) / 'lost-detach-recovery.json'),
+        identity=lambda pid: str(pid),
+    )
+    lost_detach_client.connect(42, '/tmp/Hades/Game.macOS', features=DEFAULT_FEATURES)
+    lost_detach_client.set_game_speed(2.0)
+    lost_detach_sidecar.fail_detach_unknown = True
+    try:
+        lost_detach_client.disconnect()
+    except AdapterError as error:
+        assert error.code == 'outcome_unknown'
+    else:
+        raise AssertionError('native speed reset with lost detach acknowledgement was reported as safe')
+    assert not lost_detach_client.connected
+    try:
+        lost_detach_client.connect(42, '/tmp/Hades/Game.macOS', features=DEFAULT_FEATURES)
+    except AdapterError as error:
+        assert error.code == 'restart_required'
+    else:
+        raise AssertionError('uncertain detach incorrectly permitted same-process reconnection')
 
 print('hades_game_speed_client_recovery_and_rpc_contract_ok')

@@ -17,6 +17,7 @@ class Runtime:
         self.events = []
         self.speed = 1.0
         self.speed_error = None
+        self.status_reads = 0
         self.state = {'connected': True, 'pid': 42, 'heroReady': True,
                       'heroId': 'generation:run:hero', 'target': {'heroId': 'generation:run:hero'},
                       'features': dict(DEFAULT_FEATURES), 'health': 50, 'maxHealth': 100,
@@ -30,6 +31,7 @@ class Runtime:
         return self.status()
 
     def status(self):
+        self.status_reads += 1
         return dict(self.state)
 
     def current_game_speed(self):
@@ -79,6 +81,7 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-') as directory:
                            locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
     state = adapter.dispatch('connect', {}, 'connect')
     assert state['connected']
+    assert runtime.status_reads == 1, 'connect issued a redundant full native status round-trip'
     assert 'gameSpeed' not in runtime.events[0][1], 'process-owned speed leaked into Lua resident settings'
     assert state['features']['gameSpeed'] == {
         'desired': 1.0, 'actual': 1.0, 'active': False,

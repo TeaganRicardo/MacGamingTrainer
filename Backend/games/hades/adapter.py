@@ -57,9 +57,11 @@ class HadesAdapter(GameAdapter):
             self._game_speed_actual = None
             self._game_speed_error = None
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
-            state = self._observe(self.runtime.connect(*target, features=runtime_features))
+            state = self.runtime.connect(*target, features=runtime_features)
+            self.connected = state['connected']
             self._reconcile_game_speed()
-            state = self.runtime.status() if self.connected else {**self._offline(), 'features': self.features}
+            if not self.connected:
+                state = {**self._offline(), 'features': self.features}
             return self._observe(state)
         if command == 'status':
             if not self.connected:

@@ -32,7 +32,9 @@ class HadesRuntimeClient:
 
     def _call(self, method, params=None):
         self.sidecar.reply_timeout_seconds = 120 if method == 'connect' else 12
-        crosses_runtime = method not in ('disconnect', 'time_warp.current_speed')
+        # Disconnect resets native time before detaching, so a lost reply
+        # must retain recovery evidence just like another native mutation.
+        crosses_runtime = method != 'time_warp.current_speed'
         if crosses_runtime and self.uncertain_pid is not None and self.uncertain_pid == self.pid:
             raise AdapterError('restart_required', 'hades.error.restartRequired')
         if crosses_runtime:

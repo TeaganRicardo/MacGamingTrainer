@@ -330,9 +330,8 @@ TIME_WARP_DYLIB="$TIME_WARP_NATIVE_DIR/libMGTTimeWarp.dylib"
     exit 1
 }
 mkdir -p "$TIME_WARP_NATIVE_DIR"
-# The helper is injected into the target process, which may use a different
-# architecture from the Host. Hades I runs the x86_64 Steam image under Rosetta
-# while the unified Host remains arm64, so package a matching helper slice.
+# Target-injected code may require a CPU slice different from the Host.
+# Package x86_64 alongside the requested Host slices for Intel targets.
 TIME_WARP_ARCHITECTURES=("${ARCHITECTURES[@]}")
 if ! printf '%s\n' "${TIME_WARP_ARCHITECTURES[@]}" | grep -qx 'x86_64'; then
     TIME_WARP_ARCHITECTURES+=(x86_64)
