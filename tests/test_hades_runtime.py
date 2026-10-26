@@ -326,11 +326,33 @@ function AddAssistWeapons(unit, trait)
   table.insert(unit.AssistWeapons, assist)
 end
 
+-- Native TraitScripts.lua:1547/1649/1680 (supported build). The fixture
+-- preserves legal rarity gates and verifies that the wrapper restores the
+-- loot's actual chance table without changing its native offer ownership.
+LootData = {
+  ZeusUpgrade = { GodLoot = true },
+  HermesUpgrade = { TreatAsGodLootByShops = true },
+  TrialUpgrade = { TransformingTraits = true },
+  WeaponUpgrade = { GodLoot = false },
+}
+function SetTraitsOnLoot(loot, args)
+  if loot.fail then error("native loot failed") end
+  local chances, allowed = loot.RarityChances or {}, loot.allowed or {}
+  local rarity = "Common"
+  if allowed.Legendary and (chances.Legendary or 0) >= 1 then rarity = "Legendary"
+  elseif allowed.Epic and (chances.Heroic or 0) >= 1 then rarity = "Heroic"
+  elseif allowed.Epic and (chances.Epic or 0) >= 1 then rarity = "Epic"
+  elseif allowed.Rare and (chances.Rare or 0) >= 1 then rarity = "Rare" end
+  loot.UpgradeOptions = { { ItemName = "ZeusTrait", Rarity = rarity } }
+  loot.nativeArgs = args
+  return "native", nil, rarity
+end
+
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 2 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 3 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 3 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -342,6 +364,56 @@ assert(runtime.status().heroId:find("fixture-generation:", 1, true) == 1)
 assert(baseline.heroReady and baseline.resources.MetaPoints == 17 and baseline.features.damageMultiplier == 1)
 assert(runtime.json(baseline):find('"traits":[]', 1, true))
 assert(runtime.json({ quote = '"\\\n', truth = true }):find('\\u000a', 1, true))
+
+-- Rarity changes only future legal Olympian/Hermes offers, including rerolls.
+local olympian = { Name = "ZeusUpgrade", RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
+  allowed = { Epic = true, Rare = true } }
+local original = olympian.RarityChances
+local x, missing, unmodified = SetTraitsOnLoot(olympian)
+assert(x == "native" and missing == nil and unmodified == "Common")
+runtime.set_feature("boonRarityEnabled", true)
+assert(runtime.status().features.boonRarityEnabled == true)
+local x2, empty, heroic = SetTraitsOnLoot(olympian, { ExclusionNames = { "OtherTrait" } })
+assert(x2 == "native" and empty == nil and heroic == "Heroic",
+  "native Epic-capable boon was not upgraded to Heroic")
+assert(olympian.RarityChances == original and original.Heroic == 0,
+  "rarity override leaked to the native loot's persisted chances")
+assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
+for _, name in ipairs({ "HermesUpgrade", "ZeusUpgrade" }) do
+  local rareOnly = { Name = name, RarityChances = original, allowed = { Rare = true } }
+  SetTraitsOnLoot(rareOnly)
+  assert(rareOnly.UpgradeOptions[1].Rarity == "Rare", name .. ": native Rare-only path was lost")
+end
+local commonOnly = { Name = "ZeusUpgrade", RarityChances = original, allowed = {} }
+SetTraitsOnLoot(commonOnly)
+assert(commonOnly.UpgradeOptions[1].Rarity == "Common", "fixed Common content was upgraded")
+local legendary = { Name = "ZeusUpgrade",
+  RarityChances = { Legendary = 1, Heroic = 0, Epic = 0, Rare = 0 },
+  allowed = { Legendary = true, Epic = true } }
+SetTraitsOnLoot(legendary)
+assert(legendary.UpgradeOptions[1].Rarity == "Legendary", "native eligible Legendary lost priority")
+for _, name in ipairs({ "TrialUpgrade", "WeaponUpgrade", "StackUpgrade" }) do
+  local nativeOnly = { Name = name, RarityChances = original, allowed = { Epic = true } }
+  SetTraitsOnLoot(nativeOnly)
+  assert(nativeOnly.UpgradeOptions[1].Rarity == "Common",
+    name .. ": restricted non-Olympian offer was overridden")
+end
+local forced = { Name = "ZeusUpgrade", RarityChances = original, ForceCommon = true,
+  allowed = { Epic = true } }
+SetTraitsOnLoot(forced)
+assert(forced.UpgradeOptions[1].Rarity == "Common", "native ForceCommon first-run rule lost")
+local failed = { Name = "ZeusUpgrade", RarityChances = original, allowed = { Epic = true }, fail = true }
+expectError("native loot failed", function() SetTraitsOnLoot(failed) end)
+assert(failed.RarityChances == original, "native rarity chance table leaked after callback error")
+runtime.set_feature("boonRarityEnabled", false)
+SetTraitsOnLoot(olympian)
+assert(olympian.UpgradeOptions[1].Rarity == "Common", "turning rarity off did not restore natural rolls")
+runtime.set_feature("boonRarityEnabled", true)
+runtime.disable_all()
+assert(runtime.status().features.boonRarityEnabled == false, "Disable All did not reset rarity policy")
+SetTraitsOnLoot(olympian)
+assert(olympian.UpgradeOptions[1].Rarity == "Common")
+expectError("invalidValue", function() runtime.set_feature("boonRarityEnabled", 1) end)
 
 runtime.set_feature("invincibility", true)
 assert(runtime.status().invincible and CurrentRun.InvulnerableFlags.NativeMenu)

@@ -105,18 +105,64 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         let custom=HotkeyChord(keyCode:99,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F3")
         check(store.set(.invincibility,chord:custom)==nil,"valid shortcut failed")
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==custom,"shortcut override was not persisted")
-        check(store.set(.disableAll,chord:custom) == .disableAll,"panic shortcut was reassigned")
+        check(store.set(.disableAll,chord:custom) == .invincibility,"Disable All conflict was not detected")
+        let another=HotkeyChord(keyCode:98,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F4")
+        check(store.set(.disableAll,chord:another)==nil,"Disable All is incorrectly hardcoded")
+        check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==another,"Disable All override was not persisted")
         store.reset()
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==HadesShortcutAction.invincibility.defaultChord,"shortcut reset failed")
 
         let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
         localization.language = .en
+        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
+            "workbench order drifted or exposed an unimplemented rooms panel")
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.moneyNoDecrease,
+            .rerollsNoDecrease,.fullGodGauge,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
+        func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
+            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
+                TrainerPresentationLanguage.allCases.map {
+                    HadesGameModule.resolveText(key:key,language:$0,localization:localization)
+                }
+            }
+        }
+        check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
+            "Host-owned function names were not localized in search")
+        check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",
+            "Host management label leaked raw localization key")
+        check(searchFunctions("invincibility").contains { $0.section == .common && $0.id == "shortcut.invincibility" },
+            "English workbench feature lookup failed")
+        check(searchFunctions("无敌").contains { $0.id == "shortcut.invincibility" },
+            "Chinese workbench feature lookup failed")
+        check(searchFunctions("gem").contains { $0.section == .resources && $0.resource != nil },
+            "resource search did not include bilingual catalog names")
+        check(searchFunctions("稀有度").contains { $0.id == "shortcut.boonRarityEnabled"
+            && $0.section == .boons }, "boon rarity function not localized to the effect area")
+        let mutations = commands().filter { $0["command"] as? String == "set_feature" }.count
+        model.performShortcut(HadesShortcutAction.boonRarityEnabled.rawValue)
+        wait("boon rarity shortcut did not dispatch a supported native feature") {
+            !model.busy && commands().filter { $0["command"] as? String == "set_feature" }.count == mutations + 1
+        }
+        let rarityRequest = commands().last { $0["command"] as? String == "set_feature" }
+        let rarityArgs = rarityRequest?["params"] as? [String:Any]
+        check(rarityArgs?["feature"] as? String == "boonRarityEnabled"
+              && rarityArgs?["value"] as? Bool == true,
+              "boon rarity shortcut lost the boolean feature semantics")
+        check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
+            "numeric search did not target expanded run metrics")
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
         let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
         window.contentView=host;host.frame=NSRect(x:0,y:0,width:1150,height:2400)
         host.layoutSubtreeIfNeeded();pump()
-        guard let field=fields(in:host).first(where:{$0.accessibilityLabel()=="Life"}),
+        check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.money",language:.en) },
+              "Obol metric missing from the compact run dashboard")
+        model.numericControlsExpanded=true;host.layoutSubtreeIfNeeded();pump()
+        check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.damageMultiplier",language:.en) },
+              "expanded run dashboard lost damage multiplier")
+        model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
+        let currentLife=localization.localized("host.input.currentValue",arguments:[
+            HadesPresentation.text("hades.health",language:.en)])
+        guard let field=fields(in:host).first(where:{$0.accessibilityLabel()==currentLife}),
               let coordinator=field.delegate as? TrainerTextField.Coordinator else { fatalError("native health control missing") }
         check(field.stringValue=="50","native control did not show observation")
         coordinator.begin();field.stringValue="70"
@@ -147,7 +193,10 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         _=model.setNumber(.damageMultiplier,text:"nan");pump()
         check(commands().count==count,"invalid multiplier crossed the backend boundary")
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
-        check(fields(in:host).contains { $0.accessibilityLabel()=="生命值" },"language switch failed to relabel native fields")
+        let currentLifeCN=localization.localized("host.input.currentValue",arguments:[
+            HadesPresentation.text("hades.health",language:.zhCN)])
+        check(fields(in:host).contains { $0.accessibilityLabel()==currentLifeCN },
+            "language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
@@ -198,6 +247,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
     (folder / 'main.swift').write_text(HARNESS)
+    for language in ('en', 'zh-CN'):
+        destination = folder / f'{language}.lproj'
+        destination.mkdir()
+        shutil.copy2(ROOT / 'Resources/Localization' / f'{language}.lproj' / 'Host.strings',
+                     destination / 'Host.strings')
     (folder / 'state.json').write_text(json.dumps({'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': []}))

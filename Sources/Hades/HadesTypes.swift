@@ -1,12 +1,12 @@
 import Foundation
 
 enum HadesFeature: String, CaseIterable, Identifiable {
-    case invincibility, moneyNoDecrease, rerollsNoDecrease, fullGodGauge
+    case invincibility, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled
     case damageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
 
     var id: String { rawValue }
     var key: String { "hades.\(rawValue)" }
-    var isToggle: Bool { Self.allCases.prefix(4).contains(self) }
+    var isToggle: Bool { Self.allCases.prefix(5).contains(self) }
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
     var icon: String {
         switch self {
@@ -14,6 +14,7 @@ enum HadesFeature: String, CaseIterable, Identifiable {
         case .moneyNoDecrease: return "circle.fill"
         case .rerollsNoDecrease: return "arrow.triangle.2.circlepath"
         case .fullGodGauge: return "bolt.heart.fill"
+        case .boonRarityEnabled: return "sparkles"
         case .damageMultiplier: return "burst.fill"
         case .moveSpeedMultiplier: return "figure.run"
         case .attackSpeedMultiplier: return "bolt.fill"
@@ -114,14 +115,11 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, heal, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, disableAll
+    case invincibility, heal, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
     var defaultChord: HotkeyChord {
-        if self == .disableAll {
-            return HotkeyChord(keyCode: 51, modifiers: HotkeyChord.controlModifier | HotkeyChord.optionModifier, keyLabel: "⌫")
-        }
-        return HotkeyChord.defaultShortcut(index: Self.allCases.firstIndex(of: self)!)!
+        HotkeyChord.defaultShortcut(index: HadesWorkbenchCatalog.orderedShortcutActions.firstIndex(of: self)!)!
     }
 }
 
@@ -139,7 +137,6 @@ struct HadesShortcutStore {
     }
     func chord(_ action: HadesShortcutAction) -> HotkeyChord { overrides[action] ?? action.defaultChord }
     mutating func set(_ action: HadesShortcutAction, chord proposed: HotkeyChord) -> HadesShortcutAction? {
-        if action == .disableAll { return .disableAll }
         if let conflict = HadesShortcutAction.allCases.first(where: { $0 != action && chord($0).keyCode == proposed.keyCode && chord($0).modifiers == proposed.modifiers }) { return conflict }
         overrides[action] = proposed
         defaults.set(proposed.payload, forKey: "hades.shortcut.\(action.rawValue)")

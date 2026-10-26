@@ -1,20 +1,27 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 2 then error("hades.error.restartRequired") end
+  if existing.revision ~= 3 then error("hades.error.restartRequired") end
   return existing
 end
 
 local trainerFlag = "MacGamingTrainer.Hades"
 local defaults = {
   invincibility = false, moneyNoDecrease = false, rerollsNoDecrease = false,
-  fullGodGauge = false, damageMultiplier = 1, moveSpeedMultiplier = 1,
+  fullGodGauge = false, boonRarityEnabled = false, damageMultiplier = 1, moveSpeedMultiplier = 1,
   attackSpeedMultiplier = 1, dashBonus = 0,
 }
 local resourceNames = {
   "MetaPoints", "Gems", "SuperGems", "LockKeys", "SuperLockKeys", "GiftPoints", "SuperGiftPoints",
 }
+-- Shipped LootData.lua: only normal Olympian and Hermes offer pools.
+-- TrialUpgrade/Chaos, Hammer, Pom and forced-Common rooms use other native rules.
+local rarityLootNames = {
+  ZeusUpgrade = true, PoseidonUpgrade = true, AthenaUpgrade = true, AresUpgrade = true,
+  AphroditeUpgrade = true, ArtemisUpgrade = true, DionysusUpgrade = true,
+  DemeterUpgrade = true, HermesUpgrade = true,
+}
 local runtime = {
-  version = 1, revision = 2,
+  version = 1, revision = 3,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -433,6 +440,30 @@ local function installHooks()
       end
     end)
   end
+  hook("SetTraitsOnLoot", function(original)
+    return function(loot, ...)
+      if runtime.features.boonRarityEnabled and type(loot) == "table"
+          and rarityLootNames[loot.Name] and not loot.ForceCommon
+          and type(loot.RarityChances) == "table" then
+        -- Native TraitScripts.lua selects a Legendary only when eligible; the
+        -- Heroic roll uses the Epic-capable trait pool. Keep the Legendary
+        -- chance and source/slot legality, while preferring Heroic (or Rare
+        -- for a Rare-only trait). Original odds are never changed in-place.
+        local odds = loot.RarityChances
+        local boosted = {}
+        for key, value in pairs(odds) do boosted[key] = value end
+        boosted.Heroic, boosted.Epic, boosted.Rare = 1, 1, 1
+        loot.RarityChances = boosted
+        -- The native selection path is synchronous; restore the exact native
+        -- odds on both success and a rejected/failed native offer generation.
+        local result = table.pack(pcall(original, loot, ...))
+        loot.RarityChances = odds
+        if not result[1] then error(result[2], 0) end
+        return table.unpack(result, 2, result.n)
+      end
+      return original(loot, ...)
+    end
+  end)
   hook("SpendMoney", function(original)
     return function(amount, ...)
       local run, unit = CurrentRun, hero()
