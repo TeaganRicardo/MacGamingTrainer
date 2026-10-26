@@ -12,6 +12,9 @@ struct HadesTrainerView: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerGamePageVisible) private var pageVisible
     @Environment(\.trainerManagementActions) private var managementActions
+    @State private var gameSpeedInput = "1.0"
+    @State private var gameSpeedPreview: Double?
+    @State private var gameSpeedEditing = false
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
     private var error: String { model.localError.isEmpty ? model.backendStatus.error : model.localError }
@@ -94,7 +97,7 @@ struct HadesTrainerView: View {
                         .monospacedDigit()
                 }
                 if model.numericControlsExpanded {
-                    ForEach(HadesFeature.allCases.filter { !$0.isToggle }) { feature in
+                    ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
                         HadesFeatureMetricCard(model: model, feature: feature)
                     }
                 }
@@ -124,7 +127,99 @@ struct HadesTrainerView: View {
                 }
             }
             .trainerGroupedRows()
+            gameSpeedPanel
         }
+    }
+
+    private var gameSpeedMapping: TrainerSliderMapping {
+        .anchoredLogarithmic(
+            values: [0.1, 0.5, 1.0, 2.0, 5.0],
+            step: 0.1,
+            detents: [0.5, 1.0, 2.0],
+            magnetDistance: 0.10,
+            settleDistance: 0.04
+        )
+    }
+
+    private func speedNumber(_ value: Double) -> String { String(format: "%.1f", value) }
+
+    private var gameSpeedInputBinding: Binding<String> {
+        Binding(
+            get: { gameSpeedPreview.map(speedNumber) ?? gameSpeedInput },
+            set: { gameSpeedPreview = nil; gameSpeedInput = $0 }
+        )
+    }
+
+    private var gameSpeedSliderValue: Binding<Double> {
+        Binding(
+            get: { Double(gameSpeedInput) ?? model.number(.gameSpeed) },
+            set: { value in
+                gameSpeedPreview = nil
+                gameSpeedInput = speedNumber(value)
+                model.setFeature(.gameSpeed, value: (value * 10).rounded() / 10)
+            }
+        )
+    }
+
+    private var gameSpeedPanel: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TrainerLabeledControlRow(
+                title: localization.localized("host.timeWarp.title"),
+                icon: "speedometer",
+                tint: model.canMutate ? theme.accent : theme.inactive,
+                emphasized: model.canMutate,
+                helpText: localization.localized("host.timeWarp.hint")
+            ) {
+                TrainerNumberField(
+                    text: gameSpeedInputBinding,
+                    placeholder: "1.0",
+                    accessibilityLabel: localization.localized("host.timeWarp.title"),
+                    width: 62,
+                    enabled: model.canMutate,
+                    onEditingChanged: { active in
+                        gameSpeedEditing = active
+                        if !active { gameSpeedPreview = nil }
+                    },
+                    onCommit: { completed in
+                        guard completed.changed else { return completed.text }
+                        guard let value = Double(completed.text), value.isFinite, (0...10).contains(value) else {
+                            model.rejectInvalidValue()
+                            return completed.text
+                        }
+                        let normalized = speedNumber((value * 10).rounded() / 10)
+                        gameSpeedInput = normalized
+                        model.setFeature(.gameSpeed, value: (value * 10).rounded() / 10)
+                        return normalized
+                    }
+                )
+                Text("×").foregroundStyle(.secondary)
+                TrainerMappedSlider(
+                    value: gameSpeedSliderValue,
+                    mapping: gameSpeedMapping,
+                    accessibilityLabel: localization.localized("host.timeWarp.title"),
+                    accessibilityHint: localization.localized("host.timeWarp.hint"),
+                    enabled: model.canMutate,
+                    onPreviewValue: { gameSpeedPreview = $0 }
+                )
+                .frame(width: 200)
+            }
+            if let actual = model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber {
+                let key = abs(actual - model.number(.gameSpeed)) < 0.000001
+                    ? "host.timeWarp.actual" : "host.timeWarp.pending"
+                Text(localization.presentation(key, arguments: [speedNumber(actual)]))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let error = model.features[HadesFeature.gameSpeed.rawValue]?.errorPresentation {
+                Text(localization.presentation(
+                    error, arguments: model.features[HadesFeature.gameSpeed.rawValue]?.errorArguments ?? []
+                ))
+                .font(.caption).foregroundStyle(theme.warning)
+            }
+        }
+        .onChange(of: model.number(.gameSpeed), initial: true) { _, value in
+            if !gameSpeedEditing && gameSpeedPreview == nil { gameSpeedInput = speedNumber(value) }
+        }
+        .trainerGroupedRows()
     }
 
     private var boonsSection: some View {

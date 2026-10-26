@@ -14,6 +14,9 @@ DEFAULT_FEATURES = {
     'attackSpeedMultiplier': 1,
     'dashBonus': 0,
 }
+# Process Time Warp is a separate Core-owned native helper. It is a durable
+# module preference, but it must never enter the Lua resident feature document.
+DEFAULT_PREFERENCES = {**DEFAULT_FEATURES, 'gameSpeed': 1.0}
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 ONE_SHOT_COMMANDS = frozenset(('set_value', 'heal', 'set_resource', 'add_trait',
@@ -49,3 +52,15 @@ def feature_document(values):
     if not isinstance(values, dict) or set(values) != set(DEFAULT_FEATURES):
         raise invalid_value()
     return {name: feature_value(name, value) for name, value in values.items()}
+
+
+def preference_value(name, value):
+    if name == 'gameSpeed':
+        return number(value, 0, 10)
+    return feature_value(name, value)
+
+
+def preference_document(values):
+    if not isinstance(values, dict) or set(values) != set(DEFAULT_PREFERENCES):
+        raise invalid_value()
+    return {name: preference_value(name, value) for name, value in values.items()}

@@ -143,6 +143,11 @@
 "host.timeWarp.error.memoryAllocationFailed" = "Unable to allocate target memory for the Time Warp image allowlist.";
 "host.timeWarp.error.memoryWriteFailed" = "Unable to write the Time Warp image allowlist.";
 
+"host.timeWarp.title" = "Game Speed";
+"host.timeWarp.hint" = "Adjust game time from paused (0×) to 10×. 1× is normal speed.";
+"host.timeWarp.actual" = "Applied: {0}×";
+"host.timeWarp.pending" = "Desired speed will apply when connected; actual: {0}×.";
+
 "host.save.edit" = "Edit Save";
 
 // Trainer-owned feedback controls; paired in zh-CN/Host.strings.

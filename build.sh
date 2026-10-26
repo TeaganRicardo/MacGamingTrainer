@@ -330,8 +330,15 @@ TIME_WARP_DYLIB="$TIME_WARP_NATIVE_DIR/libMGTTimeWarp.dylib"
     exit 1
 }
 mkdir -p "$TIME_WARP_NATIVE_DIR"
+# The helper is injected into the target process, which may use a different
+# architecture from the Host. Hades I runs the x86_64 Steam image under Rosetta
+# while the unified Host remains arm64, so package a matching helper slice.
+TIME_WARP_ARCHITECTURES=("${ARCHITECTURES[@]}")
+if ! printf '%s\n' "${TIME_WARP_ARCHITECTURES[@]}" | grep -qx 'x86_64'; then
+    TIME_WARP_ARCHITECTURES+=(x86_64)
+fi
 TIME_WARP_ARCH_BINARIES=()
-for arch in "${ARCHITECTURES[@]}"; do
+for arch in "${TIME_WARP_ARCHITECTURES[@]}"; do
     helper="$GENERATED_DIR/libMGTTimeWarp.$arch.dylib"
     # Production Process Time Warp + bundled fishhook compile. Keep warnings visible
     # without making pre-existing/vendor diagnostics a new build-failure gate.

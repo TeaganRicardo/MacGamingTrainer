@@ -17,6 +17,7 @@ class HadesRuntimeClient:
         self.recovery = recovery or HadesRecoveryJournal()
         self.identity = identity
         self.process_identity = None
+        self.game_speed_actual = None
 
     @staticmethod
     def _new_sidecar():
@@ -25,13 +26,13 @@ class HadesRuntimeClient:
         environment['PYTHONPATH'] = str(backend)
         environment['PYTHONDONTWRITEBYTECODE'] = '1'
         return JsonLineSidecarClient(
-            ['/usr/bin/xcrun', 'python3', '-u', '-m', 'games.hades.lldb_worker'],
+            ['/usr/bin/xcrun', 'python3', '-u', '-m', 'games.hades.time_warp_worker'],
             cwd=backend, env=environment, reply_timeout_seconds=120,
         )
 
     def _call(self, method, params=None):
         self.sidecar.reply_timeout_seconds = 120 if method == 'connect' else 12
-        crosses_runtime = method != 'disconnect'
+        crosses_runtime = method not in ('disconnect', 'time_warp.current_speed')
         if crosses_runtime and self.uncertain_pid is not None and self.uncertain_pid == self.pid:
             raise AdapterError('restart_required', 'hades.error.restartRequired')
         if crosses_runtime:
@@ -70,6 +71,14 @@ class HadesRuntimeClient:
             if crosses_runtime:
                 self.uncertain_pid = self.pid
             raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+        if method in ('time_warp.current_speed', 'time_warp.set_speed'):
+            speed = result.get('gameSpeed')
+            if type(speed) not in (int, float) or not 0 <= speed <= 10:
+                self.sidecar.close()
+                self.connected = False
+                if crosses_runtime:
+                    self.uncertain_pid = self.pid
+                raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
         if crosses_runtime:
             self.recovery.complete()
         self.connected = result['connected']
@@ -81,12 +90,14 @@ class HadesRuntimeClient:
         if self.sidecar.terminal:
             self.sidecar.close()
             self.sidecar = self._new_sidecar()
+        if self.pid != pid:
+            self.game_speed_actual = None
         self.pid = pid
         self.uncertain_pid = None
         self.process_identity = identity
         params = {'pid': pid, 'executable': executable}
         if features is not None:
-            params['features'] = features
+            params['features'] = {name: value for name, value in features.items() if name != 'gameSpeed'}
         return self._call('connect', params)
 
     def status(self):
@@ -94,6 +105,25 @@ class HadesRuntimeClient:
             from .adapter import HadesAdapter
             return HadesAdapter._offline()
         return self._call('status')
+
+    def current_game_speed(self):
+        result = self._call('time_warp.current_speed')
+        value = result.get('gameSpeed')
+        if type(value) not in (int, float) or not 0 <= value <= 10:
+            raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+        self.game_speed_actual = float(value)
+        return self.game_speed_actual
+
+    def set_game_speed(self, value):
+        result = self._call('time_warp.set_speed', {'value': value})
+        actual = result.get('gameSpeed')
+        if type(actual) not in (int, float) or not 0 <= actual <= 10:
+            self.connected = False
+            self.uncertain_pid = self.pid
+            self.game_speed_actual = None
+            raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+        self.game_speed_actual = float(actual)
+        return self.game_speed_actual
 
     def set_invincibility(self, value):
         return self._call('set_invincibility', {'value': value})
@@ -106,9 +136,11 @@ class HadesRuntimeClient:
     def disconnect(self):
         if self.sidecar.started:
             result = self._call('disconnect')
+            self.game_speed_actual = 1.0
             self.sidecar.close()
             return result
         self.connected = False
+        self.game_speed_actual = None
         from .adapter import HadesAdapter
         return HadesAdapter._offline()
 

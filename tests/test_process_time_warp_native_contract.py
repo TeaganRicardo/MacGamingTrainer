@@ -40,6 +40,9 @@ for token in (
     'libMGTTimeWarp.dylib',
     'codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"',
     'LICENSE.fishhook',
+    'TIME_WARP_ARCHITECTURES=("${ARCHITECTURES[@]}")',
+    "TIME_WARP_ARCHITECTURES+=(x86_64)",
+    'for arch in "${TIME_WARP_ARCHITECTURES[@]}"; do',
 ):
 
     assert token in BUILD, token
