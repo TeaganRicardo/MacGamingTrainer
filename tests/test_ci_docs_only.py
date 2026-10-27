@@ -175,6 +175,9 @@ assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, m
 assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=False, module_build=False)
+assert_scope(["tests/fixtures/swift/InMemoryDefaults.swift"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope(["Backend/core/native/example.c"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Backend/games/example/unknown.binary"], docs_only=False, linux=True, macos=True, module_build=False)
 
 # Reference ownership comes from module identity, and macOS routing for a
 # reference file comes from appResources rather than a filename convention.

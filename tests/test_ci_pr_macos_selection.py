@@ -29,6 +29,7 @@ assert selected_tests(["tests/test_hades2_save_editor_frontend.py"], TESTS, SOUR
     "test_hades2_save_editor_frontend.py"
 ]
 assert selected_tests(["Tools/macos_only_tests.txt"], TESTS, SOURCES) == sorted(TESTS)
+assert selected_tests(["tests/fixtures/swift/InMemoryDefaults.swift"], TESTS, SOURCES) == sorted(TESTS)
 assert selected_tests(["Native/ProcessTimeWarp/ProcessTimeWarp.c"], TESTS, SOURCES) == [
     "test_build_signing_metadata_macos.py"
 ]

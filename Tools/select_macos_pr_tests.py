@@ -39,6 +39,10 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
 
     chosen: set[str] = set()
     for path in paths:
+        if path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
+            # These fixtures are shared across native behavior tests; a narrow
+            # name match would miss consumers and provide false confidence.
+            return sorted(tests)
         if path.startswith("tests/") and Path(path).name in tests:
             chosen.add(Path(path).name)
         if path.startswith("Sources/Core/") or path == "Sources/App.swift":

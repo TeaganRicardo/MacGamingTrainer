@@ -102,16 +102,16 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
-    if path.startswith("Backend/games/"):
-        # Backend source logic and resident Lua are portable. Module manifests,
-        # entitlements and native compilation inputs still need a macOS build.
-        return not (
-            path.endswith(("module.json", ".plist", ".c", ".h", ".m", ".mm", ".dylib"))
-            or "/native/" in path
-        )
     if path.startswith("Backend/"):
-        return True
+        # Portable Backend source is explicitly typed. An unrecognized or
+        # native input must not silently become Linux-only.
+        if "/native/" in path or path.endswith(("module.json", ".plist")):
+            return False
+        return path.endswith((".py", ".lua", ".json", ".csv", ".txt", ".md"))
     if path.startswith("tests/"):
+        # Shared Swift/native fixtures are inputs to macOS behavioral harnesses.
+        if path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
+            return False
         return Path(path).name not in macos_only_tests
     if path.startswith(".github/workflows/"):
         return path not in MODULE_EXACT_PATHS
