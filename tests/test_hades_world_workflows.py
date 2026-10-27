@@ -21,7 +21,7 @@ DeepCopyTable = clone
 SaveIgnores = {}
 GameState = { Resources = { MetaPoints = 10 }, LifetimeResourcesGained = { MetaPoints = 20 } }
 CurrentRun = { Hero = { ObjectId = 10, Health = 50, MaxHealth = 50, Traits = {} }, Money = 5,
-  RoomCreations = {}, CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" } }
+  BiomeDepthCache = 8, RoomCreations = {}, CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" } }
 local originalRoom = CurrentRun.CurrentRoom
 RoomSetData = { Tartarus = {
   A_Combat02 = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" },
@@ -34,7 +34,25 @@ local encounterCalls = 0
 function ChooseEncounter(run, room) encounterCalls = encounterCalls + 1; return { Name = "NativeDefault" } end
 function SetupEncounter(data, room) return clone(data) end
 function IsEncounterEligible(run, room, data) return room.blockThanatos ~= true end
-function IsRoomEligible(run, room, data) return data.eligible ~= false and data.Name ~= room.Name end
+function IsRoomEligible(run, room, data, args)
+  assert(type(args) == "table")
+  return data.eligible ~= false and data.Name ~= room.Name
+    and (not data.ForceAtBiomeDepthMin or run.BiomeDepthCache >= data.ForceAtBiomeDepthMin)
+end
+local randomDraws, forceError = 0, false
+function RandomChance(chance) randomDraws = randomDraws + 1; return false end
+local nativeRandomChance = RandomChance
+function IsRoomForced(run, room, data, args)
+  assert(run == CurrentRun and room == run.CurrentRoom and type(args) == "table")
+  if forceError then RandomChance(0.5); error("injected native force failure") end
+  if data.AlwaysForce then return true end
+  local depth = run.BiomeDepthCache + (args.RoomsSkipped or 0)
+  if data.ForceAtBiomeDepthMin and depth >= data.ForceAtBiomeDepthMin then
+    if depth >= data.ForceAtBiomeDepthMax then return true end
+    return RandomChance(1 / (data.ForceAtBiomeDepthMax - depth))
+  end
+  return false
+end
 function CreateRoom(data, args)
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
   local result = clone(data); result.RoomSetName = "Tartarus"; return result
@@ -57,6 +75,20 @@ function CreateDoorRewardPreview(door) previews = previews + 1 end
 function Destroy(args) destroyed = destroyed + #args.Ids end
 local inactivePoints = { 501 }
 local pedestalIds = { 801, 802, 803 }
+local secretPoints = { 601 }
+local positions = { [601] = { X = 100, Y = 50 }, [602] = { X = 400, Y = 50 }, [850] = { X = 100, Y = 50 } }
+local closestError = false
+function GetClosest(args)
+  if closestError then error("injected native footprint failure") end
+  local nearest, distance
+  local origin = assert(positions[args.Id])
+  for _, id in ipairs(args.DestinationIds) do
+    local point = positions[id]
+    local value = (point.X - origin.X)^2 + (point.Y - origin.Y)^2
+    if not distance or value < distance then nearest, distance = id, value end
+  end
+  return nearest
+end
 function IsWellShopEligible(run, room) return room.WellShopChanceSuccess and not room.blockWell end
 function IsSellTraitShopEligible(run, room) return room.SellTraitShopChanceSuccess end
 function IsChallengeSwitchEligible(run, count) return run.CurrentRoom.ChallengeChanceSuccess end
@@ -81,13 +113,14 @@ end
 function GetInactiveIdsByType(args) assert(args.Name == "FishingPoint"); return inactivePoints end
 function GetIdsByType(args)
   if args.Name == "ChallengeSwitchBase" then return pedestalIds end
-  assert(args.Name == "SecretPoint"); return { 601 }
+  assert(args.Name == "SecretPoint"); return secretPoints
 end
 function GetRandomValue(values) return values[1] end
 function GetRunDepth(run) return 8 end
 local activated = 0
 function Activate(args) activated = args.Id; inactivePoints = {} end
-function UseHeroTraitsWithValue() end
+local traitUses = 0
+function UseHeroTraitsWithValue() traitUses = traitUses + 1 end
 function CheckRoomExitsReady(room) return true end
 function thread(fn, ...) return fn(...) end
 function FishingPointAvailablePresentation(room) assert(room.FishingPointId == 501) end
@@ -96,11 +129,26 @@ function IsFishingEligible(run, room)
   return room.FishingPointChanceSuccess and room.rodUnlocked ~= false
 end
 function IsSecretDoorEligible(run, room) return room.SecretChanceSuccess and room.chaosUnlocked ~= false end
-function ChooseNextRoomData(run, args) assert(args.RoomDataSet == RoomSetData.Secrets); return args.RoomDataSet[1] end
+function ChooseNextRoomData(run, args)
+  if args.RoomDataSet == RoomSetData.Secrets then return args.RoomDataSet[1] end
+  local eligible, forced = {}, {}
+  for _, data in pairs(RoomSetData.Tartarus) do
+    if IsRoomEligible(run, run.CurrentRoom, data, args) then
+      eligible[#eligible + 1] = data
+      if IsRoomForced(run, run.CurrentRoom, data, args) then forced[#forced + 1] = data end
+    end
+  end
+  table.sort(eligible, function(a, b) return a.Name < b.Name end)
+  return GetRandomValue(#forced > 0 and forced or eligible)
+end
 ObstacleData = { SecretDoor = { Name = "SecretDoor" } }
 function GetSecretDoorCost() return 12 end
 local spawned = 0
-function SpawnObstacle(args) spawned = spawned + 1; return 700 + spawned end
+function SpawnObstacle(args)
+  spawned = spawned + 1
+  if positions[args.DestinationId] then positions[700 + spawned] = clone(positions[args.DestinationId]) end
+  return 700 + spawned
+end
 function SetupObstacle(door) assert(door.Name == "SecretDoor") end
 function ExitDoorUnlockedPresentation(door) assert(door.HealthCost == 12) end
 function AddResource(name, amount, source)
@@ -167,6 +215,43 @@ firstDoor.Room = firstRoom
 runtime.set_door_route(doorParams({ route = "story" }))
 assert(firstDoor.Room.Name == "A_Story01" and CurrentRun.RoomCreations.A_Story01 == 1)
 runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom)
+local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
+  ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
+RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
+CurrentRun.BiomeDepthCache = 11
+assert(ChooseNextRoomData(CurrentRun, {}) == forcedRoom, "native depth-11 selection did not force its pre-boss")
+firstDoor.Room = clone(forcedRoom)
+local forcedTarget, beforeForcedAssignments = firstDoor.Room, assigned
+assert(not world().doors[1].canReward and #world().doors[1].routes == 0)
+fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "combat" })) end)
+fails("worldUnavailable", function() runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" })) end)
+assert(firstDoor.Room == forcedTarget and assigned == beforeForcedAssignments)
+firstDoor.Room = firstRoom
+assert(#world().doors[1].routes == 0, "a forced room outside route categories was ignored")
+fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "thanatos" })) end)
+CurrentRun.BiomeDepthCache = 8
+RoomSetData.Tartarus.A_PreBoss01 = nil
+assert(#world().doors[1].routes > 0)
+RoomSetData.Tartarus.A_PreBossChance = { Name = "A_PreBossChance", ForceAtBiomeDepthMin = 8, ForceAtBiomeDepthMax = 12 }
+local beforeForceDraws = randomDraws
+assert(ChooseNextRoomData(CurrentRun, {}) ~= RoomSetData.Tartarus.A_PreBossChance)
+assert(randomDraws == beforeForceDraws + 1, "the native selector lost its original chance draw")
+local beforeInspection = randomDraws
+assert(#world().doors[1].routes == 0, "potentially forced route was exposed as an override")
+runtime.disable_all()
+assert(randomDraws == beforeInspection and RandomChance == nativeRandomChance,
+  "status or disabled inspection consumed native force RNG")
+ChooseNextRoomData(CurrentRun, {})
+assert(randomDraws == beforeInspection + 1, "disabled native room selection changed its draw count")
+local beforeForceError = randomDraws
+forceError = true
+fails("injected native force failure", world)
+assert(RandomChance == nativeRandomChance and randomDraws == beforeForceError,
+  "native force-query failure leaked its callback or consumed RNG")
+forceError = false
+RoomSetData.Tartarus.A_PreBossChance = nil
+runtime.set_door_route(doorParams({ route = "combat" }))
+runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom)
 local beforeAssignments = assigned
 fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "shop" })) end)
 assert(assigned == beforeAssignments)
@@ -187,10 +272,26 @@ runtime.generate_fishing(params())
 assert(activated == 501 and originalRoom.FishingPointId == 501 and CurrentRun.LastFishingPointDepth == 8)
 assert(not world().canFish)
 fails("worldUnavailable", function() runtime.generate_fishing(params()) end)
-runtime.generate_chaos_gate(params())
+local erebus = { Name = "ShrinePointDoor", ObjectId = 850, ShrinePointReq = 5, Room = { Name = "RoomChallenge01" } }
+OfferedExitDoors[850] = erebus
+local beforeGateSpawns, beforeGateTraits = spawned, traitUses
+assert(not world().canChaos, "an Erebus-occupied secret point was available")
+fails("worldUnavailable", function() runtime.generate_chaos_gate(params()) end)
+assert(spawned == beforeGateSpawns and traitUses == beforeGateTraits
+  and not originalRoom.ForceSecretDoor and not CurrentRun.LastSecretDepth)
+secretPoints = { 601, 602 }
+assert(world().canChaos, "an unoccupied shared secret point was hidden")
+local gateParams = params()
+closestError = true
+fails("injected native footprint failure", function() runtime.generate_chaos_gate(gateParams) end)
+closestError = false
+assert(spawned == beforeGateSpawns and traitUses == beforeGateTraits and originalRoom.SecretChanceSuccess == nil)
+runtime.generate_chaos_gate(gateParams)
 local chaosDoor
 for _, door in pairs(OfferedExitDoors) do if door.Name == "SecretDoor" then chaosDoor = door end end
 assert(chaosDoor and chaosDoor.HealthCost == 12 and chaosDoor.ReadyToUse and chaosDoor.Room.Name == "RoomSecret01")
+assert(positions[chaosDoor.ObjectId].X == positions[602].X and OfferedExitDoors[850] == erebus and erebus.ShrinePointReq == 5,
+  "Chaos generation overlapped or changed the native Erebus gate")
 assert(CurrentRun.LastSecretDepth == 8 and not world().canChaos)
 fails("worldUnavailable", function() runtime.generate_chaos_gate(params()) end)
 injectedSpawnError = true
@@ -210,10 +311,13 @@ fails("worldUnavailable", function() runtime.generate_chamber_object(params({ ob
 runtime.set_door_route(doorParams({ route = "thanatos" }))
 local abandoned = firstDoor.Room
 local old = params({ reward = "ZeusUpgrade" })
+local oldGate = params()
 CurrentRun.CurrentRoom = { Name = "A_Combat02", RoomSetName = "Tartarus", rodUnlocked = false, chaosUnlocked = false }
 OfferedExitDoors = {}
-local count = #loot
+local count, beforeStaleGateSpawns = #loot, spawned
 fails("staleRoom", function() runtime.spawn_reward(old) end)
+fails("staleRoom", function() runtime.generate_chaos_gate(oldGate) end)
+assert(spawned == beforeStaleGateSpawns, "old-room gate generation reached native creation")
 assert(#loot == count and not world().canFish and not world().canChaos)
 assert(ChooseEncounter(CurrentRun, abandoned).Name == "NativeDefault", "old source-room intent survived")
 assert(assigned > 0 and previews > 0)
