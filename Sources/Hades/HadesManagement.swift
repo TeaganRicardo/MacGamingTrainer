@@ -18,6 +18,7 @@ struct HadesManagementUtilities: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerManagementActions) private var managementActions
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerToolWindows) private var toolWindows
 
     private func text(_ key: String) -> String {
         HadesGameModule.resolveText(key: key, localization: localization)
@@ -29,6 +30,12 @@ struct HadesManagementUtilities: View {
                 actions {
                     TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: "arrow.clockwise",
                         enabled: model.hostActionsEnabled, action: model.refreshFromHost)
+                    TrainerSecondaryActionButton(title: text("hades.saveEditor.title"), systemImage: "externaldrive.badge.gearshape",
+                        enabled: model.hostActionsEnabled) {
+                        toolWindows.open("hades-save-editor", text("hades.saveEditor.title")) {
+                            HadesGameModule.makeSaveEditorWindow(model: model)
+                        }
+                    }
                     if let open = managementActions.openSaveManagement {
                         TrainerSecondaryActionButton(title: text("host.saveManagement"), systemImage: "externaldrive",
                             enabled: model.hostActionsEnabled, action: open)

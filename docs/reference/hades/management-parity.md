@@ -14,7 +14,7 @@ Semantic Save Editor delivery: [#584](https://github.com/TeaganRicardo/MacGaming
 | Feature presets | Hades II Profile service | Hades `HadesProfileStore`, separate `hades/profiles` directory and schema |
 | Current session, history, completed-log cleanup | Host `TrainerLogSink` | Same Host owner, Hades target-process lifetime |
 | Diagnostics and export | Game observation/report + Host logs | Hades observation/report + current Host-owned log files |
-| Semantic Save Editor | Hades II document/workspace and codec | Unimplemented; complete scope retained in #584 |
+| Semantic Save Editor | Hades II document/workspace and codec | Hades-owned version-16 document, typed domains/Advanced, pinned workspaces and native tool windows; [evidence and execution boundary](save_editor.md) |
 | Re-sign/restore game image | Hades II image preparation | No Hades I preparation workflow is claimed |
 
 The Management section uses Daily Actions, Settings & Profiles, and Maintenance & Diagnostics groups. Controls use the existing Host panels/buttons/sheets, collapse into vertical layouts when needed, and appear in bilingual workbench search. Profiles and diagnostics close their page-anchored sheets when the game page is hidden. The existing Save tool window keeps its original persistent game context.
@@ -39,9 +39,9 @@ Read-only source inspection used the supported native image declared in `module.
 | Statistics/history/equipment | `RunManager.lua:1724–1958` appends run history, updates caches and weapon projections | Stored statistics remain directly editable; selected equipment and linked derived caches need explicit owner analysis |
 | Save membership | Module `saveManagement` + `HadesSaveProvider` | Core manages profile `.sav`, `.sjson`, `.ctrls` and `activeProfile` files; current `SGB1` parsing only identifies the active profile for backup naming |
 
-Source SHA-256: `Main.lua` `6aab9af9cbaf499aef3adb7e4ac622efc530db652dcf8e80d44e85cc74a7453e`; `RunManager.lua` `4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e`; `GiftScripts.lua` `1c9e3aa8c018c6d64e4b888dadfccc296b3c48293889440b6a34863d98e3bbf7`.
+Native source hashes and official bilingual identity extraction are owned by `Backend/games/hades/save_catalog.json.sourceEvidence`.
 
-#584 owns container/header/compression/checksum and luabins investigation with non-user temporary fixtures; lossless Hades-owned codec; source-backed semantic operations and actual typed/path Advanced editing; fixed-source/explicit-target workspaces and independent tool windows; verified recoverable replacement; complete edit → basket revision/removal → Apply → re-read journeys. Unknown native impact gets an explicit warning; missing semantic research is not a permanent editing ban. Hades II's codec is evidence to compare, not authority for Hades I bytes. Current Core backups remain useful while this delivery is open.
+#584 implements those owners through the independent [Save Editor](save_editor.md). Its native artifact map, representation differences from Hades II, linked Mirror/aspect operations, direct statistics and typed/path editing, recoverable replacement and authored complete journeys are recorded there. Unknown native impact receives an editable warning. Executed checks and final-head review remain the completion gates under the current pause.
 
 ## Verification boundary
 

@@ -41,8 +41,11 @@ class HadesAdapter(GameAdapter):
         self.features = dict(DEFAULT_PREFERENCES)
         self._game_speed_actual = None
         self._game_speed_error = None
+        self.save_workspaces = {}
 
     def dispatch(self, command, params, request_id):
+        if command.startswith('save_editor_'):
+            return self._save_editor(command[len('save_editor_'):], params)
         if command == 'list_profiles':
             return {'profiles': self.profiles.list()}
         if command == 'save_profile':
@@ -180,6 +183,44 @@ class HadesAdapter(GameAdapter):
             return self._observe(self.runtime.command(command, values))
         raise AdapterError('unknown_command', 'hades.error.unknownCommand')
 
+    def _save_editor(self, command, params):
+        from .save_workspace import HadesSaveWorkspace
+        if self.save_service is None:
+            raise AdapterError('save_editor_unavailable', 'hades.saveEditor.error',
+                               arguments=['Save management is unavailable.'])
+        try:
+            if command == 'inventory':
+                return HadesSaveWorkspace.inventory(self.save_service, params.get('snapshotId'))
+            if command == 'open':
+                workspace = HadesSaveWorkspace.open(self.save_service,
+                    snapshot_id=params.get('snapshotId'), source=params.get('source'), target=params.get('target'))
+                self.save_workspaces[workspace.identifier] = workspace
+                return workspace.summary(params.get('language', 'en'))
+            identifier = params.get('workspaceId')
+            if not isinstance(identifier, str) or identifier not in self.save_workspaces:
+                raise ValueError('This editor workspace is closed. Reopen the selected document.')
+            workspace = self.save_workspaces[identifier]
+            if command == 'close':
+                del self.save_workspaces[identifier]
+                return {'closed': True}
+            if command == 'target': return workspace.set_target(params['target'])
+            if command == 'query':
+                return workspace.query(**{key: value for key, value in params.items() if key != 'workspaceId'})
+            language = params.get('language', 'en')
+            if command == 'detail': return workspace.detail(params['entryId'], language)
+            if command == 'stage': return workspace.stage(params['entryId'], params['operation'], params.get('value'), language)
+            if command == 'unstage': return workspace.unstage(params['entryId'], language)
+            if command == 'review': return workspace.review(language)
+            if command == 'cancel': return workspace.cancel(language)
+            if command == 'apply': return workspace.apply()
+            raise ValueError('Unknown Save Editor operation.')
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            recovery = getattr(error, 'recovery_path', None)
+            wrapped = AdapterError('rollback_failed' if recovery is not None else 'save_editor_invalid', 'hades.saveEditor.error',
+                                   diagnostic=str(error), arguments=[str(error)])
+            if recovery is not None: wrapped.recovery_path = str(recovery)
+            raise wrapped from error
+
     @staticmethod
     def _mutation_params(command, params):
         if command in WORLD_COMMANDS:
@@ -289,4 +330,5 @@ class HadesAdapter(GameAdapter):
                 'health': 0, 'maxHealth': 0, 'money': 0, 'pid': None}
 
     def close(self):
+        self.save_workspaces.clear()
         self.runtime.close()

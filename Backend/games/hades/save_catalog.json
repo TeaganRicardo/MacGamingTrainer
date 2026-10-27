@@ -1,0 +1,1879 @@
+{
+  "schemaVersion": 1,
+  "mirrorRows": [
+    [
+      "BackstabMetaUpgrade",
+      "FirstStrikeMetaUpgrade"
+    ],
+    [
+      "DoorHealMetaUpgrade",
+      "DarknessHealMetaUpgrade"
+    ],
+    [
+      "ExtraChanceMetaUpgrade",
+      "ExtraChanceReplenishMetaUpgrade"
+    ],
+    [
+      "StaminaMetaUpgrade",
+      "PerfectDashMetaUpgrade"
+    ],
+    [
+      "StoredAmmoVulnerabilityMetaUpgrade",
+      "StoredAmmoSlowMetaUpgrade"
+    ],
+    [
+      "AmmoMetaUpgrade",
+      "ReloadAmmoMetaUpgrade"
+    ],
+    [
+      "MoneyMetaUpgrade",
+      "InterestMetaUpgrade"
+    ],
+    [
+      "HealthMetaUpgrade",
+      "HighHealthDamageMetaUpgrade"
+    ],
+    [
+      "VulnerabilityEffectBonusMetaUpgrade",
+      "GodEnhancementMetaUpgrade"
+    ],
+    [
+      "RareBoonDropMetaUpgrade",
+      "RunProgressRewardMetaUpgrade"
+    ],
+    [
+      "EpicBoonDropMetaUpgrade",
+      "DuoRarityBoonDropMetaUpgrade"
+    ],
+    [
+      "RerollMetaUpgrade",
+      "RerollPanelMetaUpgrade"
+    ]
+  ],
+  "weapons": {
+    "SwordWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "SwordBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "SwordCriticalParryTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "DislodgeAmmoTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "SwordConsecrationTrait"
+      }
+    ],
+    "SpearWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "SpearBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "SpearTeleportTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "SpearWeaveTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "SpearSpinTravel"
+      }
+    ],
+    "GunWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "GunBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "GunGrenadeSelfEmpowerTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "GunManualReloadTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "GunLoadedGrenadeTrait"
+      }
+    ],
+    "BowWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "BowBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "BowMarkHomingTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "BowLoadAmmoTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "BowBondTrait"
+      }
+    ],
+    "ShieldWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "ShieldBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "ShieldRushBonusProjectileTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "ShieldTwoShieldTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "ShieldLoadAmmoTrait"
+      }
+    ],
+    "FistWeapon": [
+      {
+        "index": 1,
+        "maxRank": 5,
+        "startsUnlocked": true,
+        "trait": "FistBaseUpgradeTrait"
+      },
+      {
+        "index": 2,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "FistVacuumTrait"
+      },
+      {
+        "index": 3,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "FistWeaveTrait"
+      },
+      {
+        "index": 4,
+        "maxRank": 5,
+        "startsUnlocked": false,
+        "trait": "FistDetonateTrait"
+      }
+    ]
+  },
+  "names": {
+    "A": {
+      "zh-CN": "A",
+      "en": "A"
+    },
+    "AboveShrineRewardThreshold": {
+      "zh-CN": "热度表已超标！选择减免条件？",
+      "en": "Heat Gauge exceeded!! Choose fewer Conditions?"
+    },
+    "AboveShrineRewardThreshold_1": {
+      "zh-CN": "热度表过于超标！",
+      "en": "Heat Gauge greatly exceeded!!!"
+    },
+    "AboveShrineRewardThreshold_2": {
+      "zh-CN": "热度表严重超标！",
+      "en": "Heat Gauge way over the line!!!"
+    },
+    "AboveShrineRewardThreshold_3": {
+      "zh-CN": "好好好，你把热度表弄哭了，高兴吗？？",
+      "en": "Great, you made Heat Gauge cry, happy??"
+    },
+    "AchillesPatroclusAssistTrait": {
+      "zh-CN": "安托斯伴偶",
+      "en": "Companion Antos"
+    },
+    "Add": {
+      "zh-CN": "+",
+      "en": "+"
+    },
+    "Ammo": {
+      "zh-CN": "血石",
+      "en": "Bloodstone"
+    },
+    "AmmoAlt": {
+      "zh-CN": "血石",
+      "en": "Bloodstone"
+    },
+    "AmmoMetaUpgrade": {
+      "zh-CN": "地狱之魂",
+      "en": "Infernal Soul"
+    },
+    "AmmoMetaUpgrade_ShortTotal": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "AmmoMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "AmmoPack": {
+      "zh-CN": "血石",
+      "en": "Bloodstones"
+    },
+    "AphroditeUpgrade": {
+      "zh-CN": "阿弗洛狄忒",
+      "en": "Aphrodite"
+    },
+    "AresUpgrade": {
+      "zh-CN": "阿瑞斯",
+      "en": "Ares"
+    },
+    "ArtemisUpgrade": {
+      "zh-CN": "阿尔忒弥斯",
+      "en": "Artemis"
+    },
+    "Asphodel": {
+      "zh-CN": "水仙花平原",
+      "en": "Asphodel"
+    },
+    "AtShrineRewardThreshold": {
+      "zh-CN": "热度表已满格！有新的悬赏！",
+      "en": "Heat Gauge full! New Bounties available!"
+    },
+    "AthenaUpgrade": {
+      "zh-CN": "雅典娜",
+      "en": "Athena"
+    },
+    "BackstabAlphaStrikeTrait": {
+      "zh-CN": "黑色披肩",
+      "en": "Black Shawl"
+    },
+    "BackstabMetaUpgrade": {
+      "zh-CN": "影子袭击",
+      "en": "Shadow Presence"
+    },
+    "BackstabMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "BelowShrineRewardThreshold": {
+      "zh-CN": "热度表未满！请选取更多条件。",
+      "en": "Heat Gauge not full! Choose more Conditions."
+    },
+    "BelowShrineRewardThreshold_RewardEligible": {
+      "zh-CN": "在右侧选中条件，可以赚取更多悬赏。",
+      "en": "Choose a Condition at right to earn more Bounties."
+    },
+    "BelowSoftShrineCapThreshold": {
+      "zh-CN": "悬赏已抵达上限！感谢您受苦受难。",
+      "en": "Bounty limit reached! Thank you for suffering."
+    },
+    "BelowSoftShrineCapThreshold_ZeroLimitUncleared": {
+      "zh-CN": "清空热度表，可获剩余悬赏！",
+      "en": "Deplete Heat Gauge for remaining Bounties!"
+    },
+    "BelowSoftShrineCapThreshold_ZeroLimitUncleared_BountiesAvailable": {
+      "zh-CN": "热度表为空！尚有悬赏！",
+      "en": "Heat Gauge empty! Unclaimed Bounties available!"
+    },
+    "BiomeSpeedShrineUpgrade": {
+      "zh-CN": "进度紧张",
+      "en": "Tight Deadline"
+    },
+    "BiomeSpeedShrineUpgrade_0": {
+      "zh-CN": "∞",
+      "en": "∞"
+    },
+    "BiomeSpeedShrineUpgrade_1": {
+      "zh-CN": "9:00",
+      "en": "9:00"
+    },
+    "BiomeSpeedShrineUpgrade_2": {
+      "zh-CN": "7:00",
+      "en": "7:00"
+    },
+    "BiomeSpeedShrineUpgrade_3": {
+      "zh-CN": "5:00",
+      "en": "5:00"
+    },
+    "BiomeSpeedShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "BonusMoneyTrait": {
+      "zh-CN": "冥府零钱包",
+      "en": "Chthonic Coin Purse"
+    },
+    "Boon": {
+      "zh-CN": "奥林匹斯诸神的祝福",
+      "en": "Boon of Olympus"
+    },
+    "Boss": {
+      "zh-CN": "Boss",
+      "en": "Boss"
+    },
+    "BossDifficultyShrineUpgrade": {
+      "zh-CN": "极端措施",
+      "en": "Extreme Measures"
+    },
+    "BossDifficultyShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "BowBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "BowBondTrait": {
+      "zh-CN": "罗摩形态",
+      "en": "Aspect of Rama"
+    },
+    "BowLoadAmmoTrait": {
+      "zh-CN": "赫拉形态",
+      "en": "Aspect of Hera"
+    },
+    "BowMarkHomingTrait": {
+      "zh-CN": "喀戎形态",
+      "en": "Aspect of Chiron"
+    },
+    "BowMarkHomingTrait_Max": {
+      "zh-CN": "喀戎形态",
+      "en": "Aspect of Chiron"
+    },
+    "BowWeapon": {
+      "zh-CN": "索心弓",
+      "en": "Heart-Seeking Bow"
+    },
+    "BowWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "C": {
+      "zh-CN": "C",
+      "en": "C"
+    },
+    "Cast": {
+      "zh-CN": "投弹",
+      "en": "Cast"
+    },
+    "CastAlt": {
+      "zh-CN": "投弹",
+      "en": "Cast"
+    },
+    "Challenge": {
+      "zh-CN": "厄瑞玻斯",
+      "en": "Erebus"
+    },
+    "ChallengeSwitch": {
+      "zh-CN": "地狱宝藏",
+      "en": "Infernal Trove"
+    },
+    "ChamberStackTrait": {
+      "zh-CN": "石榴花",
+      "en": "Pom Blossom"
+    },
+    "ChaosBoonTrait": {
+      "zh-CN": "宇宙之卵",
+      "en": "Cosmic Egg"
+    },
+    "ChaosCurseMoveSpeedTrait": {
+      "zh-CN": "懒惰",
+      "en": "Slothful"
+    },
+    "Codex": {
+      "zh-CN": "打开手稿",
+      "en": "Open Codex"
+    },
+    "Common": {
+      "zh-CN": "普通",
+      "en": "Common"
+    },
+    "Cosmetic": {
+      "zh-CN": "圣殿装饰",
+      "en": "House Decor"
+    },
+    "Cosmetic_DrapesBlue": {
+      "zh-CN": "蔚蓝窗帘",
+      "en": "Drapery, Azure"
+    },
+    "Cosmetic_DrapesGreen": {
+      "zh-CN": "橄榄色窗帘",
+      "en": "Drapery, Olive"
+    },
+    "Cosmetic_DrapesGrey": {
+      "zh-CN": "灰色窗帘",
+      "en": "Drapery, Bone"
+    },
+    "Cosmetic_DrapesRed": {
+      "zh-CN": "绯红色窗帘",
+      "en": "Drapery, Crimson"
+    },
+    "Cosmetic_HouseCandles01": {
+      "zh-CN": "双蜡烛照明",
+      "en": "Lighting, Dual Stick"
+    },
+    "Cosmetic_HousePillarsA": {
+      "zh-CN": "厄运石柱",
+      "en": "Columns, Ominous"
+    },
+    "Cosmetic_LaurelsBlue": {
+      "zh-CN": "钴制桂冠",
+      "en": "Laurels, Cobalt"
+    },
+    "Cosmetic_LaurelsRed": {
+      "zh-CN": "绯红桂冠",
+      "en": "Laurels, Crimson"
+    },
+    "Cosmetic_LaurelsSkulls": {
+      "zh-CN": "死亡桂冠",
+      "en": "Laurels, Deathly"
+    },
+    "Cosmetic_NorthHallPaintingAsphodel": {
+      "zh-CN": "水仙花平原风景画",
+      "en": "Landscape, Asphodel"
+    },
+    "Cosmetic_NorthHallPaintingHades": {
+      "zh-CN": "冥王画像",
+      "en": "Painting, God of the Dead"
+    },
+    "Cosmetic_NorthHallPaintingMysteryGirl": {
+      "zh-CN": "公主肖像画",
+      "en": "Portrait, Princess"
+    },
+    "Cosmetic_NorthHallPaintingMysteryWoman": {
+      "zh-CN": "暗夜之母画像",
+      "en": "Painting, Night"
+    },
+    "Cosmetic_NorthHallPaintingTartarus": {
+      "zh-CN": "塔耳塔罗斯风景画",
+      "en": "Landscape, Tartarus"
+    },
+    "Cosmetic_NorthHallPaintingTheseus": {
+      "zh-CN": "英灵肖像画",
+      "en": "Portrait, Exalted Hero"
+    },
+    "Cosmetic_NorthHallPaintingTots": {
+      "zh-CN": "刻耳柏洛斯肖像画",
+      "en": "Portrait, Cerberus"
+    },
+    "Cosmetic_NorthHallPaintingZagreus": {
+      "zh-CN": "王子画像",
+      "en": "Painting, Prince"
+    },
+    "Cosmetic_NorthHallPedestalArtifact": {
+      "zh-CN": "精美的手工制品",
+      "en": "Artifact, Extraordinary"
+    },
+    "Cosmetic_NorthHallPedestalHammer": {
+      "zh-CN": "建造者的工具",
+      "en": "Tool, Builder's"
+    },
+    "Cosmetic_NorthHallPedestalSphere": {
+      "zh-CN": "星座球",
+      "en": "Sphere, Constellation"
+    },
+    "Cosmetic_SouthHallTrimBrown": {
+      "zh-CN": "土黄色镶边",
+      "en": "Trim, Burnished Gold"
+    },
+    "Cosmetic_UISkinDefault": {
+      "zh-CN": "王子主题背景",
+      "en": "Theme, Princely"
+    },
+    "Cosmetic_WallWeaponAxe": {
+      "zh-CN": "装饰用双面斧",
+      "en": "Decorative Arms, Labrys"
+    },
+    "Cosmetic_WallWeaponBident": {
+      "zh-CN": "装饰用双叉矛",
+      "en": "Decorative Arms, Bident"
+    },
+    "Cosmetic_WallWeaponSword": {
+      "zh-CN": "装饰用双刃剑",
+      "en": "Decorative Arms, Xiphos"
+    },
+    "Crawler": {
+      "zh-CN": "爬虫",
+      "en": "Crawler"
+    },
+    "CrusherUnit": {
+      "zh-CN": "碎骨坦克",
+      "en": "Skull-Crusher"
+    },
+    "DarknessHealMetaUpgrade": {
+      "zh-CN": "暗之回复",
+      "en": "Dark Regeneration"
+    },
+    "DarknessHealMetaUpgrade_ShortTotal": {
+      "zh-CN": "…% 的",
+      "en": "…% of"
+    },
+    "DarknessHealMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "DashAttackMetaUpgrade": {
+      "zh-CN": "势如破竹",
+      "en": "Quick Temper"
+    },
+    "DashAttackMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "DeathArea": {
+      "zh-CN": "冥王圣殿",
+      "en": "House of Hades"
+    },
+    "DemeterUpgrade": {
+      "zh-CN": "得墨忒尔",
+      "en": "Demeter"
+    },
+    "DionysusUpgrade": {
+      "zh-CN": "迪奥尼索司",
+      "en": "Dionysus"
+    },
+    "DirectionalArmorTrait": {
+      "zh-CN": "密尔弥冬护腕",
+      "en": "Myrmidon Bracer"
+    },
+    "DislodgeAmmoTrait": {
+      "zh-CN": "波塞冬形态",
+      "en": "Aspect of Poseidon"
+    },
+    "DistanceDamageTrait": {
+      "zh-CN": "遥远的记忆",
+      "en": "Distant Memory"
+    },
+    "DoorHeal": {
+      "zh-CN": "冥府活力",
+      "en": "Chthonic Vitality"
+    },
+    "DoorHealMetaUpgrade": {
+      "zh-CN": "冥府活力",
+      "en": "Chthonic Vitality"
+    },
+    "DoorHealMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "DoorHealMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "DuoRarityBoonDropMetaUpgrade": {
+      "zh-CN": "神之恩赐",
+      "en": "Gods' Legacy"
+    },
+    "DuoRarityBoonDropMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "DusaAssistTrait": {
+      "zh-CN": "伴偶菲迪",
+      "en": "Companion Fidi"
+    },
+    "DusaLoungeRenovationQuestComplete": {
+      "zh-CN": "与圣殿承包商合作，翻新休息室。",
+      "en": "Employ the House Contractor to Help Renovate the Lounge"
+    },
+    "Elysium": {
+      "zh-CN": "至福乐土",
+      "en": "Elysium"
+    },
+    "Emote": {
+      "zh-CN": "嘲讽",
+      "en": "Quip"
+    },
+    "Encounter": {
+      "zh-CN": "遭遇战",
+      "en": "Encounter(s)"
+    },
+    "End": {
+      "zh-CN": "End",
+      "en": "End"
+    },
+    "EnemyCountShrineUpgrade": {
+      "zh-CN": "大敌当前",
+      "en": "Jury Summons"
+    },
+    "EnemyCountShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemyDamage": {
+      "zh-CN": "苦力劳动",
+      "en": "Hard Labor"
+    },
+    "EnemyDamageShrineUpgrade": {
+      "zh-CN": "苦力劳动",
+      "en": "Hard Labor"
+    },
+    "EnemyDamageShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemyEliteShrineUpgrade": {
+      "zh-CN": "福利待遇",
+      "en": "Benefits Package"
+    },
+    "EnemyEliteShrineUpgrade_ShortTotal": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "EnemyEliteShrineUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "EnemyHealthShrineUpgrade": {
+      "zh-CN": "广播体操",
+      "en": "Calisthenics Program"
+    },
+    "EnemyHealthShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemyHealthShrineUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemyShieldShrineUpgrade": {
+      "zh-CN": "伤害控制",
+      "en": "Damage Control"
+    },
+    "EnemyShieldShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemyShieldShrineUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EnemySpeedShrineUpgrade": {
+      "zh-CN": "强制加班",
+      "en": "Forced Overtime"
+    },
+    "EnemySpeedShrineUpgrade_0": {
+      "zh-CN": "+0%",
+      "en": "+0%"
+    },
+    "EnemySpeedShrineUpgrade_1": {
+      "zh-CN": "+10%",
+      "en": "+10%"
+    },
+    "EnemySpeedShrineUpgrade_2": {
+      "zh-CN": "+25%",
+      "en": "+25%"
+    },
+    "EnemySpeedShrineUpgrade_3": {
+      "zh-CN": "+50%",
+      "en": "+50%"
+    },
+    "EnemySpeedShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Epic": {
+      "zh-CN": "史诗",
+      "en": "Epic"
+    },
+    "EpicBoonDropMetaUpgrade": {
+      "zh-CN": "神之骄傲",
+      "en": "Gods' Pride"
+    },
+    "EpicBoonDropMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "EpicHeroicBoonMetaUpgrade": {
+      "zh-CN": "神之嫉妒",
+      "en": "Gods' Envy"
+    },
+    "EpicHeroicBoonMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ExitBlockedByBoon": {
+      "zh-CN": "收集奖励！",
+      "en": "Collect Reward!"
+    },
+    "ExitBlockedByHealthReq": {
+      "zh-CN": "不足！",
+      "en": "Not Enough !"
+    },
+    "ExitBlockedByMoneyReq": {
+      "zh-CN": "不足！",
+      "en": "Not Enough !"
+    },
+    "ExitBlockedBySellWell": {
+      "zh-CN": "冥界海关：使用净化池！",
+      "en": "Underworld Customs: Use Pool of Purging!"
+    },
+    "ExitBlockedByShrinePointReq": {
+      "zh-CN": "不足！",
+      "en": "Not Enough !"
+    },
+    "ExitNotActive": {
+      "zh-CN": "出口堵塞！",
+      "en": "Exit Blocked!"
+    },
+    "ExtraChance": {
+      "zh-CN": "死里逃生",
+      "en": "Death Defiance"
+    },
+    "ExtraChanceAlt": {
+      "zh-CN": "百折不挠",
+      "en": "Stubborn Defiance"
+    },
+    "ExtraChanceMetaUpgrade": {
+      "zh-CN": "死里逃生",
+      "en": "Death Defiance"
+    },
+    "ExtraChanceMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ExtraChanceMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ExtraChanceReplenishMetaUpgrade": {
+      "zh-CN": "百折不挠",
+      "en": "Stubborn Defiance"
+    },
+    "ExtraChanceReplenishMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ExtraChanceReplenishMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "FastClearDodgeBonusTrait": {
+      "zh-CN": "萤光羽毛",
+      "en": "Lambent Plume"
+    },
+    "FirstStrikeMetaUpgrade": {
+      "zh-CN": "烈火袭击",
+      "en": "Fiery Presence"
+    },
+    "FirstStrikeMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "FishingPoint": {
+      "zh-CN": "钓鱼点",
+      "en": "Fishing Point"
+    },
+    "FishingTrait": {
+      "zh-CN": "渔获丰收",
+      "en": "Huge Catch"
+    },
+    "FistBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "FistDetonateTrait": {
+      "zh-CN": "吉尔伽美什形态",
+      "en": "Aspect of Gilgamesh"
+    },
+    "FistVacuumTrait": {
+      "zh-CN": "塔罗斯形态",
+      "en": "Aspect of Talos"
+    },
+    "FistWeapon": {
+      "zh-CN": "双子之拳",
+      "en": "Twin Fists"
+    },
+    "FistWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "FistWeaveTrait": {
+      "zh-CN": "得墨忒尔形态",
+      "en": "Aspect of Demeter"
+    },
+    "FlurrySpawner": {
+      "zh-CN": "捉魂魔法球",
+      "en": "Soul Catcher"
+    },
+    "ForceAphroditeBoonTrait": {
+      "zh-CN": "永恒的玫瑰",
+      "en": "Eternal Rose"
+    },
+    "ForceAresBoonTrait": {
+      "zh-CN": "充血药瓶",
+      "en": "Blood-filled Vial"
+    },
+    "ForceArtemisBoonTrait": {
+      "zh-CN": "坚硬箭头",
+      "en": "Adamant Arrowhead"
+    },
+    "ForceAthenaBoonTrait": {
+      "zh-CN": "猫头鹰吊坠",
+      "en": "Owl Pendant"
+    },
+    "ForceDemeterBoonTrait": {
+      "zh-CN": "冰冻之角",
+      "en": "Frostbitten Horn"
+    },
+    "ForceDionysusBoonTrait": {
+      "zh-CN": "满溢酒杯",
+      "en": "Overflowing Cup"
+    },
+    "ForcePoseidonBoonTrait": {
+      "zh-CN": "海螺壳",
+      "en": "Conch Shell"
+    },
+    "ForceSellShrineUpgrade": {
+      "zh-CN": "冥界海关",
+      "en": "Underworld Customs"
+    },
+    "ForceSellShrineUpgrade_ShortTotal": {
+      "zh-CN": "-…",
+      "en": "-…"
+    },
+    "ForceZeusBoonTrait": {
+      "zh-CN": "雷霆之印",
+      "en": "Thunder Signet"
+    },
+    "Fury2FirstAppearance": {
+      "zh-CN": "已见到阿勒克图",
+      "en": "Met Alecto"
+    },
+    "Fury3FirstAppearance": {
+      "zh-CN": "已见到提西福涅",
+      "en": "Met Tisiphone"
+    },
+    "FuryAssistTrait": {
+      "zh-CN": "伴偶巴蒂",
+      "en": "Companion Battie"
+    },
+    "Gift": {
+      "zh-CN": "礼物和其他",
+      "en": "Gift & Misc."
+    },
+    "GiftDrop": {
+      "zh-CN": "蜜露",
+      "en": "Nectar"
+    },
+    "GiftUseText": {
+      "zh-CN": "赠送 ( -… )",
+      "en": "Gift ( -… )"
+    },
+    "GodEnhancementMetaUpgrade": {
+      "zh-CN": "掌上明珠",
+      "en": "Family Favorite"
+    },
+    "GodEnhancementMetaUpgrade_InRun": {
+      "zh-CN": "掌上明珠",
+      "en": "Family Favorite"
+    },
+    "GodEnhancementMetaUpgrade_ShortTotal": {
+      "zh-CN": "… 每位",
+      "en": "… Per"
+    },
+    "GodEnhancementMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "GodModeTrait": {
+      "zh-CN": "天外飞仙",
+      "en": "Deus Ex Machina"
+    },
+    "GunBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "GunGrenadeSelfEmpowerTrait": {
+      "zh-CN": "厄里斯形态",
+      "en": "Aspect of Eris"
+    },
+    "GunLoadedGrenadeTrait": {
+      "zh-CN": "路西法形态",
+      "en": "Aspect of Lucifer"
+    },
+    "GunManualReloadTrait": {
+      "zh-CN": "赫斯提亚形态",
+      "en": "Aspect of Hestia"
+    },
+    "GunWeapon": {
+      "zh-CN": "狮鹫坚炮",
+      "en": "Adamant Rail"
+    },
+    "GunWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "HadesEMFight": {
+      "zh-CN": "极限措施",
+      "en": "Extremer Measures"
+    },
+    "HadesShoutKeepsake": {
+      "zh-CN": "死者印记",
+      "en": "Sigil of the Dead"
+    },
+    "HealDropRange": {
+      "zh-CN": "生命精华",
+      "en": "Life Essence"
+    },
+    "HealingReduction": {
+      "zh-CN": "持久伤害",
+      "en": "Lasting Consequences"
+    },
+    "HealingReductionShrineUpgrade": {
+      "zh-CN": "持久伤害",
+      "en": "Lasting Consequences"
+    },
+    "HealingReductionShrineUpgrade_ShortTotal": {
+      "zh-CN": "-…%",
+      "en": "-…%"
+    },
+    "HealingReductionShrineUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "-…%",
+      "en": "-…%"
+    },
+    "Health": {
+      "zh-CN": "生命值",
+      "en": "Life"
+    },
+    "HealthEncounterEndRegenMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "HealthMetaUpgrade": {
+      "zh-CN": "顽强抵抗",
+      "en": "Thick Skin"
+    },
+    "HealthMetaUpgrade_ShortTotal": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "HealthMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "HeavyRanged": {
+      "zh-CN": "硫磺水晶",
+      "en": "Brimstone"
+    },
+    "HeavyRangedForked": {
+      "zh-CN": "蛇石",
+      "en": "Snakestone"
+    },
+    "HeavyRangedSplitterMiniboss": {
+      "zh-CN": "末日巨岩",
+      "en": "Doomstone"
+    },
+    "HermesUpgrade": {
+      "zh-CN": "赫尔墨斯",
+      "en": "Hermes"
+    },
+    "Heroic": {
+      "zh-CN": "英雄",
+      "en": "Heroic"
+    },
+    "HighHealthDamageMetaUpgrade": {
+      "zh-CN": "自信满满",
+      "en": "High Confidence"
+    },
+    "HighHealthDamageMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "HitShields": {
+      "zh-CN": "免伤害！",
+      "en": "Resisted!"
+    },
+    "InterestGainedCombatText": {
+      "zh-CN": "点石成金: +…",
+      "en": "Golden Touch: +…"
+    },
+    "InterestMetaUpgrade": {
+      "zh-CN": "点石成金",
+      "en": "Golden Touch"
+    },
+    "InterestMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "InterestMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Legendary": {
+      "zh-CN": "传奇",
+      "en": "Legendary"
+    },
+    "LifeOnUrnTrait": {
+      "zh-CN": "哈耳庇厄毛掸",
+      "en": "Harpy Feather Duster"
+    },
+    "LightSpawner": {
+      "zh-CN": "骷髅堆",
+      "en": "Skullomat"
+    },
+    "Location_Asphodel": {
+      "zh-CN": "水仙花平原",
+      "en": "ASPHODEL"
+    },
+    "Location_Elysium": {
+      "zh-CN": "至福乐土",
+      "en": "ELYSIUM"
+    },
+    "Location_Styx_Short": {
+      "zh-CN": "冥河",
+      "en": "STYX"
+    },
+    "Location_Tartarus": {
+      "zh-CN": "塔耳塔罗斯",
+      "en": "TARTARUS"
+    },
+    "LockKey": {
+      "zh-CN": "冥府钥匙",
+      "en": "Chthonic Key"
+    },
+    "LockKeyDrop": {
+      "zh-CN": "冥府钥匙",
+      "en": "Chthonic Keys"
+    },
+    "LowHealthDamageTrait": {
+      "zh-CN": "骷髅耳环",
+      "en": "Skull Earring"
+    },
+    "MaxHealthIncrease": {
+      "zh-CN": "生命上限：+…",
+      "en": "Max Life: +…"
+    },
+    "MaxHealthKeepsakeTrait": {
+      "zh-CN": "旧尖刺项圈",
+      "en": "Old Spiked Collar"
+    },
+    "MetaPointCapRefund": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "MetaPointCapShrineUpgrade": {
+      "zh-CN": "惯例审查",
+      "en": "Routine Inspection"
+    },
+    "MetaPointCapShrineUpgrade_NoPoints": {
+      "zh-CN": "∞",
+      "en": "∞"
+    },
+    "MetaPointCapShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaPointHealTrait": {
+      "zh-CN": "废弃披肩",
+      "en": "Abandoned Shawl"
+    },
+    "MetaUpgradeLastStandTrait": {
+      "zh-CN": "死里逃生",
+      "en": "Death Defiance"
+    },
+    "MetaUpgradeMenu": {
+      "zh-CN": "夜之圣镜",
+      "en": "Mirror of Night"
+    },
+    "MetaUpgradeMenu_Flavor": {
+      "zh-CN": "“万物均孕育在无边的黑暗之中”",
+      "en": "“Within the Infinite Dark, Everything”"
+    },
+    "MetaUpgradeMenu_InvalidCost": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgradeMenu_Maxed": {
+      "zh-CN": "最大",
+      "en": "max"
+    },
+    "MetaUpgradeMenu_Subtitle": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgradeMenu_Subtitle_Cap": {
+      "zh-CN": "… …",
+      "en": "… …"
+    },
+    "MetaUpgradeMenu_Subtitle_Key": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgradeRefundHint": {
+      "zh-CN": "重置天赋",
+      "en": "Reset Talents"
+    },
+    "MetaUpgradeStrikeThroughShrineUpgrade": {
+      "zh-CN": "惯例审查",
+      "en": "Routine Inspection"
+    },
+    "MetaUpgradeStrikeThroughShrineUpgrade_NoPoints": {
+      "zh-CN": "-0",
+      "en": "-0"
+    },
+    "MetaUpgradeStrikeThroughShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgradeSwapHint": {
+      "zh-CN": "切换天赋",
+      "en": "Swap Talent"
+    },
+    "MetaUpgradeUnlockHint": {
+      "zh-CN": "解锁天赋",
+      "en": "Unlock Talents"
+    },
+    "MetaUpgrade_Available_SuperKeys": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgrade_Locked_Keys": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgrade_Locked_SuperKeys": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MetaUpgrade_New": {
+      "zh-CN": "新增！",
+      "en": "New!"
+    },
+    "MetaUpgrade_Sealed": {
+      "zh-CN": "失效",
+      "en": "Unavailable"
+    },
+    "MinibossCountShrineUpgrade": {
+      "zh-CN": "中层管理",
+      "en": "Middle Management"
+    },
+    "MinibossCountShrineUpgrade_ShortTotal": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "MinibossCountShrineUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "MoneyMetaUpgrade": {
+      "zh-CN": "财大气粗",
+      "en": "Deep Pockets"
+    },
+    "MoneyMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "MoneyMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Multiply": {
+      "zh-CN": "*",
+      "en": "*"
+    },
+    "Music": {
+      "zh-CN": "宫廷音乐",
+      "en": "COURT MUSIC"
+    },
+    "MyrmidonReunionQuestComplete": {
+      "zh-CN": "帮助阿喀琉斯和普特洛克勒斯重逢。",
+      "en": "Find a Way to Reunite Achilles and Patroclus"
+    },
+    "NPC_Achilles_01": {
+      "zh-CN": "阿喀琉斯",
+      "en": "Achilles"
+    },
+    "NPC_Bouldy_01": {
+      "zh-CN": "巨石",
+      "en": "Bouldy"
+    },
+    "NPC_Cerberus_01": {
+      "zh-CN": "刻耳柏洛斯",
+      "en": "Cerberus"
+    },
+    "NPC_Charon_01": {
+      "zh-CN": "卡戎",
+      "en": "Charon"
+    },
+    "NPC_Dusa_01": {
+      "zh-CN": "杜莎",
+      "en": "Dusa"
+    },
+    "NPC_Eurydice_01": {
+      "zh-CN": "欧律狄克",
+      "en": "Eurydice"
+    },
+    "NPC_FurySister_01": {
+      "zh-CN": "墨纪拉",
+      "en": "Megaera"
+    },
+    "NPC_Hades_01": {
+      "zh-CN": "哈迪斯",
+      "en": "Hades"
+    },
+    "NPC_Hypnos_01": {
+      "zh-CN": "修普诺斯",
+      "en": "Hypnos"
+    },
+    "NPC_Nyx_01": {
+      "zh-CN": "倪克斯",
+      "en": "Nyx"
+    },
+    "NPC_Orpheus_01": {
+      "zh-CN": "俄耳甫斯",
+      "en": "Orpheus"
+    },
+    "NPC_Patroclus_01": {
+      "zh-CN": "普特洛克勒斯",
+      "en": "Patroclus"
+    },
+    "NPC_Persephone_Home_01": {
+      "zh-CN": "珀尔塞福涅",
+      "en": "Persephone"
+    },
+    "NPC_Sisyphus_01": {
+      "zh-CN": "西西弗斯",
+      "en": "Sisyphus"
+    },
+    "NPC_Skelly_01": {
+      "zh-CN": "骨头",
+      "en": "Skelly"
+    },
+    "NPC_Thanatos_01": {
+      "zh-CN": "塔纳托斯",
+      "en": "Thanatos"
+    },
+    "NoClearTime": {
+      "zh-CN": "不适用",
+      "en": "NA"
+    },
+    "NoClears": {
+      "zh-CN": "不适用",
+      "en": "NA"
+    },
+    "NoHeatClear": {
+      "zh-CN": "不适用",
+      "en": "NA"
+    },
+    "NoInvulnerabilityShrineUpgrade": {
+      "zh-CN": "个人责任",
+      "en": "Personal Liability"
+    },
+    "NoInvulnerabilityShrineUpgrade_ShortTotal": {
+      "zh-CN": "100%",
+      "en": "100%"
+    },
+    "NoWeaponKills": {
+      "zh-CN": "不适用",
+      "en": "NA"
+    },
+    "NothingEquipped": {
+      "zh-CN": "无",
+      "en": "Nothing"
+    },
+    "NyxQuestItem": {
+      "zh-CN": "修复远古印记",
+      "en": "Eldest Sigil Restoration"
+    },
+    "On": {
+      "zh-CN": "开",
+      "en": "On"
+    },
+    "OrpheusAboutSingersReunionQuest01": {
+      "zh-CN": "帮助俄耳甫斯和欧律狄克重逢。",
+      "en": "Find a Way to Reunite Orpheus and Eurydice"
+    },
+    "OrpheusFirstMeeting": {
+      "zh-CN": "找圣殿承包商释放俄耳甫斯",
+      "en": "Work with the House Contractor to Release Orpheus"
+    },
+    "OrpheusUnlockItem": {
+      "zh-CN": "宫廷乐师的判决书",
+      "en": "Court Musician's Sentence"
+    },
+    "OutOfAmmo": {
+      "zh-CN": "耗尽！",
+      "en": "Out of !"
+    },
+    "PerfectClearDamageBonus": {
+      "zh-CN": "清场！…",
+      "en": "Clear! …"
+    },
+    "PerfectClearDamageBonusTrait": {
+      "zh-CN": "蝴蝶标本",
+      "en": "Pierced Butterfly"
+    },
+    "PerfectDashMetaUpgrade": {
+      "zh-CN": "无情抽身",
+      "en": "Ruthless Reflex"
+    },
+    "PerfectDashMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "PoseidonUpgrade": {
+      "zh-CN": "波塞冬",
+      "en": "Poseidon"
+    },
+    "Rare": {
+      "zh-CN": "稀有",
+      "en": "Rare"
+    },
+    "RareBoonDropMetaUpgrade": {
+      "zh-CN": "奥林匹斯的关照",
+      "en": "Olympian Favor"
+    },
+    "RareBoonDropMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Rarity": {
+      "zh-CN": "稀有度",
+      "en": "Rarity"
+    },
+    "RatThug": {
+      "zh-CN": "巨型鼠兽",
+      "en": "Gigantic Vermin"
+    },
+    "ReducedLootChoicesShrineUpgrade": {
+      "zh-CN": "审批流程",
+      "en": "Approval Process"
+    },
+    "ReducedLootChoicesShrineUpgrade_ShortTotal": {
+      "zh-CN": "-…",
+      "en": "-…"
+    },
+    "ReincarnationTrait": {
+      "zh-CN": "幸运牙齿",
+      "en": "Lucky Tooth"
+    },
+    "ReloadAmmoMetaUpgrade": {
+      "zh-CN": "冥河之魂",
+      "en": "Stygian Soul"
+    },
+    "ReloadAmmoMetaUpgrade_ShortTotal": {
+      "zh-CN": "… 秒",
+      "en": "… Sec."
+    },
+    "ReloadAmmoMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "… 秒",
+      "en": "… Sec."
+    },
+    "RequiredShrineThreshold": {
+      "zh-CN": "1. 自行增减条件\n 2. 使热度表打到 …\n 3. 使用…杀出重围",
+      "en": "1. Choose Any Conditions \n\n 2. Fill Heat Gauge to … \n\n 3. Get Out Using the …"
+    },
+    "RequiredShrineThreshold_AtSoftLimit": {
+      "zh-CN": "1. 有胆就选中条件 \n 2. 使用 …杀出重围 \n 注：该武器已无悬赏！",
+      "en": "1. Choose Any Conditions, If You Dare \n 2. Get Out Using the … \n Note: No Bounties Remain For This Weapon!"
+    },
+    "RequiredShrineThreshold_AtSoftLimit_ZeroLimitUncleared": {
+      "zh-CN": "1. 0 仍有悬赏 \n 2. 此外再无悬赏 \n 3. 自行增减条件",
+      "en": "1. Bounties Still Available at 0 \n 2. Expect No Bounties Beyond This \n 3. Choose Conditions at Your Discretion"
+    },
+    "RequiredShrineThreshold_Zero": {
+      "zh-CN": "1. 有胆就选中条件 \n 2. 使用 …杀出重围",
+      "en": "1. Choose Any Conditions, If You Dare \n 2. Get Out Using the …"
+    },
+    "RerollAmount": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "RerollMetaUpgrade": {
+      "zh-CN": "逆天改命",
+      "en": "Fated Authority"
+    },
+    "RerollMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "RerollMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "RerollPanelMetaUpgrade": {
+      "zh-CN": "铜唇铁舌",
+      "en": "Fated Persuasion"
+    },
+    "RerollPanelMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "RerollPanelMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Room": {
+      "zh-CN": "房间",
+      "en": "Chamber(s)"
+    },
+    "RoomRewardMaxHealthDrop": {
+      "zh-CN": "半人马之心",
+      "en": "Centaur Heart"
+    },
+    "RoomRewardMetaPointDrop": {
+      "zh-CN": "黑暗",
+      "en": "Darkness"
+    },
+    "RoomRewardMoneyDrop": {
+      "zh-CN": "卡戎金币",
+      "en": "Charon's Obol"
+    },
+    "RunProgressRewardMetaUpgrade": {
+      "zh-CN": "暗之洞悉",
+      "en": "Dark Foresight"
+    },
+    "RunProgressRewardMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Rush": {
+      "zh-CN": "冲刺",
+      "en": "Dash"
+    },
+    "S": {
+      "zh-CN": "S",
+      "en": "S"
+    },
+    "Secrets": {
+      "zh-CN": "混沌世界",
+      "en": "Chaos"
+    },
+    "ShadeNaked": {
+      "zh-CN": "高级暗灵",
+      "en": "Exalted Shade"
+    },
+    "ShieldAfterHitTrait": {
+      "zh-CN": "折断的矛头",
+      "en": "Broken Spearpoint"
+    },
+    "ShieldBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "ShieldBossTrait": {
+      "zh-CN": "常绿橡子",
+      "en": "Evergreen Acorn"
+    },
+    "ShieldLoadAmmoTrait": {
+      "zh-CN": "贝奥武夫形态",
+      "en": "Aspect of Beowulf"
+    },
+    "ShieldRanged": {
+      "zh-CN": "虚无宝石",
+      "en": "Voidstone"
+    },
+    "ShieldRushBonusProjectileTrait": {
+      "zh-CN": "卡俄斯形态",
+      "en": "Aspect of Chaos"
+    },
+    "ShieldTwoShieldTrait": {
+      "zh-CN": "宙斯形态",
+      "en": "Aspect of Zeus"
+    },
+    "ShieldWeapon": {
+      "zh-CN": "混沌之盾",
+      "en": "Shield of Chaos"
+    },
+    "ShieldWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "ShopDurationTrait": {
+      "zh-CN": "骨头沙漏",
+      "en": "Bone Hourglass"
+    },
+    "ShopPricesShrineUpgrade": {
+      "zh-CN": "上下打点",
+      "en": "Convenience Fee"
+    },
+    "ShopPricesShrineUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Shout": {
+      "zh-CN": "求援",
+      "en": "Call"
+    },
+    "ShrineIntro_HardMode": {
+      "zh-CN": "契约",
+      "en": "The Pact"
+    },
+    "ShrineIntro_ReturningPlayers": {
+      "zh-CN": "契约",
+      "en": "The Pact"
+    },
+    "ShrineMenu": {
+      "zh-CN": "惩罚契约",
+      "en": "PACT of PUNISHMENT"
+    },
+    "ShrineMenu_Blocked": {
+      "zh-CN": "热度过低！",
+      "en": "Heat Too Low!"
+    },
+    "ShrineMenu_Confirm": {
+      "zh-CN": "开始逃脱",
+      "en": "Begin Escape"
+    },
+    "ShrineMenu_Flavor": {
+      "zh-CN": "“在哈迪斯的冥界，地狱契约将永远有效”",
+      "en": "“Infernal Contract Valid for Eternity in the Underworld of Hades”"
+    },
+    "ShrineMenu_Hint": {
+      "zh-CN": "以该武器的目标热度水平逃出冥界即可获得悬赏，并解锁下一个目标。",
+      "en": "Escape the Underworld at this weapon's target Heat Level to earn Bounties, and unlock the next target."
+    },
+    "ShrineMenu_Info": {
+      "zh-CN": "信息",
+      "en": "Info"
+    },
+    "ShrineMenu_InvalidCost": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ShrineMenu_SubHead": {
+      "zh-CN": "条款 条件",
+      "en": "Terms Conditions"
+    },
+    "ShrineMenu_Subtitle_CurrentMetaPoints": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "ShrineNeedsMoreInvestment": {
+      "zh-CN": "至少需要投入 … 才能解锁！",
+      "en": "Needs at least … invested to unlock!"
+    },
+    "ShrineRewardBiomeProgress": {
+      "zh-CN": "悬赏 \n 武器：… 热度：…",
+      "en": "Bounties \n Weapon: … heat: …"
+    },
+    "ShrineRewardBiomeProgress_Inactive": {
+      "zh-CN": "悬赏 \n 武器：… 热度：…",
+      "en": "Bounties \n Weapon: … heat: …"
+    },
+    "SisyphusAssistTrait": {
+      "zh-CN": "伴偶沙迪",
+      "en": "Companion Shady"
+    },
+    "SisyphusLiberationQuestComplete": {
+      "zh-CN": "设法赦免西西弗斯",
+      "en": "Find a Way to Pardon Sisyphus"
+    },
+    "SkellyAssistTrait": {
+      "zh-CN": "伴偶瑞博",
+      "en": "Companion Rib"
+    },
+    "SkellyTrueDeathQuestComplete": {
+      "zh-CN": "用最高级别的扎格列欧斯形态的斯第格思杀死骨头。",
+      "en": "Slay Skelly using Stygius with the MAX Lv. Zagreus Aspect"
+    },
+    "SpearBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "SpearSpinTravel": {
+      "zh-CN": "关羽形态",
+      "en": "Aspect of Guan Yu"
+    },
+    "SpearTeleportTrait": {
+      "zh-CN": "阿喀琉斯形态",
+      "en": "Aspect of Achilles"
+    },
+    "SpearWeapon": {
+      "zh-CN": "永恒之矛",
+      "en": "Eternal Spear"
+    },
+    "SpearWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "SpearWeaveTrait": {
+      "zh-CN": "哈迪斯形态",
+      "en": "Aspect of Hades"
+    },
+    "SpendGenericResource": {
+      "zh-CN": "-…",
+      "en": "-…"
+    },
+    "SplitShotUnit": {
+      "zh-CN": "禁忌使者",
+      "en": "Splitter"
+    },
+    "StackUpgrade": {
+      "zh-CN": "力量石榴",
+      "en": "Pom of Power"
+    },
+    "StaminaMetaUpgrade": {
+      "zh-CN": "高速反应",
+      "en": "Greater Reflex"
+    },
+    "StaminaMetaUpgrade_ShortTotal": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "StaminaMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "+…",
+      "en": "+…"
+    },
+    "StoredAmmoSlow": {
+      "zh-CN": "深渊之血",
+      "en": "Abyssal Blood"
+    },
+    "StoredAmmoSlowMetaUpgrade": {
+      "zh-CN": "深渊之血",
+      "en": "Abyssal Blood"
+    },
+    "StoredAmmoSlowMetaUpgrade_ShortTotal": {
+      "zh-CN": "…%",
+      "en": "…%"
+    },
+    "StoredAmmoVulnerabilityMetaUpgrade": {
+      "zh-CN": "沸腾之血",
+      "en": "Boiling Blood"
+    },
+    "StoredAmmoVulnerabilityMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "Styx": {
+      "zh-CN": "冥河",
+      "en": "Styx"
+    },
+    "Subtract": {
+      "zh-CN": "-",
+      "en": "-"
+    },
+    "SuperGenerationTrait": {
+      "zh-CN": "大发雷霆",
+      "en": "Clouded Judgment"
+    },
+    "SuperGiftUseText": {
+      "zh-CN": "赠送 ( -… )",
+      "en": "Gift ( -… )"
+    },
+    "Swarmer": {
+      "zh-CN": "骷髅头",
+      "en": "Numbskull"
+    },
+    "SwordBaseUpgradeTrait": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "SwordConsecrationTrait": {
+      "zh-CN": "亚瑟形态",
+      "en": "Aspect of Arthur"
+    },
+    "SwordCriticalParryTrait": {
+      "zh-CN": "涅墨西斯形态",
+      "en": "Aspect of Nemesis"
+    },
+    "SwordWeapon": {
+      "zh-CN": "冥界之刃",
+      "en": "Stygian Blade"
+    },
+    "SwordWeapon_Unequipped": {
+      "zh-CN": "扎格列欧斯形态",
+      "en": "Aspect of Zagreus"
+    },
+    "Tartarus": {
+      "zh-CN": "塔耳塔罗斯",
+      "en": "Tartarus"
+    },
+    "TemporaryMoveSpeedTrait": {
+      "zh-CN": "燃烧灵液",
+      "en": "Ignited Ichor"
+    },
+    "ThanatosAssistTrait": {
+      "zh-CN": "伴偶莫特",
+      "en": "Companion Mort"
+    },
+    "TrainingMelee": {
+      "zh-CN": "骨头",
+      "en": "Skelly"
+    },
+    "TrapDamageShrineUpgrade": {
+      "zh-CN": "强化安保",
+      "en": "Heightened Security"
+    },
+    "Traps": {
+      "zh-CN": "陷阱",
+      "en": "Traps"
+    },
+    "TrialUpgrade": {
+      "zh-CN": "卡俄斯",
+      "en": "Chaos"
+    },
+    "UI_TraitLevel": {
+      "zh-CN": "级别…",
+      "en": "Lv.…"
+    },
+    "UI_TraitLevel_Max": {
+      "zh-CN": "顶级",
+      "en": "MAX"
+    },
+    "UI_TraitLevel_Upgrade": {
+      "zh-CN": "级别…级别…",
+      "en": "lv.… lv.…"
+    },
+    "UnknownLockedAspect": {
+      "zh-CN": "？？？形态",
+      "en": "Aspect of ? ? ?"
+    },
+    "UnknownShrineUpgrade": {
+      "zh-CN": "？? ?",
+      "en": "? ? ?"
+    },
+    "UnknownUpgrade": {
+      "zh-CN": "？？？形态",
+      "en": "Aspect of ? ? ?"
+    },
+    "UnstoredAmmoVulnerabilityMetaUpgrade": {
+      "zh-CN": "第一滴血",
+      "en": "First Blood"
+    },
+    "UnstoredAmmoVulnerabilityMetaUpgrade_ShortTotal": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "UnusedWeaponBonusAddGems": {
+      "zh-CN": "至暗渴望",
+      "en": "Darker Thirst"
+    },
+    "UnusedWeaponBonusTrait": {
+      "zh-CN": "黑暗渴望",
+      "en": "Dark Thirst"
+    },
+    "UnusedWeaponBonusTraitAddGems": {
+      "zh-CN": "至暗渴望",
+      "en": "Darker Thirst"
+    },
+    "Use": {
+      "zh-CN": "互动",
+      "en": "Interact"
+    },
+    "VanillaTrait": {
+      "zh-CN": "破碎枷锁",
+      "en": "Shattered Shackle"
+    },
+    "VulnerabilityEffectBonusMetaUpgrade": {
+      "zh-CN": "尚方宝剑",
+      "en": "Privileged Status"
+    },
+    "VulnerabilityEffectBonusMetaUpgrade_ShortTotal": {
+      "zh-CN": "… 对",
+      "en": "… vs."
+    },
+    "VulnerabilityEffectBonusMetaUpgrade_ShortTotalNoIcon": {
+      "zh-CN": "…",
+      "en": "…"
+    },
+    "WeaponSelectPanel_Left": {
+      "zh-CN": "杀敌数： \n\n 成功逃脱： \n\n 最快时间： \n\n 最高热度：",
+      "en": "Foes Slain: \n\n Successful Escapes: \n\n Fastest Time: \n\n Highest Heat:"
+    },
+    "WeaponSelectPanel_Right": {
+      "zh-CN": "… \n\n … \n\n … \n\n …",
+      "en": "… \n\n … \n\n … \n\n …"
+    },
+    "WeaponSelectPanel_Right_Alt": {
+      "zh-CN": "… \n\n … \n\n … \n\n …",
+      "en": "… \n\n … \n\n … \n\n …"
+    },
+    "WeaponSelectPanel_Title": {
+      "zh-CN": "生命状态",
+      "en": "Vital Stats"
+    },
+    "WeaponUnlocks": {
+      "zh-CN": "冥府兵器",
+      "en": "Infernal Arms"
+    },
+    "WeaponUpgrade": {
+      "zh-CN": "狄德勒斯之锤",
+      "en": "Daedalus Hammer"
+    },
+    "WeaponUpgradeScreen_Header": {
+      "zh-CN": "形态",
+      "en": "Aspects of"
+    },
+    "X": {
+      "zh-CN": "X",
+      "en": "X"
+    },
+    "Y": {
+      "zh-CN": "Y",
+      "en": "Y"
+    },
+    "Z": {
+      "zh-CN": "Z",
+      "en": "Z"
+    },
+    "ZeusUpgrade": {
+      "zh-CN": "宙斯",
+      "en": "Zeus"
+    },
+    "_PlayerUnit": {
+      "zh-CN": "你自己",
+      "en": "Yourself"
+    }
+  },
+  "sourceEvidence": {
+    "method": "Static native data-table extraction and same-ID official bilingual text.",
+    "files": {
+      "Scripts/Main.lua": "6aab9af9cbaf499aef3adb7e4ac622efc530db652dcf8e80d44e85cc74a7453e",
+      "Scripts/RunManager.lua": "4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e",
+      "Scripts/RoomManager.lua": "ca379fe0708af778007aef929822e4cfe8cf3a47dd2a3d37bf57e582ddb1b924",
+      "Scripts/MetaUpgradeData.lua": "d7a9a8dee7e92b3b2567f709057ecd35bca973836d36595be928c88b7bee2f86",
+      "Scripts/MetaUpgrades.lua": "98e5ec449cf1ab4254aa8e687357152cb3453dd78a4b7a4995b07b18621bfdef",
+      "Scripts/WeaponUpgradeData.lua": "f58d2d6153c5b4b242105b47b3f57e7201fe11526dbce7aaa574437e94a673d7",
+      "Scripts/WeaponUpgradeScripts.lua": "5ab734faec6116f99f91bae9b6a7ebe0280ac82f4970dd2bb25e227c26d5a1b7",
+      "Scripts/GiftData.lua": "e5da8af1a84ebce5edf7065e371d6aa3dc8583081541a7c0cd3e8a79620c69fd",
+      "Scripts/GiftScripts.lua": "1c9e3aa8c018c6d64e4b888dadfccc296b3c48293889440b6a34863d98e3bbf7",
+      "Game/Text/zh-CN/HelpText.zh-CN.sjson": "0dc218bc3b8fc2e564dfbcc915d54fbfbf4059bc2767a72e909c462a9aec5417",
+      "Game/Text/zh-CN/MiscText.zh-CN.sjson": "b022346ffe7c79377f795ed207da44110bfcb5a2d03f05ab5b1e7462df724101",
+      "Game/Text/en/HelpText.en.sjson": "3e9236427492819d19ec6a3240933c0a713f705568eeb4b080770d87a5a284d5",
+      "Game/Text/en/MiscText.en.sjson": "4f506d9205630977541afe0d44dc060a2b340b2402b21f85dd66d33029157fd7"
+    }
+  }
+}
