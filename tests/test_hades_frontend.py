@@ -189,13 +189,8 @@ func accessibilityText(in view: NSView) -> [String] {
         ["accessibilityLabel","accessibilityValue"].compactMap { accessibilityString(element,$0) }
     }
 }
-func accessibilityButton(named name: String, in view: NSView) -> (any NSAccessibilityProtocol)? {
-    for element in accessibilityElements(in:view) {
-        guard let button=element as? NSAccessibilityProtocol, button.accessibilityRole() == .button,
-              button.accessibilityLabel()==name || button.accessibilityTitle()==name else { continue }
-        return button
-    }
-    return nil
+func accessibilityButton(named name: String, in view: NSView) -> NativeAccessibilityControl? {
+    namedNativeControl(view,role:"AXButton",name:name)
 }
 func nativeHierarchy(in view: NSView) -> String {
     accessibilityElements(in:view).map { element in
@@ -219,7 +214,7 @@ func requireNativeControl<T>(_ name: String, in view: NSView, find: (NSView) -> 
 }
 func pressNativeButton(named name: String, in view: NSView) {
     let button=requireNativeControl("native accessibility button '"+name+"'",in:view) { accessibilityButton(named:name,in:$0) }
-    check(button.accessibilityPerformPress(),"native accessibility button '"+name+"' rejected Press\n"+nativeHierarchy(in:view))
+    check(button.enabled && button.press(),"native accessibility button '"+name+"' rejected Press\n"+nativeHierarchy(in:view))
 }
 func textViews(in view: NSView) -> [NSTextView] {
     (view as? NSTextView).map { [$0] } ?? view.subviews.flatMap(textViews)
@@ -235,6 +230,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
 @main struct Main {
     @MainActor static func main() throws {
         _ = NSApplication.shared
+        enableNativeAccessibility()
         let folder=URL(fileURLWithPath:CommandLine.arguments[1])
         let python=URL(fileURLWithPath:CommandLine.arguments[2])
         let stateURL=folder.appendingPathComponent("state.json")
@@ -859,7 +855,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     generated = folder / 'ActiveGame.generated.swift'
     subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades').rglob('*.swift')) + [
-        ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', generated, folder / 'main.swift']
+        ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
+        generated, folder / 'main.swift']
     subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(folder / 'frontend')], check=True, cwd=ROOT)
     proc = subprocess.run([str(folder / 'frontend'), str(folder), sys.executable], capture_output=True, text=True, timeout=35)
     if proc.returncode:
