@@ -55,8 +55,16 @@ function CreateBoonLootButtons(loot)
   if loot.fail then error("native menu failure") end
   return allowed
 end
-CreateStoreButtons = function() return IsMetaUpgradeSelected("RerollPanelMetaUpgrade") end
-CreateSellButtons = function() return IsMetaUpgradeSelected("RerollPanelMetaUpgrade") end
+-- StoreScripts.lua:724 and SellTraitScripts.lua:294 query inside an if.
+-- A tail-call return would erase the native owner frame in Lua 5.2.
+function CreateStoreButtons()
+  if IsMetaUpgradeSelected("RerollPanelMetaUpgrade") then return true end
+  return false
+end
+function CreateSellButtons()
+  if IsMetaUpgradeSelected("RerollPanelMetaUpgrade") then return true end
+  return false
+end
 function RefreshUseButton(id, door) updates.door = door.CanBeRerolled end
 function AssignRoomToExitDoor(door, room)
   door.Room = room
@@ -96,9 +104,19 @@ ammo.RangedWeapon = 0
 UpdateAmmoUI({ Ammo = 0 })
 assert(ammoCalls == calls and updates.castAmmo == 0)
 
-assert(not CreateBoonLootButtons({}) and not IsMetaUpgradeSelected("RerollPanelMetaUpgrade"))
+assert(not CreateBoonLootButtons({}), "default boon permission ignored native Mirror selection")
+assert(not CreateStoreButtons(), "default store permission ignored native Mirror selection")
+assert(not CreateSellButtons(), "default purge permission ignored native Mirror selection")
+assert(not IsMetaUpgradeSelected("RerollPanelMetaUpgrade"))
+selected.RerollPanelMetaUpgrade = true
+assert(CreateBoonLootButtons({}), "native boon permission was lost")
+assert(CreateStoreButtons(), "native store permission was lost")
+assert(CreateSellButtons(), "native purge permission was lost")
+selected.RerollPanelMetaUpgrade = false
 runtime.set_feature("forceRerolls", true)
-assert(CreateBoonLootButtons({}) and CreateStoreButtons() and CreateSellButtons())
+assert(CreateBoonLootButtons({}), "forced boon permission was not visible to its native owner")
+assert(CreateStoreButtons(), "forced store permission was not visible to its native owner")
+assert(CreateSellButtons(), "forced purge permission was not visible to its native owner")
 assert(not CreateBoonLootButtons({ BlockReroll = true }))
 assert(not IsMetaUpgradeSelected("RerollPanelMetaUpgrade"), "permission changed Mirror selection")
 local ok = pcall(CreateBoonLootButtons, { fail = true })
@@ -114,6 +132,7 @@ Save()
 assert(door.CanBeRerolled and not selected.RerollMetaUpgrade)
 runtime.set_feature("forceRerolls", false)
 assert(not door.CanBeRerolled and not CreateBoonLootButtons({}), "disable retained forced permissions")
+assert(not CreateStoreButtons() and not CreateSellButtons(), "disable retained forced panel permissions")
 runtime.set_feature("forceRerolls", true)
 AssignRoomToExitDoor(door, room)
 local replacement = { ChosenRewardType = "Boon" }
@@ -123,10 +142,15 @@ assert(door.CanBeRerolled)
 runtime.disable_all()
 assert(not door.CanBeRerolled and door.Room == replacement, "door cleanup restored an old target")
 selected.RerollMetaUpgrade = true
+selected.RerollPanelMetaUpgrade = true
 AssignRoomToExitDoor(door, room)
 runtime.set_feature("forceRerolls", true)
 runtime.disable_all()
 assert(door.CanBeRerolled, "disable removed native Mirror permission")
+assert(CreateBoonLootButtons({}) and CreateStoreButtons() and CreateSellButtons(),
+  "disable removed native Mirror panel permissions")
+assert(IsMetaUpgradeSelected("RerollPanelMetaUpgrade"), "disable changed native Mirror selection")
+selected.RerollPanelMetaUpgrade = false
 
 TraitData.NativeCurse = { Name = "NativeCurse", RemainingUses = 3, UsesAsEncounters = true }
 LootData.TrialUpgrade.PermanentTraits = { "ChaosTrait" }
