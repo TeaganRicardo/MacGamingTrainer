@@ -129,7 +129,7 @@ assert 'bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"' in build2
 assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true'" in build2
 assert "needs.scope.outputs.needs_full_build == 'false'" in build2
 assert "steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false'" in build2
-assert "needs.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true'" in build2
+assert "steps.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true'" in build2
 assert './build.sh --typecheck --all' in build2
 assert './build.sh --all' in build2
 
