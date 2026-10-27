@@ -54,7 +54,7 @@ On 2026-10-17 the user reported completing perceived-performance testing on the 
 
 ## Execution authorization
 
-**Testing pause (2026-10-26):** planning #124 records the user's subsequent pause on further testing and game/debugger operations. It supersedes the earlier local-testing permission below until explicitly resumed; source changes and tests can be prepared on GitHub, but unexecuted checks are pending evidence. Do not trigger PR CI or claim a validated artifact solely from source review.
+**Testing pause (2026-10-26):** planning #124 records the user's pause on local tests and game/debugger operations, which remains binding until explicitly resumed. On 2026-10-27 normal required GitHub PR CI was separately authorized for a final batched change; it does not authorize game/RDC testing or ad-hoc repeated CI. Source inspection and unexecuted tests remain pending evidence; a validated artifact requires actual exact-head checks.
 
 
 The user authorizes independently reviewed, automated-green merges before consolidated final manual acceptance of the selected work. Coordinate actual overlapping owners and review the final head; missing manual-only evidence does not itself reopen coding tasks or block unrelated work.
