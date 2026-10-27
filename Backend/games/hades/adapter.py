@@ -71,7 +71,7 @@ class HadesAdapter(GameAdapter):
             return self._observe(state)
         if command == 'diagnostics':
             state = self.dispatch('status', {}, request_id)
-            return {'diagnostics': build_diagnostics(self, state)}
+            return {**state, 'diagnostics': build_diagnostics(self, state)}
         if command == 'catalog':
             try:
                 language = params.get('language', 'zh-CN')

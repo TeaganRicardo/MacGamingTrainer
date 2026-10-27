@@ -84,7 +84,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     assert not offline['connected'] and preferences.load() == desired
     assert offline['features']['gameSpeed']['desired'] == 2
     assert offline['features']['gameSpeed']['actual'] is None and runtime.calls == []
-    report = adapter.dispatch('diagnostics', {}, 'diagnostics')['diagnostics']
+    diagnostic_reply = adapter.dispatch('diagnostics', {}, 'diagnostics')
+    assert diagnostic_reply['connected'] is False and diagnostic_reply['heroReady'] is False
+    report = diagnostic_reply['diagnostics']
     assert report['gameID'] == 'hades' and report['desired'] == desired
     assert report['supportedBuild'] == json.loads((context.module_dir / 'module.json').read_text())['supportedBuild']
     assert not next(check for check in report['checks'] if check['name'] == 'hades.diagnostics.connection')['ok']
