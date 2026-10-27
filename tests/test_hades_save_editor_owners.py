@@ -48,6 +48,28 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-owners-') as temporary
     assert chinese[0]['content'][0]['text'].startswith('不要绝望，孩子')
     assert any(row['id'] == nyx_id for row in workspace.query(domain='narrative', language='en', query='不要绝望')['rows'])
     assert not workspace.query(domain='narrative', query='RequiredMaxCompletedRuns')['rows']
+    # Identity discovery precedes localization, including structural aliases
+    # omitted by the translated file and native chapter TitleText IDs.
+    for name, english, chinese in (
+            ('FirstClear', 'Is There No Escape?', '无处可逃了吗？'),
+            ('MeetOlympians', 'Distant Relatives', '遥远的亲人们'),
+            ('SkellyTrueDeath_B', 'Eternal Rest', '永恒的安息')):
+        identity = entry(workspace, ('GameState', 'QuestStatus', name))
+        for language, title in (('en', english), ('zh-CN', chinese)):
+            row = next(row for row in workspace.query(domain='narrative', language=language, limit=200)['rows']
+                       if row['id'] == identity)
+            assert row['name'] == title and row['owner'] == title and row['ownerId'] == identity
+            for query in (english, chinese):
+                found = workspace.query(domain='narrative', language=language, query=query)['rows']
+                assert {row['ownerId'] for row in found} == {identity}
+    chair = entry(workspace, ('GameState', 'Cosmetics', 'Cosmetic_ThanatosChair'))
+    assert next(row for row in narrative if row['id'] == chair)['name'] == 'Chair, Deathlike'
+    assert next(row for row in workspace.query(domain='narrative', language='zh-CN', query='Chair, Deathlike')['rows']
+                if row['id'] == chair)['name'] == '死亡风格座椅'
+    chapter_id = entry(workspace, ('CodexStatus', 'ChthonicGods'))
+    assert next(row for row in narrative if row['id'] == chapter_id)['name'] == 'Chthonic Gods'
+    assert next(row for row in workspace.query(domain='narrative', language='zh-CN', limit=200)['rows']
+                if row['id'] == chapter_id)['name'] == '冥府诸神'
     equipment = workspace.query(domain='equipment', limit=200)['rows']
     assert {entry(workspace, ('GameState', key)) for key in ('LastAwardTrait', 'LastAssistTrait')} <= {row['id'] for row in equipment}
     statistics = workspace.query(domain='statistics', limit=200)['rows']
@@ -70,12 +92,22 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-owners-') as temporary
     # Table rows and their fields share one physical entity; a matching Nyx
     # never pulls Achilles into the same owner or search result.
     native = root_state()
+    native['GameState']['QuestStatus']['DefaultQuestItem'] = 'Unlocked'
+    native['GameState']['Cosmetics']['DefaultCosmeticItem'] = True
+    native['GameState']['Cosmetics']['GiftRack'] = True
+    native['GameState']['Cosmetics']['Cosmetic_UISkinBlood'] = True
     native['GameState']['Gift'] = Entries([
         ('NPC_Nyx_01', {'Value': 1, 'NewTraits': ['BackstabAlphaStrikeTrait']}),
         ('NPC_Nyx_01', {'Value': 4, 'NewTraits': ['BackstabAlphaStrikeTrait']}),
         ('NPC_Achilles_01', {'Value': 2, 'NewTraits': ['DirectionalArmorTrait']})])
     (saves / 'Profile1.sav').write_bytes(build_save(state=native))
     duplicate = HadesSaveWorkspace.open(service, source=source)
+    for key in ('DefaultQuestItem', 'DefaultCosmeticItem', 'GiftRack'):
+        assert not duplicate.query(domain='narrative', query=key)['rows']
+        assert duplicate.query(domain='advanced', query=key)['rows']
+    debug_skin = entry(duplicate, ('GameState', 'Cosmetics', 'Cosmetic_UISkinBlood'))
+    assert debug_skin not in {row['id'] for row in duplicate.query(domain='narrative', limit=200)['rows']}
+    assert duplicate.detail(debug_skin)['row']['editable']
     rows = duplicate.query(domain='relationships', query='倪克斯', language='en', limit=200)['rows']
     gift = physical(duplicate.document, ('GameState', 'Gift'))
     expected_owners = {values.identifier(gift + (index * 2 + 1,), duplicate.baseline_generation) for index in (0, 1)}

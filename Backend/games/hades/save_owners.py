@@ -65,10 +65,14 @@ def ordinary_purpose(keys, catalog):
     """Return a native field/identity or bilingual indexed purpose, else None."""
     if not keys or any(type(key) is bool or not isinstance(key, (str, int, float)) for key in keys): return None
     identities = catalog['nativeIds']
+    if any(key in identities['diagnostics'] for key in keys if isinstance(key, str)): return None
 
     def member(path, category):
         known = catalog[category] if category in ('scenes', 'weapons') else identities[category]
-        return path[0] if len(path) == 1 and isinstance(path[0], str) and path[0] in known else None
+        if len(path) != 1 or not isinstance(path[0], str) or path[0] not in known: return None
+        if category in ('meta', 'characters', 'traits', 'quests', 'cosmetics') and path[0] not in catalog['names']:
+            return None
+        return path[0]
 
     def trait(path):
         if not path: return 'Traits'
@@ -122,7 +126,7 @@ def ordinary_purpose(keys, catalog):
         if len(path) == 1: return ('挑战记录 #' + str(int(path[0])), 'Run #' + str(int(path[0])))
         return run(path[1:])
     if root == 'Gift':
-        if path[0] not in identities['characters']: return None
+        if member(path[:1], 'characters') is None: return None
         if len(path) == 1: return path[0]
         if path[1] not in ('Value', 'NewTraits'): return None
         if len(path) == 2: return path[1]

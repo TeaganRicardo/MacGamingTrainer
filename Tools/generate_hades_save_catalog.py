@@ -39,6 +39,9 @@ def native_tables(source):
         elif (stack and index + 2 < len(tokens) and tokens[index + 1] == '='
               and tokens[index + 2].startswith(('"', "'"))):
             stack[-1]['fields'][token] = lua_string(tokens[index + 2])
+        elif (stack and token == 'DebugOnly' and index + 2 < len(tokens)
+              and tokens[index + 1:index + 3] == ['=', 'true']):
+            stack[-1]['debugOnly'] = True
     if stack: raise ValueError('Unclosed native literal table')
     return roots
 
@@ -86,19 +89,29 @@ def extract_scenes(paths, localized):
 
 
 def native_identities(content, files):
+    diagnostics = set()
+
+    def diagnostic_nodes(nodes):
+        for node in nodes:
+            if node.get('debugOnly') and node['key']: diagnostics.add(node['key'])
+            diagnostic_nodes(node['children'])
+
     def tables(name):
         path = content / 'Scripts' / name
         if path not in files: files.append(path)
-        return native_tables(path.read_text(encoding='utf-8-sig'))
+        roots = native_tables(path.read_text(encoding='utf-8-sig'))
+        diagnostic_nodes(roots)
+        return roots
 
     def children(name, owner):
         return [child['key'] for root in tables(name) if root['key'] == owner
                 for child in root['children'] if child['key']]
 
-    codex = {}
+    codex, text_ids = {}, {}
     for root in tables('CodexData.lua'):
         if root['key'] != 'Codex': continue
         for chapter in root['children']:
+            if chapter['fields'].get('TitleText'): text_ids[chapter['key']] = chapter['fields']['TitleText']
             codex[chapter['key']] = [entry['key'] for entries in chapter['children'] if entries['key'] == 'Entries'
                                      for entry in entries['children'] if entry['key']]
     flags = ['HardMode']
@@ -108,7 +121,7 @@ def native_identities(content, files):
     rooms = []
     for path in sorted((content / 'Scripts').glob('RoomData*.lua')):
         for root in tables(path.name): rooms.extend(child['key'] for child in root['children'] if child['key'])
-    return {**{name: sorted(set(items)) for name, items in {
+    identities = {name: sorted(set(items)) for name, items in {
         'meta': children('MetaUpgradeData.lua', 'MetaUpgradeData'),
         'characters': children('GiftData.lua', 'GiftData') + children('NPCData.lua', 'NPCs'),
         'traits': children('TraitData.lua', 'TraitData'),
@@ -118,7 +131,8 @@ def native_identities(content, files):
         'rooms': rooms, 'flags': flags,
         'chapters': list(codex),
         'resources': list(RESOURCE_TEXT_IDS),
-    }.items()}, 'codex': codex}
+    }.items()}
+    return {**identities, 'codex': codex, 'diagnostics': sorted(diagnostics)}, text_ids
 
 
 def block(source, start):
@@ -176,8 +190,11 @@ def generate(content):
         weapons[match[1]] = items
     if len(weapons) != 6 or any(len(rows) != 4 for rows in weapons.values()):
         raise ValueError('Supported native weapon/aspect inventory changed')
+    identities, text_ids = native_identities(content, files)
     identifiers = set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', '\n'.join(
         path.read_text(encoding='utf-8-sig') for path in files)))
+    identifiers.update(identifier for group in identities.values() if isinstance(group, list) for identifier in group)
+    identifiers.update(identifier for entries in identities['codex'].values() for identifier in entries)
     names = {}
     aliases = {}
     for name in ('HelpText', 'MiscText'):
@@ -187,19 +204,21 @@ def generate(content):
         records = text_records(path)
         for index, match in enumerate(starts):
             body = source[match.end():starts[index + 1].start() if index + 1 < len(starts) else len(source)]
-            if re.search(r'\bOverwriteLocalization\s*=\s*true', body):
-                aliases[match[1]] = records[match[1]]
+            record = records[match[1]]
+            if (re.search(r'\bOverwriteLocalization\s*=\s*true', body)
+                    or 'InheritFrom' in record and 'DisplayName' not in record):
+                aliases[match[1]] = record
     localized = {}
     for language in ('zh-CN', 'en'):
-        # Native language-independent alias definitions refer to translated
-        # Keywords; the Chinese file deliberately omits these aliases.
+        # Native language-independent aliases retain their inheritance or
+        # translated Keywords when a locale omits the structural record.
         records = dict(aliases)
         for name in ('HelpText', 'MiscText'):
             path = content / 'Game/Text' / language / f'{name}.{language}.sjson'
             files.append(path)
             records.update(text_records(path))
         for identifier in sorted(identifiers):
-            label = render_text(records, identifier, 'DisplayName')
+            label = render_text(records, text_ids.get(identifier, identifier), 'DisplayName')
             if label: names.setdefault(identifier, {})[language] = label
         for path in sorted((content / 'Game/Text' / language).glob('_*.' + language + '.sjson')):
             files.append(path)
@@ -207,7 +226,6 @@ def generate(content):
         localized[language] = records
     names = {key: value for key, value in names.items() if len(value) == 2}
     scenes = extract_scenes(scene_paths, localized)
-    identities = native_identities(content, files)
     return {'schemaVersion': 1, 'mirrorRows': mirror, 'weapons': weapons, 'names': names, 'scenes': scenes, 'nativeIds': identities,
             'sourceEvidence': {'method': 'Static native tables, displayed scene lines/choices and same-ID official bilingual text.',
                 'files': {str(path.relative_to(content)): hashlib.sha256(path.read_bytes()).hexdigest()
