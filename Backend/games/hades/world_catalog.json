@@ -1,0 +1,264 @@
+{
+  "schemaVersion": 1,
+  "rewards": {
+    "ZeusUpgrade": {
+      "id": "ZeusUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "宙斯",
+        "en": "Zeus"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "PoseidonUpgrade": {
+      "id": "PoseidonUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "波塞冬",
+        "en": "Poseidon"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "AthenaUpgrade": {
+      "id": "AthenaUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "雅典娜",
+        "en": "Athena"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "AphroditeUpgrade": {
+      "id": "AphroditeUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "阿弗洛狄忒",
+        "en": "Aphrodite"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "AresUpgrade": {
+      "id": "AresUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "阿瑞斯",
+        "en": "Ares"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "ArtemisUpgrade": {
+      "id": "ArtemisUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "阿尔忒弥斯",
+        "en": "Artemis"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "DionysusUpgrade": {
+      "id": "DionysusUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "迪奥尼索司",
+        "en": "Dionysus"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "DemeterUpgrade": {
+      "id": "DemeterUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "得墨忒尔",
+        "en": "Demeter"
+      },
+      "rewardType": "Boon",
+      "doorAllowed": true
+    },
+    "HermesUpgrade": {
+      "id": "HermesUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "赫尔墨斯",
+        "en": "Hermes"
+      },
+      "rewardType": "HermesUpgrade",
+      "doorAllowed": true
+    },
+    "WeaponUpgrade": {
+      "id": "WeaponUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "狄德勒斯之锤",
+        "en": "Daedalus Hammer"
+      },
+      "rewardType": "WeaponUpgrade",
+      "doorAllowed": true
+    },
+    "StackUpgrade": {
+      "id": "StackUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "力量石榴",
+        "en": "Pom of Power"
+      },
+      "rewardType": "StackUpgrade",
+      "doorAllowed": true
+    },
+    "TrialUpgrade": {
+      "id": "TrialUpgrade",
+      "kind": "loot",
+      "names": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rewardType": "TrialUpgrade",
+      "doorAllowed": false
+    },
+    "RoomRewardMetaPointDrop": {
+      "id": "RoomRewardMetaPointDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "黑暗",
+        "en": "Darkness"
+      },
+      "rewardType": "RoomRewardMetaPointDrop",
+      "doorAllowed": true
+    },
+    "GemDrop": {
+      "id": "GemDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "宝石",
+        "en": "Gemstones"
+      },
+      "rewardType": "GemDrop",
+      "doorAllowed": true
+    },
+    "LockKeyDrop": {
+      "id": "LockKeyDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "冥府钥匙",
+        "en": "Chthonic Keys"
+      },
+      "rewardType": "LockKeyDrop",
+      "doorAllowed": true
+    },
+    "GiftDrop": {
+      "id": "GiftDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "蜜露",
+        "en": "Nectar"
+      },
+      "rewardType": "GiftDrop",
+      "doorAllowed": true
+    },
+    "SuperGemDrop": {
+      "id": "SuperGemDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "钻石",
+        "en": "Diamond"
+      },
+      "rewardType": "SuperGemDrop",
+      "doorAllowed": true
+    },
+    "SuperLockKeyDrop": {
+      "id": "SuperLockKeyDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "泰坦之血",
+        "en": "Titan Blood"
+      },
+      "rewardType": "SuperLockKeyDrop",
+      "doorAllowed": true
+    },
+    "SuperGiftDrop": {
+      "id": "SuperGiftDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "仙酒",
+        "en": "Ambrosia"
+      },
+      "rewardType": "SuperGiftDrop",
+      "doorAllowed": true
+    },
+    "RoomRewardMaxHealthDrop": {
+      "id": "RoomRewardMaxHealthDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "半人马之心",
+        "en": "Centaur Heart"
+      },
+      "rewardType": "RoomRewardMaxHealthDrop",
+      "doorAllowed": true
+    },
+    "RoomRewardMoneyDrop": {
+      "id": "RoomRewardMoneyDrop",
+      "kind": "consumable",
+      "names": {
+        "zh-CN": "卡戎金币",
+        "en": "Charon's Obol"
+      },
+      "rewardType": "RoomRewardMoneyDrop",
+      "doorAllowed": true
+    }
+  },
+  "terms": {
+    "trove": {
+      "zh-CN": "地狱宝藏",
+      "en": "Infernal Trove"
+    },
+    "well": {
+      "zh-CN": "卡戎之井",
+      "en": "Well of Charon"
+    },
+    "purge": {
+      "zh-CN": "净化池",
+      "en": "Pool of Purging"
+    },
+    "fishing": {
+      "zh-CN": "钓鱼点",
+      "en": "Fishing Point"
+    },
+    "chaos": {
+      "zh-CN": "混沌之门",
+      "en": "Chaos Gate"
+    }
+  },
+  "sourceEvidence": {
+    "method": "Supported-build native room/door, loot, consumable and fishing owners; same-ID official bilingual HelpText/MiscText. Native entrypoints and limitations are mapped in docs/reference/hades/rooms_resources.md.",
+    "files": {
+      "Game/Text/zh-CN/HelpText.zh-CN.sjson": "0dc218bc3b8fc2e564dfbcc915d54fbfbf4059bc2767a72e909c462a9aec5417",
+      "Game/Text/zh-CN/MiscText.zh-CN.sjson": "b022346ffe7c79377f795ed207da44110bfcb5a2d03f05ab5b1e7462df724101",
+      "Game/Text/en/HelpText.en.sjson": "3e9236427492819d19ec6a3240933c0a713f705568eeb4b080770d87a5a284d5",
+      "Game/Text/en/MiscText.en.sjson": "4f506d9205630977541afe0d44dc060a2b340b2402b21f85dd66d33029157fd7",
+      "Scripts/RoomManager.lua": "ca379fe0708af778007aef929822e4cfe8cf3a47dd2a3d37bf57e582ddb1b924",
+      "Scripts/RunManager.lua": "4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e",
+      "Scripts/RoomEvents.lua": "c3bd6737a807f948ef47efd2c09010dbd4692e587ba102b6edc06a5eb698cb55",
+      "Scripts/RoomPresentation.lua": "2d164457578215cff1488d044d9c2826ec79fe2dd652445e58933beae4f69300",
+      "Scripts/FishingScripts.lua": "a0a52b09dea9e974471e6116101357bb30f0cd34c5c70a3903f3698b9c8f6d0d",
+      "Scripts/Interactables.lua": "2b862c615ae29af2e31e499a7b88b9c996c5c6ee1859683c608e698ffddf6549",
+      "Scripts/LootData.lua": "20081ab6f36c04e1ed0091fe67336d3662b35168179a77d309573e2af5ff7595",
+      "Scripts/ConsumableData.lua": "90cc8a8b2c81a9b93a8ec1bff9a9924f32d8c5fe9343a4309c933693ad5ca399",
+      "Scripts/RoomData.lua": "2998e4109ee5275dcfade2e928d33e8ba386d13cefc196e7d96a9e0ee52ebec6",
+      "Scripts/RoomDataTartarus.lua": "4a367d719cfe7e5e1ce17713493415feaf9343b0c107e5e8db7dd08a391e6de7",
+      "Scripts/RoomDataAsphodel.lua": "76147ac9ba6476a85ae14dcb10f921620182a5fa0dd640faf4712faa1c8ede25",
+      "Scripts/RoomDataElysium.lua": "ee1d3799e6cf77e2ba75af099d2a9434a3ea156d18b3ebf5baf6a01770d413c5",
+      "Scripts/RoomDataStyx.lua": "ed423dfb4976df6f6c91bef9d75c0a0c45cae7291d0987b580e71a776604c4eb",
+      "Scripts/RoomDataSecrets.lua": "045123252aaa5048d9ea8a1bd0473377f70ce40c5ffb8dfe18326969b970000a",
+      "Scripts/EncounterSets.lua": "201a1f698a63d8b4a024eca4c8fc8556d9dbb79b4e4197cce2e2dda3669e75c6",
+      "Scripts/EncounterData.lua": "4fafd05c105cae9e92172813a0dae070599359d2efa4636d19851c9ffe96291e",
+      "Scripts/ObstacleData.lua": "fa65bf150caa11b531b18f154a7d66cbbf2e3d8062c9bae586d31ef9bd6fdb48",
+      "Scripts/SellTraitScripts.lua": "cc4cdda49ce9fed27db4304812bbf2c8dc6f050775eda21bf9186cd9b1ed1864"
+    }
+  }
+}

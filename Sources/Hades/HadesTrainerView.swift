@@ -49,6 +49,7 @@ struct HadesTrainerView: View {
             commonSection.id(HadesWorkbenchSection.common.id)
             boonsSection.id(HadesWorkbenchSection.boons.id)
             resourcesSection.id(HadesWorkbenchSection.resources.id)
+            HadesRoomsPanel(model: model).id(HadesWorkbenchSection.rooms.id)
             managementSection.id(HadesWorkbenchSection.management.id)
         }
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
@@ -248,6 +249,7 @@ struct HadesTrainerView: View {
                 }
             }
             .trainerGroupedRows()
+            HadesGatheringPanel(model: model)
         }
     }
 

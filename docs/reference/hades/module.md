@@ -4,9 +4,9 @@ The module targets the exact Intel Steam image declared in `Backend/games/hades/
 
 ## Workbench presentation
 
-Hades I now follows Hades II's ordered workbench navigation: compact and expandable Run Data, Common toggles, unified Boons & Effects (selected current-group editing and exact acquisition), Resources & Gathering, and Management. The current seven permanent resources remain visible as direct rows. The Rooms & Rewards section is reserved but deliberately not shown until source-backed native room controls are delivered by #572; a label or disabled dummy action would falsely imply coverage. Whole-workbench bilingual search resolves existing features, numeric controls, resources and management destinations. The single visible-order registry drives default shortcuts and shortcut settings, including a customizable Disable All binding.
+Hades I follows Hades II's ordered workbench navigation: compact and expandable Run Data, Common toggles, unified Boons & Effects (selected current-group editing and exact acquisition), Resources & Gathering, Rooms & Rewards, and Management. The seven permanent resources remain visible as direct rows, with a separate native gain action and fishing-point generation. Rooms & Rewards contains native reward generation, ready-exit reward and route selection, a scheduled eligible Thanatos encounter, Chaos Gate and eligible chamber-object generation. [The room/resource capability map](rooms_resources.md) owns native entrypoints, lifecycle and acceptance boundaries. Whole-workbench bilingual search resolves actions, native resource/facility identities and destinations. The visible-order registry drives shortcuts and their settings.
 
-This presentation update uses existing native actions. It does not imply Hades I has the Hades II-only gathering, room, boon or management capabilities: the gaps and their Hades-native implementation are explicitly owned by #571–#573. Native game effects, save/recovery and user acceptance retain their original owners.
+Hades-native owners determine each capability. [Combat and boon effects](combat_effects.md), [rooms/resources](rooms_resources.md) and [management #573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573) have separate scope; native game effects, save/recovery and user acceptance retain their evidence requirements.
 
 ## Supported actions
 
@@ -17,6 +17,8 @@ This presentation update uses existing native actions. It does not imply Hades I
 | Boon rarity (new) | On/off minimum Heroic preference for future normal Olympian/Hermes offers and rerolls; does not alter eligibility, fixed rarity, existing offers, Chaos, Hammer or Pom selection |
 | Hero values | Set health, maximum health, Obols and rerolls; heal to current maximum |
 | Permanent resources | Edit the seven native resource owners declared by `schema.py` and the generated catalog |
+| Gain and gathering | Add native resources/Obols with their bookkeeping; generate an eligible native fishing point and retain normal fishing/catch/turn-in behavior |
+| Rooms and rewards | Generate native loot/pickups, select ready-exit rewards/routes, schedule an eligible Thanatos encounter, generate Chaos Gate/Trove/Well/Purge objects, restore an owned unchanged exit before entry |
 | Acquisition | Search the official bilingual reward catalog; acquire Olympian/Hermes boons, weapon-compatible Hammers, Chaos blessings, Keepsakes and Companions through their native owners |
 | Current boons | Observe current native effects; edit level/rarity and remove supported boon groups |
 | Management | Game-scoped customizable shortcuts, disable all, manual backups, stopped-game restore and staged restore through Core Save |
@@ -33,7 +35,7 @@ The game-speed control uses the debugger-side Process Time Warp helper and prese
 
 Durable desired settings live under the module's own `MacGamingTrainer/hades` directory. Reconnecting applies them to a compatible runtime; hero setup remounts them after native per-room state resets. Manual detach preserves desired intent. Disable All and application termination reset desired settings and attempt resident cleanup. Offline Disable All reports that in-game cleanup needs reconnection or a game restart. A failed preference write is reported while resident cleanup still runs. Native scripted movement temporarily owns speed; its completion or native reset remounts the current movement multiplier. Committed numeric edits remain after Disable All.
 
-One-shot requests carry the observed hero identity and, for existing boons, the selected group token. The worker verifies the hero inside the same Lua execution before mutation. A draft captured for an earlier hero cannot be applied to its replacement, including a fresh Lua runtime in the same game process. Focused number drafts survive observations; unfocused fields follow current values.
+One-shot requests carry the observed hero identity and, for existing boons, the selected group token. Room/door actions carry the observed native room and selected door/reward tokens. The worker verifies these owners inside the same Lua execution before mutation. A draft captured for an earlier hero cannot be applied to its replacement, including a fresh Lua runtime in the same game process. Focused number drafts survive observations; unfocused fields follow current values. Pending encounter intents remain resident-only and cannot be replayed from profiles or saves.
 
 The backend records an in-flight native request before sending it. A lost acknowledgement or backend crash retains that record. Reconnecting to the same process lifetime requires restarting the game; the request is never replayed automatically. A new process lifetime clears the obsolete marker. The UI revokes mutation authority when the runtime outcome or protocol is untrustworthy.
 
@@ -43,7 +45,7 @@ The resident revision and source path are declared in `module.json` and extracte
 
 ## Native evidence and validation
 
-`catalog.json.sourceEvidence` records the exact native data and official bilingual text hashes. `Tools/generate_hades_catalog.py` reproduces the acquisition catalog and current-trait name registry. Native sources establish `SetupHeroObject` room resets, `SpendMoney`/`AddMoney` bookkeeping, native property application, the three reroll entry points, and trait acquisition/teardown. `Main.lua:Save` serializes non-ignored global tables; the module excludes its resident state and transient projections.
+`catalog.json.sourceEvidence` records the exact native data and official bilingual text hashes. `Tools/generate_hades_catalog.py` reproduces the acquisition catalog and current-trait name registry; `Tools/generate_hades_world_catalog.py` reproduces the separate room/reward/facility registry and its native source hashes. Native sources establish `SetupHeroObject` room resets, `SpendMoney`/`AddMoney` bookkeeping, native property application, the three reroll entry points, and trait acquisition/teardown. `Main.lua:Save` serializes non-ignored global tables; the module excludes its resident state and transient projections.
 
 Portable journeys exercise native-shaped Lua calls, yielding reroll lifecycles, remount/reset, gains, hero/group ownership and crash recovery. The macOS frontend harness compiles the actual Core + Hades Swift graph and exercises AppKit number fields, focused drafts, target changes, bilingual catalog data, shortcuts and fatal-error recovery. Temporary filesystem tests cover save membership, profile naming and Core backup/restore integration.
 

@@ -238,7 +238,8 @@ class HadesLuaTransport:
                 if 'hades.error.restartRequired' in text:
                     raise failure('restart_required', 'restartRequired', text)
                 for key in ('heroNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
-                            'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied'):
+                            'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied',
+                            'staleRoom', 'staleDoor', 'worldUnavailable'):
                     if 'hades.error.' + key in text:
                         raise failure('runtime_not_ready', key, text)
                 if mutating:

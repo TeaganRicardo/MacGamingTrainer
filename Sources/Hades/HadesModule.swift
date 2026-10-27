@@ -16,6 +16,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var activeFeatures: [String: Bool] = [:]
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
+    @Published private(set) var world: HadesWorldObservation?
+    @Published private(set) var worldRewards: [HadesWorldReward] = []
+    @Published private(set) var worldTerms: [String: [String: String]] = [:]
     @Published private(set) var catalog: [HadesCatalogEntry] = []
     @Published private(set) var resourceCatalog: [HadesResourceDefinition] = []
     @Published private(set) var traitNames: [String: [String: String]] = [:]
@@ -112,6 +115,21 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
         sendToHero("set_resource", params: ["resource": resource, "value": value], target: target, operation: "hades.resources")
     }
+    func gainResource(_ resource: String, amount: Double, target: HadesHeroTarget?) {
+        sendToHero("gain_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.gainResource")
+    }
+    func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String) {
+        guard let roomID, roomID == world?.roomId else { localError = "hades.error.staleRoom"; return }
+        var payload = params
+        payload["roomId"] = roomID
+        sendToHero(command, params: payload, target: target, operation: operation)
+    }
+    func generateFishing() {
+        worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing")
+    }
+    func generateChaosGate() {
+        worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate")
+    }
     func heal() { sendToHero("heal", target: target, operation: "hades.heal") }
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
         sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")
@@ -179,6 +197,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .heal { heal() }
+        else if action == .generateFishing { generateFishing() }
+        else if action == .generateChaosGate { generateChaosGate() }
         else if action == .disableAll { disableAll() }
         else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
     }
@@ -208,7 +228,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
                 self.feedback = TrainerFeedbackNotice(
-                    text: TrainerTextToken(key: pendingCleanup ? "hades.disableAllPending" : "host.backend.notice.completed"),
+                    text: TrainerTextToken(key: pendingCleanup ? "hades.disableAllPending"
+                        : (command == "set_door_route" && params["route"] as? String == "thanatos"
+                           ? "hades.routeScheduled" : "host.backend.notice.completed")),
                     tone: pendingCleanup ? .warning : .success)
             }
             completion?(ok)
@@ -236,6 +258,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 catalog = decoded.catalog
                 resourceCatalog = decoded.resourceCatalog
                 traitNames = decoded.traitNames ?? [:]
+                worldRewards = decoded.worldRewards ?? []
+                worldTerms = decoded.worldTerms ?? [:]
             }
             guard payload["connected"] != nil else { return }
             let state = try JSONDecoder().decode(HadesObservation.self, from: data)
@@ -258,6 +282,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             activeFeatures = state.activeFeatures ?? [:]
             resources = state.resources ?? [:]
             traits = state.traits ?? []
+            world = state.world
         } catch {
             if payload["catalog"] == nil { resetObservation() }
             localError = payload["catalog"] != nil ? "hades.error.catalog" : "hades.error.protocol"
@@ -266,7 +291,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0; godGauge = 0; maxGodGauge = 0
-        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []
+        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []; world = nil
     }
 }
 

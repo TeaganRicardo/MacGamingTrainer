@@ -118,12 +118,12 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
 
         let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
         localization.language = .en
-        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
-            "workbench order drifted or exposed an unimplemented rooms panel")
+        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
+            "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.fullHealth,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
+            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
-            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
+            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
                     HadesGameModule.resolveText(key:key,language:$0,localization:localization)
                 }
@@ -153,6 +153,17 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
               "boon rarity shortcut lost the boolean feature semantics")
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
+        check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
+        check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
+        let beforeWorld = commands().count
+        model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        pump(); check(commands().count == beforeWorld && model.localError == "hades.error.staleRoom", "old-room intent crossed the backend")
+        model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        wait { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
+        let worldArgs = commands().last { $0["command"] as? String == "spawn_reward" }?["params"] as? [String:Any]
+        check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
+        model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
+        wait { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
         let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
@@ -282,11 +293,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
                      destination / 'Host.strings')
     (folder / 'state.json').write_text(json.dumps({'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
-        'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': []}))
+        'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
+        'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}))
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
     selected = next(row for row in data['entries'] if row['id'] == 'AmmoBoltTrait')
     (folder / 'catalog.json').write_text(json.dumps({'catalog': [selected], 'resourceCatalog': data['resources'],
-        'traitNames': data['traitNames']}))
+        'traitNames': data['traitNames'], 'worldRewards': list(json.loads(
+            (ROOT / 'Backend/games/hades/world_catalog.json').read_text())['rewards'].values()),
+        'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}))
     generated = folder / 'ActiveGame.generated.swift'
     subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades').rglob('*.swift')) + [

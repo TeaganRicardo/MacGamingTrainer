@@ -126,6 +126,34 @@ struct HadesCurrentTrait: Decodable, Identifiable, Equatable {
     var id: String { instanceId }
 }
 
+struct HadesWorldReward: Decodable, Identifiable {
+    let id: String
+    let kind: String
+    let names: [String: String]
+    let doorAllowed: Bool
+    func name(language: TrainerPresentationLanguage) -> String {
+        names[language.rawValue] ?? names["en"] ?? id
+    }
+}
+
+struct HadesWorldDoor: Decodable, Identifiable, Equatable {
+    let id: String
+    let number: Int
+    let reward: String
+    let canReward: Bool
+    let routes: [String]
+    let canRestore: Bool
+    let pendingEncounter: Bool
+}
+
+struct HadesWorldObservation: Decodable, Equatable {
+    let roomId: String
+    let doors: [HadesWorldDoor]
+    let canFish: Bool
+    let canChaos: Bool
+    let objects: [String]
+}
+
 struct HadesObservation: Decodable {
     let connected: Bool
     let pid: Int32?
@@ -142,6 +170,7 @@ struct HadesObservation: Decodable {
     let activeFeatures: [String: Bool]?
     let resources: [String: Double]?
     let traits: [HadesCurrentTrait]?
+    let world: HadesWorldObservation?
 }
 
 struct HadesCatalogEntry: Decodable, Identifiable, Equatable {
@@ -174,6 +203,8 @@ struct HadesCatalogPayload: Decodable {
     let catalog: [HadesCatalogEntry]
     let resourceCatalog: [HadesResourceDefinition]
     let traitNames: [String: [String: String]]?
+    let worldRewards: [HadesWorldReward]?
+    let worldTerms: [String: [String: String]]?
 }
 
 struct HadesNumberDraft {
@@ -192,7 +223,7 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, heal, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, disableAll
+    case invincibility, heal, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
     var defaultChord: HotkeyChord {

@@ -5,6 +5,7 @@ import subprocess
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
+from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, preference_value, invalid_value, number)
 
@@ -43,7 +44,8 @@ class HadesAdapter(GameAdapter):
             try:
                 language = params.get('language', 'zh-CN')
                 return {'catalog': catalog(language, params.get('query', ''), params.get('kind', 'all')),
-                        'resourceCatalog': resource_catalog(language), 'traitNames': trait_names()}
+                        'resourceCatalog': resource_catalog(language), 'traitNames': trait_names(),
+                        'worldRewards': reward_catalog(), 'worldTerms': world_terms()}
             except ValueError as error:
                 raise invalid_value() from error
         if command == 'launch':
@@ -148,6 +150,8 @@ class HadesAdapter(GameAdapter):
 
     @staticmethod
     def _mutation_params(command, params):
+        if command in WORLD_COMMANDS:
+            return world_mutation_params(command, params)
         if command == 'heal':
             return {}
         if command == 'set_value':

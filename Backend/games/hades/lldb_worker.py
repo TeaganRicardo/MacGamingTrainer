@@ -7,7 +7,8 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .schema import DEFAULT_FEATURES, ONE_SHOT_COMMANDS, feature_document, feature_value
+from .schema import DEFAULT_FEATURES, ONE_SHOT_COMMANDS, WORLD_COMMANDS, feature_document, feature_value
+from .world import mutation_params as world_mutation_params, runtime_definitions
 
 
 def lua_literal(value):
@@ -37,6 +38,7 @@ class HadesLLDBWorker:
 
     def _invoke(self, method='status', arguments=(), *, target=None):
         source = 'local runtime = (function()\n' + self.source + '\nend)()\n'
+        source += 'runtime.worldDefinitions = runtime.worldDefinitions or ' + lua_literal(runtime_definitions()) + '\n'
         source += ('if not runtime.bootstrapId then runtime.bootstrapId=' + lua_literal(uuid.uuid4().hex)
                    + ';runtime.generationId=runtime.bootstrapId;runtime.configure('
                    + lua_literal(self.features) + ') end\n')
@@ -85,6 +87,9 @@ class HadesLLDBWorker:
                 result = self._invoke(method, (values,))
                 self.features = values
                 return result
+            if method in WORLD_COMMANDS:
+                values = world_mutation_params(method, params)
+                return self._invoke(method, (values,), target=target)
             arguments = {
                 'disable_all': (), 'heal': (),
                 'set_value': (params.get('field'), params.get('value')),
