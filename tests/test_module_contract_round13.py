@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         'module_inventory.py',
         'module_support.py',
         'resident_runtime.py',
+        'supported_build.py',
         'validate_game_module.py',
         'generate_game_binding.py',
     ):

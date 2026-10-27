@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def fixture(root):
-    for directory in ('Backend', 'Tools', 'Sources', 'Resources', 'docs/reference/hades2'):
+    for directory in ('Backend', 'Tools', 'Sources', 'Resources',
+                      'docs/reference/hades', 'docs/reference/hades2'):
         shutil.copytree(ROOT / directory, root / directory,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     for name in ('Info.plist', 'ACTIVE_GAME_ID'):
