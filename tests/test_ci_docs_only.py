@@ -29,13 +29,15 @@ assert not module.is_docs_only(["docs/a.md", REFERENCE_DATA])
 MACOS_ONLY = {"test_hades2_run_log_watcher.py"}
 
 
-def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None):
+def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None, full_build=None):
+    expected_build = macos if build is None else build
     assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY) == {
         "docs_only": docs_only,
         "needs_linux": linux,
         "needs_macos": macos,
         "needs_module": module_build,
-        "needs_build": macos if build is None else build,
+        "needs_build": expected_build,
+        "needs_full_build": expected_build if full_build is None else full_build,
     }
 
 
@@ -107,6 +109,7 @@ assert_scope(
     linux=True,
     macos=True,
     module_build=False,
+    full_build=False,
 )
 assert_scope(
     ["Sources/Core/UI/TrainerTheme.swift"],
@@ -114,6 +117,7 @@ assert_scope(
     linux=True,
     macos=True,
     module_build=True,
+    full_build=False,
 )
 assert_scope(
     ["ContractFixtures/reference_module/backend/adapter.py"],
@@ -171,13 +175,26 @@ assert_scope(
 # verification is reserved for shared module/build boundaries.
 assert_scope(["Backend/games/hades/runtime/hades.lua"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["Backend/games/hades2/native/CommandMailbox.c"], docs_only=False, linux=True, macos=True, module_build=False)
-assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
 assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["tests/fixtures/swift/InMemoryDefaults.swift"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope(["Backend/core/native/example.c"], docs_only=False, linux=True, macos=True, module_build=False)
 assert_scope(["Backend/games/example/unknown.binary"], docs_only=False, linux=True, macos=True, module_build=False)
+
+# Full builds are mandatory for every link, ABI and distribution boundary.
+# Multiple changed paths use the strictest decision, never the fastest path.
+assert_scope(["Sources/App.swift"], docs_only=False, linux=True, macos=True, module_build=True)
+assert_scope(["Info.plist"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["app.json"], docs_only=False, linux=True, macos=True, module_build=True)
+assert_scope(["build.sh"], docs_only=False, linux=True, macos=True, module_build=True)
+assert_scope([".github/workflows/build2-macos.yml"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Tools/python_runtime.json"], docs_only=False, linux=True, macos=True, module_build=True)
+assert_scope(["Sources/Hades2/Hades2Model.swift", "Backend/games/hades/runtime.lua"],
+             docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
+assert_scope(["Sources/Hades2/Hades2Model.swift", "Info.plist"],
+             docs_only=False, linux=True, macos=True, module_build=False)
 
 # Reference ownership comes from module identity, and macOS routing for a
 # reference file comes from appResources rather than a filename convention.
@@ -201,6 +218,7 @@ assert module.classify_scope(
     "needs_macos": False,
     "needs_module": False,
     "needs_build": False,
+    "needs_full_build": False,
 }
 assert module.classify_scope(
     ["docs/reference/alpha/anything.json"],
@@ -213,6 +231,7 @@ assert module.classify_scope(
     "needs_macos": True,
     "needs_module": False,
     "needs_build": True,
+    "needs_full_build": True,
 }
 
 

@@ -74,7 +74,7 @@ for invalid in ("@supportedBuild/../secrets", "@supportedBuild//etc/passwd", "@s
         raise AssertionError("unsafe supported-build resource reference was accepted: " + invalid)
 assert classify_scope(["Tools/supported_build.py"]) == {
     "docs_only": False, "needs_linux": True, "needs_macos": True, "needs_module": True,
-    "needs_build": True,
+    "needs_build": True, "needs_full_build": True,
 }
 
 with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:

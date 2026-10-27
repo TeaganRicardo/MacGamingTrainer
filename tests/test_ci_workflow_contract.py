@@ -119,13 +119,18 @@ build2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in build2
 assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
 assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
+assert 'needs_full_build: ${{ steps.scope.outputs.needs_full_build }}' in build2
 assert 'needs: scope' in build2
 assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
 assert 'bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"' in build2
-assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true'" in build2
+assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true'" in build2
+assert "needs.scope.outputs.needs_full_build == 'false'" in build2
+assert "steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false'" in build2
+assert "needs.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true'" in build2
+assert './build.sh --typecheck --all' in build2
 assert './build.sh --all' in build2
 
 module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
@@ -176,6 +181,7 @@ for step in (
     )
 assert "Run full macOS contracts for release convergence" in build2
 assert "Run selected macOS PR smoke tests" in build2
+assert "Typecheck unified trainer on Swift PR" in build2
 assert "Build unified trainer" in build2
 assert "Verify package" in build2
 
