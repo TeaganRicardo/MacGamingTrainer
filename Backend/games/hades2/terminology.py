@@ -15,7 +15,8 @@ def _reference_path(module_file: Path = Path(__file__)) -> Path:
 
     if resource_root.name == "Resources" and resource_root.parent.name == "Contents":
         return bundled_reference
-    return module_file.parents[3] / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    from .config import SUPPORTED_BUILD
+    return module_file.parents[3] / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
 
 
 class TermClass(str, Enum):

@@ -291,9 +291,16 @@ else:
         module = self.root / 'Backend/games/hades2'
         module.mkdir(parents=True)
         module_manifest = module / 'module.json'
+        supported_build = {
+            'architecture': 'arm64', 'bundleVersion': '42', 'steamBuildID': '123',
+            'uuid': 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE',
+            'originalExecutableSHA256': 'a' * 64,
+            'referenceDirectory': 'docs/reference/hades2/1.42-123',
+        }
         module_manifest.write_text(json.dumps({
             'id': 'hades2', 'displayName': 'Hades II',
             'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
+            'supportedBuild': supported_build,
         }))
         workflow = self.root / '.github/workflows/build2-macos.yml'
         workflow.parent.mkdir(parents=True)
@@ -347,6 +354,7 @@ else:
             'origin': 'github',
             'workflow': {'name': 'Build 2 macOS', 'eventName': 'workflow_dispatch'},
             'moduleId': 'hades2',
+            'supportedBuilds': {'hades2': supported_build},
             'toolchain': toolchain,
         }
 
@@ -369,6 +377,18 @@ else:
 
         valid = verify(manifest)
         self.assertEqual(valid.returncode, 0, valid.stderr)
+
+        wrong_supported = json.loads(json.dumps(manifest))
+        wrong_supported['supportedBuilds']['hades2']['uuid'] = 'WRONG'
+        rejected = verify(wrong_supported)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('supported game build identities', rejected.stderr)
+
+        missing_supported = json.loads(json.dumps(manifest))
+        missing_supported.pop('supportedBuilds')
+        rejected = verify(missing_supported)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('supported game build identities', rejected.stderr)
 
         wrong_toolchain = json.loads(json.dumps(manifest))
         wrong_toolchain['toolchain']['developer']['xcodeBuild'] = 'wrong'

@@ -1,7 +1,4 @@
 {
-  "uuid": "BA8CE510-EB7F-3E65-96B6-574608EA4550",
-  "architecture": "x86_64",
-  "steamBuildID": "10929685",
   "symbols": {
     "_ZN3sgg13ConfigOptions20RequireFocusToUpdateE": {
       "rva": 28618475

@@ -6,17 +6,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "Tools"))
 
 from games.hades2.terminology import TerminologyRegistry, _reference_path
+from supported_build import resolved_resource_source
 
-SOURCE_REFERENCE = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+MANIFEST = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))
+SUPPORTED_BUILD = MANIFEST["supportedBuild"]
+SOURCE_REFERENCE = ROOT / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
 
 
 def test_bundled_resource_wins_over_source_tree_fallback():
     with tempfile.TemporaryDirectory(prefix="mgt-terminology-bundle-") as temporary:
         resources = Path(temporary) / "Mac Gaming Trainer.app/Contents/Resources"
         module_file = resources / "Backend/games/hades2/terminology.py"
-        source_reference = resources / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+        source_reference = resources / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
         bundled_reference = resources / "ui_terminology.json"
         module_file.parent.mkdir(parents=True)
         source_reference.parent.mkdir(parents=True)
@@ -34,14 +38,14 @@ def test_development_execution_falls_back_to_source_reference():
     with tempfile.TemporaryDirectory(prefix="mgt-terminology-source-") as temporary:
         repository = Path(temporary)
         module_file = repository / "Backend/games/hades2/terminology.py"
-        source_reference = repository / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+        source_reference = repository / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
         module_file.parent.mkdir(parents=True)
         source_reference.parent.mkdir(parents=True)
         shutil.copyfile(SOURCE_REFERENCE, source_reference)
 
         selected = _reference_path(module_file)
         assert selected == source_reference.resolve()
-        assert TerminologyRegistry.load(selected).target["steamBuild"] == "25481925"
+        assert TerminologyRegistry.load(selected).target["steamBuild"] == SUPPORTED_BUILD["steamBuildID"]
 
 
 def test_present_but_invalid_bundle_is_not_hidden_by_source_fallback():
@@ -49,7 +53,7 @@ def test_present_but_invalid_bundle_is_not_hidden_by_source_fallback():
         resources = Path(temporary) / "Mac Gaming Trainer.app/Contents/Resources"
         module_file = resources / "Backend/games/hades2/terminology.py"
         bundled_reference = resources / "ui_terminology.json"
-        source_reference = resources / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+        source_reference = resources / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
         module_file.parent.mkdir(parents=True)
         source_reference.parent.mkdir(parents=True)
         shutil.copyfile(SOURCE_REFERENCE, source_reference)
@@ -68,11 +72,11 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
     build = (ROOT / "build.sh").read_text(encoding="utf-8")
     macos_workflow = (ROOT / ".github/workflows/build2-macos.yml").read_text(encoding="utf-8")
     module_matrix = (ROOT / ".github/workflows/module-build-matrix.yml").read_text(encoding="utf-8")
-    manifest = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))
+    manifest = MANIFEST
 
     assert manifest["appResources"] == [
         {
-            "source": "docs/reference/hades2/1.143476-25481925/ui_terminology.json",
+            "source": "@supportedBuild/ui_terminology.json",
             "destination": "ui_terminology.json",
         },
         {
@@ -84,6 +88,9 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
             "destination": "hades2.en.json",
         },
     ]
+    assert resolved_resource_source(
+        manifest["appResources"][0]["source"], SUPPORTED_BUILD
+    ) == SOURCE_REFERENCE.relative_to(ROOT).as_posix()
     assert "appResources" in build
 
     # Both shipped languages must exist in the source tree: a missing table

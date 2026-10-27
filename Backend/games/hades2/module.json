@@ -47,7 +47,7 @@
   },
   "appResources": [
     {
-      "source": "docs/reference/hades2/1.143476-25481925/ui_terminology.json",
+      "source": "@supportedBuild/ui_terminology.json",
       "destination": "ui_terminology.json"
     },
     {
@@ -79,5 +79,14 @@
     "hotBackup": true,
     "restorePolicy": "hotPreferred",
     "stagedRestore": true
+  },
+  "supportedBuild": {
+    "architecture": "arm64",
+    "bundleVersion": "143476",
+    "steamBuildID": "25481925",
+    "uuid": "35CD2E50-2D78-3A63-835B-3EB1224C6D65",
+    "originalExecutableSHA256": "933a2db2251a3fddd70900016f323338690235c7b3aae63edd4a78ca18c3bfe3",
+    "referenceDirectory": "docs/reference/hades2/1.143476-25481925",
+    "nativeUUIDHeader": "native/SupportedBuildIdentity.h"
   }
 }

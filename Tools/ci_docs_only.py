@@ -42,6 +42,8 @@ MODULE_EXACT_PATHS = {
     "Info.plist",
     "Sources/App.swift",
     "Tools/ci_docs_only.py",
+    "Tools/supported_build.py",
+    "Tools/build_module_native.py",
     "Tools/clean_signing_metadata.py",
     "Tools/generate_game_binding.py",
     "Tools/module_inventory.py",

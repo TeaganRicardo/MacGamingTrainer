@@ -1,6 +1,6 @@
 # Hades I module
 
-The module targets the Intel Steam image declared in `Backend/games/hades/symbols.json`. It owns its LLDB sidecar, resident Lua, desired settings, command validation, catalog and UI. Hades II runtime and preference data are independent.
+The module targets the exact Intel Steam image declared in `Backend/games/hades/module.json.supportedBuild`; `symbols.json` contains only the image-specific symbol RVAs and signatures. It owns its LLDB sidecar, resident Lua, desired settings, command validation, catalog and UI. Hades II runtime and preference data are independent.
 
 ## Workbench presentation
 

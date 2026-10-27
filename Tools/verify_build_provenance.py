@@ -118,6 +118,14 @@ def verify_provenance(
         if module_input != expected_module_input:
             raise RuntimeError("provenance module manifest differs from current source")
 
+    selected = ids if module_id == 'all' else (module_id,)
+    expected_supported = {
+        game_id: identity for game_id in selected
+        if (identity := json.loads((repo_root / 'Backend/games' / game_id / 'module.json').read_text(encoding='utf-8')).get('supportedBuild')) is not None
+    }
+    if manifest.get('supportedBuilds', {}) != expected_supported:
+        raise RuntimeError('provenance supported game build identities differ from module declarations')
+
     python_runtime = manifest.get("pythonRuntime")
     runtime_declaration = repo_root / "Tools" / "python_runtime.json"
     if python_runtime is not None:

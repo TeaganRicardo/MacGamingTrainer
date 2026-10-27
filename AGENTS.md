@@ -15,10 +15,21 @@ For Core/game/build changes, also read [GAME_MODULES.md](GAME_MODULES.md); for r
 | Host/process/backend lifecycle | `Sources/Core/Host/**`, `Sources/Core/Runtime/**` |
 | Shared visual language and generic input | `Sources/Core/UI/**`, `Sources/Core/Input/**` |
 | Generic optional Save transactions | `Backend/core/save_*`, `Sources/Core/Save/**` |
-| Hades commands, state, transport, persistence, save semantics and game UI | `Backend/games/hades2/**`, `Sources/Hades2/**` |
+| Game commands, state, transport, persistence, saves and UI | Each game owns `Backend/games/<id>/**` and its frontend under `Sources/<Game>/**` |
 | Build/module metadata interpretation | `Tools/**` and module manifests |
 
 Keep game meaning in the game module. A shared abstraction needs a demonstrated game-agnostic contract; repeated Hades-only changes are evidence to improve the Hades owner first.
+
+## Version impact procedure
+
+For any change touching product release metadata, module manifests, supported game images, native symbols/C offsets, resident scripts, persistence formats, bundled references, toolchains or release workflows:
+
+1. **Classify the identity that changed:** product SemVer/build, supported **game** build, Host/module protocol, resident Lua revision, persisted schema, or build toolchain/provenance. Different identities have different owners; a game update does not imply a product-version bump.
+2. **Read the owner before writing:** `Info.plist` for product release identity; `Backend/games/<id>/module.json.supportedBuild` for verified native game identity; `module.json.protocolVersion` for frontend/backend compatibility; resident declaration and Lua source for resident revision; the corresponding schema owner for persistence. See [VERSIONING.md](VERSIONING.md) and [GAME_MODULES.md](GAME_MODULES.md).
+3. **Update dependents through the owner:** for a newly verified game image, update its `supportedBuild`, revalidate `symbols.json` RVAs/prefixes and native offsets, regenerate the declared native UUID header with `python3 Tools/supported_build.py --write-native-header <id>`, and update/revalidate the game-owned reference snapshot, packaged resources and extraction generators. Never copy new version/UUID/hash literals into feature code or workflow scripts. Keep retired reference snapshots explicitly historical.
+4. **Check behavior and migration:** changing a module protocol, resident revision, or persistence schema needs the owning compatibility/recovery tests and migration/old-version refusal behavior. Hades-native one-shots keep unknown-outcome non-replay and tested session ownership.
+5. **Validate one exact SHA:** run `python3 Tools/supported_build.py` and affected portable/module/macOS checks once authorized, then independent final-head review and required PR CI once for the final batch. A changed head invalidates preceding QA claims. Respect testing pauses and distinguish source inspection, synthetic checks and actual-game acceptance.
+6. **Prepare releases separately:** only an intentional release-preparation PR edits product SemVer/build in `Info.plist`; release tags follow verified GitHub-source artifact provenance. Do not retag or invent previous releases. Update the controlling Issue and any operational compatibility change rather than maintaining a second version-status table.
 
 ## Implement and prove the outcome
 

@@ -88,7 +88,7 @@ _CURRENT_RUN_FAMILY_LABELS = {
     'weaponAspect': ('武器形态效果', 'Weapon Aspect Effect'),
 }
 
-# Current-target (1.143476 / Steam 25481925) mounted TraitData rows that do not
+# Supported-build snapshot mounted TraitData rows that do not
 # have a sufficiently specific standalone native title. Values are Trainer
 # Product Terms derived from the target build's effect data/descriptions. Arcana
 # and Familiar entries are descriptors only; their native owner title is composed

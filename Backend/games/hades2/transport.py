@@ -37,7 +37,8 @@ class Hades2LuaTransport:
         self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
-        self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
+        from .config import SUPPORTED_BUILD
+        self.symbols=manifest['symbols'];self.known_uuid=SUPPORTED_BUILD['uuid'];self.runtime_uuid=None
 
     @property
     def tainted(self):

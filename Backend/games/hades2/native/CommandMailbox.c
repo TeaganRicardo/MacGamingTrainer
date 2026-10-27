@@ -4,6 +4,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include "MailboxProtocol.h"
+#include "SupportedBuildIdentity.h"
 
 #define EXPORT __attribute__((visibility("default")))
 
@@ -225,9 +226,7 @@ static int verifyImage(uintptr_t base, char *output, size_t capacity) {
         || header[1] != UINT32_C(0x100000c) || header[3] != 2
         || header[5] > 65536 || header[4] > header[5] / 8)
         return failure(output, capacity, INSTALL_FAILURE, "Unsupported Hades executable header");
-    static const uint8_t expected_uuid[16] = {
-        0x35,0xcd,0x2e,0x50,0x2d,0x78,0x3a,0x63,0x83,0x5b,0x3e,0xb1,0x22,0x4c,0x6d,0x65
-    };
+    static const uint8_t expected_uuid[16] = { MGT_SUPPORTED_GAME_UUID_BYTES };
     uintptr_t cursor = base + sizeof(header), end = cursor + header[5];
     int uuid_matches = 0;
     for (uint32_t index = 0; index < header[4]; ++index) {
@@ -246,7 +245,7 @@ static int verifyImage(uintptr_t base, char *output, size_t capacity) {
         cursor += command[1];
     }
     if (!uuid_matches)
-        return failure(output, capacity, INSTALL_FAILURE, "Mailbox requires Hades II 1.143476 arm64");
+        return failure(output, capacity, INSTALL_FAILURE, "Mailbox requires " MGT_SUPPORTED_GAME_DESCRIPTION);
     LuaAPI candidate;
 #define RESOLVE_API(result, name, arguments, rva, prefix) \
     if (!prefixMatches(base + rva, prefix)) \

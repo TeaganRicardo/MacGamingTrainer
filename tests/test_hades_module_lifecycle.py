@@ -63,7 +63,8 @@ target = types.SimpleNamespace(
     DeleteAllBreakpoints=lambda: None,
 )
 transport = HadesLuaTransport.__new__(HadesLuaTransport)
-transport.manifest = {'uuid': 'fixture-uuid', 'symbols': {focus_symbol: {'rva': 16}}}
+transport.manifest = {'symbols': {focus_symbol: {'rva': 16}}}
+transport.supported_build = {'uuid': 'fixture-uuid', 'architecture': 'x86_64'}
 transport.debugger = types.SimpleNamespace(CreateTarget=lambda path: target)
 transport.listener = None
 transport.target = target

@@ -468,6 +468,13 @@ def build_manifest(
         if resident is not None:
             manifest["residentRuntime"] = resident
 
+    if module_id:
+        selected = ids if module_id == 'all' else (module_id,)
+        manifest['supportedBuilds'] = {
+            game_id: identity for game_id in selected
+            if (identity := json.loads((repo_root / 'Backend/games' / game_id / 'module.json').read_text(encoding='utf-8')).get('supportedBuild')) is not None
+        }
+
     return manifest
 
 
