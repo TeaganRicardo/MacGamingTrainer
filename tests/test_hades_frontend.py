@@ -25,6 +25,10 @@ for raw in sys.stdin:
     command=request['command'];params=request.get('params',{})
     if command=='catalog':result=json.loads((folder/'catalog.json').read_text())
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
+    elif command in ('list_profiles','save_profile','delete_profile'):
+        result={'profiles':[{'name':'Fixture','updatedAt':'2026-10-27T00:00:00+00:00'}] if command!='delete_profile' else []}
+    elif command=='diagnostics':
+        result={'diagnostics':{'gameID':'hades','checks':[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]}}
     else:
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
@@ -91,6 +95,20 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             logSink:TrainerLogSink(url:folder.appendingPathComponent("trainer.log")))
         wait { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
+        model.listProfiles()
+        wait { !model.busy && model.profiles.count == 1 }
+        check(model.connected && model.health==50,"profile inventory erased runtime state")
+        check(model.profiles[0].name=="Fixture","Hades profile inventory did not decode")
+        model.runDiagnostics()
+        wait { !model.busy && model.diagnostics.count == 1 }
+        check(model.diagnostics[0].ok && model.connected,"diagnostics payload replaced runtime authority")
+        model.saveProfile("Fixture")
+        wait { !model.busy }
+        model.loadProfile("Fixture")
+        wait { !model.busy }
+        let profileRequest=commands().last { $0["command"] as? String == "load_profile" }
+        check((profileRequest?["params"] as? [String:Any])?["name"] as? String == "Fixture",
+              "feature profile lost its game-owned command/name")
         check(model.features["invincibility"] == .boolean(true),"boolean feature was decoded as a number")
         check(model.features["damageMultiplier"] == .number(2),"numeric feature decoding failed")
         check(model.catalog.contains { $0.matches("Zeus 闪电") },"catalog search did not combine bilingual fields")
@@ -129,6 +147,10 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
                 }
             }
         }
+        check(searchFunctions("profile").contains { $0.section == .management && $0.id == "hades.manage.profiles" },
+            "profile manager was absent from bilingual workbench discovery")
+        check(searchFunctions("诊断").contains { $0.id == "hades.manage.diagnostics" },
+            "diagnostics were absent from bilingual workbench discovery")
         check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
             "Host-owned function names were not localized in search")
         check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",

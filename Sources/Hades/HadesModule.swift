@@ -1,5 +1,7 @@
 import Foundation
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var backendStatus = TrainerBackendStatus()
@@ -30,6 +32,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var shortcutSettingsPresented = false
     @Published var workbenchSearch = ""
     @Published var numericControlsExpanded = false
+    @Published var profilesPresented = false
+    @Published var diagnosticsPresented = false
+    @Published private(set) var profiles: [HadesSettingsProfile] = []
+    @Published private(set) var diagnostics: [HadesDiagnosticCheck] = []
+    private var diagnosticsReport: [String: Any]?
 
     private let session: TrainerBackendSession
     private let logSink: TrainerLogSink
@@ -87,6 +94,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func refreshFromHost() { send("status", operation: "host.refreshStatus", announceSuccess: false) }
     func restartBackendFromHost() { session.restart() }
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+        logSink.targetLifetimeChanged(running: observation.isRunning, identity: .init(
+            processName: HadesGameModule.descriptor.targetProcessName,
+            bundleIdentifier: HadesGameModule.descriptor.targetBundleIdentifier,
+            processIdentifier: observation.processIdentifier))
         targetObservation = observation
         resetObservation()
     }
@@ -160,6 +171,60 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard hostActionsEnabled else { return }
         send("disable_all", operation: "host.disableAll")
     }
+    func listProfiles() { send("list_profiles", operation: "hades.manage.profiles", announceSuccess: false) }
+    func saveProfile(_ name: String) { send("save_profile", params: ["name": name], operation: "hades.profile.save") }
+    func loadProfile(_ name: String) { send("load_profile", params: ["name": name], operation: "hades.profile.load") }
+    func deleteProfile(_ name: String) { send("delete_profile", params: ["name": name], operation: "host.delete") }
+    func runDiagnostics() { send("diagnostics", operation: "hades.manage.diagnostics", announceSuccess: false) }
+    func openLog() {
+        session.flushDiagnostics()
+        logSink.flush()
+        NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())
+    }
+    func openLogHistory() {
+        do {
+            logSink.flush()
+            try FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(logSink.historyURL)
+        } catch { localError = "hades.error.logOpen" }
+    }
+    func clearCompletedLogs() {
+        let cleared = logSink.clearCompletedSessions()
+        feedback = TrainerFeedbackNotice(
+            text: TrainerTextToken(key: cleared ? "host.logs.cleared" : "host.logs.clearFailed"),
+            tone: cleared ? .success : .warning)
+    }
+    func exportDiagnostics() {
+        session.flushDiagnostics()
+        logSink.flush()
+        send("diagnostics", operation: "hades.diagnostics.export", announceSuccess: false) { [weak self] ok in
+            guard ok, let self, var report = self.diagnosticsReport else { return }
+            self.session.flushDiagnostics()
+            self.logSink.flush()
+            do {
+                var logs: [String: String] = [:]
+                let urls: [URL]
+                if let bundle = self.logSink.currentSessionURL() {
+                    urls = ["manifest.json", "host.log", "backend.log", "runtime.log"].map { bundle.appendingPathComponent($0) }
+                } else { urls = [self.logSink.currentLogURL()] }
+                for url in urls where FileManager.default.fileExists(atPath: url.path) {
+                    logs[url.lastPathComponent] = try String(contentsOf: url, encoding: .utf8)
+                }
+                report["logs"] = logs
+                let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.json]
+                panel.nameFieldStringValue = "Hades-Diagnostics.json"
+                panel.begin { [weak self] response in
+                    guard response == .OK, let url = panel.url else { return }
+                    do {
+                        try data.write(to: url, options: .atomic)
+                        self?.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
+                    } catch { self?.localError = "hades.error.diagnosticsExport" }
+                }
+            } catch { self.localError = "hades.error.diagnosticsExport" }
+        }
+    }
     func rejectInvalidValue() { localError = "hades.error.invalidValue" }
     func dismissFeedback(_ id: UUID) { if feedback?.id == id { feedback = nil } }
     func traitName(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
@@ -227,11 +292,15 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                      timeout: command == "connect" ? 130 : 20, completion: { [weak self] ok in
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
-                self.feedback = TrainerFeedbackNotice(
-                    text: TrainerTextToken(key: pendingCleanup ? "hades.disableAllPending"
-                        : (command == "set_door_route" && params["route"] as? String == "thanatos"
-                           ? "hades.routeScheduled" : "host.backend.notice.completed")),
-                    tone: pendingCleanup ? .warning : .success)
+                let pendingProfile = command == "load_profile" && !self.connected
+                let noticeKey: String
+                if pendingCleanup { noticeKey = "hades.disableAllPending" }
+                else if pendingProfile { noticeKey = "hades.profile.pending" }
+                else if command == "set_door_route" && params["route"] as? String == "thanatos" {
+                    noticeKey = "hades.routeScheduled"
+                } else { noticeKey = "host.backend.notice.completed" }
+                self.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: noticeKey),
+                    tone: pendingCleanup || pendingProfile ? .warning : .success)
             }
             completion?(ok)
         })
@@ -253,6 +322,15 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func apply(_ payload: [String: Any]) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
+            if let rows = payload["profiles"] {
+                profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
+                    from: JSONSerialization.data(withJSONObject: rows))
+            }
+            if let report = payload["diagnostics"] as? [String: Any], let checks = report["checks"] {
+                diagnostics = try JSONDecoder().decode([HadesDiagnosticCheck].self,
+                    from: JSONSerialization.data(withJSONObject: checks))
+                diagnosticsReport = report
+            }
             if payload["catalog"] != nil {
                 let decoded = try JSONDecoder().decode(HadesCatalogPayload.self, from: data)
                 catalog = decoded.catalog

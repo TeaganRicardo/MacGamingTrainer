@@ -6,6 +6,8 @@ from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
+from .profiles import HadesProfileStore
+from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, preference_value, invalid_value, number)
 
@@ -35,11 +37,41 @@ class HadesAdapter(GameAdapter):
         self.locate_process = locate_process
         self.connected = False
         self.preferences = preferences or HadesPreferenceStore()
+        self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
         self.features = dict(DEFAULT_PREFERENCES)
         self._game_speed_actual = None
         self._game_speed_error = None
 
     def dispatch(self, command, params, request_id):
+        if command == 'list_profiles':
+            return {'profiles': self.profiles.list()}
+        if command == 'save_profile':
+            self.profiles.save(params.get('name'), self.preferences.load())
+            return {'profiles': self.profiles.list()}
+        if command == 'delete_profile':
+            self.profiles.delete(params.get('name'))
+            return {'profiles': self.profiles.list()}
+        if command == 'load_profile':
+            features = self.profiles.load(params.get('name'))
+            self.preferences.save(features)
+            self.features = features
+            state = {**self._offline(), 'features': self.features}
+            if self.connected:
+                runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
+                try:
+                    state = self.runtime.command('configure', {'features': runtime_features})
+                except AdapterError as error:
+                    if error.code in ('outcome_unknown', 'restart_required') or not self.runtime.connected:
+                        self.connected = False
+                    raise
+                self._observe(state)
+                speed_error = self._reconcile_game_speed()
+                if speed_error:
+                    raise speed_error
+            return self._observe(state)
+        if command == 'diagnostics':
+            state = self.dispatch('status', {}, request_id)
+            return {'diagnostics': build_diagnostics(self, state)}
         if command == 'catalog':
             try:
                 language = params.get('language', 'zh-CN')
@@ -213,6 +245,7 @@ class HadesAdapter(GameAdapter):
             self._record_game_speed_error(error)
             if error.code in ('outcome_unknown', 'restart_required') or not getattr(self.runtime, 'connected', True):
                 self.connected = False
+            return error
 
     def _record_game_speed_error(self, error):
         self._game_speed_error = {

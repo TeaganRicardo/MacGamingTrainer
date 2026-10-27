@@ -11,7 +11,6 @@ struct HadesTrainerView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerGamePageVisible) private var pageVisible
-    @Environment(\.trainerManagementActions) private var managementActions
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
@@ -53,8 +52,14 @@ struct HadesTrainerView: View {
             managementSection.id(HadesWorkbenchSection.management.id)
         }
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
+        .sheet(isPresented: $model.profilesPresented) { HadesProfileManagerView(model: model) }
+        .sheet(isPresented: $model.diagnosticsPresented) { HadesDiagnosticsView(model: model) }
         .onChange(of: pageVisible) { _, visible in
-            if !visible { model.shortcutSettingsPresented = false }
+            if !visible {
+                model.shortcutSettingsPresented = false
+                model.profilesPresented = false
+                model.diagnosticsPresented = false
+            }
         }
     }
 
@@ -256,33 +261,7 @@ struct HadesTrainerView: View {
     private var managementSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.management.titleKey),
                        icon: HadesWorkbenchSection.management.icon) {
-            HStack(spacing: 8) {
-                TrainerSecondaryActionButton(
-                    title: localization.localized("host.refreshStatus"), systemImage: "arrow.clockwise",
-                    enabled: model.backendAvailable && !model.busy, action: model.refreshFromHost
-                )
-                if let open = managementActions.openSaveManagement {
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.saveManagement"), systemImage: "externaldrive",
-                        enabled: model.hostActionsEnabled, action: open
-                    )
-                }
-                TrainerSecondaryActionButton(
-                    title: localization.localized("host.shortcutSettings"), systemImage: "keyboard"
-                ) {
-                    model.shortcutSettingsPresented = true
-                }
-                Spacer()
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
-                TrainerSecondaryActionButton(
-                    title: localization.localized("host.disableAll"), systemImage: "power",
-                    enabled: model.hostActionsEnabled, action: model.disableAll
-                )
-            }
-            if !model.shortcutError.isEmpty {
-                TrainerMessageBanner(text: text(model.shortcutError),
-                                     icon: "keyboard", color: theme.warning)
-            }
+            HadesManagementUtilities(model: model)
         }
     }
 }
@@ -754,6 +733,15 @@ struct HadesManagementCommands: Commands {
             Button(localization.localized("host.disableAll"), action: model.disableAll).disabled(!model.hostActionsEnabled)
             Divider()
             Button(localization.localized("host.shortcutSettings")) { model.shortcutSettingsPresented = true }
+            Button(HadesPresentation.text("hades.manage.profiles", language: localization.language)) {
+                model.profilesPresented = true; model.listProfiles()
+            }.disabled(!model.hostActionsEnabled)
+            Button(localization.localized("host.viewLog"), action: model.openLog)
+            Button(localization.localized("host.viewLogHistory"), action: model.openLogHistory)
+            Button(localization.localized("host.clearCompletedLogs"), action: model.clearCompletedLogs)
+            Button(HadesPresentation.text("hades.manage.diagnostics", language: localization.language)) {
+                model.diagnosticsPresented = true; model.runDiagnostics()
+            }.disabled(!model.hostActionsEnabled)
         }
     }
 }

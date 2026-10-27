@@ -90,7 +90,9 @@ enum HadesWorkbenchCatalog {
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
             (.rooms, ["hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
-            (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings"]),
+            (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings",
+                           "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
+                           "host.viewLogHistory", "host.clearCompletedLogs"]),
         ]
         let fixed = other.flatMap { section, keys in
             keys.map { HadesWorkbenchEntry(id: $0, titleKey: $0, section: section) }
