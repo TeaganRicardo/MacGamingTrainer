@@ -201,15 +201,47 @@ assert(GameState.KeepsakeChambers.ReincarnationTrait == 75)
 runtime.remove_trait(runtime.status().traits[1].instanceId)
 assert(GameState.LastAwardTrait == nil and GameState.KeepsakeChambers.ReincarnationTrait == 75)
 assert(unit.MaxLastStands == 1 and #unit.LastStands == 1, "unequip lost native revival ownership")
-unit.SuperMeter = 10
+-- ShoutScripts.lua:1-17 requires an AddShout trait before meter edits apply.
+-- The shared fixture represents that native eligibility with hasCall.
+unit.hasCall, unit.SuperActive, unit.SuperMeter = nil, false, 10
+local gauge = runtime.set_value("godGauge", 50)
+assert(unit.SuperMeter == 10 and gauge.godGauge == 10, "a direct edit fabricated an unavailable Aid")
+runtime.set_feature("fullGodGauge", true)
+assert(unit.SuperMeter == 10 and runtime.status().features.fullGodGauge
+  and not runtime.status().activeFeatures.fullGodGauge, "unavailable Aid intent was not dormant")
+unit.hasCall = true
+runtime.configure({ fullGodGauge = true })
+assert(unit.SuperMeter == 100 and runtime.status().activeFeatures.fullGodGauge,
+  "reconciling eligible Aid intent did not fill the native meter")
+runtime.set_feature("fullGodGauge", false)
+gauge = runtime.set_value("godGauge", 50)
+assert(unit.SuperMeter == 50 and gauge.godGauge == 50 and updates.gauge == 50)
+runtime.set_value("godGauge", 20)
+assert(unit.SuperMeter == 20, "direct meter reduction was lost")
+unit.superCap = 25
 runtime.set_value("godGauge", 50)
-assert(unit.SuperMeter == 50)
+assert(unit.SuperMeter == 25, "direct meter edit discarded the native Aid cap")
+unit.superCap = nil
 expectError("invalidValue", function() runtime.set_value("godGauge", 101) end)
+runtime.set_feature("fullGodGauge", true)
+gauge = runtime.set_value("godGauge", 50)
+assert(unit.SuperMeter == 100 and gauge.features.fullGodGauge and gauge.activeFeatures.fullGodGauge,
+  "a direct edit removed durable full-gauge intent")
+unit.SuperActive = true
+expectError("invalidValue", function() runtime.set_value("godGauge", 50) end)
+assert(unit.SuperMeter == 100, "rejected active-Aid edit mutated its meter")
+unit.SuperActive = false
+runtime.disable_all()
+runtime.set_value("godGauge", 50)
+assert(unit.SuperMeter == 50 and not runtime.status().features.fullGodGauge,
+  "disable retained full-gauge intent")
 CurrentRun = nil
 runtime.configure({ fullHealth = true, forceRerolls = true, infiniteAmmo = true })
 local dormant = runtime.status()
 assert(dormant.features.fullHealth and not dormant.activeFeatures.fullHealth and not dormant.heroReady)
 runtime.disable_all()
+assert(not runtime.status().features.fullHealth and not runtime.status().features.infiniteAmmo
+  and not runtime.status().features.forceRerolls, "disable retained dormant combat intent")
 print("hades_combat_parity_journeys_ok")
 '''
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
