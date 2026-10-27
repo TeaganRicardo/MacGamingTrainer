@@ -37,6 +37,16 @@ assert get_entry('ChaosCurseNoMoneyTrait')['kind'] == 'curse'
 assert get_entry('ChaosCurseNoMoneyTrait')['acquirable'] is False
 assert get_entry('TemporaryImprovedWeaponTrait')['kind'] == 'temporary'
 assert get_entry('BouldyBlessing_Attack')['kind'] == 'special'
+patroclus_traits = {'TemporaryDoorHealTrait_Patroclus', 'TemporaryImprovedWeaponTrait_Patroclus',
+                    'UpgradedTemporaryLastStandHealTrait'}
+for identifier in patroclus_traits:
+    entry = get_entry(identifier)
+    assert entry['kind'] == 'special' and entry['sources'] == ['NPC_Patroclus_01']
+    assert entry['sourceNames'] == {'zh-CN': '普特洛克勒斯', 'en': 'Patroclus'}
+    assert entry['rarities'] == ['Common'] and entry['supportsLevel'] is False
+    assert identifier in {row['id'] for row in catalog(query='普特洛克勒斯 patroclus')}
+    assert trait_names()[identifier] == entry['names']
+assert 'Scripts/NPCData.lua' in data()['sourceEvidence']['files']
 assert all(len(value) == 64 for value in data()['sourceEvidence']['files'].values())
 assert all('{' not in row['name'] and '{' not in row['description'] for row in catalog())
 assert trait_names()['GodModeTrait'] == {'zh-CN': '天外飞仙', 'en': 'Deus Ex Machina'}
@@ -51,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-catalog-') as directory:
       NativeBoon = { InheritFrom = { "Base" } },
       NativeHammer = {}, NativeBlessing = {}, NativeGift = { Slot = "Keepsake" },
       NativeCompanion = { Slot = "Assist" }, EnemyOnlyTrait = {}, NativeCurse = {},
-      NativeRuntimeTrait = { CustomTitle = "NativeRuntimeTitle" },
+      NativeRuntimeTrait = { CustomTitle = "NativeRuntimeTitle" }, NativePatroclus = {},
     }''')
     (scripts / 'LootData.lua').write_text('''LootData = {
       ZeusUpgrade = { Traits = { "NativeBoon" }, LinkedUpgrades = { NativeBoon = {} } },
@@ -61,6 +71,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-catalog-') as directory:
       TrialUpgrade={PermanentTraits={"NativeBlessing"}, TemporaryTraits={"NativeCurse"}},
     }''')
     (scripts / 'StoreData.lua').write_text('StoreData = {}')
+    (scripts / 'NPCData.lua').write_text('''PresetEventArgs = { PatroclusBenefitChoices = {
+      { { PostLineThreadedFunctionName="PatroclusBuff", PostLineFunctionArgs={ TraitName="NativePatroclus" } } },
+      { { PostLineThreadedFunctionName="PatroclusBuff", PostLineFunctionArgs={ LastStand={Count=100} } } },
+      { { PostLineThreadedFunctionName="UnrelatedOwner", PostLineFunctionArgs={ TraitName="EnemyOnlyTrait" } } },
+    } }
+UnitSetData.NPCs = error("NPC actor initialization must not execute during extraction")''')
     (scripts / 'GiftData.lua').write_text('GiftOrdering = { "NativeGift", "NativeCompanion" }')
     for name in EVIDENCE_SCRIPTS:
         (scripts / name).write_text('-- provenance-only native source\n')
@@ -68,7 +84,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-catalog-') as directory:
         text = content / 'Game/Text' / language
         text.mkdir(parents=True)
         names = ['NativeBoon', 'NativeHammer', 'NativeBlessing', 'NativeGift', 'NativeCompanion',
-                 'NativeCurse', 'ZeusUpgrade', 'WeaponUpgrade', 'TrialUpgrade', 'NativeRuntimeTitle', *RESOURCE_TEXT_IDS.values()]
+                 'NativeCurse', 'ZeusUpgrade', 'WeaponUpgrade', 'TrialUpgrade', 'NativeRuntimeTitle',
+                 'NativePatroclus', 'NPC_Patroclus_01', *RESOURCE_TEXT_IDS.values()]
         records = '\n'.join('{ Id = ' + json.dumps(name) + ' DisplayName = ' + json.dumps(language + ':' + name)
                             + ' Description = "Native {#BoldFormat}description{#PreviousFormat} {$TooltipData.Value}" }'
                             for name in names)
@@ -76,7 +93,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-catalog-') as directory:
         (text / f'MiscText.{language}.sjson').write_text('{ Texts = [] }')
     result = generate(content, require_lua52('Hades catalog generation'))
     entries = {row['id']: row for row in result['entries']}
-    assert set(entries) == {'NativeBoon', 'NativeHammer', 'NativeBlessing', 'NativeCurse', 'NativeGift', 'NativeCompanion'}
+    assert set(entries) == {'NativeBoon', 'NativeHammer', 'NativeBlessing', 'NativeCurse', 'NativeGift',
+                            'NativeCompanion', 'NativePatroclus'}
+    assert entries['NativePatroclus']['sourceNames']['zh-CN'] == 'zh-CN:NPC_Patroclus_01'
     assert entries['NativeBoon']['rarities'] == ['Common', 'Heroic']
     assert entries['NativeCompanion']['kind'] == 'companion'
     assert entries['NativeBoon']['descriptions']['en'] == 'Native description …'

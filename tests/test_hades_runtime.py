@@ -25,6 +25,7 @@ local function expectError(key, fn)
   assert(not ok and tostring(message):find(key, 1, true), tostring(message))
 end
 local updates = {}
+PresetEventArgs = { PatroclusBenefitChoices = {} }
 SaveIgnores = {}
 local savedState, saveFailure
 function Save()
@@ -222,6 +223,8 @@ function GetTraitNameCount(unit, name)
   return count
 end
 function TraitUIUpdateText(trait) updates.trait = trait.RemainingUses end
+function UpdateTraitNumber(trait) updates.traitNumber = trait.Name end
+function RecreateLifePips() updates.lifePips = true end
 function RemoveTraitData(unit, selected)
   for index, trait in ipairs(unit.Traits) do
     if trait == selected then table.remove(unit.Traits, index); break end

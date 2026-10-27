@@ -883,9 +883,30 @@ local function equipOwnedTrait(unit, name, source, rarity, level)
   GameState[ownerKey] = name
   if assist then EquipReferencedWeapons(source) end
   equip(unit, name)
-  if assist then
-    for _, trait in pairs(unit.Traits or {}) do
-      if trait.Name == name then AddAssistWeapons(unit, trait); break end
+  for _, trait in pairs(unit.Traits or {}) do
+    if trait.Name == name then
+      if assist then
+        AddAssistWeapons(unit, trait)
+        if previous and previous.Name == name and finite(previous.RemainingUses) then
+          -- AwardMenuScripts UpgradeAssistKeepsake grants one use per added rank.
+          trait.RemainingUses = math.max(0, previous.RemainingUses + rank - currentRank)
+          UpdateTraitNumber(trait)
+        end
+      elseif previous and previous.Name == name then
+        -- AdvanceKeepsake restores earned effects after native unequip/equip.
+        if previous.AccumulatedDodgeBonus then
+          trait.AccumulatedDodgeBonus = previous.AccumulatedDodgeBonus
+          SetLifeProperty({ Property = "DodgeChance", Value = trait.AccumulatedDodgeBonus,
+            ValueChangeType = "Add", DestinationId = unit.ObjectId, DataValue = false })
+          SetUnitProperty({ Property = "Speed", Value = 1 + trait.AccumulatedDodgeBonus,
+            ValueChangeType = "Multiply", DestinationId = unit.ObjectId })
+        end
+        trait.AccumulatedDamageBonus, trait.Uses, trait.CurrentRoom =
+          previous.AccumulatedDamageBonus, previous.Uses, previous.CurrentRoom
+        if name == "ReincarnationTrait" then RecreateLifePips() end
+        UpdateTraitNumber(trait)
+      end
+      break
     end
   end
   runtime.propertyDepth = runtime.propertyDepth - 1
@@ -903,8 +924,19 @@ function runtime.add_trait(name, rarity, level)
       assert(trait.Slot ~= source.Slot or trait.Name == name, "hades.error.traitSlotOccupied")
     end
   end
+  local patroclus = false
+  for _, choice in ipairs(PresetEventArgs.PatroclusBenefitChoices) do
+    for _, action in ipairs(choice) do
+      if action.PostLineThreadedFunctionName == "PatroclusBuff"
+          and action.PostLineFunctionArgs.TraitName == name then patroclus = true end
+    end
+  end
+  assert(not patroclus or level == 1, "hades.error.invalidValue")
   suspendProperties(unit)
-  addTraits(unit, name, rarity, level)
+  if patroclus then
+    -- PatroclusBuff's synchronous trait owner; its presentation yields first.
+    AddTraitToHero({ TraitData = source })
+  else addTraits(unit, name, rarity, level) end
   mount(unit, false)
   return runtime.status()
 end
