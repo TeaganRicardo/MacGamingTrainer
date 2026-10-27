@@ -46,7 +46,21 @@ if ! mkdir -p "$HOME"; then
 fi
 
 MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
-if [[ -f "$MACOS_ONLY_LIST" ]]; then
+selected=""
+if [[ ! -f "$MACOS_ONLY_LIST" ]]; then
+  record_failure "missing macOS-only test list: $MACOS_ONLY_LIST"
+elif [[ $# -eq 0 ]]; then
+  # Full inventory is reserved for exact-SHA release convergence.
+  selected="$(cat "$MACOS_ONLY_LIST")"
+elif [[ $# -eq 3 && "$1" == "--pr" ]]; then
+  if ! selected="$(python3 Tools/select_macos_pr_tests.py "$2" "$3")"; then
+    record_failure "select PR macOS tests"
+  fi
+else
+  record_failure "usage: run_macos_checks.sh [--pr BASE_SHA HEAD_SHA]"
+fi
+
+if [[ -n "$selected" ]]; then
   while IFS= read -r name || [[ -n "$name" ]]; do
     [[ -n "$name" ]] || continue
     test_file="$ROOT/tests/$name"
@@ -55,9 +69,7 @@ if [[ -f "$MACOS_ONLY_LIST" ]]; then
       continue
     fi
     run_check "$name" python3 "$test_file"
-  done < "$MACOS_ONLY_LIST"
-else
-  record_failure "missing macOS-only test list: $MACOS_ONLY_LIST"
+  done <<< "$selected"
 fi
 
 if (("${#failures[@]}" > 0)); then

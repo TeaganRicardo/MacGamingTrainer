@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       needs_macos: ${{ steps.scope.outputs.needs_macos }}
+      needs_build: ${{ steps.scope.outputs.needs_build }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -107,9 +108,13 @@ jobs:
           echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
           echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
-      - name: Run macOS-only contract suite
-        if: needs.scope.outputs.needs_macos == 'true'
+      - name: Run full macOS contracts for release convergence
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: bash Tools/run_macos_checks.sh
+
+      - name: Run selected macOS PR smoke tests
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
+        run: bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"
 
       # Declared behavioural invariants, proven to fail when the code that
       # guards them is broken. Several of these tests compile Swift and drive
@@ -132,11 +137,11 @@ jobs:
         run: python3 Tools/mutation_gate.py
 
       - name: Build unified trainer
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true')
         run: ./build.sh --all
 
       - name: Verify package
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true')
         run: |
           app="$(python3 Tools/verify_module_build.py all --print-app)"
           expected_version="${{ steps.version.outputs.version }}"

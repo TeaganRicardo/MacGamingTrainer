@@ -12,7 +12,8 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # Release coordination only; real builds and signing stay in the dispatched macOS lanes.
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -30,8 +31,8 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/main"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
-          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
+          version=$(python3 -c 'import plistlib; print(plistlib.load(open("Info.plist", "rb"))["CFBundleShortVersionString"])')
+          build=$(python3 -c 'import plistlib; print(plistlib.load(open("Info.plist", "rb"))["CFBundleVersion"])')
           tag=$(python3 Tools/release_tag.py "$version" "$build")
           modules=$(python3 - <<'PY'
           import json
@@ -164,7 +165,7 @@ jobs:
           artifact="$(find artifacts -maxdepth 1 -type f -name '*.zip' -print)"
           provenance="$(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print)"
           sidecar="$(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print)"
-          (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
+          (cd artifacts && sha256sum -c "$(basename "$sidecar")")
           python3 Tools/verify_build_provenance.py \
             --provenance "$provenance" \
             --artifact "$artifact" \

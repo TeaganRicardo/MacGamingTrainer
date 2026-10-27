@@ -51,9 +51,12 @@ jobs:
   build:
     needs: scope
     if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && 'macos-26' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
+      # Hades isolated diagnostics remain part of explicit release convergence,
+      # while PRs run only the reference fixture for shared module seams.
+      MGT_RUN_MODULE_BUILD: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') }}
       # macos-26 is GA but its hosted image is serviced in place. Exact image
       # identity and native tool versions are retained in artifact provenance.
       MGT_MACOS_RUNNER_LABEL: macos-26
@@ -73,42 +76,42 @@ jobs:
           exit 1
 
       - name: Fast path
-        if: needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'false'
+        if: needs.scope.result == 'success' && env.MGT_RUN_MODULE_BUILD == 'false'
         run: echo "Change does not require the reference module build."
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         with:
           fetch-depth: 0
           ref: ${{ env.HEAD_SHA }}
 
       - name: Require intended executable checkout
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         with:
           python-version: '3.15.0'
 
       - name: Verify selected macOS toolchain
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         run: python3 Tools/macos_toolchain_identity.py
 
       - name: Install reference fixture
-        if: needs.scope.outputs.needs_module == 'true' && matrix.game == 'reference_fixture'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && matrix.game == 'reference_fixture'
         run: |
           mkdir -p Backend/games/reference_fixture Sources/ReferenceFixture
           cp -R ContractFixtures/reference_module/backend/. Backend/games/reference_fixture/
           cp -R ContractFixtures/reference_module/frontend/. Sources/ReferenceFixture/
 
       - name: Build selected module
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         run: |
           ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
-        if: needs.scope.outputs.needs_module == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true'
         run: |
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
@@ -121,7 +124,7 @@ jobs:
 
       - name: Retain isolated module artifact and source provenance
         id: package
-        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
@@ -144,7 +147,7 @@ jobs:
             --workflow-source .github/workflows/module-build-matrix.yml "${copy_args[@]}"
 
       - name: Verify isolated artifact checksum and declared inputs
-        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           (cd artifacts && shasum -a 256 -c "${{ steps.package.outputs.sidecar_name }}")
           checkout=clean
@@ -168,7 +171,7 @@ jobs:
             --match-current-macos-toolchain
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && github.event_name == 'workflow_dispatch'
         with:
           name: ${{ matrix.game }}-${{ env.HEAD_SHA }}
           path: |

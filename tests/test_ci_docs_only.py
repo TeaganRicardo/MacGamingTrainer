@@ -29,12 +29,13 @@ assert not module.is_docs_only(["docs/a.md", REFERENCE_DATA])
 MACOS_ONLY = {"test_hades2_run_log_watcher.py"}
 
 
-def assert_scope(paths, *, docs_only, linux, macos, module_build):
+def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None):
     assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY) == {
         "docs_only": docs_only,
         "needs_linux": linux,
         "needs_macos": macos,
         "needs_module": module_build,
+        "needs_build": macos if build is None else build,
     }
 
 
@@ -56,8 +57,8 @@ assert_scope(
     ["Backend/games/hades2/adapter.py"],
     docs_only=False,
     linux=True,
-    macos=True,
-    module_build=True,
+    macos=False,
+    module_build=False,
 )
 
 for shared_backend_seam in (
@@ -73,8 +74,8 @@ for shared_backend_seam in (
         [shared_backend_seam],
         docs_only=False,
         linux=True,
-        macos=True,
-        module_build=True,
+        macos=False,
+        module_build=False,
     )
 
 # Core Save implementation remains ordinary Backend/Core Python unless a
@@ -105,7 +106,7 @@ assert_scope(
     docs_only=False,
     linux=True,
     macos=True,
-    module_build=True,
+    module_build=False,
 )
 assert_scope(
     ["Sources/Core/UI/TrainerTheme.swift"],
@@ -126,14 +127,14 @@ assert_scope(
     docs_only=False,
     linux=True,
     macos=True,
-    module_build=True,
+    module_build=False,
 )
 assert_scope(
     ["Backend/games/hades2/trainer-entitlements.plist"],
     docs_only=False,
     linux=True,
     macos=True,
-    module_build=True,
+    module_build=False,
 )
 assert_scope(
     ["tests/test_hades2_run_log_watcher.py"],
@@ -141,6 +142,7 @@ assert_scope(
     linux=True,
     macos=True,
     module_build=False,
+    build=False,
 )
 assert_scope(
     ["tests/test_hades2_transport_outcome_unknown_taint.py"],
@@ -160,9 +162,22 @@ assert_scope(
     ["Tools/ci_docs_only.py"],
     docs_only=False,
     linux=True,
-    macos=True,
-    module_build=True,
+    macos=False,
+    module_build=False,
 )
+
+# Source identity determines platform work. Pure game logic is Linux-owned;
+# Swift and native sources still require a real compiler, but isolated module
+# verification is reserved for shared module/build boundaries.
+assert_scope(["Backend/games/hades/runtime/hades.lua"], docs_only=False, linux=True, macos=False, module_build=False)
+assert_scope(["Backend/games/hades2/native/CommandMailbox.c"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
+assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=False, module_build=False)
+assert_scope(["tests/fixtures/swift/InMemoryDefaults.swift"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope(["Backend/core/native/example.c"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(["Backend/games/example/unknown.binary"], docs_only=False, linux=True, macos=True, module_build=False)
 
 # Reference ownership comes from module identity, and macOS routing for a
 # reference file comes from appResources rather than a filename convention.
@@ -185,6 +200,7 @@ assert module.classify_scope(
     "needs_linux": True,
     "needs_macos": False,
     "needs_module": False,
+    "needs_build": False,
 }
 assert module.classify_scope(
     ["docs/reference/alpha/anything.json"],
@@ -196,6 +212,7 @@ assert module.classify_scope(
     "needs_linux": True,
     "needs_macos": True,
     "needs_module": False,
+    "needs_build": True,
 }
 
 

@@ -48,12 +48,14 @@ Evidence belongs to the exact SHA that executed it. Choose verification by the c
 | Changed responsibility | Task verification |
 | --- | --- |
 | Portable backend/contracts | `bash Tools/run_linux_checks.sh` (broad portable discovery) |
-| Swift/AppKit/build/package | `Build 2 macOS`: macOS contracts and actual Hades build/package/signing, plus applicable portable contracts |
-| Core/module/build contract | Also the module build matrix/reference fixture |
+| Swift/AppKit/native/package | `Build 2 macOS`: targeted PR macOS smoke tests and a unified product build/signature when source inputs need them; full macOS contracts and package checks on release dispatch |
+| Shared Core/Host/module/build contract | Also the module matrix reference fixture; game-owned frontend changes do not require duplicate isolated builds |
 | Core Save transactions | Full portable Save behavior coverage; macOS for Swift integration |
 | `Backend/games/hades2/runtime/hades.lua` | Portable behavior and PR-only resident revision increase; real Hades II acceptance for changed runtime semantics |
 
-The three existing checks remain `Linux contracts`, `Build 2 macOS` and `Module build matrix`; their change-scope classifier selects execution. Mutation audits, retained QA/release artifacts, provenance and checksums belong to explicit convergence/release dispatch on one selected SHA. Merged `main` does not automatically repeat PR checks. A manual handoff uses one fixed source/artifact/checksum, with unexecuted checks explicitly pending.
+The three existing checks remain `Linux contracts`, `Build 2 macOS` and `Module build matrix`; their stable required check contexts are `backend-contracts`, `build` and `build (reference_fixture)`. Portable game runtime/backend changes use Linux contracts. PR macOS behavior checks are a bounded smoke selection; a real unified build runs for affected Swift/native/package inputs. Only shared architecture/build changes require the reference fixture on PRs; isolated Hades diagnostics run on explicit convergence. Full macOS contracts, module isolation, package/signature verification, mutation audits and retained provenance/checksums belong to exact-SHA release/convergence dispatch. The release coordinator runs on Linux and only consumes macOS-generated artifacts. Merged `main` does not automatically repeat PR checks except intentional release preparation.
+
+Do not use a missing or skipped check as a successful required gate. The two required macOS check contexts remain present as Ubuntu fast-path jobs when their platform work is unnecessary; unclassified diffs fail closed. A change to test ownership/inventory requires re-evaluating smoke coverage. A manual handoff uses one fixed source/artifact/checksum, with unexecuted checks explicitly pending.
 
 Tests use temporary fixtures, never the real user/game save tree. New test files use descriptive `test_<subject>.py` names; existing historical names need no bulk rename.
 
