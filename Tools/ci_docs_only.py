@@ -24,39 +24,31 @@ PORTABLE_TOOL_PATHS = {
     "Tools/release_tag.py",
     "Tools/module_inventory.py",
     "Tools/run_linux_checks.sh",
+    "Tools/ci_docs_only.py",
+    "Tools/select_macos_pr_tests.py",
 }
-BACKEND_MODULE_BOUNDARY_PATHS = {
-    "Backend/core/__init__.py",
-    "Backend/core/adapter.py",
-    "Backend/core/game_spec.py",
-    "Backend/core/module_manifest.py",
-    "Backend/core/protocol.py",
-    "Backend/core/registry.py",
-    "Backend/core/server.py",
-}
+# Only native/module composition boundaries need the reference-fixture compiler lane.
+# Pure Backend implementation and game-owned Swift changes are verified by their
+# owning lanes; invoking a second macOS app build adds no isolation evidence.
 MODULE_EXACT_PATHS = {
     ".github/workflows/module-build-matrix.yml",
-    "ACTIVE_GAME_ID",
     "app.json",
-    "Tools/product_support.py",
-    "Backend/games/__init__.py",
-    "Info.plist",
-    "Sources/App.swift",
-    "Tools/ci_docs_only.py",
-    "Tools/supported_build.py",
     "Tools/build_module_native.py",
     "Tools/clean_signing_metadata.py",
     "Tools/generate_game_binding.py",
     "Tools/module_inventory.py",
     "Tools/module_support.py",
+    "Tools/product_support.py",
     "Tools/publish_module_build.py",
-    "Tools/validate_game_module.py",
+    "Tools/supported_build.py",
     "Tools/verify_module_build.py",
+    "Tools/python_runtime.json",
     "build.sh",
 }
 MODULE_PREFIXES = (
     "ContractFixtures/reference_module/",
     "Sources/Core/",
+    "Native/",
 )
 
 
@@ -97,13 +89,11 @@ def load_macos_only_tests(root: Path = ROOT) -> set[str]:
 
 
 def needs_module_build_for_path(path: str) -> bool:
-    if (
-        path in BACKEND_MODULE_BOUNDARY_PATHS
-        or path in MODULE_EXACT_PATHS
+    return (
+        path in MODULE_EXACT_PATHS
+        or path == "Sources/App.swift"
         or path.startswith(MODULE_PREFIXES)
-    ):
-        return True
-    return path.startswith(("Backend/games/", "Sources/"))
+    )
 
 
 def is_linux_portable_only(
@@ -113,14 +103,42 @@ def is_linux_portable_only(
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
     if path.startswith("Backend/games/"):
-        return False
+        # Backend source logic and resident Lua are portable. Module manifests,
+        # entitlements and native compilation inputs still need a macOS build.
+        return not (
+            path.endswith(("module.json", ".plist", ".c", ".h", ".m", ".mm", ".dylib"))
+            or "/native/" in path
+        )
     if path.startswith("Backend/"):
-        return not path.endswith("/module.json") and not path.endswith(".plist")
+        return True
     if path.startswith("tests/"):
         return Path(path).name not in macos_only_tests
+    if path.startswith(".github/workflows/"):
+        return path not in MODULE_EXACT_PATHS
+    if path in PORTABLE_TOOL_PATHS:
+        return True
     if is_executable_reference_data(path, reference_prefixes):
         return path not in app_resource_sources
-    return path in PORTABLE_TOOL_PATHS
+    return False
+
+
+def needs_build_for_path(
+    path: str,
+    macos_only_tests: set[str],
+    reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] = (),
+) -> bool:
+    # Workflow-only changes and native test-only changes do not require an app
+    # package. The job still runs the selected macOS behavior tests.
+    if path.startswith(("tests/", ".github/workflows/")) or path in {
+        "Tools/macos_only_tests.txt",
+        "Tools/run_macos_checks.sh",
+        "Tools/select_macos_pr_tests.py",
+    }:
+        return False
+    return not is_linux_portable_only(
+        path, macos_only_tests, reference_prefixes, app_resource_sources
+    )
 
 
 def classify_scope(
@@ -138,6 +156,7 @@ def classify_scope(
             "needs_linux": True,
             "needs_macos": True,
             "needs_module": True,
+            "needs_build": True,
         }
 
     docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
@@ -147,6 +166,7 @@ def classify_scope(
             "needs_linux": False,
             "needs_macos": False,
             "needs_module": False,
+            "needs_build": False,
         }
 
     macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
@@ -170,6 +190,10 @@ def classify_scope(
         "needs_linux": True,
         "needs_macos": needs_macos,
         "needs_module": needs_module,
+        "needs_build": needs_module or any(
+            needs_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
+            for path in normalized
+        ),
     }
 
 
@@ -218,7 +242,7 @@ def main(argv: list[str]) -> int:
     except (ModuleInventoryError, OSError, subprocess.SubprocessError) as error:
         print(f"ci scope: {error}", file=sys.stderr)
         return 2
-    for key in ("docs_only", "needs_linux", "needs_macos", "needs_module"):
+    for key in ("docs_only", "needs_linux", "needs_macos", "needs_module", "needs_build"):
         print(f"{key}={'true' if scope[key] else 'false'}")
     return 0
 

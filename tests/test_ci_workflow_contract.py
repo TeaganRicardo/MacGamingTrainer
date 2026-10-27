@@ -118,20 +118,25 @@ for shared_tool in (
 build2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in build2
 assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
+assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
 assert 'needs: scope' in build2
 assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
+assert 'bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"' in build2
+assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true'" in build2
 assert './build.sh --all' in build2
 
 module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
-assert "needs.scope.outputs.needs_module == 'true' && 'macos-26' || 'ubuntu-latest'" in module_matrix
+assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
+assert "MGT_RUN_MODULE_BUILD:" in module_matrix
+assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
-assert "needs.scope.outputs.needs_module == 'false'" in module_matrix
+assert "env.MGT_RUN_MODULE_BUILD == 'false'" in module_matrix
 assert '- reference_fixture' in module_matrix
 assert '- hades\n' in module_matrix
 assert '- hades2' not in module_matrix, 'Hades II build is already owned by Build 2 macOS'
@@ -169,7 +174,8 @@ for step in (
     assert "github.event_name == 'workflow_dispatch'" in window, (
         f"Build 2 heavy convergence step is not dispatch-only: {step}"
     )
-assert "Run macOS-only contract suite" in build2
+assert "Run full macOS contracts for release convergence" in build2
+assert "Run selected macOS PR smoke tests" in build2
 assert "Build unified trainer" in build2
 assert "Verify package" in build2
 
@@ -185,5 +191,10 @@ for step in (
     )
 assert "Build selected module" in module_matrix
 assert "Verify packaged module isolation" in module_matrix
+
+release = (ROOT / '.github/workflows/direct-release.yml').read_text()
+assert 'runs-on: ubuntu-latest' in release, "Release coordinator must not occupy a macOS runner"
+assert 'sha256sum -c' in release
+assert '/usr/libexec/PlistBuddy' not in release
 
 print("ci_workflow_contract_ok")
