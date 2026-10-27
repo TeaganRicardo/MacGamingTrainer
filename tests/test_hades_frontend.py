@@ -822,9 +822,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
         backup.close();check(backup.workspaceID == nil,"closing a backup retained its workspace identity")
         editorWindow.performClose(nil);pump()
         check(editor.workspaceID == nil,"Host close did not release the active editor")
-        check(commands().contains { $0["command"] as? String == "save_editor_close"
-            && ($0["params"] as? [String:Any])?["workspaceId"] as? String == pinnedWorkspace },
-            "closing a document did not close its original workspace")
+        wait("active save_editor_close received by worker for the originally pinned workspace") {
+            commands().contains { $0["command"] as? String == "save_editor_close"
+                && ($0["params"] as? [String:Any])?["workspaceId"] as? String == pinnedWorkspace }
+        }
         print("hades_save_editor_native_control_journeys_ok")
 
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
