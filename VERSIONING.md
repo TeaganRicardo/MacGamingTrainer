@@ -25,7 +25,7 @@ When a release is deliberately prepared:
 4. run the normal release/build gates on that exact SHA;
 5. after the release commit is on `main`, publish the exact source and retained artifact under the immutable release tag determined below.
 
-If the same product SemVer needs another distributable build after an earlier build was already used or uploaded, keep `CFBundleShortVersionString` unchanged and increment only `CFBundleVersion`. Its release uses the immutable `vMAJOR.MINOR.PATCH+bBUILD` tag, leaving the original `vMAJOR.MINOR.PATCH` release unchanged. The direct-release workflow rejects non-increasing build numbers within that SemVer release line and refuses to overwrite existing tags.
+If the same product SemVer needs another distributable build after an earlier build was already used or uploaded, keep `CFBundleShortVersionString` unchanged and increment only `CFBundleVersion`. Its release uses the immutable `vMAJOR.MINOR.PATCH+bBUILD` tag, leaving the original `vMAJOR.MINOR.PATCH` release unchanged. The direct-release workflow rejects non-increasing bundle build numbers across all official three-part release tags, including new product SemVer lines, and refuses to overwrite existing tags. The historical `v0.1` tag is outside this newer naming scheme.
 
 Transient CI builds do not consume build numbers. Their exact source identity is the Git SHA included in the artifact name.
 

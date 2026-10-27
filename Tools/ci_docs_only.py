@@ -21,6 +21,7 @@ from module_inventory import (
 PORTABLE_TOOL_PATHS = {
     "Tools/check_runtime_revision.py",
     "Tools/discover_linux_tests.py",
+    "Tools/release_tag.py",
     "Tools/module_inventory.py",
     "Tools/run_linux_checks.sh",
 }

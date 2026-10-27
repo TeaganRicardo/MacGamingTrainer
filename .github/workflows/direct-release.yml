@@ -32,29 +32,7 @@ jobs:
           test -z "$(git status --porcelain)"
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
           build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
-          base_tag="v$version"
-          tag="$base_tag"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ "$build" =~ ^[1-9][0-9]*$ ]]
-          if git rev-parse -q --verify "refs/tags/$base_tag" >/dev/null; then
-            # A second distributable for the same product SemVer needs a new,
-            # immutable tag: never move or overwrite the previous release.
-            previous_build=$(git show "$base_tag:Info.plist" | python3 -c 'import plistlib,sys;print(plistlib.loads(sys.stdin.buffer.read())["CFBundleVersion"])')
-            for existing in $(git tag -l "${base_tag}+b*"); do
-              number="${existing#${base_tag}+b}"
-              [[ "$number" =~ ^[1-9][0-9]*$ ]] || continue
-              if (( number > previous_build )); then previous_build="$number"; fi
-            done
-            if (( build <= previous_build )); then
-              echo "Bundle build $build must exceed the prior $version release build $previous_build." >&2
-              exit 1
-            fi
-            tag="${base_tag}+b${build}"
-          fi
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "Release tag $tag already exists; refusing to replace it." >&2
-            exit 1
-          fi
+          tag=$(python3 Tools/release_tag.py "$version" "$build")
           modules=$(python3 - <<'PY'
           import json
           from pathlib import Path
