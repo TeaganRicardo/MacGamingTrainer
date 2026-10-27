@@ -1,6 +1,5 @@
-"""Raw LZ4 blocks shared by the two native save containers.
+"""Bounded raw LZ4 block encoding and decoding.
 
-Derived from TheNormalnij/Hades-SavesExtractor format knowledge (MIT).
 Container owners supply their native byte bounds.
 """
 import struct
@@ -76,7 +75,7 @@ def compress(payload, max_input_bytes):
     """Encode one standards-compatible raw LZ4 block without a runtime dependency.
 
     A fixed-size hash table provides ordinary LZ4 greedy matching while keeping
-    memory bounded for the supported Hades save buffer. The encoder deliberately
+    memory bounded for the caller-supplied input limit. The encoder deliberately
     preserves the block-format end constraints (last five bytes literals; final
     match begins at least twelve bytes before the end) used by reference LZ4
     decoders.

@@ -168,22 +168,58 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 func fields(in view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
 }
-func buttons(in view: NSView) -> [NSButton] {
-    (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
-}
-func accessibilityText(in view: NSView) -> [String] {
-    var pending: [NSObject] = [view], visited: Set<ObjectIdentifier> = [], result: [String] = []
+func accessibilityElements(in view: NSView) -> [NSObject] {
+    var pending: [NSObject] = [view], visited: Set<ObjectIdentifier> = [], result: [NSObject] = []
     while let element=pending.popLast() {
         guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
-        for name in ["accessibilityLabel","accessibilityValue"] {
-            let selector=NSSelectorFromString(name)
-            if element.responds(to:selector), let value=element.perform(selector)?.takeUnretainedValue() as? String { result.append(value) }
-        }
+        result.append(element)
         let children=NSSelectorFromString("accessibilityChildren")
         if element.responds(to:children), let values=element.perform(children)?.takeUnretainedValue() as? [NSObject] { pending.append(contentsOf:values) }
         if let native=element as? NSView { pending.append(contentsOf:native.subviews.map { $0 as NSObject }) }
     }
     return result
+}
+func accessibilityString(_ element: NSObject, _ name: String) -> String? {
+    let selector=NSSelectorFromString(name)
+    guard element.responds(to:selector) else { return nil }
+    return element.perform(selector)?.takeUnretainedValue() as? String
+}
+func accessibilityText(in view: NSView) -> [String] {
+    accessibilityElements(in:view).flatMap { element in
+        ["accessibilityLabel","accessibilityValue"].compactMap { accessibilityString(element,$0) }
+    }
+}
+func accessibilityButton(named name: String, in view: NSView) -> (any NSAccessibilityProtocol)? {
+    for element in accessibilityElements(in:view) {
+        guard let button=element as? NSAccessibilityProtocol, button.accessibilityRole() == .button,
+              button.accessibilityLabel()==name || button.accessibilityTitle()==name else { continue }
+        return button
+    }
+    return nil
+}
+func nativeHierarchy(in view: NSView) -> String {
+    accessibilityElements(in:view).map { element in
+        let attributes=["accessibilityRole","accessibilityLabel","accessibilityTitle","accessibilityValue","accessibilityIdentifier"]
+            .compactMap { key in accessibilityString(element,key).map { key+"="+$0.debugDescription } }.joined(separator:" ")
+        let control: String
+        if let field=element as? NSTextField { control=" nativeField="+field.stringValue.debugDescription+" delegate="+String(describing:field.delegate) }
+        else if let editor=element as? NSTextView { control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor)" }
+        else { control="" }
+        return String(describing:type(of:element))+" "+attributes+control
+    }.joined(separator:"\n")
+}
+func requireNativeControl<T>(_ name: String, in view: NSView, find: (NSView) -> T?) -> T {
+    let deadline=Date().addingTimeInterval(5)
+    repeat {
+        view.layoutSubtreeIfNeeded()
+        if let control=find(view) { return control }
+        pump(0.02)
+    } while Date() < deadline
+    fatalError(name+" missing after rendering\n"+nativeHierarchy(in:view))
+}
+func pressNativeButton(named name: String, in view: NSView) {
+    let button=requireNativeControl("native accessibility button '"+name+"'",in:view) { accessibilityButton(named:name,in:$0) }
+    check(button.accessibilityPerformPress(),"native accessibility button '"+name+"' rejected Press\n"+nativeHierarchy(in:view))
 }
 func textViews(in view: NSView) -> [NSTextView] {
     (view as? NSTextView).map { [$0] } ?? view.subviews.flatMap(textViews)
@@ -441,6 +477,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         editor.detail("entry:equipment");wait { !editor.busy && editor.editingRow?.id == "entry:equipment" }
         check(editor.editingRow?.choices?.count == 2,"basket revision lost native selection choices")
         editor.dismissDetail()
+        wait("equipment sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
         editor.selectDomain(.advanced);wait { !editor.queryLoading && editor.rows.first?.id == "entry:advanced" }
         let advanced=editor.rows.first!
         let raw=HadesSaveValue.table(arraySize:0,hashSize:2,entries:[
@@ -463,12 +500,20 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             fatalError("typed rejection sheet missing")
         }
         rejectedContent.layoutSubtreeIfNeeded();pump()
-        guard let rejectedJSON=textViews(in:rejectedContent).first(where:{$0.isEditable && !$0.isFieldEditor}),
-              let rejectedKey=fields(in:rejectedContent).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.saveEditor.key",language:.en)}),
-              let rejectedKeyCoordinator=rejectedKey.delegate as? TrainerTextField.Coordinator,
-              let rejectedDone=buttons(in:rejectedContent).first(where:{$0.title==localization.localized("host.done")}) else {
-            fatalError("native typed sheet controls missing")
+        let rejectedJSON=requireNativeControl("typed rejection sheet editable NSTextView",in:rejectedContent) {
+            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor})
         }
+        let rejectedKey=requireNativeControl("typed rejection sheet append-key NSTextField",in:rejectedContent) {
+            fields(in:$0).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.saveEditor.key",language:.en)})
+        }
+        guard let rejectedKeyCoordinator=rejectedKey.delegate as? TrainerTextField.Coordinator else {
+            fatalError("typed rejection sheet append-key coordinator missing\n"+nativeHierarchy(in:rejectedContent))
+        }
+        _=requireNativeControl("typed rejection sheet Done accessibility button",in:rejectedContent) {
+            accessibilityButton(named:localization.localized("host.done"),in:$0)
+        }
+        check(rejectedJSON.string == HadesSaveValue.number(9).json && rejectedKey.stringValue == HadesSaveValue.string("new-key").json,
+            "typed append sheet did not initialize its acknowledged value/key\n"+nativeHierarchy(in:rejectedContent))
         let draftKey=HadesSaveValue.string("retained-draft-key").json
         rejectedKeyCoordinator.begin();rejectedKey.stringValue=draftKey
         rejectedKeyCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:rejectedKey))
@@ -479,7 +524,8 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         }
         let rejectedValue = #"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[]}"#
         replaceTypedJSON(rejectedValue,field:rejectedJSON,window:rejectedSheet)
-        rejectedDone.performClick(nil)
+        pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
+        wait("native typed Done did not enqueue Stage") { editor.busy }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "Done dismissed the typed draft before Stage acknowledgment")
         wait { !editor.busy && editor.failures["entry:advanced"] != nil }
@@ -492,7 +538,8 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(accessibilityText(in:rejectedContent).contains(where:{$0.contains("matching allocation counts")}),
             "the typed sheet hid its asynchronous rejection reason")
         replaceTypedJSON(HadesSaveValue.number(10).json,field:rejectedJSON,window:rejectedSheet)
-        rejectedDone.performClick(nil)
+        pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
+        wait("native corrected Done did not enqueue Stage") { editor.busy }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "corrected typed input closed before matching acceptance")
         wait { !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil }
@@ -505,14 +552,19 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             fatalError("typed discard sheet missing")
         }
         discardContent.layoutSubtreeIfNeeded();pump()
-        guard let discardJSON=textViews(in:discardContent).first(where:{$0.isEditable && !$0.isFieldEditor}),
-              let discardDone=buttons(in:discardContent).first(where:{$0.title==localization.localized("host.done")}),
-              let discardButton=buttons(in:discardContent).first(where:{$0.title==localization.localized("host.cancel")}) else {
-            fatalError("native typed discard controls missing")
+        let discardJSON=requireNativeControl("typed discard sheet editable NSTextView",in:discardContent) {
+            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor})
+        }
+        _=requireNativeControl("typed discard sheet Done accessibility button",in:discardContent) {
+            accessibilityButton(named:localization.localized("host.done"),in:$0)
+        }
+        _=requireNativeControl("typed discard sheet Cancel accessibility button",in:discardContent) {
+            accessibilityButton(named:localization.localized("host.cancel"),in:$0)
         }
         replaceTypedJSON(rejectedValue,field:discardJSON,window:discardSheet)
-        discardDone.performClick(nil);wait { !editor.busy && editor.hasFailedDraft(advanced) }
-        discardButton.performClick(nil)
+        pressNativeButton(named:localization.localized("host.done"),in:discardContent)
+        wait { !editor.busy && editor.hasFailedDraft(advanced) }
+        pressNativeButton(named:localization.localized("host.cancel"),in:discardContent)
         wait { editor.editingRow == nil && editorWindow.attachedSheet == nil }
         check(!editor.hasFailedDraft(advanced) && editor.canApply && editor.review.count == 4
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10),
@@ -535,11 +587,11 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         pump();typedSheet.makeFirstResponder(nil)
         wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advancedScalar"})?.typedValue == .string("typed-scalar") }
         check(editor.review.count == 5,"Advanced scalar type change replaced unrelated intents")
-        editor.dismissDetail();pump()
+        editor.dismissDetail();wait("typed scalar sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
         editor.detail("entry:advancedScalar")
         wait { !editor.busy && editor.editingRow != nil }
         check(editor.editingTyped,"basket revision forgot the scalar's typed editing route")
-        editor.dismissDetail();pump()
+        editor.dismissDetail();wait("typed revision sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
         let backup=model.makeSaveEditorModel(snapshotID:"verified-fixture")
         backup.open(language:.en)
         wait { backup.workspaceID != nil && !backup.busy && !backup.queryLoading }

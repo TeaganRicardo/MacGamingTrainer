@@ -1,6 +1,6 @@
 # Hades save-format attribution
 
-The SGB1/LZ4/luabins format implementation in `save_document.py` was developed from format information and implementation evidence published by **Hades-SavesExtractor** by Uladzislau Nikalayevich (TheNormalnij).
+The SGB1/LZ4/luabins format implementation in `save_document.py` was developed from format information and implementation evidence published by **Hades-SavesExtractor** by Uladzislau Nikalayevich (TheNormalnij). This attribution also covers the raw LZ4 encoder and decoder extracted into `Backend/core/lz4_block.py` and shared by the Hades I and Hades II save codecs. The copyright, permission and warranty notices below apply to that shared primitive.
 
 Source: `https://github.com/TheNormalnij/Hades-SavesExtractor`
 
