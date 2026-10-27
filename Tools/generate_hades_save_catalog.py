@@ -10,6 +10,80 @@ from generate_hades_catalog import text_records, render_text
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_LUA_TOKEN = re.compile(r'--\[\[.*?\]\]|--[^\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_]\w*|-?\d+(?:\.\d+)?|[{}\[\]=,;.]', re.DOTALL)
+
+
+def lua_string(token):
+    return re.sub(r'\\([nrt"\'\\])', lambda match: {
+        'n': '\n', 'r': '\r', 't': '\t', '"': '"', "'": "'", '\\': '\\',
+    }[match[1]], token[1:-1])
+
+
+def native_tables(source):
+    """Read literal table structure and string attributes without running Lua."""
+    tokens = [token for token in _LUA_TOKEN.findall(source) if not token.startswith('--')]
+    roots, stack = [], []
+    for index, token in enumerate(tokens):
+        if token == '{':
+            key = None
+            if index > 1 and tokens[index - 1] == '=':
+                key = tokens[index - 2]
+                if key == ']' and index > 3: key = tokens[index - 3]
+                if key.startswith(('"', "'")): key = lua_string(key)
+            node = {'key': key, 'fields': {}, 'children': []}
+            (stack[-1]['children'] if stack else roots).append(node)
+            stack.append(node)
+        elif token == '}':
+            if not stack: raise ValueError('Unmatched native table close')
+            stack.pop()
+        elif (stack and index + 2 < len(tokens) and tokens[index + 1] == '='
+              and tokens[index + 2].startswith(('"', "'"))):
+            stack[-1]['fields'][token] = lua_string(tokens[index + 2])
+    if stack: raise ValueError('Unclosed native literal table')
+    return roots
+
+
+def scene_lines(node):
+    # Only displayed line/choice nodes contribute content. Requirement tables,
+    # event arguments and voice-line callback metadata are never search prose.
+    if node['fields'].get('Text'): yield node['fields']
+    for child in node['children']:
+        if child['key'] is None or child['key'].isdigit() or child['key'] == 'Choices':
+            yield from scene_lines(child)
+
+
+def extract_scenes(paths, localized):
+    scenes = {}
+
+    def visit(node, ancestors):
+        key = node['key'] or ''
+        if key.endswith('TextLineSets'):
+            source = next((parent for parent in reversed(ancestors)
+                           if parent['fields'].get('Speaker') or (parent['key'] or '').startswith('NPC_')), None)
+            owner = (source['fields'].get('Speaker') or source['key']) if source else ''
+            for scene in node['children']:
+                if not scene['key']: continue
+                lines = list(scene_lines(scene))
+                if not lines: continue
+                result = scenes.setdefault(scene['key'], {'owner': owner, 'content': {'en': [], 'zh-CN': []}})
+                for line in lines:
+                    cue = line.get('Cue', '').removeprefix('/VO/')
+                    speaker = line.get('Speaker') or owner or cue.split('_')[0]
+                    # Narrative.lua:470..476 identifies CharProtag as the hero,
+                    # whose official label is PlayerUnit / PlayerUnit_Intro.
+                    if speaker == 'CharProtag': speaker = 'PlayerUnit'
+                    for language in ('en', 'zh-CN'):
+                        text = (render_text(localized[language], cue, 'DisplayName')
+                                if language != 'en' else '') or render_text({'line': {'DisplayName': line['Text']}}, 'line', 'DisplayName')
+                        item = {'speaker': render_text(localized[language], speaker, 'DisplayName') or speaker,
+                                'text': text}
+                        if item not in result['content'][language]: result['content'][language].append(item)
+        for child in node['children']: visit(child, [*ancestors, node])
+
+    for path in paths:
+        for root in native_tables(path.read_text(encoding='utf-8-sig')): visit(root, [])
+    return scenes
+
 
 def block(source, start):
     start = source.index('{', start)
@@ -38,7 +112,11 @@ def generate(content):
     files = [content / 'Scripts' / name for name in
              ('Main.lua', 'RunManager.lua', 'RoomManager.lua', 'MetaUpgradeData.lua',
               'MetaUpgrades.lua', 'WeaponUpgradeData.lua', 'WeaponUpgradeScripts.lua',
-              'GiftData.lua', 'GiftScripts.lua')]
+              'GiftData.lua', 'GiftScripts.lua', 'Narrative.lua', 'CodexScripts.lua',
+              'QuestLogScreen.lua', 'GhostAdminScreen.lua', 'AwardMenuScripts.lua', 'TextLineSets.lua')]
+    scene_paths = [path for path in sorted((content / 'Scripts').glob('*.lua'))
+                   if re.search(r'\b\w*TextLineSets\s*=', path.read_text(encoding='utf-8-sig'))]
+    files.extend(path for path in scene_paths if path not in files)
     meta = (content / 'Scripts/MetaUpgradeData.lua').read_text(encoding='utf-8-sig')
     order, _ = block(meta, meta.index('MetaUpgradeOrder ='))
     mirror = [list(pair) for pair in re.findall(r'\{\s*"(\w+)"\s*,\s*"(\w+)"\s*\}', order)]
@@ -75,6 +153,7 @@ def generate(content):
             body = source[match.end():starts[index + 1].start() if index + 1 < len(starts) else len(source)]
             if re.search(r'\bOverwriteLocalization\s*=\s*true', body):
                 aliases[match[1]] = records[match[1]]
+    localized = {}
     for language in ('zh-CN', 'en'):
         # Native language-independent alias definitions refer to translated
         # Keywords; the Chinese file deliberately omits these aliases.
@@ -86,9 +165,14 @@ def generate(content):
         for identifier in sorted(identifiers):
             label = render_text(records, identifier, 'DisplayName')
             if label: names.setdefault(identifier, {})[language] = label
+        for path in sorted((content / 'Game/Text' / language).glob('_*.' + language + '.sjson')):
+            files.append(path)
+            records.update(text_records(path))
+        localized[language] = records
     names = {key: value for key, value in names.items() if len(value) == 2}
-    return {'schemaVersion': 1, 'mirrorRows': mirror, 'weapons': weapons, 'names': names,
-            'sourceEvidence': {'method': 'Static native data-table extraction and same-ID official bilingual text.',
+    scenes = extract_scenes(scene_paths, localized)
+    return {'schemaVersion': 1, 'mirrorRows': mirror, 'weapons': weapons, 'names': names, 'scenes': scenes,
+            'sourceEvidence': {'method': 'Static native tables, displayed scene lines/choices and same-ID official bilingual text.',
                 'files': {str(path.relative_to(content)): hashlib.sha256(path.read_bytes()).hexdigest()
                           for path in files}}}
 

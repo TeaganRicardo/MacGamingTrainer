@@ -21,34 +21,47 @@ folder=pathlib.Path(__file__).parent
 workspaces={};next_workspace=0
 files=[{'rootId':'fixture','relativePath':f'Profile{n}.sav','profile':f'Profile{n}','variant':''} for n in (1,2)]
 values={'resources':25,'progression':False,'equipment':1,'relationships':1,'narrative':'Fixture dialogue',
-    'statistics':4,'history':2,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
+    'statistics':4,'history':2,'shiftA':11,'shiftB':22,'shiftC':33,'narrativeNyx':True,'narrativeNyxShared':False,'narrativeAchilles':False,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
         {'key':{'luaType':'string','value':'unknown'},'value':{'luaType':'number','value':3}}]}}
 def typed(value):
     if isinstance(value,dict):return value
     return {'luaType':'boolean' if type(value) is bool else ('number' if isinstance(value,(int,float)) else 'string'),'value':value}
+def entry_domain(identifier,workspace):
+    if identifier.startswith('p:'):
+        _,baseline,index=identifier.split(':')
+        if baseline!=workspace['baseline']:raise ValueError('Old physical occurrence')
+        return workspace['physical'][int(index)]
+    return identifier.split(':')[1]
 def save_row(domain,workspace,full=False):
     cn=workspace.get('language')=='zh-CN'
-    row={'id':'entry:'+domain,'name':{'resources':'Gems','progression':'Mirror pair','equipment':'Aspect',
-        'statistics':'Runs Completed','advanced':'Unknown Table','advancedScalar':'Advanced Scalar'}.get(domain,domain),
+    identifier=('p:'+workspace['baseline']+':'+str(workspace['physical'].index(domain))) if domain.startswith('shift') else 'entry:'+domain
+    row={'id':identifier,'baselineGeneration':workspace['baseline'],'name':{'resources':'Gems','progression':'Mirror pair','equipment':'Aspect',
+        'statistics':'Runs Completed','advanced':'Unknown Table','advancedScalar':'Advanced Scalar','shiftA':'Shift A','shiftB':'Shift B','shiftC':'Shift C'}.get(domain,domain),
         'englishName':domain,'group':'Saved fields','groupId':'fixture-group','owner':'Fixture Owner','ownerId':'fixture-owner','valueType':typed(workspace['values'][domain])['luaType'],
         'displayValue':str(workspace['values'][domain]),'typedValue':typed(workspace['values'][domain]),
         'editable':True,'operations':['set','unset']+(['append'] if domain=='advanced' else []),'hasChildren':domain=='advanced'}
     if domain=='equipment':row['choices']=[{'name':'Zagreus','value':typed(1)},{'name':'Nemesis','value':typed(2)}]
     if domain=='advanced':row['warning']='Unknown native impact'
+    if domain.startswith('narrative') and domain!='narrative':
+        nyx=domain!='narrativeAchilles'
+        row.update(name='First Meeting',englishName='First Meeting',owner=('倪克斯' if cn else 'Nyx') if nyx else ('阿喀琉斯' if cn else 'Achilles'),
+            ownerId='npc:Nyx' if nyx else 'npc:Achilles',group='TextLinesRecord',groupId='scene:'+domain,
+            content=[{'speaker':('倪克斯' if cn else 'Nyx') if nyx else 'Achilles',
+                'text':('不要绝望，孩子。' if cn else 'Do not despair, child.') if nyx else 'Your training awaits.'}])
     return row
 def review(workspace):
     actions=[]
     for entry,intent in workspace['pending'].items():
-        domain=entry.split(':')[1];value=intent.get('value');row=save_row(domain,workspace)
+        domain=entry_domain(entry,workspace);value=intent.get('value');row=save_row(domain,workspace)
         actions.append({'id':entry,'name':row['name'],'before':str(workspace['values'][domain]),'after':str(value),
             'operation':intent['operation'],'valueType':row['valueType'],
             'typedValue':value.get('value') if intent['operation']=='append' else value,
             'typedKey':value.get('key') if intent['operation']=='append' else None,'effects':[
                 {'id':'linked:rank','name':'Linked rank','before':'0','after':'1'}] if domain=='equipment' else []})
-    return {'actions':actions,'count':len(actions),'effectCount':sum(len(a['effects']) for a in actions)}
+    return {'baselineGeneration':workspace['baseline'],'actions':actions,'count':len(actions),'effectCount':sum(len(a['effects']) for a in actions)}
 def summary(workspace):
-    return {'workspaceId':workspace['id'],'source':workspace['source'],'sourceSHA256':workspace['sha'],
-        'target':workspace.get('target'),'domains':[domain for domain in values if domain!='advancedScalar'],'review':review(workspace)}
+    return {'workspaceId':workspace['id'],'baselineGeneration':workspace['baseline'],'source':workspace['source'],'sourceSHA256':workspace['sha'],
+        'target':workspace.get('target'),'domains':['resources','progression','equipment','relationships','narrative','statistics','history','advanced'],'review':review(workspace)}
 def save_command(command,params,state):
     global next_workspace
     suffix=command.removeprefix('save_editor_')
@@ -59,29 +72,51 @@ def save_command(command,params,state):
         if params.get('snapshotId'):source['snapshotId']=params['snapshotId']
         data=json.loads(json.dumps(values))
         if source['kind']=='currentFile' and (folder/'installed.json').exists():data=json.loads((folder/'installed.json').read_text())
-        workspace={'id':identifier,'source':source,'target':params.get('target'), 'sha':'installed-sha' if (folder/'installed.json').exists() and source['kind']=='currentFile' else 'original-sha','values':data,'pending':{}}
+        workspace={'id':identifier,'source':source,'target':params.get('target'), 'sha':'installed-sha' if (folder/'installed.json').exists() and source['kind']=='currentFile' else 'original-sha','values':data,'pending':{},'baseline':'baseline'+str(next_workspace)+'a','baselineVersion':0,'physical':['shiftA','shiftB','shiftC']}
         workspaces[identifier]=workspace;return summary(workspace)
     workspace=workspaces[params['workspaceId']]
     workspace['language']=params.get('language','en')
+    if suffix in ('target','stage','unstage','cancel','apply') and params.get('baselineGeneration')!=workspace['baseline']:
+        raise ValueError('This control belongs to an earlier document baseline. Refresh the editor before editing.')
     if suffix=='target':workspace['target']=params['target'];return summary(workspace)
     if suffix=='close':del workspaces[params['workspaceId']];return {'closed':True}
     if suffix=='query':
+        if state.get('editorHoldQuery'):time.sleep(.3)
         row=save_row(params['domain'],workspace)
         rows=[row]+([save_row('advancedScalar',workspace)] if params['domain']=='advanced' else [])
-        return {'rows':rows,'total':len(rows),'offset':0,'limit':len(rows),'breadcrumbs':[], 'parentId':params.get('parentId')}
-    if suffix=='detail':return {'row':save_row(params['entryId'].split(':')[1],workspace,True)}
+        if params['domain']=='advanced' and state.get('editorShift'):rows=[save_row(key,workspace) for key in workspace['physical']]
+        if params['domain']=='narrative':
+            rows=[save_row(key,workspace) for key in ('narrativeNyx','narrativeNyxShared','narrativeAchilles')]
+            if params.get('query'):
+                def matches(item):
+                    text=' '.join([item['name'],item['owner'],*(part for line in item.get('content',[]) for part in line.values()),
+                        'Nyx 倪克斯 Do not despair, child. 不要绝望，孩子。' if item['ownerId']=='npc:Nyx' else 'Achilles 阿喀琉斯 Your training awaits.']).casefold()
+                    return all(word.casefold() in text for word in params['query'].split())
+                rows=[item for item in rows if matches(item)]
+        baseline='old-replayed-baseline' if state.get('editorOldQueryReply') else workspace['baseline']
+        return {'baselineGeneration':baseline,'rows':rows,'total':len(rows),'offset':0,'limit':len(rows),'breadcrumbs':[], 'parentId':params.get('parentId')}
+    if suffix=='detail':return {'row':save_row(entry_domain(params['entryId'],workspace),workspace,True)}
     if suffix=='stage':
         if params.get('value',{}).get('value')==999:raise ValueError('Fixture rejected this edit; prior changes retained.')
         workspace['pending'][params['entryId']]={'operation':params['operation'],'value':params.get('value')}
-        return review(workspace)
+        result=review(workspace)
+        if state.get('editorOldReviewReply'):result['baselineGeneration']='old-replayed-baseline'
+        return result
     if suffix=='unstage':workspace['pending'].pop(params['entryId'],None);return review(workspace)
     if suffix=='cancel':workspace['pending'].clear();return review(workspace)
     if suffix=='review':return review(workspace)
     if suffix=='apply':
         if state.get('editorApplyFailure'):raise OSError('Fixture recovery required')
-        for entry,intent in workspace['pending'].items():workspace['values'][entry.split(':')[1]]=intent['value']
+        time.sleep(.1)
+        removed=[]
+        for entry,intent in workspace['pending'].items():
+            domain=entry_domain(entry,workspace)
+            if intent['operation']=='unset':removed.append(domain)
+            else:workspace['values'][domain]=intent['value']
+        workspace['physical']=[item for item in workspace['physical'] if item not in removed]
+        workspace['baselineVersion']+=1;workspace['baseline']='baseline'+workspace['id'].split(':')[1]+'v'+str(workspace['baselineVersion'])
         workspace['pending'].clear();(folder/'installed.json').write_text(json.dumps(workspace['values']))
-        return {'applied':True,'verified':True,'runtimeReloaded':False,'installedSHA256':'installed-sha','hot':True,
+        return {'baselineGeneration':workspace['baseline'],'applied':True,'verified':True,'runtimeReloaded':False,'installedSHA256':'installed-sha','hot':True,
             'source':workspace['source'],'sourceSHA256':workspace['sha'],'target':workspace['target'],'previousSnapshotId':'fixture-prewrite'}
 
 for raw in sys.stdin:
@@ -127,6 +162,20 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 }
 func fields(in view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+func accessibilityText(in view: NSView) -> [String] {
+    var pending: [NSObject] = [view], visited: Set<ObjectIdentifier> = [], result: [String] = []
+    while let element=pending.popLast() {
+        guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
+        for name in ["accessibilityLabel","accessibilityValue"] {
+            let selector=NSSelectorFromString(name)
+            if element.responds(to:selector), let value=element.perform(selector)?.takeUnretainedValue() as? String { result.append(value) }
+        }
+        let children=NSSelectorFromString("accessibilityChildren")
+        if element.responds(to:children), let values=element.perform(children)?.takeUnretainedValue() as? [NSObject] { pending.append(contentsOf:values) }
+        if let native=element as? NSView { pending.append(contentsOf:native.subviews.map { $0 as NSObject }) }
+    }
+    return result
 }
 func textViews(in view: NSView) -> [NSTextView] {
     (view as? NSTextView).map { [$0] } ?? view.subviews.flatMap(textViews)
@@ -354,12 +403,12 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         gemsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:gemsField))
         wait { !editor.busy && editor.review.actions.first?.typedValue == .number(90) }
         check(editor.review.count == 1,"revising a field duplicated the user action")
-        editor.unstage("entry:resources");wait { !editor.busy && editor.review.count == 0 }
+        editor.unstage("entry:resources",baseline:editor.baselineGeneration!);wait { !editor.busy && editor.review.count == 0 }
         editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
         check(gemsField.stringValue == "25","removing an intent did not restore the source observation")
-        editor.stage("entry:resources",operation:"set",value:HadesSaveValue.number(75).object,workspace:pinnedWorkspace)
+        editor.stage("entry:resources",operation:"set",value:HadesSaveValue.number(75).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
         wait { !editor.busy && editor.review.count == 1 }
-        editor.stage("entry:statistics",operation:"set",value:HadesSaveValue.number(999).object,workspace:pinnedWorkspace)
+        editor.stage("entry:statistics",operation:"set",value:HadesSaveValue.number(999).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
         wait { !editor.busy && editor.failures["entry:statistics"] != nil }
         check(editor.review.count == 1 && editor.review.actions[0].id == "entry:resources",
             "a rejected edit erased acknowledged pending work")
@@ -368,7 +417,16 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         let stats=editor.rows.first!
         _=editor.commit(stats,text:"12",workspace:pinnedWorkspace)
         wait { !editor.busy && editor.review.count == 2 }
-        editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace)
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorOldReviewReply"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
+        wait { !editor.busy && editor.failures["entry:equipment"] != nil }
+        check(editor.review.count == 2 && editor.review.baselineGeneration == editor.baselineGeneration && !editor.canApply,
+            "a replayed old-baseline review replaced acknowledged Changes or enabled Apply")
+        saveState["editorOldReviewReply"]=false
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
         wait { !editor.busy && editor.review.count == 3 }
         check(editor.review.effectCount == 1 && editor.review.actions.first(where:{$0.id=="entry:equipment"})?.effects.first?.name == "Linked rank",
             "linked equipment effects were hidden from Changes")
@@ -415,8 +473,63 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(backup.source?.kind == "managedBackup" && backup.source?.snapshotId == "verified-fixture"
             && backup.workspaceID != editor.workspaceID,"backup document shared the active workspace")
         let backupID=backup.workspaceID
-        editor.selectTarget("fixture/Profile2.sav");wait { !editor.busy && editor.selectedTargetID == "fixture/Profile2.sav" }
-        editor.apply();wait { !editor.busy && editor.receipt != nil && !editor.queryLoading }
+        editor.selectDomain(.resources);wait { !editor.queryLoading && editor.canEditRows }
+        editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
+        guard let applyDraftField=fields(in:editorWindow.contentView!).first(where:{$0.accessibilityLabel()=="Gems"}),
+              let applyDraftCoordinator=applyDraftField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native pre-Apply draft field missing")
+        }
+        let preApplyBaseline=editor.baselineGeneration!
+        let backupBaseline=backup.baselineGeneration
+        let applyCount=commands().filter{$0["command"] as? String == "save_editor_apply"}.count
+        applyDraftCoordinator.begin();applyDraftField.stringValue="76"
+        applyDraftCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:applyDraftField))
+        editor.apply(baseline:preApplyBaseline);pump()
+        check(!editor.canApply && editor.baselineGeneration == preApplyBaseline && applyDraftField.stringValue == "76",
+            "Apply discarded or crossed an unfinished focused draft")
+        check(commands().filter{$0["command"] as? String == "save_editor_apply"}.count == applyCount,
+            "Apply dispatched before native edit completion")
+        applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
+        wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:resources"})?.typedValue == .number(76) }
+        applyDraftCoordinator.begin();applyDraftField.stringValue="invalid"
+        applyDraftCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:applyDraftField))
+        applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
+        editor.apply(baseline:preApplyBaseline);pump()
+        check(!editor.canApply && applyDraftField.stringValue == "invalid" && editor.baselineGeneration == preApplyBaseline,
+            "invalid completed input was lost or permitted Apply")
+        check(editor.review.actions.first(where:{$0.id=="entry:resources"})?.typedValue == .number(76)
+            && backup.baselineGeneration == backupBaseline && backup.canEditRows,
+            "invalid draft erased acknowledged work or locked another document")
+        editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:preApplyBaseline)
+        wait { !editor.busy && !editor.queryLoading };pump()
+        check(applyDraftField.stringValue == "invalid" && !editor.canApply,
+            "an unrelated completed edit replaced an invalid native draft")
+        applyDraftCoordinator.begin();applyDraftField.stringValue="75"
+        applyDraftCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:applyDraftField))
+        applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
+        wait { !editor.busy && editor.canApply && !editor.queryLoading }
+        let oldResourceRow=editor.rows.first!
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorHoldQuery"]=true;saveState["editorOldQueryReply"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        editor.selectTarget("fixture/Profile2.sav",baseline:editor.baselineGeneration);wait { !editor.busy && editor.selectedTargetID == "fixture/Profile2.sav" }
+        editor.apply(baseline:editor.baselineGeneration);wait { !editor.busy && editor.receipt != nil }
+        let countBeforeOldCommit=commands().filter{$0["command"] as? String == "save_editor_stage"}.count
+        _=editor.commit(oldResourceRow,text:"888",workspace:pinnedWorkspace)
+        check(!editor.canEditRows && !editor.canApply && editor.baselineGeneration != preApplyBaseline,
+            "Apply receipt enabled controls before fresh matching rows")
+        wait { !editor.queryLoading }
+        check(!editor.canEditRows,"an old-baseline query reply enabled mutation controls")
+        check(commands().filter{$0["command"] as? String == "save_editor_stage"}.count == countBeforeOldCommit,
+            "old visible row queued a mutation during the post-Apply refresh gap")
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorHoldQuery"]=false;saveState["editorOldQueryReply"]=false
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        editor.query();wait { !editor.queryLoading && editor.canEditRows }
+        _=editor.commit(oldResourceRow,text:"889",workspace:pinnedWorkspace);pump()
+        check(commands().filter{$0["command"] as? String == "save_editor_stage"}.count == countBeforeOldCommit,
+            "a stale native binding adopted the fresh baseline authority")
+
         check(editor.review.count == 0 && editor.sourceSHA256 == pinnedSHA && editor.workspaceID == pinnedWorkspace,
             "Apply replaced the fixed originally read document")
         check(editor.receipt?.target.relativePath == "Profile2.sav" && editor.receipt?.runtimeReloaded == false
@@ -426,13 +539,98 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(editor.rows.first?.typedValue == .number(75),"Apply did not refresh the verified candidate values")
         check(editor.workspaceID == pinnedWorkspace && editor.sourceSHA256 == pinnedSHA && backup.workspaceID == backupID,
             "post-Apply refresh retargeted an existing pinned document")
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorShift"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        let shifted=model.makeSaveEditorModel()
+        shifted.open(language:.en);wait { shifted.canEditRows && !shifted.busy }
+        shifted.selectDomain(.advanced);wait { !shifted.queryLoading && shifted.rows.count == 3 }
+        let shiftedWindow=tools.open(id:"hades-shifted-editor",title:"Shifted Save Editor",localization:localization,theme:.standard) {
+            TrainerToolWindowContent(canClose:{ !shifted.busy },onClose:shifted.close) { HadesSaveEditorView(model:shifted) }
+        }
+        let oldA=shifted.rows[0], oldB=shifted.rows[1]
+        let oldShiftBaseline=shifted.baselineGeneration!
+        shifted.stage(oldA.id,operation:"unset",workspace:shifted.workspaceID,baseline:oldA.baselineGeneration)
+        wait { !shifted.busy && !shifted.queryLoading && shifted.review.count == 1 }
+        shiftedWindow.contentView?.layoutSubtreeIfNeeded();pump()
+        guard let oldBField=fields(in:shiftedWindow.contentView!).first(where:{$0.accessibilityLabel()=="Shift B"}),
+              let oldBCoordinator=oldBField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native old-B occurrence control missing")
+        }
+        func completeOldB(_ text:String) {
+            oldBCoordinator.begin();oldBField.stringValue=text
+            oldBCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:oldBField))
+            oldBCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:oldBField))
+        }
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorHoldQuery"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        let shiftedStageCount=commands().filter{$0["command"] as? String == "save_editor_stage"}.count
+        shifted.apply(baseline:oldShiftBaseline)
+        completeOldB("900")
+        wait { shifted.receipt != nil && !shifted.busy }
+        check(!shifted.canEditRows,"shifted document enabled old rows in its Apply/query gap")
+        completeOldB("901")
+        _=backup.commit(backup.rows.first!,text:"50",workspace:backup.workspaceID)
+        wait { !backup.busy && backup.review.count == 1 }
+        check(backup.baselineGeneration == backupBaseline && backup.canEditRows,
+            "another document's Apply blocked or re-owned the backup edit")
+        wait { !shifted.queryLoading && shifted.canEditRows }
+        check(shifted.rows.map(\.name) == ["Shift B","Shift C"] && shifted.rows[1].typedValue == .number(33),
+            "deleting A changed the saved value of shifted C")
+        completeOldB("902");pump()
+        check(commands().filter{$0["command"] as? String == "save_editor_stage"}.count == shiftedStageCount + 1,
+            "old B was queued against C's reused physical occurrence")
+        var rejectedOldBaseline=false
+        session.send("save_editor_stage",params:["workspaceId":shifted.workspaceID!,"baselineGeneration":oldShiftBaseline,
+            "entryId":oldB.id,"operation":"set","value":HadesSaveValue.number(903).object],
+            operation:"hades.saveEditor.title",announceSuccess:false,reply:{ rejectedOldBaseline = !$0.success })
+        wait { rejectedOldBaseline }
+        shifted.query();wait { !shifted.queryLoading }
+        check(shifted.rows[1].typedValue == .number(33),"server accepted an old physical ID against the new baseline")
+        shiftedWindow.performClose(nil);pump()
+        check(shifted.workspaceID == nil,"closing shifted document retained stale occurrence authority")
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorHoldQuery"]=false;saveState["editorShift"]=false
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+
+        editor.selectDomain(.narrative);wait { !editor.queryLoading && editor.rows.count == 3 }
+        check(Set(editor.rows.map(\.ownerId)).count == 2 && Set(editor.rows.map(\.name)).count == 1,
+            "same-name scenes merged distinct character owners")
+        check(editor.rows.first?.group == "TextLinesRecord" && editor.rows.first?.content?.first?.text == "Do not despair, child.",
+            "native global narrative rows lost their source dialogue")
+        editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
+        check(accessibilityText(in:editorWindow.contentView!).contains(where:{$0.contains("Do not despair, child.")}),
+            "dialogue text was not directly exposed in the native owner card")
+        editor.search="Nyx";editor.searchChanged()
+        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
+        check(!editor.rows.contains{$0.ownerId == "npc:Achilles"} && editor.search == "Nyx",
+            "Nyx search included another character or lost the query")
+        editor.search="不要绝望";editor.searchChanged()
+        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
+        editor.search="Nyx";editor.searchChanged();wait { !editor.queryLoading && editor.rows.count == 2 }
+        let played=editor.rows.first!
+        editor.stage(played.id,operation:"set",value:HadesSaveValue.boolean(false).object,
+            workspace:editor.workspaceID,baseline:played.baselineGeneration)
+        wait { !editor.busy && editor.review.count == 1 }
+        editor.detail(played.id,baseline:played.baselineGeneration);wait { !editor.busy && editor.editingRow != nil }
+        check(!editor.editingTyped && editor.editingRow?.content?.first?.speaker == "Nyx",
+            "narrative basket revision lost the native Played control or scene content")
+        editor.dismissDetail();pump()
+        editor.unstage(played.id,baseline:played.baselineGeneration);wait { !editor.busy && editor.review.count == 0 }
+        localization.language = .zhCN
+        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.first?.content?.first?.speaker == "倪克斯" }
+        check(editor.rows.first?.content?.first?.text == "不要绝望，孩子。" && editor.search == "Nyx",
+            "language refresh lost bilingual visible dialogue search")
+        localization.language = .en;editor.search="";editor.searchChanged()
+        wait { !editor.queryLoading && editor.rows.count == 3 }
         backup.selectDomain(.resources);wait { !backup.queryLoading }
         _=backup.commit(backup.rows.first!,text:"50",workspace:backup.workspaceID)
         wait { !backup.busy && backup.review.count == 1 }
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorApplyFailure"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
-        backup.apply();wait { !backup.busy && backup.recoveryPath != nil }
+        backup.apply(baseline:backup.baselineGeneration);wait { !backup.busy && backup.recoveryPath != nil }
         check(backup.review.count == 1 && !backup.canApply,"uncertain Apply lost edits or allowed automatic replay")
         check(backup.failures["apply"]?.arguments.first == "Fixture recovery required","failure did not carry actionable detail")
         let editorRequests=commands().filter { ($0["command"] as? String)?.hasPrefix("save_editor_") == true }

@@ -6,8 +6,9 @@ from pathlib import Path
 import uuid
 
 from .catalog import trait_names, resource_catalog
-from .save_document import HadesSaveDocument, LuaTable, AmbiguousKeyError, SaveFormatError
+from .save_document import HadesSaveDocument, LuaTable, AmbiguousKeyError
 from .save_edit import HadesSaveEditSession
+from .save_owners import NATIVE_OWNERS, ENTITY_DEPTHS
 from .save_provider import editor_files, active_profile_bytes
 from . import save_values as values
 
@@ -15,23 +16,6 @@ from . import save_values as values
 _CATALOG = json.loads(Path(__file__).with_name('save_catalog.json').read_text())
 DOMAINS = ('resources', 'progression', 'equipment', 'relationships', 'narrative',
            'statistics', 'history', 'advanced')
-_OWNERS = {
-    'resources': ('Resources', 'LifetimeResourcesGained', 'LifetimeResourcesSpent'),
-    'progression': ('MetaUpgrades', 'MetaUpgradesUnlocked', 'MetaUpgradeStagesUnlocked',
-                    'MetaUpgradesSelected', 'MetaUpgradeState', 'AssistUnlocks', 'ActiveMutators'),
-    'equipment': ('WeaponsUnlocked', 'WeaponUnlocks', 'LastWeaponUpgradeData',
-                  'LastInteractedWeaponUpgrade', 'KeepsakeChambers'),
-    'relationships': ('Gift', 'NPCInteractions', 'NPCInteractionsCheckRecord', 'AssistUnlocks'),
-    'narrative': ('TextLinesRecord', 'TextLinesChoiceRecord', 'Flags', 'QuestsCompleted',
-                  'WorldUpgrades', 'WorldUpgradesAdded', 'CodexStatus'),
-    'statistics': ('TimesCleared', 'TimesClearedWeapon', 'WeaponRecordsClearTime',
-                   'WeaponRecordsShrinePoints', 'ConsecutiveClears', 'ConsecutiveClearsRecord',
-                   'CompletedRunsCache', 'AccumulatedMetaPointsCache', 'SpentShrinePointsCache',
-                   'RecordClearedShrineThreshold', 'RecordLastClearedShrineReward',
-                   'ClearedWithMetaUpgrades', 'GameplayTime', 'TotalTime',
-                   'TotalRequiredEnemyKills', 'EncountersOccurredCache', 'EncountersCompletedCache'),
-    'history': ('RunHistory',),
-}
 _PAIRS = {
     'GameState': ('长期进度', 'Persistent progress'), 'CurrentRun': ('当前挑战', 'Current run'),
     'RunHistory': ('挑战历史', 'Run history'), 'Resources': ('资源库存', 'Resource balances'),
@@ -45,13 +29,15 @@ _PAIRS = {
     'Gift': ('关系与赠礼', 'Relationships and gifts'), 'Value': ('赠礼进度', 'Gift progress'),
     'NPCInteractions': ('角色互动次数', 'Character interaction counts'),
     'TextLinesRecord': ('已发生剧情', 'Recorded scenes'),
-    'TextLinesChoiceRecord': ('剧情选择', 'Scene choices'), 'Flags': ('剧情标志', 'Story flags'),
-    'QuestsCompleted': ('完成的命运清单', 'Completed prophecies'),
-    'WorldUpgrades': ('房屋修整', 'House renovations'), 'WorldUpgradesAdded': ('已购房屋修整', 'Purchased renovations'),
+    'Flags': ('剧情标志', 'Story flags'),
+    'QuestStatus': ('命运清单进度', 'Prophecy progress'),
+    'Cosmetics': ('房屋修整', 'House renovations'), 'CosmeticsAdded': ('已购房屋修整', 'Purchased renovations'),
     'CodexStatus': ('冥界宝典记录', 'Codex records'),
     'WeaponsUnlocked': ('已解锁兵器', 'Unlocked weapons'), 'WeaponUnlocks': ('兵器形态等级', 'Weapon aspect ranks'),
     'LastWeaponUpgradeData': ('兵器形态选择', 'Selected weapon aspects'),
     'LastInteractedWeaponUpgrade': ('最近选择的形态', 'Last selected aspect'),
+    'LastAwardTrait': ('下次装备的信物', 'Next-equip keepsake'),
+    'LastAssistTrait': ('下次装备的伙伴', 'Next-equip companion'),
     'KeepsakeChambers': ('信物遭遇计数', 'Keepsake encounter counts'), 'AssistUnlocks': ('伙伴解锁', 'Companion unlocks'),
     'Hero': ('扎格列欧斯', 'Zagreus'), 'Weapons': ('已装备兵器', 'Equipped weapons'),
     'Traits': ('祝福与效果', 'Boons and effects'), 'MaxHealth': ('生命上限', 'Maximum life'),
@@ -66,7 +52,7 @@ _PAIRS = {
     'CompletedRunsCache': ('挑战次数缓存', 'Completed run count cache'),
     'AccumulatedMetaPointsCache': ('黑暗累计值缓存', 'Accumulated Darkness cache'),
     'SpentShrinePointsCache': ('已投入热度缓存', 'Spent Heat cache'),
-    'GameplayTime': ('游戏时间（秒）', 'Gameplay time (seconds)'), 'TotalTime': ('累计时间（秒）', 'Total time (seconds)'),
+    'GameplayTime': ('本次挑战时间（秒）', 'Current-run time (seconds)'),
     'TotalRequiredEnemyKills': ('必要敌人击杀数', 'Required enemy kills'),
     'EndingRoomName': ('结束房间', 'Ending chamber'), 'EndingMoney': ('结束时金币', 'Ending Obol'),
     'WeaponsCache': ('兵器记录', 'Recorded weapons'), 'TraitCache': ('祝福记录', 'Recorded boons'),
@@ -105,6 +91,11 @@ def warning(language, known=False):
                 'Edits the stored value directly. A later native cache recalculation may replace it.')
     return ('此字段的完整游戏影响尚未确认；将按所选类型和物理位置写入。' if language == 'zh-CN' else
             'The complete gameplay impact is unknown. This writes the selected type and physical occurrence.')
+
+
+def scene(keys):
+    return (_CATALOG['scenes'].get(keys[1]) if len(keys) >= 2 and keys[0] == 'TextLinesRecord'
+            and isinstance(keys[1], str) else None)
 
 
 def logical(document, keys):
@@ -152,9 +143,18 @@ class HadesSaveWorkspace:
         self.session = session
         self.identifier = uuid.uuid4().hex
         self.pending = {}
+        self.baseline_generation = uuid.uuid4().hex
 
     @property
     def document(self): return self.session.document
+
+    def _identifier(self, path): return values.identifier(path, self.baseline_generation)
+
+    def _parse_id(self, identifier): return values.parse_id(identifier, self.baseline_generation)
+
+    def _require_generation(self, generation):
+        if generation != self.baseline_generation:
+            raise ValueError('This control belongs to an earlier document baseline. Refresh the editor before editing.')
 
     @staticmethod
     def inventory(service, snapshot_id=None):
@@ -182,12 +182,13 @@ class HadesSaveWorkspace:
         return cls(session)
 
     def summary(self, language='en'):
-        return {'workspaceId': self.identifier, 'source': self.session.source,
+        return {'workspaceId': self.identifier, 'baselineGeneration': self.baseline_generation, 'source': self.session.source,
                 'sourceSHA256': self.session.source_sha256, 'target': self.session.target,
                 'domains': list(DOMAINS), 'review': self.review(language),
                 'recoveryPath': self.session.recovery_path}
 
-    def set_target(self, target):
+    def set_target(self, target, *, baseline_generation):
+        self._require_generation(baseline_generation)
         self.session.set_target(target)
         return self.summary()
 
@@ -200,14 +201,26 @@ class HadesSaveWorkspace:
         operations = ['set']
         if path != (0,): operations.append('unset')
         if isinstance(node, LuaTable): operations.append('append')
-        result = {'id': values.identifier(path), 'name': name, 'englishName': label(keys[-1], 'en') if keys else 'Saved globals',
+        result = {'id': self._identifier(path), 'baselineGeneration': self.baseline_generation, 'name': name, 'englishName': label(keys[-1], 'en') if keys else 'Saved globals',
                   'group': group, 'owner': ' › '.join(label(key, language) for key in keys[:-1]),
-                  'ownerId': values.identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
-                  'groupId': values.identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
+                  'ownerId': self._identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
+                  'groupId': self._identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
                   'valueType': kind, 'displayValue': values.display(node), 'editable': True,
                   'hasChildren': isinstance(node, LuaTable), 'operations': operations,
                   'warning': warning(language, bool(keys and isinstance(keys[-1], str) and
-                      ('Cache' in keys[-1] or keys[-1] in _OWNERS['statistics'])))}
+                      ('Cache' in keys[-1] or tuple(keys) in NATIVE_OWNERS['statistics'])))}
+        for root, entity_depth in ENTITY_DEPTHS.items():
+            if len(keys) >= entity_depth and tuple(keys[:len(root)]) == root:
+                entity_path = path[:entity_depth + 1]
+                result.update(owner=label(keys[entity_depth - 1], language), ownerId=self._identifier(entity_path),
+                              group=label(keys[-2] if len(keys) > entity_depth + 1 else root[-1], language),
+                              groupId=self._identifier(path[:-1] if len(keys) > entity_depth + 1 else entity_path))
+                break
+        narrative = scene(keys)
+        if narrative and len(keys) == 2 and not key_row:
+            result.update(name='已发生' if language == 'zh-CN' else 'Played', englishName='Played',
+                          owner=label(narrative['owner'], language) if narrative['owner'] else narrative['content'][language][0]['speaker'],
+                          group=label('TextLinesRecord', language), content=narrative['content'][language])
         if full or not isinstance(node, LuaTable): result['typedValue'] = values.typed(node)
         return result
 
@@ -224,7 +237,7 @@ class HadesSaveWorkspace:
         if name == 'notable_lua_data':
             node = LuaTable(len(node), 0, enumerate(node, 1))
         elif name == 'timestamp': node = str(node)
-        return {'id': 'h:' + name, 'name': label(name, language), 'englishName': label(name, 'en'),
+        return {'id': 'h:' + name, 'baselineGeneration': self.baseline_generation, 'name': label(name, language), 'englishName': label(name, 'en'),
                 'group': '文件头' if language == 'zh-CN' else 'File header', 'owner': 'SGB1',
                 'ownerId': 'header', 'groupId': 'header',
                 'valueType': 'table' if isinstance(node, LuaTable) else values.typed(node)['luaType'],
@@ -309,21 +322,16 @@ class HadesSaveWorkspace:
         for row in rows:
             identifier = row['id']
             owner = ('weapon:' + identifier.split(':')[1] if identifier.startswith(('aspectRank:', 'aspectSelection:')) else identifier)
-            row.update(ownerId=owner, groupId=owner)
+            row.update(ownerId=owner, groupId=owner, baselineGeneration=self.baseline_generation)
         return rows
 
     def _domain_roots(self, domain):
         if domain == 'advanced':
             return [((index,), []) for index in range(len(self.document.lua_values))]
         result = []
-        for name in _OWNERS.get(domain, ()):
-            try: result.append((physical(self.document, ('GameState', name)), ['GameState', name]))
+        for keys in NATIVE_OWNERS[domain]:
+            try: result.append((physical(self.document, keys), list(keys)))
             except (KeyError, ValueError): continue
-        if domain in ('equipment', 'history', 'statistics'):
-            additions = [('CurrentRun', 'Hero')] if domain == 'equipment' else [('CurrentRun',)]
-            for keys in additions:
-                try: result.append((physical(self.document, keys), list(keys)))
-                except (KeyError, ValueError): continue
         return result
 
     def query(self, domain='resources', language='en', query='', parentId=None, offset=0, limit=100):
@@ -333,14 +341,14 @@ class HadesSaveWorkspace:
             raise ValueError('Invalid editor page.')
         rows, breadcrumbs = [], []
         if parentId is not None:
-            path = values.parse_id(parentId)
+            path = self._parse_id(parentId)
             owner = values.resolve(self.document, path)
             if not isinstance(owner, LuaTable): raise ValueError('Open a table to browse its fields.')
             keys = self._logical_keys(path)
             for depth in range(1, len(path) + 1):
                 crumb = path[:depth]
                 crumb_keys = self._logical_keys(crumb)
-                breadcrumbs.append({'id': values.identifier(crumb), 'name': label(crumb_keys[-1], language) if crumb_keys else 'Lua'})
+                breadcrumbs.append({'id': self._identifier(crumb), 'name': label(crumb_keys[-1], language) if crumb_keys else 'Lua'})
             roots, max_depth = [(path, keys)], 1
         else:
             roots, max_depth = self._domain_roots(domain), 2 if domain != 'advanced' else 1
@@ -357,14 +365,14 @@ class HadesSaveWorkspace:
                 if not (parentId is None and domain == 'resources' and keys == ['GameState', 'Resources']
                         and type(key) is str and any(row['id'] == 'resource:' + key for row in rows)):
                     row = self._row(child, child_keys, language)
-                    if domain == 'advanced' or len(keys) == 2 and keys[1] in ('TextLinesRecord', 'TextLinesChoiceRecord', 'Flags'):
+                    if domain == 'advanced':
                         row['owner'] = label(key, language) + (' · ' + str(index + 1) if domain == 'advanced' else '')
-                        row['ownerId'] = values.identifier(child)
+                        row['ownerId'] = self._identifier(child)
                     rows.append(row)
                 if domain == 'advanced':
                     key_row = self._row(path + (index * 2,), child_keys, language, key_row=True)
                     key_row['owner'] = label(key, language) + ' · ' + str(index + 1)
-                    key_row['ownerId'] = values.identifier(child)
+                    key_row['ownerId'] = self._identifier(child)
                     rows.append(key_row)
                     if isinstance(key, LuaTable) and (query or depth + 1 < max_depth):
                         walk(path + (index * 2,), child_keys, depth + 1)
@@ -377,15 +385,20 @@ class HadesSaveWorkspace:
             matches = set()
             for row in rows:
                 identifier = row['id']
-                keys = self._logical_keys(values.parse_id(identifier)) if identifier.startswith('p:') else []
+                keys = self._logical_keys(self._parse_id(identifier)) if identifier.startswith('p:') else []
                 if identifier.startswith('mirror:'): keys = _CATALOG['mirrorRows'][int(identifier.split(':')[1]) - 1]
                 elif identifier.startswith(('aspectSelection:', 'aspectRank:')):
                     keys = [identifier.split(':')[1]]
                     if identifier.startswith('aspectRank:'):
                         keys.append(_CATALOG['weapons'][keys[0]][int(identifier.split(':')[2]) - 1]['trait'])
                 elif identifier.startswith(('h:', 'resource:')): keys = [identifier.split(':')[1]]
-                searchable = ' '.join([row['name'], row['englishName'], row['owner'], row['group'], row['displayValue'],
-                    *(label(key, language) for language in ('zh-CN', 'en') for key in keys)]).casefold()
+                content = scene(keys) if 'content' in row else None
+                searchable = [row['name'], row['englishName'], row['owner'], row['group'], row['displayValue'],
+                              *(label(key, language) for language in ('zh-CN', 'en') for key in keys)]
+                if content:
+                    searchable.extend(part for lines in content['content'].values() for line in lines
+                                      for part in (line['speaker'], line['text']))
+                searchable = ' '.join(searchable).casefold()
                 if all(word in searchable for word in words): matches.add(row['ownerId'])
             rows = [row for row in rows if row['ownerId'] in matches]
         # Domains may intentionally include the same owner through multiple roots.
@@ -400,7 +413,7 @@ class HadesSaveWorkspace:
                 if not selected: start = cursor
                 selected.extend(group)
             cursor = end
-        return {'workspaceId': self.identifier, 'rows': selected, 'total': len(rows),
+        return {'workspaceId': self.identifier, 'baselineGeneration': self.baseline_generation, 'rows': selected, 'total': len(rows),
                 'offset': start, 'limit': len(selected), 'nextOffset': start + len(selected),
                 'parentId': parentId, 'breadcrumbs': breadcrumbs}
 
@@ -412,7 +425,7 @@ class HadesSaveWorkspace:
                 raise ValueError('Unknown native header field.')
             row = self._header_row(entry_id[2:], language, full=True)
         elif entry_id.startswith('p:'):
-            path = values.parse_id(entry_id)
+            path = self._parse_id(entry_id)
             row = self._row(path, self._logical_keys(path), language, full=True,
                             key_row=len(path) > 1 and path[-1] % 2 == 0)
         else:
@@ -421,10 +434,11 @@ class HadesSaveWorkspace:
             if row is None: raise ValueError('Editor entry does not exist.')
         return {'row': row}
 
-    def stage(self, entry_id, operation, value=None, language='en'):
+    def stage(self, entry_id, operation, value=None, language='en', *, baseline_generation):
+        self._require_generation(baseline_generation)
         row = self.detail(entry_id, language)['row']
         if operation not in row['operations']: raise ValueError('This operation is unavailable for the selected entry.')
-        intent = {'id': entry_id, 'operation': operation, 'value': value}
+        intent = {'id': entry_id, 'operation': operation, 'value': value, 'baselineGeneration': baseline_generation}
         candidate = {**self.pending, entry_id: intent}
         _, review = self._plan(tuple(candidate.values()), language)
         planned = {action['id'] for action in review['actions']}
@@ -434,23 +448,26 @@ class HadesSaveWorkspace:
         self.pending = candidate
         return self.review(language)
 
-    def unstage(self, entry_id, language='en'):
+    def unstage(self, entry_id, language='en', *, baseline_generation):
+        self._require_generation(baseline_generation)
         candidate = {key: value for key, value in self.pending.items() if key != entry_id}
         self._plan(candidate.values(), language)
         self.pending = candidate
         return self.review(language)
 
-    def cancel(self, language='en'):
+    def cancel(self, language='en', *, baseline_generation):
+        self._require_generation(baseline_generation)
         self.pending.clear()
         return self.review(language)
 
     def _plan(self, intents, language):
+        for intent in intents: self._require_generation(intent['baselineGeneration'])
         candidate = self.document.clone()
         writes, actions = [], []
 
         def add(intent, address, before, after, name, *, path=None, logical_keys=None, header=None, operation='set', wire=None):
             if operation == 'set' and values.equal(before, after): return
-            effect = {'id': ('h:' + header if header else values.identifier(path) if path else 'linked:' + repr(logical_keys)),
+            effect = {'id': ('h:' + header if header else self._identifier(path) if path else 'linked:' + repr(logical_keys)),
                       'name': name, 'before': values.display(before), 'after': values.display(after)}
             writes.append({'action': intent['id'], 'address': address, 'before': before, 'after': after,
                            'path': path, 'logical': logical_keys, 'header': header, 'operation': operation,
@@ -467,7 +484,7 @@ class HadesSaveWorkspace:
             if operation not in row['operations']: raise ValueError('Staged operation no longer matches its entry.')
             start = len(writes)
             if identifier.startswith('p:'):
-                path = values.parse_id(identifier)
+                path = self._parse_id(identifier)
                 before = values.resolve(self.document, path)
                 after = values.from_typed(wire) if operation == 'set' else None
                 add(intent, path, before, after, row['name'], path=path, operation=operation, wire=wire)
@@ -612,14 +629,15 @@ class HadesSaveWorkspace:
                 action['effects'].append({'id': 'h:' + field, 'name': label(field, language),
                     'before': str(old_header), 'after': str(projected)})
         HadesSaveDocument.from_bytes(candidate.to_bytes())
-        return candidate, {'actions': actions, 'count': len(actions),
+        return candidate, {'baselineGeneration': self.baseline_generation, 'actions': actions, 'count': len(actions),
                            'effectCount': sum(len(action['effects']) for action in actions)}
 
     def review(self, language='en'):
         if language not in ('en', 'zh-CN'): raise ValueError('Unsupported editor language.')
         return self._plan(tuple(self.pending.values()), language)[1]
 
-    def apply(self):
+    def apply(self, *, baseline_generation):
+        self._require_generation(baseline_generation)
         if not self.pending: raise ValueError('There are no staged changes to apply.')
         candidate, _ = self._plan(tuple(self.pending.values()), 'en')
         original = self.session.document
@@ -630,7 +648,8 @@ class HadesSaveWorkspace:
             self.session.document = original
             raise
         self.pending.clear()
-        return {**result, 'verified': True, 'workspaceId': self.identifier,
+        self.baseline_generation = uuid.uuid4().hex
+        return {**result, 'baselineGeneration': self.baseline_generation, 'verified': True, 'workspaceId': self.identifier,
                 'source': self.session.source, 'target': self.session.target,
                 'sourceSHA256': self.session.source_sha256,
                 'installedSHA256': self.session.original_sha256}

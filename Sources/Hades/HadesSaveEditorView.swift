@@ -65,7 +65,8 @@ struct HadesSaveEditorView: View {
         }.padding(theme.rowHorizontalPadding)
     }
     private var selection: some View {
-        VStack(alignment: .leading, spacing: theme.controlPadding) {
+        let baseline = model.baselineGeneration
+        return VStack(alignment: .leading, spacing: theme.controlPadding) {
             HStack {
                 Picker(text("hades.saveEditor.source"), selection: $model.selectedSourceID) {
                     Text(text("hades.saveEditor.selectSource")).tag("")
@@ -87,10 +88,10 @@ struct HadesSaveEditorView: View {
                 }
                 Text("SHA-256 · " + model.sourceSHA256).font(.caption2.monospaced()).foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Picker(text("hades.saveEditor.target"), selection: Binding(get: { model.selectedTargetID }, set: model.selectTarget)) {
+                Picker(text("hades.saveEditor.target"), selection: Binding(get: { model.selectedTargetID }, set: { model.selectTarget($0, baseline: baseline) })) {
                     Text(text("hades.saveEditor.selectTarget")).tag("")
                     ForEach(model.targets) { Text($0.label).tag($0.id) }
-                }.disabled(model.busy)
+                }.disabled(model.busy || !model.canEditRows)
             } else if model.sources.isEmpty && !model.busy {
                 TrainerEmptyState(text: text("hades.saveEditor.noSources"))
             }
@@ -169,12 +170,13 @@ struct HadesSaveEditorView: View {
         }.padding(theme.controlPadding)
     }
     private var changes: some View {
-        VStack(alignment: .leading, spacing: theme.controlPadding) {
+        let baseline = model.review.baselineGeneration
+        return VStack(alignment: .leading, spacing: theme.controlPadding) {
             HStack {
                 Text(text("hades.saveEditor.changes") + " (\(model.review.count))").font(.headline)
                 Spacer()
-                Button(text("hades.saveEditor.discard"), action: model.cancel).disabled(model.busy)
-                TrainerPrimaryActionButton(title: text("hades.apply"), enabled: model.canApply, action: model.apply)
+                Button(text("hades.saveEditor.discard")) { model.cancel(baseline: baseline) }.disabled(model.busy || !model.canEditRows)
+                TrainerPrimaryActionButton(title: text("hades.apply"), enabled: model.canApply) { model.apply(baseline: baseline) }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.controlPadding) {
@@ -184,8 +186,8 @@ struct HadesSaveEditorView: View {
                                 HStack(alignment: .firstTextBaseline) {
                                     Text(action.name).font(.subheadline.weight(.semibold))
                                     Spacer()
-                                    Button(text("hades.saveEditor.revise")) { model.detail(action.id) }.disabled(model.busy)
-                                    Button(text("hades.remove")) { model.unstage(action.id) }.disabled(model.busy)
+                                    Button(text("hades.saveEditor.revise")) { model.detail(action.id, baseline: baseline) }.disabled(model.busy || !model.canEditRows)
+                                    Button(text("hades.remove")) { model.unstage(action.id, baseline: baseline) }.disabled(model.busy || !model.canEditRows)
                                 }
                                 Text(action.before + " → " + action.after).font(.caption).textSelection(.enabled)
                                 ForEach(action.effects) { effect in
@@ -238,17 +240,25 @@ private struct HadesSaveEditorField: View {
                                      emphasized: pending != nil) {
                 controls
                 if model.domain == .advanced && hasNativeControl {
-                    Button(text("hades.saveEditor.editTyped")) { model.detail(row.id, typed: true) }
+                    Button(text("hades.saveEditor.editTyped")) { model.detail(row.id, typed: true, baseline: row.baselineGeneration) }
                         .accessibilityLabel(text("hades.saveEditor.editTyped") + " " + row.name)
                 }
-                if row.hasChildren { Button { model.browse(row.id) } label: { Image(systemName: "chevron.right") }
+                if row.hasChildren { Button { model.browse(row.id, baseline: row.baselineGeneration) } label: { Image(systemName: "chevron.right") }
                     .help(text("hades.saveEditor.browse")).accessibilityLabel(text("hades.saveEditor.browse") + " " + row.name) }
                 if row.operations.contains("unset") {
                     Menu {
                         Button(text("hades.saveEditor.unset"), role: .destructive) {
-                            model.stage(row.id, operation: "unset", workspace: workspace)
+                            model.stage(row.id, operation: "unset", workspace: workspace, baseline: row.baselineGeneration)
                         }
                     } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
+                }
+            }.disabled(!model.canEdit(row))
+            if let lines = row.content {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    VStack(alignment: .leading, spacing: 3) {
+                        if !line.speaker.isEmpty { Text(line.speaker).font(.caption.weight(.semibold)) }
+                        Text(line.text).font(.callout).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, theme.controlPadding)
                 }
             }
             if case .some(.string(let content)) = value, content.count > 80 || content.contains("\n") {
@@ -261,7 +271,7 @@ private struct HadesSaveEditorField: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onChange(of: model.editRevision) { _, _ in if !focused { draft = nil } }
+        .onChange(of: model.editRevision) { _, _ in if !focused && !model.hasFailedDraft(row) { draft = nil } }
     }
     private var hasNativeControl: Bool {
         if row.choices?.isEmpty == false { return true }
@@ -273,25 +283,28 @@ private struct HadesSaveEditorField: View {
     @ViewBuilder private var controls: some View {
         if let choices = row.choices, !choices.isEmpty {
             Picker(row.name, selection: Binding(get: { choices.firstIndex(where: { $0.value == value }) ?? -1 }, set: { index in
-                if choices.indices.contains(index) { model.stage(row.id, operation: "set", value: choices[index].value.object, workspace: workspace) }
+                if choices.indices.contains(index) { model.stage(row.id, operation: "set", value: choices[index].value.object, workspace: workspace, baseline: row.baselineGeneration) }
             })) {
                 Text(displayValue).tag(-1)
                 ForEach(choices.indices, id: \.self) { Text(choices[$0].name).tag($0) }
             }.labelsHidden().frame(maxWidth: 240)
         } else if case .some(.boolean(let enabled)) = value {
             Toggle(row.name, isOn: Binding(get: { enabled }, set: {
-                model.stage(row.id, operation: "set", value: HadesSaveValue.boolean($0).object, workspace: workspace)
+                model.stage(row.id, operation: "set", value: HadesSaveValue.boolean($0).object, workspace: workspace, baseline: row.baselineGeneration)
             })).labelsHidden().toggleStyle(.switch).controlSize(.small)
         } else if let scalar = value?.scalarText {
             TrainerTextField(title: row.name, text: Binding(get: { draft ?? scalar }, set: { draft = $0 }),
-                onEditingChanged: { focused = $0 }, onCommit: { completed in
+                onEditingChanged: {
+                    focused = $0
+                    model.editingChanged(row.id, baseline: row.baselineGeneration, active: $0)
+                }, onCommit: { completed in
                     guard completed.changed else { return completed.text }
                     return model.commit(row, text: completed.text, workspace: workspace)
                 })
                 .frame(width: row.valueType == "number" ? 155 : 280)
         } else {
             Text(displayValue).font(.caption).lineLimit(3).textSelection(.enabled).frame(maxWidth: 220, alignment: .trailing)
-            Button(text("hades.saveEditor.editTyped")) { model.detail(row.id) }
+            Button(text("hades.saveEditor.editTyped")) { model.detail(row.id, baseline: row.baselineGeneration) }
         }
     }
 }
@@ -340,16 +353,21 @@ private struct HadesSaveTypedEditor: View {
                     }))
                 }
                 if append {
-                    TrainerTextField(title: text("hades.saveEditor.key"), text: $appendKey)
+                    TrainerTextField(title: text("hades.saveEditor.key"), text: $appendKey, onEditingChanged: {
+                        model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: $0)
+                    })
                 }
                 TextEditor(text: $json).font(.system(.body, design: .monospaced)).focused($editing)
                     .frame(minHeight: 280).overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.accent.opacity(0.35)))
-                    .onChange(of: editing) { old, current in if old && !current { commit() } }
+                    .onChange(of: editing) { old, current in
+                        if old && !current { commit() }
+                        model.editingChanged(row.id, baseline: row.baselineGeneration, active: current)
+                    }
             }
             if !valid { Text(text("hades.saveEditor.invalidValue")).font(.caption).foregroundStyle(theme.warning) }
             if let failure = model.failures[row.id] { Text(localization.string(failure)).font(.caption).foregroundStyle(theme.warning) }
             HStack {
-                if action != nil { Button(text("hades.remove")) { model.unstage(row.id); model.dismissDetail() }.disabled(model.busy) }
+                if action != nil { Button(text("hades.remove")) { model.unstage(row.id, baseline: row.baselineGeneration); model.dismissDetail() }.disabled(model.busy) }
                 Spacer()
                 Button(text("host.done")) {
                     editing = false
@@ -357,6 +375,7 @@ private struct HadesSaveTypedEditor: View {
                 }.disabled(model.busy)
             }
         }.padding(20).frame(width: 700)
+        .disabled(!model.canEdit(row))
         .trainerDismissTextEditingOnClickAway()
         .onAppear {
             append = action?.operation == "append"

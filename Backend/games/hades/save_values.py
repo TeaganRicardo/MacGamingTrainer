@@ -90,14 +90,15 @@ def display(value):
     return value
 
 
-def identifier(path):
-    return 'p:' + '/'.join(str(index) for index in path)
+def identifier(path, baseline_generation):
+    return 'p:' + baseline_generation + ':' + '/'.join(str(index) for index in path)
 
 
-def parse_id(value):
-    if not isinstance(value, str) or not value.startswith('p:'):
+def parse_id(value, baseline_generation):
+    prefix = 'p:' + baseline_generation + ':'
+    if not isinstance(value, str) or not value.startswith(prefix):
         raise ValueError('Invalid physical Lua entry identity.')
-    parts = value[2:].split('/')
+    parts = value[len(prefix):].split('/')
     if not parts or len(parts) > MAX_TABLE_DEPTH + 2 or any(not part.isdigit() for part in parts):
         raise ValueError('Invalid physical Lua occurrence path.')
     return tuple(int(part) for part in parts)

@@ -203,16 +203,18 @@ class HadesAdapter(GameAdapter):
             if command == 'close':
                 del self.save_workspaces[identifier]
                 return {'closed': True}
-            if command == 'target': return workspace.set_target(params['target'])
+            if command == 'target': return workspace.set_target(params['target'], baseline_generation=params.get('baselineGeneration'))
             if command == 'query':
                 return workspace.query(**{key: value for key, value in params.items() if key != 'workspaceId'})
             language = params.get('language', 'en')
             if command == 'detail': return workspace.detail(params['entryId'], language)
-            if command == 'stage': return workspace.stage(params['entryId'], params['operation'], params.get('value'), language)
-            if command == 'unstage': return workspace.unstage(params['entryId'], language)
+            if command == 'stage': return workspace.stage(params['entryId'], params['operation'], params.get('value'), language,
+                                                         baseline_generation=params.get('baselineGeneration'))
+            if command == 'unstage': return workspace.unstage(params['entryId'], language,
+                                                             baseline_generation=params.get('baselineGeneration'))
             if command == 'review': return workspace.review(language)
-            if command == 'cancel': return workspace.cancel(language)
-            if command == 'apply': return workspace.apply()
+            if command == 'cancel': return workspace.cancel(language, baseline_generation=params.get('baselineGeneration'))
+            if command == 'apply': return workspace.apply(baseline_generation=params.get('baselineGeneration'))
             raise ValueError('Unknown Save Editor operation.')
         except (ValueError, KeyError, TypeError, OSError) as error:
             recovery = getattr(error, 'recovery_path', None)
