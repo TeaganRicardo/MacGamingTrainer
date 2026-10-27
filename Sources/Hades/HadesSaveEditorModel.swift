@@ -315,6 +315,14 @@ final class HadesSaveEditorModel: ObservableObject {
         }
     }
     func dismissDetail() { detailGeneration += 1; editingRow = nil; editingTyped = false }
+    func discardDraft(_ row: HadesSaveEditorRow, workspace captured: String?) {
+        guard ownsMutation(captured, row.baselineGeneration) else { return }
+        failedDrafts.remove(draftKey(row.id, row.baselineGeneration))
+        activeEdits.remove(draftKey(row.id, row.baselineGeneration))
+        activeEdits.remove(draftKey(row.id + ":key", row.baselineGeneration))
+        failures.removeValue(forKey: row.id); editRevision += 1
+        dismissDetail()
+    }
     func commit(_ row: HadesSaveEditorRow, text: String, workspace captured: String?) -> String {
         guard ownsMutation(captured, row.baselineGeneration) else { stale(row.id); return text }
         let value: HadesSaveValue
@@ -329,7 +337,8 @@ final class HadesSaveEditorModel: ObservableObject {
         return value.scalarText ?? text
     }
     @discardableResult
-    func commitJSON(_ row: HadesSaveEditorRow, text: String, appendKey: String? = nil, workspace captured: String?) -> Bool {
+    func commitJSON(_ row: HadesSaveEditorRow, text: String, appendKey: String? = nil, workspace captured: String?,
+                    accepted: @escaping (Bool) -> Void = { _ in }) -> Bool {
         guard ownsMutation(captured, row.baselineGeneration) else { stale(row.id); return false }
         do {
             let value = try JSONDecoder().decode(HadesSaveValue.self, from: Data(text.utf8))
@@ -339,31 +348,36 @@ final class HadesSaveEditorModel: ObservableObject {
                 object = ["key": key.object, "value": object]
             }
             stage(row.id, operation: appendKey == nil ? "set" : "append", value: object, workspace: captured,
-                  baseline: row.baselineGeneration, typed: true)
+                  baseline: row.baselineGeneration, typed: true, accepted: accepted)
             return true
         } catch { invalid(row); return false }
     }
-    func stage(_ id: String, operation: String, value: [String: Any]? = nil, workspace captured: String?, baseline: String, typed: Bool = false) {
-        guard ownsMutation(captured, baseline), let workspaceID else { stale(id); return }
+    func stage(_ id: String, operation: String, value: [String: Any]? = nil, workspace captured: String?, baseline: String,
+               typed: Bool = false, accepted: @escaping (Bool) -> Void = { _ in }) {
+        guard ownsMutation(captured, baseline), let workspaceID else { stale(id); accepted(false); return }
         var params: [String: Any] = ["entryId": id, "operation": operation, "language": language.rawValue]
         if let value { params["value"] = value }
         perform("stage", params: params, scope: id, workspace: workspaceID, baseline: baseline,
                 failed: { [weak self] in
-                    guard let self else { return }; self.failedDrafts.insert(self.draftKey(id, baseline))
+                    guard let self else { return }; self.failedDrafts.insert(self.draftKey(id, baseline)); accepted(false)
                 }) { [weak self] result in
             guard let self else { return }
-            guard self.applyReview(result, scope: id) else { self.failedDrafts.insert(self.draftKey(id, baseline)); return }
+            guard self.applyReview(result, scope: id) else {
+                self.failedDrafts.insert(self.draftKey(id, baseline)); accepted(false); return
+            }
             self.failedDrafts.remove(self.draftKey(id, baseline))
             if typed { self.typedEntries.insert(id) } else { self.typedEntries.remove(id) }
-            self.editRevision += 1; self.query(offset: self.offset)
+            self.editRevision += 1; self.query(offset: self.offset); accepted(true)
         }
     }
-    func unstage(_ id: String, baseline: String) {
+    func unstage(_ id: String, baseline: String, accepted: @escaping (Bool) -> Void = { _ in }) {
         guard ownsMutation(workspaceID, baseline), let workspaceID else { return }
-        perform("unstage", params: ["entryId": id, "language": language.rawValue], scope: id, workspace: workspaceID, baseline: baseline) { [weak self] result in
-            guard let self, self.applyReview(result, scope: id) else { return }
+        perform("unstage", params: ["entryId": id, "language": language.rawValue], scope: id, workspace: workspaceID, baseline: baseline,
+                failed: { accepted(false) }) { [weak self] result in
+            guard let self else { return }
+            guard self.applyReview(result, scope: id) else { accepted(false); return }
             self.failedDrafts.remove(self.draftKey(id, baseline)); self.typedEntries.remove(id)
-            self.editRevision += 1; self.query(offset: self.offset)
+            self.editRevision += 1; self.query(offset: self.offset); accepted(true)
         }
     }
     func cancel(baseline: String?) {

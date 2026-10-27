@@ -97,7 +97,12 @@ def save_command(command,params,state):
         return {'baselineGeneration':baseline,'rows':rows,'total':len(rows),'offset':0,'limit':len(rows),'breadcrumbs':[], 'parentId':params.get('parentId')}
     if suffix=='detail':return {'row':save_row(entry_domain(params['entryId'],workspace),workspace,True)}
     if suffix=='stage':
+        if state.get('editorDelayTypedStage'):time.sleep(.2)
         if params.get('value',{}).get('value')==999:raise ValueError('Fixture rejected this edit; prior changes retained.')
+        node=params.get('value',{})
+        if params['operation']=='append':node=node.get('value',{})
+        if node.get('luaType')=='table' and node['arraySize']+node['hashSize']!=len(node['entries']):
+            raise ValueError('Typed Lua tables require ordered entries and matching allocation counts.')
         workspace['pending'][params['entryId']]={'operation':params['operation'],'value':params.get('value')}
         result=review(workspace)
         if state.get('editorOldReviewReply'):result['baselineGeneration']='old-replayed-baseline'
@@ -162,6 +167,9 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 }
 func fields(in view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+func buttons(in view: NSView) -> [NSButton] {
+    (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
 }
 func accessibilityText(in view: NSView) -> [String] {
     var pending: [NSObject] = [view], visited: Set<ObjectIdentifier> = [], result: [String] = []
@@ -446,6 +454,71 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "append" }
         check(editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("new-key"),
             "append revision lost the physical typed key")
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorDelayTypedStage"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        editor.detail("entry:advanced",typed:true)
+        wait { !editor.busy && editor.editingRow?.id == "entry:advanced" && editorWindow.attachedSheet != nil }
+        guard let rejectedSheet=editorWindow.attachedSheet, let rejectedContent=rejectedSheet.contentView else {
+            fatalError("typed rejection sheet missing")
+        }
+        rejectedContent.layoutSubtreeIfNeeded();pump()
+        guard let rejectedJSON=textViews(in:rejectedContent).first(where:{$0.isEditable && !$0.isFieldEditor}),
+              let rejectedKey=fields(in:rejectedContent).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.saveEditor.key",language:.en)}),
+              let rejectedKeyCoordinator=rejectedKey.delegate as? TrainerTextField.Coordinator,
+              let rejectedDone=buttons(in:rejectedContent).first(where:{$0.title==localization.localized("host.done")}) else {
+            fatalError("native typed sheet controls missing")
+        }
+        let draftKey=HadesSaveValue.string("retained-draft-key").json
+        rejectedKeyCoordinator.begin();rejectedKey.stringValue=draftKey
+        rejectedKeyCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:rejectedKey))
+        rejectedKeyCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:rejectedKey))
+        func replaceTypedJSON(_ value:String,field:NSTextView,window:NSWindow) {
+            check(window.makeFirstResponder(field),"typed JSON control did not acquire focus")
+            field.selectAll(nil);field.insertText(value,replacementRange:field.selectedRange());pump(0.03)
+        }
+        let rejectedValue = #"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[]}"#
+        replaceTypedJSON(rejectedValue,field:rejectedJSON,window:rejectedSheet)
+        rejectedDone.performClick(nil)
+        check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
+            "Done dismissed the typed draft before Stage acknowledgment")
+        wait { !editor.busy && editor.failures["entry:advanced"] != nil }
+        check(editorWindow.attachedSheet === rejectedSheet && rejectedJSON.string == rejectedValue
+            && rejectedKey.stringValue == draftKey && editor.hasFailedDraft(advanced) && !editor.canApply,
+            "asynchronous typed rejection lost JSON/key text or allowed Apply")
+        check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(9)
+            && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("new-key"),
+            "typed rejection replaced acknowledged Changes")
+        check(accessibilityText(in:rejectedContent).contains(where:{$0.contains("matching allocation counts")}),
+            "the typed sheet hid its asynchronous rejection reason")
+        replaceTypedJSON(HadesSaveValue.number(10).json,field:rejectedJSON,window:rejectedSheet)
+        rejectedDone.performClick(nil)
+        check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
+            "corrected typed input closed before matching acceptance")
+        wait { !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil }
+        check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10)
+            && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("retained-draft-key")
+            && !editor.hasFailedDraft(advanced),"accepted typed correction lost its key, value or basket ownership")
+        editor.detail("entry:advanced",typed:true)
+        wait { !editor.busy && editor.editingRow != nil && editorWindow.attachedSheet != nil }
+        guard let discardSheet=editorWindow.attachedSheet, let discardContent=discardSheet.contentView else {
+            fatalError("typed discard sheet missing")
+        }
+        discardContent.layoutSubtreeIfNeeded();pump()
+        guard let discardJSON=textViews(in:discardContent).first(where:{$0.isEditable && !$0.isFieldEditor}),
+              let discardDone=buttons(in:discardContent).first(where:{$0.title==localization.localized("host.done")}),
+              let discardButton=buttons(in:discardContent).first(where:{$0.title==localization.localized("host.cancel")}) else {
+            fatalError("native typed discard controls missing")
+        }
+        replaceTypedJSON(rejectedValue,field:discardJSON,window:discardSheet)
+        discardDone.performClick(nil);wait { !editor.busy && editor.hasFailedDraft(advanced) }
+        discardButton.performClick(nil)
+        wait { editor.editingRow == nil && editorWindow.attachedSheet == nil }
+        check(!editor.hasFailedDraft(advanced) && editor.canApply && editor.review.count == 4
+            && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10),
+            "deliberate typed draft discard lost acknowledged Changes or left Apply blocked")
+        saveState["editorDelayTypedStage"]=false
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         check(editor.commitJSON(advanced,text:raw.json,workspace:pinnedWorkspace),"revising append to table set failed")
         wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "set" }
         editor.detail("entry:advancedScalar",typed:true)

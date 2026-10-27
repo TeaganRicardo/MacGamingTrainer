@@ -79,7 +79,7 @@ def root_state(amount=12, marker='fixed-source'):
             'TimesCleared': 1, 'TimesClearedWeapon': {'SwordWeapon': 1},
             'WeaponRecordsClearTime': {'SwordWeapon': 120}, 'WeaponRecordsShrinePoints': {'SwordWeapon': 3},
             'ConsecutiveClears': 0, 'ConsecutiveClearsRecord': 1,
-            'RoomCountCache': {'A_Opening01': 2}, 'EncountersOccurredCache': {}, 'EncountersCompletedCache': {},
+            'RoomCountCache': {'RoomOpening': 2}, 'EncountersOccurredCache': {}, 'EncountersCompletedCache': {},
             'RecordClearedShrineThreshold': {}, 'RecordLastClearedShrineReward': {},
             'ClearedWithMetaUpgrades': {}, 'TotalRequiredEnemyKills': 7,
             'CompletedRunsCache': 2, 'AccumulatedMetaPointsCache': 40, 'SpentShrinePointsCache': 3,

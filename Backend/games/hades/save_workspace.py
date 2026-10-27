@@ -8,7 +8,7 @@ import uuid
 from .catalog import trait_names, resource_catalog
 from .save_document import HadesSaveDocument, LuaTable, AmbiguousKeyError
 from .save_edit import HadesSaveEditSession
-from .save_owners import NATIVE_OWNERS, ENTITY_DEPTHS
+from .save_owners import NATIVE_OWNERS, ENTITY_DEPTHS, ordinary_purpose
 from .save_provider import editor_files, active_profile_bytes
 from . import save_values as values
 
@@ -27,6 +27,7 @@ _PAIRS = {
     'MetaUpgradeState': ('夜之圣镜 · 备用等级', 'Mirror of Night · stored ranks'),
     'MetaUpgradeStagesUnlocked': ('夜之圣镜 · 解锁阶段', 'Mirror of Night · unlocked stages'),
     'Gift': ('关系与赠礼', 'Relationships and gifts'), 'Value': ('赠礼进度', 'Gift progress'),
+    'NewTraits': ('新获信物与效果', 'Newly granted traits'),
     'NPCInteractions': ('角色互动次数', 'Character interaction counts'),
     'TextLinesRecord': ('已发生剧情', 'Recorded scenes'),
     'Flags': ('剧情标志', 'Story flags'),
@@ -44,6 +45,10 @@ _PAIRS = {
     'Health': ('生命值', 'Life'), 'Money': ('卡戎金币', 'Charon’s Obol'), 'NumRerolls': ('重掷次数', 'Rerolls'),
     'Name': ('名称', 'Name'), 'Rarity': ('稀有度', 'Rarity'), 'Level': ('等级', 'Rank'),
     'Index': ('形态序号', 'Aspect index'), 'Cleared': ('已成功逃脱', 'Escaped'),
+    'WeaponName': ('兵器', 'Weapon'), 'ItemIndex': ('形态序号', 'Aspect index'),
+    'Amount': ('宝典累计进度', 'Codex accumulated progress'), 'Unlocked': ('已解锁', 'Unlocked'),
+    'SelectedChapterName': ('当前宝典章节', 'Selected Codex chapter'),
+    'SelectedEntryNames': ('各章当前宝典条目', 'Selected Codex entries by chapter'),
     'TimesCleared': ('成功逃脱次数', 'Escape count'), 'TimesClearedWeapon': ('各兵器成功逃脱次数', 'Escapes by weapon'),
     'WeaponRecordsClearTime': ('各兵器最快逃脱时间', 'Fastest escapes by weapon'),
     'WeaponRecordsShrinePoints': ('各兵器最高热度', 'Highest Heat by weapon'),
@@ -54,6 +59,11 @@ _PAIRS = {
     'SpentShrinePointsCache': ('已投入热度缓存', 'Spent Heat cache'),
     'GameplayTime': ('本次挑战时间（秒）', 'Current-run time (seconds)'),
     'TotalRequiredEnemyKills': ('必要敌人击杀数', 'Required enemy kills'),
+    'RecordClearedShrineThreshold': ('各兵器与首领的热度纪录', 'Heat records by weapon and boss chamber'),
+    'RecordLastClearedShrineReward': ('各兵器与首领的热度奖励记录', 'Heat reward records by weapon and boss chamber'),
+    'ClearedWithMetaUpgrades': ('成功逃脱时的圣镜等级纪录', 'Mirror rank records on escape'),
+    'EncountersOccurredCache': ('遭遇发生次数缓存', 'Encounter occurrence count cache'),
+    'EncountersCompletedCache': ('遭遇完成次数缓存', 'Encounter completion count cache'),
     'EndingRoomName': ('结束房间', 'Ending chamber'), 'EndingMoney': ('结束时金币', 'Ending Obol'),
     'WeaponsCache': ('兵器记录', 'Recorded weapons'), 'TraitCache': ('祝福记录', 'Recorded boons'),
     'MetaUpgradeCache': ('圣镜记录', 'Recorded Mirror talents'), 'RunDepthCache': ('挑战深度缓存', 'Run depth cache'),
@@ -61,6 +71,13 @@ _PAIRS = {
     'MetaPointsCache': ('黑暗记录', 'Recorded Darkness'), 'ShrinePointsCache': ('热度记录', 'Recorded Heat'),
     'EndingKeepsakeName': ('结束时信物', 'Ending keepsake'),
     'ActiveMutators': ('已启用挑战条件', 'Active challenge conditions'),
+    'HardMode': ('地狱模式', 'Hell Mode'), 'FistUnlocked': ('拳套解锁剧情标志', 'Twin Fists unlock story flag'),
+    'GunUnlocked': ('坚炮解锁剧情标志', 'Adamant Rail unlock story flag'),
+    'AspectsUnlocked': ('形态解锁剧情标志', 'Aspect unlock story flag'),
+    'EasyModeLevel': ('神力模式累计强度', 'Accumulated God Mode strength'),
+    'TargetShrinePointThreshold': ('挑战目标热度', 'Target Heat threshold'),
+    'SquelchedHermes': ('已关闭赫尔墨斯对白', 'Hermes dialogue silenced'),
+    'RunClearMessage': ('逃脱结果消息', 'Escape result message'),
     'timestamp': ('保存时间戳', 'Save timestamp'), 'location': ('保存地点', 'Save location'),
     'completed_runs': ('挑战次数 · 文件头', 'Run count · file header'),
     'accumulated_meta_points': ('黑暗累计值 · 文件头', 'Accumulated Darkness · file header'),
@@ -194,14 +211,18 @@ class HadesSaveWorkspace:
 
     def _row(self, path, keys, language, *, full=False, key_row=False):
         node = values.resolve(self.document, path)
-        name = label(keys[-1], language) if keys else ('保存的全局状态' if language == 'zh-CN' else 'Saved globals')
+        purpose = ordinary_purpose(keys, _CATALOG)
+        def purpose_label(selected):
+            if isinstance(purpose, tuple): return purpose[0 if selected == 'zh-CN' else 1]
+            return label(purpose if purpose is not None else keys[-1], selected) if keys else ('保存的全局状态' if selected == 'zh-CN' else 'Saved globals')
+        name = purpose_label(language)
         if key_row: name += ' · ' + ('键' if language == 'zh-CN' else 'key')
         group = label(keys[-2], language) if len(keys) > 1 else ('全局状态' if language == 'zh-CN' else 'Global state')
         kind = values.typed(node)['luaType'] if not isinstance(node, LuaTable) else 'table'
         operations = ['set']
         if path != (0,): operations.append('unset')
         if isinstance(node, LuaTable): operations.append('append')
-        result = {'id': self._identifier(path), 'baselineGeneration': self.baseline_generation, 'name': name, 'englishName': label(keys[-1], 'en') if keys else 'Saved globals',
+        result = {'id': self._identifier(path), 'baselineGeneration': self.baseline_generation, 'name': name, 'englishName': purpose_label('en'),
                   'group': group, 'owner': ' › '.join(label(key, language) for key in keys[:-1]),
                   'ownerId': self._identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
                   'groupId': self._identifier(path[:-1]) if len(path) > 1 else 'root:' + str(path[0]),
@@ -345,6 +366,8 @@ class HadesSaveWorkspace:
             owner = values.resolve(self.document, path)
             if not isinstance(owner, LuaTable): raise ValueError('Open a table to browse its fields.')
             keys = self._logical_keys(path)
+            if domain != 'advanced' and ordinary_purpose(keys, _CATALOG) is None:
+                raise ValueError('This field has no ordinary purpose descriptor. Open its typed occurrence in Advanced.')
             for depth in range(1, len(path) + 1):
                 crumb = path[:depth]
                 crumb_keys = self._logical_keys(crumb)
@@ -357,11 +380,13 @@ class HadesSaveWorkspace:
 
         def walk(path, keys, depth):
             node = values.resolve(self.document, path)
+            if domain != 'advanced' and ordinary_purpose(keys, _CATALOG) is None: return
             if depth == 0 and parentId is None: rows.append(self._row(path, keys, language))
             if not isinstance(node, LuaTable): return
             for index, (key, item) in enumerate(node.entries()):
                 child = path + (index * 2 + 1,)
                 child_keys = [*keys, key]
+                if domain != 'advanced' and ordinary_purpose(child_keys, _CATALOG) is None: continue
                 if not (parentId is None and domain == 'resources' and keys == ['GameState', 'Resources']
                         and type(key) is str and any(row['id'] == 'resource:' + key for row in rows)):
                     row = self._row(child, child_keys, language)
@@ -395,6 +420,8 @@ class HadesSaveWorkspace:
                 content = scene(keys) if 'content' in row else None
                 searchable = [row['name'], row['englishName'], row['owner'], row['group'], row['displayValue'],
                               *(label(key, language) for language in ('zh-CN', 'en') for key in keys)]
+                purpose = ordinary_purpose(keys, _CATALOG)
+                if isinstance(purpose, tuple): searchable.extend(purpose)
                 if content:
                     searchable.extend(part for lines in content['content'].values() for line in lines
                                       for part in (line['speaker'], line['text']))

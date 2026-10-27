@@ -323,6 +323,9 @@ private struct HadesSaveTypedEditor: View {
     @State private var initialKey = "{\"luaType\":\"string\",\"value\":\"\"}"
     @State private var initialAppend = false
     @State private var valid = true
+    @State private var staging = false
+    @State private var closeAfterStage = false
+    @State private var discarding = false
     @FocusState private var editing: Bool
     private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
     private var action: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
@@ -350,29 +353,48 @@ private struct HadesSaveTypedEditor: View {
                         json = appending ? HadesSaveValue.string("").json
                             : ((action?.operation == "set" ? action?.typedValue : nil) ?? row.typedValue ?? .null).json
                         initial = json
-                    }))
+                    })).disabled(staging)
                 }
                 if append {
                     TrainerTextField(title: text("hades.saveEditor.key"), text: $appendKey, onEditingChanged: {
                         model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: $0)
-                    })
+                    }).disabled(staging)
                 }
                 TextEditor(text: $json).font(.system(.body, design: .monospaced)).focused($editing)
                     .frame(minHeight: 280).overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.accent.opacity(0.35)))
+                    .disabled(staging)
                     .onChange(of: editing) { old, current in
-                        if old && !current { commit() }
+                        if old && !current && !discarding { commit() }
                         model.editingChanged(row.id, baseline: row.baselineGeneration, active: current)
                     }
             }
             if !valid { Text(text("hades.saveEditor.invalidValue")).font(.caption).foregroundStyle(theme.warning) }
             if let failure = model.failures[row.id] { Text(localization.string(failure)).font(.caption).foregroundStyle(theme.warning) }
             HStack {
-                if action != nil { Button(text("hades.remove")) { model.unstage(row.id, baseline: row.baselineGeneration); model.dismissDetail() }.disabled(model.busy) }
+                Button(text("host.cancel"), role: .cancel) {
+                    guard !model.busy else { return }
+                    discarding = true; editing = false
+                    model.discardDraft(row, workspace: workspace)
+                }.disabled(model.busy)
+                if action != nil {
+                    Button(text("hades.remove")) {
+                        guard !model.busy else { return }
+                        discarding = true; editing = false; staging = true
+                        model.unstage(row.id, baseline: row.baselineGeneration) { accepted in
+                            staging = false
+                            if accepted { model.discardDraft(row, workspace: workspace) }
+                            else { discarding = false }
+                        }
+                    }.disabled(model.busy || staging)
+                }
                 Spacer()
                 Button(text("host.done")) {
+                    guard !model.busy else { return }
+                    if native {
+                        if !model.hasFailedDraft(row) { model.dismissDetail() }
+                    } else { commit(closeWhenAccepted: true) }
                     editing = false
-                    if native || commit() { model.dismissDetail() }
-                }.disabled(model.busy)
+                }.disabled(model.busy || staging)
             }
         }.padding(20).frame(width: 700)
         .disabled(!model.canEdit(row))
@@ -384,10 +406,23 @@ private struct HadesSaveTypedEditor: View {
             initial = json; initialKey = appendKey; initialAppend = append
         }
     }
-    @discardableResult private func commit() -> Bool {
-        guard json != initial || appendKey != initialKey || append != initialAppend else { return true }
-        valid = model.commitJSON(row, text: json, appendKey: append ? appendKey : nil, workspace: workspace)
-        if valid { initial = json; initialKey = appendKey; initialAppend = append }
-        return valid
+    private func commit(closeWhenAccepted: Bool = false) {
+        if closeWhenAccepted { closeAfterStage = true }
+        guard !staging else { return }
+        guard json != initial || appendKey != initialKey || append != initialAppend else {
+            if closeAfterStage { model.discardDraft(row, workspace: workspace) }; return
+        }
+        let submittedJSON = json, submittedKey = appendKey, submittedAppend = append
+        staging = true
+        let enqueued = model.commitJSON(row, text: submittedJSON, appendKey: submittedAppend ? submittedKey : nil, workspace: workspace) { accepted in
+            staging = false; valid = accepted
+            guard accepted else { closeAfterStage = false; return }
+            initial = submittedJSON; initialKey = submittedKey; initialAppend = submittedAppend
+            if closeAfterStage && json == submittedJSON && appendKey == submittedKey && append == submittedAppend {
+                model.dismissDetail()
+            }
+            closeAfterStage = false
+        }
+        if !enqueued { staging = false; valid = false; closeAfterStage = false }
     }
 }

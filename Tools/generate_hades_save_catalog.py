@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import re
 
-from generate_hades_catalog import text_records, render_text
+from generate_hades_catalog import RESOURCE_TEXT_IDS, text_records, render_text
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,6 +83,42 @@ def extract_scenes(paths, localized):
     for path in paths:
         for root in native_tables(path.read_text(encoding='utf-8-sig')): visit(root, [])
     return scenes
+
+
+def native_identities(content, files):
+    def tables(name):
+        path = content / 'Scripts' / name
+        if path not in files: files.append(path)
+        return native_tables(path.read_text(encoding='utf-8-sig'))
+
+    def children(name, owner):
+        return [child['key'] for root in tables(name) if root['key'] == owner
+                for child in root['children'] if child['key']]
+
+    codex = {}
+    for root in tables('CodexData.lua'):
+        if root['key'] != 'Codex': continue
+        for chapter in root['children']:
+            codex[chapter['key']] = [entry['key'] for entries in chapter['children'] if entries['key'] == 'Entries'
+                                     for entry in entries['children'] if entry['key']]
+    flags = ['HardMode']
+    for root in tables('GameStateFlagData.lua'):
+        for group in root['children']:
+            if group['key'] == 'RunStartFlags': flags.extend(child['key'] for child in group['children'] if child['key'])
+    rooms = []
+    for path in sorted((content / 'Scripts').glob('RoomData*.lua')):
+        for root in tables(path.name): rooms.extend(child['key'] for child in root['children'] if child['key'])
+    return {**{name: sorted(set(items)) for name, items in {
+        'meta': children('MetaUpgradeData.lua', 'MetaUpgradeData'),
+        'characters': children('GiftData.lua', 'GiftData') + children('NPCData.lua', 'NPCs'),
+        'traits': children('TraitData.lua', 'TraitData'),
+        'quests': children('QuestData.lua', 'QuestData'),
+        'cosmetics': children('ConditionalItemData.lua', 'ConditionalItemData'),
+        'encounters': children('EncounterData.lua', 'EncounterData'),
+        'rooms': rooms, 'flags': flags,
+        'chapters': list(codex),
+        'resources': list(RESOURCE_TEXT_IDS),
+    }.items()}, 'codex': codex}
 
 
 def block(source, start):
@@ -171,7 +207,8 @@ def generate(content):
         localized[language] = records
     names = {key: value for key, value in names.items() if len(value) == 2}
     scenes = extract_scenes(scene_paths, localized)
-    return {'schemaVersion': 1, 'mirrorRows': mirror, 'weapons': weapons, 'names': names, 'scenes': scenes,
+    identities = native_identities(content, files)
+    return {'schemaVersion': 1, 'mirrorRows': mirror, 'weapons': weapons, 'names': names, 'scenes': scenes, 'nativeIds': identities,
             'sourceEvidence': {'method': 'Static native tables, displayed scene lines/choices and same-ID official bilingual text.',
                 'files': {str(path.relative_to(content)): hashlib.sha256(path.read_bytes()).hexdigest()
                           for path in files}}}
