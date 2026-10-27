@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// The visible workbench follows the same order as Hades II. Rooms stays
-/// reserved for the native room/reward implementation (#572); no empty panel
-/// or nonfunctional navigation destination is exposed before that delivery.
+/// The visible workbench and shortcut registry follow the shared product order.
 enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
     case values, common, boons, resources, rooms, management
 
@@ -28,7 +26,7 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
         }
     }
 
-    static var visible: [Self] { allCases.filter { $0 != .rooms } }
+    static var visible: [Self] { allCases }
 }
 
 struct HadesWorkbenchEntry: Identifiable {
@@ -36,6 +34,7 @@ struct HadesWorkbenchEntry: Identifiable {
     let titleKey: String
     let section: HadesWorkbenchSection
     var resource: HadesResourceDefinition? = nil
+    var worldNames: [String: String]? = nil
 
     var requiresExpandedMetrics: Bool { id.hasPrefix("numeric.") }
 }
@@ -45,10 +44,15 @@ enum HadesWorkbenchCatalog {
     static let orderedShortcutActions: [HadesShortcutAction] = [
         .heal,
         .invincibility,
+        .fullHealth,
         .moneyNoDecrease,
         .rerollsNoDecrease,
         .fullGodGauge,
+        .infiniteAmmo,
+        .forceRerolls,
         .boonRarityEnabled,
+        .generateFishing,
+        .generateChaosGate,
         .disableAll,
     ]
 
@@ -57,6 +61,8 @@ enum HadesWorkbenchCatalog {
             switch action {
             case .heal: section == .values
             case .boonRarityEnabled: section == .boons
+            case .generateFishing: section == .resources
+            case .generateChaosGate: section == .rooms
             case .disableAll: section == .management
             default: section == .common
             }
@@ -70,7 +76,9 @@ enum HadesWorkbenchCatalog {
                 titleKey: action.key,
                 section: action == .heal ? .values
                     : (action == .disableAll ? .management
-                       : (action == .boonRarityEnabled ? .boons : .common))
+                       : (action == .boonRarityEnabled ? .boons
+                          : (action == .generateFishing ? .resources
+                             : (action == .generateChaosGate ? .rooms : .common))))
             )
         }
         let other: [(HadesWorkbenchSection, [String])] = [
@@ -78,9 +86,13 @@ enum HadesWorkbenchCatalog {
                        "hades.godGauge"]),
             (.common, ["host.timeWarp.title"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
-                      "hades.level", "hades.apply", "hades.remove"]),
-            (.resources, ["hades.resources"]),
-            (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings"]),
+                      "hades.level", "hades.apply", "hades.remove", "hades.chaosPair",
+                      "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
+            (.resources, ["hades.resources", "hades.gainResource"]),
+            (.rooms, ["hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
+            (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings",
+                           "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
+                           "host.viewLogHistory", "host.clearCompletedLogs"]),
         ]
         let fixed = other.flatMap { section, keys in
             keys.map { HadesWorkbenchEntry(id: $0, titleKey: $0, section: section) }
@@ -94,6 +106,7 @@ enum HadesWorkbenchCatalog {
     static func matches(
         _ query: String,
         resources: [HadesResourceDefinition],
+        worldTerms: [String: [String: String]] = [:],
         resolving labels: (String) -> [String]
     ) -> [HadesWorkbenchEntry] {
         let words = query.split(whereSeparator: \.isWhitespace).map { normalized(String($0)) }
@@ -102,9 +115,14 @@ enum HadesWorkbenchCatalog {
             HadesWorkbenchEntry(id: "resource.\($0.id)", titleKey: "hades.resources",
                                 section: .resources, resource: $0)
         }
-        return (entries + dynamic).filter { entry in
+        let world = worldTerms.map { key, names in
+            HadesWorkbenchEntry(id: "world.\(key)", titleKey: "hades.chamberObject",
+                section: key == "fishing" ? .resources : .rooms, worldNames: names)
+        }
+        return (entries + dynamic + world).filter { entry in
             let names = labels(entry.titleKey) + labels(entry.section.titleKey)
                 + (entry.resource.map { Array($0.names.values) + [$0.id] } ?? [])
+                + (entry.worldNames.map { Array($0.values) } ?? [])
             let searchable = normalized(names.joined(separator: " "))
             return words.allSatisfy { searchable.contains($0) }
         }
@@ -146,7 +164,7 @@ struct HadesHeaderActions: View {
     @State private var resultsPresented = false
 
     private var results: [HadesWorkbenchEntry] {
-        HadesWorkbenchCatalog.matches(model.workbenchSearch, resources: model.resourceCatalog) { key in
+        HadesWorkbenchCatalog.matches(model.workbenchSearch, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
             TrainerPresentationLanguage.allCases.map {
                 HadesGameModule.resolveText(key: key, language: $0, localization: localization)
             }
@@ -154,6 +172,9 @@ struct HadesHeaderActions: View {
     }
 
     private func label(_ entry: HadesWorkbenchEntry) -> String {
+        if let names = entry.worldNames {
+            return names[localization.language.rawValue] ?? names["en"] ?? ""
+        }
         if let resource = entry.resource {
             return resource.name(language: localization.language.rawValue)
         }

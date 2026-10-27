@@ -12,7 +12,7 @@ from lua_runtime_support import require_lua52
 lua = require_lua52('Hades worker captured target dispatch')
 fixture = r'''
 local mutations = 0
-local runtime = {version=1,revision=3,bootstrapId='fixture', generationId='fixture'}
+local runtime = {version=1,revision=4,bootstrapId='fixture', generationId='fixture'}
 function runtime.status() return {heroId='fixture:run:hero',heroReady=true,health=50} end
 function runtime.configure(values) return runtime.status() end
 function runtime.set_value(field,value)

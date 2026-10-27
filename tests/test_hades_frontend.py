@@ -25,8 +25,16 @@ for raw in sys.stdin:
     command=request['command'];params=request.get('params',{})
     if command=='catalog':result=json.loads((folder/'catalog.json').read_text())
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
+    elif command in ('list_profiles','save_profile','delete_profile'):
+        result={'profiles':[{'name':'Fixture','updatedAt':'2026-10-27T00:00:00+00:00'}] if command!='delete_profile' else []}
+    elif command=='diagnostics':
+        result={**state,'diagnostics':{'gameID':'hades','checks':[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]}}
     else:
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
+        if command=='set_trait_uses':
+            for trait in state['traits']:
+                if trait['instanceId']==params['instanceId']:trait['remainingUses']=params['uses']
+            (folder/'state.json').write_text(json.dumps(state))
         result=state
     time.sleep(.02)
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
@@ -87,6 +95,20 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             logSink:TrainerLogSink(url:folder.appendingPathComponent("trainer.log")))
         wait { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
+        model.listProfiles()
+        wait { !model.busy && model.profiles.count == 1 }
+        check(model.connected && model.health==50,"profile inventory erased runtime state")
+        check(model.profiles[0].name=="Fixture","Hades profile inventory did not decode")
+        model.runDiagnostics()
+        wait { !model.busy && model.diagnostics.count == 1 }
+        check(model.diagnostics[0].ok && model.connected,"diagnostics payload replaced runtime authority")
+        model.saveProfile("Fixture")
+        wait { !model.busy }
+        model.loadProfile("Fixture")
+        wait { !model.busy }
+        let profileRequest=commands().last { $0["command"] as? String == "load_profile" }
+        check((profileRequest?["params"] as? [String:Any])?["name"] as? String == "Fixture",
+              "feature profile lost its game-owned command/name")
         check(model.features["invincibility"] == .boolean(true),"boolean feature was decoded as a number")
         check(model.features["damageMultiplier"] == .number(2),"numeric feature decoding failed")
         check(model.catalog.contains { $0.matches("Zeus 闪电") },"catalog search did not combine bilingual fields")
@@ -114,17 +136,21 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
 
         let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
         localization.language = .en
-        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
-            "workbench order drifted or exposed an unimplemented rooms panel")
-        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
+        check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
+            "workbench order lost the implemented native rooms panel")
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.fullHealth,.moneyNoDecrease,
+            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
-            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
+            HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
                     HadesGameModule.resolveText(key:key,language:$0,localization:localization)
                 }
             }
         }
+        check(searchFunctions("profile").contains { $0.section == .management && $0.id == "hades.manage.profiles" },
+            "profile manager was absent from bilingual workbench discovery")
+        check(searchFunctions("诊断").contains { $0.id == "hades.manage.diagnostics" },
+            "diagnostics were absent from bilingual workbench discovery")
         check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
             "Host-owned function names were not localized in search")
         check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",
@@ -149,6 +175,17 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
               "boon rarity shortcut lost the boolean feature semantics")
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
+        check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
+        check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
+        let beforeWorld = commands().count
+        model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        pump(); check(commands().count == beforeWorld && model.localError == "hades.error.staleRoom", "old-room intent crossed the backend")
+        model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        wait { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
+        let worldArgs = commands().last { $0["command"] as? String == "spawn_reward" }?["params"] as? [String:Any]
+        check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
+        model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
+        wait { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
         let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
@@ -198,6 +235,30 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(fields(in:host).contains { $0.accessibilityLabel()==currentLifeCN },
             "language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
+        var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
+            "rarity":"Common","level":1,"canEdit":true,"canRemove":true,"limitation":"",
+            "remainingUses":3,"canSetUses":true,"canExpire":true]]
+        try JSONSerialization.data(withJSONObject:lifetimeState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost();wait { !model.busy && model.traits.first?.remainingUses==3 }
+        host.layoutSubtreeIfNeeded();pump()
+        let usesLabel=HadesPresentation.text("hades.remainingUses",language:localization.language)
+        guard let usesField=fields(in:host).first(where:{$0.accessibilityLabel()==usesLabel}),
+              let usesCoordinator=usesField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native remaining-use control missing")
+        }
+        check(usesField.stringValue=="3","remaining-use observation missing")
+        usesCoordinator.begin();usesField.stringValue="6"
+        usesCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:usesField))
+        usesCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:usesField))
+        wait { !model.busy && model.traits.first?.remainingUses==6 }
+        host.layoutSubtreeIfNeeded();pump()
+        check(usesField.stringValue=="6","remaining-use commit did not refresh observation")
+        let usesRequests=commands().filter { $0["command"] as? String == "set_trait_uses" }
+        let usesParams=usesRequests.last?["params"] as? [String:Any]
+        check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
+            && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
+            "remaining-use commit lost its selected effect or hero")
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait { !model.busy && model.connected==connected && !model.heroReady }
@@ -254,11 +315,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
                      destination / 'Host.strings')
     (folder / 'state.json').write_text(json.dumps({'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
-        'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': []}))
+        'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
+        'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}))
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
     selected = next(row for row in data['entries'] if row['id'] == 'AmmoBoltTrait')
     (folder / 'catalog.json').write_text(json.dumps({'catalog': [selected], 'resourceCatalog': data['resources'],
-        'traitNames': data['traitNames']}))
+        'traitNames': data['traitNames'], 'worldRewards': list(json.loads(
+            (ROOT / 'Backend/games/hades/world_catalog.json').read_text())['rewards'].values()),
+        'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}))
     generated = folder / 'ActiveGame.generated.swift'
     subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades').rglob('*.swift')) + [

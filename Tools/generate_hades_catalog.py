@@ -10,7 +10,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'Backend/games/hades/catalog.json'
-SCRIPTS = ('WeaponSets.lua', 'TraitData.lua', 'LootData.lua', 'GiftData.lua')
+SCRIPTS = ('WeaponSets.lua', 'TraitData.lua', 'LootData.lua', 'GiftData.lua', 'StoreData.lua', 'NPCData.lua')
 RESOURCE_TEXT_IDS = {
     'MetaPoints': 'MetaPoint', 'Gems': 'Gem', 'LockKeys': 'LockKey',
     'GiftPoints': 'GiftPoint', 'SuperGems': 'SuperGem',
@@ -18,11 +18,21 @@ RESOURCE_TEXT_IDS = {
 }
 EVIDENCE_SCRIPTS = ('RunManager.lua', 'RoomManager.lua', 'TraitScripts.lua', 'UIScripts.lua',
                     'KeepsakeScripts.lua', 'AwardMenuScripts.lua', 'ShoutScripts.lua',
-                    'Main.lua', 'Combat.lua')
+                    'Main.lua', 'Combat.lua', 'Powers.lua', 'UpgradeChoice.lua',
+                    'Interactables.lua', 'MetaUpgrades.lua', 'TraitTrayScripts.lua',
+                    'StoreScripts.lua', 'SellTraitScripts.lua', 'AssistScripts.lua')
 
 EXTRACT = r'''
 GlobalVoiceLines = {}; HeroVoiceLines = {}; Color = {}; GameData = {}; ConstantsData = {}
-for index = 1, #arg do assert(loadfile(arg[index]))() end
+for index = 1, #arg do
+  local path = arg[index]
+  if path:match('NPCData%.lua$') then
+    local file = assert(io.open(path, 'r'))
+    local source = file:read('*a'); file:close()
+    local presets = assert(source:match('^(.-)\nUnitSetData%.NPCs%s*='), 'NPC preset data boundary missing')
+    assert(load(presets, '@' .. path))()
+  else assert(loadfile(path))() end
+end
 local function quote(value)
   return '"' .. value:gsub('[%z\1-\31\\"]', function(character)
     return string.format('\\u%04x', string.byte(character))
@@ -71,6 +81,26 @@ for _, source in ipairs(gods) do
   for name in pairs(data.LinkedUpgrades or {}) do add(name, kind, source) end
 end
 for _, name in ipairs(LootData.TrialUpgrade.PermanentTraits or {}) do add(name, 'chaos', 'TrialUpgrade') end
+for _, name in ipairs(LootData.TrialUpgrade.TemporaryTraits or {}) do add(name, 'curse', 'TrialUpgrade') end
+local function shopTraits(value)
+  if type(value) ~= 'table' then return end
+  if value.Type == 'Trait' then add(value.Name, 'temporary', 'TemporaryEffects') end
+  for _, name in ipairs(value.Traits or {}) do add(name, 'temporary', 'TemporaryEffects') end
+  for _, child in pairs(value) do if type(child) == 'table' then shopTraits(child) end end
+end
+shopTraits(StoreData)
+for _, choice in ipairs(PresetEventArgs.PatroclusBenefitChoices) do
+  for _, action in ipairs(choice) do
+    if action.PostLineThreadedFunctionName == 'PatroclusBuff' then
+      add(action.PostLineFunctionArgs.TraitName, 'special', 'NPC_Patroclus_01')
+    end
+  end
+end
+for name, trait in pairs(TraitData) do
+  for _, parent in ipairs(trait.InheritFrom or {}) do
+    if parent == 'BouldyBlessing' then add(name, 'special', 'NPCSpecialEffects') end
+  end
+end
 for _, name in ipairs(GiftOrdering) do
   add(name, inherited(name, 'Slot') == 'Assist' and 'companion' or 'keepsake', 'GiftOrdering')
 end
@@ -152,10 +182,13 @@ def generate(content, lua):
             'source': sources[0], 'sources': sources,
             'sourceNames': {language: ' / '.join(render_text(records, source, 'DisplayName')
                 or {'GiftOrdering': {'zh-CN': '信物', 'en': 'Keepsakes'}[language]}
-                    .get(source, source) for source in sources)
+                    .get(source, {'TemporaryEffects': {'zh-CN': '临时效果', 'en': 'Temporary Effects'},
+                                  'NPCSpecialEffects': {'zh-CN': 'NPC 特殊效果', 'en': 'NPC Effects'}}
+                            .get(source, {}).get(language, source)) for source in sources)
                 for language, records in localized.items()},
             'rarities': rarities, 'supportsLevel': trait['supportsLevel'],
             'isDuo': trait['isDuo'], 'slot': trait['slot'],
+            **({'acquirable': False} if trait['kind'] == 'curse' else {}),
         })
     resources = []
     for identifier, text_id in RESOURCE_TEXT_IDS.items():
@@ -177,8 +210,8 @@ def generate(content, lua):
         'sourceEvidence': {
             'files': {path.relative_to(content).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                       for path in sorted(paths)},
-            'method': 'Native LootData reward pools, TrialUpgrade.PermanentTraits and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.',
-            'dataLoadContext': 'Data chunks only; unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.',
+            'method': 'Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, NPCData PatroclusBuff choices, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.',
+            'dataLoadContext': 'Data chunks only; NPCData loads only PresetEventArgs before UnitSetData.NPCs. Unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.',
             'descriptionValues': 'Native text templates; runtime numeric substitutions are shown as ellipses.',
         }, 'entries': entries, 'resources': resources, 'traitNames': trait_names}
 

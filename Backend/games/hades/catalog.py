@@ -5,7 +5,7 @@ from pathlib import Path
 
 _DATA = json.loads(Path(__file__).with_name('catalog.json').read_text())
 _ENTRIES = {row['id']: row for row in _DATA['entries']}
-_KINDS = frozenset(('all', 'boon', 'hammer', 'chaos', 'keepsake', 'companion'))
+_KINDS = frozenset(('all', 'boon', 'hammer', 'chaos', 'curse', 'temporary', 'special', 'keepsake', 'companion'))
 
 
 def data():
