@@ -74,7 +74,11 @@ for name in ("build2-macos.yml", "module-build-matrix.yml"):
     assert "macos-latest" not in source, name
 
 release = (workflow_root / "direct-release.yml").read_text()
-assert "runs-on: macos-26" in release
+# The release job now coordinates Linux-side dispatch and verifies the retained
+# artifact's recorded macOS toolchain; compilation/signing remain macOS-owned.
+assert "runs-on: ubuntu-latest" in release
+assert "sha256sum -c" in release
+assert "/usr/libexec/PlistBuddy" not in release
 assert "macos-latest" not in release
 assert "Tools/verify_build_provenance.py" in release
 assert "--require-macos-toolchain" in release
