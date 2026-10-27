@@ -45,9 +45,12 @@ enum HadesWorkbenchCatalog {
     static let orderedShortcutActions: [HadesShortcutAction] = [
         .heal,
         .invincibility,
+        .fullHealth,
         .moneyNoDecrease,
         .rerollsNoDecrease,
         .fullGodGauge,
+        .infiniteAmmo,
+        .forceRerolls,
         .boonRarityEnabled,
         .disableAll,
     ]
@@ -78,7 +81,8 @@ enum HadesWorkbenchCatalog {
                        "hades.godGauge"]),
             (.common, ["host.timeWarp.title"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
-                      "hades.level", "hades.apply", "hades.remove"]),
+                      "hades.level", "hades.apply", "hades.remove", "hades.chaosPair",
+                      "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources"]),
             (.management, ["host.refreshStatus", "host.saveManagement", "host.shortcutSettings"]),
         ]

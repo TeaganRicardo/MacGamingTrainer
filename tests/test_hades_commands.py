@@ -65,12 +65,14 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     store = HadesPreferenceStore(Path(directory) / 'preferences.json')
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
-    legacy = dict(DEFAULT_FEATURES)
+    historical = {name: value for name, value in DEFAULT_FEATURES.items()
+                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier'}}
+    legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
-    assert store.load() == {**legacy, 'boonRarityEnabled': False, 'gameSpeed': 1.0}, 'original preferences did not migrate'
-    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': DEFAULT_FEATURES}))
-    assert store.load() == {**DEFAULT_FEATURES, 'gameSpeed': 1.0}, 'post-rarity preferences did not migrate'
+    assert store.load() == {**DEFAULT_PREFERENCES, **legacy}, 'original preferences did not migrate'
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
+    assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
     assert offline['catalog'] and 'connected' not in offline and runtime.events == []
     adapter.dispatch('connect', {}, 'connect')

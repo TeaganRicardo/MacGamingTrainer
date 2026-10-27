@@ -13,6 +13,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var godGauge = 0.0
     @Published private(set) var maxGodGauge = 0.0
     @Published private(set) var features: [String: HadesFeatureValue] = [:]
+    @Published private(set) var activeFeatures: [String: Bool] = [:]
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
     @Published private(set) var catalog: [HadesCatalogEntry] = []
@@ -40,6 +41,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
     var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
+    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible && connected }
     var canMutate: Bool { backendAvailable && backendStatus.protocolCompatible && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
@@ -88,10 +90,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func hostDidBecomeActive() { if connected && !busy { refreshFromHost() } }
 
     func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
+    func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
     func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
-        guard canMutate else { return }
+        guard canEditIntent else { return }
         send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key)
     }
     func setNumber(_ feature: HadesFeature, text: String) -> String {
@@ -118,6 +121,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func removeTrait(_ trait: HadesCurrentTrait) {
         sendToHero("remove_trait", params: ["instanceId": trait.instanceId], target: target, operation: "hades.remove")
+    }
+    func addChaosPair(blessing: HadesCatalogEntry, curse: String, rarity: String, encounters: Int) {
+        sendToHero("add_chaos_pair", params: ["blessing": blessing.id, "curse": curse,
+                   "rarity": rarity, "encounters": encounters], target: target, operation: "hades.chaosPair")
+    }
+    func setTraitUses(_ trait: HadesCurrentTrait, uses: Int, target: HadesHeroTarget?) {
+        sendToHero("set_trait_uses", params: ["instanceId": trait.instanceId, "uses": uses],
+                   target: target, operation: "hades.remainingUses")
+    }
+    func expireTrait(_ trait: HadesCurrentTrait) {
+        sendToHero("expire_trait", params: ["instanceId": trait.instanceId], target: target,
+                   operation: trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing")
+    }
+    func refreshTrait(_ trait: HadesCurrentTrait) {
+        sendToHero("refresh_trait", params: ["instanceId": trait.instanceId], target: target,
+                   operation: "hades.refreshEffect")
     }
     func disableAll() {
         guard hostActionsEnabled else { return }
@@ -156,7 +175,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              (action == .disableAll ? hostActionsEnabled : canMutate) else {
+              (action == .disableAll ? hostActionsEnabled : (action == .heal ? canMutate : canEditIntent)) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .heal { heal() }
@@ -236,6 +255,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             maxGodGauge = state.maxGodGauge ?? 0
             target = state.target
             features = state.features ?? [:]
+            activeFeatures = state.activeFeatures ?? [:]
             resources = state.resources ?? [:]
             traits = state.traits ?? []
         } catch {
@@ -246,7 +266,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0; godGauge = 0; maxGodGauge = 0
-        target = nil; features = [:]; resources = [:]; traits = []
+        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []
     }
 }
 

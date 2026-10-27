@@ -92,6 +92,10 @@ class HadesLLDBWorker:
                 'add_trait': (params.get('trait'), params.get('rarity'), params.get('level')),
                 'update_trait': (params.get('instanceId'), params.get('rarity'), params.get('level')),
                 'remove_trait': (params.get('instanceId'),),
+                'set_trait_uses': (params.get('instanceId'), params.get('uses')),
+                'expire_trait': (params.get('instanceId'),),
+                'refresh_trait': (params.get('instanceId'),),
+                'add_chaos_pair': (params.get('blessing'), params.get('curse'), params.get('rarity'), params.get('encounters')),
             }[method]
             result = self._invoke(method, arguments, target=target)
             if method == 'disable_all':

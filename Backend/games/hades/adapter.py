@@ -152,7 +152,7 @@ class HadesAdapter(GameAdapter):
             return {}
         if command == 'set_value':
             field = params.get('field')
-            if field not in ('health', 'maxHealth', 'money', 'rerolls'):
+            if field not in ('health', 'maxHealth', 'money', 'rerolls', 'godGauge'):
                 raise invalid_value()
             return {'field': field, 'value': number(params.get('value'),
                     1 if field in ('health', 'maxHealth') else 0, integer=True)}
@@ -164,7 +164,7 @@ class HadesAdapter(GameAdapter):
         if command == 'add_trait':
             identifier = params.get('trait')
             entry = get_entry(identifier) if isinstance(identifier, str) else None
-            if entry is None:
+            if entry is None or entry.get('acquirable') is False:
                 raise invalid_value()
             rarity = params.get('rarity')
             if rarity not in entry['rarities']:
@@ -173,10 +173,21 @@ class HadesAdapter(GameAdapter):
             if not entry.get('supportsLevel', True) and level != 1:
                 raise invalid_value()
             return {'trait': identifier, 'rarity': rarity, 'level': level}
+        if command == 'add_chaos_pair':
+            blessing, curse = params.get('blessing'), params.get('curse')
+            entry = get_entry(blessing) if isinstance(blessing, str) else None
+            curse_entry = get_entry(curse) if isinstance(curse, str) else None
+            if (entry is None or entry['kind'] != 'chaos' or curse_entry is None
+                    or curse_entry['kind'] != 'curse' or params.get('rarity') not in entry['rarities']):
+                raise invalid_value()
+            return {'blessing': blessing, 'curse': curse, 'rarity': params['rarity'],
+                    'encounters': number(params.get('encounters'), 1, 100, integer=True)}
         identifier = params.get('instanceId')
         if not isinstance(identifier, str) or not identifier:
             raise invalid_value()
         result = {'instanceId': identifier}
+        if command == 'set_trait_uses':
+            result['uses'] = number(params.get('uses'), 0, 1000, integer=True)
         if command == 'update_trait':
             rarity = params.get('rarity')
             if rarity not in ('Common', 'Rare', 'Epic', 'Heroic', 'Legendary'):

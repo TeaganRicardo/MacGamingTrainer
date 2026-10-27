@@ -22,14 +22,11 @@ struct HadesTrainerView: View {
     private func state(_ feature: HadesFeature) -> TrainerFeatureControlState {
         let enabled = model.isEnabled(feature)
         return TrainerFeatureControlState(
-            isOn: enabled, isInteractive: model.canMutate, canEditValue: model.canMutate,
+            isOn: enabled, isInteractive: model.canEditIntent, canEditValue: model.canEditIntent,
             opacity: model.heroReady ? 1 : 0.6,
-            indicatorColor: enabled ? theme.accent : theme.inactive,
-            helpText: feature == .fullGodGauge ? text("hades.fullGodGaugeHelp")
-                : (feature == .invincibility ? text("hades.invincibilityHelp")
-                   : (feature == .boonRarityEnabled ? text("hades.boonRarityHelp")
-                      : text("hades.noConsumptionHelp"))),
-            isWarning: false
+            indicatorColor: model.isActive(feature) ? theme.accent : theme.inactive,
+            helpText: text(feature.helpKey),
+            isWarning: enabled && !model.isActive(feature)
         )
     }
 
@@ -90,12 +87,8 @@ struct HadesTrainerView: View {
                                       value: model.money, field: "money")
                 HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: "arrow.clockwise",
                                       value: model.rerolls, field: "rerolls")
-                TrainerMetricCard(title: text("hades.godGauge"), icon: "bolt.heart.fill",
-                                  tint: theme.accent) {
-                    Text("\(HadesNumberDraft.format(model.godGauge)) / \(HadesNumberDraft.format(model.maxGodGauge))")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                }
+                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
+                                      value: model.godGauge, field: "godGauge")
                 if model.numericControlsExpanded {
                     ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
                         HadesFeatureMetricCard(model: model, feature: feature)
@@ -438,7 +431,7 @@ private struct HadesFeatureMetricCard: View {
         return TrainerMetricCard(title: title, icon: feature.icon, tint: theme.accent) {
             TrainerResetButton(
                 title: HadesPresentation.text("hades.reset", language: localization.language),
-                enabled: model.canMutate
+                enabled: model.canEditIntent
             ) {
                 model.setFeature(feature, value: feature.neutralValue)
             }
@@ -446,7 +439,7 @@ private struct HadesFeatureMetricCard: View {
             HStack(spacing: 3) {
                 TrainerNumberField(
                     text: Binding(get: { draft.text }, set: { draft.update($0) }),
-                    accessibilityLabel: title, width: 58, enabled: model.canMutate, alignment: .center,
+                    accessibilityLabel: title, width: 58, enabled: model.canEditIntent, alignment: .center,
                     onEditingChanged: { active in
                         if active { draft.begin(target: nil) } else { draft.end() }
                     },
@@ -477,14 +470,14 @@ private struct HadesCatalogView: View {
         let entries: [HadesCatalogEntry]
     }
 
-    private var matches: [HadesCatalogEntry] { model.catalog.filter { $0.matches(query) } }
+    private var matches: [HadesCatalogEntry] { model.catalog.filter { $0.kind != "curse" && $0.matches(query) } }
     private func sourceID(_ entry: HadesCatalogEntry) -> String {
         let nativeName = entry.sourceNames?["en"] ?? entry.kind
         if entry.kind == "boon" && nativeName.contains(" / ") { return "boon:duo" }
         return entry.kind + ":" + nativeName
     }
     private var sourceGroups: [SourceGroup] {
-        let kinds = ["boon", "hammer", "chaos", "keepsake", "companion"]
+        let kinds = ["boon", "hammer", "chaos", "temporary", "special", "keepsake", "companion"]
         return Dictionary(grouping: matches, by: sourceID).map { id, entries in
             SourceGroup(id: id, kind: entries[0].kind, entries: entries)
         }.sorted { lhs, rhs in
@@ -562,6 +555,9 @@ private struct HadesCatalogView: View {
                         if selected.kind == "keepsake" || selected.kind == "companion" {
                             Text(text("hades.equipmentAcquireHelp")).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if selected.kind == "chaos" {
+                            HadesChaosPairControls(model: model, blessing: selected, rarity: rarity)
                         }
                         HStack(spacing: 12) {
                             Picker(text("hades.rarity"), selection: $rarity) {
@@ -686,11 +682,11 @@ private struct HadesCurrentTraitRow: View {
                             guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
                             model.updateTrait(trait, rarity: rarity, level: amount, target: owner)
                         }
-                        TrainerSecondaryActionButton(title: text("hades.remove"), enabled: model.canMutate && trait.canRemove) { model.removeTrait(trait) }
                     }
                 } else if !trait.limitation.isEmpty {
                     Text(text("hades.limitation.\(trait.limitation)")).font(.caption).foregroundStyle(.secondary)
                 }
+                HadesEffectLifecycleControls(model: model, trait: trait)
             }
         }
         .onChange(of: trait) { old, updated in

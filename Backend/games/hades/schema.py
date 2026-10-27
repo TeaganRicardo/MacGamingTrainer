@@ -8,8 +8,12 @@ DEFAULT_FEATURES = {
     'moneyNoDecrease': False,
     'rerollsNoDecrease': False,
     'fullGodGauge': False,
+    'fullHealth': False,
+    'infiniteAmmo': False,
+    'forceRerolls': False,
     'boonRarityEnabled': False,
     'damageMultiplier': 1,
+    'incomingDamageMultiplier': 1,
     'moveSpeedMultiplier': 1,
     'attackSpeedMultiplier': 1,
     'dashBonus': 0,
@@ -20,7 +24,8 @@ DEFAULT_PREFERENCES = {**DEFAULT_FEATURES, 'gameSpeed': 1.0}
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 ONE_SHOT_COMMANDS = frozenset(('set_value', 'heal', 'set_resource', 'add_trait',
-                               'update_trait', 'remove_trait'))
+                               'update_trait', 'remove_trait', 'add_chaos_pair',
+                               'set_trait_uses', 'expire_trait', 'refresh_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_invincibility',
                                        'configure', 'disable_all'}
 

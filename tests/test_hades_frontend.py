@@ -27,6 +27,10 @@ for raw in sys.stdin:
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
     else:
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
+        if command=='set_trait_uses':
+            for trait in state['traits']:
+                if trait['instanceId']==params['instanceId']:trait['remainingUses']=params['uses']
+            (folder/'state.json').write_text(json.dumps(state))
         result=state
     time.sleep(.02)
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
@@ -116,8 +120,8 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         localization.language = .en
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.management],
             "workbench order drifted or exposed an unimplemented rooms panel")
-        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.fullHealth,.moneyNoDecrease,
+            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.disableAll],"shortcut order drifted from the visible workbench")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -198,6 +202,30 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(fields(in:host).contains { $0.accessibilityLabel()==currentLifeCN },
             "language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
+        var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
+            "rarity":"Common","level":1,"canEdit":true,"canRemove":true,"limitation":"",
+            "remainingUses":3,"canSetUses":true,"canExpire":true]]
+        try JSONSerialization.data(withJSONObject:lifetimeState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost();wait { !model.busy && model.traits.first?.remainingUses==3 }
+        host.layoutSubtreeIfNeeded();pump()
+        let usesLabel=HadesPresentation.text("hades.remainingUses",language:localization.language)
+        guard let usesField=fields(in:host).first(where:{$0.accessibilityLabel()==usesLabel}),
+              let usesCoordinator=usesField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native remaining-use control missing")
+        }
+        check(usesField.stringValue=="3","remaining-use observation missing")
+        usesCoordinator.begin();usesField.stringValue="6"
+        usesCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:usesField))
+        usesCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:usesField))
+        wait { !model.busy && model.traits.first?.remainingUses==6 }
+        host.layoutSubtreeIfNeeded();pump()
+        check(usesField.stringValue=="6","remaining-use commit did not refresh observation")
+        let usesRequests=commands().filter { $0["command"] as? String == "set_trait_uses" }
+        let usesParams=usesRequests.last?["params"] as? [String:Any]
+        check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
+            && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
+            "remaining-use commit lost its selected effect or hero")
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait { !model.busy && model.connected==connected && !model.heroReady }
