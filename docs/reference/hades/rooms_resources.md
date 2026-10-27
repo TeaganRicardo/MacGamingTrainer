@@ -1,6 +1,6 @@
 # Hades I resources, gathering, rooms and rewards
 
-This is the source-backed capability map for [#572](https://github.com/TeaganRicardo/MacGamingTrainer/issues/572). The supported image is owned by `Backend/games/hades/module.json.supportedBuild`. `world_catalog.json.sourceEvidence` binds the native script and official bilingual text inputs; `Tools/generate_hades_world_catalog.py --content <Content>` reproduces that registry without executing game scripts. Combat and boon effects have their own [map](combat_effects.md); management and Save Editor retain [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573) and [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
+This is the source-backed capability map for [#572](https://github.com/TeaganRicardo/MacGamingTrainer/issues/572). The supported image is owned by `Backend/games/hades/module.json.supportedBuild`. `world_catalog.json.sourceEvidence` binds the native script and official bilingual text inputs; `Tools/generate_hades_world_catalog.py --content <Content>` reproduces that registry without executing game scripts. Combat and boon effects have their own [map](combat_effects.md); [management parity](management-parity.md) records [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573), with semantic Save Editor completion retained in [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
 
 ## Native capability and delivered behavior
 

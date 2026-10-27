@@ -2,7 +2,7 @@
 
 This is the source-backed coverage map for [#571](https://github.com/TeaganRicardo/MacGamingTrainer/issues/571), under [#124](https://github.com/TeaganRicardo/MacGamingTrainer/issues/124). Compatibility is owned by `Backend/games/hades/module.json`; the extracted native script and official bilingual text hashes are recorded in `catalog.json.sourceEvidence`. The supported native owners below are relative to the game's `Content/Scripts/` directory. They were inspected read-only; extraction loads data chunks rather than the game.
 
-Resources, NPC rewards, exits and rooms belong to [#572](https://github.com/TeaganRicardo/MacGamingTrainer/issues/572). Profiles, diagnostics and Save Editor belong to [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573) and [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584). Their completion is tracked by those owners.
+Resources, NPC rewards, exits and rooms have a separate [capability map](rooms_resources.md) for [#572](https://github.com/TeaganRicardo/MacGamingTrainer/issues/572). [Management parity](management-parity.md) records profiles and diagnostics for [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573), with semantic Save Editor completion retained in [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
 
 ## Common
 
@@ -18,7 +18,7 @@ Resources, NPC rewards, exits and rooms belong to [#572](https://github.com/Teag
 | Unlimited Cast and Gun Ammo | Refill equipped `RangedWeapon` / `GunWeapon` with native `RunWeaponMethod("RefillAmmo")` before `UpdateAmmoUI` / `UpdateGunUI` readback. `Powers.lua:1119,1153`, `Combat.lua:70`, `UIScripts.lua:924,1000`. | Implemented; native stored Casts, projectile drops/pickups, loading and volley bookkeeping remain owned by the game. |
 | Damage; incoming damage | Trainer-owned outgoing and incoming `GlobalMultiplier` modifiers, multiplicative alongside native modifiers. `Combat.lua` damage calculation and `TraitScripts.lua` modifier owners. | Outgoing retained; incoming implemented. Neutral 1 removes only the Trainer modifier. |
 | Movement; attack speed; additional dashes | Reversible native property changes, Hermes speed property definitions, `WeaponSets.HeroRushWeapons`; scripted movement leases preserve native entrances/flashbacks. | Existing paths retained, including the delivered native movement ownership work. |
-| Game Speed | Existing Core Time Warp helper through Hades' durable `gameSpeed` preference; desired/actual/active projection and reset/recovery. | Delivered #574 retained. |
+| Game Speed | Existing Core Time Warp helper through Hades' durable `gameSpeed` preference; desired/actual/active projection and reset/recovery. | Delivered #576 retained. |
 
 The numeric multipliers are 0.1–100; additional dashes are 0–20. There is no invented Hades II Magick, Sprint or Hex stat behind these controls.
 

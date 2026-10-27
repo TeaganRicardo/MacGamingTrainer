@@ -3,6 +3,8 @@
 Parent: [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573).
 Semantic Save Editor delivery: [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
 
+The integrated Hades I batch has separate source-backed maps for [Common and Boons & Effects](combat_effects.md) and [Resources, Gathering, Rooms & Rewards](rooms_resources.md). Their live one-shot state remains outside feature profiles.
+
 ## Management entrypoints
 
 | Player task | Hades II owner | Hades I owner |

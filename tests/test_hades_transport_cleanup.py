@@ -158,7 +158,83 @@ assert transport.tainted and events == [], events
 
 from games.hades.client import HadesRuntimeClient
 from games.hades.lldb_worker import error_payload
+from games.hades.lldb_worker import HadesLLDBWorker
+from games.hades.schema import DEFAULT_FEATURES
+from games.hades.catalog import data as catalog_data
+from games.hades.world import reward_catalog
 from games.hades.recovery import HadesRecoveryJournal
+
+
+class PayloadCapture:
+    pid = 42
+
+    def __init__(self):
+        self.sizes = []
+
+    def attach(self, pid, executable):
+        pass
+
+    def alive(self):
+        return True
+
+    def execute(self, source, *, mutating):
+        self.sizes.append(len(source.encode('utf-8')))
+        assert self.sizes[-1] <= module.LUA_SOURCE_LIMIT_BYTES, 'assembled resident request exceeds transport capacity'
+        return {'heroId': 'a' * 32 + ':1:2:40000', 'heroReady': True}
+
+
+# Exercise the actual request builder, including its resident, world registry,
+# two feature documents, UTF-8 escaping and captured native owner arguments.
+capture = PayloadCapture()
+HadesLLDBWorker(capture).dispatch('connect', {'pid': 42, 'executable': '/tmp/Hades/Game.macOS'})
+worker = HadesLLDBWorker(capture)
+features = {key: (False if type(value) is bool else 20 if key == 'dashBonus' else 0.10000000000000002)
+            for key, value in DEFAULT_FEATURES.items()}
+worker.dispatch('connect', {'pid': 42, 'executable': '/tmp/Hades/Game.macOS', 'features': features})
+worker.dispatch('configure', {'features': features})
+target = {'heroId': 'a' * 32 + ':1:2:40000'}
+longest = max((row for row in catalog_data()['entries'] if row.get('acquirable', True)), key=lambda row: len(row['id']))
+worker.dispatch('add_trait', {'target': target, 'trait': longest['id'],
+                            'rarity': max(longest['rarities'], key=len),
+                            'level': 100 if longest.get('supportsLevel', True) else 1})
+reward = max((row for row in reward_catalog() if row['doorAllowed']), key=lambda row: len(row['id']))['id']
+worker.dispatch('set_door_reward', {'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+                                  'doorId': '4:5:' + reward + ':nil:6', 'reward': reward})
+worker.dispatch('set_door_route', {'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+                                 'doorId': '4:5:' + reward + ':nil:6', 'route': 'reprieve'})
+leveled = max((row for row in catalog_data()['entries'] if row['kind'] == 'boon' and row['supportsLevel']),
+              key=lambda row: len(row['id']))
+group_id = 'trait:' + leveled['id'] + ':' + ','.join(map(str, range(1_000_000, 1_000_100)))
+worker.dispatch('update_trait', {'target': target, 'instanceId': group_id, 'rarity': 'Legendary', 'level': 100})
+assert max(capture.sizes) > 64 * 1024, 'fixture missed the combined resident/group request regression'
+oversized_transport, _, oversized_events, _, _ = fixture()
+at_limit = '中' * (module.LUA_SOURCE_LIMIT_BYTES // 3) + 'ab'
+assert len(at_limit.encode('utf-8')) == module.LUA_SOURCE_LIMIT_BYTES
+try:
+    oversized_transport.execute(at_limit + 'c', mutating=True)
+except ValueError:
+    pass
+else:
+    raise AssertionError('over-budget UTF-8 request crossed the transport boundary')
+assert oversized_events == [] and not oversized_transport.tainted, 'rejected source touched or tainted the game'
+
+
+class BoundaryReached(Exception):
+    pass
+
+
+def observe_boundary():
+    raise BoundaryReached()
+
+
+at_limit_transport, _, _, _, _ = fixture()
+at_limit_transport._boundary = observe_boundary
+try:
+    at_limit_transport.execute(at_limit, mutating=True)
+except BoundaryReached:
+    pass
+else:
+    raise AssertionError('an exact-limit UTF-8 request did not reach the native boundary')
 
 
 class Sidecar:
