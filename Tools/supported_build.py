@@ -91,6 +91,15 @@ def validate_supported_build(module: Path, *, root: Path = ROOT, verify_generate
             if duplicate in symbols:
                 raise ValueError(f"{game_id}: {duplicate} duplicated in symbols.json")
 
+    # A source-backed, generated native catalog belongs to the same supported
+    # Steam image as its module; ordinary static catalogs have no such claim.
+    catalog_path = module.parent / "catalog.json"
+    if catalog_path.is_file():
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        if isinstance(catalog, dict) and ("sourceEvidence" in catalog or "steamBuildID" in catalog):
+            if catalog.get("steamBuildID") != build["steamBuildID"]:
+                raise ValueError(f"{game_id}: source-backed catalog build differs from supportedBuild")
+
     terms = directory / "ui_terminology.json"
     if terms.is_file() and "bundleVersion" in build:
         target = json.loads(terms.read_text(encoding="utf-8")).get("target", {})

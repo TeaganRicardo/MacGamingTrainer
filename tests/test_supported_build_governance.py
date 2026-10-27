@@ -95,8 +95,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     generated = module_dir / "native/SupportedBuildIdentity.h"
     generated.parent.mkdir()
     terms_path = reference_dir / "ui_terminology.json"
+    catalog_path = module_dir / "catalog.json"
 
-    def write(build_value=None, symbol_data=None, terms_value=None, header_value=None):
+    def write(build_value=None, symbol_data=None, terms_value=None, header_value=None, catalog_value=None):
         value = build if build_value is None else build_value
         module.write_text(json.dumps({"id": "example", "displayName": "Example", "supportedBuild": value}), encoding="utf-8")
         symbols.write_text(json.dumps({"symbols": {"lua_gettop": {"rva": 1}}} if symbol_data is None
@@ -104,6 +105,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
         terms_path.write_text(json.dumps({"target": {"gameVersion": "1.42", "steamBuild": "123"}}
                                         if terms_value is None else terms_value), encoding="utf-8")
         generated.write_text(native_header(build, game_name="Example") if header_value is None else header_value, encoding="utf-8")
+        catalog_path.write_text(json.dumps(
+            {"schemaVersion": 1, "game": "example", "steamBuildID": "123",
+             "sourceEvidence": {"files": {}}, "entries": []}
+            if catalog_value is None else catalog_value
+        ), encoding="utf-8")
 
     def should_reject(**values):
         write(**values)
@@ -123,6 +129,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     should_reject(symbol_data={"uuid": build["uuid"], "symbols": {}})
     should_reject(terms_value={"target": {"gameVersion": "1.43", "steamBuild": "123"}})
     should_reject(terms_value={"target": {"gameVersion": "1.42", "steamBuild": "456"}})
+    should_reject(catalog_value={
+        "game": "example", "steamBuildID": "456", "sourceEvidence": {"files": {}}
+    })
+    should_reject(catalog_value={
+        "game": "example", "sourceEvidence": {"files": {}}
+    })
+    # An unrelated static catalog does not claim a native game build.
+    write(catalog_value={"schemaVersion": 1, "game": "example", "entries": []})
+    assert validate_supported_build(module, root=root) == build
     should_reject(header_value="#define MGT_SUPPORTED_GAME_UUID_BYTES 0x00\n")
     write()
     assert validate_supported_build(module, root=root) == build
