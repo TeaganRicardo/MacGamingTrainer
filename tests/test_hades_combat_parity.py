@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'Tests'))
+sys.path.insert(0, str(ROOT / 'tests'))
 sys.path.insert(0, str(ROOT / 'Backend'))
 from lua_runtime_support import require_lua52
 from core.adapter import AdapterError
@@ -16,7 +16,7 @@ from games.hades.preferences import HadesPreferenceStore
 from games.hades.schema import DEFAULT_PREFERENCES
 
 # Reuse the native-shaped engine fixture without importing/executing its tests.
-module = ast.parse((ROOT / 'Tests/test_hades_runtime.py').read_text())
+module = ast.parse((ROOT / 'tests/test_hades_runtime.py').read_text())
 fixture = next(ast.literal_eval(node.value) for node in module.body
                if isinstance(node, ast.Assign) and any(
                    isinstance(target, ast.Name) and target.id == 'harness' for target in node.targets))

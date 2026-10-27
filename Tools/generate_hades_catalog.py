@@ -10,7 +10,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'Backend/games/hades/catalog.json'
-SCRIPTS = ('WeaponSets.lua', 'TraitData.lua', 'LootData.lua', 'GiftData.lua', 'StoreData.lua')
+SCRIPTS = ('WeaponSets.lua', 'TraitData.lua', 'LootData.lua', 'GiftData.lua', 'StoreData.lua', 'NPCData.lua')
 RESOURCE_TEXT_IDS = {
     'MetaPoints': 'MetaPoint', 'Gems': 'Gem', 'LockKeys': 'LockKey',
     'GiftPoints': 'GiftPoint', 'SuperGems': 'SuperGem',
@@ -24,7 +24,15 @@ EVIDENCE_SCRIPTS = ('RunManager.lua', 'RoomManager.lua', 'TraitScripts.lua', 'UI
 
 EXTRACT = r'''
 GlobalVoiceLines = {}; HeroVoiceLines = {}; Color = {}; GameData = {}; ConstantsData = {}
-for index = 1, #arg do assert(loadfile(arg[index]))() end
+for index = 1, #arg do
+  local path = arg[index]
+  if path:match('NPCData%.lua$') then
+    local file = assert(io.open(path, 'r'))
+    local source = file:read('*a'); file:close()
+    local presets = assert(source:match('^(.-)\nUnitSetData%.NPCs%s*='), 'NPC preset data boundary missing')
+    assert(load(presets, '@' .. path))()
+  else assert(loadfile(path))() end
+end
 local function quote(value)
   return '"' .. value:gsub('[%z\1-\31\\"]', function(character)
     return string.format('\\u%04x', string.byte(character))
@@ -81,6 +89,13 @@ local function shopTraits(value)
   for _, child in pairs(value) do if type(child) == 'table' then shopTraits(child) end end
 end
 shopTraits(StoreData)
+for _, choice in ipairs(PresetEventArgs.PatroclusBenefitChoices) do
+  for _, action in ipairs(choice) do
+    if action.PostLineThreadedFunctionName == 'PatroclusBuff' then
+      add(action.PostLineFunctionArgs.TraitName, 'special', 'NPC_Patroclus_01')
+    end
+  end
+end
 for name, trait in pairs(TraitData) do
   for _, parent in ipairs(trait.InheritFrom or {}) do
     if parent == 'BouldyBlessing' then add(name, 'special', 'NPCSpecialEffects') end
@@ -195,8 +210,8 @@ def generate(content, lua):
         'sourceEvidence': {
             'files': {path.relative_to(content).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                       for path in sorted(paths)},
-            'method': 'Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.',
-            'dataLoadContext': 'Data chunks only; unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.',
+            'method': 'Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, NPCData PatroclusBuff choices, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.',
+            'dataLoadContext': 'Data chunks only; NPCData loads only PresetEventArgs before UnitSetData.NPCs. Unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.',
             'descriptionValues': 'Native text templates; runtime numeric substitutions are shown as ellipses.',
         }, 'entries': entries, 'resources': resources, 'traitNames': trait_names}
 

@@ -7,6 +7,8 @@ import time
 
 from core.adapter import AdapterError
 
+LUA_SOURCE_LIMIT_BYTES = 128 * 1024
+
 sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False).strip())
 import lldb
 
@@ -191,8 +193,8 @@ class HadesLuaTransport:
         if self.tainted:
             raise failure('restart_required', 'restartRequired')
         payload = source.encode('utf-8')
-        if len(payload) > 65536:
-            raise ValueError('Hades Lua request exceeds 64 KiB')
+        if len(payload) > LUA_SOURCE_LIMIT_BYTES:
+            raise ValueError('Hades Lua request exceeds 128 KiB')
         scratch = None
         try:
             thread, state = self._boundary()

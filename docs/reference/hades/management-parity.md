@@ -3,6 +3,8 @@
 Parent: [#573](https://github.com/TeaganRicardo/MacGamingTrainer/issues/573).
 Semantic Save Editor delivery: [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
 
+The integrated Hades I batch has separate source-backed maps for [Common and Boons & Effects](combat_effects.md) and [Resources, Gathering, Rooms & Rewards](rooms_resources.md). Their live one-shot state remains outside feature profiles.
+
 ## Management entrypoints
 
 | Player task | Hades II owner | Hades I owner |
@@ -45,4 +47,4 @@ Native source hashes and official bilingual identity extraction are owned by `Ba
 
 ## Verification boundary
 
-`tests/test_hades_management.py` covers profile isolation/validation, disconnected desired state, connected configure/speed reconciliation, durable-write failure, outcome-unknown non-replay and offline diagnostic truth. The existing `test_hades_frontend.py` native harness covers management decoding without erasing runtime authority, profile dispatch and bilingual discovery. These tests were authored while local tests/game/debugger operations remained paused. No local test, build, rendered UI, game save or game process operation was executed for this implementation. Exact-head CI and independent review remain separate scheduling gates; native Save-load and later game-authored persistence remain pending acceptance.
+`tests/test_hades_management.py` covers profile isolation/validation, disconnected desired state, connected configure/speed reconciliation, durable-write failure, outcome-unknown non-replay and offline diagnostic truth. The existing `test_hades_frontend.py` native harness covers management decoding without erasing runtime authority, profile dispatch and bilingual discovery. Executed automation evidence belongs to each exact-source PR; [PROJECT_STATUS.md](../../../PROJECT_STATUS.md) owns operating limits and native/rendered manual acceptance. Native Save-load and later game-authored persistence require their own evidence.

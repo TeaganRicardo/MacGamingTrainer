@@ -17,6 +17,7 @@
       "Scripts/LootData.lua": "20081ab6f36c04e1ed0091fe67336d3662b35168179a77d309573e2af5ff7595",
       "Scripts/Main.lua": "6aab9af9cbaf499aef3adb7e4ac622efc530db652dcf8e80d44e85cc74a7453e",
       "Scripts/MetaUpgrades.lua": "98e5ec449cf1ab4254aa8e687357152cb3453dd78a4b7a4995b07b18621bfdef",
+      "Scripts/NPCData.lua": "c67c2b68111c8dcb74eca323542952d6630e1f57e4fa5986240b602291522455",
       "Scripts/Powers.lua": "c81fcdcbd037427044962bc7806971517d6cb8a042b97ce4b72143bdcfac8b6f",
       "Scripts/RoomManager.lua": "ca379fe0708af778007aef929822e4cfe8cf3a47dd2a3d37bf57e582ddb1b924",
       "Scripts/RunManager.lua": "4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e",
@@ -31,8 +32,8 @@
       "Scripts/UpgradeChoice.lua": "de82d04b14ebf13f7793e41c6c8c16448ecf030a503174a31adab65f6c4fb2c1",
       "Scripts/WeaponSets.lua": "2672ff2c4ab332b1e43645a26d9dcd95a46e385ec4367ef1511253e9986b73b7"
     },
-    "method": "Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.",
-    "dataLoadContext": "Data chunks only; unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.",
+    "method": "Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, NPCData PatroclusBuff choices, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.",
+    "dataLoadContext": "Data chunks only; NPCData loads only PresetEventArgs before UnitSetData.NPCs. Unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.",
     "descriptionValues": "Native text templates; runtime numeric substitutions are shown as ellipses."
   },
   "entries": [
@@ -8432,6 +8433,33 @@
       "slot": ""
     },
     {
+      "id": "TemporaryDoorHealTrait_Patroclus",
+      "kind": "special",
+      "textId": "TemporaryDoorHealTrait_Patroclus",
+      "names": {
+        "zh-CN": "九头蛇轻饮·金典",
+        "en": "HydraLite Gold"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：每次进入房间时恢复 …%。 \n 持续时间： … 个房间",
+        "en": "Passive: Restore …% when you enter a chamber. \n Duration: … Chamber(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
       "id": "TemporaryForcedChallengeSwitchTrait",
       "kind": "temporary",
       "textId": "TemporaryForcedChallengeSwitchTrait",
@@ -8612,6 +8640,33 @@
       "sourceNames": {
         "zh-CN": "临时效果",
         "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedWeaponTrait_Patroclus",
+      "kind": "special",
+      "textId": "TemporaryImprovedWeaponTrait_Patroclus",
+      "names": {
+        "zh-CN": "库克罗普斯肉干精选",
+        "en": "Cyclops Jerky Select"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：普通攻击造成的伤害 … 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Your Attack deals … damage. \n Duration: … Encounter(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
       },
       "rarities": [
         "Common"
@@ -8868,6 +8923,33 @@
         "Legendary"
       ],
       "supportsLevel": true,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "UpgradedTemporaryLastStandHealTrait",
+      "kind": "special",
+      "textId": "UpgradedTemporaryLastStandHealTrait",
+      "names": {
+        "zh-CN": "冥河之抚·黑金",
+        "en": "Touch of Styx Dark"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：百折不挠生效时，恢复的生命值增加 … \n 持续时间： … 遭遇战",
+        "en": "Passive: Stubborn Defiance restores … more than usual. \n Duration: … Encounter(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
       "isDuo": false,
       "slot": ""
     },

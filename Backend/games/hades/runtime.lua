@@ -883,9 +883,30 @@ local function equipOwnedTrait(unit, name, source, rarity, level)
   GameState[ownerKey] = name
   if assist then EquipReferencedWeapons(source) end
   equip(unit, name)
-  if assist then
-    for _, trait in pairs(unit.Traits or {}) do
-      if trait.Name == name then AddAssistWeapons(unit, trait); break end
+  for _, trait in pairs(unit.Traits or {}) do
+    if trait.Name == name then
+      if assist then
+        AddAssistWeapons(unit, trait)
+        if previous and previous.Name == name and finite(previous.RemainingUses) then
+          -- AwardMenuScripts UpgradeAssistKeepsake grants one use per added rank.
+          trait.RemainingUses = math.max(0, previous.RemainingUses + rank - currentRank)
+          UpdateTraitNumber(trait)
+        end
+      elseif previous and previous.Name == name then
+        -- AdvanceKeepsake restores earned effects after native unequip/equip.
+        if previous.AccumulatedDodgeBonus then
+          trait.AccumulatedDodgeBonus = previous.AccumulatedDodgeBonus
+          SetLifeProperty({ Property = "DodgeChance", Value = trait.AccumulatedDodgeBonus,
+            ValueChangeType = "Add", DestinationId = unit.ObjectId, DataValue = false })
+          SetUnitProperty({ Property = "Speed", Value = 1 + trait.AccumulatedDodgeBonus,
+            ValueChangeType = "Multiply", DestinationId = unit.ObjectId })
+        end
+        trait.AccumulatedDamageBonus, trait.Uses, trait.CurrentRoom =
+          previous.AccumulatedDamageBonus, previous.Uses, previous.CurrentRoom
+        if name == "ReincarnationTrait" then RecreateLifePips() end
+        UpdateTraitNumber(trait)
+      end
+      break
     end
   end
   runtime.propertyDepth = runtime.propertyDepth - 1
@@ -903,8 +924,19 @@ function runtime.add_trait(name, rarity, level)
       assert(trait.Slot ~= source.Slot or trait.Name == name, "hades.error.traitSlotOccupied")
     end
   end
+  local patroclus = false
+  for _, choice in ipairs(PresetEventArgs.PatroclusBenefitChoices) do
+    for _, action in ipairs(choice) do
+      if action.PostLineThreadedFunctionName == "PatroclusBuff"
+          and action.PostLineFunctionArgs.TraitName == name then patroclus = true end
+    end
+  end
+  assert(not patroclus or level == 1, "hades.error.invalidValue")
   suspendProperties(unit)
-  addTraits(unit, name, rarity, level)
+  if patroclus then
+    -- PatroclusBuff's synchronous trait owner; its presentation yields first.
+    AddTraitToHero({ TraitData = source })
+  else addTraits(unit, name, rarity, level) end
   mount(unit, false)
   return runtime.status()
 end
@@ -1056,15 +1088,27 @@ world = (function()
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
+  local function couldBeForced(room)
+    local randomChance = RandomChance
+    -- Status must not redraw native force chances. Protect every possible force.
+    RandomChance = function(chance) return chance > 0 end
+    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, {})
+    RandomChance = randomChance
+    if not ok then error(result, 0) end
+    return result
+  end
   local function routeRooms(room)
     local result = {}
     if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
-        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return result end
+        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return end
     for name, data in pairs(RoomSetData[room.RoomSetName or "Tartarus"] or {}) do
-      local kind = routeKind(name)
-      if kind and IsRoomEligible(CurrentRun, room, data) then
-        result[kind] = result[kind] or {}
-        table.insert(result[kind], data)
+      if IsRoomEligible(CurrentRun, room, data, {}) then
+        if couldBeForced(data) then return end
+        local kind = routeKind(name)
+        if kind then
+          result[kind] = result[kind] or {}
+          table.insert(result[kind], data)
+        end
       end
     end
     return result
@@ -1088,11 +1132,25 @@ world = (function()
       and #GetInactiveIdsByType({ Name = "FishingPoint" }) > 0
       and chanceEligible(room, "FishingPointChanceSuccess", IsFishingEligible)
   end
-  local function canChaos(room)
+  local function availableSecretPoints()
+    local points = GetIdsByType({ Name = "SecretPoint" })
+    local occupied, available = {}, {}
+    for _, door in pairs(OfferedExitDoors or {}) do
+      if door.Name == "SecretDoor" or door.Name == "ShrinePointDoor" then
+        local point = GetClosest({ Id = door.ObjectId, DestinationIds = points })
+        if point then occupied[point] = true end
+      end
+    end
+    for _, point in ipairs(points) do
+      if not occupied[point] then available[#available + 1] = point end
+    end
+    return available
+  end
+  local function canChaos(room, points)
     for _, door in pairs(OfferedExitDoors or {}) do
       if door.Name == "SecretDoor" then return false end
     end
-    return #GetIdsByType({ Name = "SecretPoint" }) > 0
+    return #(points or availableSecretPoints()) > 0
       and chanceEligible(room, "SecretChanceSuccess", IsSecretDoorEligible)
   end
   local function freePedestals(room, ids)
@@ -1118,7 +1176,8 @@ world = (function()
     return chanceEligible(room, owner.chance, callback)
   end
   local function canModify(room)
-    return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward and not room.ForcedReward
+    return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
+      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
   local function refreshDoor(door, room)
     local ids, seen = {}, {}
@@ -1207,7 +1266,7 @@ world = (function()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
         local options = array()
-        if canModify(door.Room) then
+        if routes and canModify(door.Room) then
           for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
             if routes[kind] then options[#options + 1] = kind end
           end
@@ -1281,10 +1340,11 @@ world = (function()
   end
   function runtime.generate_chaos_gate(params)
     local room = requireRoom(params)
-    assert(canChaos(room), "hades.error.worldUnavailable")
+    local points = availableSecretPoints()
+    assert(canChaos(room, points), "hades.error.worldUnavailable")
     local data = ChooseNextRoomData(CurrentRun, { RoomDataSet = RoomSetData.Secrets })
     assert(data, "hades.error.worldUnavailable")
-    local point = GetRandomValue(GetIdsByType({ Name = "SecretPoint" }))
+    local point = GetRandomValue(points)
     local door = DeepCopyTable(ObstacleData.SecretDoor)
     door.ObjectId = SpawnObstacle({ Name = "SecretDoor", Group = "FX_Terrain", DestinationId = point, AttachedTable = door })
     SetupObstacle(door)
@@ -1347,6 +1407,8 @@ world = (function()
   function runtime.set_door_route(params)
     local door = requireDoor(params)
     assert(canModify(door.Room), "hades.error.worldUnavailable")
+    local routes = routeRooms(CurrentRun.CurrentRoom)
+    assert(routes, "hades.error.worldUnavailable")
     if params.route == "thanatos" then
       local data = thanatos(door.Room)
       assert(data, "hades.error.worldUnavailable")
@@ -1355,7 +1417,7 @@ world = (function()
       encounters[room] = { run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom, name = data.Name }
       applyDoor(door, room)
     else
-      local candidates = routeRooms(CurrentRun.CurrentRoom)[params.route]
+      local candidates = routes[params.route]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
       local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
       applyDoor(door, room)
