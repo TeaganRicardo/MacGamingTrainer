@@ -62,6 +62,12 @@ def review(workspace):
 def summary(workspace):
     return {'workspaceId':workspace['id'],'baselineGeneration':workspace['baseline'],'source':workspace['source'],'sourceSHA256':workspace['sha'],
         'target':workspace.get('target'),'domains':['resources','progression','equipment','relationships','narrative','statistics','history','advanced'],'review':review(workspace)}
+def emit(reply):
+    result=reply.get('result',{})
+    event={key:reply[key] for key in ('id','ok','error') if key in reply}
+    event.update(command=request['command'],baselineGeneration=result.get('baselineGeneration'))
+    with (folder/'replies.jsonl').open('a') as stream:stream.write(json.dumps(event)+'\n')
+    print(json.dumps(reply),flush=True)
 def save_command(command,params,state):
     global next_workspace
     suffix=command.removeprefix('save_editor_')
@@ -134,7 +140,7 @@ for raw in sys.stdin:
         except (ValueError,OSError) as error:
             failure={'code':'fixture_editor','presentation':'hades.saveEditor.error','arguments':[str(error)]}
             if isinstance(error,OSError):failure['recoveryPath']=str(folder/'recovery-copy')
-            print(json.dumps({'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':False,'error':failure}),flush=True)
+            emit({'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':False,'error':failure})
             continue
     elif command=='catalog':result=json.loads((folder/'catalog.json').read_text())
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
@@ -155,15 +161,15 @@ for raw in sys.stdin:
     if command=='status' and state.get('fixtureError'):
         reply.update(ok=False,error={'code':'fixture','presentation':state['fixtureError']},state=state)
         reply.pop('result')
-    print(json.dumps(reply),flush=True)
+    emit(reply)
 '''
 
 HARNESS = r'''
 import AppKit
 import SwiftUI
 
-func check(_ condition: @autoclosure () -> Bool, _ message: String) {
-    if !condition() { fatalError(message) }
+func check(_ condition: @autoclosure () -> Bool, _ message: String, file: StaticString = #fileID, line: UInt = #line) {
+    if !condition() { fatalError(message, file:file, line:line) }
 }
 func fields(in view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
@@ -197,35 +203,30 @@ func nativeHierarchy(in view: NSView) -> String {
         let attributes=["accessibilityRole","accessibilityLabel","accessibilityTitle","accessibilityValue","accessibilityIdentifier"]
             .compactMap { key in accessibilityString(element,key).map { key+"="+$0.debugDescription } }.joined(separator:" ")
         let control: String
-        if let field=element as? NSTextField { control=" nativeField="+field.stringValue.debugDescription+" delegate="+String(describing:field.delegate) }
-        else if let editor=element as? NSTextView { control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor)" }
+        if let field=element as? NSTextField { control=" nativeField="+field.stringValue.debugDescription+" delegate="+String(describing:field.delegate)+" editing=\((field.delegate as? TrainerTextField.Coordinator)?.edit != nil)" }
+        else if let editor=element as? NSTextView { control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor) text="+editor.string.debugDescription }
         else { control="" }
         return String(describing:type(of:element))+" "+attributes+control
     }.joined(separator:"\n")
 }
-func requireNativeControl<T>(_ name: String, in view: NSView, find: (NSView) -> T?) -> T {
+func requireNativeControl<T>(_ name: String, in view: NSView, file: StaticString = #fileID, line: UInt = #line, find: (NSView) -> T?) -> T {
     let deadline=Date().addingTimeInterval(5)
     repeat {
         view.layoutSubtreeIfNeeded()
         if let control=find(view) { return control }
         pump(0.02)
     } while Date() < deadline
-    fatalError(name+" missing after rendering\n"+nativeHierarchy(in:view))
+    fatalError(name+" missing after rendering\n"+nativeHierarchy(in:view),file:file,line:line)
 }
-func pressNativeButton(named name: String, in view: NSView) {
-    let button=requireNativeControl("native accessibility button '"+name+"'",in:view) { accessibilityButton(named:name,in:$0) }
-    check(button.enabled && button.press(),"native accessibility button '"+name+"' rejected Press\n"+nativeHierarchy(in:view))
+func pressNativeButton(named name: String, in view: NSView, file: StaticString = #fileID, line: UInt = #line) {
+    let button=requireNativeControl("native accessibility button '"+name+"'",in:view,file:file,line:line) { accessibilityButton(named:name,in:$0) }
+    check(button.enabled && button.press(),"native accessibility button '"+name+"' rejected Press\n"+nativeHierarchy(in:view),file:file,line:line)
 }
 func textViews(in view: NSView) -> [NSTextView] {
     (view as? NSTextView).map { [$0] } ?? view.subviews.flatMap(textViews)
 }
 func pump(_ seconds: TimeInterval = 0.1) {
     RunLoop.current.run(until: Date().addingTimeInterval(seconds))
-}
-func wait(_ message: String = "fixture request did not complete", _ condition: () -> Bool) {
-    let deadline = Date().addingTimeInterval(5)
-    while !condition() && Date() < deadline { pump(0.02) }
-    check(condition(), message)
 }
 @main struct Main {
     @MainActor static func main() throws {
@@ -255,22 +256,75 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
         }
         let defaults=InMemoryDefaults()
-        let session=TrainerBackendSession(client:BackendClient(process:BackendProcess(executableURL:python,forceKillDelay:0.1)))
+        let client=BackendClient(process:BackendProcess(executableURL:python,forceKillDelay:0.1))
+        let session=TrainerBackendSession(client:client)
         let model=HadesTrainerModel(session:session,backendScriptURL:folder.appendingPathComponent("worker.py"),defaults:defaults,
             logSink:TrainerLogSink(url:folder.appendingPathComponent("trainer.log")))
-        wait { model.connected && !model.catalog.isEmpty && !model.busy }
+        var diagnosticEditors: [(String,HadesSaveEditorModel)] = []
+        var diagnosticWindows: [(String,NSWindow)] = []
+        func fixtureDiagnostics() -> String {
+            func json(_ value: Any) -> String {
+                let data=try! JSONSerialization.data(withJSONObject:value,options:[.prettyPrinted,.sortedKeys])
+                return String(data:data,encoding:.utf8)!
+            }
+            func journal(_ name:String) -> [[String:Any]] {
+                let text=(try? String(contentsOf:folder.appendingPathComponent(name),encoding:.utf8)) ?? ""
+                return text.split(separator:"\n").compactMap { try? JSONSerialization.jsonObject(with:Data($0.utf8)) as? [String:Any] }
+            }
+            let received=commands(), emitted=journal("replies.jsonl")
+            let emittedIDs=Set(emitted.compactMap { $0["id"] as? String })
+            let state=(try? String(contentsOf:stateURL,encoding:.utf8)) ?? "unreadable"
+            let documents=diagnosticEditors.map { name, editor -> [String:Any] in
+                ["name":name,"workspace":editor.workspaceID ?? "nil","baseline":editor.baselineGeneration ?? "nil",
+                 "domain":editor.domain.rawValue,"search":editor.search,"busy":editor.busy,"applying":editor.applying,
+                 "queryLoading":editor.queryLoading,"canEditRows":editor.canEditRows,"canApply":editor.canApply,
+                 "target":editor.selectedTargetID,"reviewBaseline":editor.review.baselineGeneration,"reviewCount":editor.review.count,
+                 "actions":editor.review.actions.map { ["id":$0.id,"operation":$0.operation,"value":$0.typedValue?.json ?? "nil","key":$0.typedKey?.json ?? "nil"] },
+                 "editingRow":editor.editingRow?.id ?? "nil","editingTyped":editor.editingTyped,
+                 "receiptBaseline":editor.receipt?.baselineGeneration ?? "nil","recoveryPath":editor.recoveryPath ?? "nil",
+                 "failures":editor.failures.mapValues { ["key":$0.key,"arguments":$0.arguments] as [String:Any] },
+                 "rows":editor.rows.map { ["id":$0.id,"baseline":$0.baselineGeneration,"value":$0.typedValue?.json ?? "nil","failedDraft":editor.hasFailedDraft($0)] as [String:Any] }]
+            }
+            let status=session.currentStatus
+            let runtime: [String:Any] = ["running":client.isRunning,"started":client.isStarted,
+                "inFlight":client.hasInFlightRequest,"queued":client.queuedRequestCount,"lifecycle":session.lifecycleID.uuidString,
+                "sessionBusy":status.busy,"operation":status.operation.key,"error":status.error,"errorArguments":status.errorArguments,
+                "trainerBusy":model.busy,"connected":model.connected,"heroReady":model.heroReady,"health":model.health,
+                "canMutate":model.canMutate,"localError":model.localError]
+            let windows=diagnosticWindows.map { name, window -> String in
+                let responder=String(describing:window.firstResponder)
+                let drafts=(window.contentView.map(fields) ?? []).filter { $0.delegate is TrainerTextField.Coordinator }.map {
+                    "\($0.accessibilityLabel() ?? "unlabelled") value=\($0.stringValue.debugDescription) editing=\(($0.delegate as? TrainerTextField.Coordinator)?.edit != nil)"
+                }.joined(separator:"\n")
+                let sheet=window.attachedSheet.map { sheet in
+                    "sheet firstResponder=\(String(describing:sheet.firstResponder))\n"+(sheet.contentView.map(nativeHierarchy) ?? "no content")
+                } ?? "no attached sheet"
+                return "\(name) visible=\(window.isVisible) firstResponder=\(responder)\nnative drafts:\n\(drafts)\n\(sheet)"
+            }.joined(separator:"\n")
+            let log=(try? String(contentsOf:folder.appendingPathComponent("trainer.log"),encoding:.utf8)) ?? ""
+            return "backend/trainer:\n"+json(runtime)+"\ndocuments:\n"+json(documents)+"\nfixture state:\n"+state
+                + "\nworker received without emitted reply:\n"+json(received.filter { !emittedIDs.contains($0["id"] as? String ?? "") })
+                + "\nlast 12 worker requests:\n"+json(Array(received.suffix(12)))+"\nlast 12 emitted replies:\n"+json(Array(emitted.suffix(12)))
+                + "\nwindows:\n"+windows+"\ntrainer log tail:\n"+log.split(separator:"\n").suffix(12).joined(separator:"\n")
+        }
+        func wait(_ expectation: String, file: StaticString = #fileID, line: UInt = #line, _ condition: () -> Bool) {
+            let deadline=Date().addingTimeInterval(5)
+            while !condition() && Date() < deadline { pump(0.02) }
+            if !condition() { fatalError("Timed out after 5s waiting for "+expectation+"\n"+fixtureDiagnostics(),file:file,line:line) }
+        }
+        wait("startup status/catalog replies: connected, catalog populated, trainer idle") { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
         model.listProfiles()
-        wait { !model.busy && model.profiles.count == 1 }
+        wait("list_profiles reply: one profile, trainer idle") { !model.busy && model.profiles.count == 1 }
         check(model.connected && model.health==50,"profile inventory erased runtime state")
         check(model.profiles[0].name=="Fixture","Hades profile inventory did not decode")
         model.runDiagnostics()
-        wait { !model.busy && model.diagnostics.count == 1 }
+        wait("diagnostics reply: one check, trainer idle") { !model.busy && model.diagnostics.count == 1 }
         check(model.diagnostics[0].ok && model.connected,"diagnostics payload replaced runtime authority")
         model.saveProfile("Fixture")
-        wait { !model.busy }
+        wait("save_profile reply: trainer idle") { !model.busy }
         model.loadProfile("Fixture")
-        wait { !model.busy }
+        wait("load_profile reply: trainer idle") { !model.busy }
         let profileRequest=commands().last { $0["command"] as? String == "load_profile" }
         check((profileRequest?["params"] as? [String:Any])?["name"] as? String == "Fixture",
               "feature profile lost its game-owned command/name")
@@ -332,7 +386,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             && $0.section == .boons }, "boon rarity function not localized to the effect area")
         let mutations = commands().filter { $0["command"] as? String == "set_feature" }.count
         model.performShortcut(HadesShortcutAction.boonRarityEnabled.rawValue)
-        wait("boon rarity shortcut did not dispatch a supported native feature") {
+        wait("boon rarity set_feature reply: request received, trainer idle") {
             !model.busy && commands().filter { $0["command"] as? String == "set_feature" }.count == mutations + 1
         }
         let rarityRequest = commands().last { $0["command"] as? String == "set_feature" }
@@ -348,15 +402,16 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
         pump(); check(commands().count == beforeWorld && model.localError == "hades.error.staleRoom", "old-room intent crossed the backend")
         model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
-        wait { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
+        wait("spawn_reward reply for current room: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
         let worldArgs = commands().last { $0["command"] as? String == "spawn_reward" }?["params"] as? [String:Any]
         check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
         model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
-        wait { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
+        wait("generate_fishing shortcut reply: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
         let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
         window.contentView=host;host.frame=NSRect(x:0,y:0,width:1150,height:2400)
+        diagnosticWindows.append(("trainer",window))
         host.layoutSubtreeIfNeeded();pump()
         check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.money",language:.en) },
               "Obol metric missing from the compact run dashboard")
@@ -372,10 +427,10 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         coordinator.begin();field.stringValue="70"
         coordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field))
         try updateState(hero:"run:hero:1",health:60)
-        model.refreshFromHost();wait { !model.busy && model.health==60 };host.layoutSubtreeIfNeeded();pump()
+        model.refreshFromHost();wait("focused health draft: status observed health 60, trainer idle") { !model.busy && model.health==60 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="70","background status replaced focused native draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field))
-        wait { !model.busy && model.health==70 }
+        wait("native health set_value reply: health 70, trainer idle") { !model.busy && model.health==70 }
         let sent=commands().filter { $0["command"] as? String == "set_value" }
         check(sent.count==1,"native commit did not send exactly one mutation")
         let params=sent[0]["params"] as! [String:Any]
@@ -385,13 +440,13 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         coordinator.begin();field.stringValue="80"
         coordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field))
         try updateState(hero:"run:hero:2",health:30)
-        model.refreshFromHost();wait { !model.busy && model.health==30 };host.layoutSubtreeIfNeeded();pump()
+        model.refreshFromHost();wait("hero replacement status: health 30, trainer idle") { !model.busy && model.health==30 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="80","hero replacement erased focused draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field));pump()
         check(commands().filter { $0["command"] as? String == "set_value" }.count==1,"stale draft mutated replacement hero")
         check(model.localError=="hades.error.staleHero","stale draft lacked actionable feedback")
         try updateState(hero:"run:hero:2",health:31)
-        model.refreshFromHost();wait { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
+        model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="31","unfocused native value did not refresh")
         let count=commands().count
         _=model.setNumber(.damageMultiplier,text:"nan");pump()
@@ -407,13 +462,15 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             "Save Editor was absent from bilingual Management discovery")
         check(HadesGameModule.managedBackupEditor != nil,"verified backups have no Hades editor factory")
         let editor = model.makeSaveEditorModel()
+        diagnosticEditors.append(("active",editor))
         let tools = TrainerToolWindowStore()
         var editorFactories = 0
         let editorWindow = tools.open(id:"hades-save-editor",title:"Hades Save Editor",localization:localization,theme:.standard) {
             editorFactories += 1
             return TrainerToolWindowContent(canClose:{ !editor.busy },onClose:editor.close) { HadesSaveEditorView(model:editor) }
         }
-        wait { editor.workspaceID != nil && !editor.busy && !editor.queryLoading && !editor.rows.isEmpty }
+        diagnosticWindows.append(("active editor",editorWindow))
+        wait("active save_editor inventory/open/query replies: pinned workspace, initial rows, editor idle") { editor.workspaceID != nil && !editor.busy && !editor.queryLoading && !editor.rows.isEmpty }
         check(editor.source?.kind == "currentFile" && editor.source?.relativePath == "Profile1.sav",
             "active editor did not pin the explicitly read file")
         let pinnedWorkspace = editor.workspaceID
@@ -425,73 +482,73 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         var saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["activeSave"]="Profile2.sav"
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
-        editor.refreshInventory();wait { !editor.busy }
+        editor.refreshInventory();wait("active save_editor_inventory reply after active-profile change") { !editor.busy }
         check(editor.workspaceID == pinnedWorkspace && editor.sourceSHA256 == pinnedSHA
             && editor.source?.relativePath == "Profile1.sav","active profile switch redirected a pinned document")
         guard let gemsField=fields(in:editorWindow.contentView!).first(where:{$0.accessibilityLabel()=="Gems"}),
               let gemsCoordinator=gemsField.delegate as? TrainerTextField.Coordinator else { fatalError("native save resource field missing") }
         gemsCoordinator.begin();gemsField.stringValue="80"
         gemsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:gemsField))
-        editor.query();wait { !editor.queryLoading };editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
+        editor.query();wait("active save_editor_query reply while native Gems draft focused") { !editor.queryLoading };editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
         check(gemsField.stringValue == "80","query replaced a focused Save Editor draft")
         gemsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:gemsField))
         check(!tools.canCloseAll,"Host allowed close/quit during a pending editor write")
-        wait { !editor.busy && editor.review.count == 1 && !editor.queryLoading }
+        wait("native Gems 80 save_editor_stage/query replies: one acknowledged action, editor idle") { !editor.busy && editor.review.count == 1 && !editor.queryLoading }
         check(editor.review.actions.first?.typedValue == .number(80),"completed native input did not enter Changes")
         gemsCoordinator.begin();gemsField.stringValue="90"
         gemsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:gemsField))
         gemsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:gemsField))
-        wait { !editor.busy && editor.review.actions.first?.typedValue == .number(90) }
+        wait("native Gems revision save_editor_stage reply: acknowledged value 90") { !editor.busy && editor.review.actions.first?.typedValue == .number(90) }
         check(editor.review.count == 1,"revising a field duplicated the user action")
-        editor.unstage("entry:resources",baseline:editor.baselineGeneration!);wait { !editor.busy && editor.review.count == 0 }
+        editor.unstage("entry:resources",baseline:editor.baselineGeneration!);wait("resource save_editor_unstage reply: empty Changes") { !editor.busy && editor.review.count == 0 }
         editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
         check(gemsField.stringValue == "25","removing an intent did not restore the source observation")
         editor.stage("entry:resources",operation:"set",value:HadesSaveValue.number(75).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
-        wait { !editor.busy && editor.review.count == 1 }
+        wait("resource 75 save_editor_stage reply: one acknowledged action") { !editor.busy && editor.review.count == 1 }
         editor.stage("entry:statistics",operation:"set",value:HadesSaveValue.number(999).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
-        wait { !editor.busy && editor.failures["entry:statistics"] != nil }
+        wait("statistics 999 save_editor_stage rejection: row error, editor idle") { !editor.busy && editor.failures["entry:statistics"] != nil }
         check(editor.review.count == 1 && editor.review.actions[0].id == "entry:resources",
             "a rejected edit erased acknowledged pending work")
         editor.selectDomain(.progression);editor.selectDomain(.statistics)
-        wait { !editor.queryLoading && editor.rows.first?.id == "entry:statistics" }
+        wait("rapid progression/statistics save_editor_query: current statistics row accepted") { !editor.queryLoading && editor.rows.first?.id == "entry:statistics" }
         let stats=editor.rows.first!
         _=editor.commit(stats,text:"12",workspace:pinnedWorkspace)
-        wait { !editor.busy && editor.review.count == 2 }
+        wait("statistics 12 save_editor_stage reply: two acknowledged actions") { !editor.busy && editor.review.count == 2 }
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorOldReviewReply"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
-        wait { !editor.busy && editor.failures["entry:equipment"] != nil }
+        wait("old-baseline equipment save_editor_stage reply: rejected review, row error") { !editor.busy && editor.failures["entry:equipment"] != nil }
         check(editor.review.count == 2 && editor.review.baselineGeneration == editor.baselineGeneration && !editor.canApply,
             "a replayed old-baseline review replaced acknowledged Changes or enabled Apply")
         saveState["editorOldReviewReply"]=false
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
-        wait { !editor.busy && editor.review.count == 3 }
+        wait("current-baseline equipment save_editor_stage reply: three acknowledged actions") { !editor.busy && editor.review.count == 3 }
         check(editor.review.effectCount == 1 && editor.review.actions.first(where:{$0.id=="entry:equipment"})?.effects.first?.name == "Linked rank",
             "linked equipment effects were hidden from Changes")
-        editor.detail("entry:equipment");wait { !editor.busy && editor.editingRow?.id == "entry:equipment" }
+        editor.detail("entry:equipment");wait("equipment save_editor_detail reply: basket revision row") { !editor.busy && editor.editingRow?.id == "entry:equipment" }
         check(editor.editingRow?.choices?.count == 2,"basket revision lost native selection choices")
         editor.dismissDetail()
         wait("equipment sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
-        editor.selectDomain(.advanced);wait { !editor.queryLoading && editor.rows.first?.id == "entry:advanced" }
+        editor.selectDomain(.advanced);wait("Advanced save_editor_query reply: table row accepted") { !editor.queryLoading && editor.rows.first?.id == "entry:advanced" }
         let advanced=editor.rows.first!
         let raw=HadesSaveValue.table(arraySize:0,hashSize:2,entries:[
             .init(key:.string("unknown"),value:.number(8)),.init(key:.rawString("/wA="),value:.rawNumber("000000000000f87f"))])
         check(editor.commitJSON(advanced,text:raw.json,workspace:pinnedWorkspace),"typed Advanced value was rejected locally")
-        wait { !editor.busy && editor.review.count == 4 }
+        wait("raw table save_editor_stage reply: four acknowledged actions") { !editor.busy && editor.review.count == 4 }
         check(editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == raw,
             "Advanced editing lost raw strings, table metadata or IEEE bits")
         check(editor.commitJSON(advanced,text:HadesSaveValue.number(9).json,
             appendKey:HadesSaveValue.string("new-key").json,workspace:pinnedWorkspace),"typed append was rejected locally")
-        wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "append" }
+        wait("typed append save_editor_stage reply: acknowledged append operation") { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "append" }
         check(editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("new-key"),
             "append revision lost the physical typed key")
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorDelayTypedStage"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         editor.detail("entry:advanced",typed:true)
-        wait { !editor.busy && editor.editingRow?.id == "entry:advanced" && editorWindow.attachedSheet != nil }
+        wait("typed rejection save_editor_detail reply and attached Advanced sheet") { !editor.busy && editor.editingRow?.id == "entry:advanced" && editorWindow.attachedSheet != nil }
         guard let rejectedSheet=editorWindow.attachedSheet, let rejectedContent=rejectedSheet.contentView else {
             fatalError("typed rejection sheet missing")
         }
@@ -514,17 +571,17 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         rejectedKeyCoordinator.begin();rejectedKey.stringValue=draftKey
         rejectedKeyCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:rejectedKey))
         rejectedKeyCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:rejectedKey))
-        func replaceTypedJSON(_ value:String,field:NSTextView,window:NSWindow) {
-            check(window.makeFirstResponder(field),"typed JSON control did not acquire focus")
+        func replaceTypedJSON(_ value:String,field:NSTextView,window:NSWindow,file:StaticString = #fileID,line:UInt = #line) {
+            check(window.makeFirstResponder(field),"typed JSON control did not acquire focus",file:file,line:line)
             field.selectAll(nil);field.insertText(value,replacementRange:field.selectedRange());pump(0.03)
         }
         let rejectedValue = #"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[]}"#
         replaceTypedJSON(rejectedValue,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
-        wait("native typed Done did not enqueue Stage") { editor.busy }
+        wait("native typed Done: save_editor_stage in flight") { editor.busy }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "Done dismissed the typed draft before Stage acknowledgment")
-        wait { !editor.busy && editor.failures["entry:advanced"] != nil }
+        wait("native typed Done save_editor_stage rejection: allocation-count row error") { !editor.busy && editor.failures["entry:advanced"] != nil }
         check(editorWindow.attachedSheet === rejectedSheet && rejectedJSON.string == rejectedValue
             && rejectedKey.stringValue == draftKey && editor.hasFailedDraft(advanced) && !editor.canApply,
             "asynchronous typed rejection lost JSON/key text or allowed Apply")
@@ -535,15 +592,15 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             "the typed sheet hid its asynchronous rejection reason")
         replaceTypedJSON(HadesSaveValue.number(10).json,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
-        wait("native corrected Done did not enqueue Stage") { editor.busy }
+        wait("native corrected Done: save_editor_stage in flight") { editor.busy }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "corrected typed input closed before matching acceptance")
-        wait { !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil }
+        wait("corrected native Done save_editor_stage acceptance and sheet dismissal") { !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil }
         check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10)
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("retained-draft-key")
             && !editor.hasFailedDraft(advanced),"accepted typed correction lost its key, value or basket ownership")
         editor.detail("entry:advanced",typed:true)
-        wait { !editor.busy && editor.editingRow != nil && editorWindow.attachedSheet != nil }
+        wait("typed discard save_editor_detail reply and attached sheet") { !editor.busy && editor.editingRow != nil && editorWindow.attachedSheet != nil }
         guard let discardSheet=editorWindow.attachedSheet, let discardContent=discardSheet.contentView else {
             fatalError("typed discard sheet missing")
         }
@@ -559,18 +616,18 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         }
         replaceTypedJSON(rejectedValue,field:discardJSON,window:discardSheet)
         pressNativeButton(named:localization.localized("host.done"),in:discardContent)
-        wait { !editor.busy && editor.hasFailedDraft(advanced) }
+        wait("second native typed Done save_editor_stage rejection: retained failed draft") { !editor.busy && editor.hasFailedDraft(advanced) }
         pressNativeButton(named:localization.localized("host.cancel"),in:discardContent)
-        wait { editor.editingRow == nil && editorWindow.attachedSheet == nil }
+        wait("native typed Cancel: draft discarded and sheet dismissed") { editor.editingRow == nil && editorWindow.attachedSheet == nil }
         check(!editor.hasFailedDraft(advanced) && editor.canApply && editor.review.count == 4
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10),
             "deliberate typed draft discard lost acknowledged Changes or left Apply blocked")
         saveState["editorDelayTypedStage"]=false
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         check(editor.commitJSON(advanced,text:raw.json,workspace:pinnedWorkspace),"revising append to table set failed")
-        wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "set" }
+        wait("raw table revision save_editor_stage reply: acknowledged set operation") { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.operation == "set" }
         editor.detail("entry:advancedScalar",typed:true)
-        wait { !editor.busy && editor.editingRow?.id == "entry:advancedScalar" && editor.editingTyped
+        wait("Advanced scalar save_editor_detail reply and attached typed sheet") { !editor.busy && editor.editingRow?.id == "entry:advancedScalar" && editor.editingTyped
             && editorWindow.attachedSheet != nil }
         guard let typedSheet=editorWindow.attachedSheet, let typedContent=typedSheet.contentView else {
             fatalError("Advanced scalar typed sheet missing")
@@ -580,21 +637,25 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
               typedSheet.makeFirstResponder(typedField) else { fatalError("Advanced scalar typed editor missing native text control") }
         typedField.selectAll(nil)
         typedField.insertText(HadesSaveValue.string("typed-scalar").json,replacementRange:typedField.selectedRange())
-        pump();typedSheet.makeFirstResponder(nil)
-        wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advancedScalar"})?.typedValue == .string("typed-scalar") }
+        pump();pressNativeButton(named:localization.localized("host.done"),in:typedContent)
+        wait("Advanced scalar native Done: acknowledged type change and sheet dismissal") {
+            !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advancedScalar"})?.typedValue == .string("typed-scalar")
+                && editor.editingRow == nil && editorWindow.attachedSheet == nil
+        }
         check(editor.review.count == 5,"Advanced scalar type change replaced unrelated intents")
-        editor.dismissDetail();wait("typed scalar sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
         editor.detail("entry:advancedScalar")
-        wait { !editor.busy && editor.editingRow != nil }
+        wait("typed scalar basket save_editor_detail reply and attached revision sheet") { !editor.busy && editor.editingRow != nil && editorWindow.attachedSheet != nil }
         check(editor.editingTyped,"basket revision forgot the scalar's typed editing route")
-        editor.dismissDetail();wait("typed revision sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
+        pressNativeButton(named:localization.localized("host.cancel"),in:editorWindow.attachedSheet!.contentView!)
+        wait("typed scalar revision native Cancel: sheet dismissed with draft cleanup") { editor.editingRow == nil && editorWindow.attachedSheet == nil }
         let backup=model.makeSaveEditorModel(snapshotID:"verified-fixture")
+        diagnosticEditors.append(("backup",backup))
         backup.open(language:.en)
-        wait { backup.workspaceID != nil && !backup.busy && !backup.queryLoading }
+        wait("backup save_editor inventory/open/query replies: independent workspace ready") { backup.workspaceID != nil && !backup.busy && !backup.queryLoading }
         check(backup.source?.kind == "managedBackup" && backup.source?.snapshotId == "verified-fixture"
             && backup.workspaceID != editor.workspaceID,"backup document shared the active workspace")
         let backupID=backup.workspaceID
-        editor.selectDomain(.resources);wait { !editor.queryLoading && editor.canEditRows }
+        editor.selectDomain(.resources);wait("pre-Apply resource save_editor_query reply: editable current rows") { !editor.queryLoading && editor.canEditRows }
         editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
         guard let applyDraftField=fields(in:editorWindow.contentView!).first(where:{$0.accessibilityLabel()=="Gems"}),
               let applyDraftCoordinator=applyDraftField.delegate as? TrainerTextField.Coordinator else {
@@ -611,7 +672,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(commands().filter{$0["command"] as? String == "save_editor_apply"}.count == applyCount,
             "Apply dispatched before native edit completion")
         applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
-        wait { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:resources"})?.typedValue == .number(76) }
+        wait("pre-Apply native draft save_editor_stage reply: acknowledged Gems 76") { !editor.busy && editor.review.actions.first(where:{$0.id=="entry:resources"})?.typedValue == .number(76) }
         applyDraftCoordinator.begin();applyDraftField.stringValue="invalid"
         applyDraftCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:applyDraftField))
         applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
@@ -622,31 +683,31 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             && backup.baselineGeneration == backupBaseline && backup.canEditRows,
             "invalid draft erased acknowledged work or locked another document")
         editor.stage("entry:equipment",operation:"set",value:HadesSaveValue.number(2).object,workspace:pinnedWorkspace,baseline:preApplyBaseline)
-        wait { !editor.busy && !editor.queryLoading };pump()
+        wait("unrelated equipment save_editor_stage/query replies while invalid Gems draft remains") { !editor.busy && !editor.queryLoading };pump()
         check(applyDraftField.stringValue == "invalid" && !editor.canApply,
             "an unrelated completed edit replaced an invalid native draft")
         applyDraftCoordinator.begin();applyDraftField.stringValue="75"
         applyDraftCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:applyDraftField))
         applyDraftCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:applyDraftField))
-        wait { !editor.busy && editor.canApply && !editor.queryLoading }
+        wait("corrected native Gems 75 save_editor_stage/query replies: Apply enabled") { !editor.busy && editor.canApply && !editor.queryLoading }
         let oldResourceRow=editor.rows.first!
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorHoldQuery"]=true;saveState["editorOldQueryReply"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
-        editor.selectTarget("fixture/Profile2.sav",baseline:editor.baselineGeneration);wait { !editor.busy && editor.selectedTargetID == "fixture/Profile2.sav" }
-        editor.apply(baseline:editor.baselineGeneration);wait { !editor.busy && editor.receipt != nil }
+        editor.selectTarget("fixture/Profile2.sav",baseline:editor.baselineGeneration);wait("save_editor_target reply: explicit Profile2 target accepted") { !editor.busy && editor.selectedTargetID == "fixture/Profile2.sav" }
+        editor.apply(baseline:editor.baselineGeneration);wait("active save_editor_apply reply: verified receipt accepted, editor idle") { !editor.busy && editor.receipt != nil }
         let countBeforeOldCommit=commands().filter{$0["command"] as? String == "save_editor_stage"}.count
         _=editor.commit(oldResourceRow,text:"888",workspace:pinnedWorkspace)
         check(!editor.canEditRows && !editor.canApply && editor.baselineGeneration != preApplyBaseline,
             "Apply receipt enabled controls before fresh matching rows")
-        wait { !editor.queryLoading }
+        wait("post-Apply deliberately old save_editor_query reply completed") { !editor.queryLoading }
         check(!editor.canEditRows,"an old-baseline query reply enabled mutation controls")
         check(commands().filter{$0["command"] as? String == "save_editor_stage"}.count == countBeforeOldCommit,
             "old visible row queued a mutation during the post-Apply refresh gap")
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorHoldQuery"]=false;saveState["editorOldQueryReply"]=false
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
-        editor.query();wait { !editor.queryLoading && editor.canEditRows }
+        editor.query();wait("post-Apply current save_editor_query reply: matching baseline editable") { !editor.queryLoading && editor.canEditRows }
         _=editor.commit(oldResourceRow,text:"889",workspace:pinnedWorkspace);pump()
         check(commands().filter{$0["command"] as? String == "save_editor_stage"}.count == countBeforeOldCommit,
             "a stale native binding adopted the fresh baseline authority")
@@ -656,7 +717,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(editor.receipt?.target.relativePath == "Profile2.sav" && editor.receipt?.runtimeReloaded == false
             && editor.receipt?.previousSnapshotId == "fixture-prewrite","Apply receipt lost target, backup or runtime meaning")
         check(backup.workspaceID == backupID && backup.review.count == 0,"active Apply changed another document")
-        editor.selectDomain(.resources);wait { !editor.queryLoading }
+        editor.selectDomain(.resources);wait("verified candidate resource save_editor_query reply") { !editor.queryLoading }
         check(editor.rows.first?.typedValue == .number(75),"Apply did not refresh the verified candidate values")
         check(editor.workspaceID == pinnedWorkspace && editor.sourceSHA256 == pinnedSHA && backup.workspaceID == backupID,
             "post-Apply refresh retargeted an existing pinned document")
@@ -664,15 +725,17 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         saveState["editorShift"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         let shifted=model.makeSaveEditorModel()
-        shifted.open(language:.en);wait { shifted.canEditRows && !shifted.busy }
-        shifted.selectDomain(.advanced);wait { !shifted.queryLoading && shifted.rows.count == 3 }
+        diagnosticEditors.append(("shifted",shifted))
+        shifted.open(language:.en);wait("shifted save_editor inventory/open/query replies: current baseline editable") { shifted.canEditRows && !shifted.busy }
+        shifted.selectDomain(.advanced);wait("shifted Advanced save_editor_query reply: three physical rows") { !shifted.queryLoading && shifted.rows.count == 3 }
         let shiftedWindow=tools.open(id:"hades-shifted-editor",title:"Shifted Save Editor",localization:localization,theme:.standard) {
             TrainerToolWindowContent(canClose:{ !shifted.busy },onClose:shifted.close) { HadesSaveEditorView(model:shifted) }
         }
+        diagnosticWindows.append(("shifted editor",shiftedWindow))
         let oldA=shifted.rows[0], oldB=shifted.rows[1]
         let oldShiftBaseline=shifted.baselineGeneration!
         shifted.stage(oldA.id,operation:"unset",workspace:shifted.workspaceID,baseline:oldA.baselineGeneration)
-        wait { !shifted.busy && !shifted.queryLoading && shifted.review.count == 1 }
+        wait("shifted unset-A save_editor_stage/query replies: one acknowledged action") { !shifted.busy && !shifted.queryLoading && shifted.review.count == 1 }
         shiftedWindow.contentView?.layoutSubtreeIfNeeded();pump()
         guard let oldBField=fields(in:shiftedWindow.contentView!).first(where:{$0.accessibilityLabel()=="Shift B"}),
               let oldBCoordinator=oldBField.delegate as? TrainerTextField.Coordinator else {
@@ -689,14 +752,14 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         let shiftedStageCount=commands().filter{$0["command"] as? String == "save_editor_stage"}.count
         shifted.apply(baseline:oldShiftBaseline)
         completeOldB("900")
-        wait { shifted.receipt != nil && !shifted.busy }
+        wait("shifted save_editor_apply reply: verified new-baseline receipt") { shifted.receipt != nil && !shifted.busy }
         check(!shifted.canEditRows,"shifted document enabled old rows in its Apply/query gap")
         completeOldB("901")
         _=backup.commit(backup.rows.first!,text:"50",workspace:backup.workspaceID)
-        wait { !backup.busy && backup.review.count == 1 }
+        wait("independent backup Gems 50 save_editor_stage reply during shifted refresh") { !backup.busy && backup.review.count == 1 }
         check(backup.baselineGeneration == backupBaseline && backup.canEditRows,
             "another document's Apply blocked or re-owned the backup edit")
-        wait { !shifted.queryLoading && shifted.canEditRows }
+        wait("shifted post-Apply save_editor_query reply: matching baseline editable") { !shifted.queryLoading && shifted.canEditRows }
         check(shifted.rows.map(\.name) == ["Shift B","Shift C"] && shifted.rows[1].typedValue == .number(33),
             "deleting A changed the saved value of shifted C")
         completeOldB("902");pump()
@@ -706,8 +769,8 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         session.send("save_editor_stage",params:["workspaceId":shifted.workspaceID!,"baselineGeneration":oldShiftBaseline,
             "entryId":oldB.id,"operation":"set","value":HadesSaveValue.number(903).object],
             operation:"hades.saveEditor.title",announceSuccess:false,reply:{ rejectedOldBaseline = !$0.success })
-        wait { rejectedOldBaseline }
-        shifted.query();wait { !shifted.queryLoading }
+        wait("direct old-baseline save_editor_stage reply: server rejection callback") { rejectedOldBaseline }
+        shifted.query();wait("shifted save_editor_query reply after old-ID rejection") { !shifted.queryLoading }
         check(shifted.rows[1].typedValue == .number(33),"server accepted an old physical ID against the new baseline")
         shiftedWindow.performClose(nil);pump()
         check(shifted.workspaceID == nil,"closing shifted document retained stale occurrence authority")
@@ -715,7 +778,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         saveState["editorHoldQuery"]=false;saveState["editorShift"]=false
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
 
-        editor.selectDomain(.narrative);wait { !editor.queryLoading && editor.rows.count == 3 }
+        editor.selectDomain(.narrative);wait("narrative save_editor_query reply: three scenes across distinct owners") { !editor.queryLoading && editor.rows.count == 3 }
         check(Set(editor.rows.map(\.ownerId)).count == 2 && Set(editor.rows.map(\.name)).count == 1,
             "same-name scenes merged distinct character owners")
         check(editor.rows.first?.group == "TextLinesRecord" && editor.rows.first?.content?.first?.text == "Do not despair, child.",
@@ -724,34 +787,34 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         check(accessibilityText(in:editorWindow.contentView!).contains(where:{$0.contains("Do not despair, child.")}),
             "dialogue text was not directly exposed in the native owner card")
         editor.search="Nyx";editor.searchChanged()
-        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
+        wait("Nyx typeahead save_editor_query reply: only two Nyx scenes") { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
         check(!editor.rows.contains{$0.ownerId == "npc:Achilles"} && editor.search == "Nyx",
             "Nyx search included another character or lost the query")
         editor.search="不要绝望";editor.searchChanged()
-        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
-        editor.search="Nyx";editor.searchChanged();wait { !editor.queryLoading && editor.rows.count == 2 }
+        wait("Chinese dialogue typeahead save_editor_query reply: only two Nyx scenes") { !editor.queryLoading && editor.rows.count == 2 && editor.rows.allSatisfy{$0.ownerId == "npc:Nyx"} }
+        editor.search="Nyx";editor.searchChanged();wait("restored Nyx typeahead save_editor_query reply: two scenes") { !editor.queryLoading && editor.rows.count == 2 }
         let played=editor.rows.first!
         editor.stage(played.id,operation:"set",value:HadesSaveValue.boolean(false).object,
             workspace:editor.workspaceID,baseline:played.baselineGeneration)
-        wait { !editor.busy && editor.review.count == 1 }
-        editor.detail(played.id,baseline:played.baselineGeneration);wait { !editor.busy && editor.editingRow != nil }
+        wait("narrative Played save_editor_stage reply: one acknowledged action") { !editor.busy && editor.review.count == 1 }
+        editor.detail(played.id,baseline:played.baselineGeneration);wait("narrative basket save_editor_detail reply: native Played row") { !editor.busy && editor.editingRow != nil }
         check(!editor.editingTyped && editor.editingRow?.content?.first?.speaker == "Nyx",
             "narrative basket revision lost the native Played control or scene content")
         editor.dismissDetail();pump()
-        editor.unstage(played.id,baseline:played.baselineGeneration);wait { !editor.busy && editor.review.count == 0 }
+        editor.unstage(played.id,baseline:played.baselineGeneration);wait("narrative save_editor_unstage reply: empty Changes") { !editor.busy && editor.review.count == 0 }
         localization.language = .zhCN
-        wait { !editor.queryLoading && editor.rows.count == 2 && editor.rows.first?.content?.first?.speaker == "倪克斯" }
+        wait("Chinese language save_editor_query/review replies: two localized Nyx scenes") { !editor.queryLoading && editor.rows.count == 2 && editor.rows.first?.content?.first?.speaker == "倪克斯" }
         check(editor.rows.first?.content?.first?.text == "不要绝望，孩子。" && editor.search == "Nyx",
             "language refresh lost bilingual visible dialogue search")
         localization.language = .en;editor.search="";editor.searchChanged()
-        wait { !editor.queryLoading && editor.rows.count == 3 }
-        backup.selectDomain(.resources);wait { !backup.queryLoading }
+        wait("English narrative clear-search save_editor_query reply: all three scenes") { !editor.queryLoading && editor.rows.count == 3 }
+        backup.selectDomain(.resources);wait("backup resource save_editor_query reply before recovery journey") { !backup.queryLoading }
         _=backup.commit(backup.rows.first!,text:"50",workspace:backup.workspaceID)
-        wait { !backup.busy && backup.review.count == 1 }
+        wait("backup resource save_editor_stage reply before recovery Apply") { !backup.busy && backup.review.count == 1 }
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorApplyFailure"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
-        backup.apply(baseline:backup.baselineGeneration);wait { !backup.busy && backup.recoveryPath != nil }
+        backup.apply(baseline:backup.baselineGeneration);wait("backup save_editor_apply failure: visible recovery path, editor idle") { !backup.busy && backup.recoveryPath != nil }
         check(backup.review.count == 1 && !backup.canApply,"uncertain Apply lost edits or allowed automatic replay")
         check(backup.failures["apply"]?.arguments.first == "Fixture recovery required","failure did not carry actionable detail")
         let editorRequests=commands().filter { ($0["command"] as? String)?.hasPrefix("save_editor_") == true }
@@ -769,7 +832,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             "rarity":"Common","level":1,"canEdit":true,"canRemove":true,"limitation":"",
             "remainingUses":3,"canSetUses":true,"canExpire":true]]
         try JSONSerialization.data(withJSONObject:lifetimeState).write(to:stateURL,options:.atomic)
-        model.refreshFromHost();wait { !model.busy && model.traits.first?.remainingUses==3 }
+        model.refreshFromHost();wait("temporary-effect status reply: three remaining uses") { !model.busy && model.traits.first?.remainingUses==3 }
         host.layoutSubtreeIfNeeded();pump()
         let usesLabel=HadesPresentation.text("hades.remainingUses",language:localization.language)
         guard let usesField=fields(in:host).first(where:{$0.accessibilityLabel()==usesLabel}),
@@ -780,7 +843,7 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
         usesCoordinator.begin();usesField.stringValue="6"
         usesCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:usesField))
         usesCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:usesField))
-        wait { !model.busy && model.traits.first?.remainingUses==6 }
+        wait("native remaining-use set_trait_uses reply: six uses observed") { !model.busy && model.traits.first?.remainingUses==6 }
         host.layoutSubtreeIfNeeded();pump()
         check(usesField.stringValue=="6","remaining-use commit did not refresh observation")
         let usesRequests=commands().filter { $0["command"] as? String == "set_trait_uses" }
@@ -790,11 +853,11 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             "remaining-use commit lost its selected effect or hero")
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
-            model.refreshFromHost();wait { !model.busy && model.connected==connected && !model.heroReady }
+            model.refreshFromHost();wait("no-hero status reply: connected=\(connected), trainer idle") { !model.busy && model.connected==connected && !model.heroReady }
             check(model.hostActionsEnabled && !model.canMutate,"offline shortcut fixture retained a hero")
             let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
             model.performShortcut(HadesShortcutAction.disableAll.rawValue)
-            wait("Disable All shortcut did not dispatch without a hero (connected=\(connected))") {
+            wait("no-hero disable_all reply: request received, trainer idle (connected=\(connected))") {
                 !model.busy && commands().filter { $0["command"] as? String == "disable_all" }.count==disabled+1
             }
             check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
@@ -804,10 +867,10 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             check(commands().count==afterDisable,"a hero shortcut ran without a hero")
         }
         try setConnection(true,heroReady:true)
-        model.refreshFromHost();wait { !model.busy && model.canMutate }
+        model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
         for key in ["hades.error.outcomeUnknown","hades.error.restartRequired","hades.error.debuggerProtocol"] {
             try setFixtureError(key)
-            model.refreshFromHost();wait { !model.busy && model.backendStatus.error==key }
+            model.refreshFromHost();wait("unsafe status error reply: \(key), trainer idle") { !model.busy && model.backendStatus.error==key }
             check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
                 "unsafe runtime error retained mutation authority: \(key)")
             let afterFailure=commands().count
@@ -815,17 +878,17 @@ func wait(_ message: String = "fixture request did not complete", _ condition: (
             model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
             check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
             try setFixtureError(nil)
-            model.toggleConnectionFromHost();wait { model.connected && !model.busy && model.backendStatus.error.isEmpty }
+            model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
             check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")
         }
         var malformed=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         malformed.removeValue(forKey:"heroReady")
         try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
-        model.refreshFromHost();wait { !model.busy && !model.connected }
+        model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
         check(model.localError=="hades.error.protocol" && !model.canMutate,"malformed observation retained mutation authority")
         var complete=false
         model.prepareForTermination { complete=true }
-        wait { complete }
+        wait("prepareForTermination: backend shutdown completion") { complete }
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")
     }
