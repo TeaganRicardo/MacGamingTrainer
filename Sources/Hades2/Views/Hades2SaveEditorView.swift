@@ -625,6 +625,7 @@ struct Hades2SaveEditorView: View {
                     .disabled(model.busy)
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
+                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: !model.busy && model.hasWriteTarget
                 ) {
                     model.apply()
