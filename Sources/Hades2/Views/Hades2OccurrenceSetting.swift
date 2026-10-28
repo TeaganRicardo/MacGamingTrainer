@@ -53,6 +53,7 @@ struct Hades2OccurrenceSetting: View {
                 TrainerShortcutBadgeSlot(text: generateShortcutText)
                 TrainerSecondaryActionButton(
                     title: generateLabel,
+                    systemImage: TrainerSemanticIcon.Action.generate,
                     enabled: canGenerate,
                     width: theme.compactActionWidth,
                     helpText: generateHelp,
