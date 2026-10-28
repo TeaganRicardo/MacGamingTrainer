@@ -27,19 +27,19 @@ enum HadesFeature: String, CaseIterable, Identifiable {
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
     var icon: String {
         switch self {
-        case .invincibility: return "shield.fill"
-        case .fullHealth: return "heart.fill"
-        case .infiniteAmmo: return "infinity"
-        case .forceRerolls: return "dice.fill"
+        case .invincibility: return TrainerSemanticIcon.Feature.invincibility
+        case .fullHealth: return TrainerSemanticIcon.Feature.infiniteLife
+        case .infiniteAmmo: return TrainerSemanticIcon.Feature.infiniteAmmo
+        case .forceRerolls: return TrainerSemanticIcon.Feature.forceRerolls
         case .incomingDamageMultiplier: return "shield.lefthalf.filled"
-        case .moneyNoDecrease: return "circle.fill"
-        case .rerollsNoDecrease: return "arrow.triangle.2.circlepath"
+        case .moneyNoDecrease: return TrainerSemanticIcon.Feature.infiniteCurrency
+        case .rerollsNoDecrease: return TrainerSemanticIcon.Feature.infiniteRerolls
         case .fullGodGauge: return "bolt.heart.fill"
-        case .boonRarityEnabled: return "sparkles"
-        case .gameSpeed: return "speedometer"
-        case .damageMultiplier: return "burst.fill"
-        case .moveSpeedMultiplier: return "figure.run"
-        case .attackSpeedMultiplier: return "bolt.fill"
+        case .boonRarityEnabled: return TrainerSemanticIcon.Feature.boonRarity
+        case .gameSpeed: return TrainerSemanticIcon.Feature.gameSpeed
+        case .damageMultiplier: return TrainerSemanticIcon.Feature.damageMultiplier
+        case .moveSpeedMultiplier: return TrainerSemanticIcon.Feature.moveSpeedMultiplier
+        case .attackSpeedMultiplier: return TrainerSemanticIcon.Feature.attackSpeedMultiplier
         case .dashBonus: return "wind"
         }
     }
@@ -223,7 +223,7 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, heal, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
+    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
     var defaultChord: HotkeyChord {
@@ -236,6 +236,7 @@ struct HadesShortcutStore {
     private(set) var overrides: [HadesShortcutAction: HotkeyChord] = [:]
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        defaults.removeObject(forKey: "hades.shortcut.heal")
         for action in HadesShortcutAction.allCases {
             if let payload = defaults.object(forKey: "hades.shortcut.\(action.rawValue)"),
                let chord = HotkeyChord(payload: payload) {
