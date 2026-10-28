@@ -15,7 +15,7 @@ struct Hades2ProfileManagerView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: "slider.horizontal.3", width: 620) {
+        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
             Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
         } content: {
             Text(text("hades2.profile.explanation"))
@@ -87,7 +87,7 @@ struct Hades2DiagnosticsView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: "stethoscope", width: 700) {
+        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
             Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
             Button { model.exportDiagnostics() } label: {
                 Label(text("hades2.diagnostics.export"), systemImage: "square.and.arrow.up")
@@ -141,7 +141,7 @@ struct Hades2ShortcutSettingsView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
             EmptyView()
         } content: {
             Text(localization.localized("host.hotkeys.help"))
