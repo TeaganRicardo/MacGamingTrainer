@@ -16,10 +16,10 @@ enum TrainerSemanticIcon {
 
     enum Feature {
         static let invincibility = "shield.fill"
-        static let infiniteLife = "heart.fill"
-        static let infiniteMagick = "drop.fill"
-        static let infiniteCurrency = "banknote.fill"
-        static let infiniteRerolls = "dice.fill"
+        static let life = "heart.fill"
+        static let magick = "drop.fill"
+        static let currency = "banknote.fill"
+        static let rerolls = "dice.fill"
         static let forceRerolls = "arrow.triangle.2.circlepath"
         static let infiniteAmmo = "infinity"
         static let boonRarity = "star.circle.fill"
