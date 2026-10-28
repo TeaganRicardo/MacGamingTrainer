@@ -76,15 +76,15 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
 
     var commonFeatureIcon: String? {
         switch self {
-        case .invincibility: "shield.fill"
-        case .infiniteHealth: "heart.fill"
-        case .infiniteMana: "sparkles"
-        case .infiniteMoney: "circle.hexagongrid.fill"
-        case .infiniteRerolls: "dice.fill"
-        case .forceEnableRerolls: "arrow.triangle.2.circlepath"
-        case .instantCastCooldown: "circle.dotted.circle"
+        case .invincibility: TrainerSemanticIcon.Feature.invincibility
+        case .infiniteHealth: TrainerSemanticIcon.Feature.infiniteLife
+        case .infiniteMana: TrainerSemanticIcon.Feature.infiniteMagick
+        case .infiniteMoney: TrainerSemanticIcon.Feature.infiniteCurrency
+        case .infiniteRerolls: TrainerSemanticIcon.Feature.infiniteRerolls
+        case .forceEnableRerolls: TrainerSemanticIcon.Feature.forceRerolls
+        case .instantCastCooldown: "timer"
         case .hexAlwaysReady: "moon.stars.fill"
-        case .infiniteAmmo: "scope"
+        case .infiniteAmmo: TrainerSemanticIcon.Feature.infiniteAmmo
         case .autoMiniGames: "gamecontroller.fill"
         default: nil
         }
