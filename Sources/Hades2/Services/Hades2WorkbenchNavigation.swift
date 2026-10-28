@@ -31,6 +31,7 @@ struct Hades2WorkbenchEntry: Identifiable {
     let titleKey: String
     let section: Hades2WorkbenchSection
     let shortcut: ShortcutAction?
+    var icon: String { shortcut?.icon ?? section.icon }
 }
 
 /// Function discovery owns only stable destinations and existing label keys.
