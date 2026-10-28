@@ -74,7 +74,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
 
     var isSpeedAdjustment: Bool { self == .decreaseGameSpeed || self == .increaseGameSpeed }
 
-    var commonFeatureIcon: String? {
+    var icon: String {
         switch self {
         case .invincibility: TrainerSemanticIcon.Feature.invincibility
         case .infiniteHealth: TrainerSemanticIcon.Feature.life
@@ -86,6 +86,36 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .hexAlwaysReady: "moon.stars.fill"
         case .infiniteAmmo: TrainerSemanticIcon.Feature.infiniteAmmo
         case .autoMiniGames: "gamecontroller.fill"
+        case .decreaseGameSpeed: "gauge.with.dots.needle.33percent"
+        case .increaseGameSpeed: TrainerSemanticIcon.Feature.gameSpeed
+        case .boonRarityEnabled: TrainerSemanticIcon.Feature.boonRarity
+        case .forceLegendary: "star.fill"
+        case .forceDuo: "person.2.fill"
+        case .acquireChaosPair: TrainerSemanticIcon.World.chaosGate
+        case .acquireExactBoon: "scope"
+        case .openSellTraits: "arrow.left.arrow.right.circle"
+        case .moneyMultiplierEnabled: TrainerSemanticIcon.Feature.currency
+        case .resourceMultiplierEnabled: TrainerSemanticIcon.Section.resources
+        case .generateFlora: "leaf.fill"
+        case .generateMining: "hammer.fill"
+        case .generateDigging: "mountain.2.fill"
+        case .generateShades: "person.crop.circle"
+        case .generateFishing: TrainerSemanticIcon.World.fishing
+        case .matureGarden: "leaf.circle.fill"
+        case .applyNextRoomReward: TrainerSemanticIcon.World.exit
+        case .applyNextOccurrence: "figure.walk.motion"
+        case .spawnOlympian: TrainerSemanticIcon.Section.boons
+        case .spawnPickup: TrainerSemanticIcon.Section.resources
+        case .spawnSpecial: "moon.stars.fill"
+        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        }
+    }
+
+    var commonFeatureIcon: String? {
+        switch self {
+        case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
+             .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames:
+            icon
         default: nil
         }
     }
