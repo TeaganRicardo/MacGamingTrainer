@@ -151,7 +151,7 @@ struct Hades2ShortcutSettingsView: View {
                 LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
                     ForEach(Hades2WorkbenchCatalog.orderedShortcutActions) { action in
                         HStack {
-                            Text(text(action.presentationKey))
+                            Label(text(action.presentationKey), systemImage: action.icon)
                             Spacer()
                             Button {
                                 beginCapture(action)
