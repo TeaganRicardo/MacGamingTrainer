@@ -687,7 +687,7 @@ private struct HadesShortcutSettingsView: View {
             Text(localization.localized("host.hotkeys.help")).foregroundStyle(.secondary)
             ForEach(HadesWorkbenchCatalog.orderedShortcutActions) { action in
                 HStack {
-                    Text(text(action.key))
+                    Label(text(action.key), systemImage: action.icon)
                     Spacer()
                     Button { begin(action) } label: {
                         Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
