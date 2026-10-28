@@ -1,3 +1,5 @@
+import Foundation
+
 extension ShortcutAction {
     var icon: String {
         switch self {
@@ -45,8 +47,6 @@ extension ShortcutAction {
         }
     }
 }
-
-import Foundation
 
 enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
     case values, common, boons, resources, rooms, management
