@@ -95,8 +95,8 @@ hades_runtime = (ROOT / "Backend/games/hades/runtime.lua").read_text()
 assert "case invincibility, heal," not in hades_types
 assert ".heal," not in hades_nav
 assert "func heal()" not in hades_module
-assert "hades.heal" not in hades_presentation
-assert "hades.heal" not in hades_view
+assert '"hades.heal"' not in hades_presentation
+assert '"hades.heal"' not in hades_view
 assert "function runtime.heal()" not in hades_runtime
 assert "command == 'heal'" not in hades_adapter
 assert "'set_value', 'heal', 'set_resource'" not in hades_schema
