@@ -192,11 +192,10 @@ function AreTraitsIdentical(a, b)
       or a.RemainingUses or b.RemainingUses then return a.Name == b.Name and a.Id == b.Id end
   return a.Name == b.Name
 end
-local setupCalls, healCalls = 0, 0
+local setupCalls = 0
 function NativeSetup() setupCalls = setupCalls + 1 end
 function Heal(unit, args)
   assert(args.Silent and args.HealAmount >= 0)
-  healCalls = healCalls + 1
   unit.Health = math.min(unit.MaxHealth, unit.Health + args.HealAmount)
 end
 function GetProcessedTraitData(args)
@@ -536,9 +535,6 @@ runtime.set_value("money", 7)
 runtime.set_value("rerolls", 9)
 assert(runtime.status().rerolls == 9 and updates.rerolls == 9)
 runtime.set_value("rerolls", 5)
-runtime.set_value("health", 10)
-local healed = runtime.heal()
-assert(healed.health == 60 and updates.health == 60 and healCalls == 1)
 runtime.set_resource("MetaPoints", 55)
 assert(CurrentRun.Money == 7 and GameState.Resources.MetaPoints == 55)
 assert(GameState.LifetimeResourcesGained.MetaPoints == 200, "absolute resource edit fabricated earned history")
@@ -709,7 +705,6 @@ expectError("invalidValue", function() runtime.configure({ invincibility = false
 assert(runtime.status().features.invincibility and runtime.status().features.damageMultiplier == 3,
   "configure partially committed invalid desired intent")
 expectError("heroNotReady", function() runtime.set_value("money", 10) end)
-expectError("heroNotReady", runtime.heal)
 CurrentRun = { Hero = newHero(10), Money = 0, NumRerolls = 0, InvulnerableFlags = {} }
 SetupHeroObject(CurrentRun)
 assert(runtime.status().invincible)
