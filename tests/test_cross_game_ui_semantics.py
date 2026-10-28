@@ -111,7 +111,7 @@ assert re.search(
 # than each module independently choosing an SF Symbol literal.
 icon_source = (ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift").read_text()
 for semantic in (
-    "invincibility", "life", "currency", "rerolls",
+    "invincibility", "life", "magick", "currency", "rerolls",
     "forceRerolls", "infiniteAmmo", "boonRarity", "damageMultiplier",
     "moveSpeedMultiplier", "attackSpeedMultiplier", "gameSpeed",
 ):
@@ -137,8 +137,9 @@ for hades_case, semantic in paired_icons.items():
 hades2_common_icons = {
     "invincibility": "invincibility",
     "infiniteHealth": "life",
+    "infiniteMana": "magick",
     "infiniteMoney": "currency",
-    "rerolls": "rerolls",
+    "infiniteRerolls": "rerolls",
     "forceEnableRerolls": "forceRerolls",
     "infiniteAmmo": "infiniteAmmo",
 }
