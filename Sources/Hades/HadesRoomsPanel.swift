@@ -122,7 +122,7 @@ struct HadesRoomsPanel: View {
                     }
                     if let door {
                         if door.canReward {
-                            TrainerLabeledControlRow(title: text("hades.doorReward"), icon: "gift", tint: theme.accent, emphasized: false) {
+                            TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.World.reward, tint: theme.accent, emphasized: false) {
                                 Picker(text("hades.reward"), selection: $doorReward) {
                                     ForEach(model.worldRewards.filter(\.doorAllowed)) { row in
                                         Text(row.name(language: localization.language)).tag(row.id)
