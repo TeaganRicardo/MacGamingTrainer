@@ -89,9 +89,9 @@ struct HadesTrainerView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 HadesVitalMetricCard(model: model)
-                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Feature.currency,
+                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency,
                                       value: model.money, field: "money")
-                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Feature.rerolls,
+                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
                                       value: model.rerolls, field: "rerolls")
                 HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
                                       value: model.godGauge, field: "godGauge")
@@ -156,7 +156,7 @@ struct HadesTrainerView: View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
                 title: localization.localized("host.timeWarp.title"),
-                icon: TrainerSemanticIcon.Feature.gameSpeed,
+                icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canMutate ? theme.accent : theme.inactive,
                 emphasized: model.canMutate,
                 helpText: localization.localized("host.timeWarp.hint")
@@ -238,7 +238,7 @@ struct HadesTrainerView: View {
                     HadesValueRow(
                         model: model,
                         title: resource.name(language: localization.language.rawValue),
-                        icon: TrainerSemanticIcon.Feature.resource, value: model.resources[resource.id] ?? 0
+                        icon: TrainerSemanticIcon.Concept.item, value: model.resources[resource.id] ?? 0
                     ) {
                         model.setResource(resource.id, value: $0, target: $1)
                     }
@@ -285,7 +285,7 @@ private struct HadesVitalMetricCard: View {
     }
 
     var body: some View {
-        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Feature.life, tint: .pink) {
+        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
             Color.clear.frame(width: 26, height: 24)
         } content: {
             HStack(spacing: 2) {
