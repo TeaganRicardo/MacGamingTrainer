@@ -219,7 +219,7 @@ struct Hades2TerminologyCatalog {
             .deletingLastPathComponent()   // <repo>
         candidates.append(
             repositoryRoot
-                .appendingPathComponent("docs/reference/hades2/1.139672-24556151/ui_terminology.json")
+                .appendingPathComponent("docs/reference/hades2/1.143476-25481925/ui_terminology.json")
         )
         for url in candidates where FileManager.default.fileExists(atPath: url.path) {
             guard let data = try? Data(contentsOf: url),
