@@ -77,10 +77,10 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     var commonFeatureIcon: String? {
         switch self {
         case .invincibility: TrainerSemanticIcon.Feature.invincibility
-        case .infiniteHealth: TrainerSemanticIcon.Feature.infiniteLife
-        case .infiniteMana: TrainerSemanticIcon.Feature.infiniteMagick
-        case .infiniteMoney: TrainerSemanticIcon.Feature.infiniteCurrency
-        case .infiniteRerolls: TrainerSemanticIcon.Feature.infiniteRerolls
+        case .infiniteHealth: TrainerSemanticIcon.Feature.life
+        case .infiniteMana: TrainerSemanticIcon.Feature.magick
+        case .infiniteMoney: TrainerSemanticIcon.Feature.currency
+        case .infiniteRerolls: TrainerSemanticIcon.Feature.rerolls
         case .forceEnableRerolls: TrainerSemanticIcon.Feature.forceRerolls
         case .instantCastCooldown: "timer"
         case .hexAlwaysReady: "moon.stars.fill"
