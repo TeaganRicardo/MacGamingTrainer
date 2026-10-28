@@ -35,6 +35,7 @@ struct Hades2ProfileManagerView: View {
                 .frame(maxWidth: .infinity)
                 TrainerPrimaryActionButton(
                     title: text("hades2.profile.saveCurrent"),
+                    systemImage: TrainerSemanticIcon.Action.save,
                     enabled: !model.busy && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
                     model.saveProfile(profileName)
@@ -53,6 +54,7 @@ struct Hades2ProfileManagerView: View {
                 HStack {
                     TrainerPrimaryActionButton(
                         title: text("hades2.profile.load"),
+                        systemImage: TrainerSemanticIcon.Action.load,
                         enabled: !model.busy && !selectedProfile.isEmpty,
                         action: { model.loadProfile(selectedProfile) }
                     )
