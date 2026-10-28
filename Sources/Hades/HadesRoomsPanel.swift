@@ -36,7 +36,8 @@ struct HadesGatheringPanel: View {
             }
             TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
                 TrainerSecondaryActionButton(
-                    title: text("hades.generate"), enabled: model.canMutate && model.world?.canFish == true,
+                    title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                    enabled: model.canMutate && model.world?.canFish == true,
                     action: model.generateFishing
                 )
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
@@ -88,7 +89,8 @@ struct HadesRoomsPanel: View {
                 }
                 TrainerLabeledControlRow(title: text("hades.generateChaosGate"), icon: TrainerSemanticIcon.Context.portal, tint: theme.accent, emphasized: false) {
                     TrainerSecondaryActionButton(
-                        title: text("hades.generate"), enabled: model.canMutate && model.world?.canChaos == true,
+                        title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                        enabled: model.canMutate && model.world?.canChaos == true,
                         action: model.generateChaosGate
                     )
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
