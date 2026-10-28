@@ -57,7 +57,7 @@ struct Hades2ProfileManagerView: View {
                         action: { model.loadProfile(selectedProfile) }
                     )
                     Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
-                        Label(localization.localized("host.delete"), systemImage: "trash")
+                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Tool.clearLogs)
                     }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()
@@ -263,14 +263,14 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.saveEditor.title"),
-                        systemImage: "externaldrive.badge.gearshape",
+                        systemImage: TrainerSemanticIcon.Tool.saveEditor,
                         enabled: canUseBackend,
                         action: openSaveEditor
                     )
                     if let openSaveManagement = managementActions.openSaveManagement {
                         TrainerSecondaryActionButton(
                             title: localization.localized("host.saveManagement"),
-                            systemImage: "externaldrive",
+                            systemImage: TrainerSemanticIcon.Tool.saveManagement,
                             enabled: canUseBackend,
                             action: openSaveManagement
                         )
@@ -279,7 +279,7 @@ struct Hades2ManagementUtilities: View {
                         TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
                         TrainerSecondaryActionButton(
                             title: localization.localized("host.disableAll"),
-                            systemImage: "power",
+                            systemImage: TrainerSemanticIcon.Tool.disableAll,
                             enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
                             action: model.disableAll
                         )
@@ -291,13 +291,13 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.profiles"),
-                        systemImage: "slider.horizontal.3",
+                        systemImage: TrainerSemanticIcon.Tool.profiles,
                         enabled: canStartBackendAction,
                         action: openProfiles
                     )
                     TrainerSecondaryActionButton(
                         title: localization.localized("host.shortcutSettings"),
-                        systemImage: "keyboard",
+                        systemImage: TrainerSemanticIcon.Tool.shortcuts,
                         enabled: !model.exiting,
                         action: { model.shortcutSettingsPresented = true }
                     )
@@ -308,12 +308,12 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: localization.localized("host.viewLog"),
-                        systemImage: "doc.text.magnifyingglass",
+                        systemImage: TrainerSemanticIcon.Tool.log,
                         action: model.openLog
                     )
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.diagnostics"),
-                        systemImage: "stethoscope",
+                        systemImage: TrainerSemanticIcon.Tool.diagnostics,
                         enabled: canStartBackendAction,
                         action: openDiagnostics
                     )
