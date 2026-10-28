@@ -17,7 +17,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-The bundled module list and product build identity are declared in `app.json`. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades provides live combat/effect, world/resource management, feature-profile, and native Save Editor workflows; exact compatibility and manual-acceptance scope are recorded in `PROJECT_STATUS.md`.
+The bundled module list is declared in `app.json`; product SemVer/build is declared in `Info.plist`. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades provides live combat/effect, world/resource management, feature profiles, and native Save Editor workflows; exact compatibility and manual-acceptance scope are recorded in `PROJECT_STATUS.md`.
 
 The packaged app is written under `dist/`; the exact path is printed by the build script. For a repository in a cloud-synced directory, use `MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh` to keep the signed App on a local filesystem.
 
