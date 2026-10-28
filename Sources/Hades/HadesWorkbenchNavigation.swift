@@ -33,10 +33,12 @@ struct HadesWorkbenchEntry: Identifiable {
     let id: String
     let titleKey: String
     let section: HadesWorkbenchSection
+    var shortcut: HadesShortcutAction? = nil
     var resource: HadesResourceDefinition? = nil
     var worldNames: [String: String]? = nil
 
     var requiresExpandedMetrics: Bool { id.hasPrefix("numeric.") }
+    var icon: String { shortcut?.icon ?? section.icon }
 }
 
 enum HadesWorkbenchCatalog {
@@ -75,7 +77,8 @@ enum HadesWorkbenchCatalog {
                 section: action == .disableAll ? .management
                     : (action == .boonRarityEnabled ? .boons
                        : (action == .generateFishing ? .resources
-                          : (action == .generateChaosGate ? .rooms : .common)))
+                          : (action == .generateChaosGate ? .rooms : .common))),
+                shortcut: action
             )
         }
         let other: [(HadesWorkbenchSection, [String])] = [
