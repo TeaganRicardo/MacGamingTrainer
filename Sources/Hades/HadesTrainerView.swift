@@ -285,7 +285,7 @@ private struct HadesVitalMetricCard: View {
     }
 
     var body: some View {
-        TrainerMetricCard(title: title, icon: "heart.fill", tint: .pink) {
+        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Feature.life, tint: .pink) {
             Color.clear.frame(width: 26, height: 24)
         } content: {
             HStack(spacing: 2) {
@@ -681,7 +681,7 @@ private struct HadesShortcutSettingsView: View {
     @State private var keyMonitor: Any?
     private func text(_ key: String) -> String { localization.presentation(key) }
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
             Button(text("hades.reset"), action: model.resetShortcuts)
         } content: {
             Text(localization.localized("host.hotkeys.help")).foregroundStyle(.secondary)
