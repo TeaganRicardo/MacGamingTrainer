@@ -372,7 +372,7 @@ struct Hades2TrainerView: View {
     }
 
     private var boonsSection: some View {
-        TrainerSection(title: text("hades2.section.boonsAndEffects"), icon: "sparkles") {
+        TrainerSection(title: text("hades2.section.boonsAndEffects"), icon: Hades2WorkbenchSection.boons.icon) {
             boonRarityPanel
             currentRunEffectsPanel
             boonAcquisitionPanel
@@ -758,7 +758,7 @@ struct Hades2TrainerView: View {
     }
 
     private var resourceSection: some View {
-        TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: "shippingbox.fill") {
+        TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: Hades2WorkbenchSection.resources.icon) {
             resourcePanel
             Hades2GatheringPanel(model: model)
             TrainerLabeledControlRow(
@@ -778,7 +778,7 @@ struct Hades2TrainerView: View {
     }
 
     private var roomsSection: some View {
-        TrainerSection(title: text("hades2.section.roomsAndRewards"), icon: "door.left.hand.open") {
+        TrainerSection(title: text("hades2.section.roomsAndRewards"), icon: Hades2WorkbenchSection.rooms.icon) {
             nextRoomRewardPanel
             nextOccurrencePanel
             Hades2ChaosGatePanel(model: model)
@@ -1129,17 +1129,17 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            text("hades2.vital.health"), icon: "heart.fill", current: $healthCurrent, maximum: $healthMaximum,
+            text("hades2.vital.health"), icon: TrainerSemanticIcon.Feature.infiniteLife, current: $healthCurrent, maximum: $healthMaximum,
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            text("hades2.vital.mana"), icon: "sparkles", current: $manaCurrent, maximum: $manaMaximum,
+            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Feature.infiniteMagick, current: $manaCurrent, maximum: $manaMaximum,
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
         editableAmountMetric(
-            text("hades2.vital.runGold"), icon: "circle.hexagongrid.fill", text: $coins, focus: .coins,
+            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Feature.infiniteCurrency, text: $coins, focus: .coins,
             color: .yellow, locked: model.moneyLocked, enabled: model.canSetResource,
             edit: .resource("Money"), lockEnabled: !model.infiniteMoney
         ) {
@@ -1159,7 +1159,7 @@ struct Hades2TrainerView: View {
         damageMetric
         editableStatMetric(text("hades2.stat.grasp"), icon: "brain.head.profile", stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
-            text("hades2.metric.rerolls"), icon: "dice.fill", text: $rerollAmount, focus: .rerolls,
+            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Feature.infiniteRerolls, text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls, lockEnabled: !model.infiniteRerolls
         ) {
