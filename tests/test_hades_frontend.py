@@ -204,7 +204,11 @@ func nativeHierarchy(in view: NSView) -> String {
             .compactMap { key in accessibilityString(element,key).map { key+"="+$0.debugDescription } }.joined(separator:" ")
         let control: String
         if let field=element as? NSTextField { control=" nativeField="+field.stringValue.debugDescription+" delegate="+String(describing:field.delegate)+" editing=\((field.delegate as? TrainerTextField.Coordinator)?.edit != nil)" }
-        else if let editor=element as? NSTextView { control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor) text="+editor.string.debugDescription }
+        else if let editor=element as? NSTextView {
+            control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor) richText=\(editor.isRichText) importsGraphics=\(editor.importsGraphics)"
+                + " quoteSubstitution=\(editor.isAutomaticQuoteSubstitutionEnabled) dashSubstitution=\(editor.isAutomaticDashSubstitutionEnabled)"
+                + " textReplacement=\(editor.isAutomaticTextReplacementEnabled) spellingCorrection=\(editor.isAutomaticSpellingCorrectionEnabled) text="+editor.string.debugDescription
+        }
         else { control="" }
         return String(describing:type(of:element))+" "+attributes+control
     }.joined(separator:"\n")
@@ -553,28 +557,32 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("typed rejection sheet missing")
         }
         rejectedContent.layoutSubtreeIfNeeded();pump()
-        let rejectedJSON=requireNativeControl("typed rejection sheet editable NSTextView",in:rejectedContent) {
-            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor})
+        let rejectedJSON=requireNativeControl("typed rejection sheet value NSTextView",in:rejectedContent) {
+            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor && $0.accessibilityLabel()==advanced.name})
         }
-        let rejectedKey=requireNativeControl("typed rejection sheet append-key NSTextField",in:rejectedContent) {
-            fields(in:$0).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.saveEditor.key",language:.en)})
-        }
-        guard let rejectedKeyCoordinator=rejectedKey.delegate as? TrainerTextField.Coordinator else {
-            fatalError("typed rejection sheet append-key coordinator missing\n"+nativeHierarchy(in:rejectedContent))
+        let rejectedKey=requireNativeControl("typed rejection sheet append-key NSTextView",in:rejectedContent) {
+            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor && $0.accessibilityLabel()==HadesPresentation.text("hades.saveEditor.key",language:.en)})
         }
         _=requireNativeControl("typed rejection sheet Done accessibility button",in:rejectedContent) {
             accessibilityButton(named:localization.localized("host.done"),in:$0)
         }
-        check(rejectedJSON.string == HadesSaveValue.number(9).json && rejectedKey.stringValue == HadesSaveValue.string("new-key").json,
+        check(rejectedJSON.string == HadesSaveValue.number(9).json && rejectedKey.string == HadesSaveValue.string("new-key").json,
             "typed append sheet did not initialize its acknowledged value/key\n"+nativeHierarchy(in:rejectedContent))
         let draftKey=HadesSaveValue.string("retained-draft-key").json
-        rejectedKeyCoordinator.begin();rejectedKey.stringValue=draftKey
-        rejectedKeyCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:rejectedKey))
-        rejectedKeyCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:rejectedKey))
         func replaceTypedJSON(_ value:String,field:NSTextView,window:NSWindow,file:StaticString = #fileID,line:UInt = #line) {
+            check(!field.isRichText && !field.importsGraphics && !field.isAutomaticQuoteSubstitutionEnabled
+                && !field.isAutomaticDashSubstitutionEnabled && !field.isAutomaticTextReplacementEnabled
+                && !field.isAutomaticSpellingCorrectionEnabled,
+                "typed JSON native control permits automatic text transformation\n"+nativeHierarchy(in:window.contentView!),file:file,line:line)
+            check(field.frame.height >= field.enclosingScrollView!.contentSize.height,
+                "typed JSON native text view does not cover its scroll viewport",file:file,line:line)
             check(window.makeFirstResponder(field),"typed JSON control did not acquire focus",file:file,line:line)
-            field.selectAll(nil);field.insertText(value,replacementRange:field.selectedRange());pump(0.03)
+            field.selectAll(nil);field.insertText(value,replacementRange:field.selectedRange())
+            let selection=field.selectedRange();pump(0.03)
+            check(field.string == value && field.selectedRange() == selection && window.firstResponder === field,
+                "native JSON insertion changed the literal draft, selection or focus\n"+nativeHierarchy(in:window.contentView!),file:file,line:line)
         }
+        replaceTypedJSON(draftKey,field:rejectedKey,window:rejectedSheet)
         let rejectedValue = #"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[]}"#
         replaceTypedJSON(rejectedValue,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
@@ -583,19 +591,24 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "Done dismissed the typed draft before Stage acknowledgment")
         wait("native typed Done save_editor_stage rejection: allocation-count row error") { !editor.busy && editor.failures["entry:advanced"] != nil }
         check(editorWindow.attachedSheet === rejectedSheet && rejectedJSON.string == rejectedValue
-            && rejectedKey.stringValue == draftKey && editor.hasFailedDraft(advanced) && !editor.canApply,
+            && rejectedKey.string == draftKey && editor.hasFailedDraft(advanced) && !editor.canApply,
             "asynchronous typed rejection lost JSON/key text or allowed Apply")
         check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(9)
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("new-key"),
             "typed rejection replaced acknowledged Changes")
         check(accessibilityText(in:rejectedContent).contains(where:{$0.contains("matching allocation counts")}),
             "the typed sheet hid its asynchronous rejection reason")
-        replaceTypedJSON(HadesSaveValue.number(10).json,field:rejectedJSON,window:rejectedSheet)
+        let correctedJSON=HadesSaveValue.number(10).json
+        replaceTypedJSON(correctedJSON,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
         wait("native corrected Done: save_editor_stage in flight") { editor.busy }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "corrected typed input closed before matching acceptance")
-        wait("corrected native Done save_editor_stage acceptance and sheet dismissal") { !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil }
+        wait("corrected native Done save_editor_stage acceptance and sheet dismissal") {
+            check(rejectedJSON.string == correctedJSON && rejectedKey.string == draftKey,
+                "literal JSON/key drifted while awaiting Stage acknowledgment\n"+nativeHierarchy(in:rejectedContent))
+            return !editor.busy && editor.editingRow == nil && editorWindow.attachedSheet == nil
+        }
         check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10)
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("retained-draft-key")
             && !editor.hasFailedDraft(advanced),"accepted typed correction lost its key, value or basket ownership")
@@ -605,8 +618,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("typed discard sheet missing")
         }
         discardContent.layoutSubtreeIfNeeded();pump()
-        let discardJSON=requireNativeControl("typed discard sheet editable NSTextView",in:discardContent) {
-            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor})
+        let discardJSON=requireNativeControl("typed discard sheet value NSTextView",in:discardContent) {
+            textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor && $0.accessibilityLabel()==advanced.name})
         }
         _=requireNativeControl("typed discard sheet Done accessibility button",in:discardContent) {
             accessibilityButton(named:localization.localized("host.done"),in:$0)
@@ -633,13 +646,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("Advanced scalar typed sheet missing")
         }
         typedContent.layoutSubtreeIfNeeded();pump()
-        guard let typedField=textViews(in:typedContent).first(where:{ $0.isEditable && !$0.isFieldEditor }),
-              typedSheet.makeFirstResponder(typedField) else { fatalError("Advanced scalar typed editor missing native text control") }
-        typedField.selectAll(nil)
-        typedField.insertText(HadesSaveValue.string("typed-scalar").json,replacementRange:typedField.selectedRange())
+        guard let typedField=textViews(in:typedContent).first(where:{ $0.isEditable && !$0.isFieldEditor }) else {
+            fatalError("Advanced scalar typed editor missing native text control")
+        }
+        let scalarText="typed-scalar -- “literal”"
+        replaceTypedJSON(HadesSaveValue.string(scalarText).json,field:typedField,window:typedSheet)
         pump();pressNativeButton(named:localization.localized("host.done"),in:typedContent)
         wait("Advanced scalar native Done: acknowledged type change and sheet dismissal") {
-            !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advancedScalar"})?.typedValue == .string("typed-scalar")
+            !editor.busy && editor.review.actions.first(where:{$0.id=="entry:advancedScalar"})?.typedValue == .string(scalarText)
                 && editor.editingRow == nil && editorWindow.attachedSheet == nil
         }
         check(editor.review.count == 5,"Advanced scalar type change replaced unrelated intents")

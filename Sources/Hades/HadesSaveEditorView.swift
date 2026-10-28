@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct HadesSaveEditorView: View {
@@ -309,6 +310,91 @@ private struct HadesSaveEditorField: View {
     }
 }
 
+private struct HadesSaveJSONEditor: NSViewRepresentable {
+    let title: String
+    @Binding var text: String
+    @Binding var focused: Bool
+    @Environment(\.isEnabled) private var enabled
+
+    final class ScrollView: NSScrollView {
+        override func tile() {
+            super.tile()
+            guard let view = documentView as? NSTextView else { return }
+            let minimum = NSSize(width: 0, height: contentSize.height)
+            if view.minSize != minimum { view.minSize = minimum }
+            let size = NSSize(width: contentSize.width, height: max(view.frame.height, contentSize.height))
+            if view.frame.size != size { view.setFrameSize(size) }
+        }
+    }
+    final class TextView: NSTextView {
+        var focusChanged: ((Bool) -> Void)?
+        override func becomeFirstResponder() -> Bool {
+            let accepted = super.becomeFirstResponder()
+            if accepted { focusChanged?(true) }
+            return accepted
+        }
+        override func resignFirstResponder() -> Bool {
+            let accepted = super.resignFirstResponder()
+            if accepted { focusChanged?(false) }
+            return accepted
+        }
+    }
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: HadesSaveJSONEditor
+        init(_ parent: HadesSaveJSONEditor) { self.parent = parent }
+        func focusChanged(_ focused: Bool) {
+            if parent.focused != focused { parent.focused = focused }
+        }
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            parent.text = view.string
+        }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = ScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        let view = TextView(frame: scroll.contentView.bounds)
+        view.delegate = context.coordinator
+        view.focusChanged = { [weak coordinator = context.coordinator] in coordinator?.focusChanged($0) }
+        view.isRichText = false
+        view.importsGraphics = false
+        view.isAutomaticQuoteSubstitutionEnabled = false
+        view.isAutomaticDashSubstitutionEnabled = false
+        view.isAutomaticTextReplacementEnabled = false
+        view.isAutomaticSpellingCorrectionEnabled = false
+        view.allowsUndo = true
+        view.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.autoresizingMask = [.width]
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        view.textContainer?.containerSize = NSSize(width: scroll.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+        view.textContainer?.widthTracksTextView = true
+        view.textContainerInset = NSSize(width: 6, height: 6)
+        view.string = text
+        view.isEditable = enabled
+        view.setAccessibilityLabel(title)
+        scroll.documentView = view
+        return scroll
+    }
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        let view = scroll.documentView as! TextView
+        if view.string != text { view.string = text }
+        view.isEditable = enabled
+        view.setAccessibilityLabel(title)
+        if !focused, view.window?.firstResponder === view { view.window?.makeFirstResponder(nil) }
+    }
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        let view = scroll.documentView as! TextView
+        view.focusChanged = nil
+        view.delegate = nil
+    }
+}
+
 private struct HadesSaveTypedEditor: View {
     @ObservedObject var model: HadesSaveEditorModel
     let row: HadesSaveEditorRow
@@ -326,7 +412,8 @@ private struct HadesSaveTypedEditor: View {
     @State private var staging = false
     @State private var closeAfterStage = false
     @State private var discarding = false
-    @FocusState private var editing: Bool
+    @State private var editing = false
+    @State private var editingKey = false
     private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
     private var action: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
     private var native: Bool {
@@ -349,18 +436,19 @@ private struct HadesSaveTypedEditor: View {
                 Text(text("hades.saveEditor.typedHelp")).font(.caption).fixedSize(horizontal: false, vertical: true)
                 if row.operations.contains("append") {
                     Toggle(text("hades.saveEditor.append"), isOn: Binding(get: { append }, set: { appending in
-                        append = appending
+                        append = appending; editingKey = false
                         json = appending ? HadesSaveValue.string("").json
                             : ((action?.operation == "set" ? action?.typedValue : nil) ?? row.typedValue ?? .null).json
                         initial = json
                     })).disabled(staging)
                 }
                 if append {
-                    TrainerTextField(title: text("hades.saveEditor.key"), text: $appendKey, onEditingChanged: {
-                        model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: $0)
-                    }).disabled(staging)
+                    Text(text("hades.saveEditor.key")).font(.caption)
+                    HadesSaveJSONEditor(title: text("hades.saveEditor.key"), text: $appendKey, focused: $editingKey)
+                        .frame(height: 70).overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.accent.opacity(0.35)))
+                        .disabled(staging)
                 }
-                TextEditor(text: $json).font(.system(.body, design: .monospaced)).focused($editing)
+                HadesSaveJSONEditor(title: row.name, text: $json, focused: $editing)
                     .frame(minHeight: 280).overlay(RoundedRectangle(cornerRadius: 6).stroke(theme.accent.opacity(0.35)))
                     .disabled(staging)
                     .onChange(of: editing) { old, current in
@@ -373,13 +461,13 @@ private struct HadesSaveTypedEditor: View {
             HStack {
                 Button(text("host.cancel"), role: .cancel) {
                     guard !model.busy else { return }
-                    discarding = true; editing = false
+                    discarding = true; editing = false; editingKey = false
                     model.discardDraft(row, workspace: workspace)
                 }.disabled(model.busy)
                 if action != nil {
                     Button(text("hades.remove")) {
                         guard !model.busy else { return }
-                        discarding = true; editing = false; staging = true
+                        discarding = true; editing = false; editingKey = false; staging = true
                         model.unstage(row.id, baseline: row.baselineGeneration) { accepted in
                             staging = false
                             if accepted { model.discardDraft(row, workspace: workspace) }
@@ -393,12 +481,15 @@ private struct HadesSaveTypedEditor: View {
                     if native {
                         if !model.hasFailedDraft(row) { model.dismissDetail() }
                     } else { commit(closeWhenAccepted: true) }
-                    editing = false
+                    editing = false; editingKey = false
                 }.disabled(model.busy || staging)
             }
         }.padding(20).frame(width: 700)
         .disabled(!model.canEdit(row))
         .trainerDismissTextEditingOnClickAway()
+        .onChange(of: editingKey) { _, active in
+            model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: active)
+        }
         .onAppear {
             append = action?.operation == "append"
             appendKey = action?.typedKey?.json ?? appendKey
