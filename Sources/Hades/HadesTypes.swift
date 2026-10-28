@@ -25,24 +25,6 @@ enum HadesFeature: String, CaseIterable, Identifiable {
         }
     }
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
-    var icon: String {
-        switch self {
-        case .invincibility: return TrainerSemanticIcon.Feature.invincibility
-        case .fullHealth: return TrainerSemanticIcon.Feature.life
-        case .infiniteAmmo: return TrainerSemanticIcon.Feature.infiniteAmmo
-        case .forceRerolls: return TrainerSemanticIcon.Feature.forceRerolls
-        case .incomingDamageMultiplier: return "shield.lefthalf.filled"
-        case .moneyNoDecrease: return TrainerSemanticIcon.Feature.currency
-        case .rerollsNoDecrease: return TrainerSemanticIcon.Feature.rerolls
-        case .fullGodGauge: return "bolt.heart.fill"
-        case .boonRarityEnabled: return TrainerSemanticIcon.Feature.boonRarity
-        case .gameSpeed: return TrainerSemanticIcon.Feature.gameSpeed
-        case .damageMultiplier: return TrainerSemanticIcon.Feature.damageMultiplier
-        case .moveSpeedMultiplier: return TrainerSemanticIcon.Feature.moveSpeedMultiplier
-        case .attackSpeedMultiplier: return TrainerSemanticIcon.Feature.attackSpeedMultiplier
-        case .dashBonus: return "wind"
-        }
-    }
 }
 
 enum HadesFeatureValue: Decodable, Equatable {
@@ -226,21 +208,6 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
-    var icon: String {
-        switch self {
-        case .invincibility: TrainerSemanticIcon.Feature.invincibility
-        case .fullHealth: TrainerSemanticIcon.Feature.life
-        case .moneyNoDecrease: TrainerSemanticIcon.Feature.currency
-        case .rerollsNoDecrease: TrainerSemanticIcon.Feature.rerolls
-        case .fullGodGauge: "bolt.heart.fill"
-        case .infiniteAmmo: TrainerSemanticIcon.Feature.infiniteAmmo
-        case .forceRerolls: TrainerSemanticIcon.Feature.forceRerolls
-        case .boonRarityEnabled: TrainerSemanticIcon.Feature.boonRarity
-        case .generateFishing: TrainerSemanticIcon.World.fishing
-        case .generateChaosGate: TrainerSemanticIcon.World.chaosGate
-        case .disableAll: TrainerSemanticIcon.Tool.disableAll
-        }
-    }
     var defaultChord: HotkeyChord {
         HotkeyChord.defaultShortcut(index: HadesWorkbenchCatalog.orderedShortcutActions.firstIndex(of: self)!)!
     }
