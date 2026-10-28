@@ -1,6 +1,6 @@
 # MacGamingTrainer
 
-MacGamingTrainer is a native macOS trainer host with game-specific modules. The unified App includes **Hades II** and an initial **Hades** module, selected from the left sidebar. Switching the displayed game keeps other game contexts connected, with their pending operations and tool windows intact. Only the displayed trainer responds to global shortcuts.
+MacGamingTrainer is a native macOS trainer host with game-specific modules. The unified App includes **Hades II** and **Hades** modules, selected from the left sidebar. Switching the displayed game keeps other game contexts connected, with their pending operations and tool windows intact. Only the displayed trainer responds to global shortcuts.
 
 ## Build
 
@@ -17,7 +17,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-The bundled module list and product build identity are declared in `app.json`. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades currently provides connection/status and a current-hero invincibility toggle; its gameplay coverage is recorded in `PROJECT_STATUS.md`.
+The bundled module list and product build identity are declared in `app.json`. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades includes live-run controls for combat, traits, room/reward interactions, profiles, diagnostics, and a native Save Editor with semantic and typed Advanced editing. Hades II includes its established live-run controls and Save Editor. The integrated dual-module candidate has passed hosted contracts/build/signature checks; real-game, rendered UI, and save-load/persistence acceptance remain pending in [#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429). Product compatibility and operating limits are recorded in `PROJECT_STATUS.md`.
 
 The packaged app is written under `dist/`; the exact path is printed by the build script. For a repository in a cloud-synced directory, use `MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh` to keep the signed App on a local filesystem.
 
@@ -34,7 +34,7 @@ xcrun lldb -P
 - `Sources/Hades/` — Hades frontend and game-owned state/presentation.
 - `Sources/Hades2/` — Hades II frontend and game-owned presentation/state.
 - `Backend/core/` — shared backend infrastructure.
-- `Backend/games/hades/` — Hades x86_64 debugger/Lua bridge and initial runtime feature.
+- `Backend/games/hades/` — Hades x86_64 debugger/Lua bridge, combat/world features, persistence, and Save Editor.
 - `Backend/games/hades2/` — Hades II backend, transport, persistence, catalog, and resident runtime.
 - `ContractFixtures/reference_module/` — executable cross-game module contract fixture.
 - `docs/reference/hades2/` — versioned Hades II research/reference data.
