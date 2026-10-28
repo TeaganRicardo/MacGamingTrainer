@@ -117,6 +117,7 @@ struct HadesProfileManagerView: View {
             HStack(spacing: 10) {
                 TrainerTextField(title: text("hades.profile.name"), text: $name)
                 TrainerPrimaryActionButton(title: text("hades.profile.save"),
+                    systemImage: TrainerSemanticIcon.Action.save,
                     enabled: model.hostActionsEnabled && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                     model.saveProfile(name)
                     selected = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,6 +133,7 @@ struct HadesProfileManagerView: View {
                 }
                 HStack {
                     TrainerPrimaryActionButton(title: text("hades.profile.load"),
+                        systemImage: TrainerSemanticIcon.Action.load,
                         enabled: model.hostActionsEnabled && !selected.isEmpty) { model.loadProfile(selected) }
                     Button(role: .destructive) { model.deleteProfile(selected) } label: {
                         Label(text("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
