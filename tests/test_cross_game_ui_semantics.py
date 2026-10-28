@@ -136,7 +136,7 @@ paired_icons = {
     "gameSpeed": "timeScale",
 }
 for hades_case, semantic in paired_icons.items():
-    assert f"case .{hades_case}: return TrainerSemanticIcon.Concept.{semantic}" in hades_nav
+    assert f"case .{hades_case}: TrainerSemanticIcon.Concept.{semantic}" in hades_nav
 
 hades2_nav = (ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift").read_text()
 hades2_common_icons = {
