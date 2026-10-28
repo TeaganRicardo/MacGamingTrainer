@@ -825,7 +825,7 @@ struct Hades2TrainerView: View {
     private var gameSpeedPanel: some View {
         if model.featureSupport["gameSpeed"] == true {
             TrainerLabeledControlRow(
-                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Feature.gameSpeed,
+                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditDesired ? theme.accent : theme.inactive,
                 emphasized: model.canEditDesired
             ) {
@@ -1129,17 +1129,17 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            text("hades2.vital.health"), icon: TrainerSemanticIcon.Feature.life, current: $healthCurrent, maximum: $healthMaximum,
+            text("hades2.vital.health"), icon: TrainerSemanticIcon.Concept.vitality, current: $healthCurrent, maximum: $healthMaximum,
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Feature.magick, current: $manaCurrent, maximum: $manaMaximum,
+            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Concept.energy, current: $manaCurrent, maximum: $manaMaximum,
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
         editableAmountMetric(
-            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Feature.currency, text: $coins, focus: .coins,
+            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Concept.currency, text: $coins, focus: .coins,
             color: .yellow, locked: model.moneyLocked, enabled: model.canSetResource,
             edit: .resource("Money"), lockEnabled: !model.infiniteMoney
         ) {
@@ -1159,7 +1159,7 @@ struct Hades2TrainerView: View {
         damageMetric
         editableStatMetric(text("hades2.stat.grasp"), icon: "brain.head.profile", stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
-            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Feature.rerolls, text: $rerollAmount, focus: .rerolls,
+            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls, lockEnabled: !model.infiniteRerolls
         ) {
@@ -1178,10 +1178,10 @@ struct Hades2TrainerView: View {
         editableStatMetric(text("hades2.stat.enemyDamage"), icon: "burst.fill", stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
         editableStatMetric(text("hades2.stat.enemyHealth"), icon: "heart.text.square.fill", stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
         editableStatMetric(text("hades2.stat.chargeSpeed"), icon: "timer", stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
-        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Feature.moveSpeedMultiplier, stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
+        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
         editableStatMetric(text("hades2.stat.sprintSpeed"), icon: "hare.fill", stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
         editableStatMetric(text("hades2.stat.dashSpeed"), icon: "forward.end.fill", stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
-        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Feature.attackSpeedMultiplier, stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
+        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
         editableStatMetric(text("hades2.stat.manaRegen"), icon: "drop.circle.fill", stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
     }
 
@@ -1196,7 +1196,7 @@ struct Hades2TrainerView: View {
 
     private var damageMetric: some View {
         TrainerMultiplierMetricCard(
-            title: text("hades2.feature.damageMultiplier"), icon: TrainerSemanticIcon.Feature.damageMultiplier,
+            title: text("hades2.feature.damageMultiplier"), icon: TrainerSemanticIcon.Concept.impact,
             text: $multiplier, focus: $focusedField, focusValue: .damageMultiplier,
             suffix: "×", editable: model.canEditDesired,
             onCommit: completing(.multiplier("damageMultiplier"))
@@ -1209,7 +1209,7 @@ struct Hades2TrainerView: View {
 
     private var nextRoomRewardPanel: some View {
         TrainerLabeledControlRow(
-            title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.World.exit,
+            title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
             emphasized: model.canEditDesired
         ) {
@@ -1303,7 +1303,7 @@ struct Hades2TrainerView: View {
             .trainerGroupedRows()
             TrainerResourceEditor(
                 title: text("hades2.resource.materials"),
-                icon: TrainerSemanticIcon.Feature.resource,
+                icon: TrainerSemanticIcon.Concept.item,
                 search: $search,
                 selection: $selectedMaterial,
                 amount: $materialAmount,
@@ -1333,8 +1333,8 @@ struct Hades2TrainerView: View {
 
     private var rewardSpawningPanel: some View {
         VStack(spacing: 1) {
-            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: TrainerSemanticIcon.Section.boons, options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
-            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: TrainerSemanticIcon.Section.resources, options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: TrainerSemanticIcon.Section.effects, options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: TrainerSemanticIcon.Section.inventory, options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             spawnRow(
                 title: text("hades2.spawn.characterRewards"),
                 icon: "moon.stars.fill",
@@ -1550,7 +1550,7 @@ struct Hades2TrainerView: View {
     private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
         TrainerFeatureMultiplierRow(
             title: title,
-            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Feature.currency : TrainerSemanticIcon.Section.resources,
+            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Concept.currency : TrainerSemanticIcon.Section.inventory,
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme, localization: localization),
             text: text,
             onCommit: completing(.multiplier(feature)),
