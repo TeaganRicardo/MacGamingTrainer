@@ -111,7 +111,7 @@ assert re.search(
 # than each module independently choosing an SF Symbol literal.
 icon_source = (ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift").read_text()
 for semantic in (
-    "invincibility", "infiniteLife", "infiniteCurrency", "infiniteRerolls",
+    "invincibility", "life", "currency", "rerolls",
     "forceRerolls", "infiniteAmmo", "boonRarity", "damageMultiplier",
     "moveSpeedMultiplier", "attackSpeedMultiplier", "gameSpeed",
 ):
@@ -120,9 +120,9 @@ for semantic in (
 hades2_types = (ROOT / "Sources/Hades2/Hades2Types.swift").read_text()
 paired_icons = {
     "invincibility": "invincibility",
-    "fullHealth": "infiniteLife",
-    "moneyNoDecrease": "infiniteCurrency",
-    "rerollsNoDecrease": "infiniteRerolls",
+    "fullHealth": "life",
+    "moneyNoDecrease": "currency",
+    "rerollsNoDecrease": "rerolls",
     "forceRerolls": "forceRerolls",
     "infiniteAmmo": "infiniteAmmo",
     "boonRarityEnabled": "boonRarity",
@@ -136,9 +136,9 @@ for hades_case, semantic in paired_icons.items():
 
 hades2_common_icons = {
     "invincibility": "invincibility",
-    "infiniteHealth": "infiniteLife",
-    "infiniteMoney": "infiniteCurrency",
-    "infiniteRerolls": "infiniteRerolls",
+    "infiniteHealth": "life",
+    "infiniteMoney": "currency",
+    "rerolls": "rerolls",
     "forceEnableRerolls": "forceRerolls",
     "infiniteAmmo": "infiniteAmmo",
 }
