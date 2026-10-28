@@ -57,7 +57,7 @@ struct Hades2ProfileManagerView: View {
                         action: { model.loadProfile(selectedProfile) }
                     )
                     Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
-                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Tool.clearLogs)
+                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
                     }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()
