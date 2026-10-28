@@ -1129,17 +1129,17 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            text("hades2.vital.health"), icon: TrainerSemanticIcon.Feature.infiniteLife, current: $healthCurrent, maximum: $healthMaximum,
+            text("hades2.vital.health"), icon: TrainerSemanticIcon.Feature.life, current: $healthCurrent, maximum: $healthMaximum,
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Feature.infiniteMagick, current: $manaCurrent, maximum: $manaMaximum,
+            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Feature.magick, current: $manaCurrent, maximum: $manaMaximum,
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
         editableAmountMetric(
-            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Feature.infiniteCurrency, text: $coins, focus: .coins,
+            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Feature.currency, text: $coins, focus: .coins,
             color: .yellow, locked: model.moneyLocked, enabled: model.canSetResource,
             edit: .resource("Money"), lockEnabled: !model.infiniteMoney
         ) {
@@ -1159,7 +1159,7 @@ struct Hades2TrainerView: View {
         damageMetric
         editableStatMetric(text("hades2.stat.grasp"), icon: "brain.head.profile", stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
-            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Feature.infiniteRerolls, text: $rerollAmount, focus: .rerolls,
+            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Feature.rerolls, text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls, lockEnabled: !model.infiniteRerolls
         ) {
@@ -1550,7 +1550,7 @@ struct Hades2TrainerView: View {
     private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
         TrainerFeatureMultiplierRow(
             title: title,
-            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Feature.infiniteCurrency : TrainerSemanticIcon.Section.resources,
+            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Feature.currency : TrainerSemanticIcon.Section.resources,
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme, localization: localization),
             text: text,
             onCommit: completing(.multiplier(feature)),
