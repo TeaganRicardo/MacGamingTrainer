@@ -111,53 +111,54 @@ assert re.search(
 # than each module independently choosing an SF Symbol literal.
 icon_source = (ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift").read_text()
 for semantic in (
-    "invincibility", "life", "magick", "currency", "rerolls",
-    "forceRerolls", "infiniteAmmo", "boonRarity", "damageMultiplier",
-    "moveSpeedMultiplier", "attackSpeedMultiplier", "gameSpeed",
+    "protection", "vitality", "energy", "currency", "randomize",
+    "refresh", "capacity", "quality", "impact", "movement",
+    "actionSpeed", "timeScale", "item",
 ):
     assert f"static let {semantic} =" in icon_source
+for forbidden in ("Hades", "invincibility", "boonRarity", "reroll"):
+    assert forbidden not in icon_source, f"Core icon vocabulary leaked game meaning: {forbidden}"
 
 hades2_types = (ROOT / "Sources/Hades2/Hades2Types.swift").read_text()
 paired_icons = {
-    "invincibility": "invincibility",
-    "fullHealth": "life",
+    "invincibility": "protection",
+    "fullHealth": "vitality",
     "moneyNoDecrease": "currency",
-    "rerollsNoDecrease": "rerolls",
-    "forceRerolls": "forceRerolls",
-    "infiniteAmmo": "infiniteAmmo",
-    "boonRarityEnabled": "boonRarity",
-    "damageMultiplier": "damageMultiplier",
-    "moveSpeedMultiplier": "moveSpeedMultiplier",
-    "attackSpeedMultiplier": "attackSpeedMultiplier",
-    "gameSpeed": "gameSpeed",
+    "rerollsNoDecrease": "randomize",
+    "forceRerolls": "refresh",
+    "infiniteAmmo": "capacity",
+    "boonRarityEnabled": "quality",
+    "damageMultiplier": "impact",
+    "moveSpeedMultiplier": "movement",
+    "attackSpeedMultiplier": "actionSpeed",
+    "gameSpeed": "timeScale",
 }
 for hades_case, semantic in paired_icons.items():
-    assert f"case .{hades_case}: return TrainerSemanticIcon.Feature.{semantic}" in hades_types
+    assert f"case .{hades_case}: return TrainerSemanticIcon.Concept.{semantic}" in hades_nav
 
+hades2_nav = (ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift").read_text()
 hades2_common_icons = {
-    "invincibility": "invincibility",
-    "infiniteHealth": "life",
-    "infiniteMana": "magick",
+    "invincibility": "protection",
+    "infiniteHealth": "vitality",
+    "infiniteMana": "energy",
     "infiniteMoney": "currency",
-    "infiniteRerolls": "rerolls",
-    "forceEnableRerolls": "forceRerolls",
-    "infiniteAmmo": "infiniteAmmo",
+    "infiniteRerolls": "randomize",
+    "forceEnableRerolls": "refresh",
+    "infiniteAmmo": "capacity",
 }
 for h2_case, semantic in hades2_common_icons.items():
-    assert f"case .{h2_case}: TrainerSemanticIcon.Feature.{semantic}" in hades2_types
+    assert f"case .{h2_case}: TrainerSemanticIcon.Concept.{semantic}" in hades2_nav
 
 hades2_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-for semantic in (
-    "damageMultiplier", "moveSpeedMultiplier", "attackSpeedMultiplier", "gameSpeed"
-):
-    assert f"TrainerSemanticIcon.Feature.{semantic}" in hades2_view
+for semantic in ("impact", "movement", "actionSpeed", "timeScale"):
+    assert f"TrainerSemanticIcon.Concept.{semantic}" in hades2_view
 
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
     ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
 ):
     source = path.read_text()
-    for semantic in ("values", "common", "boons", "resources", "rooms", "management"):
+    for semantic in ("metrics", "general", "effects", "inventory", "navigation", "settings"):
         assert f"TrainerSemanticIcon.Section.{semantic}" in source
 
 for path in (
@@ -170,13 +171,15 @@ for path in (
 
 # Every shortcut-visible function owns one icon. The same action icon is reused
 # in shortcut settings and function discovery instead of being redrawn there.
-assert "var icon: String {" in hades_types
-assert "var icon: String {" in hades2_types
+assert "extension HadesFeature {" in hades_nav
+assert "extension HadesShortcutAction {" in hades_nav
+assert "extension ShortcutAction {" in hades2_nav
+assert "TrainerSemanticIcon" not in hades_types
+assert "TrainerSemanticIcon" not in hades2_types
 assert "Label(text(action.key), systemImage: action.icon)" in hades_view
 hades2_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
 assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2_management
 assert "var icon: String { shortcut?.icon ?? section.icon }" in hades_nav
-hades2_nav = (ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift").read_text()
 assert "var icon: String { shortcut?.icon ?? section.icon }" in hades2_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
 assert "systemImage: entry.icon" in hades2_host
