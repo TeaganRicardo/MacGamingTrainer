@@ -1,3 +1,51 @@
+extension ShortcutAction {
+    var icon: String {
+        switch self {
+        case .invincibility: TrainerSemanticIcon.Concept.protection
+        case .infiniteHealth: TrainerSemanticIcon.Concept.vitality
+        case .infiniteMana: TrainerSemanticIcon.Concept.energy
+        case .infiniteMoney: TrainerSemanticIcon.Concept.currency
+        case .infiniteRerolls: TrainerSemanticIcon.Concept.randomize
+        case .forceEnableRerolls: TrainerSemanticIcon.Concept.refresh
+        case .instantCastCooldown: "timer"
+        case .hexAlwaysReady: "moon.stars.fill"
+        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
+        case .autoMiniGames: "gamecontroller.fill"
+        case .decreaseGameSpeed: "gauge.with.dots.needle.33percent"
+        case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
+        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
+        case .forceLegendary: "star.fill"
+        case .forceDuo: "person.2.fill"
+        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .acquireExactBoon: "scope"
+        case .openSellTraits: "arrow.left.arrow.right.circle"
+        case .moneyMultiplierEnabled: TrainerSemanticIcon.Concept.currency
+        case .resourceMultiplierEnabled: TrainerSemanticIcon.Section.inventory
+        case .generateFlora: "leaf.fill"
+        case .generateMining: "hammer.fill"
+        case .generateDigging: "mountain.2.fill"
+        case .generateShades: "person.crop.circle"
+        case .generateFishing: TrainerSemanticIcon.Context.fishing
+        case .matureGarden: "leaf.circle.fill"
+        case .applyNextRoomReward: TrainerSemanticIcon.Context.doorway
+        case .applyNextOccurrence: "figure.walk.motion"
+        case .spawnOlympian: TrainerSemanticIcon.Section.effects
+        case .spawnPickup: TrainerSemanticIcon.Section.inventory
+        case .spawnSpecial: "moon.stars.fill"
+        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        }
+    }
+
+    var commonFeatureIcon: String? {
+        switch self {
+        case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
+             .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames:
+            icon
+        default: nil
+        }
+    }
+}
+
 import Foundation
 
 enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
@@ -16,12 +64,12 @@ enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .values: TrainerSemanticIcon.Section.values
-        case .common: TrainerSemanticIcon.Section.common
-        case .boons: TrainerSemanticIcon.Section.boons
-        case .resources: TrainerSemanticIcon.Section.resources
-        case .rooms: TrainerSemanticIcon.Section.rooms
-        case .management: TrainerSemanticIcon.Section.management
+        case .values: TrainerSemanticIcon.Section.metrics
+        case .common: TrainerSemanticIcon.Section.general
+        case .boons: TrainerSemanticIcon.Section.effects
+        case .resources: TrainerSemanticIcon.Section.inventory
+        case .rooms: TrainerSemanticIcon.Section.navigation
+        case .management: TrainerSemanticIcon.Section.settings
         }
     }
 }
