@@ -1,40 +1,40 @@
 
-/// Cross-game semantic icon vocabulary.
+/// Shared semantic SF Symbol vocabulary.
 ///
-/// Game modules choose a semantic role, not an SF Symbol literal. Shared roles
-/// must resolve here so Hades integrations do not drift or redraw the same
-/// concept independently. Game-specific concepts remain module-owned.
+/// Product modules choose a visual role, not an SF Symbol literal. Only roles
+/// demonstrated by multiple product surfaces belong here; domain-specific
+/// identities remain module-owned.
 enum TrainerSemanticIcon {
     enum Section {
-        static let values = "gauge.with.dots.needle.67percent"
-        static let common = "bolt.fill"
-        static let boons = "sparkles"
-        static let resources = "shippingbox.fill"
-        static let rooms = "door.left.hand.open"
-        static let management = "gearshape.2.fill"
+        static let metrics = "gauge.with.dots.needle.67percent"
+        static let general = "bolt.fill"
+        static let effects = "sparkles"
+        static let inventory = "shippingbox.fill"
+        static let navigation = "door.left.hand.open"
+        static let settings = "gearshape.2.fill"
     }
 
-    enum Feature {
-        static let invincibility = "shield.fill"
-        static let life = "heart.fill"
-        static let magick = "drop.fill"
+    enum Concept {
+        static let protection = "shield.fill"
+        static let vitality = "heart.fill"
+        static let energy = "drop.fill"
         static let currency = "banknote.fill"
-        static let rerolls = "dice.fill"
-        static let forceRerolls = "arrow.triangle.2.circlepath"
-        static let infiniteAmmo = "infinity"
-        static let boonRarity = "star.circle.fill"
-        static let damageMultiplier = "burst.fill"
-        static let moveSpeedMultiplier = "figure.run"
-        static let attackSpeedMultiplier = "bolt.fill"
-        static let gameSpeed = "speedometer"
-        static let resource = "diamond.fill"
+        static let randomize = "dice.fill"
+        static let refresh = "arrow.triangle.2.circlepath"
+        static let capacity = "infinity"
+        static let quality = "star.circle.fill"
+        static let impact = "burst.fill"
+        static let movement = "figure.run"
+        static let actionSpeed = "bolt.fill"
+        static let timeScale = "speedometer"
+        static let item = "diamond.fill"
     }
 
-    enum World {
+    enum Context {
         static let fishing = "fish.fill"
-        static let chaosGate = "circle.hexagongrid.fill"
+        static let portal = "circle.hexagongrid.fill"
         static let reward = "gift.fill"
-        static let exit = "door.left.hand.open"
+        static let doorway = "door.left.hand.open"
     }
 
     enum Tool {
