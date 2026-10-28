@@ -25,7 +25,7 @@ struct HadesChaosPairControls: View {
             }
             TrainerLabeledControlRow(title: text("hades.chaosEncounters"), icon: "hourglass", tint: theme.accent, emphasized: model.canMutate) {
                 TrainerNumberField(text: $encounters, accessibilityLabel: text("hades.chaosEncounters"), width: 60)
-                TrainerSecondaryActionButton(title: text("hades.chaosPair"), enabled: model.canMutate && !curse.isEmpty) {
+                TrainerSecondaryActionButton(title: text("hades.chaosPair"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate && !curse.isEmpty) {
                     guard let count = Int(encounters), (1...100).contains(count) else {
                         model.rejectInvalidValue(); return
                     }
@@ -72,19 +72,21 @@ struct HadesEffectLifecycleControls: View {
             }
             HStack(spacing: 10) {
                 if trait.canRefresh == true {
-                    TrainerSecondaryActionButton(title: text("hades.refreshEffect"), enabled: model.canMutate) {
+                    TrainerSecondaryActionButton(title: text("hades.refreshEffect"), systemImage: TrainerSemanticIcon.Concept.refresh, enabled: model.canMutate) {
                         model.refreshTrait(trait)
                     }
                 }
                 if trait.canExpire == true {
                     TrainerSecondaryActionButton(
                         title: text(trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing"),
+                        systemImage: trait.blessing == nil ? "hourglass.bottomhalf.filled" : "bolt.fill",
                         enabled: model.canMutate && trait.canRemove
                     ) { model.expireTrait(trait) }
                 }
                 if trait.canRemove {
                     TrainerSecondaryActionButton(
                         title: text(trait.canExpire == true && trait.blessing != nil ? "hades.cancelCurse" : "hades.remove"),
+                        systemImage: TrainerSemanticIcon.Action.remove,
                         enabled: model.canMutate
                     ) { model.removeTrait(trait) }
                 }
