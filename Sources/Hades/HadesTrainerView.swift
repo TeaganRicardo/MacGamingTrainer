@@ -541,7 +541,8 @@ private struct HadesCatalogView: View {
                                 TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
                             }
                             Spacer()
-                            TrainerPrimaryActionButton(title: text("hades.acquire"), enabled: model.canMutate && selected.acquirable != false) {
+                            TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
+                                enabled: model.canMutate && selected.acquirable != false) {
                                 guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
                                 model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
                             }
@@ -651,7 +652,8 @@ private struct HadesCurrentTraitRow: View {
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
                         }
                         Spacer()
-                        TrainerSecondaryActionButton(title: text("hades.apply"), enabled: model.canMutate && (rarity != trait.rarity || level != String(trait.level))) {
+                        TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
+                            enabled: model.canMutate && (rarity != trait.rarity || level != String(trait.level))) {
                             guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
                             model.updateTrait(trait, rarity: rarity, level: amount, target: owner)
                         }
