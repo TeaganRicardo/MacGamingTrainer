@@ -16,12 +16,12 @@ enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .values: "gauge.with.dots.needle.67percent"
-        case .common: "bolt.fill"
-        case .boons: "sparkles"
-        case .resources: "shippingbox.fill"
-        case .rooms: "door.left.hand.open"
-        case .management: "gearshape.2.fill"
+        case .values: TrainerSemanticIcon.Section.values
+        case .common: TrainerSemanticIcon.Section.common
+        case .boons: TrainerSemanticIcon.Section.boons
+        case .resources: TrainerSemanticIcon.Section.resources
+        case .rooms: TrainerSemanticIcon.Section.rooms
+        case .management: TrainerSemanticIcon.Section.management
         }
     }
 }
