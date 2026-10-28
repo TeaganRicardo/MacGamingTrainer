@@ -22,7 +22,7 @@ struct Hades2GatheringPanel: View {
         case .mining: "hammer.fill"
         case .digging: "mountain.2.fill"
         case .shades: "person.crop.circle"
-        case .fishing: TrainerSemanticIcon.World.fishing
+        case .fishing: TrainerSemanticIcon.Context.fishing
         }
     }
 
