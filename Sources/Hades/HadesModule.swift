@@ -171,6 +171,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard hostActionsEnabled else { return }
         send("disable_all", operation: "host.disableAll")
     }
+    func makeSaveEditorModel(snapshotID: String? = nil) -> HadesSaveEditorModel {
+        HadesSaveEditorModel(session: session, snapshotID: snapshotID)
+    }
     func listProfiles() { send("list_profiles", operation: "hades.manage.profiles", announceSuccess: false) }
     func saveProfile(_ name: String) { send("save_profile", params: ["name": name], operation: "hades.profile.save") }
     func loadProfile(_ name: String) { send("load_profile", params: ["name": name], operation: "hades.profile.load") }
@@ -397,10 +400,23 @@ struct HadesGameModule: TrainerGameModule {
     static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
     static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }
     static func makeFeedback(model: HadesTrainerModel) -> HadesOperationFeedback { HadesOperationFeedback(model: model) }
+    static var managedBackupEditor: ((HadesTrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
+        { model, snapshot in makeSaveEditorWindow(model: model, snapshotID: snapshot.id) }
+    }
+    static func makeSaveEditorWindow(model: HadesTrainerModel, snapshotID: String? = nil) -> TrainerToolWindowContent {
+        let editor = model.makeSaveEditorModel(snapshotID: snapshotID)
+        return TrainerToolWindowContent(canClose: { !editor.busy }, onClose: editor.close) {
+            HadesSaveEditorView(model: editor)
+        }
+    }
     static func makeManagementCommands(model: HadesTrainerModel, localization: TrainerLocalizationStore) -> HadesManagementCommands {
         HadesManagementCommands(model: model, localization: localization)
     }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
-        HadesPresentation.text(key, language: language)
+        var result = HadesPresentation.text(key, language: language)
+        for argument in arguments {
+            if let range = result.range(of: "%@") { result.replaceSubrange(range, with: argument) }
+        }
+        return result
     }
 }
