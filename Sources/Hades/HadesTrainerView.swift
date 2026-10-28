@@ -89,9 +89,9 @@ struct HadesTrainerView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 HadesVitalMetricCard(model: model)
-                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Feature.infiniteCurrency,
+                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Feature.currency,
                                       value: model.money, field: "money")
-                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Feature.infiniteRerolls,
+                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Feature.rerolls,
                                       value: model.rerolls, field: "rerolls")
                 HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
                                       value: model.godGauge, field: "godGauge")
