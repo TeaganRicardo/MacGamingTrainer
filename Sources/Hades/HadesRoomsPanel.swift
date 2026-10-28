@@ -32,7 +32,7 @@ struct HadesGatheringPanel: View {
                     onEditingChanged: { editing in if editing { capturedTarget = model.target } },
                     onCommit: { $0.text }
                 )
-                TrainerSecondaryActionButton(title: text("hades.gain"), enabled: model.canMutate, action: gain)
+                TrainerSecondaryActionButton(title: text("hades.gain"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate, action: gain)
             }
             TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
                 TrainerSecondaryActionButton(
@@ -82,7 +82,7 @@ struct HadesRoomsPanel: View {
                         }
                     }
                     .labelsHidden().frame(maxWidth: 210)
-                    TrainerSecondaryActionButton(title: text("hades.generate"), enabled: model.canMutate && model.world != nil) {
+                    TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate && model.world != nil) {
                         action("spawn_reward", operation: "hades.spawnReward", params: ["reward": reward])
                     }
                 }
@@ -100,7 +100,7 @@ struct HadesRoomsPanel: View {
                             ForEach(objects, id: \.self) { item in Text(termName(item)).tag(item) }
                         }
                         .labelsHidden().frame(maxWidth: 210)
-                        TrainerSecondaryActionButton(title: text("hades.generate"), enabled: model.canMutate) {
+                        TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate) {
                             action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
                         }
                     }
@@ -129,7 +129,7 @@ struct HadesRoomsPanel: View {
                                     }
                                 }
                                 .labelsHidden().frame(maxWidth: 210)
-                                TrainerSecondaryActionButton(title: text("hades.apply"), enabled: model.canMutate) {
+                                TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
                                     action("set_door_reward", operation: "hades.doorReward", params: ["doorId": door.id, "reward": doorReward])
                                 }
                             }
@@ -142,7 +142,7 @@ struct HadesRoomsPanel: View {
                                     }
                                 }
                                 .labelsHidden().frame(maxWidth: 210)
-                                TrainerSecondaryActionButton(title: text("hades.apply"), enabled: model.canMutate) {
+                                TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
                                     action("set_door_route", operation: "hades.doorRoute", params: ["doorId": door.id, "route": route])
                                 }
                             }
@@ -152,7 +152,7 @@ struct HadesRoomsPanel: View {
                         }
                         if door.canRestore {
                             TrainerLabeledControlRow(title: text("hades.restoreDoor"), icon: TrainerSemanticIcon.Action.restore, tint: theme.accent, emphasized: false) {
-                                TrainerSecondaryActionButton(title: text("hades.restore"), enabled: model.canMutate) {
+                                TrainerSecondaryActionButton(title: text("hades.restore"), systemImage: TrainerSemanticIcon.Action.restore, enabled: model.canMutate) {
                                     action("restore_door", operation: "hades.restoreDoor", params: ["doorId": door.id])
                                 }
                             }
