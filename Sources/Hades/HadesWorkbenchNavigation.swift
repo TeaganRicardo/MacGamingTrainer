@@ -1,5 +1,44 @@
 import SwiftUI
 
+extension HadesFeature {
+    var icon: String {
+        switch self {
+        case .invincibility: TrainerSemanticIcon.Concept.protection
+        case .fullHealth: TrainerSemanticIcon.Concept.vitality
+        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
+        case .forceRerolls: TrainerSemanticIcon.Concept.refresh
+        case .incomingDamageMultiplier: "shield.lefthalf.filled"
+        case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
+        case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
+        case .fullGodGauge: "bolt.heart.fill"
+        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
+        case .gameSpeed: TrainerSemanticIcon.Concept.timeScale
+        case .damageMultiplier: TrainerSemanticIcon.Concept.impact
+        case .moveSpeedMultiplier: TrainerSemanticIcon.Concept.movement
+        case .attackSpeedMultiplier: TrainerSemanticIcon.Concept.actionSpeed
+        case .dashBonus: "wind"
+        }
+    }
+}
+
+extension HadesShortcutAction {
+    var icon: String {
+        switch self {
+        case .invincibility: TrainerSemanticIcon.Concept.protection
+        case .fullHealth: TrainerSemanticIcon.Concept.vitality
+        case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
+        case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
+        case .fullGodGauge: "bolt.heart.fill"
+        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
+        case .forceRerolls: TrainerSemanticIcon.Concept.refresh
+        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
+        case .generateFishing: TrainerSemanticIcon.Context.fishing
+        case .generateChaosGate: TrainerSemanticIcon.Context.portal
+        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        }
+    }
+}
+
 /// The visible workbench and shortcut registry follow the shared product order.
 enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
     case values, common, boons, resources, rooms, management
@@ -17,12 +56,12 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .values: TrainerSemanticIcon.Section.values
-        case .common: TrainerSemanticIcon.Section.common
-        case .boons: TrainerSemanticIcon.Section.boons
-        case .resources: TrainerSemanticIcon.Section.resources
-        case .rooms: TrainerSemanticIcon.Section.rooms
-        case .management: TrainerSemanticIcon.Section.management
+        case .values: TrainerSemanticIcon.Section.metrics
+        case .common: TrainerSemanticIcon.Section.general
+        case .boons: TrainerSemanticIcon.Section.effects
+        case .resources: TrainerSemanticIcon.Section.inventory
+        case .rooms: TrainerSemanticIcon.Section.navigation
+        case .management: TrainerSemanticIcon.Section.settings
         }
     }
 
