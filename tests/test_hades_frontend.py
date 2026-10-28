@@ -351,9 +351,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             canEdit:false,canRemove:false,limitation:"unknownTrait")
         check(model.traitName(unknown,language:.en)=="Unrecognized Effect","unknown native ID leaked into the effect label")
 
+        defaults.set(1, forKey:"hades.shortcut.heal")
         var store=HadesShortcutStore(defaults:defaults)
-        let clash=store.chord(.heal)
-        check(store.set(.invincibility,chord:HotkeyChord(keyCode:clash.keyCode,modifiers:clash.modifiers,keyLabel:"different label")) == .heal,
+        check(defaults.object(forKey:"hades.shortcut.heal")==nil,"retired Heal shortcut preference was not removed")
+        let clash=store.chord(.fullHealth)
+        check(store.set(.invincibility,chord:HotkeyChord(keyCode:clash.keyCode,modifiers:clash.modifiers,keyLabel:"different label")) == .fullHealth,
             "physical shortcut conflict depended on display label")
         let custom=HotkeyChord(keyCode:99,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F3")
         check(store.set(.invincibility,chord:custom)==nil,"valid shortcut failed")
@@ -371,8 +373,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             resolver:HadesGameModule.presentationText)
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
-        check(HadesWorkbenchCatalog.orderedShortcutActions == [.heal,.invincibility,.fullHealth,.moneyNoDecrease,
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
             .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
+        check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
+              && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
+              "retiring Heal did not shift derived shortcuts forward")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -897,8 +902,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
                 "Disable All feedback did not distinguish native cleanup from detached desired reset")
             let afterDisable=commands().count
-            model.performShortcut(HadesShortcutAction.heal.rawValue);pump()
-            check(commands().count==afterDisable,"a hero shortcut ran without a hero")
+            model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
+            check(commands().count==afterDisable,"a hero-owned shortcut ran without a hero")
         }
         try setConnection(true,heroReady:true)
         model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
@@ -908,7 +913,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
                 "unsafe runtime error retained mutation authority: \(key)")
             let afterFailure=commands().count
-            model.setFeature(.invincibility,value:true);model.heal()
+            model.setFeature(.invincibility,value:true)
             model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
             check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
             try setFixtureError(nil)
