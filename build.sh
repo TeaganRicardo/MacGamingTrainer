@@ -19,12 +19,29 @@ PYTHON_RUNTIME_MANIFEST="${ROOT}/Tools/python_runtime.json"
 CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
 [[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
 
+# --typecheck uses the same product metadata and Swift compiler preflight as
+# the distributable build, but never downloads/copies bundled Python, emits a
+# binary, signs, or publishes a package. It is not release verification.
+BUILD_MODE=full
+if [[ "${1:-}" == "--typecheck" ]]; then
+    BUILD_MODE=typecheck
+    shift
+fi
 BUILD_SELECTION="${1:-${MGT_GAME_ID:-all}}"
 [[ "$BUILD_SELECTION" != "--all" ]] || BUILD_SELECTION="all"
-if [[ $# -gt 1 ]]; then
-    echo "Usage: ./build.sh [--all|game-id]" >&2
+if [[ $# -gt 1 || "$BUILD_SELECTION" == --* ]]; then
+    echo "Usage: ./build.sh [--typecheck] [--all|game-id]" >&2
     exit 2
 fi
+
+BUILD_STARTED_SECONDS=$SECONDS
+PHASE_STARTED_SECONDS=$SECONDS
+record_build_timing() {
+    local elapsed=$((SECONDS - PHASE_STARTED_SECONDS))
+    printf 'MGT_BUILD_TIMING mode=%s selection=%s phase=%s seconds=%d total=%d\n' \
+        "$BUILD_MODE" "$BUILD_SELECTION" "$1" "$elapsed" "$((SECONDS - BUILD_STARTED_SECONDS))"
+    PHASE_STARTED_SECONDS=$SECONDS
+}
 
 GENERATED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mgt-build.XXXXXX")"
 trap 'rm -rf "$GENERATED_DIR"' EXIT
@@ -85,8 +102,14 @@ case "$HOST_ARCH" in
     arm64|x86_64) ;;
     *) echo "Unsupported build-host architecture for bundled Python: $HOST_ARCH" >&2; exit 1 ;;
 esac
-HOST_PYTHON_ROOT="$(prepare_python_runtime "$HOST_ARCH")"
-PYTHON="$HOST_PYTHON_ROOT/bin/python3"
+if [[ "$BUILD_MODE" == "typecheck" ]]; then
+    # The hosted workflow pins this interpreter to Tools/python_runtime.json.
+    # A Swift-only preflight does not need a bundled cross-architecture runtime.
+    PYTHON="$(command -v python3)" || { echo "Missing python3 for typecheck." >&2; exit 1; }
+else
+    HOST_PYTHON_ROOT="$(prepare_python_runtime "$HOST_ARCH")"
+    PYTHON="$HOST_PYTHON_ROOT/bin/python3"
+fi
 
 NORMALIZED_MANIFEST="$GENERATED_DIR/module.normalized.json"
 "$PYTHON" "$ROOT/Tools/product_support.py" "$BUILD_SELECTION" > "$NORMALIZED_MANIFEST"
@@ -133,8 +156,11 @@ for arch in "${ARCHITECTURES[@]}"; do
         arm64|x86_64) ;;
         *) echo "Unsupported frontend architecture: $arch" >&2; exit 1 ;;
     esac
-    prepare_python_runtime "$arch" >/dev/null
+    if [[ "$BUILD_MODE" == "full" ]]; then
+        prepare_python_runtime "$arch" >/dev/null
+    fi
 done
+record_build_timing "runtime-bootstrap"
 
 DIST="${GENERATED_DIR}/dist"
 PUBLISH_DIST="${MGT_BUILD_OUTPUT_DIR:-${ROOT}/dist}"
@@ -145,7 +171,7 @@ CONTENTS="${APP}/Contents"
 BACKEND="${CONTENTS}/Resources/Backend"
 LOCALIZATION_ROOT="${ROOT}/Resources/Localization"
 
-if [[ "$REQUIRES_LLDB" == "1" ]]; then
+if [[ "$BUILD_MODE" == "full" && "$REQUIRES_LLDB" == "1" ]]; then
     LLDB="$(xcrun --find lldb 2>/dev/null || true)"
     [[ -n "$LLDB" ]] || { echo "The active game module requires LLDB." >&2; exit 1; }
     if ! /usr/bin/xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); assert p; sys.path.insert(0,p); import lldb; assert lldb.SBDebugger' >/dev/null 2>&1; then
@@ -166,6 +192,40 @@ GENERATED_SWIFT="$GENERATED_DIR/ActiveGame.generated.swift"
 grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT" || {
     echo "Generated game catalog is invalid." >&2; exit 1;
 }
+
+SWIFT_SOURCES=("$ROOT/Sources/App.swift")
+while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/Sources/Core" -type f -name '*.swift' | sort)
+while IFS= read -r directory; do
+    [[ -d "$ROOT/$directory" ]] || { echo "Missing frontend directory: $directory" >&2; exit 1; }
+    while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/$directory" -type f -name '*.swift' | sort)
+done < <("$PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["frontend"]["sourceDirectories"]))' "$NORMALIZED_MANIFEST")
+SWIFT_SOURCES+=("$GENERATED_SWIFT")
+[[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
+
+record_build_timing "product-frontend-inputs"
+
+# Compiler preflight is shared by normal builds and the lightweight PR path.
+for arch in "${ARCHITECTURES[@]}"; do
+    # Semantic preflight catches cross-file access/type errors before the
+    # optimized compiler path, where SwiftUI failures can otherwise crash with
+    # an unhelpful constraint-solver stack dump.
+    "$SWIFTC" \
+        -typecheck \
+        -parse-as-library \
+        -target "${arch}-apple-macosx${MIN_MACOS}" \
+        -sdk "$SDK" \
+        -framework SwiftUI \
+        -framework AppKit \
+        -framework Carbon \
+        "${SWIFT_SOURCES[@]}"
+done
+record_build_timing "swift-typecheck"
+
+if [[ "$BUILD_MODE" == "typecheck" ]]; then
+    printf 'Validated Swift product catalog and typechecked %s for %s (%s).\n' \
+        "$APP_NAME" "$BUILD_SELECTION" "${ARCHITECTURES[*]}"
+    exit 0
+fi
 
 rm -rf "$APP"
 mkdir -p "${CONTENTS}/MacOS" "$BACKEND" "${CONTENTS}/Resources"
@@ -227,31 +287,11 @@ for language in ("en", "zh-CN"):
         raise SystemExit(f"Host localization package mismatch: {packaged}")
 PY
 
-SWIFT_SOURCES=("$ROOT/Sources/App.swift")
-while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/Sources/Core" -type f -name '*.swift' | sort)
-while IFS= read -r directory; do
-    [[ -d "$ROOT/$directory" ]] || { echo "Missing frontend directory: $directory" >&2; exit 1; }
-    while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/$directory" -type f -name '*.swift' | sort)
-done < <("$PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["frontend"]["sourceDirectories"]))' "$NORMALIZED_MANIFEST")
-SWIFT_SOURCES+=("$GENERATED_SWIFT")
-[[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
+record_build_timing "package-runtime"
 
 ARCH_BINARIES=()
 for arch in "${ARCHITECTURES[@]}"; do
     binary="$GENERATED_DIR/$EXECUTABLE.$arch"
-
-    # Semantic preflight catches cross-file access/type errors before the
-    # optimized compiler path, where SwiftUI failures can otherwise crash with
-    # an unhelpful constraint-solver stack dump.
-    "$SWIFTC" \
-        -typecheck \
-        -parse-as-library \
-        -target "${arch}-apple-macosx${MIN_MACOS}" \
-        -sdk "$SDK" \
-        -framework SwiftUI \
-        -framework AppKit \
-        -framework Carbon \
-        "${SWIFT_SOURCES[@]}"
 
     "$SWIFTC" \
         -parse-as-library \
@@ -273,6 +313,7 @@ else
     [[ -n "$LIPO" ]] || { echo "Universal build requested but lipo is unavailable." >&2; exit 1; }
     "$LIPO" -create "${ARCH_BINARIES[@]}" -output "${CONTENTS}/MacOS/${EXECUTABLE}"
 fi
+record_build_timing "swift-optimized"
 
 # Package generic backend core and the selected game module set. Preserve
 # permitted xattrs; clean only FinderInfo/ResourceFork before signing.
@@ -385,6 +426,7 @@ PY
 
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
+record_build_timing "backend-and-native"
 
 HAS_ICON=0
 if [[ -f "$ROOT/AppIcon.icns" ]]; then
@@ -464,6 +506,7 @@ mkdir -p "$PUBLISH_DIST"
 [[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
 "$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"
 "$PYTHON" "$ROOT/Tools/verify_module_build.py" "$BUILD_SELECTION" --dist-dir "$PUBLISH_DIST" >/dev/null
+record_build_timing "sign-and-publish"
 
 cat <<MSG
 Built:

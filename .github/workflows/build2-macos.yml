@@ -26,6 +26,7 @@ jobs:
     outputs:
       needs_macos: ${{ steps.scope.outputs.needs_macos }}
       needs_build: ${{ steps.scope.outputs.needs_build }}
+      needs_full_build: ${{ steps.scope.outputs.needs_full_build }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,6 +48,12 @@ jobs:
         if: steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'
         run: |
           echo "Change-scope classifier did not emit needs_macos=true|false." >&2
+          exit 1
+
+      - name: Require explicit build mode decision
+        if: (steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false') || (steps.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true')
+        run: |
+          echo "Change-scope classifier emitted an invalid build mode decision." >&2
           exit 1
 
   build:
@@ -136,12 +143,16 @@ jobs:
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: python3 Tools/mutation_gate.py
 
+      - name: Typecheck unified trainer on Swift PR
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request' && needs.scope.outputs.needs_build == 'true' && needs.scope.outputs.needs_full_build == 'false'
+        run: ./build.sh --typecheck --all
+
       - name: Build unified trainer
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true')
         run: ./build.sh --all
 
       - name: Verify package
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_build == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true')
         run: |
           app="$(python3 Tools/verify_module_build.py all --print-app)"
           expected_version="${{ steps.version.outputs.version }}"
