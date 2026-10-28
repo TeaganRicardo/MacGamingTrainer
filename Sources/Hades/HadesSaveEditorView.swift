@@ -329,6 +329,7 @@ private struct HadesSaveJSONEditor: NSViewRepresentable {
     final class TextView: NSTextView {
         var focusChanged: ((Bool) -> Void)?
         override func becomeFirstResponder() -> Bool {
+            guard isEditable && isSelectable else { return false }
             let accepted = super.becomeFirstResponder()
             if accepted { focusChanged?(true) }
             return accepted
@@ -376,6 +377,7 @@ private struct HadesSaveJSONEditor: NSViewRepresentable {
         view.textContainerInset = NSSize(width: 6, height: 6)
         view.string = text
         view.isEditable = enabled
+        view.isSelectable = enabled
         view.setAccessibilityLabel(title)
         scroll.documentView = view
         return scroll
@@ -385,8 +387,9 @@ private struct HadesSaveJSONEditor: NSViewRepresentable {
         let view = scroll.documentView as! TextView
         if view.string != text { view.string = text }
         view.isEditable = enabled
+        view.isSelectable = enabled
         view.setAccessibilityLabel(title)
-        if !focused, view.window?.firstResponder === view { view.window?.makeFirstResponder(nil) }
+        if !enabled || !focused, view.window?.firstResponder === view { view.window?.makeFirstResponder(nil) }
     }
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
         let view = scroll.documentView as! TextView
@@ -510,6 +513,9 @@ private struct HadesSaveTypedEditor: View {
             guard accepted else { closeAfterStage = false; return }
             initial = submittedJSON; initialKey = submittedKey; initialAppend = submittedAppend
             if closeAfterStage && json == submittedJSON && appendKey == submittedKey && append == submittedAppend {
+                discarding = true; editing = false; editingKey = false
+                model.editingChanged(row.id, baseline: row.baselineGeneration, active: false)
+                model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: false)
                 model.dismissDetail()
             }
             closeAfterStage = false

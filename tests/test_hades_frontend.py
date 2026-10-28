@@ -205,7 +205,7 @@ func nativeHierarchy(in view: NSView) -> String {
         let control: String
         if let field=element as? NSTextField { control=" nativeField="+field.stringValue.debugDescription+" delegate="+String(describing:field.delegate)+" editing=\((field.delegate as? TrainerTextField.Coordinator)?.edit != nil)" }
         else if let editor=element as? NSTextView {
-            control=" nativeTextView editable=\(editor.isEditable) fieldEditor=\(editor.isFieldEditor) richText=\(editor.isRichText) importsGraphics=\(editor.importsGraphics)"
+            control=" nativeTextView editable=\(editor.isEditable) selectable=\(editor.isSelectable) fieldEditor=\(editor.isFieldEditor) richText=\(editor.isRichText) importsGraphics=\(editor.importsGraphics)"
                 + " quoteSubstitution=\(editor.isAutomaticQuoteSubstitutionEnabled) dashSubstitution=\(editor.isAutomaticDashSubstitutionEnabled)"
                 + " textReplacement=\(editor.isAutomaticTextReplacementEnabled) spellingCorrection=\(editor.isAutomaticSpellingCorrectionEnabled) text="+editor.string.debugDescription
         }
@@ -601,9 +601,17 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let correctedJSON=HadesSaveValue.number(10).json
         replaceTypedJSON(correctedJSON,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
-        wait("native corrected Done: save_editor_stage in flight") { editor.busy }
+        wait("native corrected Done: save_editor_stage in flight with both JSON inputs disabled") {
+            editor.busy && !rejectedJSON.isEditable && !rejectedJSON.isSelectable
+                && !rejectedKey.isEditable && !rejectedKey.isSelectable
+        }
         check(editor.busy && editor.editingRow != nil && editorWindow.attachedSheet === rejectedSheet,
             "corrected typed input closed before matching acceptance")
+        for field in [rejectedJSON,rejectedKey] {
+            _=rejectedSheet.makeFirstResponder(field)
+            check(rejectedSheet.firstResponder !== field && !field.isEditable && !field.isSelectable,
+                "disabled typed JSON input accepted focus while Stage acknowledgment was pending\n"+nativeHierarchy(in:rejectedContent))
+        }
         wait("corrected native Done save_editor_stage acceptance and sheet dismissal") {
             check(rejectedJSON.string == correctedJSON && rejectedKey.string == draftKey,
                 "literal JSON/key drifted while awaiting Stage acknowledgment\n"+nativeHierarchy(in:rejectedContent))
@@ -611,7 +619,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(10)
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("retained-draft-key")
-            && !editor.hasFailedDraft(advanced),"accepted typed correction lost its key, value or basket ownership")
+            && !editor.hasFailedDraft(advanced) && editor.canApply,
+            "accepted typed correction lost its key, value or basket ownership, or left Apply blocked")
         editor.detail("entry:advanced",typed:true)
         wait("typed discard save_editor_detail reply and attached sheet") { !editor.busy && editor.editingRow != nil && editorWindow.attachedSheet != nil }
         guard let discardSheet=editorWindow.attachedSheet, let discardContent=discardSheet.contentView else {
