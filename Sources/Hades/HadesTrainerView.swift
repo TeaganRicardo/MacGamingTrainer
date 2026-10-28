@@ -89,9 +89,9 @@ struct HadesTrainerView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 HadesVitalMetricCard(model: model)
-                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: "circle.fill",
+                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Feature.infiniteCurrency,
                                       value: model.money, field: "money")
-                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: "arrow.clockwise",
+                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Feature.infiniteRerolls,
                                       value: model.rerolls, field: "rerolls")
                 HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
                                       value: model.godGauge, field: "godGauge")
@@ -164,7 +164,7 @@ struct HadesTrainerView: View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
                 title: localization.localized("host.timeWarp.title"),
-                icon: "speedometer",
+                icon: TrainerSemanticIcon.Feature.gameSpeed,
                 tint: model.canMutate ? theme.accent : theme.inactive,
                 emphasized: model.canMutate,
                 helpText: localization.localized("host.timeWarp.hint")
@@ -246,7 +246,7 @@ struct HadesTrainerView: View {
                     HadesValueRow(
                         model: model,
                         title: resource.name(language: localization.language.rawValue),
-                        icon: "diamond.fill", value: model.resources[resource.id] ?? 0
+                        icon: TrainerSemanticIcon.Feature.resource, value: model.resources[resource.id] ?? 0
                     ) {
                         model.setResource(resource.id, value: $0, target: $1)
                     }
