@@ -177,7 +177,7 @@ struct HadesSaveEditorView: View {
                 Text(text("hades.saveEditor.changes") + " (\(model.review.count))").font(.headline)
                 Spacer()
                 Button(text("hades.saveEditor.discard")) { model.cancel(baseline: baseline) }.disabled(model.busy || !model.canEditRows)
-                TrainerPrimaryActionButton(title: text("hades.apply"), enabled: model.canApply) { model.apply(baseline: baseline) }
+                TrainerPrimaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canApply) { model.apply(baseline: baseline) }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.controlPadding) {
