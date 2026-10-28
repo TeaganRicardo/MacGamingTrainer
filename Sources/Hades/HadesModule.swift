@@ -141,7 +141,6 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func generateChaosGate() {
         worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate")
     }
-    func heal() { sendToHero("heal", target: target, operation: "hades.heal") }
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
         sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")
     }
@@ -261,11 +260,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              (action == .disableAll ? hostActionsEnabled : (action == .heal ? canMutate : canEditIntent)) else {
+              (action == .disableAll ? hostActionsEnabled : canEditIntent) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
-        if action == .heal { heal() }
-        else if action == .generateFishing { generateFishing() }
+        if action == .generateFishing { generateFishing() }
         else if action == .generateChaosGate { generateChaosGate() }
         else if action == .disableAll { disableAll() }
         else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
