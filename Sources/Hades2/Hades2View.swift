@@ -673,6 +673,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitLevel(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -685,6 +686,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
@@ -717,6 +719,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitRarity(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -733,6 +736,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
@@ -1234,6 +1238,7 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.canEditDesired,
                 width: theme.compactActionWidth
             ) {
@@ -1278,6 +1283,7 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.canEditDesired,
                 width: theme.compactActionWidth
             ) {
@@ -1494,6 +1500,7 @@ struct Hades2TrainerView: View {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
                 TrainerSecondaryActionButton(
                     title: text("hades2.spawn.open"),
+                    systemImage: ShortcutAction.openSellTraits.icon,
                     enabled: model.canOpenSellTraits,
                     width: theme.compactActionWidth
                 ) { _ = model.openSellTraits() }
