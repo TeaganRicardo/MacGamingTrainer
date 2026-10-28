@@ -28,12 +28,12 @@ enum HadesFeature: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .invincibility: return TrainerSemanticIcon.Feature.invincibility
-        case .fullHealth: return TrainerSemanticIcon.Feature.infiniteLife
+        case .fullHealth: return TrainerSemanticIcon.Feature.life
         case .infiniteAmmo: return TrainerSemanticIcon.Feature.infiniteAmmo
         case .forceRerolls: return TrainerSemanticIcon.Feature.forceRerolls
         case .incomingDamageMultiplier: return "shield.lefthalf.filled"
-        case .moneyNoDecrease: return TrainerSemanticIcon.Feature.infiniteCurrency
-        case .rerollsNoDecrease: return TrainerSemanticIcon.Feature.infiniteRerolls
+        case .moneyNoDecrease: return TrainerSemanticIcon.Feature.currency
+        case .rerollsNoDecrease: return TrainerSemanticIcon.Feature.rerolls
         case .fullGodGauge: return "bolt.heart.fill"
         case .boonRarityEnabled: return TrainerSemanticIcon.Feature.boonRarity
         case .gameSpeed: return TrainerSemanticIcon.Feature.gameSpeed
