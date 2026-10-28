@@ -14,7 +14,7 @@ struct Hades2BoonRarityPanel: View {
             .trainerControlState(using: theme, localization: localization)
         return VStack(spacing: 1) {
             TrainerLabeledControlRow(
-                title: text("hades2.rarity.title"), icon: "star.circle.fill",
+                title: text("hades2.rarity.title"), icon: TrainerSemanticIcon.Feature.boonRarity,
                 tint: state.indicatorColor, emphasized: state.isOn, opacity: state.opacity
             ) {
                 Picker(text("hades2.rarity.minimum"), selection: Binding(
