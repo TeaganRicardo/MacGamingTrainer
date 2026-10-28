@@ -134,7 +134,7 @@ struct HadesProfileManagerView: View {
                     TrainerPrimaryActionButton(title: text("hades.profile.load"),
                         enabled: model.hostActionsEnabled && !selected.isEmpty) { model.loadProfile(selected) }
                     Button(role: .destructive) { model.deleteProfile(selected) } label: {
-                        Label(text("host.delete"), systemImage: TrainerSemanticIcon.Tool.clearLogs)
+                        Label(text("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
                     }.disabled(!model.hostActionsEnabled || selected.isEmpty)
                     Spacer()
                 }
