@@ -167,4 +167,18 @@ for path in (
     for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
 
+# Every shortcut-visible function owns one icon. The same action icon is reused
+# in shortcut settings and function discovery instead of being redrawn there.
+assert "var icon: String {" in hades_types
+assert "var icon: String {" in hades2_types
+assert "Label(text(action.key), systemImage: action.icon)" in hades_view
+hades2_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
+assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2_management
+assert "var icon: String { shortcut?.icon ?? section.icon }" in hades_nav
+hades2_nav = (ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift").read_text()
+assert "var icon: String { shortcut?.icon ?? section.icon }" in hades2_nav
+hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
+assert "systemImage: entry.icon" in hades2_host
+assert "systemImage: entry.icon" in hades_nav
+
 print("cross_game_ui_semantics_ok")
