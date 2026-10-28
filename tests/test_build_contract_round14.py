@@ -49,6 +49,11 @@ assert build.count('[[ ! -L "$PUBLISH_DIST" ]]') >= 2
 assert build.index('[[ ! -L "$PUBLISH_DIST" ]]') < build.index('"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"')
 assert '"${DIST}/${APP_NAME}.app"' in build
 assert '-typecheck' in build and build.index('-typecheck') < build.index('-O \\')
+assert 'BUILD_MODE=typecheck' in build
+assert 'if [[ "$BUILD_MODE" == "typecheck" ]]; then' in build
+assert 'record_build_timing "swift-typecheck"' in build
+assert 'record_build_timing "swift-optimized"' in build
+assert 'record_build_timing "sign-and-publish"' in build
 clang_compile = build[build.index('\"$CLANG\" '):build.index('TIME_WARP_ARCH_BINARIES+=(\"$helper\")')]
 assert '-Wall' in clang_compile
 assert '-Wextra' in clang_compile

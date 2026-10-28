@@ -114,7 +114,9 @@ def is_linux_portable_only(
             return False
         return Path(path).name not in macos_only_tests
     if path.startswith(".github/workflows/"):
-        return path not in MODULE_EXACT_PATHS
+        # A change to Build 2's own execution recipe must exercise the real
+        # macOS product; the separate module-matrix workflow owns its lane.
+        return path not in MODULE_EXACT_PATHS and path != ".github/workflows/build2-macos.yml"
     if path in PORTABLE_TOOL_PATHS:
         return True
     if is_executable_reference_data(path, reference_prefixes):
@@ -128,8 +130,10 @@ def needs_build_for_path(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
-    # Workflow-only changes and native test-only changes do not require an app
-    # package. The job still runs the selected macOS behavior tests.
+    # Native test-only changes and unrelated workflow edits need no app
+    # package; changes to this builder's own recipe do.
+    if path == ".github/workflows/build2-macos.yml":
+        return True
     if path.startswith(("tests/", ".github/workflows/")) or path in {
         "Tools/macos_only_tests.txt",
         "Tools/run_macos_checks.sh",
@@ -137,6 +141,22 @@ def needs_build_for_path(
     }:
         return False
     return not is_linux_portable_only(
+        path, macos_only_tests, reference_prefixes, app_resource_sources
+    )
+
+
+def needs_full_build_for_path(
+    path: str,
+    macos_only_tests: set[str],
+    reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] = (),
+) -> bool:
+    # Ordinary game/Core Swift sources share the product typecheck preflight.
+    # The entrypoint, native/link inputs, manifests, packaged resources and
+    # build tooling must still compile/link/sign the actual App on every PR.
+    if path.startswith("Sources/") and path.endswith(".swift") and path != "Sources/App.swift":
+        return False
+    return needs_module_build_for_path(path) or needs_build_for_path(
         path, macos_only_tests, reference_prefixes, app_resource_sources
     )
 
@@ -157,6 +177,7 @@ def classify_scope(
             "needs_macos": True,
             "needs_module": True,
             "needs_build": True,
+            "needs_full_build": True,
         }
 
     docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
@@ -167,6 +188,7 @@ def classify_scope(
             "needs_macos": False,
             "needs_module": False,
             "needs_build": False,
+            "needs_full_build": False,
         }
 
     macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
@@ -192,6 +214,10 @@ def classify_scope(
         "needs_module": needs_module,
         "needs_build": needs_module or any(
             needs_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
+            for path in normalized
+        ),
+        "needs_full_build": any(
+            needs_full_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
             for path in normalized
         ),
     }
@@ -242,7 +268,7 @@ def main(argv: list[str]) -> int:
     except (ModuleInventoryError, OSError, subprocess.SubprocessError) as error:
         print(f"ci scope: {error}", file=sys.stderr)
         return 2
-    for key in ("docs_only", "needs_linux", "needs_macos", "needs_module", "needs_build"):
+    for key in ("docs_only", "needs_linux", "needs_macos", "needs_module", "needs_build", "needs_full_build"):
         print(f"{key}={'true' if scope[key] else 'false'}")
     return 0
 

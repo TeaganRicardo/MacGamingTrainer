@@ -311,10 +311,18 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 + "\nlast 12 worker requests:\n"+json(Array(received.suffix(12)))+"\nlast 12 emitted replies:\n"+json(Array(emitted.suffix(12)))
                 + "\nwindows:\n"+windows+"\ntrainer log tail:\n"+log.split(separator:"\n").suffix(12).joined(separator:"\n")
         }
+        // The outer Python harness retains only the last native phase if the
+        // entire expanded fixture exceeds its global process budget.
+        func recordPhase(_ stage: String) {
+            try? (String(Date().timeIntervalSince1970)+" "+stage).write(
+                to: folder.appendingPathComponent("native-phase.txt"), atomically: true, encoding: .utf8)
+        }
         func wait(_ expectation: String, file: StaticString = #fileID, line: UInt = #line, _ condition: () -> Bool) {
+            recordPhase("wait: "+expectation)
             let deadline=Date().addingTimeInterval(5)
             while !condition() && Date() < deadline { pump(0.02) }
             if !condition() { fatalError("Timed out after 5s waiting for "+expectation+"\n"+fixtureDiagnostics(),file:file,line:line) }
+            recordPhase("passed: "+expectation)
         }
         wait("startup status/catalog replies: connected, catalog populated, trainer idle") { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
@@ -556,6 +564,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         guard let rejectedSheet=editorWindow.attachedSheet, let rejectedContent=rejectedSheet.contentView else {
             fatalError("typed rejection sheet missing")
         }
+        recordPhase("native typed rejection: locate AppKit controls")
         rejectedContent.layoutSubtreeIfNeeded();pump()
         let rejectedJSON=requireNativeControl("typed rejection sheet value NSTextView",in:rejectedContent) {
             textViews(in:$0).first(where:{$0.isEditable && !$0.isFieldEditor && $0.accessibilityLabel()==advanced.name})
@@ -598,6 +607,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "typed rejection replaced acknowledged Changes")
         check(accessibilityText(in:rejectedContent).contains(where:{$0.contains("matching allocation counts")}),
             "the typed sheet hid its asynchronous rejection reason")
+        recordPhase("native typed correction: replace JSON")
         let correctedJSON=HadesSaveValue.number(10).json
         replaceTypedJSON(correctedJSON,field:rejectedJSON,window:rejectedSheet)
         pressNativeButton(named:localization.localized("host.done"),in:rejectedContent)
@@ -945,7 +955,30 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
         generated, folder / 'main.swift']
     subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(folder / 'frontend')], check=True, cwd=ROOT)
-    proc = subprocess.run([str(folder / 'frontend'), str(folder), sys.executable], capture_output=True, text=True, timeout=35)
+    # The expanded native editor fixture already reached late checks after ~28s
+    # on the previous head. Preserve the per-expectation 5s fail-fast limits;
+    # use a separate bounded 65s budget for the whole fixture process.
+    try:
+        proc = subprocess.run([str(folder / 'frontend'), str(folder), sys.executable],
+                              capture_output=True, text=True, timeout=65)
+    except subprocess.TimeoutExpired as error:
+        phase = folder / 'native-phase.txt'
+        print('Native frontend exceeded 65s; last phase: ' +
+              (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
+              file=sys.stderr)
+        for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):
+            journal = folder / filename
+            if journal.exists():
+                print(filename + ' tail:', file=sys.stderr)
+                for line in journal.read_text(encoding='utf-8', errors='replace').splitlines()[-12:]:
+                    print(line, file=sys.stderr)
+        for stream in ('stdout', 'stderr'):
+            captured = getattr(error, stream)
+            if captured:
+                print('Partial ' + stream + ':', file=sys.stderr)
+                print(captured.decode(errors='replace') if isinstance(captured, bytes) else captured,
+                      file=sys.stderr)
+        raise SystemExit(1)
     if proc.returncode:
         print(proc.stdout)
         print(proc.stderr)
