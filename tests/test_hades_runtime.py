@@ -25,6 +25,7 @@ local function expectError(key, fn)
   assert(not ok and tostring(message):find(key, 1, true), tostring(message))
 end
 local updates = {}
+PresetEventArgs = { PatroclusBenefitChoices = {} }
 SaveIgnores = {}
 local savedState, saveFailure
 function Save()
@@ -124,6 +125,7 @@ function SpendMoney(amount, source)
   UpdateMoneyUI(CurrentRun.Money)
   return "spent", nil, source
 end
+function IsMetaUpgradeSelected() return true end
 local rerollsSeenInMenu = {}
 function AttemptBoonLootReroll()
   if CurrentRun.NumRerolls <= 0 then return end
@@ -214,6 +216,22 @@ end
 function EquipPlayerWeapon()
   CurrentRun.Hero.properties.ChargeTime = 3
   return "equipped"
+end
+function GetTraitNameCount(unit, name)
+  local count = 0
+  for _, trait in pairs(unit.Traits) do if trait.Name == name then count = count + 1 end end
+  return count
+end
+function TraitUIUpdateText(trait) updates.trait = trait.RemainingUses end
+function UpdateTraitNumber(trait) updates.traitNumber = trait.Name end
+function RecreateLifePips() updates.lifePips = true end
+function RemoveTraitData(unit, selected)
+  for index, trait in ipairs(unit.Traits) do
+    if trait == selected then table.remove(unit.Traits, index); break end
+  end
+  if selected.OnExpire and selected.OnExpire.TraitData then
+    AddTraitToHero({ TraitData = selected.OnExpire.TraitData })
+  end
 end
 function RemoveWeaponTrait(name)
   local unit = CurrentRun.Hero
@@ -349,10 +367,10 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 3 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 4 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -580,8 +598,9 @@ expectError("invalidValue", function() runtime.add_trait("LegendaryTrait", "Hero
 expectError("invalidValue", function() runtime.add_trait("HammerTrait", "Rare", 1) end)
 runtime.add_trait("SetupTrait", "Common", 1)
 assert(setupCalls == 1 and runtime.status().traits[1].limitation == "specialLifecycle")
-expectError("unsupportedTrait", function() runtime.remove_trait(runtime.status().traits[1].instanceId) end)
-RemoveWeaponTrait("SetupTrait")
+assert(runtime.status().traits[1].canRemove and not runtime.status().traits[1].canEdit)
+runtime.remove_trait(runtime.status().traits[1].instanceId)
+assert(#unit.Traits == 0)
 runtime.add_trait("ZeusTrait", "Rare", 1)
 local ordinaryBoon = runtime.status().traits[1].instanceId
 runtime.add_trait("ReincarnationTrait", "Rare", 1)
@@ -601,7 +620,7 @@ expectError("invalidValue", function() runtime.add_trait("ReincarnationTrait", "
 runtime.add_trait("KeepsakeTrait", "Epic", 1)
 assert(GameState.LastAwardTrait == "KeepsakeTrait" and GameState.KeepsakeChambers.KeepsakeTrait == 75)
 assert(#unit.LastStands == 1 and unit.MaxLastStands == 1 and unit.LastStands[1].Name == "NativeDeathDefiance")
-assert(runtime.status().traits[2].rarity == "Epic" and runtime.status().traits[2].limitation == "specialOwner")
+assert(runtime.status().traits[2].rarity == "Epic" and runtime.status().traits[2].canEdit and runtime.status().traits[2].canRemove)
 assert(runtime.status().traits[1].instanceId == ordinaryBoon and unit.Weapons.SwordWeapon)
 expectError("unsupportedTrait", function() runtime.add_trait("StoryKeepsakeTrait", "Rare", 1) end)
 assert(GameState.LastAwardTrait == "KeepsakeTrait" and GameState.KeepsakeChambers.StoryKeepsakeTrait == nil)
@@ -643,9 +662,11 @@ unit.Traits = {
   { Name = "TemporaryTrait", Id = "owner-b", RemainingUses = 3 },
 }
 traits = runtime.status().traits
-assert(#traits == 2 and traits[1].level == 1 and traits[1].limitation == "duplicateName")
-expectError("unsupportedTrait", function() runtime.remove_trait(traits[1].instanceId) end)
-assert(#unit.Traits == 2, "name-based native removal crossed special owners")
+assert(#traits == 2 and traits[1].level == 1 and traits[1].canRemove)
+local retained = unit.Traits[2]
+runtime.remove_trait(traits[1].instanceId)
+assert(#unit.Traits == 1 and unit.Traits[1] == retained, "selected removal crossed special owners")
+expectError("staleTrait", function() runtime.remove_trait(traits[1].instanceId) end)
 unit.Traits = {}
 
 unit.InvulnerableFlags.NativeScene, CurrentRun.InvulnerableFlags.NativeScene = true, true

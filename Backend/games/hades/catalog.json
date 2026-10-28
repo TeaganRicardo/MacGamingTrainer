@@ -8,22 +8,32 @@
       "Game/Text/en/MiscText.en.sjson": "4f506d9205630977541afe0d44dc060a2b340b2402b21f85dd66d33029157fd7",
       "Game/Text/zh-CN/HelpText.zh-CN.sjson": "0dc218bc3b8fc2e564dfbcc915d54fbfbf4059bc2767a72e909c462a9aec5417",
       "Game/Text/zh-CN/MiscText.zh-CN.sjson": "b022346ffe7c79377f795ed207da44110bfcb5a2d03f05ab5b1e7462df724101",
+      "Scripts/AssistScripts.lua": "ec06e281c7118e5fd469fb3306120ca8bd12e9eabfd61a6d06a114f8b93e3404",
       "Scripts/AwardMenuScripts.lua": "e0bbffc5c6bafc136c1167d75d1adf2bedd9aa47dd93e2612520e46b5498ef0d",
       "Scripts/Combat.lua": "d449e16a85d0688ce8806bad1b76e8ef1c65ea742cda4d3cd3343b1d7381d473",
       "Scripts/GiftData.lua": "e5da8af1a84ebce5edf7065e371d6aa3dc8583081541a7c0cd3e8a79620c69fd",
+      "Scripts/Interactables.lua": "2b862c615ae29af2e31e499a7b88b9c996c5c6ee1859683c608e698ffddf6549",
       "Scripts/KeepsakeScripts.lua": "f95f2615b9658eedeb58d6214b288487ca97800f3fab5362c7f01ffa76629801",
       "Scripts/LootData.lua": "20081ab6f36c04e1ed0091fe67336d3662b35168179a77d309573e2af5ff7595",
       "Scripts/Main.lua": "6aab9af9cbaf499aef3adb7e4ac622efc530db652dcf8e80d44e85cc74a7453e",
+      "Scripts/MetaUpgrades.lua": "98e5ec449cf1ab4254aa8e687357152cb3453dd78a4b7a4995b07b18621bfdef",
+      "Scripts/NPCData.lua": "c67c2b68111c8dcb74eca323542952d6630e1f57e4fa5986240b602291522455",
+      "Scripts/Powers.lua": "c81fcdcbd037427044962bc7806971517d6cb8a042b97ce4b72143bdcfac8b6f",
       "Scripts/RoomManager.lua": "ca379fe0708af778007aef929822e4cfe8cf3a47dd2a3d37bf57e582ddb1b924",
       "Scripts/RunManager.lua": "4b2fc24bee7e89f4cb9efedaafd7c35ef4829df6e047d4f37406f0619273895e",
+      "Scripts/SellTraitScripts.lua": "cc4cdda49ce9fed27db4304812bbf2c8dc6f050775eda21bf9186cd9b1ed1864",
       "Scripts/ShoutScripts.lua": "695bb1c3719c93775ef35ef51e3434114f39b4fd8aae8ea93fe1d136c1c2cc4f",
+      "Scripts/StoreData.lua": "db7edc1bda6fb69ec3512a44ec1843bfa2e75d9aa9230853c9201abf14b89311",
+      "Scripts/StoreScripts.lua": "33557b841a02cba52b46ef0dd3e2a209f4d4cc32c99cb297035bada33f359d37",
       "Scripts/TraitData.lua": "ddb690ad6274550bf5103d8875b5ca9063b5bb9fe8a6c08d3e011f7746338d18",
       "Scripts/TraitScripts.lua": "473b3a2df05923bdbfe123e35047ff86ee44db4c7f4e3881e1812461d43ee3a6",
+      "Scripts/TraitTrayScripts.lua": "440b1a0bf2e81959b7e468428ae6695eb4c85df156d794fb1d9679dc204c5e7c",
       "Scripts/UIScripts.lua": "ef6dac3ca795f2de8ede6e6b586260e492cb4107766a9d4ae5c6553d0dd379a4",
+      "Scripts/UpgradeChoice.lua": "de82d04b14ebf13f7793e41c6c8c16448ecf030a503174a31adab65f6c4fb2c1",
       "Scripts/WeaponSets.lua": "2672ff2c4ab332b1e43645a26d9dcd95a46e385ec4367ef1511253e9986b73b7"
     },
-    "method": "Native LootData reward pools, TrialUpgrade.PermanentTraits and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.",
-    "dataLoadContext": "Data chunks only; unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.",
+    "method": "Native LootData reward pools, TrialUpgrade permanent/temporary pairs, StoreData traits, NPCData PatroclusBuff choices, BouldyBlessing inheritance and GiftOrdering; TraitData inheritance; same-ID official bilingual HelpText/MiscText.",
+    "dataLoadContext": "Data chunks only; NPCData loads only PresetEventArgs before UnitSetData.NPCs. Unrelated Color, voice-line, GameData and ConstantsData tables are empty during extraction.",
     "descriptionValues": "Native text templates; runtime numeric substitutions are shown as ellipses."
   },
   "entries": [
@@ -1572,6 +1582,195 @@
       "slot": ""
     },
     {
+      "id": "BouldyBlessing_Armor",
+      "kind": "special",
+      "textId": "BouldyBlessing_Armor",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 伤害减免： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Damage Reduction: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_Attack",
+      "kind": "special",
+      "textId": "BouldyBlessing_Attack",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 普通攻击 伤害奖励： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Attack Damage Bonus: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_Money",
+      "kind": "special",
+      "textId": "BouldyBlessing_Money",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 奖励： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Bonus: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_None",
+      "kind": "special",
+      "textId": "BouldyBlessing_None",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你不知道你是否相信巨石…… \n 模糊奖励： +2%",
+        "en": "You do not know if you believe in Bouldy... \n Ambiguity Bonus: +2%"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_Ranged",
+      "kind": "special",
+      "textId": "BouldyBlessing_Ranged",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 投弹 伤害奖励： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Cast Damage Bonus: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_Special",
+      "kind": "special",
+      "textId": "BouldyBlessing_Special",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 特殊攻击 伤害奖励： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Special Damage Bonus: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "BouldyBlessing_Speed",
+      "kind": "special",
+      "textId": "BouldyBlessing_Speed",
+      "names": {
+        "zh-CN": "石之心",
+        "en": "Heart of Stone"
+      },
+      "descriptions": {
+        "zh-CN": "你相信巨石，巨石也相信你。 \n 移动速度奖励： …",
+        "en": "You believe in Bouldy, and Bouldy believes in you. \n Move Speed Bonus: …"
+      },
+      "source": "NPCSpecialEffects",
+      "sources": [
+        "NPCSpecialEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "NPC 特殊效果",
+        "en": "NPC Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
       "id": "BowBondBoostTrait",
       "kind": "hammer",
       "textId": "BowBondBoostTrait",
@@ -2413,6 +2612,370 @@
       "supportsLevel": false,
       "isDuo": false,
       "slot": "Keepsake"
+    },
+    {
+      "id": "ChaosCurseAmmoUseDelayTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseAmmoUseDelayTrait",
+      "names": {
+        "zh-CN": "手滑",
+        "en": "Slippery"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你无法收集，持续 … 秒。",
+        "en": "For the next … Encounter(s), you cannot collect for … Sec."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseCastAttackTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseCastAttackTrait",
+      "names": {
+        "zh-CN": "坏死",
+        "en": "Addled"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，每次投弹都会损失 -…。",
+        "en": "For the next … Encounter(s), each time you Cast, get hit for -…."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseDamageTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseDamageTrait",
+      "names": {
+        "zh-CN": "煎熬",
+        "en": "Excruciating"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你将受到 … 伤害。",
+        "en": "For the next … Encounter(s), you take … damage."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseDashRangeTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseDashRangeTrait",
+      "names": {
+        "zh-CN": "踌躇",
+        "en": "Halting"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你的冲刺距离缩短-…%。",
+        "en": "For the next … Encounter(s), your Dash has -…% range."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseDeathWeaponTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseDeathWeaponTrait",
+      "names": {
+        "zh-CN": "尖刻",
+        "en": "Caustic"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，被杀死的敌人将向你投掷地狱炸弹。",
+        "en": "For the next … Encounter(s), slain foes toss an Inferno-Bomb at you."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseHealthTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseHealthTrait",
+      "names": {
+        "zh-CN": "衰竭",
+        "en": "Atrophic"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你的生命上限降低 …。",
+        "en": "For the next … Encounter(s), your Life Total is reduced by …."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseHiddenRoomReward",
+      "kind": "curse",
+      "textId": "ChaosCurseHiddenRoomReward",
+      "names": {
+        "zh-CN": "迷茫",
+        "en": "Enshrouded"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 房间，密室奖励提前预览将被隐藏。",
+        "en": "For the next … Chamber(s), chamber reward previews are hidden."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseMoveSpeedTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseMoveSpeedTrait",
+      "names": {
+        "zh-CN": "懒惰",
+        "en": "Slothful"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的…遭遇战，你的移动速度变为…% 。",
+        "en": "For the next … Encounter(s), you have …% move speed."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseNoMoneyTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseNoMoneyTrait",
+      "names": {
+        "zh-CN": "贫民",
+        "en": "Pauper's"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你无法获得。",
+        "en": "For the next … Encounter(s), you cannot earn ."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCursePrimaryAttackTrait",
+      "kind": "curse",
+      "textId": "ChaosCursePrimaryAttackTrait",
+      "names": {
+        "zh-CN": "致残",
+        "en": "Maimed"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，每次普通攻击都会损失 -…。",
+        "en": "For the next … Encounter(s), each time you Attack, get hit for -…."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseSecondaryAttackTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseSecondaryAttackTrait",
+      "names": {
+        "zh-CN": "剥皮",
+        "en": "Flayed"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，每次特殊攻击都会损失 -…。",
+        "en": "For the next … Encounter(s), each time you Special, get hit for -…."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseSpawnTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseSpawnTrait",
+      "names": {
+        "zh-CN": "暴动",
+        "en": "Roiling"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，敌人的数量增加 … 。",
+        "en": "For the next … standard Encounter(s), you face … more foes."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
+    },
+    {
+      "id": "ChaosCurseTrapDamageTrait",
+      "kind": "curse",
+      "textId": "ChaosCurseTrapDamageTrait",
+      "names": {
+        "zh-CN": "深渊",
+        "en": "Abyssal"
+      },
+      "descriptions": {
+        "zh-CN": "接下来的 … 遭遇战，你将受到来自陷阱的 … 伤害。",
+        "en": "For the next … Encounter(s), you take … damage from Traps."
+      },
+      "source": "TrialUpgrade",
+      "sources": [
+        "TrialUpgrade"
+      ],
+      "sourceNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": "",
+      "acquirable": false
     },
     {
       "id": "CharmTrait",
@@ -7708,6 +8271,546 @@
       "slot": ""
     },
     {
+      "id": "TemporaryAlphaStrikeTrait",
+      "kind": "temporary",
+      "textId": "TemporaryAlphaStrikeTrait",
+      "names": {
+        "zh-CN": "厄里斯的手环",
+        "en": "Eris Bangle"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：对未受伤敌人造成的伤害提高… 。\n 持续时间： … 遭遇战",
+        "en": "Passive: You deal … damage striking undamaged foes. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryArmorDamageTrait",
+      "kind": "temporary",
+      "textId": "TemporaryArmorDamageTrait",
+      "names": {
+        "zh-CN": "塔罗斯的钉子",
+        "en": "Nail of Talos"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：对护甲伤害提高… 。\n 持续时间： … 遭遇战",
+        "en": "Passive: You deal … damage to Armor. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryBackstabTrait",
+      "kind": "temporary",
+      "textId": "TemporaryBackstabTrait",
+      "names": {
+        "zh-CN": "涅墨西斯的徽证",
+        "en": "Nemesis Crest"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：背刺伤害提高… 。\n 持续时间： … 遭遇战",
+        "en": "Passive: You deal … damage striking foes from behind. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryBlockExplodingChariotsTrait",
+      "kind": "temporary",
+      "textId": "TemporaryBlockExplodingChariotsTrait",
+      "names": {
+        "zh-CN": "火焰战车卸任",
+        "en": "Flame Wheels Release"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具： … 不会在遭遇战出现。\n 持续时间： … 次遭遇战",
+        "en": "Passive: Prevent … foes from appearing in Encounter(s). \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryBoonRarityTrait",
+      "kind": "temporary",
+      "textId": "TemporaryBoonRarityTrait",
+      "names": {
+        "zh-CN": "阿里阿德涅的纱线",
+        "en": "Yarn of Ariadne"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：你见到的下一个祝福会提升稀有度。",
+        "en": "Passive: The next Boon you find has upgraded Rarity."
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryDoorHealTrait",
+      "kind": "temporary",
+      "textId": "TemporaryDoorHealTrait",
+      "names": {
+        "zh-CN": "九头蛇轻饮",
+        "en": "HydraLite"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：每次进入房间时恢复 …%。 \n 持续时间： … 个房间",
+        "en": "Passive: Restore …% when you enter a chamber. \n Duration: … Chamber(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryDoorHealTrait_Patroclus",
+      "kind": "special",
+      "textId": "TemporaryDoorHealTrait_Patroclus",
+      "names": {
+        "zh-CN": "九头蛇轻饮·金典",
+        "en": "HydraLite Gold"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：每次进入房间时恢复 …%。 \n 持续时间： … 个房间",
+        "en": "Passive: Restore …% when you enter a chamber. \n Duration: … Chamber(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryForcedChallengeSwitchTrait",
+      "kind": "temporary",
+      "textId": "TemporaryForcedChallengeSwitchTrait",
+      "names": {
+        "zh-CN": "宝藏追踪器",
+        "en": "Trove Tracker"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：确保在前方刷出地狱宝藏（若条件允许）。",
+        "en": "Passive: Ensure an Infernal Trove will spawn ahead (where possible)."
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryForcedFishingPointTrait",
+      "kind": "temporary",
+      "textId": "TemporaryForcedFishingPointTrait",
+      "names": {
+        "zh-CN": "枯骨之诱",
+        "en": "Skeletal Lure"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：确保在前方刷出钓鱼点（若条件允许)。",
+        "en": "Passive: Ensure a Fishing Point will spawn ahead (where possible)."
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryForcedSecretDoorTrait",
+      "kind": "temporary",
+      "textId": "TemporaryForcedSecretDoorTrait",
+      "names": {
+        "zh-CN": "伊克西翁之光",
+        "en": "Light of Ixion"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：确保在前方刷出混沌之门（若条件允许）。",
+        "en": "Passive: Ensure a Chaos Gate will spawn ahead (where possible)."
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedRangedTrait",
+      "kind": "temporary",
+      "textId": "TemporaryImprovedRangedTrait",
+      "names": {
+        "zh-CN": "阿特拉斯穗带",
+        "en": "Braid of Atlas"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：投弹造成的伤害 … 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Your Cast deals … damage. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedSecondaryTrait",
+      "kind": "temporary",
+      "textId": "TemporaryImprovedSecondaryTrait",
+      "names": {
+        "zh-CN": "奇美拉肉干",
+        "en": "Chimaera Jerky"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：特殊攻击造成的伤害 … 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Your Special deals … damage. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedTrapDamageTrait",
+      "kind": "temporary",
+      "textId": "TemporaryImprovedTrapDamageTrait",
+      "names": {
+        "zh-CN": "冥界碎片",
+        "en": "Stygian Shard"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：陷阱对敌人造成的伤害… 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Traps deal … damage to your foes. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedWeaponTrait",
+      "kind": "temporary",
+      "textId": "TemporaryImprovedWeaponTrait",
+      "names": {
+        "zh-CN": "库克罗普斯肉干",
+        "en": "Cyclops Jerky"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：普通攻击造成的伤害 … 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Your Attack deals … damage. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryImprovedWeaponTrait_Patroclus",
+      "kind": "special",
+      "textId": "TemporaryImprovedWeaponTrait_Patroclus",
+      "names": {
+        "zh-CN": "库克罗普斯肉干精选",
+        "en": "Cyclops Jerky Select"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：普通攻击造成的伤害 … 。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Your Attack deals … damage. \n Duration: … Encounter(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryLastStandHealTrait",
+      "kind": "temporary",
+      "textId": "TemporaryLastStandHealTrait",
+      "names": {
+        "zh-CN": "冥河之抚",
+        "en": "Touch of Styx"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：百折不挠生效时，恢复的生命值增加 … \n 持续时间： … 遭遇战",
+        "en": "Passive: Stubborn Defiance restores … more than usual. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryMoreAmmoTrait",
+      "kind": "temporary",
+      "textId": "TemporaryMoreAmmoTrait",
+      "names": {
+        "zh-CN": "普罗米修斯之石",
+        "en": "Prometheus Stone"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：数量上限 +…，供投弹使用。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Gain +… for your Cast. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryMoveSpeedTrait",
+      "kind": "temporary",
+      "textId": "TemporaryMoveSpeedTrait",
+      "names": {
+        "zh-CN": "燃烧灵液",
+        "en": "Ignited Ichor"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：移动速度提升…%。 \n 持续时间： … 次遭遇战",
+        "en": "Passive: Gain …% move speed. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryPreloadSuperGenerationTrait",
+      "kind": "temporary",
+      "textId": "TemporaryPreloadSuperGenerationTrait",
+      "names": {
+        "zh-CN": "虚空捕网",
+        "en": "Aether Net"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：遭遇战开始时神力槽里就有…%能量。\n 持续时间： … 次遭遇战",
+        "en": "Passive: You start Encounter(s) with your God Gauge …% full. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "TemporaryWeaponLifeOnKillTrait",
+      "kind": "temporary",
+      "textId": "TemporaryWeaponLifeOnKillTrait",
+      "names": {
+        "zh-CN": "拉米亚之眼",
+        "en": "Eye of Lamia"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：被杀的敌人有 …% 的几率掉落 物品。 \n 持续时间： … 遭遇战",
+        "en": "Passive: Slain foes have a … chance to drop items. \n Duration: … Encounter(s)"
+      },
+      "source": "TemporaryEffects",
+      "sources": [
+        "TemporaryEffects"
+      ],
+      "sourceNames": {
+        "zh-CN": "临时效果",
+        "en": "Temporary Effects"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
       "id": "ThanatosAssistTrait",
       "kind": "companion",
       "textId": "ThanatosAssistTrait",
@@ -7820,6 +8923,33 @@
         "Legendary"
       ],
       "supportsLevel": true,
+      "isDuo": false,
+      "slot": ""
+    },
+    {
+      "id": "UpgradedTemporaryLastStandHealTrait",
+      "kind": "special",
+      "textId": "UpgradedTemporaryLastStandHealTrait",
+      "names": {
+        "zh-CN": "冥河之抚·黑金",
+        "en": "Touch of Styx Dark"
+      },
+      "descriptions": {
+        "zh-CN": "被动道具：百折不挠生效时，恢复的生命值增加 … \n 持续时间： … 遭遇战",
+        "en": "Passive: Stubborn Defiance restores … more than usual. \n Duration: … Encounter(s)"
+      },
+      "source": "NPC_Patroclus_01",
+      "sources": [
+        "NPC_Patroclus_01"
+      ],
+      "sourceNames": {
+        "zh-CN": "普特洛克勒斯",
+        "en": "Patroclus"
+      },
+      "rarities": [
+        "Common"
+      ],
+      "supportsLevel": false,
       "isDuo": false,
       "slot": ""
     },

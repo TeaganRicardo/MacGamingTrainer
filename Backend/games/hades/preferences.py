@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 
 from core.adapter import AdapterError
-from .schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES, preference_document
+from .schema import DEFAULT_PREFERENCES, preference_document
 
 
 class HadesPreferenceStore:
@@ -22,15 +22,16 @@ class HadesPreferenceStore:
         if not isinstance(document, dict) or document.get('schemaVersion') != 1:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
         features = document.get('features')
-        # Migrate the original eight-key and post-rarity nine-key preference
-        # documents without relaxing validation of any other schemaVersion 1
-        # payload. Process speed is owned by Core, not the resident Lua table.
+        # Schema 1 has three shipped feature sets, extended only by neutral
+        # durable settings. An unknown or partially corrupted set stays invalid.
         if isinstance(features, dict):
-            keys = set(features)
-            if keys == set(DEFAULT_FEATURES) - {'boonRarityEnabled'}:
-                features = {**features, 'boonRarityEnabled': False, 'gameSpeed': 1.0}
-            elif keys == set(DEFAULT_FEATURES):
-                features = {**features, 'gameSpeed': 1.0}
+            original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
+                        'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
+                        'attackSpeedMultiplier', 'dashBonus'}
+            shipped = (original, original | {'boonRarityEnabled'},
+                       original | {'boonRarityEnabled', 'gameSpeed'})
+            if set(features) in shipped:
+                features = {**DEFAULT_PREFERENCES, **features}
         try:
             return preference_document(features)
         except AdapterError as error:

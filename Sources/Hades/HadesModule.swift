@@ -1,5 +1,7 @@
 import Foundation
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var backendStatus = TrainerBackendStatus()
@@ -13,8 +15,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var godGauge = 0.0
     @Published private(set) var maxGodGauge = 0.0
     @Published private(set) var features: [String: HadesFeatureValue] = [:]
+    @Published private(set) var activeFeatures: [String: Bool] = [:]
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
+    @Published private(set) var world: HadesWorldObservation?
+    @Published private(set) var worldRewards: [HadesWorldReward] = []
+    @Published private(set) var worldTerms: [String: [String: String]] = [:]
     @Published private(set) var catalog: [HadesCatalogEntry] = []
     @Published private(set) var resourceCatalog: [HadesResourceDefinition] = []
     @Published private(set) var traitNames: [String: [String: String]] = [:]
@@ -26,6 +32,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var shortcutSettingsPresented = false
     @Published var workbenchSearch = ""
     @Published var numericControlsExpanded = false
+    @Published var profilesPresented = false
+    @Published var diagnosticsPresented = false
+    @Published private(set) var profiles: [HadesSettingsProfile] = []
+    @Published private(set) var diagnostics: [HadesDiagnosticCheck] = []
+    private var diagnosticsReport: [String: Any]?
 
     private let session: TrainerBackendSession
     private let logSink: TrainerLogSink
@@ -40,6 +51,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
     var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
+    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible && connected }
     var canMutate: Bool { backendAvailable && backendStatus.protocolCompatible && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
@@ -82,16 +94,21 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func refreshFromHost() { send("status", operation: "host.refreshStatus", announceSuccess: false) }
     func restartBackendFromHost() { session.restart() }
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+        logSink.targetLifetimeChanged(running: observation.isRunning, identity: .init(
+            processName: HadesGameModule.descriptor.targetProcessName,
+            bundleIdentifier: HadesGameModule.descriptor.targetBundleIdentifier,
+            processIdentifier: observation.processIdentifier))
         targetObservation = observation
         resetObservation()
     }
     func hostDidBecomeActive() { if connected && !busy { refreshFromHost() } }
 
     func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
+    func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
     func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
-        guard canMutate else { return }
+        guard canEditIntent else { return }
         send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key)
     }
     func setNumber(_ feature: HadesFeature, text: String) -> String {
@@ -109,6 +126,21 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
         sendToHero("set_resource", params: ["resource": resource, "value": value], target: target, operation: "hades.resources")
     }
+    func gainResource(_ resource: String, amount: Double, target: HadesHeroTarget?) {
+        sendToHero("gain_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.gainResource")
+    }
+    func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String) {
+        guard let roomID, roomID == world?.roomId else { localError = "hades.error.staleRoom"; return }
+        var payload = params
+        payload["roomId"] = roomID
+        sendToHero(command, params: payload, target: target, operation: operation)
+    }
+    func generateFishing() {
+        worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing")
+    }
+    func generateChaosGate() {
+        worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate")
+    }
     func heal() { sendToHero("heal", target: target, operation: "hades.heal") }
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
         sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")
@@ -119,9 +151,79 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func removeTrait(_ trait: HadesCurrentTrait) {
         sendToHero("remove_trait", params: ["instanceId": trait.instanceId], target: target, operation: "hades.remove")
     }
+    func addChaosPair(blessing: HadesCatalogEntry, curse: String, rarity: String, encounters: Int) {
+        sendToHero("add_chaos_pair", params: ["blessing": blessing.id, "curse": curse,
+                   "rarity": rarity, "encounters": encounters], target: target, operation: "hades.chaosPair")
+    }
+    func setTraitUses(_ trait: HadesCurrentTrait, uses: Int, target: HadesHeroTarget?) {
+        sendToHero("set_trait_uses", params: ["instanceId": trait.instanceId, "uses": uses],
+                   target: target, operation: "hades.remainingUses")
+    }
+    func expireTrait(_ trait: HadesCurrentTrait) {
+        sendToHero("expire_trait", params: ["instanceId": trait.instanceId], target: target,
+                   operation: trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing")
+    }
+    func refreshTrait(_ trait: HadesCurrentTrait) {
+        sendToHero("refresh_trait", params: ["instanceId": trait.instanceId], target: target,
+                   operation: "hades.refreshEffect")
+    }
     func disableAll() {
         guard hostActionsEnabled else { return }
         send("disable_all", operation: "host.disableAll")
+    }
+    func listProfiles() { send("list_profiles", operation: "hades.manage.profiles", announceSuccess: false) }
+    func saveProfile(_ name: String) { send("save_profile", params: ["name": name], operation: "hades.profile.save") }
+    func loadProfile(_ name: String) { send("load_profile", params: ["name": name], operation: "hades.profile.load") }
+    func deleteProfile(_ name: String) { send("delete_profile", params: ["name": name], operation: "host.delete") }
+    func runDiagnostics() { send("diagnostics", operation: "hades.manage.diagnostics", announceSuccess: false) }
+    func openLog() {
+        session.flushDiagnostics()
+        logSink.flush()
+        NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())
+    }
+    func openLogHistory() {
+        do {
+            logSink.flush()
+            try FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(logSink.historyURL)
+        } catch { localError = "hades.error.logOpen" }
+    }
+    func clearCompletedLogs() {
+        let cleared = logSink.clearCompletedSessions()
+        feedback = TrainerFeedbackNotice(
+            text: TrainerTextToken(key: cleared ? "host.logs.cleared" : "host.logs.clearFailed"),
+            tone: cleared ? .success : .warning)
+    }
+    func exportDiagnostics() {
+        session.flushDiagnostics()
+        logSink.flush()
+        send("diagnostics", operation: "hades.diagnostics.export", announceSuccess: false) { [weak self] ok in
+            guard ok, let self, var report = self.diagnosticsReport else { return }
+            self.session.flushDiagnostics()
+            self.logSink.flush()
+            do {
+                var logs: [String: String] = [:]
+                let urls: [URL]
+                if let bundle = self.logSink.currentSessionURL() {
+                    urls = ["manifest.json", "host.log", "backend.log", "runtime.log"].map { bundle.appendingPathComponent($0) }
+                } else { urls = [self.logSink.currentLogURL()] }
+                for url in urls where FileManager.default.fileExists(atPath: url.path) {
+                    logs[url.lastPathComponent] = try String(contentsOf: url, encoding: .utf8)
+                }
+                report["logs"] = logs
+                let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.json]
+                panel.nameFieldStringValue = "Hades-Diagnostics.json"
+                panel.begin { [weak self] response in
+                    guard response == .OK, let url = panel.url else { return }
+                    do {
+                        try data.write(to: url, options: .atomic)
+                        self?.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
+                    } catch { self?.localError = "hades.error.diagnosticsExport" }
+                }
+            } catch { self.localError = "hades.error.diagnosticsExport" }
+        }
     }
     func rejectInvalidValue() { localError = "hades.error.invalidValue" }
     func dismissFeedback(_ id: UUID) { if feedback?.id == id { feedback = nil } }
@@ -156,10 +258,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              (action == .disableAll ? hostActionsEnabled : canMutate) else {
+              (action == .disableAll ? hostActionsEnabled : (action == .heal ? canMutate : canEditIntent)) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .heal { heal() }
+        else if action == .generateFishing { generateFishing() }
+        else if action == .generateChaosGate { generateChaosGate() }
         else if action == .disableAll { disableAll() }
         else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
     }
@@ -188,9 +292,15 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                      timeout: command == "connect" ? 130 : 20, completion: { [weak self] ok in
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
-                self.feedback = TrainerFeedbackNotice(
-                    text: TrainerTextToken(key: pendingCleanup ? "hades.disableAllPending" : "host.backend.notice.completed"),
-                    tone: pendingCleanup ? .warning : .success)
+                let pendingProfile = command == "load_profile" && !self.connected
+                let noticeKey: String
+                if pendingCleanup { noticeKey = "hades.disableAllPending" }
+                else if pendingProfile { noticeKey = "hades.profile.pending" }
+                else if command == "set_door_route" && params["route"] as? String == "thanatos" {
+                    noticeKey = "hades.routeScheduled"
+                } else { noticeKey = "host.backend.notice.completed" }
+                self.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: noticeKey),
+                    tone: pendingCleanup || pendingProfile ? .warning : .success)
             }
             completion?(ok)
         })
@@ -212,11 +322,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func apply(_ payload: [String: Any]) {
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
+            if let rows = payload["profiles"] {
+                profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
+                    from: JSONSerialization.data(withJSONObject: rows))
+            }
+            if let report = payload["diagnostics"] as? [String: Any], let checks = report["checks"] {
+                diagnostics = try JSONDecoder().decode([HadesDiagnosticCheck].self,
+                    from: JSONSerialization.data(withJSONObject: checks))
+                diagnosticsReport = report
+            }
             if payload["catalog"] != nil {
                 let decoded = try JSONDecoder().decode(HadesCatalogPayload.self, from: data)
                 catalog = decoded.catalog
                 resourceCatalog = decoded.resourceCatalog
                 traitNames = decoded.traitNames ?? [:]
+                worldRewards = decoded.worldRewards ?? []
+                worldTerms = decoded.worldTerms ?? [:]
             }
             guard payload["connected"] != nil else { return }
             let state = try JSONDecoder().decode(HadesObservation.self, from: data)
@@ -236,8 +357,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             maxGodGauge = state.maxGodGauge ?? 0
             target = state.target
             features = state.features ?? [:]
+            activeFeatures = state.activeFeatures ?? [:]
             resources = state.resources ?? [:]
             traits = state.traits ?? []
+            world = state.world
         } catch {
             if payload["catalog"] == nil { resetObservation() }
             localError = payload["catalog"] != nil ? "hades.error.catalog" : "hades.error.protocol"
@@ -246,7 +369,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0; godGauge = 0; maxGodGauge = 0
-        target = nil; features = [:]; resources = [:]; traits = []
+        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []; world = nil
     }
 }
 

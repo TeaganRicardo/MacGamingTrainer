@@ -1,16 +1,37 @@
 import Foundation
 
 enum HadesFeature: String, CaseIterable, Identifiable {
-    case invincibility, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled, gameSpeed
-    case damageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
+    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, gameSpeed
+    case damageMultiplier, incomingDamageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
 
     var id: String { rawValue }
     var key: String { self == .gameSpeed ? "host.timeWarp.title" : "hades.\(rawValue)" }
-    var isToggle: Bool { Self.allCases.prefix(5).contains(self) }
+    var isToggle: Bool {
+        switch self {
+        case .invincibility, .fullHealth, .moneyNoDecrease, .rerollsNoDecrease,
+             .fullGodGauge, .infiniteAmmo, .forceRerolls, .boonRarityEnabled: true
+        default: false
+        }
+    }
+    var helpKey: String {
+        switch self {
+        case .fullGodGauge: "hades.fullGodGaugeHelp"
+        case .invincibility: "hades.invincibilityHelp"
+        case .boonRarityEnabled: "hades.boonRarityHelp"
+        case .forceRerolls: "hades.forceRerollsHelp"
+        case .infiniteAmmo: "hades.infiniteAmmoHelp"
+        case .fullHealth: "hades.fullHealthHelp"
+        default: "hades.noConsumptionHelp"
+        }
+    }
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
     var icon: String {
         switch self {
         case .invincibility: return "shield.fill"
+        case .fullHealth: return "heart.fill"
+        case .infiniteAmmo: return "infinity"
+        case .forceRerolls: return "dice.fill"
+        case .incomingDamageMultiplier: return "shield.lefthalf.filled"
         case .moneyNoDecrease: return "circle.fill"
         case .rerollsNoDecrease: return "arrow.triangle.2.circlepath"
         case .fullGodGauge: return "bolt.heart.fill"
@@ -94,7 +115,43 @@ struct HadesCurrentTrait: Decodable, Identifiable, Equatable {
     let canEdit: Bool
     let canRemove: Bool
     let limitation: String
+    var remainingUses: Int? = nil
+    var canSetUses: Bool? = nil
+    var canExpire: Bool? = nil
+    var canRefresh: Bool? = nil
+    var cooldown: Double? = nil
+    var cooldownLimit: Double? = nil
+    var blessing: String? = nil
+    var curse: String? = nil
     var id: String { instanceId }
+}
+
+struct HadesWorldReward: Decodable, Identifiable {
+    let id: String
+    let kind: String
+    let names: [String: String]
+    let doorAllowed: Bool
+    func name(language: TrainerPresentationLanguage) -> String {
+        names[language.rawValue] ?? names["en"] ?? id
+    }
+}
+
+struct HadesWorldDoor: Decodable, Identifiable, Equatable {
+    let id: String
+    let number: Int
+    let reward: String
+    let canReward: Bool
+    let routes: [String]
+    let canRestore: Bool
+    let pendingEncounter: Bool
+}
+
+struct HadesWorldObservation: Decodable, Equatable {
+    let roomId: String
+    let doors: [HadesWorldDoor]
+    let canFish: Bool
+    let canChaos: Bool
+    let objects: [String]
 }
 
 struct HadesObservation: Decodable {
@@ -110,8 +167,10 @@ struct HadesObservation: Decodable {
     let maxGodGauge: Double?
     let target: HadesHeroTarget?
     let features: [String: HadesFeatureValue]?
+    let activeFeatures: [String: Bool]?
     let resources: [String: Double]?
     let traits: [HadesCurrentTrait]?
+    let world: HadesWorldObservation?
 }
 
 struct HadesCatalogEntry: Decodable, Identifiable, Equatable {
@@ -144,6 +203,8 @@ struct HadesCatalogPayload: Decodable {
     let catalog: [HadesCatalogEntry]
     let resourceCatalog: [HadesResourceDefinition]
     let traitNames: [String: [String: String]]?
+    let worldRewards: [HadesWorldReward]?
+    let worldTerms: [String: [String: String]]?
 }
 
 struct HadesNumberDraft {
@@ -162,7 +223,7 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, heal, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, boonRarityEnabled, disableAll
+    case invincibility, heal, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
     var defaultChord: HotkeyChord {

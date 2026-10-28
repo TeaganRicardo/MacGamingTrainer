@@ -5,6 +5,9 @@ import subprocess
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
+from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
+from .profiles import HadesProfileStore
+from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, preference_value, invalid_value, number)
 
@@ -34,16 +37,47 @@ class HadesAdapter(GameAdapter):
         self.locate_process = locate_process
         self.connected = False
         self.preferences = preferences or HadesPreferenceStore()
+        self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
         self.features = dict(DEFAULT_PREFERENCES)
         self._game_speed_actual = None
         self._game_speed_error = None
 
     def dispatch(self, command, params, request_id):
+        if command == 'list_profiles':
+            return {'profiles': self.profiles.list()}
+        if command == 'save_profile':
+            self.profiles.save(params.get('name'), self.preferences.load())
+            return {'profiles': self.profiles.list()}
+        if command == 'delete_profile':
+            self.profiles.delete(params.get('name'))
+            return {'profiles': self.profiles.list()}
+        if command == 'load_profile':
+            features = self.profiles.load(params.get('name'))
+            self.preferences.save(features)
+            self.features = features
+            state = {**self._offline(), 'features': self.features}
+            if self.connected:
+                runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
+                try:
+                    state = self.runtime.command('configure', {'features': runtime_features})
+                except AdapterError as error:
+                    if error.code in ('outcome_unknown', 'restart_required') or not self.runtime.connected:
+                        self.connected = False
+                    raise
+                self._observe(state)
+                speed_error = self._reconcile_game_speed()
+                if speed_error:
+                    raise speed_error
+            return self._observe(state)
+        if command == 'diagnostics':
+            state = self.dispatch('status', {}, request_id)
+            return {**state, 'diagnostics': build_diagnostics(self, state)}
         if command == 'catalog':
             try:
                 language = params.get('language', 'zh-CN')
                 return {'catalog': catalog(language, params.get('query', ''), params.get('kind', 'all')),
-                        'resourceCatalog': resource_catalog(language), 'traitNames': trait_names()}
+                        'resourceCatalog': resource_catalog(language), 'traitNames': trait_names(),
+                        'worldRewards': reward_catalog(), 'worldTerms': world_terms()}
             except ValueError as error:
                 raise invalid_value() from error
         if command == 'launch':
@@ -148,11 +182,13 @@ class HadesAdapter(GameAdapter):
 
     @staticmethod
     def _mutation_params(command, params):
+        if command in WORLD_COMMANDS:
+            return world_mutation_params(command, params)
         if command == 'heal':
             return {}
         if command == 'set_value':
             field = params.get('field')
-            if field not in ('health', 'maxHealth', 'money', 'rerolls'):
+            if field not in ('health', 'maxHealth', 'money', 'rerolls', 'godGauge'):
                 raise invalid_value()
             return {'field': field, 'value': number(params.get('value'),
                     1 if field in ('health', 'maxHealth') else 0, integer=True)}
@@ -164,7 +200,7 @@ class HadesAdapter(GameAdapter):
         if command == 'add_trait':
             identifier = params.get('trait')
             entry = get_entry(identifier) if isinstance(identifier, str) else None
-            if entry is None:
+            if entry is None or entry.get('acquirable') is False:
                 raise invalid_value()
             rarity = params.get('rarity')
             if rarity not in entry['rarities']:
@@ -173,10 +209,21 @@ class HadesAdapter(GameAdapter):
             if not entry.get('supportsLevel', True) and level != 1:
                 raise invalid_value()
             return {'trait': identifier, 'rarity': rarity, 'level': level}
+        if command == 'add_chaos_pair':
+            blessing, curse = params.get('blessing'), params.get('curse')
+            entry = get_entry(blessing) if isinstance(blessing, str) else None
+            curse_entry = get_entry(curse) if isinstance(curse, str) else None
+            if (entry is None or entry['kind'] != 'chaos' or curse_entry is None
+                    or curse_entry['kind'] != 'curse' or params.get('rarity') not in entry['rarities']):
+                raise invalid_value()
+            return {'blessing': blessing, 'curse': curse, 'rarity': params['rarity'],
+                    'encounters': number(params.get('encounters'), 1, 100, integer=True)}
         identifier = params.get('instanceId')
         if not isinstance(identifier, str) or not identifier:
             raise invalid_value()
         result = {'instanceId': identifier}
+        if command == 'set_trait_uses':
+            result['uses'] = number(params.get('uses'), 0, 1000, integer=True)
         if command == 'update_trait':
             rarity = params.get('rarity')
             if rarity not in ('Common', 'Rare', 'Epic', 'Heroic', 'Legendary'):
@@ -198,6 +245,7 @@ class HadesAdapter(GameAdapter):
             self._record_game_speed_error(error)
             if error.code in ('outcome_unknown', 'restart_required') or not getattr(self.runtime, 'connected', True):
                 self.connected = False
+            return error
 
     def _record_game_speed_error(self, error):
         self._game_speed_error = {
