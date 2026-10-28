@@ -1333,8 +1333,8 @@ struct Hades2TrainerView: View {
 
     private var rewardSpawningPanel: some View {
         VStack(spacing: 1) {
-            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
-            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: TrainerSemanticIcon.Section.boons, options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: TrainerSemanticIcon.Section.resources, options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             spawnRow(
                 title: text("hades2.spawn.characterRewards"),
                 icon: "moon.stars.fill",
