@@ -116,6 +116,8 @@ for semantic in (
     "actionSpeed", "timeScale", "item",
 ):
     assert f"static let {semantic} =" in icon_source
+for semantic in ("acquire", "apply", "generate", "save", "load", "remove", "restore"):
+    assert f"static let {semantic} =" in icon_source
 for forbidden in ("Hades", "invincibility", "boonRarity", "reroll"):
     assert forbidden not in icon_source, f"Core icon vocabulary leaked game meaning: {forbidden}"
 
@@ -184,5 +186,16 @@ assert "var icon: String { shortcut?.icon ?? section.icon }" in hades2_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
 assert "systemImage: entry.icon" in hades2_host
 assert "systemImage: entry.icon" in hades_nav
+
+# Executable product actions must carry an icon. This deliberately scans both
+# game UI trees so new actions cannot silently regress to text-only controls.
+for root in (ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+    for path in root.rglob("*.swift"):
+        lines = path.read_text().splitlines()
+        for index, line in enumerate(lines):
+            if "TrainerPrimaryActionButton(" not in line and "TrainerSecondaryActionButton(" not in line:
+                continue
+            window = "\n".join(lines[index:index + 7])
+            assert "systemImage:" in window, f"missing action icon: {path}:{index + 1}"
 
 print("cross_game_ui_semantics_ok")
