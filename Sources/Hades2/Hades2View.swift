@@ -768,6 +768,7 @@ struct Hades2TrainerView: View {
             ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
+                    systemImage: ShortcutAction.matureGarden.icon,
                     enabled: model.canMatureGarden, width: theme.compactActionWidth) {
                     _ = model.matureGarden()
                 }
@@ -1404,6 +1405,7 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
+                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireChaosPair
                             && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
                             && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
@@ -1464,6 +1466,7 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
+                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireExactReward
                             && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
                         width: theme.compactActionWidth
