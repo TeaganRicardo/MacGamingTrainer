@@ -795,13 +795,6 @@ function runtime.set_value(field, value)
   else error("hades.error.invalidValue") end
   return runtime.status()
 end
-function runtime.heal()
-  local unit = requireHero()
-  Heal(unit, { HealAmount = math.max(0, unit.MaxHealth - unit.Health), Silent = true,
-    AttackerName = trainerFlag })
-  UpdateHealthUI()
-  return runtime.status()
-end
 function runtime.set_resource(name, value)
   requireHero()
   local known = false
