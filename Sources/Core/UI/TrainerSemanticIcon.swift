@@ -51,6 +51,10 @@ enum TrainerSemanticIcon {
 
     enum Action {
         static let acquire = "plus.circle.fill"
+        static let apply = "checkmark.circle.fill"
+        static let generate = "plus.circle.fill"
+        static let save = "square.and.arrow.down"
+        static let load = "arrow.down.circle"
         static let remove = "trash"
         static let restore = "arrow.uturn.backward"
     }
