@@ -209,7 +209,7 @@ struct HadesHeaderActions: View {
                                     title: label(entry),
                                     detail: HadesGameModule.resolveText(
                                         key: entry.section.titleKey, localization: localization),
-                                    systemImage: entry.section.icon
+                                    systemImage: entry.icon
                                 ) {
                                     locate(entry)
                                 }
