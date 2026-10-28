@@ -101,14 +101,6 @@ struct HadesTrainerView: View {
                     }
                 }
             }
-            HStack(spacing: 8) {
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.heal))
-                TrainerSecondaryActionButton(
-                    title: text("hades.heal"), systemImage: "heart.fill",
-                    enabled: model.canMutate, action: model.heal
-                )
-                Spacer()
-            }
         }
     }
 
