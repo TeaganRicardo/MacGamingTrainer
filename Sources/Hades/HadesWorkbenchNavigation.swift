@@ -17,12 +17,12 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .values: "gauge.with.dots.needle.67percent"
-        case .common: "bolt.fill"
-        case .boons: "sparkles"
-        case .resources: "shippingbox.fill"
-        case .rooms: "door.left.hand.open"
-        case .management: "gearshape.2.fill"
+        case .values: TrainerSemanticIcon.Section.values
+        case .common: TrainerSemanticIcon.Section.common
+        case .boons: TrainerSemanticIcon.Section.boons
+        case .resources: TrainerSemanticIcon.Section.resources
+        case .rooms: TrainerSemanticIcon.Section.rooms
+        case .management: TrainerSemanticIcon.Section.management
         }
     }
 
@@ -42,7 +42,6 @@ struct HadesWorkbenchEntry: Identifiable {
 enum HadesWorkbenchCatalog {
     /// Single visible-order owner for shortcut defaults and the settings list.
     static let orderedShortcutActions: [HadesShortcutAction] = [
-        .heal,
         .invincibility,
         .fullHealth,
         .moneyNoDecrease,
@@ -59,7 +58,6 @@ enum HadesWorkbenchCatalog {
     static func shortcutActions(in section: HadesWorkbenchSection) -> [HadesShortcutAction] {
         orderedShortcutActions.filter { action in
             switch action {
-            case .heal: section == .values
             case .boonRarityEnabled: section == .boons
             case .generateFishing: section == .resources
             case .generateChaosGate: section == .rooms
@@ -74,11 +72,10 @@ enum HadesWorkbenchCatalog {
             HadesWorkbenchEntry(
                 id: "shortcut.\(action.rawValue)",
                 titleKey: action.key,
-                section: action == .heal ? .values
-                    : (action == .disableAll ? .management
-                       : (action == .boonRarityEnabled ? .boons
-                          : (action == .generateFishing ? .resources
-                             : (action == .generateChaosGate ? .rooms : .common))))
+                section: action == .disableAll ? .management
+                    : (action == .boonRarityEnabled ? .boons
+                       : (action == .generateFishing ? .resources
+                          : (action == .generateChaosGate ? .rooms : .common)))
             )
         }
         let other: [(HadesWorkbenchSection, [String])] = [
