@@ -226,7 +226,6 @@ enum HadesWorkbenchCatalog {
         }
         return (entries + dynamic + world).filter { entry in
             let names = labels(entry.titleKey) + labels(entry.section.titleKey)
-                + entry.searchAliasKeys.flatMap(labels)
                 + (entry.resource.map { Array($0.names.values) + [$0.id] } ?? [])
                 + (entry.worldNames.map { Array($0.values) } ?? [])
             let searchable = normalized(names.joined(separator: " "))
