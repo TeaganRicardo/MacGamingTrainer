@@ -327,13 +327,13 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.prepareSigning"),
-                        systemImage: "signature",
+                        systemImage: Hades2WorkbenchIcon.prepareSigning,
                         enabled: canChangeSignature,
                         action: model.prepareDebugging
                     )
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.restoreSigning"),
-                        systemImage: "arrow.uturn.backward.circle",
+                        systemImage: Hades2WorkbenchIcon.restoreSigning,
                         enabled: canChangeSignature,
                         action: model.restoreOriginalSignature
                     )
