@@ -335,7 +335,7 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private var statusAndSessionSection: some View {
-        TrainerSectionHeader(title: text("hades2.section.runData"), icon: "gauge.with.dots.needle.67percent") {
+        TrainerSectionHeader(title: text("hades2.section.runData"), icon: Hades2WorkbenchSection.values.icon) {
             Button { withAnimation(.easeInOut(duration: 0.18)) { model.numericControlsExpanded.toggle() } } label: {
                 HStack(spacing: 5) {
                     Text(model.numericControlsExpanded ? text("hades2.section.collapse") : text("hades2.section.expand"))
@@ -353,7 +353,7 @@ struct Hades2TrainerView: View {
     }
 
     private var commonSection: some View {
-        TrainerSection(title: text("hades2.section.common"), icon: "bolt.fill") {
+        TrainerSection(title: text("hades2.section.common"), icon: Hades2WorkbenchSection.common.icon) {
             VStack(spacing: 1) {
                 ForEach(Hades2WorkbenchCatalog.shortcutActions(in: .common).filter { $0.commonFeatureIcon != nil }) { action in
                     if let key = action.featureKey, let icon = action.commonFeatureIcon {
@@ -372,7 +372,7 @@ struct Hades2TrainerView: View {
     }
 
     private var boonsSection: some View {
-        TrainerSection(title: text("hades2.section.boonsAndEffects"), icon: "sparkles") {
+        TrainerSection(title: text("hades2.section.boonsAndEffects"), icon: Hades2WorkbenchSection.boons.icon) {
             boonRarityPanel
             currentRunEffectsPanel
             boonAcquisitionPanel
@@ -546,7 +546,7 @@ struct Hades2TrainerView: View {
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                Label(text("hades2.traits.manager"), systemImage: "slider.horizontal.3")
+                Label(text("hades2.traits.manager"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                     .fixedSize()
 
@@ -616,26 +616,32 @@ struct Hades2TrainerView: View {
                 .frame(width: 58)
                 .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
-                Button(text("hades2.traits.apply")) {
+                Button {
                     model.setTraitRemainingUses(
                         trait,
                         targetRemainingUses: traitRemainingUsesInput
                     )
+                } label: {
+                    Label(text("hades2.traits.apply"), systemImage: TrainerSemanticIcon.Action.apply)
                 }
                 .buttonStyle(.bordered)
                 .lineLimit(1)
                 .disabled(!canApplyTraitRemainingUses(trait))
 
-                Button(text("hades2.traits.expireNow")) {
+                Button {
                     model.expireTrait(trait)
+                } label: {
+                    Label(text("hades2.traits.expireNow"), systemImage: TrainerSemanticIcon.Concept.duration)
                 }
                 .buttonStyle(.bordered)
                 .lineLimit(1)
                 .disabled(!model.canMutateTraits || !trait.canExpire)
             }
         } else if trait.canAdvanceLifecycle {
-            Button(text("hades2.traits.chaos.advance")) {
+            Button {
                 model.advanceTraitLifecycle(trait)
+            } label: {
+                Label(text("hades2.traits.chaos.advance"), systemImage: Hades2WorkbenchIcon.chaosAdvance)
             }
             .buttonStyle(.bordered)
             .lineLimit(1)
@@ -673,6 +679,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitLevel(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -685,6 +692,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
@@ -717,6 +725,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitRarity(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -733,6 +742,7 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
@@ -745,10 +755,14 @@ struct Hades2TrainerView: View {
                 guard let trait else { return }
                 model.removeTrait(trait)
             } label: {
-                Text(currentRunTraitRemovalLabel(trait))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .frame(maxWidth: .infinity)
+                Label {
+                    Text(currentRunTraitRemovalLabel(trait))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                } icon: {
+                    Image(systemName: TrainerSemanticIcon.Action.remove)
+                }
             }
             .buttonStyle(.bordered)
             .frame(width: TraitManagerLayout.removeControlWidth)
@@ -758,16 +772,17 @@ struct Hades2TrainerView: View {
     }
 
     private var resourceSection: some View {
-        TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: "shippingbox.fill") {
+        TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: Hades2WorkbenchSection.resources.icon) {
             resourcePanel
             Hades2GatheringPanel(model: model)
             TrainerLabeledControlRow(
-                title: text("hades2.garden.title"), icon: "leaf.fill",
+                title: text("hades2.garden.title"), icon: Hades2WorkbenchIcon.garden,
                 tint: model.canMatureGarden ? theme.accent : theme.inactive,
                 emphasized: model.canMatureGarden
             ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
+                    systemImage: ShortcutAction.matureGarden.icon,
                     enabled: model.canMatureGarden, width: theme.compactActionWidth) {
                     _ = model.matureGarden()
                 }
@@ -778,7 +793,7 @@ struct Hades2TrainerView: View {
     }
 
     private var roomsSection: some View {
-        TrainerSection(title: text("hades2.section.roomsAndRewards"), icon: "door.left.hand.open") {
+        TrainerSection(title: text("hades2.section.roomsAndRewards"), icon: Hades2WorkbenchSection.rooms.icon) {
             nextRoomRewardPanel
             nextOccurrencePanel
             Hades2ChaosGatePanel(model: model)
@@ -825,7 +840,7 @@ struct Hades2TrainerView: View {
     private var gameSpeedPanel: some View {
         if model.featureSupport["gameSpeed"] == true {
             TrainerLabeledControlRow(
-                title: text("hades2.gameSpeed.title"), icon: "speedometer",
+                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditDesired ? theme.accent : theme.inactive,
                 emphasized: model.canEditDesired
             ) {
@@ -1129,24 +1144,24 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            text("hades2.vital.health"), icon: "heart.fill", current: $healthCurrent, maximum: $healthMaximum,
+            text("hades2.vital.health"), icon: TrainerSemanticIcon.Concept.vitality, current: $healthCurrent, maximum: $healthMaximum,
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            text("hades2.vital.mana"), icon: "sparkles", current: $manaCurrent, maximum: $manaMaximum,
+            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Concept.energy, current: $manaCurrent, maximum: $manaMaximum,
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
         editableAmountMetric(
-            text("hades2.vital.runGold"), icon: "circle.hexagongrid.fill", text: $coins, focus: .coins,
+            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Concept.currency, text: $coins, focus: .coins,
             color: .yellow, locked: model.moneyLocked, enabled: model.canSetResource,
             edit: .resource("Money"), lockEnabled: !model.infiniteMoney
         ) {
             model.lockResource("Money", locked: !model.moneyLocked)
         }
         editableAmountMetric(
-            text("hades2.vital.armor"), icon: "shield.lefthalf.filled", text: $armorCurrent, focus: .armorCurrent,
+            text("hades2.vital.armor"), icon: TrainerSemanticIcon.Concept.defense, text: $armorCurrent, focus: .armorCurrent,
             color: theme.warning, locked: model.armorLocked, enabled: model.canSetVital("armor"),
             edit: .vital("armor", field: "current")
         ) {
@@ -1157,32 +1172,32 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var expandedSessionMetrics: some View {
         damageMetric
-        editableStatMetric(text("hades2.stat.grasp"), icon: "brain.head.profile", stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
+        editableStatMetric(text("hades2.stat.grasp"), icon: Hades2WorkbenchIcon.grasp, stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
-            text("hades2.metric.rerolls"), icon: "dice.fill", text: $rerollAmount, focus: .rerolls,
+            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls, lockEnabled: !model.infiniteRerolls
         ) {
             model.lockRerolls(!model.rerollsLocked)
         }
         editableCounterMetric(
-            text("hades2.metric.spellCharge"), icon: "moonphase.waxing.crescent", text: $spellCharge,
+            text("hades2.metric.spellCharge"), icon: Hades2WorkbenchIcon.spellCharge, text: $spellCharge,
             focus: .spellCharge, color: .purple,
             detail: model.spellChargeCost.map { cost in
                     Hades2GameModule.presentationText(key: "hades2.metric.cost", arguments: [number(cost)], language: localization.language)
                 } ?? nil,
             edit: .counter("spellCharge")
         )
-        editableStatMetric(text("hades2.stat.dodge"), icon: "figure.run", stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
-        editableStatMetric(text("hades2.stat.crit"), icon: "scope", stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
-        editableStatMetric(text("hades2.stat.enemyDamage"), icon: "burst.fill", stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
-        editableStatMetric(text("hades2.stat.enemyHealth"), icon: "heart.text.square.fill", stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
-        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: "timer", stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
-        editableStatMetric(text("hades2.stat.moveSpeed"), icon: "figure.walk", stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
-        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: "hare.fill", stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
-        editableStatMetric(text("hades2.stat.dashSpeed"), icon: "forward.end.fill", stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
-        editableStatMetric(text("hades2.stat.attackSpeed"), icon: "bolt.fill", stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
-        editableStatMetric(text("hades2.stat.manaRegen"), icon: "drop.circle.fill", stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
+        editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
+        editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
+        editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
+        editableStatMetric(text("hades2.stat.enemyHealth"), icon: TrainerSemanticIcon.Concept.vitality, stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
+        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: TrainerSemanticIcon.Concept.timer, stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
+        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
+        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: Hades2WorkbenchIcon.sprintSpeed, stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
+        editableStatMetric(text("hades2.stat.dashSpeed"), icon: TrainerSemanticIcon.Concept.dash, stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
+        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
+        editableStatMetric(text("hades2.stat.manaRegen"), icon: TrainerSemanticIcon.Concept.energy, stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
     }
 
     private var elementPanel: some View {
@@ -1196,7 +1211,7 @@ struct Hades2TrainerView: View {
 
     private var damageMetric: some View {
         TrainerMultiplierMetricCard(
-            title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill",
+            title: text("hades2.feature.damageMultiplier"), icon: TrainerSemanticIcon.Concept.impact,
             text: $multiplier, focus: $focusedField, focusValue: .damageMultiplier,
             suffix: "×", editable: model.canEditDesired,
             onCommit: completing(.multiplier("damageMultiplier"))
@@ -1209,7 +1224,7 @@ struct Hades2TrainerView: View {
 
     private var nextRoomRewardPanel: some View {
         TrainerLabeledControlRow(
-            title: text("hades2.nextRoom.title"), icon: "door.left.hand.open",
+            title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
             emphasized: model.canEditDesired
         ) {
@@ -1233,6 +1248,7 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.canEditDesired,
                 width: theme.compactActionWidth
             ) {
@@ -1245,7 +1261,7 @@ struct Hades2TrainerView: View {
         let characters = model.occurrenceTargets.filter { $0.kind == "character" }
         let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
         return TrainerLabeledControlRow(
-            title: text("hades2.occurrence.title"), icon: "figure.walk.motion",
+            title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
             emphasized: model.canEditDesired
         ) {
@@ -1277,6 +1293,7 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.canEditDesired,
                 width: theme.compactActionWidth
             ) {
@@ -1303,7 +1320,7 @@ struct Hades2TrainerView: View {
             .trainerGroupedRows()
             TrainerResourceEditor(
                 title: text("hades2.resource.materials"),
-                icon: "diamond.fill",
+                icon: TrainerSemanticIcon.Concept.item,
                 search: $search,
                 selection: $selectedMaterial,
                 amount: $materialAmount,
@@ -1333,11 +1350,11 @@ struct Hades2TrainerView: View {
 
     private var rewardSpawningPanel: some View {
         VStack(spacing: 1) {
-            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
-            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.olympianBoons"), icon: TrainerSemanticIcon.Section.effects, options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: text("hades2.spawn.pickupRewards"), icon: TrainerSemanticIcon.Section.inventory, options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             spawnRow(
                 title: text("hades2.spawn.characterRewards"),
-                icon: "moon.stars.fill",
+                icon: Hades2WorkbenchIcon.specialReward,
                 options: specialBoons,
                 selection: $model.selectedSpecialReward,
                 shortcut: .spawnSpecial,
@@ -1353,7 +1370,7 @@ struct Hades2TrainerView: View {
     private var boonAcquisitionPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
+                Label(text("hades2.spawn.exactBoons"), systemImage: TrainerSemanticIcon.Concept.precision).font(.subheadline.weight(.medium))
                 Spacer()
                 TrainerSearchField(
                     text: $exactSearch,
@@ -1404,6 +1421,7 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
+                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireChaosPair
                             && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
                             && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
@@ -1464,6 +1482,7 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
+                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireExactReward
                             && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
                         width: theme.compactActionWidth
@@ -1483,7 +1502,7 @@ struct Hades2TrainerView: View {
             HStack {
                 TrainerIconLabel(
                     title: text("hades2.spawn.purgingPool"),
-                    icon: "arrow.left.arrow.right.circle",
+                    icon: Hades2WorkbenchIcon.purge,
                     tint: model.canOpenSellTraits ? theme.accent : theme.inactive,
                     emphasized: model.canOpenSellTraits
                 )
@@ -1491,6 +1510,7 @@ struct Hades2TrainerView: View {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
                 TrainerSecondaryActionButton(
                     title: text("hades2.spawn.open"),
+                    systemImage: ShortcutAction.openSellTraits.icon,
                     enabled: model.canOpenSellTraits,
                     width: theme.compactActionWidth
                 ) { _ = model.openSellTraits() }
@@ -1550,7 +1570,7 @@ struct Hades2TrainerView: View {
     private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
         TrainerFeatureMultiplierRow(
             title: title,
-            icon: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill",
+            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Concept.currency : TrainerSemanticIcon.Section.inventory,
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme, localization: localization),
             text: text,
             onCommit: completing(.multiplier(feature)),
@@ -1562,7 +1582,7 @@ struct Hades2TrainerView: View {
     }
 
     private var management: some View {
-        TrainerSection(title: text("hades2.section.management"), icon: "gearshape.2.fill") {
+        TrainerSection(title: text("hades2.section.management"), icon: Hades2WorkbenchSection.management.icon) {
             Hades2ManagementUtilities(
                 model: model,
                 openProfiles: { profileManager = true; model.listProfiles() },

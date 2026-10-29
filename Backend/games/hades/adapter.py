@@ -227,8 +227,6 @@ class HadesAdapter(GameAdapter):
     def _mutation_params(command, params):
         if command in WORLD_COMMANDS:
             return world_mutation_params(command, params)
-        if command == 'heal':
-            return {}
         if command == 'set_value':
             field = params.get('field')
             if field not in ('health', 'maxHealth', 'money', 'rerolls', 'godGauge'):

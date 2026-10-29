@@ -74,21 +74,6 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
 
     var isSpeedAdjustment: Bool { self == .decreaseGameSpeed || self == .increaseGameSpeed }
 
-    var commonFeatureIcon: String? {
-        switch self {
-        case .invincibility: "shield.fill"
-        case .infiniteHealth: "heart.fill"
-        case .infiniteMana: "sparkles"
-        case .infiniteMoney: "circle.hexagongrid.fill"
-        case .infiniteRerolls: "dice.fill"
-        case .forceEnableRerolls: "arrow.triangle.2.circlepath"
-        case .instantCastCooldown: "circle.dotted.circle"
-        case .hexAlwaysReady: "moon.stars.fill"
-        case .infiniteAmmo: "scope"
-        case .autoMiniGames: "gamecontroller.fill"
-        default: nil
-        }
-    }
 
     var commonFeatureHelpKey: String? {
         switch self {

@@ -260,14 +260,14 @@ with tempfile.TemporaryDirectory(prefix='hades-cleanup-') as directory, \
     client = HadesRuntimeClient(sidecar, recovery=journal)
     client.pid, client.process_identity, client.connected = 42, 'fixture-lifetime', True
     try:
-        client.command('heal', {})
+        client.command('set_value', {'field': 'money', 'value': 1, 'target': {'heroId': 'fixture'}})
     except AdapterError as error:
         assert error.code == 'outcome_unknown'
     else:
         raise AssertionError('the client accepted uncertain cleanup')
     assert not client.connected and journal.path.is_file()
     try:
-        client.command('heal', {})
+        client.command('set_value', {'field': 'money', 'value': 1, 'target': {'heroId': 'fixture'}})
     except AdapterError as error:
         assert error.code == 'restart_required'
     else:

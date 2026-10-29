@@ -206,7 +206,7 @@ struct Hades2SaveEditorView: View {
             Button {
                 model.refreshFiles()
             } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Image(systemName: TrainerSemanticIcon.Concept.refresh)
             }
             .buttonStyle(.borderless)
             .disabled(model.busy)
@@ -625,6 +625,7 @@ struct Hades2SaveEditorView: View {
                     .disabled(model.busy)
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
+                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: !model.busy && model.hasWriteTarget
                 ) {
                     model.apply()

@@ -91,7 +91,7 @@ struct Hades2HeaderActions: View {
                                 TrainerSectionButton(
                                     title: Hades2GameModule.resolveText(key: entry.titleKey, localization: localization),
                                     detail: Hades2GameModule.resolveText(key: entry.section.titleKey, localization: localization),
-                                    systemImage: entry.section.icon
+                                    systemImage: entry.icon
                                 ) { locate(entry) }
                             }
                         }

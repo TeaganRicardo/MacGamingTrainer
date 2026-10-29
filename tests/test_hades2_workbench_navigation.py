@@ -73,7 +73,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
     main = Path(temporary)/'main.swift'
     binary = Path(temporary)/'search'
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, str(ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
+    subprocess.run([SWIFTC, str(ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift'),
+                    str(ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
                     str(ROOT/'Sources/Hades2/Hades2Types.swift'),
                     str(ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
                     str(main), '-o', str(binary)], check=True)

@@ -25,7 +25,7 @@ RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object', 'set_door_reward', 'set_door_route', 'restore_door'))
-ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'heal', 'set_resource', 'add_trait',
+ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_invincibility',

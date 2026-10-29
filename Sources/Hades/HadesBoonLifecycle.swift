@@ -14,7 +14,7 @@ struct HadesChaosPairControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TrainerLabeledControlRow(title: text("hades.chaosCurse"), icon: "sparkles", tint: theme.accent, emphasized: model.canMutate) {
+            TrainerLabeledControlRow(title: text("hades.chaosCurse"), icon: TrainerSemanticIcon.Section.effects, tint: theme.accent, emphasized: model.canMutate) {
                 Picker(text("hades.chaosCurse"), selection: $curse) {
                     ForEach(curses) { item in
                         Text(item.name(language: localization.language.rawValue)).tag(item.id)
@@ -23,9 +23,9 @@ struct HadesChaosPairControls: View {
                 .labelsHidden()
                 .frame(maxWidth: 240)
             }
-            TrainerLabeledControlRow(title: text("hades.chaosEncounters"), icon: "hourglass", tint: theme.accent, emphasized: model.canMutate) {
+            TrainerLabeledControlRow(title: text("hades.chaosEncounters"), icon: TrainerSemanticIcon.Concept.duration, tint: theme.accent, emphasized: model.canMutate) {
                 TrainerNumberField(text: $encounters, accessibilityLabel: text("hades.chaosEncounters"), width: 60)
-                TrainerSecondaryActionButton(title: text("hades.chaosPair"), enabled: model.canMutate && !curse.isEmpty) {
+                TrainerSecondaryActionButton(title: text("hades.chaosPair"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate && !curse.isEmpty) {
                     guard let count = Int(encounters), (1...100).contains(count) else {
                         model.rejectInvalidValue(); return
                     }
@@ -51,7 +51,7 @@ struct HadesEffectLifecycleControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let remaining = trait.remainingUses, trait.canSetUses == true {
-                TrainerLabeledControlRow(title: text("hades.remainingUses"), icon: "hourglass", tint: theme.accent, emphasized: model.canMutate) {
+                TrainerLabeledControlRow(title: text("hades.remainingUses"), icon: TrainerSemanticIcon.Concept.duration, tint: theme.accent, emphasized: model.canMutate) {
                     TrainerNumberField(
                         text: Binding(get: { uses.text }, set: { uses.update($0) }),
                         accessibilityLabel: text("hades.remainingUses"), width: 64, enabled: model.canMutate,
@@ -72,19 +72,21 @@ struct HadesEffectLifecycleControls: View {
             }
             HStack(spacing: 10) {
                 if trait.canRefresh == true {
-                    TrainerSecondaryActionButton(title: text("hades.refreshEffect"), enabled: model.canMutate) {
+                    TrainerSecondaryActionButton(title: text("hades.refreshEffect"), systemImage: TrainerSemanticIcon.Concept.refresh, enabled: model.canMutate) {
                         model.refreshTrait(trait)
                     }
                 }
                 if trait.canExpire == true {
                     TrainerSecondaryActionButton(
                         title: text(trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing"),
+                        systemImage: trait.blessing == nil ? "hourglass.bottomhalf.filled" : "bolt.fill",
                         enabled: model.canMutate && trait.canRemove
                     ) { model.expireTrait(trait) }
                 }
                 if trait.canRemove {
                     TrainerSecondaryActionButton(
                         title: text(trait.canExpire == true && trait.blessing != nil ? "hades.cancelCurse" : "hades.remove"),
+                        systemImage: TrainerSemanticIcon.Action.remove,
                         enabled: model.canMutate
                     ) { model.removeTrait(trait) }
                 }

@@ -28,21 +28,21 @@ struct HadesManagementUtilities: View {
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             group("hades.manage.daily") {
                 actions {
-                    TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: "arrow.clockwise",
+                    TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: HadesWorkbenchIcon.refreshStatus,
                         enabled: model.hostActionsEnabled, action: model.refreshFromHost)
-                    TrainerSecondaryActionButton(title: text("hades.saveEditor.title"), systemImage: "externaldrive.badge.gearshape",
+                    TrainerSecondaryActionButton(title: text("hades.saveEditor.title"), systemImage: TrainerSemanticIcon.Tool.saveEditor,
                         enabled: model.hostActionsEnabled) {
                         toolWindows.open("hades-save-editor", text("hades.saveEditor.title")) {
                             HadesGameModule.makeSaveEditorWindow(model: model)
                         }
                     }
                     if let open = managementActions.openSaveManagement {
-                        TrainerSecondaryActionButton(title: text("host.saveManagement"), systemImage: "externaldrive",
+                        TrainerSecondaryActionButton(title: text("host.saveManagement"), systemImage: TrainerSemanticIcon.Tool.saveManagement,
                             enabled: model.hostActionsEnabled, action: open)
                     }
                     HStack(spacing: theme.compactControlSpacing) {
                         TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
-                        TrainerSecondaryActionButton(title: text("host.disableAll"), systemImage: "power",
+                        TrainerSecondaryActionButton(title: text("host.disableAll"), systemImage: TrainerSemanticIcon.Tool.disableAll,
                             enabled: model.hostActionsEnabled, action: model.disableAll)
                     }
                 }
@@ -50,12 +50,12 @@ struct HadesManagementUtilities: View {
             Divider()
             group("hades.manage.settings") {
                 actions {
-                    TrainerSecondaryActionButton(title: text("hades.manage.profiles"), systemImage: "slider.horizontal.3",
+                    TrainerSecondaryActionButton(title: text("hades.manage.profiles"), systemImage: TrainerSemanticIcon.Tool.profiles,
                         enabled: model.hostActionsEnabled) {
                         model.profilesPresented = true
                         model.listProfiles()
                     }
-                    TrainerSecondaryActionButton(title: text("host.shortcutSettings"), systemImage: "keyboard") {
+                    TrainerSecondaryActionButton(title: text("host.shortcutSettings"), systemImage: TrainerSemanticIcon.Tool.shortcuts) {
                         model.shortcutSettingsPresented = true
                     }
                 }
@@ -63,18 +63,18 @@ struct HadesManagementUtilities: View {
             Divider()
             group("hades.manage.maintenance") {
                 actions {
-                    TrainerSecondaryActionButton(title: text("host.viewLog"), systemImage: "doc.text.magnifyingglass",
+                    TrainerSecondaryActionButton(title: text("host.viewLog"), systemImage: TrainerSemanticIcon.Tool.log,
                         action: model.openLog)
-                    TrainerSecondaryActionButton(title: text("hades.manage.diagnostics"), systemImage: "stethoscope",
+                    TrainerSecondaryActionButton(title: text("hades.manage.diagnostics"), systemImage: TrainerSemanticIcon.Tool.diagnostics,
                         enabled: model.hostActionsEnabled) {
                         model.diagnosticsPresented = true
                         model.runDiagnostics()
                     }
                 }
                 actions {
-                    TrainerSecondaryActionButton(title: text("host.viewLogHistory"), systemImage: "clock.arrow.circlepath",
+                    TrainerSecondaryActionButton(title: text("host.viewLogHistory"), systemImage: TrainerSemanticIcon.Tool.logHistory,
                         action: model.openLogHistory)
-                    TrainerSecondaryActionButton(title: text("host.clearCompletedLogs"), systemImage: "trash",
+                    TrainerSecondaryActionButton(title: text("host.clearCompletedLogs"), systemImage: TrainerSemanticIcon.Tool.clearLogs,
                         action: model.clearCompletedLogs)
                 }
             }
@@ -110,13 +110,16 @@ struct HadesProfileManagerView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades.manage.profiles"), icon: "slider.horizontal.3", width: 620) {
-            Button(text("host.refresh"), action: model.listProfiles).disabled(!model.hostActionsEnabled)
+        TrainerSheetScaffold(title: text("hades.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
+            Button { model.listProfiles() } label: {
+                Label(text("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(!model.hostActionsEnabled)
         } content: {
             Text(text("hades.profile.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 TrainerTextField(title: text("hades.profile.name"), text: $name)
                 TrainerPrimaryActionButton(title: text("hades.profile.save"),
+                    systemImage: TrainerSemanticIcon.Action.save,
                     enabled: model.hostActionsEnabled && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                     model.saveProfile(name)
                     selected = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,9 +135,10 @@ struct HadesProfileManagerView: View {
                 }
                 HStack {
                     TrainerPrimaryActionButton(title: text("hades.profile.load"),
+                        systemImage: TrainerSemanticIcon.Action.load,
                         enabled: model.hostActionsEnabled && !selected.isEmpty) { model.loadProfile(selected) }
                     Button(role: .destructive) { model.deleteProfile(selected) } label: {
-                        Label(text("host.delete"), systemImage: "trash")
+                        Label(text("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
                     }.disabled(!model.hostActionsEnabled || selected.isEmpty)
                     Spacer()
                 }
@@ -159,10 +163,14 @@ struct HadesDiagnosticsView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades.manage.diagnostics"), icon: "stethoscope", width: 700) {
+        TrainerSheetScaffold(title: text("hades.manage.diagnostics"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
             Text("\(model.diagnostics.filter(\.ok).count)/\(model.diagnostics.count)").monospacedDigit()
-            Button(text("hades.diagnostics.export"), action: model.exportDiagnostics).disabled(!model.hostActionsEnabled)
-            Button(text("host.refresh"), action: model.runDiagnostics).disabled(!model.hostActionsEnabled)
+            Button { model.exportDiagnostics() } label: {
+                Label(text("hades.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
+            }.disabled(!model.hostActionsEnabled)
+            Button { model.runDiagnostics() } label: {
+                Label(text("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(!model.hostActionsEnabled)
         } content: {
             Text(text("hades.diagnostics.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ScrollView {

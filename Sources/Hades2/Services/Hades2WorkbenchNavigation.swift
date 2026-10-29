@@ -1,5 +1,146 @@
 import Foundation
 
+/// Hades II-specific presentation icons. Shared visual roles live in Core;
+/// these names describe concepts unique to this module.
+enum Hades2WorkbenchIcon {
+    static let grasp = "brain.head.profile"
+    static let spellCharge = "moonphase.waxing.crescent"
+    static let sprintSpeed = "hare.fill"
+    static let occurrence = "figure.walk.motion"
+    static let specialReward = "moon.stars.fill"
+    static let purge = "arrow.left.arrow.right.circle"
+    static let flora = "leaf.fill"
+    static let garden = flora
+    static let targetLevel = TrainerSemanticIcon.Concept.level
+    static let chaosAdvance = "arrow.right.circle"
+    static let chaosProbability = "percent"
+    static let prepareSigning = "signature"
+    static let restoreSigning = "arrow.uturn.backward.circle"
+    static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
+    static let miniGames = "gamecontroller.fill"
+    static let hexReady = specialReward
+    static let legendary = "star.fill"
+    static let duo = "person.2.fill"
+    static let mining = "hammer.fill"
+    static let digging = "mountain.2.fill"
+    static let shades = "person.crop.circle"
+
+    static func icon(for titleKey: String) -> String? {
+        if let family = Hades2GatheringFamily.allCases.first(where: { $0.titleKey == titleKey }) {
+            return family.icon
+        }
+        switch titleKey {
+        case "hades2.vital.health": return TrainerSemanticIcon.Concept.vitality
+        case "hades2.vital.mana", "hades2.stat.manaRegen": return TrainerSemanticIcon.Concept.energy
+        case "hades2.vital.runGold": return TrainerSemanticIcon.Concept.currency
+        case "hades2.vital.armor", "hades2.stat.dodge": return TrainerSemanticIcon.Concept.defense
+        case "hades2.feature.damageMultiplier", "hades2.stat.enemyDamage": return TrainerSemanticIcon.Concept.impact
+        case "hades2.stat.grasp": return grasp
+        case "hades2.metric.rerolls": return TrainerSemanticIcon.Concept.randomize
+        case "hades2.metric.spellCharge": return spellCharge
+        case "hades2.stat.crit": return TrainerSemanticIcon.Concept.precision
+        case "hades2.stat.enemyHealth": return TrainerSemanticIcon.Concept.vitality
+        case "hades2.stat.chargeSpeed": return TrainerSemanticIcon.Concept.timer
+        case "hades2.stat.moveSpeed": return TrainerSemanticIcon.Concept.movement
+        case "hades2.stat.sprintSpeed": return sprintSpeed
+        case "hades2.stat.dashSpeed": return TrainerSemanticIcon.Concept.dash
+        case "hades2.stat.attackSpeed": return TrainerSemanticIcon.Concept.actionSpeed
+        case "hades2.gameSpeed.title": return TrainerSemanticIcon.Concept.timeScale
+        case "hades2.traits.manager": return TrainerSemanticIcon.Concept.controls
+        case "hades2.traits.targetLevel": return targetLevel
+        case "hades2.traits.targetRarity", "hades2.rarity.minimum": return TrainerSemanticIcon.Concept.quality
+        case "hades2.traits.remainingUses", "hades2.traits.expireNow": return TrainerSemanticIcon.Concept.duration
+        case "hades2.traits.temporary.cancel", "hades2.traits.remove",
+             "hades2.traits.removeAllMatching", "hades2.traits.chaos.cancelPair":
+            return TrainerSemanticIcon.Action.remove
+        case "hades2.traits.chaos.advance": return chaosAdvance
+        case "hades2.section.elements": return TrainerSemanticIcon.Section.effects
+        case "hades2.resource.materials": return TrainerSemanticIcon.Concept.item
+        case "hades2.gathering.title": return TrainerSemanticIcon.Section.inventory
+        case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
+        case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
+        case "hades2.chaosGate.probability": return chaosProbability
+        case "hades2.nextRoom.title": return TrainerSemanticIcon.Context.doorway
+        case "hades2.occurrence.title": return occurrence
+        case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
+        case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
+        case "hades2.spawn.characterRewards": return specialReward
+        case "hades2.manage.profiles": return TrainerSemanticIcon.Tool.profiles
+        case "hades2.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor
+        case "hades2.manage.diagnostics": return TrainerSemanticIcon.Tool.diagnostics
+        case "hades2.manage.prepareSigning": return prepareSigning
+        case "hades2.manage.restoreSigning": return restoreSigning
+        case "host.saveManagement": return TrainerSemanticIcon.Tool.saveManagement
+        case "host.shortcutSettings": return TrainerSemanticIcon.Tool.shortcuts
+        case "host.viewLog": return TrainerSemanticIcon.Tool.log
+        case "host.viewLogHistory": return TrainerSemanticIcon.Tool.logHistory
+        case "host.clearCompletedLogs": return TrainerSemanticIcon.Tool.clearLogs
+        case "host.refreshStatus": return refreshStatus
+        default: return nil
+        }
+    }
+}
+
+extension Hades2GatheringFamily {
+    var icon: String {
+        switch self {
+        case .flora: Hades2WorkbenchIcon.flora
+        case .mining: Hades2WorkbenchIcon.mining
+        case .digging: Hades2WorkbenchIcon.digging
+        case .shades: Hades2WorkbenchIcon.shades
+        case .fishing: TrainerSemanticIcon.Context.fishing
+        }
+    }
+}
+
+extension ShortcutAction {
+    var icon: String {
+        switch self {
+        case .invincibility: TrainerSemanticIcon.Concept.protection
+        case .infiniteHealth: TrainerSemanticIcon.Concept.vitality
+        case .infiniteMana: TrainerSemanticIcon.Concept.energy
+        case .infiniteMoney: TrainerSemanticIcon.Concept.currency
+        case .infiniteRerolls: TrainerSemanticIcon.Concept.randomize
+        case .forceEnableRerolls: TrainerSemanticIcon.Concept.refresh
+        case .instantCastCooldown: TrainerSemanticIcon.Concept.timer
+        case .hexAlwaysReady: Hades2WorkbenchIcon.hexReady
+        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
+        case .autoMiniGames: Hades2WorkbenchIcon.miniGames
+        case .decreaseGameSpeed: "gauge.with.dots.needle.33percent"
+        case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
+        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
+        case .forceLegendary: Hades2WorkbenchIcon.legendary
+        case .forceDuo: Hades2WorkbenchIcon.duo
+        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .acquireExactBoon: TrainerSemanticIcon.Concept.precision
+        case .openSellTraits: Hades2WorkbenchIcon.purge
+        case .moneyMultiplierEnabled: TrainerSemanticIcon.Concept.currency
+        case .resourceMultiplierEnabled: TrainerSemanticIcon.Section.inventory
+        case .generateFlora: Hades2WorkbenchIcon.flora
+        case .generateMining: Hades2WorkbenchIcon.mining
+        case .generateDigging: Hades2WorkbenchIcon.digging
+        case .generateShades: Hades2WorkbenchIcon.shades
+        case .generateFishing: TrainerSemanticIcon.Context.fishing
+        case .matureGarden: Hades2WorkbenchIcon.garden
+        case .applyNextRoomReward: TrainerSemanticIcon.Context.doorway
+        case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
+        case .spawnOlympian: TrainerSemanticIcon.Section.effects
+        case .spawnPickup: TrainerSemanticIcon.Section.inventory
+        case .spawnSpecial: Hades2WorkbenchIcon.specialReward
+        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        }
+    }
+
+    var commonFeatureIcon: String? {
+        switch self {
+        case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
+             .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames:
+            icon
+        default: nil
+        }
+    }
+}
+
 enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
     case values, common, boons, resources, rooms, management
 
@@ -16,12 +157,12 @@ enum Hades2WorkbenchSection: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
-        case .values: "gauge.with.dots.needle.67percent"
-        case .common: "bolt.fill"
-        case .boons: "sparkles"
-        case .resources: "shippingbox.fill"
-        case .rooms: "door.left.hand.open"
-        case .management: "gearshape.2.fill"
+        case .values: TrainerSemanticIcon.Section.metrics
+        case .common: TrainerSemanticIcon.Section.general
+        case .boons: TrainerSemanticIcon.Section.effects
+        case .resources: TrainerSemanticIcon.Section.inventory
+        case .rooms: TrainerSemanticIcon.Section.navigation
+        case .management: TrainerSemanticIcon.Section.settings
         }
     }
 }
@@ -31,6 +172,7 @@ struct Hades2WorkbenchEntry: Identifiable {
     let titleKey: String
     let section: Hades2WorkbenchSection
     let shortcut: ShortcutAction?
+    var icon: String { shortcut?.icon ?? Hades2WorkbenchIcon.icon(for: titleKey) ?? section.icon }
 }
 
 /// Function discovery owns only stable destinations and existing label keys.

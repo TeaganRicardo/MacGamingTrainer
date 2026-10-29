@@ -76,7 +76,7 @@ struct HadesSaveEditorView: View {
                 Button(text("hades.saveEditor.read")) {
                     if model.review.count > 0 { confirmingRead = true } else { model.openSelection() }
                 }.disabled(model.busy || !model.sources.contains(where: { $0.id == model.selectedSourceID }))
-                Button { model.refreshInventory() } label: { Image(systemName: "arrow.clockwise") }
+                Button { model.refreshInventory() } label: { Image(systemName: TrainerSemanticIcon.Concept.refresh) }
                     .help(text("host.refresh")).accessibilityLabel(text("host.refresh")).disabled(model.busy)
             }
             if let source = model.source {
@@ -177,7 +177,7 @@ struct HadesSaveEditorView: View {
                 Text(text("hades.saveEditor.changes") + " (\(model.review.count))").font(.headline)
                 Spacer()
                 Button(text("hades.saveEditor.discard")) { model.cancel(baseline: baseline) }.disabled(model.busy || !model.canEditRows)
-                TrainerPrimaryActionButton(title: text("hades.apply"), enabled: model.canApply) { model.apply(baseline: baseline) }
+                TrainerPrimaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canApply) { model.apply(baseline: baseline) }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.controlPadding) {

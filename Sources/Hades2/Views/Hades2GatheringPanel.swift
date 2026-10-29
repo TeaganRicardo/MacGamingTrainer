@@ -16,15 +16,7 @@ struct Hades2GatheringPanel: View {
         }
     }
 
-    private func icon(for family: Hades2GatheringFamily) -> String {
-        switch family {
-        case .flora: "leaf.fill"
-        case .mining: "hammer.fill"
-        case .digging: "mountain.2.fill"
-        case .shades: "person.crop.circle"
-        case .fishing: "fish.fill"
-        }
-    }
+    private func icon(for family: Hades2GatheringFamily) -> String { family.icon }
 
     var body: some View {
         let generation = model.editGeneration

@@ -15,8 +15,10 @@ struct Hades2ProfileManagerView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: "slider.horizontal.3", width: 620) {
-            Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
+        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
+            Button { model.listProfiles() } label: {
+                Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(model.busy)
         } content: {
             Text(text("hades2.profile.explanation"))
                 .foregroundStyle(.secondary)
@@ -35,6 +37,7 @@ struct Hades2ProfileManagerView: View {
                 .frame(maxWidth: .infinity)
                 TrainerPrimaryActionButton(
                     title: text("hades2.profile.saveCurrent"),
+                    systemImage: TrainerSemanticIcon.Action.save,
                     enabled: !model.busy && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ) {
                     model.saveProfile(profileName)
@@ -53,11 +56,12 @@ struct Hades2ProfileManagerView: View {
                 HStack {
                     TrainerPrimaryActionButton(
                         title: text("hades2.profile.load"),
+                        systemImage: TrainerSemanticIcon.Action.load,
                         enabled: !model.busy && !selectedProfile.isEmpty,
                         action: { model.loadProfile(selectedProfile) }
                     )
                     Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
-                        Label(localization.localized("host.delete"), systemImage: "trash")
+                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
                     }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()
@@ -87,13 +91,15 @@ struct Hades2DiagnosticsView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: "stethoscope", width: 700) {
+        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
             Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
             Button { model.exportDiagnostics() } label: {
-                Label(text("hades2.diagnostics.export"), systemImage: "square.and.arrow.up")
+                Label(text("hades2.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
             }
                 .disabled(model.busy || !model.backendAvailable)
-            Button(text("hades2.diagnostics.rerun")) { model.runDiagnostics() }.disabled(model.busy)
+            Button { model.runDiagnostics() } label: {
+                Label(text("hades2.diagnostics.rerun"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(model.busy)
         } content: {
             Text(text("hades2.diagnostics.explanation"))
                 .foregroundStyle(.secondary)
@@ -141,7 +147,7 @@ struct Hades2ShortcutSettingsView: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
             EmptyView()
         } content: {
             Text(localization.localized("host.hotkeys.help"))
@@ -151,7 +157,7 @@ struct Hades2ShortcutSettingsView: View {
                 LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
                     ForEach(Hades2WorkbenchCatalog.orderedShortcutActions) { action in
                         HStack {
-                            Text(text(action.presentationKey))
+                            Label(text(action.presentationKey), systemImage: action.icon)
                             Spacer()
                             Button {
                                 beginCapture(action)
@@ -263,14 +269,14 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.saveEditor.title"),
-                        systemImage: "externaldrive.badge.gearshape",
+                        systemImage: TrainerSemanticIcon.Tool.saveEditor,
                         enabled: canUseBackend,
                         action: openSaveEditor
                     )
                     if let openSaveManagement = managementActions.openSaveManagement {
                         TrainerSecondaryActionButton(
                             title: localization.localized("host.saveManagement"),
-                            systemImage: "externaldrive",
+                            systemImage: TrainerSemanticIcon.Tool.saveManagement,
                             enabled: canUseBackend,
                             action: openSaveManagement
                         )
@@ -279,7 +285,7 @@ struct Hades2ManagementUtilities: View {
                         TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
                         TrainerSecondaryActionButton(
                             title: localization.localized("host.disableAll"),
-                            systemImage: "power",
+                            systemImage: TrainerSemanticIcon.Tool.disableAll,
                             enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
                             action: model.disableAll
                         )
@@ -291,13 +297,13 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.profiles"),
-                        systemImage: "slider.horizontal.3",
+                        systemImage: TrainerSemanticIcon.Tool.profiles,
                         enabled: canStartBackendAction,
                         action: openProfiles
                     )
                     TrainerSecondaryActionButton(
                         title: localization.localized("host.shortcutSettings"),
-                        systemImage: "keyboard",
+                        systemImage: TrainerSemanticIcon.Tool.shortcuts,
                         enabled: !model.exiting,
                         action: { model.shortcutSettingsPresented = true }
                     )
@@ -308,12 +314,12 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: localization.localized("host.viewLog"),
-                        systemImage: "doc.text.magnifyingglass",
+                        systemImage: TrainerSemanticIcon.Tool.log,
                         action: model.openLog
                     )
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.diagnostics"),
-                        systemImage: "stethoscope",
+                        systemImage: TrainerSemanticIcon.Tool.diagnostics,
                         enabled: canStartBackendAction,
                         action: openDiagnostics
                     )
@@ -325,13 +331,13 @@ struct Hades2ManagementUtilities: View {
                 actionButtons {
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.prepareSigning"),
-                        systemImage: "signature",
+                        systemImage: Hades2WorkbenchIcon.prepareSigning,
                         enabled: canChangeSignature,
                         action: model.prepareDebugging
                     )
                     TrainerSecondaryActionButton(
                         title: text("hades2.manage.restoreSigning"),
-                        systemImage: "arrow.uturn.backward.circle",
+                        systemImage: Hades2WorkbenchIcon.restoreSigning,
                         enabled: canChangeSignature,
                         action: model.restoreOriginalSignature
                     )

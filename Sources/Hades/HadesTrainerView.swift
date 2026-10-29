@@ -89,25 +89,17 @@ struct HadesTrainerView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 HadesVitalMetricCard(model: model)
-                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: "circle.fill",
+                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency,
                                       value: model.money, field: "money")
-                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: "arrow.clockwise",
+                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
                                       value: model.rerolls, field: "rerolls")
-                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
+                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
                                       value: model.godGauge, field: "godGauge")
                 if model.numericControlsExpanded {
                     ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
                         HadesFeatureMetricCard(model: model, feature: feature)
                     }
                 }
-            }
-            HStack(spacing: 8) {
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.heal))
-                TrainerSecondaryActionButton(
-                    title: text("hades.heal"), systemImage: "heart.fill",
-                    enabled: model.canMutate, action: model.heal
-                )
-                Spacer()
             }
         }
     }
@@ -164,7 +156,7 @@ struct HadesTrainerView: View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
                 title: localization.localized("host.timeWarp.title"),
-                icon: "speedometer",
+                icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canMutate ? theme.accent : theme.inactive,
                 emphasized: model.canMutate,
                 helpText: localization.localized("host.timeWarp.hint")
@@ -246,7 +238,7 @@ struct HadesTrainerView: View {
                     HadesValueRow(
                         model: model,
                         title: resource.name(language: localization.language.rawValue),
-                        icon: "diamond.fill", value: model.resources[resource.id] ?? 0
+                        icon: TrainerSemanticIcon.Concept.item, value: model.resources[resource.id] ?? 0
                     ) {
                         model.setResource(resource.id, value: $0, target: $1)
                     }
@@ -293,7 +285,7 @@ private struct HadesVitalMetricCard: View {
     }
 
     var body: some View {
-        TrainerMetricCard(title: title, icon: "heart.fill", tint: .pink) {
+        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
             Color.clear.frame(width: 26, height: 24)
         } content: {
             HStack(spacing: 2) {
@@ -493,7 +485,7 @@ private struct HadesCatalogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(text("hades.catalog"), systemImage: "scope")
+            Label(text("hades.catalog"), systemImage: HadesWorkbenchIcon.catalog)
                 .font(.subheadline.weight(.medium))
             TrainerSearchField(text: $query, placeholder: text("hades.search"),
                                clearLabel: localization.localized("host.search.clear"))
@@ -549,7 +541,8 @@ private struct HadesCatalogView: View {
                                 TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
                             }
                             Spacer()
-                            TrainerPrimaryActionButton(title: text("hades.acquire"), enabled: model.canMutate && selected.acquirable != false) {
+                            TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
+                                enabled: model.canMutate && selected.acquirable != false) {
                                 guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
                                 model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
                             }
@@ -594,7 +587,7 @@ private struct HadesCurrentTraitsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Label(text("hades.currentTraits"), systemImage: "slider.horizontal.3")
+                Label(text("hades.currentTraits"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 TrainerSearchField(text: $search, placeholder: text("hades.search"),
@@ -659,7 +652,8 @@ private struct HadesCurrentTraitRow: View {
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
                         }
                         Spacer()
-                        TrainerSecondaryActionButton(title: text("hades.apply"), enabled: model.canMutate && (rarity != trait.rarity || level != String(trait.level))) {
+                        TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
+                            enabled: model.canMutate && (rarity != trait.rarity || level != String(trait.level))) {
                             guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
                             model.updateTrait(trait, rarity: rarity, level: amount, target: owner)
                         }
@@ -689,13 +683,13 @@ private struct HadesShortcutSettingsView: View {
     @State private var keyMonitor: Any?
     private func text(_ key: String) -> String { localization.presentation(key) }
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
             Button(text("hades.reset"), action: model.resetShortcuts)
         } content: {
             Text(localization.localized("host.hotkeys.help")).foregroundStyle(.secondary)
             ForEach(HadesWorkbenchCatalog.orderedShortcutActions) { action in
                 HStack {
-                    Text(text(action.key))
+                    Label(text(action.key), systemImage: action.icon)
                     Spacer()
                     Button { begin(action) } label: {
                         Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
