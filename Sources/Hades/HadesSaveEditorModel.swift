@@ -53,7 +53,9 @@ indirect enum HadesSaveValue: Codable, Equatable {
     }
     var scalarText: String? {
         switch self {
-        case .number(let value): return HadesNumberDraft.format(value)
+        case .number(let value):
+            let text = String(value)
+            return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
         case .string(let value): return value
         default: return nil
         }
