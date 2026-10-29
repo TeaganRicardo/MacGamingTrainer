@@ -148,7 +148,7 @@ else:
 expected_executable = str((Path('/tmp') / EXECUTABLE_SUFFIX).resolve())
 unrelated_executable = '/tmp/Other/Game.macOS'
 with patch('games.hades.adapter.subprocess.check_output',
-           return_value='101 Game.macOS\\n202 Game.macOS\\n'), \\
+           return_value='101 Game.macOS\n202 Game.macOS\n'), \\
      patch('games.hades.adapter._process_executable_path',
            side_effect={101: expected_executable, 202: unrelated_executable}.get):
     assert locate_process() == (101, expected_executable)
@@ -156,7 +156,7 @@ with patch('games.hades.adapter.subprocess.check_output',
 # Full-path rows retain the fast path and do not need the native resolver.
 full_path = str(Path('/tmp') / EXECUTABLE_SUFFIX)
 with patch('games.hades.adapter.subprocess.check_output',
-           return_value=f'303 {full_path}\\n'), \\
+           return_value=f'303 {full_path}\n'), \\
      patch('games.hades.adapter._process_executable_path') as path_probe:
     assert locate_process() == (303, str(Path(full_path).resolve()))
     path_probe.assert_not_called()
