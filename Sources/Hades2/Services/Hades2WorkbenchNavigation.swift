@@ -9,6 +9,7 @@ enum Hades2WorkbenchIcon {
     static let occurrence = "figure.walk.motion"
     static let specialReward = "moon.stars.fill"
     static let purge = "arrow.left.arrow.right.circle"
+    static let flora = "leaf.fill"
     static let garden = flora
     static let targetLevel = TrainerSemanticIcon.Concept.level
     static let chaosAdvance = "arrow.right.circle"
@@ -20,7 +21,6 @@ enum Hades2WorkbenchIcon {
     static let hexReady = specialReward
     static let legendary = "star.fill"
     static let duo = "person.2.fill"
-    static let flora = "leaf.fill"
     static let mining = "hammer.fill"
     static let digging = "mountain.2.fill"
     static let shades = "person.crop.circle"
