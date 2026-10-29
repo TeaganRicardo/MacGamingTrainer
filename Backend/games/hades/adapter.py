@@ -1,6 +1,9 @@
 """Hades command semantics; debugger lifetime is isolated in its own sidecar."""
+import ctypes
+import os
 from pathlib import Path
 import subprocess
+import sys
 
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
@@ -15,13 +18,49 @@ from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
 
 
+def process_executable_path(pid):
+    """Return the kernel-reported executable path for a PID on macOS."""
+    if sys.platform != 'darwin':
+        return None
+    try:
+        libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
+        proc_pidpath = libproc.proc_pidpath
+        proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+        proc_pidpath.restype = ctypes.c_int
+        buffer = ctypes.create_string_buffer(4096)
+        length = proc_pidpath(pid, buffer, len(buffer))
+    except (OSError, AttributeError):
+        return None
+    if length <= 0:
+        return None
+    return str(Path(os.fsdecode(buffer.value)).resolve())
+
+
 def locate_process():
     rows = subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True)
+    expected_name = Path(EXECUTABLE_SUFFIX).name
     matches = []
     for row in rows.splitlines():
         parts = row.strip().split(None, 1)
-        if len(parts) == 2 and parts[1].endswith('/' + EXECUTABLE_SUFFIX):
-            matches.append((int(parts[0]), str(Path(parts[1]).resolve())))
+        if len(parts) != 2:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        command = parts[1]
+        # BSD ps may expose a process command name rather than its executable
+        # path. Use it only to narrow candidates; proc_pidpath verifies identity.
+        if Path(command).name != expected_name and not command.endswith('/' + EXECUTABLE_SUFFIX):
+            continue
+        executable = process_executable_path(pid)
+        if executable is None and command.endswith('/' + EXECUTABLE_SUFFIX):
+            executable = str(Path(command).resolve())
+        if executable is None:
+            continue
+        executable = str(Path(executable).resolve())
+        if executable.endswith('/' + EXECUTABLE_SUFFIX):
+            matches.append((pid, executable))
     if len(matches) > 1:
         raise AdapterError('ambiguous_target', 'hades.error.ambiguousTarget')
     return matches[0] if matches else None

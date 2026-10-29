@@ -18,6 +18,20 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         _saveManager = ObservedObject(wrappedValue: context.saveManager)
     }
 
+    private var launchAction: (() -> Void)? {
+        guard let launch = model.launchActionFromHost else { return nil }
+        return {
+            // The displayed state may be stale if a launch/activation event was
+            // missed. Re-snapshot before deciding whether to launch or connect.
+            targetMonitor.refresh()
+            if targetMonitor.isRunning {
+                context.toggleConnection()
+            } else {
+                launch()
+            }
+        }
+    }
+
     private var managementActions: TrainerManagementActions {
         guard Module.descriptor.supportsSaveManagement else { return .none }
         return TrainerManagementActions(openSaveManagement: {
@@ -49,11 +63,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                         connected: model.connected,
                         backendAvailable: model.backendAvailable,
                         actionsEnabled: model.hostActionsEnabled,
-                        onRefresh: model.refreshFromHost,
+                        onRefresh: {
+                            targetMonitor.refresh()
+                            model.refreshFromHost()
+                        },
                         onPrimary: context.toggleConnection,
                         onRestart: model.restartBackendFromHost,
                         targetRunning: targetMonitor.isRunning,
-                        onLaunch: model.launchActionFromHost
+                        onLaunch: launchAction
                     )
                     Module.makeSidebarActions(model: model)
                 }
@@ -69,7 +86,10 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             Module.makeFeedback(model: model)
         }
         .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
-        .onAppear { context.registerPresentation(localization) }
+        .onAppear {
+            targetMonitor.refresh()
+            context.registerPresentation(localization)
+        }
     }
 }
 
