@@ -127,7 +127,7 @@ for semantic in (
     "protection", "vitality", "energy", "currency", "randomize",
     "refresh", "capacity", "quality", "impact", "movement",
     "actionSpeed", "timeScale", "item", "controls", "defense",
-    "duration", "timer", "precision", "dash",
+    "duration", "timer", "precision", "dash", "level",
 ):
     assert f"static let {semantic} =" in icon_source
 for semantic in ("acquire", "apply", "generate", "save", "load", "remove", "restore"):
@@ -182,7 +182,7 @@ for path in (
     ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift",
 ):
     source = path.read_text()
-    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics"):
+    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "logHistory", "clearLogs", "diagnostics", "exportDiagnostics", "refreshStatus"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
 
 # Every shortcut-visible function owns one icon. The same action icon is reused
@@ -200,6 +200,10 @@ assert "if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey
 assert "Hades2WorkbenchIcon.icon(for: titleKey)" in hades2_nav
 assert "extension Hades2GatheringFamily" in hades2_nav
 assert "var icon: String { shortcut?.icon ?? Hades2WorkbenchIcon.icon(for: titleKey) ?? section.icon }" in hades2_nav
+for semantic in ("grasp", "spellCharge", "sprintSpeed", "occurrence", "specialReward", "purge",
+                 "garden", "targetLevel", "chaosProbability", "prepareSigning", "restoreSigning",
+                 "flora", "mining", "digging", "shades"):
+    assert f"static let {semantic} =" in hades2_nav
 hades_icon_map = hades_nav[hades_nav.index("static func icon(for titleKey: String)") : hades_nav.index("struct HadesWorkbenchEntry")]
 for key in (
     "hades.health", "hades.maxHealth", "hades.money", "hades.rerolls", "hades.godGauge",
