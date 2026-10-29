@@ -20,12 +20,12 @@ struct TrainerTargetObservation: Equatable {
 
 /// Event-driven target-app presence monitor shared by all game modules.
 ///
-/// It deliberately uses NSWorkspace launch/activation/termination notifications
-/// instead of a repeating process poll, so keeping the trainer open does not add
-/// background debugger or process-scan traffic. Activation is a useful second
-/// attach opportunity after launch because the target game is already foreground
-/// and cannot be paused merely to focus the trainer. The initial snapshot covers
-/// the case where the target game was already running before the trainer launched.
+/// It uses NSWorkspace launch/activation/termination notifications and a narrow
+/// kernel-path probe when taking a snapshot. It never polls on a timer, so keeping
+/// the trainer open does not add background process-scan traffic. Activation is a
+/// useful second attach opportunity after launch because the target game is already
+/// foreground and cannot be paused merely to focus the trainer. The initial snapshot
+/// covers the case where the target game was already running before the trainer launched.
 final class TrainerTargetProcessMonitor: ObservableObject {
     @Published private(set) var targetObservation = TrainerTargetObservation(
         isRunning: false,
