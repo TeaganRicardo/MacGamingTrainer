@@ -78,37 +78,37 @@ enum HadesWorkbenchIcon {
 
     static func icon(for titleKey: String) -> String? {
         switch titleKey {
-        case "hades.health", "hades.maxHealth": TrainerSemanticIcon.Concept.vitality
-        case "hades.money": TrainerSemanticIcon.Concept.currency
-        case "hades.rerolls": TrainerSemanticIcon.Concept.randomize
-        case "hades.godGauge": godGauge
-        case "host.timeWarp.title": TrainerSemanticIcon.Concept.timeScale
-        case "hades.currentTraits": TrainerSemanticIcon.Concept.controls
-        case "hades.catalog", "hades.exactSource": catalog
-        case "hades.rarity": TrainerSemanticIcon.Concept.quality
-        case "hades.level": level
-        case "hades.apply": TrainerSemanticIcon.Action.apply
-        case "hades.remove", "hades.cancelCurse": TrainerSemanticIcon.Action.remove
-        case "hades.chaosPair": TrainerSemanticIcon.Context.portal
-        case "hades.remainingUses", "hades.expireEffect": TrainerSemanticIcon.Concept.duration
-        case "hades.activateBlessing": TrainerSemanticIcon.Concept.actionSpeed
-        case "hades.refreshEffect": TrainerSemanticIcon.Concept.refresh
-        case "hades.resources": TrainerSemanticIcon.Section.inventory
-        case "hades.gainResource": TrainerSemanticIcon.Action.acquire
-        case "hades.spawnReward", "hades.doorReward": TrainerSemanticIcon.Context.reward
-        case "hades.doorRoute", "hades.route.thanatos": route
-        case "hades.restoreDoor": TrainerSemanticIcon.Action.restore
-        case "hades.chamberObject": chamberObject
-        case "host.refreshStatus": refreshStatus
-        case "hades.saveEditor.title": TrainerSemanticIcon.Tool.saveEditor
-        case "host.saveManagement": TrainerSemanticIcon.Tool.saveManagement
-        case "host.shortcutSettings": TrainerSemanticIcon.Tool.shortcuts
-        case "hades.manage.profiles": TrainerSemanticIcon.Tool.profiles
-        case "hades.manage.diagnostics": TrainerSemanticIcon.Tool.diagnostics
-        case "host.viewLog": TrainerSemanticIcon.Tool.log
-        case "host.viewLogHistory": TrainerSemanticIcon.Tool.logHistory
-        case "host.clearCompletedLogs": TrainerSemanticIcon.Tool.clearLogs
-        default: nil
+        case "hades.health", "hades.maxHealth": return TrainerSemanticIcon.Concept.vitality
+        case "hades.money": return TrainerSemanticIcon.Concept.currency
+        case "hades.rerolls": return TrainerSemanticIcon.Concept.randomize
+        case "hades.godGauge": return godGauge
+        case "host.timeWarp.title": return TrainerSemanticIcon.Concept.timeScale
+        case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
+        case "hades.catalog", "hades.exactSource": return catalog
+        case "hades.rarity": return TrainerSemanticIcon.Concept.quality
+        case "hades.level": return level
+        case "hades.apply": return TrainerSemanticIcon.Action.apply
+        case "hades.remove", "hades.cancelCurse": return TrainerSemanticIcon.Action.remove
+        case "hades.chaosPair": return TrainerSemanticIcon.Context.portal
+        case "hades.remainingUses", "hades.expireEffect": return TrainerSemanticIcon.Concept.duration
+        case "hades.activateBlessing": return TrainerSemanticIcon.Concept.actionSpeed
+        case "hades.refreshEffect": return TrainerSemanticIcon.Concept.refresh
+        case "hades.resources": return TrainerSemanticIcon.Section.inventory
+        case "hades.gainResource": return TrainerSemanticIcon.Action.acquire
+        case "hades.spawnReward", "hades.doorReward": return TrainerSemanticIcon.Context.reward
+        case "hades.doorRoute", "hades.route.thanatos": return route
+        case "hades.restoreDoor": return TrainerSemanticIcon.Action.restore
+        case "hades.chamberObject": return chamberObject
+        case "host.refreshStatus": return refreshStatus
+        case "hades.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor
+        case "host.saveManagement": return TrainerSemanticIcon.Tool.saveManagement
+        case "host.shortcutSettings": return TrainerSemanticIcon.Tool.shortcuts
+        case "hades.manage.profiles": return TrainerSemanticIcon.Tool.profiles
+        case "hades.manage.diagnostics": return TrainerSemanticIcon.Tool.diagnostics
+        case "host.viewLog": return TrainerSemanticIcon.Tool.log
+        case "host.viewLogHistory": return TrainerSemanticIcon.Tool.logHistory
+        case "host.clearCompletedLogs": return TrainerSemanticIcon.Tool.clearLogs
+        default: return nil
         }
     }
 }
