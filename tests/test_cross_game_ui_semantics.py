@@ -196,6 +196,8 @@ hades2_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").
 assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2_management
 assert "var icon: String { shortcut?.icon ?? section.icon }" in hades_nav
 assert "var icon: String { shortcut?.icon ?? section.icon }" in hades2_nav
+assert 'case "hades.manage.diagnostics": ["hades.manage.maintenance"]' in hades_nav
+assert "entry.searchAliasKeys.flatMap(labels)" in hades_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
 assert "systemImage: entry.icon" in hades2_host
 assert "systemImage: entry.icon" in hades_nav
