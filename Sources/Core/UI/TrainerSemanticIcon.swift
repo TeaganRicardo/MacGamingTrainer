@@ -28,6 +28,12 @@ enum TrainerSemanticIcon {
         static let actionSpeed = "bolt.fill"
         static let timeScale = "speedometer"
         static let item = "diamond.fill"
+        static let controls = "slider.horizontal.3"
+        static let defense = "shield.lefthalf.filled"
+        static let duration = "hourglass"
+        static let timer = "timer"
+        static let precision = "scope"
+        static let dash = "wind"
     }
 
     enum Context {
@@ -43,6 +49,7 @@ enum TrainerSemanticIcon {
         static let profiles = "slider.horizontal.3"
         static let shortcuts = "keyboard"
         static let diagnostics = "stethoscope"
+        static let exportDiagnostics = "square.and.arrow.up"
         static let log = "doc.text.magnifyingglass"
         static let logHistory = "clock.arrow.circlepath"
         static let clearLogs = "trash"
