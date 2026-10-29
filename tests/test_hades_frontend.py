@@ -21,7 +21,7 @@ folder=pathlib.Path(__file__).parent
 workspaces={};next_workspace=0
 files=[{'rootId':'fixture','relativePath':f'Profile{n}.sav','profile':f'Profile{n}','variant':''} for n in (1,2)]
 values={'resources':25,'progression':False,'equipment':1,'relationships':1,'narrative':'Fixture dialogue',
-    'statistics':4,'history':2,'shiftA':11,'shiftB':22,'shiftC':33,'narrativeNyx':True,'narrativeNyxShared':False,'narrativeAchilles':False,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
+    'statistics':4.123456789012345,'history':2,'shiftA':11,'shiftB':22,'shiftC':33,'narrativeNyx':True,'narrativeNyxShared':False,'narrativeAchilles':False,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
         {'key':{'luaType':'string','value':'unknown'},'value':{'luaType':'number','value':3}}]}}
 def typed(value):
     if isinstance(value,dict):return value
@@ -36,7 +36,7 @@ def save_row(domain,workspace,full=False):
     cn=workspace.get('language')=='zh-CN'
     identifier=('p:'+workspace['baseline']+':'+str(workspace['physical'].index(domain))) if domain.startswith('shift') else 'entry:'+domain
     row={'id':identifier,'baselineGeneration':workspace['baseline'],'name':{'resources':'Gems','progression':'Mirror pair','equipment':'Aspect',
-        'statistics':'Runs Completed','advanced':'Unknown Table','advancedScalar':'Advanced Scalar','shiftA':'Shift A','shiftB':'Shift B','shiftC':'Shift C'}.get(domain,domain),
+        'statistics':'Gameplay Time','advanced':'Unknown Table','advancedScalar':'Advanced Scalar','shiftA':'Shift A','shiftB':'Shift B','shiftC':'Shift C'}.get(domain,domain),
         'englishName':domain,'group':'Saved fields','groupId':'fixture-group','owner':'Fixture Owner','ownerId':'fixture-owner','valueType':typed(workspace['values'][domain])['luaType'],
         'displayValue':str(workspace['values'][domain]),'typedValue':typed(workspace['values'][domain]),
         'editable':True,'operations':['set','unset']+(['append'] if domain=='advanced' else []),'hasChildren':domain=='advanced'}
@@ -236,6 +236,13 @@ func pump(_ seconds: TimeInterval = 0.1) {
     @MainActor static func main() throws {
         _ = NSApplication.shared
         enableNativeAccessibility()
+        let precisionCases: [Double] = [0, -0.0, 25, 1.2345678901234567, 123.45678901234567,
+                                       .leastNonzeroMagnitude, .leastNormalMagnitude, .greatestFiniteMagnitude]
+        for number in precisionCases {
+            let text = HadesSaveValue.number(number).scalarText!
+            check(Double(text)?.bitPattern == number.bitPattern, "Save Editor numeric text lost precision: " + text)
+        }
+        check(HadesSaveValue.number(25).scalarText == "25", "Save Editor integer text lost its compact form")
         let folder=URL(fileURLWithPath:CommandLine.arguments[1])
         let python=URL(fileURLWithPath:CommandLine.arguments[2])
         let stateURL=folder.appendingPathComponent("state.json")
@@ -531,9 +538,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "a rejected edit erased acknowledged pending work")
         editor.selectDomain(.progression);editor.selectDomain(.statistics)
         wait("rapid progression/statistics save_editor_query: current statistics row accepted") { !editor.queryLoading && editor.rows.first?.id == "entry:statistics" }
-        let stats=editor.rows.first!
-        _=editor.commit(stats,text:"12",workspace:pinnedWorkspace)
-        wait("statistics 12 save_editor_stage reply: two acknowledged actions") { !editor.busy && editor.review.count == 2 }
+        let statsField=requireNativeControl("native precise statistics field",in:editorWindow.contentView!) {
+            fields(in:$0).first(where:{$0.accessibilityLabel()=="Gameplay Time"})
+        }
+        guard let statsCoordinator=statsField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native statistics input coordinator missing")
+        }
+        check(Double(statsField.stringValue) == 4.123456789012345,"native Save Editor initial value lost decimal precision")
+        let preciseStatistic=123.45678901234567
+        statsCoordinator.begin();statsField.stringValue=String(preciseStatistic)
+        statsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:statsField))
+        statsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:statsField))
+        check(Double(statsField.stringValue) == preciseStatistic,"native Save Editor commit rounded its completed decimal draft")
+        wait("precise native statistics save_editor_stage/query replies: two acknowledged actions") {
+            !editor.busy && !editor.queryLoading && editor.review.count == 2
+        }
+        check(editor.review.actions.first(where:{$0.id=="entry:statistics"})?.typedValue == .number(preciseStatistic)
+            && Double(statsField.stringValue) == preciseStatistic,"acknowledged Changes and native decimal input disagree")
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorOldReviewReply"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
@@ -762,6 +783,12 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(editor.rows.first?.typedValue == .number(75),"Apply did not refresh the verified candidate values")
         check(editor.workspaceID == pinnedWorkspace && editor.sourceSHA256 == pinnedSHA && backup.workspaceID == backupID,
             "post-Apply refresh retargeted an existing pinned document")
+        editor.selectDomain(.statistics);wait("verified candidate precise statistics save_editor_query reply") { !editor.queryLoading }
+        let installedStats=requireNativeControl("post-Apply precise statistics field",in:editorWindow.contentView!) {
+            fields(in:$0).first(where:{$0.accessibilityLabel()=="Gameplay Time"})
+        }
+        check(editor.rows.first?.typedValue == .number(preciseStatistic) && Double(installedStats.stringValue) == preciseStatistic,
+            "Apply reread changed the precise numeric value or its editable text")
         saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         saveState["editorShift"]=true
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)

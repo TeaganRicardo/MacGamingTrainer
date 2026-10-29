@@ -593,8 +593,11 @@ class HadesSaveWorkspace:
                 if previous['action'] == write['action']: continue
                 left, right = previous['address'], write['address']
                 overlap = left[:len(right)] == right or right[:len(left)] == left
-                if len(left) == len(right) and len(left) > 1 and left[:-1] == right[:-1] and type(left[-1]) is int and type(right[-1]) is int:
-                    overlap |= left[-1] // 2 == right[-1] // 2
+                shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+                if len(shorter) > 1 and shorter[:-1] == longer[:len(shorter) - 1]:
+                    sibling = longer[len(shorter) - 1]
+                    if type(shorter[-1]) is int and type(sibling) is int:
+                        overlap |= shorter[-1] // 2 == sibling // 2
                 if overlap:
                     if left == right and previous['operation'] == write['operation'] == 'set' and values.equal(previous['after'], write['after']):
                         break
