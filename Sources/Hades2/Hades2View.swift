@@ -755,10 +755,14 @@ struct Hades2TrainerView: View {
                 guard let trait else { return }
                 model.removeTrait(trait)
             } label: {
-                Text(currentRunTraitRemovalLabel(trait))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .frame(maxWidth: .infinity)
+                Label {
+                    Text(currentRunTraitRemovalLabel(trait))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .frame(maxWidth: .infinity)
+                } icon: {
+                    Image(systemName: TrainerSemanticIcon.Action.remove)
+                }
             }
             .buttonStyle(.bordered)
             .frame(width: TraitManagerLayout.removeControlWidth)
