@@ -19,7 +19,7 @@ struct Hades2ChaosGatePanel: View {
         let generation = model.editGeneration
         return Hades2OccurrenceSetting(
             title: text("hades2.chaosGate.probability"),
-            icon: "percent",
+            icon: Hades2WorkbenchIcon.chaosProbability,
             input: $percentage,
             hasOverride: model.chaosGateProbability != nil,
             enabled: model.canEditDesired,
