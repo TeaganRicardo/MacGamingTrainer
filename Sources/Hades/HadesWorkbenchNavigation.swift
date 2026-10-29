@@ -71,10 +71,10 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
 enum HadesWorkbenchIcon {
     static let godGauge = "bolt.heart.fill"
     static let catalog = TrainerSemanticIcon.Concept.precision
-    static let level = "arrow.up.circle.fill"
+    static let level = TrainerSemanticIcon.Concept.level
     static let route = "arrow.triangle.branch"
     static let chamberObject = "shippingbox"
-    static let refreshStatus = "arrow.clockwise"
+    static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
 
     static func icon(for titleKey: String) -> String? {
         switch titleKey {
