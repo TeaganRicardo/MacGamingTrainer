@@ -245,8 +245,7 @@ for key in (
 ):
     assert f'"{key}"' in hades2_icon_map, f"missing Hades II discovery icon: {key}"
 
-assert 'case "hades.manage.diagnostics": ["hades.manage.maintenance"]' in hades_nav
-assert "entry.searchAliasKeys.flatMap(labels)" in hades_nav
+assert "searchAliasKeys" not in hades_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
 assert "systemImage: entry.icon" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
