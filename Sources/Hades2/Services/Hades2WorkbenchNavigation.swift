@@ -64,7 +64,7 @@ enum Hades2WorkbenchIcon {
         case "hades2.occurrence.title": occurrence
         case "hades2.spawn.olympianBoons": TrainerSemanticIcon.Section.effects
         case "hades2.spawn.pickupRewards": TrainerSemanticIcon.Section.inventory
-        case "hades2.spawn.characterRewards": shades
+        case "hades2.spawn.characterRewards": specialReward
         case "hades2.manage.profiles": TrainerSemanticIcon.Tool.profiles
         case "hades2.saveEditor.title": TrainerSemanticIcon.Tool.saveEditor
         case "hades2.manage.diagnostics": TrainerSemanticIcon.Tool.diagnostics
