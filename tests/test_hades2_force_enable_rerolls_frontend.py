@@ -99,7 +99,7 @@ func wait(_ predicate: () -> Bool) {
 
         check(localization.string(
             TrainerTextToken(key: "hades2.feature.forceEnableRerolls")
-        ) == "强制启用重骰", "Chinese product label drifted")
+        ) == "强制重骰", "Chinese product label drifted")
         localization.language = .en
         check(localization.string(
             TrainerTextToken(key: "hades2.feature.forceEnableRerolls")
