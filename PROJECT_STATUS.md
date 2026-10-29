@@ -1,6 +1,6 @@
 # MacGamingTrainer operational state
 
-Updated: 2026-10-28
+Updated: 2026-10-29
 
 [AGENTS.md](AGENTS.md) routes development; [#124](https://github.com/TeaganRicardo/MacGamingTrainer/issues/124) owns current priority and dependencies. This file owns compatibility, operating limitations and manual-acceptance evidence. Detailed completed implementation evidence remains in the owning issues/PRs and Git history.
 
@@ -50,13 +50,15 @@ Retain these unperformed scope families in the consolidated user-run pass; detai
 
 ### Consolidated QA candidate
 
-[#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429) owns the frozen unified acceptance candidate, exact audited main checkpoint, GitHub Actions package/checksum/provenance evidence and pending user-run procedure. Subsequent documentation-only commits do not alter the executable candidate and do not warrant rebuilding it; keep the changing main checkpoint in #429 rather than duplicating it here. The signed QA artifact's independent outer digest, ZIP sidecar and provenance readback passed on 2026-10-28; the temporary Actions artifact expires on 2026-11-11. This proves package identity, not actual Hades I/Hades II runtime, UI, or save-load acceptance. Earlier fixed artifacts remain historical evidence in their owning handoffs.
+[#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429) owns the current manual-acceptance disposition, exact-source artifact/checksum/provenance evidence, and the deferred Hades I + Hades II acceptance checklist. The frozen `4f283bb2` candidate and temporary Actions artifact are historical only; they do not represent the current release. The latest official unified release and its exact source, artifact, checksum and provenance are linked from [the official GitHub Release](https://github.com/TeaganRicardo/MacGamingTrainer/releases/tag/v0.5.0) and #429. The release-source Linux contracts, Build 2 macOS and Module build matrix passed. The Hades I connection-discovery correction in [PR #594](https://github.com/TeaganRicardo/MacGamingTrainer/pull/594) is merged and its exact-head required checks passed. These automated checks do not establish actual-game behavior, rendered UI, save-load, or later game-authored persistence.
+
+No manual validation plan is currently scheduled. #429 remains open but deferred and is not an active implementation blocker. A future manual pass must use the current official release or a newly prepared exact-source artifact, not the historical frozen candidate.
 
 On 2026-10-17 the user reported completing perceived-performance testing on the then-current product line and authorized continuing #470. That cleared the earlier continuation gate; later runtime-observation, owner/reconnect and rendering scenarios still require their recorded user-run observations.
 
 ## Execution authorization
 
-**Testing pause (2026-10-26):** planning #124 records the user's pause on local tests and game/debugger operations, which remains binding until explicitly resumed. On 2026-10-27 normal required GitHub PR CI was separately authorized for a final batched change; it does not authorize game/RDC testing or ad-hoc repeated CI. Source inspection and unexecuted tests remain pending evidence; a validated artifact requires actual exact-head checks.
+**Testing pause (2026-10-26):** planning #124 records the user's pause on local tests and game/debugger operations, which remains binding until explicitly resumed. On 2026-10-27 normal required GitHub PR CI was separately authorized for a final batched change; it does not authorize game/RDC testing or ad-hoc repeated CI. Source inspection and unexecuted tests remain pending evidence; a validated artifact requires actual exact-head checks. As of 2026-10-29, no manual validation plan is scheduled; #429 is explicitly deferred and does not authorize game, RDC, debugger or save operations.
 
 The user authorizes independently reviewed, automated-green merges before consolidated final manual acceptance of the selected work. Coordinate actual overlapping owners and review the final head; missing manual-only evidence does not itself reopen coding tasks or block unrelated work.
 
