@@ -78,6 +78,15 @@ struct HadesWorkbenchEntry: Identifiable {
 
     var requiresExpandedMetrics: Bool { id.hasPrefix("numeric.") }
     var icon: String { shortcut?.icon ?? section.icon }
+
+    /// Search aliases preserve familiar terms when the visible product label
+    /// follows Hades II wording (for example, "诊断" for "运行自检").
+    var searchAliasKeys: [String] {
+        switch titleKey {
+        case "hades.manage.diagnostics": ["hades.manage.maintenance"]
+        default: []
+        }
+    }
 }
 
 enum HadesWorkbenchCatalog {
@@ -160,6 +169,7 @@ enum HadesWorkbenchCatalog {
         }
         return (entries + dynamic + world).filter { entry in
             let names = labels(entry.titleKey) + labels(entry.section.titleKey)
+                + entry.searchAliasKeys.flatMap(labels)
                 + (entry.resource.map { Array($0.names.values) + [$0.id] } ?? [])
                 + (entry.worldNames.map { Array($0.values) } ?? [])
             let searchable = normalized(names.joined(separator: " "))
