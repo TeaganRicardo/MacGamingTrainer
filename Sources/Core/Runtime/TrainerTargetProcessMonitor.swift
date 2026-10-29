@@ -128,7 +128,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         return currentMatchingProcessIdentifiers().first
     }
 
-    /// Steam may start Hades I without an NSRunningApplication record. Restrict
+    /// Some targets may start without an NSRunningApplication record. Restrict
     /// candidates by process name, then verify their kernel executable path against
     /// the declared suffix; a same-named unrelated process must never match.
     private func currentMatchingProcessIdentifiers() -> [pid_t] {
