@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
-from games.hades.adapter import HadesAdapter
+from games.hades.adapter import EXECUTABLE_SUFFIX, HadesAdapter, locate_process
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.recovery import HadesRecoveryJournal
 
@@ -142,6 +142,39 @@ except AdapterError as error:
     assert error.presentation.startswith('hades.')
 else:
     raise AssertionError('missing game must have a typed failure')
+
+# A short ps comm value must be resolved through the kernel path, while an
+# unrelated executable with the same basename must remain excluded.
+expected_executable = str((Path('/tmp') / EXECUTABLE_SUFFIX).resolve())
+unrelated_executable = '/tmp/Other/Game.macOS'
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value='101 Game.macOS\\n202 Game.macOS\\n'), \\
+     patch('games.hades.adapter._process_executable_path',
+           side_effect={101: expected_executable, 202: unrelated_executable}.get):
+    assert locate_process() == (101, expected_executable)
+
+# Full-path rows retain the fast path and do not need the native resolver.
+full_path = str(Path('/tmp') / EXECUTABLE_SUFFIX)
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value=f'303 {full_path}\\n'), \\
+     patch('games.hades.adapter._process_executable_path') as path_probe:
+    assert locate_process() == (303, str(Path(full_path).resolve()))
+    path_probe.assert_not_called()
+
+# Two actual copies of the same declared executable remain an explicit error.
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value='101 Game.macOS\\n202 Game.macOS\\n'), \\
+     patch('games.hades.adapter._process_executable_path',
+           side_effect={
+               101: expected_executable,
+               202: str(Path('/Volumes/Steam') / EXECUTABLE_SUFFIX),
+           }.get):
+    try:
+        locate_process()
+    except AdapterError as error:
+        assert error.code == 'ambiguous_target'
+    else:
+        raise AssertionError('multiple matching target processes must remain ambiguous')
 
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
 from lua_runtime_support import require_lua52

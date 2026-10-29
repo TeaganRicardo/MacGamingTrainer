@@ -253,3 +253,96 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-ownership-") as temporary:
     assert not attempts(blocked)
 
 print("host_target_ownership_ok: concurrent launch, active owner, focus/fallback, clean release, crash recovery, target isolation, fail-closed startup")
+
+
+# A synthetic executable exercises the Hades I path probe without starting the game.
+clang = shutil.which("clang")
+assert clang, "clang is required for the synthetic process identity fixture"
+host_source = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text()
+assert "onLaunch: primaryLaunchAction" in host_source
+assert re.search(
+    r"onRefresh:\s*\{\s*targetMonitor\.refresh\(\)\s*model\.refreshFromHost\(\)",
+    host_source,
+), "the visible refresh control must refresh target presence as well as backend state"
+
+with tempfile.TemporaryDirectory(prefix="mgt-target-process-") as temporary:
+    temporary = Path(temporary)
+    fixture_source = temporary / "fixture.c"
+    fixture_source.write_text("#include <unistd.h>\nint main(void) { for (;;) sleep(1); }\n")
+    target_executable = temporary / "Hades/Game.macOS.app/Contents/MacOS/Game.macOS"
+    unrelated_executable = temporary / "Other/Game.macOS"
+    for executable in (target_executable, unrelated_executable):
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run([clang, str(fixture_source), "-o", str(executable)], check=True)
+
+    harness = r'''
+import AppKit
+import Foundation
+
+@main struct FixtureMain {
+    @MainActor static func main() {
+        let expectedPID = pid_t(Int32(CommandLine.arguments[1])!)
+        let expectedRunning = CommandLine.arguments[2] == "true"
+        let monitor = TrainerTargetProcessMonitor(
+            processName: "Game.macOS",
+            bundleIdentifier: "",
+            executablePathSuffix: "Hades/Game.macOS.app/Contents/MacOS/Game.macOS"
+        )
+        precondition(monitor.isRunning == expectedRunning, "unexpected target presence")
+        if expectedRunning {
+            precondition(monitor.targetObservation.processIdentifier == expectedPID,
+                         "monitor returned the wrong process identifier")
+        }
+
+        var events: [String] = []
+        TrainerPrimaryActionRouter.perform(
+            refreshTarget: { events.append("refresh"); return true },
+            connect: { events.append("connect") },
+            launch: { events.append("launch") }
+        )
+        precondition(events == ["refresh", "connect"], "running target must route to connect")
+
+        events.removeAll()
+        TrainerPrimaryActionRouter.perform(
+            refreshTarget: { events.append("refresh"); return false },
+            connect: { events.append("connect") },
+            launch: { events.append("launch") }
+        )
+        precondition(events == ["refresh", "launch"], "missing target must route to launch")
+    }
+}
+'''
+    swift_source = temporary / "monitor.swift"
+    swift_binary = temporary / "monitor"
+    swift_source.write_text(harness)
+    subprocess.run(
+        [
+            SWIFTC,
+            "-parse-as-library",
+            str(ROOT / "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift"),
+            str(ROOT / "Sources/Core/Host/TrainerPrimaryAction.swift"),
+            str(swift_source),
+            "-o",
+            str(swift_binary),
+        ],
+        check=True,
+        cwd=ROOT,
+    )
+
+    for executable, expected in (
+        (target_executable, "true"),
+        (unrelated_executable, "false"),
+    ):
+        process = subprocess.Popen([str(executable)])
+        try:
+            subprocess.run(
+                [str(swift_binary), str(process.pid), expected],
+                check=True,
+                timeout=15,
+                cwd=ROOT,
+            )
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
+
+print("host_target_process_monitor_ok: kernel path discovery, same-name rejection, launch/connect routing")

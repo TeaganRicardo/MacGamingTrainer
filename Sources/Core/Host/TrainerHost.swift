@@ -32,6 +32,20 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         })
     }
 
+    private var primaryLaunchAction: (() -> Void)? {
+        guard let launch = model.launchActionFromHost else { return nil }
+        return {
+            TrainerPrimaryActionRouter.perform(
+                refreshTarget: {
+                    targetMonitor.refresh()
+                    return targetMonitor.isRunning
+                },
+                connect: context.toggleConnection,
+                launch: launch
+            )
+        }
+    }
+
     var body: some View {
         TrainerShell {
             TrainerSidebar {
@@ -49,11 +63,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                         connected: model.connected,
                         backendAvailable: model.backendAvailable,
                         actionsEnabled: model.hostActionsEnabled,
-                        onRefresh: model.refreshFromHost,
+                        onRefresh: {
+                            targetMonitor.refresh()
+                            model.refreshFromHost()
+                        },
                         onPrimary: context.toggleConnection,
                         onRestart: model.restartBackendFromHost,
                         targetRunning: targetMonitor.isRunning,
-                        onLaunch: model.launchActionFromHost
+                        onLaunch: primaryLaunchAction
                     )
                     Module.makeSidebarActions(model: model)
                 }

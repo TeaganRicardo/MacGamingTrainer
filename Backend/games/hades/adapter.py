@@ -1,4 +1,6 @@
 """Hades command semantics; debugger lifetime is isolated in its own sidecar."""
+import ctypes
+import os
 from pathlib import Path
 import subprocess
 
@@ -15,13 +17,48 @@ from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
 
 
+def _process_executable_path(pid):
+    """Return the kernel-reported executable path for a macOS process."""
+    try:
+        libproc = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        proc_pidpath = libproc.proc_pidpath
+        proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
+        proc_pidpath.restype = ctypes.c_int
+        buffer = ctypes.create_string_buffer(1024)
+        length = proc_pidpath(pid, buffer, len(buffer))
+        if length <= 0:
+            return None
+        return os.fsdecode(buffer.value)
+    except (OSError, AttributeError):
+        return None
+
+
 def locate_process():
     rows = subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True)
     matches = []
+    executable_name = Path(EXECUTABLE_SUFFIX).name
     for row in rows.splitlines():
         parts = row.strip().split(None, 1)
-        if len(parts) == 2 and parts[1].endswith('/' + EXECUTABLE_SUFFIX):
-            matches.append((int(parts[0]), str(Path(parts[1]).resolve())))
+        if len(parts) != 2:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+
+        command = parts[1]
+        if command.endswith('/' + EXECUTABLE_SUFFIX):
+            executable = command
+        elif Path(command).name == executable_name:
+            # Some launch paths expose only argv[0] through ps(1). Verify the
+            # actual executable with proc_pidpath before accepting the process.
+            executable = _process_executable_path(pid)
+            if not executable or not executable.endswith('/' + EXECUTABLE_SUFFIX):
+                continue
+        else:
+            continue
+        matches.append((pid, str(Path(executable).resolve())))
+
     if len(matches) > 1:
         raise AdapterError('ambiguous_target', 'hades.error.ambiguousTarget')
     return matches[0] if matches else None
