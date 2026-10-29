@@ -30,53 +30,53 @@ enum Hades2WorkbenchIcon {
             return family.icon
         }
         switch titleKey {
-        case "hades2.vital.health": TrainerSemanticIcon.Concept.vitality
-        case "hades2.vital.mana", "hades2.stat.manaRegen": TrainerSemanticIcon.Concept.energy
-        case "hades2.vital.runGold": TrainerSemanticIcon.Concept.currency
-        case "hades2.vital.armor", "hades2.stat.dodge": TrainerSemanticIcon.Concept.defense
-        case "hades2.feature.damageMultiplier", "hades2.stat.enemyDamage": TrainerSemanticIcon.Concept.impact
-        case "hades2.stat.grasp": grasp
-        case "hades2.metric.rerolls": TrainerSemanticIcon.Concept.randomize
-        case "hades2.metric.spellCharge": spellCharge
-        case "hades2.stat.crit": TrainerSemanticIcon.Concept.precision
-        case "hades2.stat.enemyHealth": TrainerSemanticIcon.Concept.vitality
-        case "hades2.stat.chargeSpeed": TrainerSemanticIcon.Concept.timer
-        case "hades2.stat.moveSpeed": TrainerSemanticIcon.Concept.movement
-        case "hades2.stat.sprintSpeed": sprintSpeed
-        case "hades2.stat.dashSpeed": TrainerSemanticIcon.Concept.dash
-        case "hades2.stat.attackSpeed": TrainerSemanticIcon.Concept.actionSpeed
-        case "hades2.gameSpeed.title": TrainerSemanticIcon.Concept.timeScale
-        case "hades2.traits.manager": TrainerSemanticIcon.Concept.controls
-        case "hades2.traits.targetLevel": targetLevel
-        case "hades2.traits.targetRarity", "hades2.rarity.minimum": TrainerSemanticIcon.Concept.quality
-        case "hades2.traits.remainingUses", "hades2.traits.expireNow": TrainerSemanticIcon.Concept.duration
+        case "hades2.vital.health": return TrainerSemanticIcon.Concept.vitality
+        case "hades2.vital.mana", "hades2.stat.manaRegen": return TrainerSemanticIcon.Concept.energy
+        case "hades2.vital.runGold": return TrainerSemanticIcon.Concept.currency
+        case "hades2.vital.armor", "hades2.stat.dodge": return TrainerSemanticIcon.Concept.defense
+        case "hades2.feature.damageMultiplier", "hades2.stat.enemyDamage": return TrainerSemanticIcon.Concept.impact
+        case "hades2.stat.grasp": return grasp
+        case "hades2.metric.rerolls": return TrainerSemanticIcon.Concept.randomize
+        case "hades2.metric.spellCharge": return spellCharge
+        case "hades2.stat.crit": return TrainerSemanticIcon.Concept.precision
+        case "hades2.stat.enemyHealth": return TrainerSemanticIcon.Concept.vitality
+        case "hades2.stat.chargeSpeed": return TrainerSemanticIcon.Concept.timer
+        case "hades2.stat.moveSpeed": return TrainerSemanticIcon.Concept.movement
+        case "hades2.stat.sprintSpeed": return sprintSpeed
+        case "hades2.stat.dashSpeed": return TrainerSemanticIcon.Concept.dash
+        case "hades2.stat.attackSpeed": return TrainerSemanticIcon.Concept.actionSpeed
+        case "hades2.gameSpeed.title": return TrainerSemanticIcon.Concept.timeScale
+        case "hades2.traits.manager": return TrainerSemanticIcon.Concept.controls
+        case "hades2.traits.targetLevel": return targetLevel
+        case "hades2.traits.targetRarity", "hades2.rarity.minimum": return TrainerSemanticIcon.Concept.quality
+        case "hades2.traits.remainingUses", "hades2.traits.expireNow": return TrainerSemanticIcon.Concept.duration
         case "hades2.traits.temporary.cancel", "hades2.traits.remove",
              "hades2.traits.removeAllMatching", "hades2.traits.chaos.cancelPair":
-            TrainerSemanticIcon.Action.remove
-        case "hades2.traits.chaos.advance": chaosAdvance
-        case "hades2.section.elements": TrainerSemanticIcon.Section.effects
-        case "hades2.resource.materials": TrainerSemanticIcon.Concept.item
-        case "hades2.gathering.title": TrainerSemanticIcon.Section.inventory
-        case "hades2.gathering.restoreNative": TrainerSemanticIcon.Action.restore
-        case "hades2.chaosGate.title": TrainerSemanticIcon.Context.portal
-        case "hades2.chaosGate.probability": chaosProbability
-        case "hades2.nextRoom.title": TrainerSemanticIcon.Context.doorway
-        case "hades2.occurrence.title": occurrence
-        case "hades2.spawn.olympianBoons": TrainerSemanticIcon.Section.effects
-        case "hades2.spawn.pickupRewards": TrainerSemanticIcon.Section.inventory
-        case "hades2.spawn.characterRewards": specialReward
-        case "hades2.manage.profiles": TrainerSemanticIcon.Tool.profiles
-        case "hades2.saveEditor.title": TrainerSemanticIcon.Tool.saveEditor
-        case "hades2.manage.diagnostics": TrainerSemanticIcon.Tool.diagnostics
-        case "hades2.manage.prepareSigning": prepareSigning
-        case "hades2.manage.restoreSigning": restoreSigning
-        case "host.saveManagement": TrainerSemanticIcon.Tool.saveManagement
-        case "host.shortcutSettings": TrainerSemanticIcon.Tool.shortcuts
-        case "host.viewLog": TrainerSemanticIcon.Tool.log
-        case "host.viewLogHistory": TrainerSemanticIcon.Tool.logHistory
-        case "host.clearCompletedLogs": TrainerSemanticIcon.Tool.clearLogs
-        case "host.refreshStatus": refreshStatus
-        default: nil
+            return TrainerSemanticIcon.Action.remove
+        case "hades2.traits.chaos.advance": return chaosAdvance
+        case "hades2.section.elements": return TrainerSemanticIcon.Section.effects
+        case "hades2.resource.materials": return TrainerSemanticIcon.Concept.item
+        case "hades2.gathering.title": return TrainerSemanticIcon.Section.inventory
+        case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
+        case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
+        case "hades2.chaosGate.probability": return chaosProbability
+        case "hades2.nextRoom.title": return TrainerSemanticIcon.Context.doorway
+        case "hades2.occurrence.title": return occurrence
+        case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
+        case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
+        case "hades2.spawn.characterRewards": return specialReward
+        case "hades2.manage.profiles": return TrainerSemanticIcon.Tool.profiles
+        case "hades2.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor
+        case "hades2.manage.diagnostics": return TrainerSemanticIcon.Tool.diagnostics
+        case "hades2.manage.prepareSigning": return prepareSigning
+        case "hades2.manage.restoreSigning": return restoreSigning
+        case "host.saveManagement": return TrainerSemanticIcon.Tool.saveManagement
+        case "host.shortcutSettings": return TrainerSemanticIcon.Tool.shortcuts
+        case "host.viewLog": return TrainerSemanticIcon.Tool.log
+        case "host.viewLogHistory": return TrainerSemanticIcon.Tool.logHistory
+        case "host.clearCompletedLogs": return TrainerSemanticIcon.Tool.clearLogs
+        case "host.refreshStatus": return refreshStatus
+        default: return nil
         }
     }
 }
