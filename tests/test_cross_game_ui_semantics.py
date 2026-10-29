@@ -251,6 +251,7 @@ hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(
 assert "systemImage: entry.icon" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert "Image(systemName: TrainerSemanticIcon.Action.remove)" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
