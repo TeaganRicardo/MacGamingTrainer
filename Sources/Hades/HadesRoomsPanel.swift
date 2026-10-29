@@ -97,7 +97,7 @@ struct HadesRoomsPanel: View {
                 }
                 .help(text("hades.chaosGateHelp"))
                 if let objects = model.world?.objects, !objects.isEmpty {
-                    TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: "shippingbox", tint: theme.accent, emphasized: false) {
+                    TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false) {
                         Picker(text("hades.chamberObject"), selection: $chamberObject) {
                             ForEach(objects, id: \.self) { item in Text(termName(item)).tag(item) }
                         }
@@ -137,7 +137,7 @@ struct HadesRoomsPanel: View {
                             }
                         }
                         if !door.routes.isEmpty {
-                            TrainerLabeledControlRow(title: text("hades.doorRoute"), icon: "arrow.triangle.branch", tint: theme.accent, emphasized: false) {
+                            TrainerLabeledControlRow(title: text("hades.doorRoute"), icon: HadesWorkbenchIcon.route, tint: theme.accent, emphasized: false) {
                                 Picker(text("hades.doorRoute"), selection: $route) {
                                     ForEach(door.routes, id: \.self) { item in
                                         Text(text("hades.route.\(item)")).tag(item)
