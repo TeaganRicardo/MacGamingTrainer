@@ -28,7 +28,7 @@ struct HadesManagementUtilities: View {
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             group("hades.manage.daily") {
                 actions {
-                    TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: "arrow.clockwise",
+                    TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: HadesWorkbenchIcon.refreshStatus,
                         enabled: model.hostActionsEnabled, action: model.refreshFromHost)
                     TrainerSecondaryActionButton(title: text("hades.saveEditor.title"), systemImage: TrainerSemanticIcon.Tool.saveEditor,
                         enabled: model.hostActionsEnabled) {
@@ -163,7 +163,9 @@ struct HadesDiagnosticsView: View {
     var body: some View {
         TrainerSheetScaffold(title: text("hades.manage.diagnostics"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
             Text("\(model.diagnostics.filter(\.ok).count)/\(model.diagnostics.count)").monospacedDigit()
-            Button(text("hades.diagnostics.export"), action: model.exportDiagnostics).disabled(!model.hostActionsEnabled)
+            Button { model.exportDiagnostics() } label: {
+                Label(text("hades.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
+            }.disabled(!model.hostActionsEnabled)
             Button(text("host.refresh"), action: model.runDiagnostics).disabled(!model.hostActionsEnabled)
         } content: {
             Text(text("hades.diagnostics.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
