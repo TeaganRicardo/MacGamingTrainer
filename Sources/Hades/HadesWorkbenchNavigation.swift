@@ -7,16 +7,16 @@ extension HadesFeature {
         case .fullHealth: TrainerSemanticIcon.Concept.vitality
         case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
         case .forceRerolls: TrainerSemanticIcon.Concept.refresh
-        case .incomingDamageMultiplier: "shield.lefthalf.filled"
+        case .incomingDamageMultiplier: TrainerSemanticIcon.Concept.defense
         case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
         case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
-        case .fullGodGauge: "bolt.heart.fill"
+        case .fullGodGauge: HadesWorkbenchIcon.godGauge
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .gameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .damageMultiplier: TrainerSemanticIcon.Concept.impact
         case .moveSpeedMultiplier: TrainerSemanticIcon.Concept.movement
         case .attackSpeedMultiplier: TrainerSemanticIcon.Concept.actionSpeed
-        case .dashBonus: "wind"
+        case .dashBonus: TrainerSemanticIcon.Concept.dash
         }
     }
 }
@@ -28,7 +28,7 @@ extension HadesShortcutAction {
         case .fullHealth: TrainerSemanticIcon.Concept.vitality
         case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
         case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
-        case .fullGodGauge: "bolt.heart.fill"
+        case .fullGodGauge: HadesWorkbenchIcon.godGauge
         case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
         case .forceRerolls: TrainerSemanticIcon.Concept.refresh
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
@@ -68,6 +68,51 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
     static var visible: [Self] { allCases }
 }
 
+enum HadesWorkbenchIcon {
+    static let godGauge = "bolt.heart.fill"
+    static let catalog = TrainerSemanticIcon.Concept.precision
+    static let level = "arrow.up.circle.fill"
+    static let route = "arrow.triangle.branch"
+    static let chamberObject = "shippingbox"
+    static let refreshStatus = "arrow.clockwise"
+
+    static func icon(for titleKey: String) -> String? {
+        switch titleKey {
+        case "hades.health", "hades.maxHealth": TrainerSemanticIcon.Concept.vitality
+        case "hades.money": TrainerSemanticIcon.Concept.currency
+        case "hades.rerolls": TrainerSemanticIcon.Concept.randomize
+        case "hades.godGauge": godGauge
+        case "host.timeWarp.title": TrainerSemanticIcon.Concept.timeScale
+        case "hades.currentTraits": TrainerSemanticIcon.Concept.controls
+        case "hades.catalog", "hades.exactSource": catalog
+        case "hades.rarity": TrainerSemanticIcon.Concept.quality
+        case "hades.level": level
+        case "hades.apply": TrainerSemanticIcon.Action.apply
+        case "hades.remove", "hades.cancelCurse": TrainerSemanticIcon.Action.remove
+        case "hades.chaosPair": TrainerSemanticIcon.Context.portal
+        case "hades.remainingUses", "hades.expireEffect": TrainerSemanticIcon.Concept.duration
+        case "hades.activateBlessing": TrainerSemanticIcon.Concept.actionSpeed
+        case "hades.refreshEffect": TrainerSemanticIcon.Concept.refresh
+        case "hades.resources": TrainerSemanticIcon.Section.inventory
+        case "hades.gainResource": TrainerSemanticIcon.Action.acquire
+        case "hades.spawnReward", "hades.doorReward": TrainerSemanticIcon.Context.reward
+        case "hades.doorRoute", "hades.route.thanatos": route
+        case "hades.restoreDoor": TrainerSemanticIcon.Action.restore
+        case "hades.chamberObject": chamberObject
+        case "host.refreshStatus": refreshStatus
+        case "hades.saveEditor.title": TrainerSemanticIcon.Tool.saveEditor
+        case "host.saveManagement": TrainerSemanticIcon.Tool.saveManagement
+        case "host.shortcutSettings": TrainerSemanticIcon.Tool.shortcuts
+        case "hades.manage.profiles": TrainerSemanticIcon.Tool.profiles
+        case "hades.manage.diagnostics": TrainerSemanticIcon.Tool.diagnostics
+        case "host.viewLog": TrainerSemanticIcon.Tool.log
+        case "host.viewLogHistory": TrainerSemanticIcon.Tool.logHistory
+        case "host.clearCompletedLogs": TrainerSemanticIcon.Tool.clearLogs
+        default: nil
+        }
+    }
+}
+
 struct HadesWorkbenchEntry: Identifiable {
     let id: String
     let titleKey: String
@@ -77,7 +122,17 @@ struct HadesWorkbenchEntry: Identifiable {
     var worldNames: [String: String]? = nil
 
     var requiresExpandedMetrics: Bool { id.hasPrefix("numeric.") }
-    var icon: String { shortcut?.icon ?? section.icon }
+    var icon: String {
+        if let shortcut { return shortcut.icon }
+        if resource != nil { return TrainerSemanticIcon.Concept.item }
+        if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey }) {
+            return feature.icon
+        }
+        if let icon = HadesWorkbenchIcon.icon(for: titleKey) { return icon }
+        if id == "world.fishing" { return TrainerSemanticIcon.Context.fishing }
+        if id == "world.chaosGate" { return TrainerSemanticIcon.Context.portal }
+        return section.icon
+    }
 
     /// Search aliases preserve familiar terms when the visible product label
     /// follows Hades II wording (for example, "诊断" for "运行自检").
@@ -88,7 +143,6 @@ struct HadesWorkbenchEntry: Identifiable {
         }
     }
 }
-
 enum HadesWorkbenchCatalog {
     /// Single visible-order owner for shortcut defaults and the settings list.
     static let orderedShortcutActions: [HadesShortcutAction] = [
