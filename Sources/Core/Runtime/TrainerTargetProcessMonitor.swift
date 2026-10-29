@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Darwin
 import Foundation
 
 /// Atomically published process presence and definitive launch generation.
@@ -19,12 +20,12 @@ struct TrainerTargetObservation: Equatable {
 
 /// Event-driven target-app presence monitor shared by all game modules.
 ///
-/// It deliberately uses NSWorkspace launch/activation/termination notifications
-/// instead of a repeating process poll, so keeping the trainer open does not add
-/// background debugger or process-scan traffic. Activation is a useful second
-/// attach opportunity after launch because the target game is already foreground
-/// and cannot be paused merely to focus the trainer. The initial snapshot covers
-/// the case where the target game was already running before the trainer launched.
+/// It uses NSWorkspace launch/activation/termination notifications and a narrow
+/// kernel-path probe when taking a snapshot. It never polls on a timer, so keeping
+/// the trainer open does not add background process-scan traffic. Activation is a
+/// useful second attach opportunity after launch because the target game is already
+/// foreground and cannot be paused merely to focus the trainer. The initial snapshot
+/// covers the case where the target game was already running before the trainer launched.
 final class TrainerTargetProcessMonitor: ObservableObject {
     @Published private(set) var targetObservation = TrainerTargetObservation(
         isRunning: false,
@@ -46,11 +47,11 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         self.bundleIdentifier = bundleIdentifier
         self.executablePathSuffix = executablePathSuffix
         self.workspace = workspace
-        let current = currentRunningApplication()
+        let currentPID = currentTargetProcessIdentifier()
         targetObservation = TrainerTargetObservation(
-            isRunning: current != nil,
+            isRunning: currentPID != nil,
             launchGeneration: 0,
-            processIdentifier: current?.processIdentifier
+            processIdentifier: currentPID
         )
 
         let center = workspace.notificationCenter
@@ -89,7 +90,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
             guard let self,
                   let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
-            self.publishPresence(self.currentRunningApplication())
+            self.publishCurrentPresence()
         })
     }
 
@@ -99,17 +100,86 @@ final class TrainerTargetProcessMonitor: ObservableObject {
     }
 
     func refresh() {
-        publishPresence(currentRunningApplication())
+        publishCurrentPresence()
     }
 
     private func publishPresence(_ application: NSRunningApplication?) {
+        publishPresence(processIdentifier: application?.processIdentifier)
+    }
+
+    private func publishCurrentPresence() {
+        publishPresence(processIdentifier: currentTargetProcessIdentifier())
+    }
+
+    private func publishPresence(processIdentifier: pid_t?) {
         let next = TrainerTargetObservation(
-            isRunning: application != nil,
+            isRunning: processIdentifier != nil,
             launchGeneration: launchGeneration,
-            processIdentifier: application?.processIdentifier
+            processIdentifier: processIdentifier
         )
         guard next != targetObservation else { return }
         targetObservation = next
+    }
+
+    private func currentTargetProcessIdentifier() -> pid_t? {
+        if let application = currentRunningApplication() {
+            return application.processIdentifier
+        }
+        return currentMatchingProcessIdentifiers().first
+    }
+
+    /// Some targets may start without an NSRunningApplication record. Restrict
+    /// candidates by process name, then verify their kernel executable path against
+    /// the declared suffix; a same-named unrelated process must never match.
+    private func currentMatchingProcessIdentifiers() -> [pid_t] {
+        guard !processName.isEmpty,
+              !executablePathSuffix.isEmpty,
+              URL(fileURLWithPath: executablePathSuffix).lastPathComponent == processName else {
+            return []
+        }
+
+        let probe = Process()
+        probe.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        probe.arguments = ["-x", processName]
+        let output = Pipe()
+        probe.standardOutput = output
+        probe.standardError = FileHandle.nullDevice
+
+        do {
+            try probe.run()
+        } catch {
+            return []
+        }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        probe.waitUntilExit()
+        guard probe.terminationStatus == 0,
+              let text = String(data: data, encoding: .utf8) else {
+            return []
+        }
+
+        return text.split(whereSeparator: { $0.isNewline }).compactMap { line in
+            guard let value = Int32(String(line)) else { return nil }
+            let pid = pid_t(value)
+            guard let path = processExecutablePath(for: pid),
+                  matchesExecutablePath(path) else {
+                return nil
+            }
+            return pid
+        }
+    }
+
+    private func processExecutablePath(for pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 1024)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    private func matchesExecutablePath(_ path: String) -> Bool {
+        guard !executablePathSuffix.isEmpty else { return false }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
+            .hasSuffix("/" + executablePathSuffix)
     }
 
     private func currentRunningApplication() -> NSRunningApplication? {
@@ -125,7 +195,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
     private func matches(_ app: NSRunningApplication) -> Bool {
         if !executablePathSuffix.isEmpty {
             guard let path = app.executableURL?.standardizedFileURL.path,
-                  path.hasSuffix("/" + executablePathSuffix) else { return false }
+                  matchesExecutablePath(path) else { return false }
         }
         if !bundleIdentifier.isEmpty, app.bundleIdentifier == bundleIdentifier {
             return true

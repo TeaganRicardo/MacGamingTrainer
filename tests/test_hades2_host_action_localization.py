@@ -71,7 +71,10 @@ for token in (
 connection_card = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
 assert 'return "host.launchGame"' in connection_card
-assert "onLaunch: model.launchActionFromHost" in host
+assert "onLaunch: launchAction" in host
+assert "private var launchAction: (() -> Void)?" in host
+assert "targetMonitor.refresh()" in host
+assert "if targetMonitor.isRunning" in host
 assert "var launchActionFromHost: (() -> Void)?" in protocol
 header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
 assert "TrainerSearchField(" in header_actions

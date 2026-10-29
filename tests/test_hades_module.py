@@ -1,5 +1,6 @@
 """Hades module identity, request ownership and safe feature scope."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
+from games.hades import adapter as hades_adapter
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.recovery import HadesRecoveryJournal
@@ -142,6 +144,43 @@ except AdapterError as error:
     assert error.presentation.startswith('hades.')
 else:
     raise AssertionError('missing game must have a typed failure')
+
+# Process-list command names are candidate hints only; the kernel path owns identity.
+expected_executable = str(Path(
+    '/Users/test/Library/Application Support/Steam/steamapps/common/Hades/'
+    'Game.macOS.app/Contents/MacOS/Game.macOS'
+).resolve())
+unrelated_executable = str(Path('/tmp/Other/Game.macOS').resolve())
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value='42 Game.macOS\n43 Game.macOS\n'):
+    with patch('games.hades.adapter.process_executable_path',
+               side_effect=lambda pid: expected_executable if pid == 42 else unrelated_executable):
+        assert hades_adapter.locate_process() == (42, expected_executable), (
+            'basename-only comm must resolve through the actual executable path'
+        )
+
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value=f'42 {expected_executable}\n'):
+    with patch('games.hades.adapter.process_executable_path', return_value=None):
+        assert hades_adapter.locate_process() == (42, expected_executable), (
+            'a full matching ps path remains a valid fallback if proc_pidpath is unavailable'
+        )
+
+with patch('games.hades.adapter.subprocess.check_output',
+           return_value='42 Game.macOS\n43 Game.macOS\n'):
+    with patch('games.hades.adapter.process_executable_path', return_value=expected_executable):
+        try:
+            hades_adapter.locate_process()
+        except AdapterError as error:
+            assert error.code == 'ambiguous_target'
+        else:
+            raise AssertionError('multiple matching Hades processes must fail closed')
+
+if sys.platform == 'darwin':
+    current_executable = hades_adapter.process_executable_path(os.getpid())
+    assert current_executable and Path(current_executable).is_absolute(), (
+        'proc_pidpath must resolve the current test process on macOS'
+    )
 
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
 from lua_runtime_support import require_lua52
