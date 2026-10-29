@@ -92,7 +92,7 @@ struct Hades2DiagnosticsView: View {
         TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
             Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
             Button { model.exportDiagnostics() } label: {
-                Label(text("hades2.diagnostics.export"), systemImage: "square.and.arrow.up")
+                Label(text("hades2.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
             }
                 .disabled(model.busy || !model.backendAvailable)
             Button(text("hades2.diagnostics.rerun")) { model.runDiagnostics() }.disabled(model.busy)
