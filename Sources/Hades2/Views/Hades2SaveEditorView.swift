@@ -206,7 +206,7 @@ struct Hades2SaveEditorView: View {
             Button {
                 model.refreshFiles()
             } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Image(systemName: TrainerSemanticIcon.Concept.refresh)
             }
             .buttonStyle(.borderless)
             .disabled(model.busy)
