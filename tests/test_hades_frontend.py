@@ -387,8 +387,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         check(searchFunctions("profile").contains { $0.section == .management && $0.id == "hades.manage.profiles" },
             "profile manager was absent from bilingual workbench discovery")
-        check(searchFunctions("诊断").contains { $0.id == "hades.manage.diagnostics" },
-            "diagnostics were absent from bilingual workbench discovery")
+        let diagnosticsZh = HadesGameModule.resolveText(key:"hades.manage.diagnostics",language:.zhCN,localization:localization)
+        let diagnosticsEn = HadesGameModule.resolveText(key:"hades.manage.diagnostics",language:.en,localization:localization)
+        check(searchFunctions(diagnosticsZh).contains { $0.id == "hades.manage.diagnostics" }
+              && searchFunctions(diagnosticsEn).contains { $0.id == "hades.manage.diagnostics" },
+              "current diagnostics label was absent from bilingual workbench discovery")
         check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
             "Host-owned function names were not localized in search")
         check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",
