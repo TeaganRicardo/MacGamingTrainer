@@ -93,7 +93,7 @@ struct HadesTrainerView: View {
                                       value: model.money, field: "money")
                 HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
                                       value: model.rerolls, field: "rerolls")
-                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: "bolt.heart.fill",
+                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
                                       value: model.godGauge, field: "godGauge")
                 if model.numericControlsExpanded {
                     ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
@@ -485,7 +485,7 @@ private struct HadesCatalogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(text("hades.catalog"), systemImage: "scope")
+            Label(text("hades.catalog"), systemImage: HadesWorkbenchIcon.catalog)
                 .font(.subheadline.weight(.medium))
             TrainerSearchField(text: $query, placeholder: text("hades.search"),
                                clearLabel: localization.localized("host.search.clear"))
@@ -587,7 +587,7 @@ private struct HadesCurrentTraitsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Label(text("hades.currentTraits"), systemImage: "slider.horizontal.3")
+                Label(text("hades.currentTraits"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 TrainerSearchField(text: $search, placeholder: text("hades.search"),
