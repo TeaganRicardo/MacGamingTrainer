@@ -125,12 +125,15 @@ struct HadesWorkbenchEntry: Identifiable {
     var icon: String {
         if let shortcut { return shortcut.icon }
         if resource != nil { return TrainerSemanticIcon.Concept.item }
+        if worldNames != nil {
+            if id == "world.fishing" { return TrainerSemanticIcon.Context.fishing }
+            if id == "world.chaosGate" { return TrainerSemanticIcon.Context.portal }
+            return section.icon
+        }
         if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey }) {
             return feature.icon
         }
         if let icon = HadesWorkbenchIcon.icon(for: titleKey) { return icon }
-        if id == "world.fishing" { return TrainerSemanticIcon.Context.fishing }
-        if id == "world.chaosGate" { return TrainerSemanticIcon.Context.portal }
         return section.icon
     }
 
