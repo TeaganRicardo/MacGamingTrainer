@@ -126,7 +126,8 @@ icon_source = (ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift").read_text()
 for semantic in (
     "protection", "vitality", "energy", "currency", "randomize",
     "refresh", "capacity", "quality", "impact", "movement",
-    "actionSpeed", "timeScale", "item",
+    "actionSpeed", "timeScale", "item", "controls", "defense",
+    "duration", "timer", "precision", "dash",
 ):
     assert f"static let {semantic} =" in icon_source
 for semantic in ("acquire", "apply", "generate", "save", "load", "remove", "restore"):
@@ -194,12 +195,54 @@ assert "TrainerSemanticIcon" not in hades2_types
 assert "Label(text(action.key), systemImage: action.icon)" in hades_view
 hades2_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
 assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2_management
-assert "var icon: String { shortcut?.icon ?? section.icon }" in hades_nav
-assert "var icon: String { shortcut?.icon ?? section.icon }" in hades2_nav
+assert "if let icon = HadesWorkbenchIcon.icon(for: titleKey)" in hades_nav
+assert "if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey })" in hades_nav
+assert "Hades2WorkbenchIcon.icon(for: titleKey)" in hades2_nav
+assert "extension Hades2GatheringFamily" in hades2_nav
+assert "var icon: String { shortcut?.icon ?? Hades2WorkbenchIcon.icon(for: titleKey) ?? section.icon }" in hades2_nav
+hades_icon_map = hades_nav[hades_nav.index("static func icon(for titleKey: String)") : hades_nav.index("struct HadesWorkbenchEntry")]
+for key in (
+    "hades.health", "hades.maxHealth", "hades.money", "hades.rerolls", "hades.godGauge",
+    "hades.currentTraits", "hades.catalog", "hades.rarity", "hades.level", "hades.apply",
+    "hades.remove", "hades.chaosPair", "hades.remainingUses", "hades.activateBlessing",
+    "hades.expireEffect", "hades.refreshEffect", "hades.resources", "hades.gainResource",
+    "hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
+    "hades.route.thanatos", "hades.chamberObject", "host.refreshStatus", "hades.saveEditor.title",
+    "host.saveManagement", "host.shortcutSettings", "hades.manage.profiles",
+    "hades.manage.diagnostics", "host.viewLog", "host.viewLogHistory", "host.clearCompletedLogs",
+):
+    assert f'"{key}"' in hades_icon_map, f"missing Hades discovery icon: {key}"
+hades2_icon_map = hades2_nav[hades2_nav.index("static func icon(for titleKey: String)") : hades2_nav.index("extension Hades2GatheringFamily")]
+for key in (
+    "hades2.vital.health", "hades2.vital.mana", "hades2.vital.runGold", "hades2.vital.armor",
+    "hades2.feature.damageMultiplier", "hades2.stat.grasp", "hades2.metric.rerolls",
+    "hades2.metric.spellCharge", "hades2.stat.dodge", "hades2.stat.crit",
+    "hades2.stat.enemyDamage", "hades2.stat.enemyHealth", "hades2.stat.chargeSpeed",
+    "hades2.stat.moveSpeed", "hades2.stat.sprintSpeed", "hades2.stat.dashSpeed",
+    "hades2.stat.attackSpeed", "hades2.stat.manaRegen", "hades2.gameSpeed.title",
+    "hades2.traits.manager", "hades2.traits.targetLevel", "hades2.traits.targetRarity",
+    "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
+    "hades2.traits.remove", "hades2.traits.removeAllMatching", "hades2.traits.chaos.advance",
+    "hades2.traits.chaos.cancelPair", "hades2.rarity.minimum", "hades2.section.elements",
+    "hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative",
+    "hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",
+    "hades2.occurrence.title", "hades2.spawn.olympianBoons", "hades2.spawn.pickupRewards",
+    "hades2.spawn.characterRewards", "hades2.manage.profiles", "hades2.saveEditor.title",
+    "hades2.manage.diagnostics", "hades2.manage.prepareSigning", "hades2.manage.restoreSigning",
+    "host.saveManagement", "host.shortcutSettings", "host.viewLog", "host.viewLogHistory",
+    "host.clearCompletedLogs", "host.refreshStatus",
+):
+    assert f'"{key}"' in hades2_icon_map, f"missing Hades II discovery icon: {key}"
+
 assert 'case "hades.manage.diagnostics": ["hades.manage.maintenance"]' in hades_nav
 assert "entry.searchAliasKeys.flatMap(labels)" in hades_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
 assert "systemImage: entry.icon" in hades2_host
+assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
+assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
+assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
+assert "return family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
 assert "systemImage: entry.icon" in hades_nav
 
 # Executable product actions must carry an icon. This deliberately scans both
