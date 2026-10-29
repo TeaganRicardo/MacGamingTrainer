@@ -114,7 +114,7 @@ for token in (
     assert token in management, token
 
 for token in (
-    'Button(localization.localized("host.refresh"))',
+    'Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)',
     'Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)',
 ):
     assert token in management, token
