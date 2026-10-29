@@ -16,7 +16,9 @@ struct Hades2ProfileManagerView: View {
 
     var body: some View {
         TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
-            Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
+            Button { model.listProfiles() } label: {
+                Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(model.busy)
         } content: {
             Text(text("hades2.profile.explanation"))
                 .foregroundStyle(.secondary)
@@ -95,7 +97,9 @@ struct Hades2DiagnosticsView: View {
                 Label(text("hades2.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
             }
                 .disabled(model.busy || !model.backendAvailable)
-            Button(text("hades2.diagnostics.rerun")) { model.runDiagnostics() }.disabled(model.busy)
+            Button { model.runDiagnostics() } label: {
+                Label(text("hades2.diagnostics.rerun"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(model.busy)
         } content: {
             Text(text("hades2.diagnostics.explanation"))
                 .foregroundStyle(.secondary)
