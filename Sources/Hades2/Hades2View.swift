@@ -546,7 +546,7 @@ struct Hades2TrainerView: View {
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                Label(text("hades2.traits.manager"), systemImage: "slider.horizontal.3")
+                Label(text("hades2.traits.manager"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                     .fixedSize()
 
@@ -766,7 +766,7 @@ struct Hades2TrainerView: View {
             resourcePanel
             Hades2GatheringPanel(model: model)
             TrainerLabeledControlRow(
-                title: text("hades2.garden.title"), icon: "leaf.fill",
+                title: text("hades2.garden.title"), icon: Hades2WorkbenchIcon.garden,
                 tint: model.canMatureGarden ? theme.accent : theme.inactive,
                 emphasized: model.canMatureGarden
             ) {
@@ -1151,7 +1151,7 @@ struct Hades2TrainerView: View {
             model.lockResource("Money", locked: !model.moneyLocked)
         }
         editableAmountMetric(
-            text("hades2.vital.armor"), icon: "shield.lefthalf.filled", text: $armorCurrent, focus: .armorCurrent,
+            text("hades2.vital.armor"), icon: TrainerSemanticIcon.Concept.defense, text: $armorCurrent, focus: .armorCurrent,
             color: theme.warning, locked: model.armorLocked, enabled: model.canSetVital("armor"),
             edit: .vital("armor", field: "current")
         ) {
@@ -1162,7 +1162,7 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var expandedSessionMetrics: some View {
         damageMetric
-        editableStatMetric(text("hades2.stat.grasp"), icon: "brain.head.profile", stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
+        editableStatMetric(text("hades2.stat.grasp"), icon: Hades2WorkbenchIcon.grasp, stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
             text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
@@ -1171,23 +1171,23 @@ struct Hades2TrainerView: View {
             model.lockRerolls(!model.rerollsLocked)
         }
         editableCounterMetric(
-            text("hades2.metric.spellCharge"), icon: "moonphase.waxing.crescent", text: $spellCharge,
+            text("hades2.metric.spellCharge"), icon: Hades2WorkbenchIcon.spellCharge, text: $spellCharge,
             focus: .spellCharge, color: .purple,
             detail: model.spellChargeCost.map { cost in
                     Hades2GameModule.presentationText(key: "hades2.metric.cost", arguments: [number(cost)], language: localization.language)
                 } ?? nil,
             edit: .counter("spellCharge")
         )
-        editableStatMetric(text("hades2.stat.dodge"), icon: "figure.run", stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
-        editableStatMetric(text("hades2.stat.crit"), icon: "scope", stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
-        editableStatMetric(text("hades2.stat.enemyDamage"), icon: "burst.fill", stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
-        editableStatMetric(text("hades2.stat.enemyHealth"), icon: "heart.text.square.fill", stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
-        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: "timer", stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
+        editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
+        editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
+        editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
+        editableStatMetric(text("hades2.stat.enemyHealth"), icon: TrainerSemanticIcon.Concept.vitality, stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
+        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: TrainerSemanticIcon.Concept.timer, stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
         editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
-        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: "hare.fill", stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
-        editableStatMetric(text("hades2.stat.dashSpeed"), icon: "forward.end.fill", stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
+        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: Hades2WorkbenchIcon.sprintSpeed, stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
+        editableStatMetric(text("hades2.stat.dashSpeed"), icon: TrainerSemanticIcon.Concept.dash, stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
         editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
-        editableStatMetric(text("hades2.stat.manaRegen"), icon: "drop.circle.fill", stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
+        editableStatMetric(text("hades2.stat.manaRegen"), icon: TrainerSemanticIcon.Concept.energy, stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
     }
 
     private var elementPanel: some View {
@@ -1251,7 +1251,7 @@ struct Hades2TrainerView: View {
         let characters = model.occurrenceTargets.filter { $0.kind == "character" }
         let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
         return TrainerLabeledControlRow(
-            title: text("hades2.occurrence.title"), icon: "figure.walk.motion",
+            title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
             emphasized: model.canEditDesired
         ) {
@@ -1344,7 +1344,7 @@ struct Hades2TrainerView: View {
             spawnRow(title: text("hades2.spawn.pickupRewards"), icon: TrainerSemanticIcon.Section.inventory, options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             spawnRow(
                 title: text("hades2.spawn.characterRewards"),
-                icon: "moon.stars.fill",
+                icon: Hades2WorkbenchIcon.specialReward,
                 options: specialBoons,
                 selection: $model.selectedSpecialReward,
                 shortcut: .spawnSpecial,
@@ -1360,7 +1360,7 @@ struct Hades2TrainerView: View {
     private var boonAcquisitionPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
+                Label(text("hades2.spawn.exactBoons"), systemImage: TrainerSemanticIcon.Concept.precision).font(.subheadline.weight(.medium))
                 Spacer()
                 TrainerSearchField(
                     text: $exactSearch,
@@ -1492,7 +1492,7 @@ struct Hades2TrainerView: View {
             HStack {
                 TrainerIconLabel(
                     title: text("hades2.spawn.purgingPool"),
-                    icon: "arrow.left.arrow.right.circle",
+                    icon: Hades2WorkbenchIcon.purge,
                     tint: model.canOpenSellTraits ? theme.accent : theme.inactive,
                     emphasized: model.canOpenSellTraits
                 )
