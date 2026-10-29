@@ -111,7 +111,9 @@ struct HadesProfileManagerView: View {
 
     var body: some View {
         TrainerSheetScaffold(title: text("hades.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
-            Button(text("host.refresh"), action: model.listProfiles).disabled(!model.hostActionsEnabled)
+            Button { model.listProfiles() } label: {
+                Label(text("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(!model.hostActionsEnabled)
         } content: {
             Text(text("hades.profile.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
@@ -166,7 +168,9 @@ struct HadesDiagnosticsView: View {
             Button { model.exportDiagnostics() } label: {
                 Label(text("hades.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
             }.disabled(!model.hostActionsEnabled)
-            Button(text("host.refresh"), action: model.runDiagnostics).disabled(!model.hostActionsEnabled)
+            Button { model.runDiagnostics() } label: {
+                Label(text("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
+            }.disabled(!model.hostActionsEnabled)
         } content: {
             Text(text("hades.diagnostics.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ScrollView {
