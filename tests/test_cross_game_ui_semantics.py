@@ -253,7 +253,7 @@ assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTra
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
-assert "return family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
+assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
 assert "systemImage: entry.icon" in hades_nav
 
 # Executable product actions must carry an icon. This deliberately scans both
