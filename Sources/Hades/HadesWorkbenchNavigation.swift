@@ -137,14 +137,6 @@ struct HadesWorkbenchEntry: Identifiable {
         return section.icon
     }
 
-    /// Search aliases preserve familiar terms when the visible product label
-    /// follows Hades II wording (for example, "诊断" for "运行自检").
-    var searchAliasKeys: [String] {
-        switch titleKey {
-        case "hades.manage.diagnostics": ["hades.manage.maintenance"]
-        default: []
-        }
-    }
 }
 enum HadesWorkbenchCatalog {
     /// Single visible-order owner for shortcut defaults and the settings list.
