@@ -34,6 +34,7 @@ enum TrainerSemanticIcon {
         static let timer = "timer"
         static let precision = "scope"
         static let dash = "wind"
+        static let level = "arrow.up.circle.fill"
     }
 
     enum Context {
@@ -50,6 +51,7 @@ enum TrainerSemanticIcon {
         static let shortcuts = "keyboard"
         static let diagnostics = "stethoscope"
         static let exportDiagnostics = "square.and.arrow.up"
+        static let refreshStatus = "arrow.clockwise"
         static let log = "doc.text.magnifyingglass"
         static let logHistory = "clock.arrow.circlepath"
         static let clearLogs = "trash"
