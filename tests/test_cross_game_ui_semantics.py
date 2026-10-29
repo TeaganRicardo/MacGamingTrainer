@@ -182,7 +182,14 @@ for path in (
     ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift",
 ):
     source = path.read_text()
-    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "logHistory", "clearLogs", "diagnostics", "exportDiagnostics", "refreshStatus"):
+    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics", "exportDiagnostics"):
+        assert f"TrainerSemanticIcon.Tool.{semantic}" in source
+for path in (
+    ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
+    ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
+):
+    source = path.read_text()
+    for semantic in ("logHistory", "clearLogs", "refreshStatus"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
 
 # Every shortcut-visible function owns one icon. The same action icon is reused
