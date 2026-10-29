@@ -163,7 +163,7 @@ with patch('games.hades.adapter.subprocess.check_output',
 
 # Two actual copies of the same declared executable remain an explicit error.
 with patch('games.hades.adapter.subprocess.check_output',
-           return_value='101 Game.macOS\\n202 Game.macOS\\n'), \\
+           return_value='101 Game.macOS\n202 Game.macOS\n'), \\
      patch('games.hades.adapter._process_executable_path',
            side_effect={
                101: expected_executable,
