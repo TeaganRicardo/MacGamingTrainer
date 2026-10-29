@@ -76,7 +76,7 @@ struct HadesSaveEditorView: View {
                 Button(text("hades.saveEditor.read")) {
                     if model.review.count > 0 { confirmingRead = true } else { model.openSelection() }
                 }.disabled(model.busy || !model.sources.contains(where: { $0.id == model.selectedSourceID }))
-                Button { model.refreshInventory() } label: { Image(systemName: "arrow.clockwise") }
+                Button { model.refreshInventory() } label: { Image(systemName: TrainerSemanticIcon.Concept.refresh) }
                     .help(text("host.refresh")).accessibilityLabel(text("host.refresh")).disabled(model.busy)
             }
             if let source = model.source {
