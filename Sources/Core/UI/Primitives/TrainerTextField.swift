@@ -147,17 +147,22 @@ struct TrainerTextField: NSViewRepresentable {
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) { coordinator.cancel(field) }
 
     private func configure(_ field: NSTextField) {
-        field.placeholderString = title
-        field.setAccessibilityLabel(accessibilityLabel ?? title)
-        field.font = font
-        field.alignment = alignment
-        field.isEnabled = enabled
+        // Assigning an unchanged AppKit control property can invalidate the
+        // intrinsic size while SwiftUI is measuring this representable. Keep
+        // configuration idempotent during a completed edit's state refresh.
+        if field.placeholderString != title { field.placeholderString = title }
+        let label = accessibilityLabel ?? title
+        if field.accessibilityLabel() != label { field.setAccessibilityLabel(label) }
+        if field.font != font { field.font = font }
+        if field.alignment != alignment { field.alignment = alignment }
+        if field.isEnabled != enabled { field.isEnabled = enabled }
         // AppKit clears a bezel when isBordered is assigned, even false.
         // The native rounded bezel draws its own background.
-        field.isBezeled = style == .rounded
-        field.bezelStyle = .roundedBezel
-        field.drawsBackground = false
-        field.textColor = .labelColor
+        let rounded = style == .rounded
+        if field.isBezeled != rounded { field.isBezeled = rounded }
+        if rounded && field.bezelStyle != .roundedBezel { field.bezelStyle = .roundedBezel }
+        if field.drawsBackground { field.drawsBackground = false }
+        if field.textColor != .labelColor { field.textColor = .labelColor }
     }
 
     static func editingTracker<Field: Hashable>(_ focus: Binding<Field?>, equals field: Field) -> (Bool) -> Void {
