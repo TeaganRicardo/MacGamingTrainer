@@ -82,6 +82,8 @@ def typed_value(value):
         except UnicodeError:
             return {"luaType": kind, "encoding": "base64",
                     "value": base64.b64encode(value.encode("utf-8", errors="surrogateescape")).decode("ascii")}
+    if kind == "number" and value == 0 and math.copysign(1.0, value) < 0:
+        return {"luaType": kind, "encoding": "ieee754", "value": "0000000000000080"}
     if kind == "number" and not math.isfinite(value):
         # Explicit encoding keeps JSON finite and gives NaN stable intent
         # equality. NaN remains forbidden as a table key.
@@ -122,6 +124,10 @@ def value_from_typed(node, depth=0, *, max_depth=_MAX_LUABINS_DEPTH):
         if not isinstance(value, str) or value not in choices:
             raise AdvancedMutationError("Save Editor nonfinite number must be nan, inf or -inf.")
         return choices[value]
+    elif kind == "number" and node.get("encoding") == "ieee754":
+        if value != "0000000000000080":
+            raise AdvancedMutationError("Save Editor IEEE-754 encoding requires negative-zero bytes.")
+        return -0.0
     elif node.get("encoding") is not None:
         raise AdvancedMutationError("Save Editor typed scalar encoding is unsupported.")
     return validate_scalar(value, kind)
@@ -264,7 +270,7 @@ def row(root, identifier, language):
         result["value"] = None if encoded.get("encoding") else value
         if encoded.get("encoding") == "base64":
             result["valueType"] = "binary"
-        elif encoded.get("encoding") == "nonfinite":
+        elif encoded.get("encoding") in ("nonfinite", "ieee754"):
             result["typedValue"] = encoded
     return result
 
@@ -311,6 +317,13 @@ def apply_intent(root, intent):
 
 def paths_overlap(left, right):
     return all(_same_lua_key(a, b) for a, b in zip(left, right))
+
+
+def same_typed_value(before, after, *, container=False):
+    # Container views add two synthetic layers above actual encoded values.
+    max_depth = _MAX_LUABINS_DEPTH + (2 if container else 0)
+    return _encode_luabins([value_from_typed(before, max_depth=max_depth)], max_depth=max_depth) == \
+        _encode_luabins([value_from_typed(after, max_depth=max_depth)], max_depth=max_depth)
 
 
 def changed_paths(before, after, path=()):

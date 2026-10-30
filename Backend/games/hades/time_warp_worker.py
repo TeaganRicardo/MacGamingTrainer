@@ -3,13 +3,22 @@ from pathlib import Path
 import sys
 
 from core.adapter import AdapterError
-from .lldb_time_warp import LLDBProcessTimeWarpDriver
+from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
 from core.process_time_warp import ProcessTimeWarpController
 from core.sidecar import serve_jsonl_requests
 
-from .lldb_worker import HadesLLDBWorker, error_payload
+from .lldb_worker import HadesLLDBWorker, error_payload as runtime_error_payload
 
 HADES_TIME_WARP_IMAGE_NAMES = ('Game.macOS',)
+
+
+def error_payload(error):
+    payload = runtime_error_payload(error)
+    recovery = {'outcome_unknown': 'outcomeUnknown', 'restart_required': 'restartRequired'}
+    if payload['code'] in recovery:
+        payload['presentation'] = 'hades.error.' + recovery[payload['code']]
+        payload['arguments'] = []
+    return payload
 
 
 class HadesTimeWarpWorker(HadesLLDBWorker):

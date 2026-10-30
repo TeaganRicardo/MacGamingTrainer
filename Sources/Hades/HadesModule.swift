@@ -310,8 +310,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func receiveStatus(_ status: TrainerBackendStatus) {
         let previousError = backendStatus.error
         backendStatus = status
-        switch status.error {
-        case "hades.error.outcomeUnknown", "hades.error.restartRequired", "hades.error.debuggerProtocol":
+        switch status.errorCode {
+        case "outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost":
             resetObservation()
         default: break
         }

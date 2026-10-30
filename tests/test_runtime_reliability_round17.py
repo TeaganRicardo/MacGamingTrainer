@@ -234,7 +234,7 @@ with tempfile.TemporaryDirectory() as td:
     main_path.write_text(textwrap.dedent(harness))
     subprocess.run([
         SWIFTC,
-        str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(main_path),
         "-o", str(binary),

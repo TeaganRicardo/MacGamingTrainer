@@ -1,7 +1,7 @@
 # Current-run effect naming governance
 
 Target: Hades II **1.143476** / Steam build **25481925**  
-Status: **active implementation — final in-game acceptance pending**
+Status: **implemented naming policy — final in-game acceptance pending**
 
 This document governs how concrete runtime traits are named when they can appear in the current-run effect manager. It defines the rules and evidence boundary only; it does not duplicate the row-level naming data.
 

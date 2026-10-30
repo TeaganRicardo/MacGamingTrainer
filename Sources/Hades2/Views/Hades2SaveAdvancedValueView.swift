@@ -22,7 +22,7 @@ struct Hades2SaveAdvancedValueView: View {
         Binding(get: { membershipDraft[keyPath: path] }, set: { value in
             var draft = membershipDraft
             draft[keyPath: path] = value
-            model.retainMembershipDraft(draft, for: entry.id)
+            model.retainMembershipDraft(draft, for: entry.id, baseline: entry.baselineGeneration)
         })
     }
 
@@ -30,7 +30,7 @@ struct Hades2SaveAdvancedValueView: View {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
     private var mutations: [String] { detail?.mutationKinds ?? entry.mutationKinds }
-    private var editable: Bool { loaded && (detail?.editable ?? entry.editable) && !model.busy }
+    private var editable: Bool { loaded && (detail?.editable ?? entry.editable) && !model.busy && entry.baselineGeneration == model.baselineGeneration }
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
@@ -85,7 +85,7 @@ struct Hades2SaveAdvancedValueView: View {
                 }
                 if mutations.contains("unset") {
                     Button(text("hades2.saveEditor.advanced.removeField")) {
-                        model.stage(entryID: entry.id, operation: "unset", value: nil)
+                        model.stage(entryID: entry.id, operation: "unset", value: nil, baseline: entry.baselineGeneration)
                     }.disabled(!editable)
                 }
             }
@@ -133,7 +133,7 @@ struct Hades2SaveAdvancedValueView: View {
         let rawKey: Any
         switch draft.keyType {
         case "number":
-            guard let number = Double(draft.key), !number.isNaN else { invalidMembership(); return }
+            guard let number = TrainerJSONNumericInput.number(draft.key, allowsInfinity: true), !number.isNaN else { invalidMembership(); return }
             rawKey = number
         case "boolean":
             guard ["true", "false"].contains(draft.key) else { invalidMembership(); return }
@@ -146,19 +146,19 @@ struct Hades2SaveAdvancedValueView: View {
         } else {
             key = ["luaType": draft.keyType, "value": rawKey]
         }
-        var payload: [String: Any] = ["key": key]
+        var payload: [String: Any] = ["key": Hades2SaveTypedValue(key)!.object]
         if operation == "addMembership" {
             guard let value = Hades2SaveTypedValue(text: draft.value) else { invalidMembership(); return }
             payload["value"] = value.object
         }
         draft.failure = nil
-        model.retainMembershipDraft(draft, for: entry.id)
-        model.stage(entryID: entry.id, operation: operation, value: payload)
+        model.retainMembershipDraft(draft, for: entry.id, baseline: entry.baselineGeneration)
+        model.stage(entryID: entry.id, operation: operation, value: payload, baseline: entry.baselineGeneration)
     }
 
     private func invalidMembership() {
         var draft = membershipDraft
         draft.failure = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
-        model.retainMembershipDraft(draft, for: entry.id)
+        model.retainMembershipDraft(draft, for: entry.id, baseline: entry.baselineGeneration)
     }
 }

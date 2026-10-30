@@ -126,7 +126,12 @@ for index in 0..<3 {
     let release = DispatchSemaphore(value: 0)
     probe.holdReadsForTest(entered: entered, release: release)
     entered.wait()
-    try probe.send(["stream": index == 0 ? "stdout" : "stderr"])
+    var sent = false
+    probe.send(["stream": index == 0 ? "stdout" : "stderr"]) { failure in
+        if let failure { fail("probe write failed: \(failure.error.localizedDescription)") }
+        sent = true
+    }
+    waitForProbe("probe request was not written") { sent }
     // A finite stdout/stderr burst arrives while its consumer is occupied.
     // Readiness delivery must not enqueue unbounded work for those same bytes.
     Thread.sleep(forTimeInterval: 0.2)
@@ -174,6 +179,7 @@ extension BackendProcess {
     harness_path.write_text(production + probe_extension + textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"),
         str(harness_path),
         "-o", str(binary),
     ], cwd=ROOT, check=True)

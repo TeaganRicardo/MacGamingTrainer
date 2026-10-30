@@ -13,6 +13,11 @@ final class Hades2RunLogWatcher {
     private let queue = DispatchQueue(label: "MacGamingTrainer.Hades2RunLogWatcher", qos: .utility)
     private let directoryURL: URL
     private let logURL: URL
+    private let deliver: (@escaping () -> Void) -> Void
+    private var deliveryEpoch = UUID() // Main queue: invalidated before retiring sources.
+    private var sourceEpoch = UUID() // Watcher queue: captured by every source/read.
+    private var directorySourceID = UUID()
+    private var fileSourceID = UUID()
     private let onEvent: (Hades2RunLogEvent) -> Void
 
     private var directorySource: DispatchSourceFileSystemObject?
@@ -22,12 +27,15 @@ final class Hades2RunLogWatcher {
     private var lineBuffer = Data()
     private var runtimeResetPending = false
 
-    init(directoryURL: URL? = nil, onEvent: @escaping (Hades2RunLogEvent) -> Void) {
+    init(directoryURL: URL? = nil,
+         deliver: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) },
+         onEvent: @escaping (Hades2RunLogEvent) -> Void) {
         let support = directoryURL ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Supergiant Games/Hades II", isDirectory: true)
         self.directoryURL = support
         logURL = support.appendingPathComponent("Hades II.log")
         self.onEvent = onEvent
+        self.deliver = deliver
     }
 
     var canObserveLifecycle: Bool {
@@ -35,11 +43,29 @@ final class Hades2RunLogWatcher {
     }
 
     func start() {
-        queue.async { [weak self] in self?.startLocked() }
+        let epoch = deliveryEpoch
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.sourceEpoch = epoch
+            self.startLocked()
+        }
     }
 
     func stop() {
+        deliveryEpoch = UUID()
         queue.async { [weak self] in self?.stopLocked() }
+    }
+
+    /// Host process replacement retires queued delivery before a new cursor is
+    /// installed. Backend restarts use start(), preserving this game lifetime.
+    func targetLifetimeChanged(running: Bool) {
+        deliveryEpoch = UUID()
+        let epoch = deliveryEpoch
+        queue.sync {
+            stopLocked()
+            sourceEpoch = epoch
+            if running { startLocked() }
+        }
     }
 
     private func startLocked() {
@@ -61,8 +87,11 @@ final class Hades2RunLogWatcher {
             eventMask: [.write, .rename, .delete],
             queue: queue
         )
+        directorySourceID = UUID()
+        let identifier = directorySourceID
+        let epoch = sourceEpoch
         next.setEventHandler { [weak self, weak next] in
-            guard let self, let next else { return }
+            guard let self, let next, self.directorySourceID == identifier, self.sourceEpoch == epoch else { return }
             let data = next.data
             if data.contains(.rename) || data.contains(.delete) {
                 self.stopLocked()
@@ -72,6 +101,7 @@ final class Hades2RunLogWatcher {
 
             guard let metadata = self.metadata() else { return }
             if self.fileSource == nil || self.fileIdentity != metadata.identity {
+                self.fileSourceID = UUID()
                 self.fileSource?.cancel()
                 self.fileSource = nil
                 self.fileIdentity = metadata.identity
@@ -103,10 +133,14 @@ final class Hades2RunLogWatcher {
             eventMask: [.write, .rename, .delete, .revoke],
             queue: queue
         )
+        fileSourceID = UUID()
+        let identifier = fileSourceID
+        let epoch = sourceEpoch
         next.setEventHandler { [weak self, weak next] in
-            guard let self, let next else { return }
+            guard let self, let next, self.fileSourceID == identifier, self.sourceEpoch == epoch else { return }
             let data = next.data
             if data.contains(.rename) || data.contains(.delete) || data.contains(.revoke) {
+                self.fileSourceID = UUID()
                 self.fileSource?.cancel()
                 self.fileSource = nil
                 self.fileIdentity = nil
@@ -131,6 +165,8 @@ final class Hades2RunLogWatcher {
     }
 
     private func stopLocked() {
+        fileSourceID = UUID()
+        directorySourceID = UUID()
         fileSource?.cancel()
         fileSource = nil
         directorySource?.cancel()
@@ -206,8 +242,13 @@ final class Hades2RunLogWatcher {
             }
         }
         guard !events.isEmpty else { return }
-        DispatchQueue.main.async { [onEvent] in
-            for event in events { onEvent(event) }
+        let epoch = sourceEpoch
+        deliver { [weak self] in
+            guard let self, self.deliveryEpoch == epoch else { return }
+            for event in events {
+                guard self.deliveryEpoch == epoch else { return }
+                self.onEvent(event)
+            }
         }
     }
 }

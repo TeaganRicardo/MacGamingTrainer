@@ -10,6 +10,7 @@ from games.hades2.command_contract import Hades2CommandContract, command_metadat
 class Probe:
     def __init__(self):
         self.calls = []
+        self.baseline_generation = "baseline-1"
 
     def open_save_editor(self, params):
         self.calls.append(("open", params))
@@ -26,6 +27,13 @@ class Probe:
     def validate_save_workspace(self, identifier):
         if identifier != "selected-document":
             raise ValueError("Save Editor document is no longer selected.")
+
+        return self
+
+    def require_baseline(self, generation):
+        if generation != self.baseline_generation:
+            from games.hades2.save_advanced import AdvancedMutationError
+            raise AdvancedMutationError("stale baseline", conflict=True)
 
     def query_save_editor(self, params):
         self.calls.append(("query", params))
@@ -69,7 +77,7 @@ assert opened["profile"] == "Profile1"
 queried = contract.dispatch(
     "save_editor_query",
     {
-        "workspaceId": "selected-document",
+        "workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation,
         "domain": "resources",
         "search": "moon",
         "offset": 20,
@@ -79,34 +87,34 @@ queried = contract.dispatch(
     },
     "query",
 )
-assert queried == {"domain": "resources", "items": []}
+assert queried == {"domain": "resources", "items": [], "baselineGeneration": probe.baseline_generation}
 
 investigated = contract.dispatch(
     "save_editor_query",
-    {"workspaceId": "selected-document", "domain": "investigate", "search": "Nemesis", "stateFilter": "notRecorded", "language": "zh-CN"},
+    {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "domain": "investigate", "search": "Nemesis", "stateFilter": "notRecorded", "language": "zh-CN"},
     "investigate",
 )
 assert investigated["domain"] == "investigate"
 assert contract.dispatch(
     "save_editor_detail",
-    {"workspaceId": "selected-document", "entryId": "investigate:NemesisPostTrueEnding01", "language": "zh-CN"},
+    {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "entryId": "investigate:NemesisPostTrueEnding01", "language": "zh-CN"},
     "detail",
 )["scene"] == "NemesisPostTrueEnding01"
 
 staged = contract.dispatch(
     "save_editor_stage",
-    {"workspaceId": "selected-document", "entryId": "resource:MetaCurrency", "operation": "set", "value": 500, "language": "en"},
+    {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "entryId": "resource:MetaCurrency", "operation": "set", "value": 500, "language": "en"},
     "stage",
 )
 assert staged["count"] == 1
 assert contract.dispatch(
     "save_editor_unstage",
-    {"workspaceId": "selected-document", "entryId": "resource:MetaCurrency", "language": "en"},
+    {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "entryId": "resource:MetaCurrency", "language": "en"},
     "unstage",
 )["actionCount"] == 0
-assert contract.dispatch("save_editor_review", {"workspaceId": "selected-document", "language": "zh-CN"}, "review")["count"] == 1
-assert contract.dispatch("save_editor_cancel", {"workspaceId": "selected-document", "language": "en"}, "cancel")["count"] == 0
-assert contract.dispatch("save_editor_apply", {"workspaceId": "selected-document"}, "apply")["applied"] is True
+assert contract.dispatch("save_editor_review", {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "language": "zh-CN"}, "review")["count"] == 1
+assert contract.dispatch("save_editor_cancel", {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "language": "en"}, "cancel")["count"] == 0
+assert contract.dispatch("save_editor_apply", {"workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation}, "apply")["applied"] is True
 
 expected_calls = [
     ("open", {}),
@@ -140,12 +148,25 @@ expected_calls = [
     ("unstage", {"entryId": "resource:MetaCurrency", "language": "en"}),
     ("review", {"language": "zh-CN"}),
     ("cancel", {"language": "en"}),
-    ("apply", {}),
+    ("apply", {"draftEntryIds": []}),
 ]
 assert probe.calls == [(name, dict(params, workspaceId="selected-document") if name != "open" else params)
                        for name, params in expected_calls]
 assert contract.dispatch("save_editor_close", {"workspaceId": "selected-document"}, "close") == {"closed": True}
 assert probe.calls[-1] == ("close", {"workspaceId": "selected-document"})
+
+
+for baseline in (None, "previous-baseline", False):
+    calls = list(probe.calls)
+    try:
+        contract.dispatch("save_editor_stage", {"workspaceId": "selected-document",
+            "baselineGeneration": baseline, "entryId": "resource:MetaCurrency",
+            "operation": "set", "value": 9}, "stale-baseline")
+    except Exception as error:
+        assert getattr(error, "presentation", None) == "hades2.saveEditor.error.typedLuaConflict"
+        assert probe.calls == calls
+    else:
+        raise AssertionError("old baseline reached mutation owner")
 
 metadata = {row["name"]: row["timeoutSeconds"] for row in command_metadata()}
 for name in (
@@ -175,7 +196,7 @@ assert probe.calls[-2:] == [
     ("inventory", {"snapshotId": "verified-backup"}), ("open", selection),
 ]
 assert contract.dispatch("save_editor_target", {
-    "workspaceId": "selected-document", "target": target,
+    "workspaceId": "selected-document", "baselineGeneration": probe.baseline_generation, "target": target,
 }, "target")["target"] == target
 calls_before_invalid = list(probe.calls)
 for command, params in (

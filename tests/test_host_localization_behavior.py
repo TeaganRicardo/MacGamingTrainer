@@ -151,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
             "-parse-as-library",
             # The token type lives in the Runtime layer, beside the wire identity
             # it travels with, so the Host store alone is no longer compilable.
-            str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+            str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
             str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
             str(ROOT / "Sources/Core/Host/TrainerLocalization.swift"),
             str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),

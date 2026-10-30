@@ -91,7 +91,7 @@ class HadesLLDBWorker:
                 values = world_mutation_params(method, params)
                 return self._invoke(method, (values,), target=target)
             arguments = {
-                'disable_all': (), 'heal': (),
+                'disable_all': (),
                 'set_value': (params.get('field'), params.get('value')),
                 'set_resource': (params.get('resource'), params.get('value')),
                 'add_trait': (params.get('trait'), params.get('rarity'), params.get('level')),

@@ -31,10 +31,20 @@ struct TrainerTextField: NSViewRepresentable {
         }
         var parent: TrainerTextField
         var edit: Edit?
+        private static var pendingCancellations: [() -> Void] = []
         init(_ parent: TrainerTextField) { self.parent = parent }
+
+        private static func finishPendingCancellations() {
+            let notifications = pendingCancellations
+            pendingCancellations.removeAll()
+            for notify in notifications { notify() }
+        }
 
         func begin() {
             guard edit == nil else { return }
+            // A replacement can acquire native focus before the queued teardown
+            // callback runs. End the old edit before announcing the new one.
+            Self.finishPendingCancellations()
             edit = Edit(initial: parent.text, text: parent.$text,
                 onEditingChanged: parent.onEditingChanged, onCommit: parent.onCommit,
                 onCancel: parent.onCancel)
@@ -78,9 +88,14 @@ struct TrainerTextField: NSViewRepresentable {
         func cancel(_ field: NSTextField) {
             let cancelled = edit
             edit = nil
-            cancelled?.onEditingChanged(false)
             field.delegate = nil
             if field.currentEditor() != nil { field.window?.makeFirstResponder(nil) }
+            if let notify = cancelled?.onEditingChanged {
+                // Dismantling runs inside a SwiftUI update. Its owner may mutate
+                // State or a published model when this edit ends.
+                Self.pendingCancellations.append { notify(false) }
+                DispatchQueue.main.async { Self.finishPendingCancellations() }
+            }
         }
     }
 
@@ -132,17 +147,37 @@ struct TrainerTextField: NSViewRepresentable {
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) { coordinator.cancel(field) }
 
     private func configure(_ field: NSTextField) {
-        field.placeholderString = title
-        field.setAccessibilityLabel(accessibilityLabel ?? title)
-        field.font = font
-        field.alignment = alignment
-        field.isEnabled = enabled
+        // Assigning unchanged AppKit properties during a SwiftUI update can
+        // invalidate layout and re-enter the AttributeGraph after edit blur.
+        if field.placeholderString != title {
+            field.placeholderString = title
+        }
+        if field.accessibilityLabel() != (accessibilityLabel ?? title) {
+            field.setAccessibilityLabel(accessibilityLabel ?? title)
+        }
+        if field.font != font {
+            field.font = font
+        }
+        if field.alignment != alignment {
+            field.alignment = alignment
+        }
+        if field.isEnabled != enabled {
+            field.isEnabled = enabled
+        }
         // AppKit clears a bezel when isBordered is assigned, even false.
         // The native rounded bezel draws its own background.
-        field.isBezeled = style == .rounded
-        field.bezelStyle = .roundedBezel
-        field.drawsBackground = false
-        field.textColor = .labelColor
+        if field.isBezeled != (style == .rounded) {
+            field.isBezeled = style == .rounded
+        }
+        if style == .rounded && field.bezelStyle != .roundedBezel {
+            field.bezelStyle = .roundedBezel
+        }
+        if field.drawsBackground {
+            field.drawsBackground = false
+        }
+        if field.textColor != .labelColor {
+            field.textColor = .labelColor
+        }
     }
 
     static func editingTracker<Field: Hashable>(_ focus: Binding<Field?>, equals field: Field) -> (Bool) -> Void {

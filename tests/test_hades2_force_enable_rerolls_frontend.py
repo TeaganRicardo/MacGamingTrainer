@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -39,7 +40,7 @@ for raw in sys.stdin:
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 17,
+        'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__,
         'gameID': args.game,
         'ok': True,
         'result': state,
@@ -140,7 +141,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-force-enable-rerolls-frontend-') as
     binary = td / 'force-rerolls'
     worker = td / 'worker.py'
     main.write_text(HARNESS)
-    worker.write_text(WORKER)
+    worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
     home = td / 'home'
     home.mkdir()
     generated = td / 'ActiveGame.generated.swift'

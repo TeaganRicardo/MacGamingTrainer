@@ -203,14 +203,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
             source=identity(source), target=identity("Profile1.sav"))
         assert opened["source"]["relativePath"] == source and opened["target"] == identity("Profile1.sav")
         owner = opened["workspaceId"]
-        request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=expected + 1)
-        request(adapter, "save_editor_apply", workspaceId=owner)
+        baseline = opened["baselineGeneration"]
+        request(adapter, "save_editor_stage", workspaceId=owner, baselineGeneration=baseline, entryId="resource:MetaCurrency", operation="set", value=expected + 1)
+        request(adapter, "save_editor_apply", workspaceId=owner, baselineGeneration=baseline)
         assert resource(saves / "Profile1.sav") == expected + 1
     assert contents(snapshot_folder) == preserved
 
     opened = request(adapter, "save_editor_open", snapshotId=snapshot,
         source=identity("Profile2.sav"), target=identity("Profile1.sav"))
     owner = opened["workspaceId"]
+    baseline = opened["baselineGeneration"]
     source_sha = opened["sourceSHA256"]
     (saves / "activeProfile").write_bytes(_active_profile("Profile3"))
     (saves / "Profile1.sav").write_bytes(_save_bytes(500, 500, "new-target-one"))
@@ -221,17 +223,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
     def no_reparse(*args, **kwargs):
         raise AssertionError("a pinned document was silently read again")
     service.source_files = service.read_source_file = no_reparse
-    rows = request(adapter, "save_editor_query", workspaceId=owner, domain="resources")["items"]
+    rows = request(adapter, "save_editor_query", workspaceId=owner, baselineGeneration=baseline, domain="resources")["items"]
     assert next(row for row in rows if row["rawId"] == "MetaCurrency")["value"] == 20
-    request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=77)
-    assert request(adapter, "save_editor_review", workspaceId=owner)["changes"][0]["before"] == 20
-    request(adapter, "save_editor_cancel", workspaceId=owner)
+    request(adapter, "save_editor_stage", workspaceId=owner, baselineGeneration=baseline, entryId="resource:MetaCurrency", operation="set", value=77)
+    assert request(adapter, "save_editor_review", workspaceId=owner, baselineGeneration=baseline)["changes"][0]["before"] == 20
+    request(adapter, "save_editor_cancel", workspaceId=owner, baselineGeneration=baseline)
     assert adapter.save_workspaces[owner].document.lua_state["GameState"]["Resources"]["MetaCurrency"] == 20
-    request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=88)
-    selected = request(adapter, "save_editor_target", workspaceId=owner, target=identity("Profile3.sav"))
+    request(adapter, "save_editor_stage", workspaceId=owner, baselineGeneration=baseline, entryId="resource:MetaCurrency", operation="set", value=88)
+    selected = request(adapter, "save_editor_target", workspaceId=owner, baselineGeneration=baseline, target=identity("Profile3.sav"))
     assert selected["workspaceId"] == owner and selected["sourceSHA256"] == source_sha
     assert selected["source"] == opened["source"] and selected["pendingCount"] == 1
-    result = request(adapter, "save_editor_apply", workspaceId=owner)
+    result = request(adapter, "save_editor_apply", workspaceId=owner, baselineGeneration=baseline)
+    baseline = result["baselineGeneration"]
     assert resource(saves / "Profile3.sav") == 88 and resource(saves / "Profile1.sav") == 500
     installed = Hades2SaveDocument.load(saves / "Profile3.sav")
     assert installed.lua_state["GameState"]["UnknownFutureField"]["Marker"] == "source-2"
@@ -246,13 +249,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
     # addressable. Identical semantic entry IDs cannot redirect either window.
     newer = request(adapter, "save_editor_open", source=identity("Profile1.sav"), target=identity("Profile3.sav"))
     new_owner = newer["workspaceId"]
+    new_baseline = newer["baselineGeneration"]
     assert new_owner != owner
-    request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=999)
-    assert request(adapter, "save_editor_review", workspaceId=owner)["changes"][0]["after"] == 999
-    assert request(adapter, "save_editor_review", workspaceId=new_owner)["count"] == 0
-    request(adapter, "save_editor_stage", workspaceId=new_owner, entryId="resource:MetaCurrency", operation="set", value=321)
-    request(adapter, "save_editor_cancel", workspaceId=owner)
-    assert request(adapter, "save_editor_review", workspaceId=new_owner)["changes"][0]["after"] == 321
+    request(adapter, "save_editor_stage", workspaceId=owner, baselineGeneration=baseline, entryId="resource:MetaCurrency", operation="set", value=999)
+    assert request(adapter, "save_editor_review", workspaceId=owner, baselineGeneration=baseline)["changes"][0]["after"] == 999
+    assert request(adapter, "save_editor_review", workspaceId=new_owner, baselineGeneration=new_baseline)["count"] == 0
+    request(adapter, "save_editor_stage", workspaceId=new_owner, baselineGeneration=new_baseline, entryId="resource:MetaCurrency", operation="set", value=321)
+    request(adapter, "save_editor_cancel", workspaceId=owner, baselineGeneration=baseline)
+    assert request(adapter, "save_editor_review", workspaceId=new_owner, baselineGeneration=new_baseline)["changes"][0]["after"] == 321
     assert request(adapter, "save_editor_close", workspaceId=owner) == {"closed": True}
     assert owner not in adapter.save_workspaces and new_owner in adapter.save_workspaces
     for invalid in (owner, "forged-workspace", None):
@@ -262,7 +266,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
             assert "workspace" in str(getattr(error, "diagnostic", None) or error).lower()
         else:
             raise AssertionError("an absent document was redirected to an open workspace")
-    request(adapter, "save_editor_apply", workspaceId=new_owner)
+    request(adapter, "save_editor_apply", workspaceId=new_owner, baselineGeneration=new_baseline)
     assert resource(saves / "Profile3.sav") == 321
     assert contents(snapshot_folder) == preserved
 

@@ -168,7 +168,7 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier")
+    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier", "baseline_generation")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
@@ -178,6 +178,7 @@ class Hades2SaveWorkspace:
         self._presentation_language = "en"
         self.profile = profile
         self.identifier = uuid.uuid4().hex
+        self.baseline_generation = uuid.uuid4().hex
 
     @property
     def relative_path(self):
@@ -1123,10 +1124,16 @@ class Hades2SaveWorkspace:
             "items": rows[offset:offset + limit],
         }
 
+    def require_baseline(self, generation):
+        if generation != self.baseline_generation:
+            raise save_advanced.AdvancedMutationError(
+                "Save Editor document baseline is stale; refresh before editing.", conflict=True)
+
     def summary(self):
         return {
             "profile": self.profile,
             "workspaceId": self.identifier,
+            "baselineGeneration": self.baseline_generation,
             "relativePath": self.relative_path,
             "source": dict(self._session.source),
             "sourceSHA256": self._session.source_sha256,
@@ -1502,7 +1509,8 @@ class Hades2SaveWorkspace:
             else:
                 after, typed_after = (save_container.normalize_set(descriptor, value)
                     if save_container.is_id(entry_id) else save_advanced.normalize_set(descriptor, value))
-                no_change = descriptor["beforePresent"] and descriptor["typedBefore"] == typed_after
+                no_change = descriptor["beforePresent"] and save_advanced.same_typed_value(
+                    descriptor["typedBefore"], typed_after, container=save_container.is_id(entry_id))
             snapshot = dict(self._pending)
             if no_change and not self._overlaps_pending_transaction(descriptor):
                 self._pending.pop(entry_id, None)
@@ -1823,15 +1831,60 @@ class Hades2SaveWorkspace:
             return
         raise ValueError("Save Editor mutation operation is unsupported.")
 
-    def apply(self):
+    @staticmethod
+    def _draft_path(path):
+        if save_container.namespace(path) is not None:
+            return path
+        return [{"saveContainer": "main"}, *path]
+
+    def _continuous_draft_candidates(self, entry_ids):
+        candidates = {}
+        for entry_id in entry_ids:
+            try:
+                descriptor = self._descriptor(entry_id)
+            except (ValueError, KeyError):
+                continue
+            path = self._draft_path(descriptor["path"])
+            continuous = True
+            for intent in self._pending.values():
+                changed = self._draft_path(intent["path"])
+                table_change = any(intent.get(key, {}).get("luaType") == "table"
+                                   for key in ("typedBefore", "typedAfter"))
+                structural = intent["operation"] not in ("set", "setEnum") or table_change
+                if structural and path[:len(changed)] == changed:
+                    continuous = False
+                    break
+                # Container vectors compact after removal; their numeric keys
+                # cannot prove that an old slot still names the same element.
+                vector = ([{"saveContainer": "payload"}] if changed[:1] == [{"saveContainer": "payload"}]
+                          else [{"saveContainer": "header"}, "notable_lua_data"])
+                if intent["operation"] == "unset" and len(changed) == len(vector) + 1 \
+                        and changed[:len(vector)] == vector and path[:len(vector)] == vector \
+                        and (len(path) == len(vector) or path[len(vector)] >= changed[len(vector)]):
+                    continuous = False
+                    break
+            if continuous:
+                candidates[entry_id] = descriptor
+        return candidates
+
+    def apply(self, draft_entry_ids=()):
         if not self._pending:
             raise ValueError("Save Editor has no changes to apply.")
 
+        draft_candidates = self._continuous_draft_candidates(draft_entry_ids)
         source_document = self._session.document
         candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
         self._apply_and_validate_intents(candidate, self._pending.values())
         self._session.document = candidate
         try:
+            continuous = []
+            for entry_id, before in draft_candidates.items():
+                try:
+                    after = self._descriptor(entry_id)
+                except (ValueError, KeyError):
+                    continue
+                if before["domain"] == after["domain"] and before["path"] == after["path"]:
+                    continuous.append(entry_id)
             result = self._session.apply()
         except BaseException:
             self._session.document = source_document
@@ -1839,7 +1892,10 @@ class Hades2SaveWorkspace:
 
         change_count = len(self._pending)
         self._pending.clear()
+        self.baseline_generation = uuid.uuid4().hex
         return {
             **result,
+            "continuousDraftEntryIds": continuous,
             "changeCount": change_count,
+            "baselineGeneration": self.baseline_generation,
         }

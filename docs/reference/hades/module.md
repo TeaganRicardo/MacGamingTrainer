@@ -6,16 +6,16 @@ The module targets the exact Intel Steam image declared in `Backend/games/hades/
 
 Hades I follows Hades II's ordered workbench navigation: compact and expandable Run Data, Common toggles, unified Boons & Effects (selected current-group editing and exact acquisition), Resources & Gathering, Rooms & Rewards, and Management. The seven permanent resources remain visible as direct rows, with a separate native gain action and fishing-point generation. Rooms & Rewards contains native reward generation, ready-exit reward and route selection, a scheduled eligible Thanatos encounter, Chaos Gate and eligible chamber-object generation. [The room/resource capability map](rooms_resources.md) owns native entrypoints, lifecycle and acceptance boundaries. Whole-workbench bilingual search resolves actions, native resource/facility identities and destinations. The visible-order registry drives shortcuts and their settings.
 
-Hades-native owners determine each capability. [Combat and boon effects](combat_effects.md), [rooms/resources](rooms_resources.md) and [management](management-parity.md) have separate source-backed maps. Semantic Save Editor delivery remains in [#584](https://github.com/TeaganRicardo/MacGamingTrainer/issues/584).
+Hades-native owners determine each capability. [Combat and boon effects](combat_effects.md), [rooms/resources](rooms_resources.md), [management](management-parity.md) and the [Save Editor](save_editor.md) have separate source-backed maps.
 
 ## Supported actions
 
 | Domain | Behavior |
 | --- | --- |
 | Combat | Invincibility, full life, unlimited Cast/gun ammunition, native reroll permissions, non-consuming Obols/rerolls, full God Gauge while an Aid is available, outgoing/incoming damage and movement/attack-speed multipliers, additional dashes |
-| Game speed (candidate) | Process-owned Time Warp setting 0–10×, separate from resident Lua effects; the native helper requires an x86_64 slice for the supported Intel target |
-| Boon rarity (new) | On/off minimum Heroic preference for future normal Olympian/Hermes offers and rerolls; does not alter eligibility, fixed rarity, existing offers, Chaos, Hammer or Pom selection |
-| Hero values | Set health, maximum health, Obols, rerolls and inactive God Gauge; heal to current maximum |
+| Game speed | Process-owned Time Warp setting 0–10×, separate from resident Lua effects; the native helper requires an x86_64 slice for the supported Intel target |
+| Boon rarity | On/off minimum Heroic preference for future normal Olympian/Hermes offers and rerolls; does not alter eligibility, fixed rarity, existing offers, Chaos, Hammer or Pom selection |
+| Hero values | Set health, maximum health, Obols, rerolls and inactive God Gauge |
 | Permanent resources | Edit the seven native resource owners declared by `schema.py` and the generated catalog |
 | Gain and gathering | Add native resources/Obols with their bookkeeping; generate an eligible native fishing point and retain normal fishing/catch/turn-in behavior |
 | Rooms and rewards | Generate native loot/pickups, select eligible ready-exit rewards/routes while preserving potential native forced choices, schedule an eligible Thanatos encounter, generate Chaos Gate/Trove/Well/Purge objects using available native points, restore an owned unchanged exit before entry |

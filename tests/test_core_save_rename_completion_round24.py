@@ -135,7 +135,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-rename-completion-") as td:
     subprocess.run([
         SWIFTC,
         "-parse-as-library",
-        str(ROOT/"Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT/"Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT/"Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT/"Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSaveTypes.swift"),

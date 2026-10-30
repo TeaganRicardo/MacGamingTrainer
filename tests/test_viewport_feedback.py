@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -30,7 +31,7 @@ for raw in sys.stdin:
     if issues_path.exists():
         payload.update(json.loads(issues_path.read_text()))
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
-             'moduleProtocolVersion': 17, 'gameID': args.game, 'ok': True}
+             'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
         outcomes = ['accepted', 'opened', 'completed', 'completed', 'failed', 'outcome_unknown']
         ack_loss = 'ack_loss_' in pathlib.Path(__file__).name
@@ -421,7 +422,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     home = td / "home"
     home.mkdir()
     main.write_text(textwrap.dedent(harness))
-    stub.write_text(textwrap.dedent(worker))
+    stub.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))))
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))

@@ -76,6 +76,9 @@ struct TrainerSaveManagerView: View {
             } else if !model.notice.isEmpty {
                 TrainerMessageBanner(text: localization.presentation(model.notice, arguments: model.noticeArguments), icon: "checkmark.circle", color: theme.success)
             }
+            if !model.observationWarning.isEmpty {
+                TrainerMessageBanner(text: localization.localized(model.observationWarning), icon: "exclamationmark.triangle", color: theme.warning)
+            }
 
             if let usage = model.storageUsage {
                 VStack(alignment: .leading, spacing: 4) {
@@ -317,8 +320,9 @@ struct TrainerSaveManagerView: View {
         if pending.indeterminate {
             return localization.localized("host.save.pendingIndeterminate")
         }
-        let name = model.snapshots.first(where: { $0.id == pending.snapshotID })?
-            .displayName(for: localization.language.rawValue) ?? pending.snapshotID
+        let snapshotID = pending.snapshotID!
+        let name = model.snapshots.first(where: { $0.id == snapshotID })?
+            .displayName(for: localization.language.rawValue) ?? snapshotID
         return localization.localized("host.save.pendingWaiting", arguments: [name])
     }
 

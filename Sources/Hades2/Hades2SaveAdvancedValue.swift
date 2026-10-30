@@ -18,20 +18,39 @@ struct Hades2SaveTypedValue: Hashable {
     var kind: String { object["luaType"] as! String }
 
     init?(_ value: Any) {
-        guard let object = value as? [String: Any], Self.valid(object),
-              let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed]),
-              let json = String(data: data, encoding: .utf8) else { return nil }
+        guard let raw = value as? [String: Any] else { return nil }
+        let object = Self.preservingSignedZero(raw)
+        guard Self.valid(object) else { return nil }
         self.object = object
-        self.json = json
+        self.json = TrainerJSONNumericInput.jsonText(from: object)
     }
 
     init?(text: String) {
-        guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) else { return nil }
+        guard let object = TrainerJSONNumericInput.jsonObject(from: text) else { return nil }
         self.init(object)
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.json == rhs.json }
     func hash(into hasher: inout Hasher) { hasher.combine(json) }
+
+    private static func preservingSignedZero(_ node: [String: Any]) -> [String: Any] {
+        var node = node
+        if node["luaType"] as? String == "number", node["encoding"] == nil || node["encoding"] is NSNull,
+           let number = node["value"] as? NSNumber,
+           CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue == 0,
+           number.doubleValue.sign == .minus {
+            node["encoding"] = "ieee754"
+            node["value"] = "0000000000000080"
+        } else if node["luaType"] as? String == "table", let entries = node["entries"] as? [[String: Any]] {
+            node["entries"] = entries.map { entry -> [String: Any] in
+                var entry = entry
+                if let key = entry["key"] as? [String: Any] { entry["key"] = preservingSignedZero(key) }
+                if let value = entry["value"] as? [String: Any] { entry["value"] = preservingSignedZero(value) }
+                return entry
+            }
+        }
+        return node
+    }
 
     private static func valid(_ node: [String: Any]) -> Bool {
         switch node["luaType"] as? String {
@@ -41,7 +60,8 @@ struct Hades2SaveTypedValue: Hashable {
             return CFGetTypeID(number) == CFBooleanGetTypeID()
         case "number":
             if let encoding = node["encoding"] as? String {
-                return encoding == "nonfinite" && ["nan", "inf", "-inf"].contains(node["value"] as? String ?? "")
+                return (encoding == "nonfinite" && ["nan", "inf", "-inf"].contains(node["value"] as? String ?? ""))
+                    || (encoding == "ieee754" && node["value"] as? String == "0000000000000080")
             }
             guard let number = node["value"] as? NSNumber,
                   CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }

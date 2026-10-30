@@ -86,7 +86,9 @@ def display(value):
     if value is None: return 'nil'
     if value is True: return 'true'
     if value is False: return 'false'
-    if isinstance(value, (int, float)): return format(value, '.15g')
+    if isinstance(value, (int, float)):
+        text = repr(value)
+        return text[:-2] if text.endswith('.0') else text
     return value
 
 

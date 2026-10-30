@@ -388,6 +388,3 @@ class RemoteProcessTimeWarpController:
         if self._transport.pid is None:
             return 1.0
         return self._call("time_warp.reset")
-
-
-LuaTransport = Hades2LuaTransport

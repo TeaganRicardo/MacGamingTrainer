@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -26,7 +27,7 @@ for line in sys.stdin:
           'chaosGateProbability': probability, 'gatheringProbabilities': {'mining': 25}}
  if req['command'] == 'status': state.pop('chaosGateProbability')
  if req['command'] == 'reset_desired': probability = None; state['chaosGateProbability'] = None
- print(json.dumps({'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 17,
+ print(json.dumps({'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__,
                    'gameID': args.game, 'ok': True, 'result': state}), flush=True)
 '''
 HARNESS = r'''
@@ -102,7 +103,7 @@ func wait(_ predicate: () -> Bool) {
 with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-frontend-') as directory:
     temp = Path(directory)
     main, worker, binary = temp / 'main.swift', temp / 'worker.py', temp / 'fixture'
-    main.write_text(HARNESS); worker.write_text(WORKER)
+    main.write_text(HARNESS); worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
     home = temp / 'home'; home.mkdir()
     generated = temp / 'ActiveGame.generated.swift'
     subprocess.run([PYTHON, str(ROOT / 'Tools/generate_game_binding.py'), 'hades2', str(generated)], check=True)

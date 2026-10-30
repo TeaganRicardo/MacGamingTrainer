@@ -21,7 +21,7 @@ for raw in sys.stdin:
     command=req.get('command','')
     params=req.get('params',{})
     recovery=pathlib.Path.home()/'Library/Application Support/MacGamingTrainer/test/transactions/.rollback-fixture'
-    result={'snapshots': [], 'pendingRestore': None, 'recoveryPaths': [str(recovery)]}
+    result={'snapshots': [], 'pendingRestore': {'indeterminate': True, 'indeterminateCount': 1}, 'recoveryPaths': [str(recovery)]}
     if command == 'core.save.set_retention':
         policy.update(params)
     if command == 'core.save.protect':
@@ -37,6 +37,8 @@ for raw in sys.stdin:
         time.sleep(0.10)
     elif command == 'core.save.backup':
         time.sleep(0.55)
+        if params.get('name') == 'receipt-only':
+            result={'operation': {'id': 'committed-backup'}, 'stateRefreshFailed': True}
     elif command == 'core.save.delete':
         snapshot_id=params.get('snapshotId')
         time.sleep(0.45 if snapshot_id == 'b' else 0.05)
@@ -120,6 +122,25 @@ struct Runner {
         if model.recoveryPaths != [recoveryPath] { fail("alternate HOME hid a valid recovery copy") }
         if TrainerSavePathValidator.validatedDirectoryURL(for: recoveryPath)?.path != recoveryPath {
             fail("alternate HOME rejected a valid directory reveal")
+        }
+
+        if model.pendingRestore?.indeterminate != true || model.pendingRestore?.snapshotID != nil {
+            fail("an undecodable interrupted claim did not retain explicit recovery state")
+        }
+        let observedSnapshots = model.snapshots
+        model.backup(name: "receipt-only")
+        if !waitUntil(2.0, { !model.busy }) { fail("committed backup did not complete") }
+        if !model.error.isEmpty || model.notice != "host.save.notice.created" ||
+            model.observationWarning != "host.save.warning.refreshFailed" {
+            fail("post-commit observation loss erased successful operation feedback")
+        }
+        if model.snapshots != observedSnapshots || model.recoveryPaths != [recoveryPath] ||
+            model.pendingRestore?.indeterminate != true {
+            fail("an absent observation erased retained inventory or recovery state")
+        }
+        model.refresh()
+        if !waitUntil(2.0, { !model.busy }) || !model.observationWarning.isEmpty {
+            fail("a successful observation did not clear its warning")
         }
 
         if model.retention?.maxCount != 20 || model.storageUsage?.snapshotBytes != 4321 {
@@ -304,7 +325,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     environment["HOME"] = str(home)
     subprocess.run([
         SWIFTC, "-parse-as-library",
-        str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"),

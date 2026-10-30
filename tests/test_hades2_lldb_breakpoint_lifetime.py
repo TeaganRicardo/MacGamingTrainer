@@ -66,7 +66,7 @@ with phase('worker.importNativeModules'):
     from hades2_lldb_fixture import (
         HELPER_SOURCE, TransportError, attach_helper, cleanup, lldb,
     )
-    from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
+    from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 PROGRESS_SOURCE = r"""
 #include <fcntl.h>

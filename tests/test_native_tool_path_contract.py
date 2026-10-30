@@ -6,8 +6,6 @@ EXPECTED = {
     "Backend/games/hades2/command_contract.py": {"run": ["/usr/bin/open", "/usr/bin/open"]},
     "Backend/games/hades2/transport.py": {"check_output": ["/usr/bin/xcrun"]},
     "Backend/debugger/lldb_time_warp.py": {"check_output": ["/usr/bin/xcrun"]},
-    "Backend/games/hades/lldb_time_warp.py": {},
-    "Backend/games/hades2/lldb_time_warp.py": {},
     "Backend/games/hades/transport.py": {"check_output": ["/usr/bin/xcrun"]},
 }
 
@@ -40,10 +38,6 @@ for relative, expected_by_method in EXPECTED.items():
         calls[method].append(executable)
 
     assert calls == expected_by_method, f"{relative}: unexpected subprocess tool paths: {calls!r}"
-
-for game in ('hades', 'hades2'):
-    wrapper = (ROOT / 'Backend/games' / game / 'lldb_time_warp.py').read_text()
-    assert 'from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver' in wrapper, game
 
 core_time_warp = (ROOT / "Backend/core/process_time_warp.py").read_text()
 assert "/usr/bin/xcrun" not in core_time_warp, (

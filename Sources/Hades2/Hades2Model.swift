@@ -426,6 +426,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // Never carry a prior process's native readiness into this lifetime.
         launchAttachGate.targetLifetimeChanged()
         pendingRunReadySignal = false
+        runLogWatcher.targetLifetimeChanged(running: running)
     }
 
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
@@ -438,11 +439,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
         )
         hostTargetLifetimeChanged(running: observation.isRunning)
-        if observation.isRunning {
-            runLogWatcher.start()
-        } else {
-            runLogWatcher.stop()
-        }
         startBackend()
     }
 
@@ -1033,10 +1029,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activationGraceFeatures.remove(key)
     }
 
-    // Do not poll in-process Lua state automatically. Every status request crosses
-    // the LLDB/Lua boundary and briefly stops the game; periodic polling therefore
-    // creates visible frame-time spikes. Runtime state is refreshed by user-driven
-    // requests (and the explicit Refresh action) instead.
+    // Runtime observations refresh through explicit user requests and lifecycle
+    // synchronization. Keep this event-driven policy with the default mailbox
+    // transport as well as the debugger transport; background status polling is
+    // not part of the observation contract.
 
     private func sendEdit(
         request: Hades2Request,

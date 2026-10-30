@@ -256,12 +256,16 @@ final class Hades2API {
         operationArguments: [String] = [],
         announceSuccess: Bool = true,
         saveWorkspaceID: String? = nil,
+        saveBaselineGeneration: String? = nil,
+        saveDraftEntryIDs: [String]? = nil,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         var params = request.params
         if let saveWorkspaceID { params["workspaceId"] = saveWorkspaceID }
+        if let saveBaselineGeneration { params["baselineGeneration"] = saveBaselineGeneration }
+        if let saveDraftEntryIDs { params["draftEntryIds"] = saveDraftEntryIDs }
         session.send(
             request.command.rawValue,
             params: params,

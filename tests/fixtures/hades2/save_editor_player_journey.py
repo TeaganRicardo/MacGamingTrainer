@@ -43,8 +43,13 @@ def document(amount, marker):
         "UnknownFutureField": table({"Marker": marker}),
         "AdvancedFixture": table({
             "Number": 4.5, "Boolean": True, "Text": "initial", "Empty": "initial", "Removed": 99.0,
+            "NumericZero": 0.0, "NumericOne": 1.0, "LargeScalar": float(2**100),
             "Binary": "\udcff\x00", "Nil": None,
             "Members": LuaTable(0, 4, [(True, "boolean key"), (1.0, "numeric key"), ("1", "string key"), ("\udcff", "binary key")]),
+            "Precision": table({
+                "Large": float(2**100), "Huge": float(2**1023), "Zero": -0.0,
+                "Sibling": "original", float(2**100): "large numeric key",
+            }),
         }),
     })
     if os.environ.get("MGT_SAVE_JOURNEY_RECORDS") == "1":

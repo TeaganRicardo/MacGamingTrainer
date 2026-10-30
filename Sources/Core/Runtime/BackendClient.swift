@@ -239,33 +239,36 @@ final class BackendClient {
             process.stop()
             return
         }
-        do {
-            BackendOperationProfile.emit("host.request_queue", id: request.id, command: request.command,
-                seconds: BackendOperationProfile.now() - request.admittedAt, log: onLog)
-            current = request
-            request.started?()
-            onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
-            let sendStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
-            try process.send(["id": request.id, "command": request.command, "params": request.params])
+        BackendOperationProfile.emit("host.request_queue", id: request.id, command: request.command,
+            seconds: BackendOperationProfile.now() - request.admittedAt, log: onLog)
+        current = request
+        request.started?()
+        onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
+        let sendStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
+        scheduleTimeout(for: request)
+        onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
+        process.send(["id": request.id, "command": request.command, "params": request.params]) { [weak self] failure in
+            guard let self, self.current?.id == request.id, !self.terminalFailureReported else { return }
             BackendOperationProfile.emit("host.request_encode_write", id: request.id, command: request.command,
-                seconds: BackendOperationProfile.now() - sendStarted, log: onLog)
-            scheduleTimeout(for: request)
-            onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
-        } catch {
-            terminalFailureReported = true
-            cancelCurrentTimeout()
-            current = nil
-            let queued = takeQueuedRequests()
-            onClientError?(BackendFailure(
+                seconds: BackendOperationProfile.now() - sendStarted, log: self.onLog)
+            guard let failure else { return }
+            self.terminalFailureReported = failure.terminal
+            self.cancelCurrentTimeout()
+            self.current = nil
+            let queued = failure.terminal ? self.takeQueuedRequests() : []
+            self.deliveringReply = true
+            self.onClientError?(BackendFailure(
                 code: "backend_send_failed",
                 presentation: "host.backend.error.sendFailed",
-                diagnostic: error.localizedDescription,
+                diagnostic: failure.error.localizedDescription,
                 recoveryPath: nil,
                 presentationArguments: []
-            ), true)
-            process.stop()
+            ), failure.terminal)
+            if failure.terminal { self.process.stop() }
             request.completion?(false)
-            complete(queued, success: false)
+            self.complete(queued, success: false)
+            self.deliveringReply = false
+            if !failure.terminal { self.flushNext() }
         }
     }
 

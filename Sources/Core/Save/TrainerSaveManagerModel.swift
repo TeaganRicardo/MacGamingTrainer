@@ -13,6 +13,7 @@ final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var errorArguments: [String] = []
     @Published private(set) var notice = ""
     @Published private(set) var noticeArguments: [String] = []
+    @Published private(set) var observationWarning = ""
 
     private let session: TrainerBackendSession
     private var activeRequestTokens: Set<UUID> = []
@@ -251,8 +252,12 @@ final class TrainerSaveManagerModel: ObservableObject {
             return
         }
         guard let result = reply.result else { return }
+        if result["stateRefreshFailed"] as? Bool == true {
+            observationWarning = "host.save.warning.refreshFailed"
+        }
         if let rows = result["snapshots"] as? [[String: Any]] {
             snapshots = rows.compactMap(TrainerSaveSnapshot.init(row:))
+            if result["stateRefreshFailed"] as? Bool != true { observationWarning = "" }
         }
         if let row = result["retention"] as? [String: Any] {
             retention = TrainerSaveRetention(row: row)
@@ -260,12 +265,11 @@ final class TrainerSaveManagerModel: ObservableObject {
         if let row = result["storageUsage"] as? [String: Any] {
             storageUsage = TrainerSaveStorageUsage(row: row)
         }
-        recoveryPaths = (result["recoveryPaths"] as? [String] ?? [])
-            .compactMap { TrainerSavePathValidator.validatedLocalURL(for: $0)?.path }
-        if let pending = result["pendingRestore"] as? [String: Any] {
-            pendingRestore = TrainerPendingRestore(row: pending)
-        } else {
-            pendingRestore = nil
+        if let paths = result["recoveryPaths"] as? [String] {
+            recoveryPaths = paths.compactMap { TrainerSavePathValidator.validatedLocalURL(for: $0)?.path }
+        }
+        if let pending = result["pendingRestore"] {
+            pendingRestore = (pending as? [String: Any]).flatMap(TrainerPendingRestore.init(row:))
         }
     }
 }

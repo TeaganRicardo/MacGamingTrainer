@@ -128,7 +128,7 @@ class Hades2Adapter(GameAdapter):
                     helper_path,[GAME_SPEC.executable_name]
                 )
             else:
-                from .lldb_time_warp import LLDBProcessTimeWarpDriver
+                from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
                 time_warp_controller=ProcessTimeWarpController(
                     LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
                 )
@@ -1049,7 +1049,7 @@ class Hades2Adapter(GameAdapter):
         return workspace
 
     def validate_save_workspace(self, identifier):
-        self._require_save_workspace(identifier)
+        return self._require_save_workspace(identifier)
 
     def save_editor_inventory(self, params):
         if self.save_service is None:
@@ -1103,7 +1103,7 @@ class Hades2Adapter(GameAdapter):
         return self._require_save_workspace(params["workspaceId"]).cancel(language=params["language"])
 
     def apply_save_editor(self, params):
-        return self._require_save_workspace(params["workspaceId"]).apply()
+        return self._require_save_workspace(params["workspaceId"]).apply(params["draftEntryIds"])
 
     def metadata(self):
         metadata = super().metadata()

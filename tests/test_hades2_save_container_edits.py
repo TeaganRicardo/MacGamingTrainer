@@ -81,20 +81,95 @@ class SaveContainerEditTests(unittest.TestCase):
         self.assertEqual(reopened.lua_values[2]["Child"], "original")
         self.assertEqual(reopened.lua_state["header"], "native header key")
 
+    def test_apply_retires_reindexed_container_controls_but_continues_scalar_drafts(self):
+        editor = self.editor
+        class Adapter:
+            def validate_save_workspace(self, identifier):
+                assert identifier == editor.identifier
+                return editor
+            def stage_save_editor(self, params):
+                return editor.stage(params["entryId"], params["operation"], params.get("value"))
+            def apply_save_editor(self, params):
+                return editor.apply(params["draftEntryIds"])
+        contract = Hades2CommandContract(Adapter())
+        generation = editor.baseline_generation
+        payload = self.rows(self.namespace("payload")["path"])
+        removed, shifted = payload[:2]
+        scalar = "resource:MetaCurrency"
+        editor.stage(removed["id"], "unset")
+        result = contract.dispatch("save_editor_apply", {"workspaceId": editor.identifier,
+            "baselineGeneration": generation, "draftEntryIds": [shifted["id"], scalar]}, "apply")
+        self.assertNotEqual(result["baselineGeneration"], generation)
+        self.assertEqual(result["continuousDraftEntryIds"], [scalar])
+        # The same old positional id now resolves to another payload value.
+        self.assertEqual(editor.investigate(shifted["id"], "en")["typedValue"], node("nil", None))
+        committed = self.path.read_bytes()
+        for stale in (None, generation):
+            with self.assertRaises(save_advanced.AdvancedMutationError):
+                contract.dispatch("save_editor_stage", {"workspaceId": editor.identifier,
+                    "baselineGeneration": stale, "entryId": shifted["id"],
+                    "operation": "set", "value": node("string", "wrong document")}, "late-control")
+        self.assertEqual(self.path.read_bytes(), committed)
+        self.assertEqual(editor.review()["actionCount"], 0)
+        contract.dispatch("save_editor_stage", {"workspaceId": editor.identifier,
+            "baselineGeneration": editor.baseline_generation, "entryId": scalar,
+            "operation": "set", "value": 9}, "fresh-control")
+        same_field = editor.apply([scalar])
+        self.assertEqual(same_field["continuousDraftEntryIds"], [scalar])
+
+    def test_vector_deletion_continues_earlier_slots_and_their_children(self):
+        root = self.namespace("payload")
+        rows = self.rows(root["path"])
+        child = self.rows(rows[1]["path"])[0]
+        self.editor.stage(rows[-1]["id"], "unset")
+        result = self.editor.apply([root["id"], rows[0]["id"], child["id"]])
+        self.assertEqual(result["continuousDraftEntryIds"], [rows[0]["id"], child["id"]])
+
+    def test_whole_subtree_replacement_does_not_continue_child_drafts(self):
+        parent = next(row for row in self.rows(self.namespace("payload")["path"])
+                      if row["valueType"] == "table")
+        child = self.rows(parent["path"])[0]
+        replacement = self.editor.investigate(parent["id"], "en")["typedValue"]
+        replacement["entries"][0]["value"] = node("string", "replacement")
+        self.editor.stage(parent["id"], "set", replacement)
+        result = self.editor.apply([child["id"], "resource:MetaCurrency"])
+        self.assertEqual(result["continuousDraftEntryIds"], ["resource:MetaCurrency"])
+
+    def test_whole_main_replacement_preserves_header_and_extra_payload_drafts(self):
+        main = self.namespace("main")
+        timestamp = self.field("timestamp")
+        notable = self.field("notable_lua_data")
+        notable_child = self.rows(notable["path"])[0]
+        payload = self.rows(self.namespace("payload")["path"])[0]
+        native = next(row for row in self.rows() if row["path"] == ["header"])
+        replacement = self.editor.investigate(main["id"], "en")["typedValue"]
+        next(entry for entry in replacement["entries"]
+             if entry["key"] == node("string", "header"))["value"] = node("string", "new main value")
+        self.editor.stage(main["id"], "set", replacement)
+        retained = [timestamp["id"], notable["id"], notable_child["id"], payload["id"]]
+        result = self.editor.apply([*retained, main["id"], native["id"], "resource:MetaCurrency"])
+        self.assertEqual(result["continuousDraftEntryIds"], retained)
+        installed = Hades2SaveDocument.load(self.path)
+        self.assertEqual(installed.lua_state["header"], "new main value")
+        self.assertEqual(installed.header.timestamp, 18446744073709551615)
+        self.assertEqual(installed.header.notable_lua_data, ("GameState", "CurrentRun"))
+        self.assertEqual(installed.lua_values[1], 12.5)
+
     def test_container_paths_cross_real_command_validation_and_never_alias_native_keys(self):
         editor = self.editor
         class Adapter:
             def validate_save_workspace(self, identifier):
                 assert identifier == editor.identifier
+                return editor
             def detail_save_editor(self, params):
                 return editor.investigate(params["entryId"], params["language"])
             def query_save_editor(self, params):
                 return editor.query(**{key: params[key] for key in ("domain", "path", "language")})
         contract = Hades2CommandContract(Adapter())
-        result = contract.dispatch("save_editor_query", {"workspaceId": editor.identifier,
+        result = contract.dispatch("save_editor_query", {"workspaceId": editor.identifier, "baselineGeneration": editor.baseline_generation,
             "domain": "advanced", "path": [{"saveContainer": "header"}], "language": "en"}, "header-query")
         self.assertTrue(any(row["rawId"] == "timestamp" for row in result["items"]))
-        detail = contract.dispatch("save_editor_detail", {"workspaceId": editor.identifier,
+        detail = contract.dispatch("save_editor_detail", {"workspaceId": editor.identifier, "baselineGeneration": editor.baseline_generation,
             "entryId": self.namespace("payload")["id"], "language": "en"}, "payload-detail")
         self.assertEqual(detail["typedValue"]["luaType"], "table")
         native = next(row for row in self.rows() if row["path"] == ["header"])

@@ -86,10 +86,7 @@ struct TrainerMappedSlider: View {
                         let rawPosition = min(max(Double((adjustedX - thumbRadius) / trackWidth), 0), 1)
                         let finalPosition = mapping.settledPosition(rawPosition)
                         let finalValue = mapping.value(at: finalPosition)
-                        commit(finalValue)
-                        withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.78, blendDuration: 0.04)) {
-                            displayPosition = finalPosition
-                        }
+                        commit(finalValue, position: finalPosition)
                         dragOffset = nil
                         lastPreviewValue = nil
                         isDragging = false
@@ -111,6 +108,15 @@ struct TrainerMappedSlider: View {
                 displayPosition = mapping.position(for: newValue)
             }
         }
+        .onChange(of: enabled) { _, enabled in
+            if !enabled {
+                dragOffset = nil
+                lastPreviewValue = nil
+                lastLocalValue = nil
+                isDragging = false
+                displayPosition = mapping.position(for: value)
+            }
+        }
         .accessibilityRepresentation {
             Slider(
                 value: Binding(
@@ -119,6 +125,7 @@ struct TrainerMappedSlider: View {
                 ),
                 in: 0...1
             )
+            .disabled(!enabled)
             .accessibilityLabel(Text(accessibilityLabel))
             .accessibilityHint(Text(accessibilityHint))
         }
@@ -127,7 +134,11 @@ struct TrainerMappedSlider: View {
         .accessibilityValue(Text(String(format: "%.1f", value)))
     }
 
-    private func commit(_ newValue: Double) {
+    private func commit(_ newValue: Double, position: Double? = nil) {
+        guard enabled else { return }
+        withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.78, blendDuration: 0.04)) {
+            displayPosition = position ?? mapping.position(for: newValue)
+        }
         guard abs(value - newValue) >= 0.000001 else { return }
         lastLocalValue = newValue
         value = newValue

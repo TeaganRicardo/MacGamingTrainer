@@ -1,10 +1,11 @@
 import Foundation
+import CoreFoundation
 import Combine
 
 // The wire representation preserves Lua types, physical table occurrences and
 // byte strings. Display text is never used as an edit or identity.
-indirect enum HadesSaveValue: Codable, Equatable {
-    struct Entry: Codable, Equatable { let key: HadesSaveValue; let value: HadesSaveValue }
+indirect enum HadesSaveValue: Decodable, Equatable {
+    struct Entry: Decodable, Equatable { let key: HadesSaveValue; let value: HadesSaveValue }
     case null, boolean(Bool), number(Double), string(String), rawString(String), rawNumber(String)
     case table(arraySize: Int, hashSize: Int, entries: [Entry])
 
@@ -27,35 +28,73 @@ indirect enum HadesSaveValue: Codable, Equatable {
         default: throw DecodingError.dataCorruptedError(forKey: .luaType, in: c, debugDescription: "Unknown Lua value type")
         }
     }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
+    var object: [String: Any] {
         switch self {
-        case .null: try c.encode("nil", forKey: .luaType)
-        case .boolean(let value): try c.encode("boolean", forKey: .luaType); try c.encode(value, forKey: .value)
-        case .number(let value): try c.encode("number", forKey: .luaType); try c.encode(value, forKey: .value)
-        case .string(let value): try c.encode("string", forKey: .luaType); try c.encode(value, forKey: .value)
+        case .null: return ["luaType": "nil"]
+        case .boolean(let value): return ["luaType": "boolean", "value": value]
+        case .number(let value):
+            if value == 0 && value.sign == .minus {
+                return HadesSaveValue.rawNumber("0000000000000080").object
+            }
+            return ["luaType": "number", "value": value]
+        case .string(let value): return ["luaType": "string", "value": value]
         case .rawString(let value):
-            try c.encode("string", forKey: .luaType); try c.encode("base64", forKey: .encoding); try c.encode(value, forKey: .value)
+            return ["luaType": "string", "encoding": "base64", "value": value]
         case .rawNumber(let value):
-            try c.encode("number", forKey: .luaType); try c.encode("ieee754", forKey: .encoding); try c.encode(value, forKey: .value)
+            return ["luaType": "number", "encoding": "ieee754", "value": value]
         case .table(let arraySize, let hashSize, let entries):
-            try c.encode("table", forKey: .luaType); try c.encode(arraySize, forKey: .arraySize)
-            try c.encode(hashSize, forKey: .hashSize); try c.encode(entries, forKey: .entries)
+            return ["luaType": "table", "arraySize": arraySize, "hashSize": hashSize,
+                    "entries": entries.map { ["key": $0.key.object, "value": $0.value.object] }]
         }
     }
-    var object: [String: Any] {
-        // Every case encodes to a JSON object by construction.
-        try! JSONSerialization.jsonObject(with: JSONEncoder().encode(self)) as! [String: Any]
-    }
-    var json: String {
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return String(data: try! encoder.encode(self), encoding: .utf8)!
+    var json: String { TrainerJSONNumericInput.jsonText(from: object) }
+    static func inputJSON(_ text: String) -> HadesSaveValue? {
+        guard let object = TrainerJSONNumericInput.jsonObject(from: text) as? [String: Any] else { return nil }
+        func decode(_ object: [String: Any]) -> HadesSaveValue? {
+            if let encoding = object["encoding"], !(encoding is NSNull), !(encoding is String) { return nil }
+            let encoding = object["encoding"] as? String
+            switch object["luaType"] as? String {
+            case "nil": return encoding == nil ? .null : nil
+            case "boolean":
+                guard encoding == nil, let number = object["value"] as? NSNumber,
+                      CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+                return .boolean(number.boolValue)
+            case "number", "string":
+                if object["luaType"] as? String == "string" {
+                    guard encoding == nil || encoding == "base64", let text = object["value"] as? String else { return nil }
+                    return encoding == "base64" ? .rawString(text) : .string(text)
+                }
+                if encoding == "ieee754" {
+                    guard let text = object["value"] as? String else { return nil }
+                    return .rawNumber(text)
+                }
+                guard encoding == nil, let number = object["value"] as? NSNumber,
+                      CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+                return .number(number.doubleValue)
+            case "table":
+                func integer(_ field: String) -> Int? {
+                    guard let number = object[field] as? NSNumber,
+                          CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+                    return Int(exactly: number.doubleValue)
+                }
+                guard encoding == nil, let arraySize = integer("arraySize"), let hashSize = integer("hashSize"),
+                      let rows = object["entries"] as? [[String: Any]] else { return nil }
+                var entries: [Entry] = []
+                for row in rows {
+                    guard row.count == 2, let keyObject = row["key"] as? [String: Any], let key = decode(keyObject),
+                          let valueObject = row["value"] as? [String: Any], let value = decode(valueObject) else { return nil }
+                    entries.append(Entry(key: key, value: value))
+                }
+                return .table(arraySize: arraySize, hashSize: hashSize, entries: entries)
+            default: return nil
+            }
+        }
+        return decode(object)
     }
     var scalarText: String? {
         switch self {
         case .number(let value):
-            let text = String(value)
-            return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
+            return TrainerJSONNumericInput.numberText(value)
         case .string(let value): return value
         default: return nil
         }
@@ -331,7 +370,7 @@ final class HadesSaveEditorModel: ObservableObject {
         let staged = review.actions.first { $0.id == row.id && $0.operation == "set" }?.typedValue
         switch staged ?? row.typedValue {
         case .some(.number):
-            guard let number = Double(text), number.isFinite else { invalid(row); return text }; value = .number(number)
+            guard let number = TrainerJSONNumericInput.number(text) else { invalid(row); return text }; value = .number(number)
         case .some(.string): value = .string(text)
         default: invalid(row); return text
         }
@@ -342,17 +381,15 @@ final class HadesSaveEditorModel: ObservableObject {
     func commitJSON(_ row: HadesSaveEditorRow, text: String, appendKey: String? = nil, workspace captured: String?,
                     accepted: @escaping (Bool) -> Void = { _ in }) -> Bool {
         guard ownsMutation(captured, row.baselineGeneration) else { stale(row.id); return false }
-        do {
-            let value = try JSONDecoder().decode(HadesSaveValue.self, from: Data(text.utf8))
-            var object = value.object
-            if let appendKey {
-                let key = try JSONDecoder().decode(HadesSaveValue.self, from: Data(appendKey.utf8))
-                object = ["key": key.object, "value": object]
-            }
-            stage(row.id, operation: appendKey == nil ? "set" : "append", value: object, workspace: captured,
-                  baseline: row.baselineGeneration, typed: true, accepted: accepted)
-            return true
-        } catch { invalid(row); return false }
+        guard let value = HadesSaveValue.inputJSON(text) else { invalid(row); return false }
+        var object = value.object
+        if let appendKey {
+            guard let key = HadesSaveValue.inputJSON(appendKey) else { invalid(row); return false }
+            object = ["key": key.object, "value": object]
+        }
+        stage(row.id, operation: appendKey == nil ? "set" : "append", value: object, workspace: captured,
+              baseline: row.baselineGeneration, typed: true, accepted: accepted)
+        return true
     }
     func stage(_ id: String, operation: String, value: [String: Any]? = nil, workspace captured: String?, baseline: String,
                typed: Bool = false, accepted: @escaping (Bool) -> Void = { _ in }) {

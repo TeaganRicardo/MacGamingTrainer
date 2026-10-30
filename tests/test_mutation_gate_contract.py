@@ -55,18 +55,17 @@ def _run_gate(*args):
 def test_gate_refuses_a_dirty_tree():
     """Mutating a dirty tree would restore stale content over uncommitted work.
 
-    Asserted with a deliberately invalid manifest so the run needs no
-    toolchain: the refusal must be decided by the tree, not by whatever
-    happens to be installed. This is what keeps the test in the Linux lane.
+    A real invariant selection must reach the dirty-tree refusal before the
+    gate checks its manifest or toolchain.
     """
     probe = ROOT / "mutation_gate_probe.tmp"
     try:
         probe.write_text("x", encoding="utf-8")
-        dirty = _run_gate("--only", "probe-clean-tree-refusal")
+        dirty = _run_gate("--only", "protocol-error-arguments")
     finally:
         probe.unlink()
     assert dirty.returncode != 0, "a dirty tree must not be mutated over"
-    assert "clean" in dirty.stderr, dirty.stderr
+    assert "working tree must be clean before running the gate:" in dirty.stderr, dirty.stderr
     # The refusal must come before any toolchain or manifest complaint.
     assert "swiftc" not in dirty.stderr, dirty.stderr
     assert "manifest is invalid" not in dirty.stderr, dirty.stderr
@@ -227,6 +226,8 @@ def test_only_a_reached_assertion_counts_as_a_catch():
         ("clang diagnostic", "clang: error: linker command failed"),
         ("python syntax", "  File \"x.py\", line 3\nSyntaxError: invalid syntax"),
         ("import failure", "ModuleNotFoundError: No module named 'nope'"),
+        ("unittest errors summary", "FAILED (errors=1)"),
+        ("unittest zero failures with errors", "FAILED (failures=0, errors=1)"),
         ("no diagnostic at all", ""),
         # Measured, not assumed: `var v = Int8.max; v += 1` traps on arm64
         # macOS with rc=-5 and prints NOTHING. This is the case that decides the
@@ -258,6 +259,13 @@ def test_only_a_reached_assertion_counts_as_a_catch():
         assert mutation_gate._only_crashed(Result(stderr), token), (
             f"a {label} failure proves nothing about the invariant and must be an error")
 
+    for failure in ("ModuleNotFoundError('missing fixture')", "TypeError('invalid fixture')"):
+        program = ("import unittest\nclass BrokenHarness(unittest.TestCase):\n"
+                   "    def test_fixture(self): raise " + failure + "\nunittest.main()\n")
+        crashed = subprocess.run([sys.executable, '-c', program], capture_output=True, text=True)
+        assert crashed.returncode != 0 and 'FAILED (errors=1)' in crashed.stderr, crashed.stderr
+        assert mutation_gate._only_crashed(crashed, token), 'unittest harness errors were counted as mutation catches'
+
     must_be_caught = [
         ("python assertion", "AssertionError: a feature row carries a literal title"),
         ("assertion mentioning 'error: '", "AssertionError: the copy said error: no"),
@@ -271,6 +279,7 @@ def test_only_a_reached_assertion_counts_as_a_catch():
         ("unittest FAIL line",
          "FAIL: reference fixture did not preserve the Host localization contract"),
         ("unittest FAILED summary", "FAILED (failures=1)"),
+        ("unittest mixed failure summary", "FAILED (failures=1, errors=1)"),
         # Measured on arm64 macOS, not inferred. These are the exact strings the
         # Swift compiler's runtime prints; review found the classifier recognised
         # a Swift catch only via the signal the harness wrapper reports after

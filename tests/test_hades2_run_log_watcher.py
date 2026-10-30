@@ -12,27 +12,6 @@ if not SWIFTC:
 main_source = r"""
 import Foundation
 
-if !Hades2RunLogRefreshGate.shouldConsume(
-    pending: true, connected: true, backendAvailable: true, busy: false, exiting: false
-) {
-    fatalError("an armed runtime-ready event must be consumable even if the previous GUI snapshot was ready")
-}
-if Hades2RunLogRefreshGate.shouldConsume(
-    pending: false, connected: true, backendAvailable: true, busy: false, exiting: false
-) {
-    fatalError("no pending lifecycle refresh must mean no Lua boundary")
-}
-if Hades2RunLogRefreshGate.shouldConsume(
-    pending: true, connected: false, backendAvailable: true, busy: false, exiting: false
-) {
-    fatalError("detached trainer must not cross the Lua boundary")
-}
-if Hades2RunLogRefreshGate.shouldConsume(
-    pending: true, connected: true, backendAvailable: true, busy: true, exiting: false
-) {
-    fatalError("busy trainer must defer the lifecycle refresh")
-}
-
 // Hades runtime-ready evidence belongs to the target lifetime, not to a
 // backend worker. Recovery may finish after the one native ready event.
 var readyBeforeBackend = Hades2LaunchAttachGate()
@@ -253,6 +232,41 @@ lateWatcher.stop()
 if lateEvents != [.runtimeReset, .runtimeReady] {
     fatalError("late-created log lost lifecycle events: \(lateEvents)")
 }
+
+// Occupy main while a parsed old-lifetime delivery queues behind it.
+let raceDirectory = directory.appendingPathComponent("delivery-race", isDirectory: true)
+try fileManager.createDirectory(at: raceDirectory, withIntermediateDirectories: true)
+let raceLog = raceDirectory.appendingPathComponent("Hades II.log")
+try Data("prior lifetime\n".utf8).write(to: raceLog)
+let queued = DispatchSemaphore(value: 0)
+var raceEvents: [Hades2RunLogEvent] = []
+let raceWatcher = Hades2RunLogWatcher(directoryURL: raceDirectory, deliver: { delivery in
+    DispatchQueue.main.async(execute: delivery)
+    queued.signal()
+}) { raceEvents.append($0) }
+raceWatcher.targetLifetimeChanged(running: true)
+func raceAppend() throws {
+    let handle = try FileHandle(forWritingTo: raceLog)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data("App.Reset Start\nFinished loadScreen onExit\n".utf8))
+    try handle.synchronize(); try handle.close()
+}
+try raceAppend()
+if queued.wait(timeout: .now() + 2) != .success { fatalError("old log signal did not queue while main was occupied") }
+// PID replacement while running must restart the sources/cursor as well as
+// invalidate the main-queue callback that already captured the old event.
+raceWatcher.targetLifetimeChanged(running: true)
+pump(0.1)
+if !raceEvents.isEmpty { fatalError("old process log event crossed target lifetime") }
+try raceAppend()
+if queued.wait(timeout: .now() + 2) != .success { fatalError("replacement process could not queue its event") }
+pump(0.1)
+if raceEvents != [.runtimeReset, .runtimeReady] { fatalError("replacement process log signal was lost") }
+// Ordinary backend recovery/repeated start retains same-lifetime observation.
+raceWatcher.start(); raceWatcher.start()
+pump(0.1)
+if raceEvents != [.runtimeReset, .runtimeReady] { fatalError("repeated start replayed readiness") }
+raceWatcher.stop()
 
 print("hades2_run_log_watcher_ok")
 """

@@ -426,6 +426,9 @@ def main():
                          "Sources/Core/Runtime/TrainerBackendSession.swift", "Native/ProcessTimeWarp/ProcessTimeWarp.c")
         },
     }
+    json_decoder = SOURCE_ROOT / "Sources/Core/Runtime/TrainerJSON.swift"
+    if json_decoder.exists():
+        report["source_sha256"]["Sources/Core/Runtime/TrainerJSON.swift"] = hashlib.sha256(json_decoder.read_bytes()).hexdigest()
     if args.mode in ("all", "transport"):
         if sys.platform != "darwin":
             parser.error("transport profiling needs macOS, Xcode Python and LLDB; use --mode resident on Linux")

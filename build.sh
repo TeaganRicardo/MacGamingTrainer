@@ -50,7 +50,10 @@ python_runtime_field() {
     plutil -extract "$1" raw -o - "$PYTHON_RUNTIME_MANIFEST"
 }
 
-prepare_python_runtime() {
+prepare_python_runtime() (
+    set -e
+    local temporary=""
+    trap 'if [[ -n "$temporary" ]]; then rm -f "$temporary"; fi' EXIT
     local arch="$1"
     local destination="$GENERATED_DIR/python-runtime/$arch"
     local runtime="$destination/python"
@@ -59,7 +62,7 @@ prepare_python_runtime() {
         return
     fi
 
-    local version release url sha cache_root archive temporary actual
+    local version release url sha cache_root archive actual
     version="$(python_runtime_field version)"
     release="$(python_runtime_field release)"
     url="$(python_runtime_field "distributions.$arch.url")"
@@ -72,12 +75,8 @@ prepare_python_runtime() {
     cache_root="${MGT_PYTHON_RUNTIME_CACHE_DIR:-${HOME:-${TMPDIR:-/tmp}}/Library/Caches/MacGamingTrainer/python-runtime}"
     mkdir -p "$cache_root"
     archive="$cache_root/cpython-${version}+${release}-${arch}-apple-darwin-install_only.tar.gz"
-    if [[ -f "$archive" ]] && ! printf '%s  %s\n' "$sha" "$archive" | shasum -a 256 -c - >/dev/null 2>&1; then
-        rm -f "$archive"
-    fi
-    if [[ ! -f "$archive" ]]; then
-        temporary="$archive.tmp.$"
-        rm -f "$temporary"
+    if [[ ! -f "$archive" ]] || ! printf '%s  %s\n' "$sha" "$archive" | shasum -a 256 -c - >/dev/null 2>&1; then
+        temporary="$(mktemp "$archive.tmp.XXXXXX")"
         curl -fL --retry 3 --retry-delay 1 -o "$temporary" "$url"
         printf '%s  %s\n' "$sha" "$temporary" | shasum -a 256 -c - >/dev/null
         mv "$temporary" "$archive"
@@ -95,7 +94,7 @@ prepare_python_runtime() {
         exit 1
     }
     printf '%s\n' "$runtime"
-}
+)
 
 HOST_ARCH="$(uname -m)"
 case "$HOST_ARCH" in
@@ -318,6 +317,9 @@ record_build_timing "swift-optimized"
 # Package generic backend core and the selected game module set. Preserve
 # permitted xattrs; clean only FinderInfo/ResourceFork before signing.
 cp -R "$ROOT/Backend/core" "$BACKEND/core"
+if [[ "$REQUIRES_LLDB" == "1" ]]; then
+    cp -R "$ROOT/Backend/debugger" "$BACKEND/debugger"
+fi
 mkdir -p "$BACKEND/games"
 cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
 for game_id in "${GAME_IDS[@]}"; do
@@ -347,11 +349,18 @@ PY
 # HOME is isolated so build verification cannot touch developer or runner state.
 BACKEND_SMOKE_HOME="$GENERATED_DIR/backend-smoke-home"
 mkdir -p "$BACKEND_SMOKE_HOME"
-PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "${GAME_IDS[@]}" <<'PY'
+PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "$REQUIRES_LLDB" "${GAME_IDS[@]}" <<'PY'
+import os
 import sys
+from pathlib import Path
 from core.registry import create_adapter
 
-for game_id in sys.argv[1:]:
+if sys.argv[1] == '1':
+    import debugger.lldb_time_warp as time_warp
+    expected = Path(os.environ['PYTHONPATH']) / 'debugger/lldb_time_warp.py'
+    if Path(time_warp.__file__).resolve() != expected.resolve():
+        raise SystemExit('Debugger driver was not imported from the packaged backend.')
+for game_id in sys.argv[2:]:
     adapter = create_adapter(game_id)
     try:
         metadata = adapter.metadata()

@@ -424,6 +424,14 @@ def _save_editor_language(raw):
     return {"language": language}
 
 
+def _save_editor_apply(raw):
+    entries = _params(raw).get("draftEntryIds", [])
+    if not isinstance(entries, list) or any(
+            not isinstance(entry, str) or not entry for entry in entries):
+        raise ValueError("Save Editor draft identities are invalid.")
+    return {"draftEntryIds": list(dict.fromkeys(entries))}
+
+
 def _save_editor_stage(raw):
     params = _params(raw)
     entry_id = params.get("entryId")
@@ -701,7 +709,7 @@ _COMMAND_SPECS = (
         validate=_save_editor_language,
         invoke=lambda adapter, params: adapter.cancel_save_editor(params),
     ),
-    _spec("save_editor_apply", timeout=30.0,
+    _spec("save_editor_apply", timeout=30.0, validate=_save_editor_apply,
         invoke=lambda adapter, params: adapter.apply_save_editor(params)),
     _spec("save_editor_close", invoke=lambda adapter, params: adapter.close_save_editor(params)),
     _spec("list_profiles", invoke=_list_profiles),
@@ -742,15 +750,21 @@ class Hades2CommandContract:
             if spec is None:
                 raise ValueError("未知命令。")
             validated = spec.validate(params)
+            workspace = None
             if command.startswith("save_editor_") and command not in ("save_editor_inventory", "save_editor_open"):
                 identifier = _params(params).get("workspaceId")
                 if not isinstance(identifier, str) or not identifier or len(identifier) > 128:
                     raise ValueError("Save Editor workspace identity is invalid.")
-                self.adapter.validate_save_workspace(identifier)
+                workspace = self.adapter.validate_save_workspace(identifier)
+                if command != "save_editor_close":
+                    workspace.require_baseline(_params(params).get("baselineGeneration"))
                 validated = dict(validated, workspaceId=identifier)
             if spec.requires_request_id:
                 validated = dict(validated, requestId=request_id)
-            return spec.invoke(self.adapter, validated)
+            result = spec.invoke(self.adapter, validated)
+            if workspace is not None and command != "save_editor_close":
+                return dict(result, baselineGeneration=workspace.baseline_generation)
+            return result
         except Exception as error:
             raise self._as_presentation_key(
                 present_runtime_error(command, error)

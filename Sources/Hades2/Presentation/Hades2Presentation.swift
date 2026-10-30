@@ -217,10 +217,14 @@ struct Hades2TerminologyCatalog {
             .deletingLastPathComponent()   // Sources/Hades2
             .deletingLastPathComponent()   // Sources
             .deletingLastPathComponent()   // <repo>
-        candidates.append(
-            repositoryRoot
-                .appendingPathComponent("docs/reference/hades2/1.143476-25481925/ui_terminology.json")
-        )
+        let manifestURL = repositoryRoot.appendingPathComponent("Backend/games/hades2/module.json")
+        if let data = try? Data(contentsOf: manifestURL),
+           let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let supported = manifest["supportedBuild"] as? [String: Any],
+           let referenceDirectory = supported["referenceDirectory"] as? String {
+            candidates.append(repositoryRoot.appendingPathComponent(referenceDirectory)
+                .appendingPathComponent("ui_terminology.json"))
+        }
         for url in candidates where FileManager.default.fileExists(atPath: url.path) {
             guard let data = try? Data(contentsOf: url),
                   let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }

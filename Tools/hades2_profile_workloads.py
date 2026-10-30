@@ -48,8 +48,12 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
         main = folder / 'main.swift'
         main.write_bytes((ROOT / 'Tools/fixtures/hades2_profile_host.swift').read_bytes())
         binary = folder / 'host'
+        runtime_sources = ['BackendProcess', 'BackendClient', 'TrainerBackendSession']
+        # Older --baseline-ref archives predate the shared JSON decoder.
+        if (source / 'Sources/Core/Runtime/TrainerJSON.swift').exists():
+            runtime_sources.append('TrainerJSON')
         subprocess.run([compiler, '-O', *(str(source / ('Sources/Core/Runtime/' + name + '.swift'))
-            for name in ('BackendProcess', 'BackendClient', 'TrainerBackendSession')),
+            for name in runtime_sources),
             str(main), '-o', str(binary)], check=True, capture_output=True, text=True, timeout=60)
         events = folder / 'events.log'
         environment = dict(os.environ, MGT_PROFILE_OPERATIONS='1' if probes else '0', MGT_PROFILE_TEMP=str(folder),

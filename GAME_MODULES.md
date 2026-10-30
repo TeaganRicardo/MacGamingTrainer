@@ -85,6 +85,8 @@ Apply the causal scope and review process in `AGENTS.md`. Module isolation prote
 
 The generic Host transports JSON-compatible dictionaries. Each game isolates that untyped edge immediately behind a typed request encoder and state decoder.
 
+The private worker transport has its own session-file framing revision, independent of the public Host envelope. Bounded JSONL control frames carry larger JSON values through atomic regular files in a private worker-specific directory; encoding, file IO and pipe writes run off the main thread under the request deadline. Consumed files are removed, and each original worker's directory is reclaimed after its writes and replies finish, including orphaned-worker cleanup after Host death. Game modules continue to receive the same dictionary interface.
+
 Core owns byte-identical cached reply delivery without re-executing the action. It notifies the adapter through the optional `reply_replayed()` lifecycle callback. A module retaining a change-aware public projection invalidates its delivery baseline there so its next live reply can reconstruct the receiver; modules producing full observations inherit the no-op default.
 
 Core enforces request ordering and timeout mechanics but does not decide game-specific timeout budgets. A timed-out backend request is terminal for that backend instance when execution outcome may be unknown. Recovery may restart the backend, but must never automatically replay an outcome-unknown non-idempotent request.

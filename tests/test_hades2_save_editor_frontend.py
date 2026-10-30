@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -36,8 +37,11 @@ workspace_number = 0
 omit_first_target = False
 manual_inventory_count = 0
 apply_count = 0
+baseline_generation = 0
+retired_fixture_applied = False
 detail_counts = {}
 refused_recovery_review = False
+refused_large_scalar = False
 
 def staged_result():
     if pending_value is None or pending_entry_id is None or pending_operation is None:
@@ -112,6 +116,7 @@ for raw in sys.stdin:
         }
     elif command == 'save_editor_open':
         workspace_number += 1
+        baseline_generation += 1
         snapshot = req['params'].get('snapshotId')
         source = dict(req['params']['source'])
         if source.get('relativePath') == 'Profile3.sav':
@@ -335,7 +340,7 @@ for raw in sys.stdin:
                 'path': ['GameState', 'GameplayTime'],
                 'name': 'Gameplay Time (seconds)',
                 'englishName': 'Gameplay Time (seconds)',
-                'value': 900.5,
+                'value': -0.0 if req['params']['search'] == 'negative-zero-fixture' else 900.5,
                 'valueType': 'number',
                 'editable': True,
                 'mutationKinds': ['set'],
@@ -435,6 +440,22 @@ for raw in sys.stdin:
                 'mutationKinds': ['set'],
                 'constraints': {'min': 0, 'max': 999999, 'integer': True},
             }]
+        if req['params']['search'] == 'retire-fixture':
+            items = [
+                {'id': 'advanced:retire-inline', 'domain': 'advanced', 'rawId': 'RetireInline',
+                 'path': ['Retire', 'Inline'], 'name': 'Retired inline value', 'englishName': 'Retired inline value',
+                 'value': 44 if retired_fixture_applied else 3, 'valueType': 'integer',
+                 'editable': True, 'mutationKinds': ['set'], 'constraints': {'integer': True}},
+                {'id': 'advanced:retire-typed', 'domain': 'advanced', 'rawId': 'RetireTyped',
+                 'path': ['Retire', 'Typed'], 'name': 'Retired structure', 'englishName': 'Retired structure',
+                 'value': None, 'valueType': 'table', 'childCount': 0,
+                 'editable': True, 'mutationKinds': ['set', 'addMembership', 'removeMembership']},
+                {'id': 'resource:GiftPoints', 'domain': 'resources', 'rawId': 'GiftPoints',
+                 'path': ['GameState', 'Resources', 'GiftPoints'],
+                 'name': 'Unrelated correction', 'englishName': 'Unrelated correction',
+                 'value': 7, 'valueType': 'integer', 'editable': True,
+                 'mutationKinds': ['set'], 'constraints': {'integer': True}},
+            ]
         groups = {}
         if domain == 'entities':
             for row in items:
@@ -457,41 +478,51 @@ for raw in sys.stdin:
         if domain == 'entities':
             result['scope'] = req['params']['scope']
     elif command == 'save_editor_detail':
-        scene = req['params']['entryId'].removeprefix('investigate:')
-        detail_counts[scene] = detail_counts.get(scene, 0) + 1
-        if scene == 'DetailRace':
-            time.sleep(0.20)
-            line_text = 'detail reply ' + str(detail_counts[scene])
+        if req['params']['entryId'] == 'advanced:retire-typed':
+            result = {'domain': 'advanced', 'entryId': 'advanced:retire-typed',
+                      'typedValue': {'luaType': 'table', 'entries': []},
+                      'editable': True, 'mutationKinds': ['set']}
         else:
-            line_text = 'I still remember'
-        result = {
-            'scene': scene, 'status': 'recorded', 'sourceStatus': 'available',
-            'reason': 'Recorded; owner verified.', 'canStage': True,
-            'stageID': 'dialogue:' + scene, 'character': 'Nemesis',
-            'sourceResolution': 'resolved', 'futureEligibility': 'unknown',
-            'definitions': [{
-                'file': 'NPCData_Nemesis.lua', 'line': 42, 'partner': False,
-                'requirements': [{
-                    'line': 43, 'scope': 'scene',
-                    'tree': {'kind': 'and', 'text': 'AND', 'evidence': 'unknown', 'children': [
-                        {'kind': 'path', 'text': 'CurrentRun.TextLinesRecord.TrueEndingFinale01',
-                         'evidence': 'unknown', 'children': []},
-                    ]},
+            scene = req['params']['entryId'].removeprefix('investigate:')
+            detail_counts[scene] = detail_counts.get(scene, 0) + 1
+            if scene == 'DetailRace':
+                time.sleep(0.20)
+                line_text = 'detail reply ' + str(detail_counts[scene])
+            else:
+                line_text = 'I still remember'
+            result = {
+                'scene': scene, 'status': 'recorded', 'sourceStatus': 'available',
+                'reason': 'Recorded; owner verified.', 'canStage': True,
+                'stageID': 'dialogue:' + scene, 'character': 'Nemesis',
+                'sourceResolution': 'resolved', 'futureEligibility': 'unknown',
+                'definitions': [{
+                    'file': 'NPCData_Nemesis.lua', 'line': 42, 'partner': False,
+                    'requirements': [{
+                        'line': 43, 'scope': 'scene',
+                        'tree': {'kind': 'and', 'text': 'AND', 'evidence': 'unknown', 'children': [
+                            {'kind': 'path', 'text': 'CurrentRun.TextLinesRecord.TrueEndingFinale01',
+                             'evidence': 'unknown', 'children': []},
+                        ]},
+                    }],
+                    'cueIDs': ['Nemesis_0407'],
                 }],
-                'cueIDs': ['Nemesis_0407'],
-            }],
-            'lines': [{
-                'cueId': 'Nemesis_0407', 'speaker': 'Nemesis', 'events': [scene],
-                'en': [line_text], 'zhCN': ['我从未忘记'],
-            }],
-        }
+                'lines': [{
+                    'cueId': 'Nemesis_0407', 'speaker': 'Nemesis', 'events': [scene],
+                    'en': [line_text], 'zhCN': ['我从未忘记'],
+                }],
+            }
     elif command == 'save_editor_stage':
-        if req['params']['value'] == 445:
+        refuse_large_scalar = (req['params']['entryId'] == 'playerStat:GameplayTime'
+                               and req['params']['value'] == 2**101 and not refused_large_scalar)
+        if refuse_large_scalar:
+            refused_large_scalar = True
+            time.sleep(0.10)
+        if req['params']['value'] == 445 or refuse_large_scalar:
             print(json.dumps({
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 17,
+                'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -516,7 +547,7 @@ for raw in sys.stdin:
             refused_recovery_review = True
             print(json.dumps({
                 'type': 'result', 'id': req['id'], 'protocolVersion': 6,
-                'moduleProtocolVersion': 17, 'gameID': args.game, 'ok': False,
+                'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__, 'gameID': args.game, 'ok': False,
                 'error': {'code': 'invalid_request',
                           'presentation': 'hades2.saveEditor.error.invalidResponse', 'arguments': []},
             }), flush=True)
@@ -534,7 +565,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 17,
+                'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -545,6 +576,8 @@ for raw in sys.stdin:
                 },
             }), flush=True)
             continue
+        baseline_generation += 1
+        retired_fixture_applied = pending_value == 777
         resource_value = pending_value
         pending_value = None
         pending_entry_id = None
@@ -560,11 +593,16 @@ for raw in sys.stdin:
         }
     else:
         result = {}
+    if command.startswith('save_editor_') and command not in ('save_editor_inventory', 'save_editor_close'):
+        result['baselineGeneration'] = str(baseline_generation)
+    if command == 'save_editor_apply':
+        result['continuousDraftEntryIds'] = [entry for entry in req['params']['draftEntryIds']
+            if not retired_fixture_applied or not entry.startswith('advanced:retire-')]
     print(json.dumps({
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 17,
+        'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__,
         'gameID': args.game,
         'ok': True,
         'result': result,
@@ -615,7 +653,7 @@ final class SaveUnstageAction: NSObject {
 
     @objc(removeClicked:) func clicked(_ sender: Any?) {
         presses += 1
-        model.unstage(entryID: entryID)
+        model.unstage(entryID: entryID, baseline: model.baselineGeneration!)
     }
 }
 
@@ -625,6 +663,19 @@ struct Main {
     static func main() throws {
         let args = CommandLine.arguments
         guard args.count == 3 else { fail("expected python + worker") }
+        for input in [#"{"luaType":"number","value":9007199254740993}"#,
+                      #"{"luaType":"table","entries":[{"key":{"luaType":"number","value":9.007199254740993e15},"value":{"luaType":"nil"}}]}"#] {
+            if Hades2SaveTypedValue(text: input) != nil { fail("typed JSON silently rounded an integral input") }
+        }
+        let zeroInputs = [#"{"luaType":"number","value":-0.0}"#,
+                          #"{"luaType":"table","entries":[{"key":{"luaType":"string","value":"zero"},"value":{"luaType":"number","value":-0.0}}]}"#]
+        for input in zeroInputs {
+            guard let value = Hades2SaveTypedValue(text: input),
+                  let wire = try? JSONSerialization.data(withJSONObject: value.object),
+                  let json = String(data: wire, encoding: .utf8), json.contains("0000000000000080") else {
+                fail("typed scalar/nested negative zero was lost through JSON serialization")
+            }
+        }
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
@@ -647,7 +698,7 @@ struct Main {
         func sample(
             _ id: String, _ domain: String, _ rawID: String, _ name: String,
             group: String? = nil, entityID: String? = nil,
-            entityName: String? = nil
+            entityName: String? = nil, baseline: String = ""
         ) -> Hades2SaveEditorEntry {
             Hades2SaveEditorEntry(
                 id: id, domain: domain, rawID: rawID, path: [],
@@ -658,7 +709,8 @@ struct Main {
                 childCount: nil, pathAmbiguous: false, investigationStatus: nil,
                 investigationSnippet: nil, investigationSourceStatus: nil,
                 investigationReason: nil, discoveryState: nil,
-                discoveryReasonCode: nil, discoveryReason: nil
+                discoveryReasonCode: nil, discoveryReason: nil,
+                baselineGeneration: baseline
             )
         }
         let grouped = Hades2SaveEditorEntityGrouping.entities(from: [
@@ -886,7 +938,7 @@ struct Main {
             fail("review did not cross the Save Editor Host command seam")
         }
 
-        model.cancel()
+        model.cancel(baseline: model.baselineGeneration)
         pump(0.20)
         if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("cancel did not clear the authoritative pending batch")
@@ -1032,7 +1084,9 @@ struct Main {
             fail("Removing an unrelated action cleared the invalid draft's correction feedback")
         }
 
-        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
+        let previousBaseline = model.baselineGeneration!
+        let previousEntry = model.items.first!
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500, baseline: model.baselineGeneration!)
         pumpUntil { !model.busy && model.pendingCount == 1 }
         guard let sameActionDraft = fields(window.contentView!).first(where: {
             $0.isEditable && $0.accessibilityLabel() == "Ashes"
@@ -1043,7 +1097,7 @@ struct Main {
         sameActionEditor.selectAll(nil)
         sameActionEditor.insertText("3.5", replacementRange: sameActionEditor.selectedRange())
         window.makeFirstResponder(nil); pump(0.10)
-        model.apply()
+        model.apply(baseline: model.baselineGeneration)
         pump(0.35)
         if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("successful Apply did not clear the committed batch")
@@ -1061,6 +1115,14 @@ struct Main {
             }) {
             fail("Applying an acknowledged action erased a later invalid draft on the same field")
         }
+        let beforeStaleControls = commands(at: commandLog).count
+        _ = model.completeTextEdit(previousEntry, text: "987")
+        model.stage(entryID: previousEntry.id, operation: "set", value: 987, baseline: previousBaseline)
+        model.unstage(entryID: previousEntry.id, baseline: previousBaseline)
+        model.cancel(baseline: previousBaseline)
+        model.apply(baseline: previousBaseline)
+        pump(0.05)
+        if commands(at: commandLog).count != beforeStaleControls { fail("old baseline control reached a replacement document") }
         guard let hotReceipt = model.lastApplyReceipt else {
             fail("hot Apply did not expose its backend receipt")
         }
@@ -1079,9 +1141,9 @@ struct Main {
             fail("Apply did not verify by re-querying the installed workspace: \(appliedCommands)")
         }
 
-        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 550)
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 550, baseline: model.baselineGeneration!)
         pumpUntil { !model.busy && model.pendingCount == 1 }
-        model.apply()
+        model.apply(baseline: model.baselineGeneration)
         pump(0.35)
         guard let coldReceipt = model.lastApplyReceipt else {
             fail("cold Apply did not expose its backend receipt")
@@ -1097,9 +1159,9 @@ struct Main {
             fail("cold Apply did not reload the installed page")
         }
 
-        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 600)
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 600, baseline: model.baselineGeneration!)
         pumpUntil { !model.busy && model.pendingCount == 1 }
-        model.apply()
+        model.apply(baseline: model.baselineGeneration)
         pump(0.20)
         if model.pendingCount != 1
             || model.operationFailures[.saveEditorApply]?.key != "host.save.error.rollbackFailed"
@@ -1127,7 +1189,7 @@ struct Main {
         }
         model.selectTarget("main/Profile1.sav")
         pumpUntil { !model.busy && model.selectedTargetID == "main/Profile1.sav" }
-        model.cancel()
+        model.cancel(baseline: model.baselineGeneration)
         pumpUntil { model.pendingCount == 0 && !model.busy }
         if !model.editFailures.isEmpty || inlineField("3.5") != nil {
             fail("Explicitly discarding Save changes retained an abandoned draft or its correction feedback")
@@ -1135,6 +1197,82 @@ struct Main {
         if model.operationFailures[.saveEditorApply]?.arguments != ["/tmp/mgt-recovery/save-600"] {
             fail("Discarding requested edits erased a failed disk transaction's recovery path")
         }
+
+        // This Apply replaces structural identities while an unrelated scalar
+        // retains its editable correction. Detail finishes before Apply; captured
+        // controls from that old baseline cannot submit afterward.
+        model.selectDomain(.resources)
+        pumpUntil { !model.querying }
+        model.search = "retire-fixture"
+        model.submitSearch()
+        pumpUntil { !model.querying && model.items.contains { $0.id == "advanced:retire-typed" } }
+        guard let retiredInline = model.items.first(where: { $0.id == "advanced:retire-inline" }),
+              let retiredTyped = model.items.first(where: { $0.id == "advanced:retire-typed" }),
+              let unrelatedDraft = model.items.first(where: { $0.id == "resource:GiftPoints" }) else {
+            fail("retired-draft fixture page did not load")
+        }
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 777, baseline: model.baselineGeneration!)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        func enterRetirementDraft(_ entry: Hades2SaveEditorEntry, text: String) {
+            guard let input = fields(window.contentView!).first(where: {
+                $0.isEditable && $0.accessibilityLabel() == entry.displayName
+            }), window.makeFirstResponder(input), let editor = input.currentEditor() as? NSTextView else {
+                fail("retirement fixture has no native input: \(entry.displayName)")
+            }
+            editor.selectAll(nil); editor.insertText(text, replacementRange: editor.selectedRange())
+            window.makeFirstResponder(nil); pump(0.05)
+        }
+        enterRetirementDraft(retiredInline, text: "3.5")
+        enterRetirementDraft(unrelatedDraft, text: "4.5")
+        _ = model.completeTypedEdit(retiredTyped, text: "unfinished typed structure")
+        model.retainMembershipDraft(Hades2SaveAdvancedMembershipDraft(keyType: "string",
+            key: "unfinished member key", value: "unfinished member value"),
+            for: retiredTyped.id, baseline: retiredTyped.baselineGeneration)
+        var initialDetailCompleted = false
+        model.loadAdvancedValue(retiredTyped, language: .en) { detail, error in
+            if detail == nil || error != nil { fail("initial structural detail did not complete normally") }
+            initialDetailCompleted = true
+        }
+        pumpUntil { initialDetailCompleted }
+        if !initialDetailCompleted { fail("detail must complete before the serialized Apply request") }
+        let retiredBaseline = model.baselineGeneration
+        model.apply(baseline: retiredBaseline)
+        pumpUntil { !model.busy && !model.querying && model.baselineGeneration != retiredBaseline }
+        pump(0.10)
+        let beforeObsoleteControls = commands(at: commandLog).count
+        var obsoleteDetailWasConsumed = false
+        model.loadAdvancedValue(retiredTyped, language: .en) { _, _ in obsoleteDetailWasConsumed = true }
+        _ = model.completeTypedEdit(retiredTyped, text: "obsolete typed input")
+        _ = model.completeTextEdit(retiredInline, text: "987")
+        model.retainMembershipDraft(Hades2SaveAdvancedMembershipDraft(key: "obsolete member"),
+            for: retiredTyped.id, baseline: retiredTyped.baselineGeneration)
+        model.stage(entryID: retiredInline.id, operation: "set", value: 987,
+            baseline: retiredInline.baselineGeneration)
+        pump(0.05)
+        if commands(at: commandLog).count != beforeObsoleteControls || obsoleteDetailWasConsumed {
+            fail("captured controls from the old baseline submitted a request or invoked detail completion")
+        }
+        let archived = model.retiredDrafts.map(\.text)
+        if !archived.contains("3.5") || !archived.contains("unfinished typed structure")
+            || !archived.contains(where: { $0.contains("unfinished member key") && $0.contains("unfinished member value") }) {
+            fail("structural Apply silently lost copyable inline/typed/membership draft text")
+        }
+        if model.textDrafts[retiredInline.id] != nil || model.typedDrafts[retiredTyped.id] != nil
+            || model.membershipDrafts[retiredTyped.id] != nil || model.editFailures[retiredInline.id] != nil
+            || model.editFailures[retiredTyped.id] != nil || obsoleteDetailWasConsumed {
+            fail("old structural draft, error, or captured detail control rebound to the new baseline")
+        }
+        guard let replacementInput = fields(window.contentView!).first(where: {
+                  $0.isEditable && $0.accessibilityLabel() == retiredInline.displayName
+              }), replacementInput.stringValue == "44",
+              let continuedInput = fields(window.contentView!).first(where: {
+                  $0.isEditable && $0.accessibilityLabel() == unrelatedDraft.displayName
+              }), continuedInput.stringValue == "4.5",
+              model.textDrafts[unrelatedDraft.id] == "4.5", model.editFailures[unrelatedDraft.id] != nil else {
+            fail("new controls reused a retired draft or discarded the unrelated editable correction")
+        }
+        model.cancel(baseline: model.baselineGeneration)
+        pumpUntil { !model.busy }
 
         model.selectScope("all")
         pump(0.20)
@@ -1267,6 +1405,93 @@ struct Main {
             || model.items.first?.constraints?.integer != false {
             fail("playerStats descriptor row was not decoded")
         }
+        model.search = "negative-zero-fixture"
+        model.submitSearch()
+        pumpUntil { !model.querying }
+        pump(0.10)
+        guard let negativeZero = model.items.first,
+              let negativeZeroValue = negativeZero.value?.base as? Double,
+              negativeZeroValue.bitPattern == (-0.0 as Double).bitPattern,
+              let negativeZeroInput = inlineField("-0"),
+              negativeZeroInput.accessibilityLabel() == negativeZero.displayName,
+              let parsedNegativeZero = model.parsedTextDraft(for: negativeZero, text: negativeZeroInput.stringValue) as? Double,
+              parsedNegativeZero.bitPattern == (-0.0 as Double).bitPattern,
+              let negativeZeroOwner = negativeZeroInput.window,
+              negativeZeroOwner.makeFirstResponder(negativeZeroInput),
+              let negativeZeroEditor = negativeZeroInput.currentEditor() as? NSTextView else {
+            fail("negative-zero scalar lost its sign or could not round-trip its actual inline prefill")
+        }
+        let beforeNegativeZeroTyping = commands(at: commandLog).count
+        negativeZeroEditor.selectAll(nil)
+        negativeZeroEditor.insertText("-0.0", replacementRange: negativeZeroEditor.selectedRange())
+        model.query()
+        pumpUntil { !model.querying }
+        pump(0.10)
+        if negativeZeroInput.stringValue != "-0.0"
+            || (model.items.first?.value?.base as? Double)?.bitPattern != (-0.0 as Double).bitPattern
+            || (model.parsedTextDraft(for: negativeZero, text: negativeZeroInput.stringValue) as? Double)?.bitPattern
+                != (-0.0 as Double).bitPattern {
+            fail("negative-zero native input or observation sign changed across refresh")
+        }
+        negativeZeroEditor.selectAll(nil)
+        negativeZeroEditor.insertText("-0", replacementRange: negativeZeroEditor.selectedRange())
+        negativeZeroOwner.makeFirstResponder(nil)
+        pump(0.10)
+        if commands(at: commandLog).dropFirst(beforeNegativeZeroTyping).contains(where: {
+            $0["command"] as? String == "save_editor_stage"
+        }) {
+            fail("restoring the original negative-zero prefill staged an unchanged field")
+        }
+
+        // Completion text must remain valid while an asynchronous Stage is
+        // refused, even for a native caller retaining its own correction draft.
+        var largeScalarDraft = "1267650600228229401496703205376"
+        let largeScalarHost = NSHostingView(rootView: TrainerTextField(
+            title: "Large scalar", text: Binding(get: { largeScalarDraft }, set: { largeScalarDraft = $0 }),
+            onCommit: { edit in
+                model.completeTextEdit(negativeZero, text: edit.text, changed: edit.changed)
+            }
+        ))
+        let largeScalarWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 340, height: 40),
+                                         styleMask: [.titled], backing: .buffered, defer: false)
+        largeScalarWindow.contentView = largeScalarHost
+        largeScalarHost.layoutSubtreeIfNeeded()
+        pump(0.10)
+        guard let largeScalarInput = fields(largeScalarHost).first(where: { $0.isEditable }),
+              largeScalarWindow.makeFirstResponder(largeScalarInput),
+              let largeScalarEditor = largeScalarInput.currentEditor() as? NSTextView else {
+            fail("could not focus the native large-number completion field")
+        }
+        let beforeLargeScalarRetry = commands(at: commandLog).count
+        largeScalarEditor.selectAll(nil)
+        largeScalarEditor.insertText("2535301200456458802993406410752", replacementRange: largeScalarEditor.selectedRange())
+        largeScalarWindow.makeFirstResponder(nil)
+        pumpUntil { !model.busy && model.editFailures[negativeZero.id] != nil }
+        guard model.pendingCount == 0,
+              model.editFailures[negativeZero.id]?.key == "hades2.saveEditor.error.invalidMutation",
+              largeScalarInput.stringValue == "2535301200456458802993406410752",
+              let retryValue = model.parsedTextDraft(for: negativeZero, text: largeScalarInput.stringValue) as? Double,
+              retryValue == Double(sign: .plus, exponent: 101, significand: 1),
+              largeScalarWindow.makeFirstResponder(largeScalarInput),
+              let largeScalarRetryEditor = largeScalarInput.currentEditor() as? NSTextView else {
+            fail("asynchronous Stage refusal retained an unparseable large-number correction")
+        }
+        largeScalarRetryEditor.selectAll(nil)
+        largeScalarRetryEditor.insertText(largeScalarInput.stringValue + ".0", replacementRange: largeScalarRetryEditor.selectedRange())
+        largeScalarWindow.makeFirstResponder(nil)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        let largeScalarRetryStages = commands(at: commandLog).dropFirst(beforeLargeScalarRetry).filter {
+            $0["command"] as? String == "save_editor_stage"
+        }
+        if model.pendingActions.first?.after != AnyHashable(Double(sign: .plus, exponent: 101, significand: 1))
+            || model.editFailures[negativeZero.id] != nil
+            || model.parsedTextDraft(for: negativeZero, text: largeScalarInput.stringValue) == nil
+            || largeScalarRetryStages.count != 2 {
+            fail("the actual large-number correction could not retry after asynchronous Stage refusal")
+        }
+        model.cancel(baseline: model.baselineGeneration)
+        pumpUntil { !model.busy && model.pendingCount == 0 }
+        largeScalarWindow.close()
 
         if Hades2SaveWorkbenchSection.growth.rawValue != "growth"
             || Hades2SaveWorkbenchSection.story.rawValue != "story" {
@@ -1389,7 +1614,7 @@ struct Main {
         pump(0.20)
         let discoveredScene = sample(
             "investigate:NemesisPostTrueEnding01", "investigate",
-            "NemesisPostTrueEnding01", "Nemesis"
+            "NemesisPostTrueEnding01", "Nemesis", baseline: model.baselineGeneration!
         )
         model.inspect(discoveredScene)
         pump(0.30)
@@ -1398,12 +1623,13 @@ struct Main {
         }
 
         // Non-occupying detail reads must remain owned by the exact request,
-        // language and workspace that started them.
+        // language, workspace and baseline captured when the entry was read.
         model.selectScope("all")
         model.setLanguage(.en)
         pumpUntil(timeout: 1.0) { !model.querying && !model.busy }
         let raceDetail = sample(
-            "investigate:DetailRace", "investigate", "DetailRace", "Detail race"
+            "investigate:DetailRace", "investigate", "DetailRace", "Detail race",
+            baseline: model.baselineGeneration!
         )
 
         model.inspect(raceDetail)
@@ -1549,10 +1775,10 @@ struct Main {
         ] || (backupCommands[1]["params"] as? [String: Any])?["snapshotId"] as? String != "verified-backup" {
             fail("backup entry bypassed the shared backend session/workbench")
         }
-        backupModel.stage(entryID: "resource:MetaCurrency", operation: "set", value: 800)
+        backupModel.stage(entryID: "resource:MetaCurrency", operation: "set", value: 800, baseline: backupModel.baselineGeneration!)
         pumpUntil { !backupModel.busy && backupModel.pendingCount == 1 }
         let beforeNoTarget = commands(at: commandLog).count
-        backupModel.apply()
+        backupModel.apply(baseline: backupModel.baselineGeneration)
         pump(0.05)
         if commands(at: commandLog).count != beforeNoTarget { fail("Apply ran without a selected target") }
         backupModel.selectTarget("main/Profile1.sav")
@@ -1626,7 +1852,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
     binary = td / "save_editor_frontend"
     home = td / "home"
     home.mkdir()
-    worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
+    worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"

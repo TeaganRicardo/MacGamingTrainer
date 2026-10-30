@@ -84,6 +84,51 @@ renamed = router.handle({'id':'r1','command':'core.save.rename','params':{'snaps
 assert renamed['ok'] is True and renamed['result']['operation']['name'] == 'Renamed'
 assert adapter.calls == []
 
+# A committed mutation keeps its receipt even if the following observation
+# fails. Retrying the same request id delivers that receipt without re-execution.
+before_committed_backup = len(router.save_service.store.list_snapshots())
+real_list_state = router.save_service.list_state
+def observation_unavailable():
+    raise OSError('fixture observation read failed after commit')
+router.save_service.list_state = observation_unavailable
+logging.disable(logging.CRITICAL)
+try:
+    committed_request = {'id':'committed-backup','command':'core.save.backup','params':{'name':'Committed'}}
+    committed = router.handle(committed_request)
+    assert committed['ok'] is True
+    assert committed['result']['operation']['name'] == 'Committed'
+    assert committed['result']['stateRefreshFailed'] is True
+    assert 'snapshots' not in committed['result']
+    assert router.handle(committed_request) == committed
+    folder = router.handle({'id':'folder-without-observation','command':'core.save.open_folder','params':{}})
+    assert folder['ok'] is True and folder['result']['stateRefreshFailed'] is True
+    assert Path(folder['result']['folder']) == router.save_service.store.snapshots.resolve()
+    assert 'snapshots' not in folder['result']
+finally:
+    logging.disable(logging.NOTSET)
+    router.save_service.list_state = real_list_state
+assert len(router.save_service.store.list_snapshots()) == before_committed_backup + 1
+
+# Invalid interrupted claims remain observable alongside the inventory and
+# explicit recovery controls; observing them never changes or replays them.
+claim = router.save_service.store.ensure_storage_root() / '.staged-restore-applying-malformed.json'
+claim.write_text('{interrupted', encoding='utf-8')
+logging.disable(logging.CRITICAL)
+try:
+    interrupted = router.handle({'id':'invalid-claim-list','command':'core.save.list','params':{}})
+    assert interrupted['ok'] is True
+    assert interrupted['result']['pendingRestore'] == {'indeterminate': True, 'indeterminateCount': 1}
+    assert interrupted['result']['snapshots']
+    assert claim.read_text(encoding='utf-8') == '{interrupted'
+    assert router.save_service.apply_staged() == {'applied': False, 'indeterminate': True}
+    blocked = router.handle({'id':'invalid-claim-delete','command':'core.save.delete','params':{'snapshotId':snapshot_id}})
+    assert blocked['ok'] is False
+    cleared = router.handle({'id':'invalid-claim-clear','command':'core.save.cancel_staged','params':{}})
+finally:
+    logging.disable(logging.NOTSET)
+assert cleared['ok'] is True and cleared['result']['operation']['cancelled'] is True
+assert cleared['result']['pendingRestore'] is None and not claim.exists()
+
 policy = router.handle({'id':'policy1','command':'core.save.set_retention','params':{'maxCount':2,'maxBytes':1048576}})
 assert policy['ok'] is True and policy['result']['retention']['maxCount'] == 2
 assert policy['result']['snapshots'][0]['origin'] == 'manual'

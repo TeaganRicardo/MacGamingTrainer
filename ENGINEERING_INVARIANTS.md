@@ -25,6 +25,7 @@ App (catalog, visible game, shared hotkey routing, all-context quit)
 - generic hotkey capture/registration and generic feedback vocabulary;
 - target-process observation and automatic/manual connection policy;
 - one backend worker session per game, JSONL request ordering, queueing, timeout and protocol verification;
+- private worker-session message files for values larger than bounded JSONL control frames, with request-identity validation, asynchronous IO under the original deadline, and cleanup bound to that worker;
 - generic optional-sidecar process lifecycle, bounded JSONL framing/request identity, reply timeout, interruption cleanup, crash handling and terminal outcome-unknown trust semantics;
 - debugger-agnostic Process Time Warp controller mechanics;
 - optional cross-game save snapshot/restore/rollback/staging infrastructure;
@@ -52,15 +53,17 @@ Selecting a different game only changes presentation. It never disconnects anoth
 | State class | Authoritative owner | Meaning | Replay rule |
 | --- | --- | --- | --- |
 | Host target/backend lifecycle | `TrainerTargetProcessMonitor`, `TrainerConnectionPolicy`, `TrainerBackendSession` | process presence, pending bounded reconnect/restart intent, worker health | event-driven only |
-| Hades durable desired state | `Hades2PreferenceStore` / Profile service, projected by `Hades2Adapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
-| Hades observable runtime state | resident Lua + Process Time Warp, decoded through `Hades2StatePatch` | what is actually active/available now | never infer active from desired alone |
-| Hades dormant state | adapter/resident status projection | desired but currently not active in the observed runtime/scene | may become active after a valid lifecycle transition |
+| Hades I durable desired state | `HadesPreferenceStore` / `HadesProfileStore`, projected by `HadesAdapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
+| Hades II durable desired state | `Hades2PreferenceStore` / `Hades2ProfileService`, projected by `Hades2Adapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
+| Hades I observable runtime state | game-owned `runtime.lua` and Process Time Warp projection, decoded by `HadesModel` | what is actually active/available now | never infer active from desired alone |
+| Hades II observable runtime state | game-owned resident Lua + Process Time Warp, decoded through `Hades2StatePatch` | what is actually active/available now | never infer active from desired alone |
+| Hades II dormant state | adapter/resident status projection | desired but currently not active in the observed runtime/scene | may become active after a valid lifecycle transition |
 | UI optimistic/edit state | Swift model/view-local state | temporary presentation/input state | never becomes runtime truth without backend confirmation |
 | Core Save transaction/recovery state | snapshot/restore service, staged claim files and contained rollback directories | durable filesystem transaction progress/outcome/recovery evidence | uncertain applying state is never auto-replayed; preserved recovery bytes remain discoverable |
 
 Sparse payloads must preserve **absent vs explicit null** semantics. `Hades2FieldPatch` exists so an omitted field cannot accidentally erase observable state.
 
-Hades public mutation patches compare complete observations at one reply-projection owner; the Adapter retains complete internal state. Status/lifecycle snapshots remain full, and action receipts stay on each actual reply. Errors, independent reply shapes and delivery of a historical Core-cached reply invalidate the public baseline so the next live runtime reply reconstructs the receiver without replaying an action.
+Hades II public mutation patches compare complete observations at one reply-projection owner; the Adapter retains complete internal state. Status/lifecycle snapshots remain full, and action receipts stay on each actual reply. Errors, independent reply shapes and delivery of a historical Core-cached reply invalidate the public baseline so the next live runtime reply reconstructs the receiver without replaying an action.
 
 ## 3. Lifecycle transition matrix
 
@@ -191,7 +194,7 @@ Source-text contracts remain acceptable where they enforce a structural boundary
 
 ## 8. Terminology ownership
 
-The game module's terminology registry owns classifications, bilingual values, provenance and allowed surfaces. For Hades, consult `Backend/games/hades2/terminology.py` and its declared reference resource; prose contains no mirrored inventory.
+Each game module owns classifications, bilingual values, provenance and allowed surfaces. Hades II uses `Backend/games/hades2/terminology.py` and its declared reference resource. Hades I uses its game-owned `catalog.py`, `world.py` and `save_owners.py` with their declared generated catalogs for native terms, and `Sources/Hades/HadesPresentation.swift` for Trainer-owned bilingual pairs. Prose contains no mirrored inventory.
 
 - Native Game Terms resolve `zh-CN` and English from the same supported-build localization ID; re-verify provenance when compatibility changes.
 - Trainer Product Terms declare an explicit bilingual pair and why the Trainer owns it; they are not native titles.
