@@ -1244,6 +1244,7 @@ struct Hades2TrainerView: View {
                 Section(text("hades2.nextRoom.olympians")) {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
+            }
             .labelsHidden().trainerPickerWidth(.wide).disabled(!model.canEditDesired)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
