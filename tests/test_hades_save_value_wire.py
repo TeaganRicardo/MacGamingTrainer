@@ -118,7 +118,7 @@ assert from_typed(samples['null-nil']) is None
 assert from_typed(samples['null-boolean']) is False
 assert from_typed(samples['null-number']) == 1
 assert from_typed(samples['null-string']) == 'abc'
-assert from_typed(samples['null-table']).entries() == [('key', None)]
+assert from_typed(samples['null-table']).entries() == (('key', None),)
 assert from_typed(samples['tag-base64']).encode('utf-8', errors='surrogateescape') == b'\xff\x00'
 assert from_typed(samples['tag-ieee754']).raw == bytes.fromhex('010000000000f07f')
 assert from_typed(samples['node-extra']) == 1
