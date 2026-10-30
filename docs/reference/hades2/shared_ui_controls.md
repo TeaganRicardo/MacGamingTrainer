@@ -15,9 +15,9 @@ Profiles/shortcuts/diagnostics, Save Editor and typed Advanced editing.
 | Reward selection/action | `TrainerResourceControls.swift`, `TrainerListControls.swift` | Native drop and character-choice lifecycles |
 | Reset action | `TrainerResetButton` in `TrainerListControls.swift` | Restore native occurrence probability |
 | Shortcut badges | `TrainerBadge.swift` | Actual action registration and ordered allocation |
-| Panels, grouped-row clipping and spacing tokens | `Sources/Core/UI/TrainerTheme.swift` | Section and multi-control composition |
+| Panels, grouped-row clipping, spacing and Picker width tokens | `Sources/Core/UI/TrainerTheme.swift` | Section and multi-control composition |
 | Sheets, tool windows and feedback | Core sheet/window/feedback components | Profiles, diagnostics, Save workspaces and receipts |
-| Native popup menus and contextual actions | SwiftUI `Picker`, `Menu` and `Button` | Trait lifecycle actions, shortcut capture, save selection and contextual menus |
+| Native popup menus and contextual actions | SwiftUI `Picker`, `Menu` and `Button` | Trait lifecycle actions, shortcut capture, save selection and contextual menus; every in-window Picker uses a Core width role |
 
 Not every native control is instantiated through a Host wrapper. Game-owned
 popup content and some native contextual buttons remain direct SwiftUI calls.
@@ -44,6 +44,22 @@ default to Heroic; an explicitly saved target survives loading. Probability
 editing and the native `GetRarityChances` hook are removed. The existing v17
 serialized `multiplier` field stays at its neutral value for stored documents
 and transport compatibility; old values cannot change native probabilities.
+
+## Picker widths and material editor layout
+
+Every in-window native SwiftUI `Picker` uses `.trainerPickerWidth(...)` from Core. The
+width roles are compact (152 pt) for short categorical values, standard (216 pt)
+for ordinary selectors, wide (288 pt) for long source/profile labels, and
+flexible (minimum 216 pt, then fills its parent row) for selectors in shared
+columns. Call sites select a semantic role; they do not set independent widths
+or content-driven maximums. Two selectors in the same comparison row use the
+same role so their columns remain balanced.
+
+The Hades II material editor is a two-row control: the first row holds its
+icon/title and search field; the second holds the flexible material Picker,
+numeric amount field and lock action. The Picker owns the remaining horizontal
+space while the amount and lock controls keep their established widths. Editing,
+focus, resource identity and lock semantics remain unchanged.
 
 ## Verification boundary
 

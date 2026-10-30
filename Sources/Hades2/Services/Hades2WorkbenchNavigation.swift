@@ -10,20 +10,21 @@ enum Hades2WorkbenchIcon {
     static let specialReward = "moon.stars.fill"
     static let purge = "arrow.left.arrow.right.circle"
     static let flora = "leaf.fill"
-    static let garden = flora
+    static let garden = "tree.fill"
     static let targetLevel = TrainerSemanticIcon.Concept.level
+    static let exactBoons = TrainerSemanticIcon.Concept.precision
     static let chaosAdvance = "arrow.right.circle"
     static let chaosProbability = "percent"
     static let prepareSigning = "signature"
     static let restoreSigning = "arrow.uturn.backward.circle"
     static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
     static let miniGames = "gamecontroller.fill"
-    static let hexReady = specialReward
+    static let hexReady = "moon.fill"
     static let legendary = "star.fill"
     static let duo = "person.2.fill"
     static let mining = "hammer.fill"
     static let digging = "mountain.2.fill"
-    static let shades = "person.crop.circle"
+    static let shades = "person.3.fill"
 
     static func icon(for titleKey: String) -> String? {
         if let family = Hades2GatheringFamily.allCases.first(where: { $0.titleKey == titleKey }) {
@@ -65,6 +66,7 @@ enum Hades2WorkbenchIcon {
         case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
         case "hades2.spawn.characterRewards": return specialReward
+        case "hades2.spawn.exactBoons": return exactBoons
         case "hades2.manage.profiles": return TrainerSemanticIcon.Tool.profiles
         case "hades2.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor
         case "hades2.manage.diagnostics": return TrainerSemanticIcon.Tool.diagnostics
@@ -106,7 +108,7 @@ extension ShortcutAction {
         case .hexAlwaysReady: Hades2WorkbenchIcon.hexReady
         case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
         case .autoMiniGames: Hades2WorkbenchIcon.miniGames
-        case .decreaseGameSpeed: "gauge.with.dots.needle.33percent"
+        case .decreaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .forceLegendary: Hades2WorkbenchIcon.legendary
@@ -238,7 +240,7 @@ enum Hades2WorkbenchCatalog {
                       "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
                       "hades2.traits.remove", "hades2.traits.removeAllMatching",
                       "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
-                      "hades2.rarity.minimum", "hades2.section.elements"]),
+                      "hades2.rarity.minimum", "hades2.section.elements", "hades2.spawn.exactBoons"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)
                 + ["hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative"]),
             (.rooms, ["hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",

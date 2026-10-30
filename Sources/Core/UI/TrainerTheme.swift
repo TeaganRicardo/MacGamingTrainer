@@ -33,6 +33,9 @@ struct TrainerTheme {
     let shortcutCaptureWidth: CGFloat
     let connectionActionWidth: CGFloat
     let compactActionWidth: CGFloat
+    let pickerCompactWidth: CGFloat
+    let pickerStandardWidth: CGFloat
+    let pickerWideWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -70,10 +73,39 @@ struct TrainerTheme {
         shortcutCaptureWidth: 180,
         connectionActionWidth: 160,
         compactActionWidth: 88,
+        pickerCompactWidth: 152,
+        pickerStandardWidth: 216,
+        pickerWideWidth: 288,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24
     )
+}
+
+enum TrainerPickerWidth {
+    case compact
+    case standard
+    case wide
+    case flexible
+}
+
+private struct TrainerPickerWidthModifier: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
+    let role: TrainerPickerWidth
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch role {
+        case .compact:
+            content.frame(width: theme.pickerCompactWidth)
+        case .standard:
+            content.frame(width: theme.pickerStandardWidth)
+        case .wide:
+            content.frame(width: theme.pickerWideWidth)
+        case .flexible:
+            content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
+        }
+    }
 }
 
 private struct TrainerThemeKey: EnvironmentKey {
@@ -90,6 +122,10 @@ extension EnvironmentValues {
 extension View {
     func trainerTheme(_ theme: TrainerTheme) -> some View {
         environment(\.trainerTheme, theme)
+    }
+
+    func trainerPickerWidth(_ role: TrainerPickerWidth = .standard) -> some View {
+        modifier(TrainerPickerWidthModifier(role: role))
     }
 
     func trainerPanel(padding: CGFloat? = nil, cornerRadius: CGFloat? = nil) -> some View {

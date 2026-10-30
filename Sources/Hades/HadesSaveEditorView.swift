@@ -72,7 +72,7 @@ struct HadesSaveEditorView: View {
                 Picker(text("hades.saveEditor.source"), selection: $model.selectedSourceID) {
                     Text(text("hades.saveEditor.selectSource")).tag("")
                     ForEach(model.sources) { Text($0.label).tag($0.id) }
-                }.disabled(model.busy)
+                }.trainerPickerWidth(.wide).disabled(model.busy)
                 Button(text("hades.saveEditor.read")) {
                     if model.review.count > 0 { confirmingRead = true } else { model.openSelection() }
                 }.disabled(model.busy || !model.sources.contains(where: { $0.id == model.selectedSourceID }))
@@ -92,7 +92,7 @@ struct HadesSaveEditorView: View {
                 Picker(text("hades.saveEditor.target"), selection: Binding(get: { model.selectedTargetID }, set: { model.selectTarget($0, baseline: baseline) })) {
                     Text(text("hades.saveEditor.selectTarget")).tag("")
                     ForEach(model.targets) { Text($0.label).tag($0.id) }
-                }.disabled(model.busy || !model.canEditRows)
+                }.trainerPickerWidth(.wide).disabled(model.busy || !model.canEditRows)
             } else if model.sources.isEmpty && !model.busy {
                 TrainerEmptyState(text: text("hades.saveEditor.noSources"))
             }
@@ -103,7 +103,7 @@ struct HadesSaveEditorView: View {
             HStack {
                 Picker(text("hades.saveEditor.domain"), selection: Binding(get: { model.domain }, set: model.selectDomain)) {
                     ForEach(model.domains) { Text(text($0.titleKey)).tag($0) }
-                }.frame(width: 235)
+                }.trainerPickerWidth(.standard)
                 TrainerSearchField(text: $model.search, placeholder: text("hades.saveEditor.search"),
                     clearLabel: text("host.search.clear"), onSubmit: { model.query() })
                 Button { model.query(offset: model.offset) } label: { Image(systemName: "arrow.clockwise") }
@@ -288,7 +288,7 @@ private struct HadesSaveEditorField: View {
             })) {
                 Text(displayValue).tag(-1)
                 ForEach(choices.indices, id: \.self) { Text(choices[$0].name).tag($0) }
-            }.labelsHidden().frame(maxWidth: 240)
+            }.labelsHidden().trainerPickerWidth(.standard)
         } else if case .some(.boolean(let enabled)) = value {
             Toggle(row.name, isOn: Binding(get: { enabled }, set: {
                 model.stage(row.id, operation: "set", value: HadesSaveValue.boolean($0).object, workspace: workspace, baseline: row.baselineGeneration)

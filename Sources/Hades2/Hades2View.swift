@@ -23,13 +23,13 @@ struct Hades2TrainerView: View {
             42 + 58 + compactActionWidth + 2 * 6
         }
 
-        static func rarityControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
-            48 + 102 + compactActionWidth + 2 * 6
+        static func rarityControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat) -> CGFloat {
+            48 + pickerWidth + compactActionWidth + 2 * 6
         }
 
-        static func commonControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+        static func commonControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat) -> CGFloat {
             levelControlsWidth(compactActionWidth: compactActionWidth)
-                + rarityControlsWidth(compactActionWidth: compactActionWidth)
+                + rarityControlsWidth(compactActionWidth: compactActionWidth, pickerWidth: pickerWidth)
                 + removeControlWidth
                 + 2 * rowSpacing
         }
@@ -563,7 +563,7 @@ struct Hades2TrainerView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: .infinity)
+                .trainerPickerWidth(.flexible)
                 .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerSearchField(
@@ -720,7 +720,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .frame(width: 102)
+                    .trainerPickerWidth(.compact)
                     .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
                     TrainerSecondaryActionButton(
@@ -737,7 +737,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .frame(width: 102)
+                    .trainerPickerWidth(.compact)
                     .disabled(true)
 
                     TrainerSecondaryActionButton(
@@ -749,7 +749,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
+            .frame(width: TraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
 
             Button(role: .destructive) {
                 guard let trait else { return }
@@ -768,7 +768,7 @@ struct Hades2TrainerView: View {
             .frame(width: TraitManagerLayout.removeControlWidth)
             .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
-        .frame(width: TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
+        .frame(width: TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
     }
 
     private var resourceSection: some View {
@@ -1244,7 +1244,7 @@ struct Hades2TrainerView: View {
                 Section(text("hades2.nextRoom.olympians")) {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
-            }.labelsHidden().frame(maxWidth: 360).disabled(!model.canEditDesired)
+            .labelsHidden().trainerPickerWidth(.wide).disabled(!model.canEditDesired)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
@@ -1288,7 +1288,7 @@ struct Hades2TrainerView: View {
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 360)
+            .trainerPickerWidth(.wide)
             .disabled(!model.canEditDesired)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
@@ -1370,7 +1370,12 @@ struct Hades2TrainerView: View {
     private var boonAcquisitionPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label(text("hades2.spawn.exactBoons"), systemImage: TrainerSemanticIcon.Concept.precision).font(.subheadline.weight(.medium))
+                TrainerIconLabel(
+                    title: text("hades2.spawn.exactBoons"),
+                    icon: Hades2WorkbenchIcon.exactBoons,
+                    tint: theme.accent,
+                    emphasized: true
+                )
                 Spacer()
                 TrainerSearchField(
                     text: $exactSearch,
@@ -1397,7 +1402,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(maxWidth: .infinity)
+                        .trainerPickerWidth(.flexible)
                         .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
                     }
 
@@ -1414,7 +1419,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(maxWidth: .infinity)
+                        .trainerPickerWidth(.flexible)
                         .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
@@ -1458,7 +1463,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 240)
+                        .trainerPickerWidth(.flexible)
                         .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
                     }
 
@@ -1475,7 +1480,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(maxWidth: .infinity)
+                        .trainerPickerWidth(.flexible)
                         .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 

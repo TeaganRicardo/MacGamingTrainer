@@ -40,11 +40,8 @@ struct HadesManagementUtilities: View {
                         TrainerSecondaryActionButton(title: text("host.saveManagement"), systemImage: TrainerSemanticIcon.Tool.saveManagement,
                             enabled: model.hostActionsEnabled, action: open)
                     }
-                    HStack(spacing: theme.compactControlSpacing) {
-                        TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
-                        TrainerSecondaryActionButton(title: text("host.disableAll"), systemImage: TrainerSemanticIcon.Tool.disableAll,
-                            enabled: model.hostActionsEnabled, action: model.disableAll)
-                    }
+                    TrainerSecondaryActionButton(title: text("host.disableAll"), systemImage: TrainerSemanticIcon.Tool.disableAll,
+                        enabled: model.hostActionsEnabled, action: model.disableAll)
                 }
             }
             Divider()
@@ -133,6 +130,7 @@ struct HadesProfileManagerView: View {
                         Text("\(profile.name) · \(profile.updatedAt)").tag(profile.name)
                     }
                 }
+                .trainerPickerWidth(.wide)
                 HStack {
                     TrainerPrimaryActionButton(title: text("hades.profile.load"),
                         systemImage: TrainerSemanticIcon.Action.load,

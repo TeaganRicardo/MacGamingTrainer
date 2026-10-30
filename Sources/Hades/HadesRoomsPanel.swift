@@ -25,7 +25,7 @@ struct HadesGatheringPanel: View {
                         Text(row.name(language: localization.language.rawValue)).tag(row.id)
                     }
                 }
-                .labelsHidden().frame(maxWidth: 155)
+                .labelsHidden().trainerPickerWidth(.standard)
                 TrainerNumberField(
                     text: $amount, accessibilityLabel: text("hades.gainAmount"), width: 72,
                     enabled: model.canMutate,
@@ -82,7 +82,7 @@ struct HadesRoomsPanel: View {
                             Text(row.name(language: localization.language)).tag(row.id)
                         }
                     }
-                    .labelsHidden().frame(maxWidth: 210)
+                    .labelsHidden().trainerPickerWidth(.standard)
                     TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate && model.world != nil) {
                         action("spawn_reward", operation: "hades.spawnReward", params: ["reward": reward])
                     }
@@ -101,7 +101,7 @@ struct HadesRoomsPanel: View {
                         Picker(text("hades.chamberObject"), selection: $chamberObject) {
                             ForEach(objects, id: \.self) { item in Text(termName(item)).tag(item) }
                         }
-                        .labelsHidden().frame(maxWidth: 210)
+                        .labelsHidden().trainerPickerWidth(.standard)
                         TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate) {
                             action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
                         }
@@ -120,7 +120,7 @@ struct HadesRoomsPanel: View {
                                 Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
                             }
                         }
-                        .labelsHidden().frame(maxWidth: 250)
+                        .labelsHidden().trainerPickerWidth(.wide)
                     }
                     if let door {
                         if door.canReward {
@@ -130,7 +130,7 @@ struct HadesRoomsPanel: View {
                                         Text(row.name(language: localization.language)).tag(row.id)
                                     }
                                 }
-                                .labelsHidden().frame(maxWidth: 210)
+                                .labelsHidden().trainerPickerWidth(.standard)
                                 TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
                                     action("set_door_reward", operation: "hades.doorReward", params: ["doorId": door.id, "reward": doorReward])
                                 }
@@ -143,7 +143,7 @@ struct HadesRoomsPanel: View {
                                         Text(text("hades.route.\(item)")).tag(item)
                                     }
                                 }
-                                .labelsHidden().frame(maxWidth: 210)
+                                .labelsHidden().trainerPickerWidth(.standard)
                                 TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
                                     action("set_door_route", operation: "hades.doorRoute", params: ["doorId": door.id, "route": route])
                                 }

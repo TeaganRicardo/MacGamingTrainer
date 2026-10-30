@@ -57,7 +57,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             HStack {
                 // Same icon treatment as every other functional row: the icon
                 // carries this editor's on/off state instead of a fixed accent.
@@ -75,26 +75,35 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                 )
                 .frame(maxWidth: 260)
             }
-            Picker(title, selection: $selection) {
-                if selection.isEmpty || sections.allSatisfy({ $0.items.isEmpty }) {
-                    Text(localization.presentation(emptyLabel)).tag("")
-                }
-                ForEach(sections) { section in
-                    Section(header: Text(section.title)) {
-                        ForEach(section.items) { item in
-                            Text(itemLabel(item)).tag(item.id)
+
+            HStack(spacing: 12) {
+                Picker(title, selection: $selection) {
+                    if selection.isEmpty || sections.allSatisfy({ $0.items.isEmpty }) {
+                        Text(localization.presentation(emptyLabel)).tag("")
+                    }
+                    ForEach(sections) { section in
+                        Section(header: Text(section.title)) {
+                            ForEach(section.items) { item in
+                                Text(itemLabel(item)).tag(item.id)
+                            }
                         }
                     }
                 }
-            }
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
-            .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))
+                .labelsHidden()
+                .trainerPickerWidth(.flexible)
+                .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))
 
-            HStack(spacing: 12) {
-                Spacer()
-                TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
-                    .id(selection)
+                TrainerNumberField(
+                    text: $amount,
+                    placeholder: "host.amount",
+                    width: 100,
+                    enabled: enabled && !selection.isEmpty,
+                    alignment: .leading,
+                    onEditingChanged: onEditingChanged,
+                    onCommit: onCommit
+                )
+                .id(selection)
+
                 TrainerLockButton(
                     title: title,
                     locked: locked,
@@ -163,7 +172,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             }
         }
         .labelsHidden()
-        .frame(maxWidth: .infinity)
+        .trainerPickerWidth(.flexible)
         .disabled(!enabled || allItems.isEmpty)
     }
 

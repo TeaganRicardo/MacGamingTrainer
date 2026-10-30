@@ -53,6 +53,7 @@ struct Hades2ProfileManagerView: View {
                         Text(profile.updatedAt.isEmpty ? profile.name : "\(profile.name) · \(profile.updatedAt)").tag(profile.name)
                     }
                 }
+                .trainerPickerWidth(.wide)
                 HStack {
                     TrainerPrimaryActionButton(
                         title: text("hades2.profile.load"),
@@ -281,15 +282,12 @@ struct Hades2ManagementUtilities: View {
                             action: openSaveManagement
                         )
                     }
-                    HStack(spacing: theme.compactControlSpacing) {
-                        TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
-                        TrainerSecondaryActionButton(
-                            title: localization.localized("host.disableAll"),
-                            systemImage: TrainerSemanticIcon.Tool.disableAll,
-                            enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
-                            action: model.disableAll
-                        )
-                    }
+                    TrainerSecondaryActionButton(
+                        title: localization.localized("host.disableAll"),
+                        systemImage: TrainerSemanticIcon.Tool.disableAll,
+                        enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
+                        action: model.disableAll
+                    )
                 }
             }
             Divider()
