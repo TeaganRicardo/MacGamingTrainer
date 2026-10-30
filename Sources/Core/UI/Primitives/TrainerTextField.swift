@@ -147,22 +147,37 @@ struct TrainerTextField: NSViewRepresentable {
     static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) { coordinator.cancel(field) }
 
     private func configure(_ field: NSTextField) {
-        // Assigning an unchanged AppKit control property can invalidate the
-        // intrinsic size while SwiftUI is measuring this representable. Keep
-        // configuration idempotent during a completed edit's state refresh.
-        if field.placeholderString != title { field.placeholderString = title }
-        let label = accessibilityLabel ?? title
-        if field.accessibilityLabel() != label { field.setAccessibilityLabel(label) }
-        if field.font != font { field.font = font }
-        if field.alignment != alignment { field.alignment = alignment }
-        if field.isEnabled != enabled { field.isEnabled = enabled }
+        // Assigning unchanged AppKit properties during a SwiftUI update can
+        // invalidate layout and re-enter the AttributeGraph after edit blur.
+        if field.placeholderString != title {
+            field.placeholderString = title
+        }
+        if field.accessibilityLabel() != (accessibilityLabel ?? title) {
+            field.setAccessibilityLabel(accessibilityLabel ?? title)
+        }
+        if field.font != font {
+            field.font = font
+        }
+        if field.alignment != alignment {
+            field.alignment = alignment
+        }
+        if field.isEnabled != enabled {
+            field.isEnabled = enabled
+        }
         // AppKit clears a bezel when isBordered is assigned, even false.
         // The native rounded bezel draws its own background.
-        let rounded = style == .rounded
-        if field.isBezeled != rounded { field.isBezeled = rounded }
-        if rounded && field.bezelStyle != .roundedBezel { field.bezelStyle = .roundedBezel }
-        if field.drawsBackground { field.drawsBackground = false }
-        if field.textColor != .labelColor { field.textColor = .labelColor }
+        if field.isBezeled != (style == .rounded) {
+            field.isBezeled = style == .rounded
+        }
+        if style == .rounded && field.bezelStyle != .roundedBezel {
+            field.bezelStyle = .roundedBezel
+        }
+        if field.drawsBackground {
+            field.drawsBackground = false
+        }
+        if field.textColor != .labelColor {
+            field.textColor = .labelColor
+        }
     }
 
     static func editingTracker<Field: Hashable>(_ focus: Binding<Field?>, equals field: Field) -> (Bool) -> Void {
