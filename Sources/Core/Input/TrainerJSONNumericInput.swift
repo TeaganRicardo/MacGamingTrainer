@@ -91,60 +91,10 @@ enum TrainerJSONNumericInput {
     }
 
     /// Validates every numeric token, including nested typed table keys/values.
-    /// Foundation parses structure and strings; validated numeric bits are
-    /// restored directly without passing through its decimal number decoder.
     static func jsonObject(from text: String) -> Any? {
-        let bytes = Array(text.utf8)
-        var result: [UInt8] = []
-        var numbers: [NSNumber] = []
-        var index = 0
-        var inString = false
-        while index < bytes.count {
-            let byte = bytes[index]
-            if inString {
-                result.append(byte)
-                index += 1
-                if byte == 92, index < bytes.count {
-                    result.append(bytes[index]); index += 1
-                } else if byte == 34 { inString = false }
-            } else if byte == 34 {
-                // Every original string/key gets a prefix, so the unprefixed
-                // numeric witness key cannot collide with user content.
-                inString = true; result.append(contentsOf: [34, 115, 58]); index += 1
-            } else if byte == 45 || (48...57).contains(byte) {
-                let start = index
-                while index < bytes.count {
-                    let byte = bytes[index]
-                    guard [UInt8(45), 43, 46, 69, 101].contains(byte) || (48...57).contains(byte) else { break }
-                    index += 1
-                }
-                let token = String(decoding: bytes[start..<index], as: UTF8.self)
-                // JSON's grammar is narrower than standalone numeric input.
-                guard token.range(of: #"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"#,
-                                  options: .regularExpression) != nil,
-                      let value = number(token) else { return nil }
-                result.append(contentsOf: "{\"n\":\"\(numbers.count)\"}".utf8)
-                numbers.append(NSNumber(value: value))
-            } else {
-                result.append(byte); index += 1
-            }
+        try? TrainerJSON.object(with: Data(text.utf8)) { token in
+            number(token).map { NSNumber(value: $0) }
         }
-        guard let object = try? JSONSerialization.jsonObject(with: Data(result), options: [.fragmentsAllowed])
-        else { return nil }
-        func restore(_ value: Any) -> Any {
-            if let text = value as? String {
-                return String(decoding: text.utf8.dropFirst(2), as: UTF8.self)
-            }
-            if let items = value as? [Any] { return items.map(restore) }
-            if let fields = value as? [String: Any] {
-                if let index = fields["n"] as? String { return numbers[Int(index)!] }
-                return Dictionary(uniqueKeysWithValues: fields.map {
-                    (String(decoding: $0.key.utf8.dropFirst(2), as: UTF8.self), restore($0.value))
-                })
-            }
-            return value
-        }
-        return restore(object)
     }
 
     /// Nil denotes a mathematically fractional decimal, which may use IEEE rounding.

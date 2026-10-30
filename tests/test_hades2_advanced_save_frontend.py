@@ -85,6 +85,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-advanced-save-journey-") as tempora
     values = {entry["key"]["value"]: entry["value"] for entry in entries}
     assert values["Sibling"]["value"] == "changed"
     assert values["Large"]["value"] == 2**100 and values["Huge"]["value"] == 2**1023
+    assert 'encoding' in values["Large"] and values["Large"]["encoding"] is None
     assert values[float(2**100)]["value"] == "large numeric key"
     assert values["Zero"] == {"luaType": "number", "encoding": "ieee754", "value": "0000000000000080"}
     scalar_stages = [request["params"]["value"] for request in requests

@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reply-round20-") as td:
     subprocess.run([
         SWIFTC,
         "-parse-as-library",
-        str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(main_path),

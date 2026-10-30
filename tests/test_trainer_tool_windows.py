@@ -72,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-tool-windows-") as directory:
     main = root / "main.swift"
     main.write_text(HARNESS)
     binary = root / "windows"
-    sources = ["Sources/Core/Runtime/BackendProcess.swift", "Sources/Core/Runtime/BackendClient.swift",
+    sources = ["Sources/Core/Runtime/TrainerJSON.swift", "Sources/Core/Runtime/BackendProcess.swift", "Sources/Core/Runtime/BackendClient.swift",
                "Sources/Core/Host/TrainerLocalization.swift", "Sources/Core/UI/TrainerTheme.swift",
                "Sources/Core/UI/TrainerToolWindows.swift", "tests/fixtures/swift/InMemoryDefaults.swift"]
     subprocess.run([SWIFT, "-parse-as-library", *[str(ROOT / path) for path in sources],

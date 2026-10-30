@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-batch-delete-") as td:
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
-        str(ROOT/"Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT/"Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT/"Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT/"Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSaveTypes.swift"),

@@ -540,7 +540,7 @@ final class BackendProcess {
             }
             do {
                 let decodeStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
-                guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any] else {
+                guard let object = try TrainerJSON.object(with: line) as? [String: Any] else {
                     reportProtocolError("后端 stdout 包含非对象 JSON。", callback: onProtocolError)
                     continue
                 }
@@ -737,7 +737,7 @@ private final class BackendFileSession {
         }
         let payload = try handle.readToEnd() ?? Data()
         guard payload.count == bytes,
-              let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let object = try TrainerJSON.object(with: payload) as? [String: Any],
               object["id"] as? String == id else {
             throw Self.failure("私有消息内容或请求标识无效。")
         }

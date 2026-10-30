@@ -93,6 +93,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-json-numeric-input-") as temporary:
     base = Path(temporary)
     main, binary = base / "main.swift", base / "numeric-input"
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, str(ROOT / "Sources/Core/Input/TrainerJSONNumericInput.swift"),
+    subprocess.run([SWIFTC, str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Input/TrainerJSONNumericInput.swift"),
                     str(main), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

@@ -161,7 +161,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-pipe-") as directory:
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
-        SWIFTC, str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        SWIFTC, str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(main_path), "-o", str(binary),
     ], check=True, cwd=ROOT)
     try:

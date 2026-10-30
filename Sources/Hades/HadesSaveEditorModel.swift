@@ -51,23 +51,24 @@ indirect enum HadesSaveValue: Decodable, Equatable {
     static func inputJSON(_ text: String) -> HadesSaveValue? {
         guard let object = TrainerJSONNumericInput.jsonObject(from: text) as? [String: Any] else { return nil }
         func decode(_ object: [String: Any]) -> HadesSaveValue? {
+            if let encoding = object["encoding"], !(encoding is NSNull), !(encoding is String) { return nil }
+            let encoding = object["encoding"] as? String
             switch object["luaType"] as? String {
-            case "nil": return .null
+            case "nil": return encoding == nil ? .null : nil
             case "boolean":
-                guard let number = object["value"] as? NSNumber,
+                guard encoding == nil, let number = object["value"] as? NSNumber,
                       CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
                 return .boolean(number.boolValue)
             case "number", "string":
-                if let encoding = object["encoding"], !(encoding is NSNull), !(encoding is String) { return nil }
                 if object["luaType"] as? String == "string" {
-                    guard let text = object["value"] as? String else { return nil }
-                    return object["encoding"] as? String == "base64" ? .rawString(text) : .string(text)
+                    guard encoding == nil || encoding == "base64", let text = object["value"] as? String else { return nil }
+                    return encoding == "base64" ? .rawString(text) : .string(text)
                 }
-                if object["encoding"] as? String == "ieee754" {
+                if encoding == "ieee754" {
                     guard let text = object["value"] as? String else { return nil }
                     return .rawNumber(text)
                 }
-                guard let number = object["value"] as? NSNumber,
+                guard encoding == nil, let number = object["value"] as? NSNumber,
                       CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
                 return .number(number.doubleValue)
             case "table":
@@ -76,11 +77,11 @@ indirect enum HadesSaveValue: Decodable, Equatable {
                           CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
                     return Int(exactly: number.doubleValue)
                 }
-                guard let arraySize = integer("arraySize"), let hashSize = integer("hashSize"),
+                guard encoding == nil, let arraySize = integer("arraySize"), let hashSize = integer("hashSize"),
                       let rows = object["entries"] as? [[String: Any]] else { return nil }
                 var entries: [Entry] = []
                 for row in rows {
-                    guard let keyObject = row["key"] as? [String: Any], let key = decode(keyObject),
+                    guard row.count == 2, let keyObject = row["key"] as? [String: Any], let key = decode(keyObject),
                           let valueObject = row["value"] as? [String: Any], let value = decode(valueObject) else { return nil }
                     entries.append(Entry(key: key, value: value))
                 }

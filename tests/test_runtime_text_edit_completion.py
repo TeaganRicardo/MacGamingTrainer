@@ -70,7 +70,7 @@ import Foundation
 enum RuntimeTextTrace {
  static var updateDepth=0
  static var currentPhase=""
- static var active: Bool { currentPhase.hasPrefix("editing:") }
+ static var active: Bool { currentPhase == "editing:money:quick-blur" }
  static func write(_ message: String) {
   guard active else { return }
   FileHandle.standardError.write(Data("text_edit_trace:\(ProcessInfo.processInfo.systemUptime):\(currentPhase):\(message)\n".utf8))
@@ -78,7 +78,13 @@ enum RuntimeTextTrace {
  static func native(_ event: String) {
   guard active else { return }
   write("\(event) updateDepth=\(updateDepth)")
-  write(Thread.callStackSymbols.prefix(12).joined(separator:"\n"))
+  write(Thread.callStackSymbols.prefix(24).joined(separator:"\n"))
+ }
+ static func window(_ event: String, field: NSView) {
+  guard active else { return }
+  let window = field.window
+  let identity = window.map { String(describing: ObjectIdentifier($0)) } ?? "nil"
+  write("\(event) field=\(ObjectIdentifier(field)) window=\(identity) visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false)")
  }
 }
 func phase(_ name: String) {
@@ -731,10 +737,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-    # A18's unresolved CI cycle needs native/SwiftUI ordering evidence. These
-    # traces affect only compiled fixture copies and only the editing journey.
+    # The first hosted cycle follows quick blur and precedes native automatic
+    # focus inside a SwiftUI update. Trace only that bounded phase in fixture
+    # copies, including idle fields and every native configuration assignment.
     traces = {
         ROOT / "Sources/Core/UI/Primitives/TrainerTextField.swift": [
+            ("        override func becomeFirstResponder() -> Bool {\n            let acquired = super.becomeFirstResponder()", r'''
+        override func becomeFirstResponder() -> Bool {
+            RuntimeTextTrace.window("become:before", field: self)
+            RuntimeTextTrace.native("become:before field=\(ObjectIdentifier(self))")
+            let acquired = super.becomeFirstResponder()
+            RuntimeTextTrace.window("become:after acquired=\(acquired)", field: self)'''),
             ("        func begin() {", r'''
         func begin() {
             RuntimeTextTrace.native("begin \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")'''),
@@ -765,22 +778,33 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
             ("    func updateNSView(_ field: NSTextField, context: Context) {", r'''
     func updateNSView(_ field: NSTextField, context: Context) {
         RuntimeTextTrace.updateDepth += 1
-        let trace = RuntimeTextTrace.active && context.coordinator.edit != nil
-        if trace { RuntimeTextTrace.write("update:enter \(ObjectIdentifier(context.coordinator)) \(accessibilityLabel ?? title)") }
+        let trace = RuntimeTextTrace.active
+        if trace {
+            RuntimeTextTrace.window("update:enter coordinator=\(ObjectIdentifier(context.coordinator)) \(accessibilityLabel ?? title) edit=\(context.coordinator.edit != nil)", field: field)
+        }
         defer {
             if trace { RuntimeTextTrace.write("update:exit \(ObjectIdentifier(context.coordinator))") }
             RuntimeTextTrace.updateDepth -= 1
         }'''),
-            ("        configure(field)\n        // A background observation", r'''
-        if trace { RuntimeTextTrace.write("configure:before \(ObjectIdentifier(context.coordinator)) enabled=\(enabled)") }
-        configure(field)
-        if trace { RuntimeTextTrace.write("configure:after \(ObjectIdentifier(context.coordinator))") }
-        // A background observation'''),
+            ("        context.coordinator.parent = self", r'''
+        if trace { RuntimeTextTrace.write("parent:before field=\(ObjectIdentifier(field))") }
+        context.coordinator.parent = self
+        if trace { RuntimeTextTrace.write("parent:after field=\(ObjectIdentifier(field))") }'''),
+            ("        if context.coordinator.edit == nil && field.stringValue != text { field.stringValue = text }", r'''
+        if context.coordinator.edit == nil && field.stringValue != text {
+            RuntimeTextTrace.write("stringValue:before field=\(ObjectIdentifier(field))")
+            field.stringValue = text
+            RuntimeTextTrace.write("stringValue:after field=\(ObjectIdentifier(field))")
+        }'''),
+            ("    private func configure(_ field: NSTextField) {", r'''
+    private func configure(_ field: NSTextField) {
+        RuntimeTextTrace.window("configure:enter", field: field)
+        defer { RuntimeTextTrace.window("configure:exit", field: field) }'''),
             ("    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {\n        CGSize(", r'''
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
-        let trace = RuntimeTextTrace.active && context.coordinator.edit != nil
-        if trace { RuntimeTextTrace.write("size:enter \(ObjectIdentifier(context.coordinator))") }
-        defer { if trace { RuntimeTextTrace.write("size:exit \(ObjectIdentifier(context.coordinator))") } }
+        let trace = RuntimeTextTrace.active
+        if trace { RuntimeTextTrace.write("size:enter field=\(ObjectIdentifier(nsView)) coordinator=\(ObjectIdentifier(context.coordinator))") }
+        defer { if trace { RuntimeTextTrace.write("size:exit field=\(ObjectIdentifier(nsView))") } }
         return CGSize('''),
             ("        { active in\n            if active { focus.wrappedValue = field }", r'''
         { active in
@@ -799,6 +823,25 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         defer { RuntimeTextTrace.write("catalog:exit") }'''),
         ],
     }
+    configuration_assignments = [
+        "field.placeholderString = title",
+        "field.setAccessibilityLabel(accessibilityLabel ?? title)",
+        "field.font = font",
+        "field.alignment = alignment",
+        "field.isEnabled = enabled",
+        "field.isBezeled = style == .rounded",
+        "field.bezelStyle = .roundedBezel",
+        "field.drawsBackground = false",
+        "field.textColor = .labelColor",
+    ]
+    for assignment in configuration_assignments:
+        property_name = assignment.split(" = ")[0].removeprefix("field.").split("(")[0]
+        traces[ROOT / "Sources/Core/UI/Primitives/TrainerTextField.swift"].append((
+            "        " + assignment,
+            '        RuntimeTextTrace.write("property:' + property_name + ':before field=\\(ObjectIdentifier(field))")\n'
+            + "        " + assignment + "\n"
+            + '        RuntimeTextTrace.write("property:' + property_name + ':after field=\\(ObjectIdentifier(field))")'
+        ))
     for source, replacements in traces.items():
         text = source.read_text()
         for anchor, replacement in replacements:

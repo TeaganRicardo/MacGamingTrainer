@@ -28,6 +28,23 @@ if pathlib.Path(__file__).name == 'blocked.py':
     (pathlib.Path(__file__).parent / 'ready').write_text('ready')
     time.sleep(30)
     raise SystemExit(0)
+invalid_replies = {
+    'invalid-overflow.py': b'1e309',
+    'invalid-nan.py': b'NaN',
+    'invalid-infinity.py': b'Infinity',
+    'invalid-key.py': b'{1:2}',
+    'invalid-utf8.py': b'"\xff"',
+    'invalid-string.py': b'"\\uZZZZ"',
+}
+if pathlib.Path(__file__).name in invalid_replies:
+    request = json.loads(sys.stdin.readline())
+    prefix = json.dumps({'type': 'result', 'id': request['id'], 'protocolVersion': 6,
+                         'moduleProtocolVersion': 1, 'gameID': 'fixture', 'ok': True})[:-1]
+    sys.stdout.buffer.write(prefix.encode() + b', "result":{"value":'
+                            + invalid_replies[pathlib.Path(__file__).name] + b'}}\n')
+    sys.stdout.buffer.flush()
+    sys.stdin.read()
+    raise SystemExit(0)
 sys.path.insert(0, BACKEND_PATH)
 from core.adapter import GameAdapter, GameAdapterContext
 import core.server as server
@@ -43,6 +60,10 @@ class Fixture(GameAdapter):
             result['numberBits'] = [format(struct.unpack('>Q', struct.pack('>d', value))[0], 'x')
                                     for value in params['numbers']]
             result['negativeZero'] = -0.0
+            result['integerMetadata'] = params['integerMetadata']
+            result['integerTypes'] = [type(value) is int for value in params['integerMetadata'].values()]
+            result['witnessContent'] = {'n': '0', 's:n': {'n': '1'}, '\u0301key': '\u0301value',
+                                        'values': [True, False, None, '{"n":"0"}']}
         return result
     def close(self):
         pass
@@ -95,6 +116,7 @@ func wait(_ message: String, seconds: TimeInterval = 8, until condition: () -> B
                        Double(sign: .plus, exponent: 100, significand: 1),
                        Double(sign: .plus, exponent: 1023, significand: 1)]
         let numberBits = numbers.map { String($0.bitPattern, radix: 16) }
+        let integerMetadata: [String: Any] = ["minimum": Int64.min, "signed": Int64.max, "unsigned": UInt64.max]
         func checkNumbers(_ result: [String: Any]?, _ path: String) {
             check(result?["numberBits"] as? [String] == numberBits,
                   "\(path) outbound numeric JSON changed IEEE bits in Python")
@@ -108,10 +130,27 @@ func wait(_ message: String, seconds: TimeInterval = 8, until condition: () -> B
             }
             check((result?["negativeZero"] as? NSNumber)?.doubleValue.bitPattern == (-0.0 as Double).bitPattern,
                   "\(path) inbound numeric JSON lost negative zero")
+            guard let integers = result?["integerMetadata"] as? [String: NSNumber] else {
+                check(false, "\(path) integer metadata missing")
+                return
+            }
+            check(integers["minimum"]?.stringValue == String(Int64.min)
+                  && integers["signed"]?.stringValue == String(Int64.max)
+                  && integers["unsigned"]?.stringValue == String(UInt64.max)
+                  && result?["integerTypes"] as? [Bool] == [true, true, true],
+                  "\(path) integer metadata rounded through Double")
+            let witness = result?["witnessContent"] as? [String: Any]
+            let values = witness?["values"] as? [Any]
+            check(witness?["n"] as? String == "0"
+                  && (witness?["s:n"] as? [String: String])?["n"] == "1"
+                  && witness?["\u{0301}key"] as? String == "\u{0301}value"
+                  && values?[0] as? Bool == true && values?[1] as? Bool == false
+                  && values?[2] is NSNull && values?[3] as? String == #"{"n":"0"}"#,
+                  "\(path) JSON witness collided with original strings/keys or changed Boolean/null")
         }
         let large = String(repeating: "完整 value\u{0}\n", count: 160_000)
         var largeDone: Bool?
-        client.send("echo", params: ["payload": large, "numbers": numbers], operation: "large", timeout: 15,
+        client.send("echo", params: ["payload": large, "numbers": numbers, "integerMetadata": integerMetadata], operation: "large", timeout: 15,
                     reply: { reply in
                         check(reply.result?["payload"] as? String == large, "large request/reply lost bytes")
                         check(reply.result?["calls"] as? Int == 1, "large request executed more than once")
@@ -127,7 +166,7 @@ func wait(_ message: String, seconds: TimeInterval = 8, until condition: () -> B
         var invalidDone: Bool?
         var followingDone: Bool?
         client.send("invalid", params: ["value": Double.nan], operation: "invalid", completion: { invalidDone = $0 })
-        client.send("after-invalid", params: ["numbers": numbers], operation: "after-invalid", reply: { reply in
+        client.send("after-invalid", params: ["numbers": numbers, "integerMetadata": integerMetadata], operation: "after-invalid", reply: { reply in
             check(reply.result?["calls"] as? Int == 2, "invalid encoding crossed the request boundary or worker restarted")
             checkNumbers(reply.result, "inline payload")
         }, completion: { followingDone = $0 })
@@ -171,6 +210,17 @@ func wait(_ message: String, seconds: TimeInterval = 8, until condition: () -> B
         wait("replacement worker did not stop") { !client.isStarted }
         wait("replacement directory was not reclaimed") { !FileManager.default.fileExists(atPath: finalSession) }
         check(terminated == 3, "worker termination callback identity changed")
+        for invalid in ["overflow", "nan", "infinity", "key", "utf8", "string"] {
+            try start("invalid-\(invalid).py")
+            let priorErrors = terminalErrors
+            var invalidReplyDone: Bool?
+            client.send("invalid-reply", operation: "invalid-reply", reply: { _ in
+                check(false, "invalid \(invalid) JSON reached the reply callback")
+            }, completion: { invalidReplyDone = $0 })
+            wait("invalid \(invalid) JSON did not terminate its original worker") { !client.isStarted }
+            check(invalidReplyDone == false && terminalErrors == priorErrors + 1,
+                  "invalid \(invalid) JSON lost its visible terminal error")
+        }
         print("backend_large_message_lifecycle_ok")
     }
 }
@@ -181,10 +231,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-large-message-lifecycle-') as tempo
     source = 'BACKEND_PATH = ' + repr(str(ROOT / 'Backend')) + '\n' + WORKER
     (folder / 'worker.py').write_text(source)
     (folder / 'blocked.py').write_text(source)
+    for invalid in ('overflow', 'nan', 'infinity', 'key', 'utf8', 'string'):
+        (folder / f'invalid-{invalid}.py').write_text(source)
     harness = folder / 'main.swift'
     harness.write_text(HARNESS)
     binary = folder / 'lifecycle'
-    subprocess.run([SWIFTC, '-parse-as-library', str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
+    subprocess.run([SWIFTC, '-parse-as-library', str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
                     str(ROOT / 'Sources/Core/Runtime/BackendClient.swift'), str(harness), '-o', str(binary)],
                    cwd=ROOT, check=True)
     try:

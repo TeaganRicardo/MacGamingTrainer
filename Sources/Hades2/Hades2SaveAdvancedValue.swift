@@ -35,7 +35,7 @@ struct Hades2SaveTypedValue: Hashable {
 
     private static func preservingSignedZero(_ node: [String: Any]) -> [String: Any] {
         var node = node
-        if node["luaType"] as? String == "number", node["encoding"] == nil,
+        if node["luaType"] as? String == "number", node["encoding"] == nil || node["encoding"] is NSNull,
            let number = node["value"] as? NSNumber,
            CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue == 0,
            number.doubleValue.sign == .minus {

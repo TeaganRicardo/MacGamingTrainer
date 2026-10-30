@@ -179,6 +179,7 @@ extension BackendProcess {
     harness_path.write_text(production + probe_extension + textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"),
         str(harness_path),
         "-o", str(binary),
     ], cwd=ROOT, check=True)

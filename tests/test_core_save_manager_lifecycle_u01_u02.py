@@ -325,7 +325,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     environment["HOME"] = str(home)
     subprocess.run([
         SWIFTC, "-parse-as-library",
-        str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"),

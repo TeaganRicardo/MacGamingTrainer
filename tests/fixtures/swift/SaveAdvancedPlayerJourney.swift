@@ -204,8 +204,27 @@ private func fields(_ view: NSView) -> [NSTextField] {
         require(precisionPrefill.contains("1267650600228229401496703205376")
                 && Hades2SaveTypedValue(text: precisionPrefill) != nil,
                 "the actual typed table prefill refused its unchanged exact large number")
-        let siblingEdit = precisionPrefill.replacingOccurrences(of: "\"original\"", with: "\"changed\"")
-        require(siblingEdit != precisionPrefill, "precision fixture sibling text was not present in the typed control")
+        var precisionDraft = TrainerJSONNumericInput.jsonObject(from: precisionPrefill) as! [String: Any]
+        var precisionEntries = precisionDraft["entries"] as! [[String: Any]]
+        for index in precisionEntries.indices {
+            let key = precisionEntries[index]["key"] as! [String: Any]
+            switch key["value"] as? String {
+            case "Sibling": precisionEntries[index]["value"] = ["luaType": "string", "value": "changed"]
+            case "Large":
+                var value = precisionEntries[index]["value"] as! [String: Any]
+                value["encoding"] = NSNull()
+                precisionEntries[index]["value"] = value
+            case "Zero":
+                precisionEntries[index]["value"] = ["luaType": "number", "encoding": NSNull(),
+                                                      "value": "raw negative zero fixture literal"]
+            default: break
+            }
+        }
+        precisionDraft["entries"] = precisionEntries
+        // Enter the raw user token through the real control, before typed-value
+        // construction can turn negative zero into its IEEE wire tag.
+        let siblingEdit = TrainerJSONNumericInput.jsonText(from: precisionDraft)
+            .replacingOccurrences(of: "\"raw negative zero fixture literal\"", with: "-0.0")
         edit(precisionInput, siblingEdit)
         until("sibling-only typed edit did not stage with unchanged large numbers") {
             !model.busy && model.pendingActions.contains { $0.entryID == precision.id }

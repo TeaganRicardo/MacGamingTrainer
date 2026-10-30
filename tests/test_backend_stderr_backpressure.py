@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-stderr-") as td:
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
-        str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(main_path),
         "-o", str(binary),
     ], check=True, cwd=ROOT)
