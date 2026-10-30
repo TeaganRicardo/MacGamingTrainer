@@ -485,8 +485,12 @@ private struct HadesCatalogView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(text("hades.catalog"), systemImage: HadesWorkbenchIcon.catalog)
-                .font(.subheadline.weight(.medium))
+            TrainerIconLabel(
+                title: text("hades.catalog"),
+                icon: HadesWorkbenchIcon.catalog,
+                tint: theme.accent,
+                emphasized: true
+            )
             TrainerSearchField(text: $query, placeholder: text("hades.search"),
                                clearLabel: localization.localized("host.search.clear"))
                 .frame(maxWidth: 280)
@@ -501,8 +505,8 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
+                        .trainerPickerWidth(.flexible)
                     }
-                    .frame(width: 240)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
                         Picker(text("hades.selectTrait"), selection: $selection) {
@@ -511,8 +515,8 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
+                        .trainerPickerWidth(.flexible)
                     }
-                    .frame(maxWidth: .infinity)
                 }
             }
             if let selected {
@@ -535,7 +539,8 @@ private struct HadesCatalogView: View {
                         HStack(spacing: 12) {
                             Picker(text("hades.rarity"), selection: $rarity) {
                                 ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
-                            }.frame(maxWidth: 220)
+                            }
+                            .trainerPickerWidth(.compact)
                             if selected.supportsLevel {
                                 Text(text("hades.level"))
                                 TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
@@ -604,7 +609,7 @@ private struct HadesCurrentTraitsPanel: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: .infinity)
+                .trainerPickerWidth(.flexible)
                 if let selected {
                     HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
                 }
@@ -646,7 +651,8 @@ private struct HadesCurrentTraitRow: View {
                     HStack {
                         Picker(text("hades.rarity"), selection: $rarity) {
                             ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
-                        }.frame(maxWidth: 210)
+                        }
+                        .trainerPickerWidth(.compact)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)

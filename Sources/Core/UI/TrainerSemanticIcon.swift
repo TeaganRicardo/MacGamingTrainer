@@ -47,7 +47,7 @@ enum TrainerSemanticIcon {
     enum Tool {
         static let saveEditor = "externaldrive.badge.gearshape"
         static let saveManagement = "externaldrive"
-        static let profiles = "slider.horizontal.3"
+        static let profiles = "square.stack.3d.up"
         static let shortcuts = "keyboard"
         static let diagnostics = "stethoscope"
         static let exportDiagnostics = "square.and.arrow.up"

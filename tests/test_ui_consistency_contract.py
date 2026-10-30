@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CORE_UI = ROOT / "Sources/Core/UI"
 HADES = ROOT / "Sources/Hades2"
+HADES1 = ROOT / "Sources/Hades"
 
 badge = (CORE_UI / "Primitives/TrainerBadge.swift").read_text()
 theme = (CORE_UI / "TrainerTheme.swift").read_text()
@@ -14,6 +15,7 @@ status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
 sidebar = (CORE_UI / "TrainerSidebar.swift").read_text()
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
+hades1_management = (HADES1 / "HadesManagement.swift").read_text()
 primary_button = (CORE_UI / "Components/TrainerListControls.swift").read_text()
 lock_button = (CORE_UI / "Primitives/TrainerToggleControl.swift").read_text()
 occurrence = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
@@ -43,12 +45,12 @@ assert "static let commonControlsWidth: CGFloat = 606" not in view
 assert "static let levelControlsWidth: CGFloat = 200" not in view
 assert "static let rarityControlsWidth: CGFloat = 250" not in view
 assert "static func levelControlsWidth(compactActionWidth: CGFloat)" in view
-assert "static func rarityControlsWidth(compactActionWidth: CGFloat)" in view
-assert "static func commonControlsWidth(compactActionWidth: CGFloat)" in view
+assert "static func rarityControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat)" in view
+assert "static func commonControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat)" in view
 assert "42 + 58 + compactActionWidth + 2 * 6" in view
-assert "48 + 102 + compactActionWidth + 2 * 6" in view
+assert "48 + pickerWidth + compactActionWidth + 2 * 6" in view
 assert "+ removeControlWidth" in view
-assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth)" in view
+assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth)" in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "trait.hasTemporaryContextualControls" in view
 assert "trait.hasContextualControls" in view
@@ -86,7 +88,10 @@ assert "TrainerLockButton(" in resource
 save_editor = (HADES / "Views/Hades2SaveEditorView.swift").read_text()
 assert ".padding(.horizontal, theme.panelPadding)" not in save_editor
 assert ".padding(.horizontal, theme.rowHorizontalPadding)" in save_editor
-assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' in management
+assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' not in management
+assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' not in hades1_management
+assert "TrainerSemanticIcon.Tool.disableAll" in management
+assert "TrainerSemanticIcon.Tool.disableAll" in hades1_management
 assert 'model.shortcutText(.disableAll))", systemImage: "power"' not in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "if hasContextualControls(for: trait)" not in view
@@ -173,6 +178,10 @@ gathering_actions = {
 assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gathering
 assert "var shortcutAction: ShortcutAction" in types
 for action in actions:
+    if action == "disableAll":
+        assert "TrainerSemanticIcon.Tool.disableAll" in management_view
+        assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management_view
+        continue
     if action in common_actions:
         continue
     if action in gathering_actions:
@@ -194,6 +203,40 @@ print("ui_consistency_contract_ok")
 resource_controls = (ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift").read_text()
 occurrence_setting = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
 assert "TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, emphasized: state.isOn)" in resource_controls
+
+# All native Picker instances use the same Core-owned width roles. This prevents
+# content-driven widths and per-view frame constants from reappearing.
+assert "enum TrainerPickerWidth" in theme
+assert "pickerCompactWidth: 152" in theme
+assert "pickerStandardWidth: 216" in theme
+assert "pickerWideWidth: 288" in theme
+assert "case .flexible:" in theme
+assert "content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)" in theme
+for source_root in (ROOT / "Sources/Core/UI", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+    for swift_path in source_root.rglob("*.swift"):
+        source = swift_path.read_text()
+        picker_count = len(re.findall(r"(?<![A-Za-z])Picker\s*\(", source))
+        if picker_count:
+            width_count = source.count(".trainerPickerWidth(")
+            assert picker_count == width_count, (
+                f"{swift_path.relative_to(ROOT)} has {picker_count} Pickers but {width_count} width roles"
+            )
+
+# The Hades II material editor has exactly two horizontal rows. The selector,
+# amount input and lock stay together on its second row.
+resource_editor = resource[
+    resource.index("struct TrainerResourceEditor"):
+    resource.index("struct TrainerGroupedOptionPicker")
+]
+assert resource_editor.count("HStack") == 2
+control_row_start = resource_editor.index("HStack(spacing: 12)")
+control_row_end = resource_editor.index("\n            }\n        }\n    }", control_row_start)
+control_row = resource_editor[control_row_start:control_row_end]
+assert "Picker(title" in control_row
+assert "TrainerNumberField(" in control_row
+assert "TrainerLockButton(" in control_row
+assert ".trainerPickerWidth(.flexible)" in control_row
+
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert "inline: true" in view
 assert "specialSearch" not in view

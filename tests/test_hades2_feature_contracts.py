@@ -137,6 +137,12 @@ visible_actions = [action for part in parts for action in shortcut_references(pa
 if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
     visible_actions.extend(common_order)
 visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
+# Disable All remains a visible action, but its fixed global shortcut is not
+# rendered as a badge beside the button.
+assert 'title: localization.localized("host.disableAll")' in management
+assert "systemImage: TrainerSemanticIcon.Tool.disableAll" in management
+assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management
+visible_actions.append("disableAll")
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
 root = source_section(view, "private var rootContent: some View {", "@ViewBuilder\n    private var statusAndSessionSection")
 assert all(section in root for section in ("statusAndSessionSection", "commonSection", "boonsSection", "resourceSection", "roomsSection", "management"))

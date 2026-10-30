@@ -242,9 +242,10 @@ assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2
 assert "if let icon = HadesWorkbenchIcon.icon(for: titleKey)" in hades_nav
 assert "if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey })" in hades_nav
 assert "Hades2WorkbenchIcon.icon(for: titleKey)" in hades2_nav
+assert '"hades2.spawn.exactBoons"' in hades2_nav
 assert "extension Hades2GatheringFamily" in hades2_nav
 assert "var icon: String { shortcut?.icon ?? Hades2WorkbenchIcon.icon(for: titleKey) ?? section.icon }" in hades2_nav
-for semantic in ("grasp", "spellCharge", "sprintSpeed", "occurrence", "specialReward", "purge",
+for semantic in ("grasp", "spellCharge", "sprintSpeed", "occurrence", "specialReward", "hexReady", "purge",
                  "garden", "targetLevel", "chaosProbability", "prepareSigning", "restoreSigning",
                  "flora", "mining", "digging", "shades"):
     assert f"static let {semantic} =" in hades2_nav
@@ -275,7 +276,7 @@ for key in (
     "hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative",
     "hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",
     "hades2.occurrence.title", "hades2.spawn.olympianBoons", "hades2.spawn.pickupRewards",
-    "hades2.spawn.characterRewards", "hades2.manage.profiles", "hades2.saveEditor.title",
+    "hades2.spawn.characterRewards", "hades2.spawn.exactBoons", "hades2.manage.profiles", "hades2.saveEditor.title",
     "hades2.manage.diagnostics", "hades2.manage.prepareSigning", "hades2.manage.restoreSigning",
     "host.saveManagement", "host.shortcutSettings", "host.viewLog", "host.viewLogHistory",
     "host.clearCompletedLogs", "host.refreshStatus",
@@ -287,6 +288,16 @@ hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(
 assert "systemImage: entry.icon" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert 'static let profiles = "square.stack.3d.up"' in icon_source
+assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
+assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
+assert 'TrainerIconLabel(' in hades_view and 'title: text("hades.catalog")' in hades_view
+assert 'TrainerIconLabel(' in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
+assert "case .decreaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
+assert "case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
+assert 'static let garden = "tree.fill"' in hades2_nav
+assert 'static let hexReady = "moon.fill"' in hades2_nav
+assert 'static let shades = "person.3.fill"' in hades2_nav
 assert "Image(systemName: TrainerSemanticIcon.Action.remove)" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
 assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
