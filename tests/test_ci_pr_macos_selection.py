@@ -14,6 +14,7 @@ TESTS = {
     "test_hades2_view_state_flow.py",
     "test_build_signing_metadata_macos.py",
     "test_hades2_save_editor_frontend.py",
+    "test_mapped_slider_interaction.py",
 }
 SOURCES = {"hades": "Sources/Hades/", "hades2": "Sources/Hades2/"}
 
@@ -25,6 +26,11 @@ assert selected_tests(["Sources/Hades/HadesTrainerView.swift"], TESTS, SOURCES) 
 assert selected_tests(["Sources/Core/Host/TrainerHost.swift"], TESTS, SOURCES) == sorted({
     "test_multi_game_contexts.py", "test_reference_fixture_session_integration.py", "test_global_hotkey_routing.py"
 })
+for path in ("Sources/Core/UI/Primitives/TrainerMappedSlider.swift", "Sources/Core/UI/Primitives/TrainerSliderMapping.swift"):
+    assert selected_tests([path], TESTS, SOURCES) == sorted({
+        "test_multi_game_contexts.py", "test_reference_fixture_session_integration.py",
+        "test_global_hotkey_routing.py", "test_mapped_slider_interaction.py",
+    })
 assert selected_tests(["tests/test_hades2_save_editor_frontend.py"], TESTS, SOURCES) == [
     "test_hades2_save_editor_frontend.py"
 ]

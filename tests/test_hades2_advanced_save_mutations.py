@@ -1,5 +1,6 @@
 """Typed Advanced edits cross the real codec and recoverable Core transaction."""
 import copy
+import math
 from pathlib import Path
 import sys
 import tempfile
@@ -185,6 +186,46 @@ class AdvancedSaveMutationTests(unittest.TestCase):
             self.workspace.stage(level["id"], "set", 3)
         self.assertEqual(self.workspace.review()["actionCount"], 1)
 
+    def test_signed_zero_and_physical_table_edits_are_not_discarded_as_noops(self):
+        raw = self.workspace.document.lua_state["GameState"]["Raw"]
+        raw["SignedZero"] = 0.0
+        raw["NestedZero"] = table({"Value": 0.0})
+        scalar = self.row("SignedZero")
+        self.workspace.stage(scalar["id"], "set", -0.0)
+        nested = self.row("NestedZero")
+        replacement = self.workspace.investigate(nested["id"], "en")["typedValue"]
+        replacement["entries"][0]["value"]["value"] = -0.0
+        self.workspace.stage(nested["id"], "set", replacement)
+        members = self.row("Members")
+        replacement = self.workspace.investigate(members["id"], "en")["typedValue"]
+        replacement["arraySize"], replacement["hashSize"] = 1, len(replacement["entries"]) - 1
+        replacement["entries"].reverse()
+        self.workspace.stage(members["id"], "set", replacement)
+        self.assertEqual(self.workspace.review()["actionCount"], 3)
+        self.workspace.apply()
+        installed = Hades2SaveDocument.load(self.path).lua_state["GameState"]["Raw"]
+        self.assertEqual(math.copysign(1.0, installed["SignedZero"]), -1.0)
+        self.assertEqual(math.copysign(1.0, installed["NestedZero"]["Value"]), -1.0)
+        self.assertEqual(save_advanced.typed_value(installed["Members"]), replacement)
+
+        allocation = self.workspace.investigate(members["id"], "en")["typedValue"]
+        allocation["arraySize"], allocation["hashSize"] = 0, len(allocation["entries"])
+        self.workspace.stage(members["id"], "set", allocation)
+        self.assertEqual(self.workspace.review()["actionCount"], 1)
+        self.workspace.apply()
+        installed = Hades2SaveDocument.load(self.path).lua_state["GameState"]["Raw"]["Members"]
+        self.assertEqual(installed.array_size, 0)
+        self.assertEqual(save_advanced.typed_value(installed), allocation)
+        reordered = copy.deepcopy(allocation)
+        reordered["entries"].reverse()
+        self.workspace.stage(members["id"], "set", reordered)
+        self.workspace.stage(scalar["id"], "set", 0.0)
+        self.assertEqual(self.workspace.review()["actionCount"], 2)
+        self.workspace.apply()
+        installed = Hades2SaveDocument.load(self.path).lua_state["GameState"]["Raw"]
+        self.assertEqual(math.copysign(1.0, installed["SignedZero"]), 1.0)
+        self.assertEqual(save_advanced.typed_value(installed["Members"]), reordered)
+
     def test_real_command_validation_accepts_typed_detail_and_long_unique_identity(self):
         workspace = self.workspace
         key = "LongUniqueKey" * 50
@@ -195,15 +236,16 @@ class AdvancedSaveMutationTests(unittest.TestCase):
             def validate_save_workspace(self, identifier):
                 if identifier != workspace.identifier:
                     raise ValueError("different workspace")
+                return workspace
             def detail_save_editor(self, params):
                 return workspace.investigate(params["entryId"], params["language"])
             def stage_save_editor(self, params):
                 return workspace.stage(params["entryId"], params["operation"], params.get("value"), params["language"])
         contract = Hades2CommandContract(Adapter())
-        detail = contract.dispatch("save_editor_detail", {"workspaceId": workspace.identifier,
+        detail = contract.dispatch("save_editor_detail", {"workspaceId": workspace.identifier, "baselineGeneration": workspace.baseline_generation,
             "entryId": entry["id"], "language": "en"}, "typed-detail")
         self.assertEqual(detail["typedValue"], node("string", "text"))
-        review = contract.dispatch("save_editor_stage", {"workspaceId": workspace.identifier,
+        review = contract.dispatch("save_editor_stage", {"workspaceId": workspace.identifier, "baselineGeneration": workspace.baseline_generation,
             "entryId": entry["id"], "operation": "set", "value": "  exact  ", "language": "en"}, "typed-stage")
         self.assertEqual(review["actionCount"], 1)
         self.workspace.apply()

@@ -109,6 +109,32 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         'distributions': {'arm64': runtime_source['distributions']['arm64']},
     }))
     assert verify_module_build.verify_module_build('all', dist) == app.resolve()
+    assert not (resources / 'Backend/debugger').exists(), 'non-debugger modules acquired an LLDB dependency'
+    module_path = project / 'Backend/games/one/module.json'
+    declaration = json.loads(module_path.read_text())
+    declaration['buildRequirements'] = {'lldbPython': True}
+    module_path.write_text(json.dumps(declaration))
+    shutil.copy2(module_path, resources / 'Backend/games/one/module.json')
+    shutil.copytree(ROOT / 'Backend/debugger', project / 'Backend/debugger')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'debugger backend' in str(error)
+    else:
+        raise AssertionError('A package missing its declared debugger dependency was accepted')
+    packaged_debugger = resources / 'Backend/debugger'
+    shutil.copytree(project / 'Backend/debugger', packaged_debugger)
+    assert verify_module_build.verify_module_build('all', dist) == app.resolve()
+    driver = packaged_debugger / 'lldb_time_warp.py'
+    original_driver = driver.read_bytes()
+    driver.write_bytes(original_driver + b'\n# divergent package\n')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'debugger backend differs' in str(error)
+    else:
+        raise AssertionError('A divergent packaged debugger driver was accepted')
+    driver.write_bytes(original_driver)
     (resources / 'GAME_MODULES.json').write_text(json.dumps(['one']))
     try:
         verify_module_build.verify_module_build('all', dist)

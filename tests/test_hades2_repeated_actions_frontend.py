@@ -1,3 +1,4 @@
+import json
 """Exercise the Hades input admission seam without starting or attaching to the game."""
 import os
 import shutil
@@ -54,7 +55,7 @@ for line in sys.stdin:
         }
     response = {
         "type": "result", "id": request["id"], "protocolVersion": 6,
-        "moduleProtocolVersion": 17, "gameID": args.game, "ok": success,
+        "moduleProtocolVersion": __MGT_MODULE_PROTOCOL__, "gameID": args.game, "ok": success,
         "result" if success else "state": observed,
     }
     if not success:
@@ -317,7 +318,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-repeat-actions-") as td:
     binary_path = root / "repeat_action_harness"
     home_path = root / "home"
     home_path.mkdir()
-    worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
+    worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     swift_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run(
         [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(binding_path)],

@@ -47,6 +47,8 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
             chosen.add(Path(path).name)
         if path.startswith("Sources/Core/") or path == "Sources/App.swift":
             chosen.update(SHARED_SMOKE)
+        if path in ("Sources/Core/UI/Primitives/TrainerMappedSlider.swift", "Sources/Core/UI/Primitives/TrainerSliderMapping.swift"):
+            chosen.add("test_mapped_slider_interaction.py")
         if path.startswith("ContractFixtures/reference_module/"):
             chosen.add("test_reference_fixture_session_integration.py")
         if path.startswith("Native/") or path == "build.sh":

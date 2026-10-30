@@ -17,7 +17,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-The bundled module list and product build identity are declared in `app.json`. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades includes live combat/resource, trait/effect, room/world and management controls, Profiles, diagnostics, and an offline semantic Save Editor with explicit source/target selection. Automated checks cover the implementation, while real-game and later-save acceptance of the current unified candidate remains pending under [#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429). See `PROJECT_STATUS.md` for supported game identities and operational limits.
+The bundled module list is declared in `app.json`; `Info.plist` owns the product version and build identity. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades includes live combat/resource, trait/effect, room/world and management controls, Profiles, diagnostics, and an offline semantic Save Editor with explicit source/target selection. Automated checks cover the implementation, while real-game and later-save acceptance of the current unified candidate remains pending under [#429](https://github.com/TeaganRicardo/MacGamingTrainer/issues/429). See `PROJECT_STATUS.md` for supported game identities and operational limits.
 
 The packaged app is written under `dist/`; the exact path is printed by the build script. For a repository in a cloud-synced directory, use `MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh` to keep the signed App on a local filesystem.
 

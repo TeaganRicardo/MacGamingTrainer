@@ -16,7 +16,7 @@ from core.adapter import AdapterError
 from core.process_time_warp import ProcessTimeWarpController
 from core.sidecar import serve_jsonl_requests
 
-from .lldb_time_warp import LLDBProcessTimeWarpDriver
+from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 
 WORKER_PROTOCOL_VERSION = 1

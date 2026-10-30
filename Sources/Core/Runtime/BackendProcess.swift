@@ -30,6 +30,9 @@ final class BackendProcess {
     private var output: FileHandle?
     private var errorOutput: FileHandle?
     private let readQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-process")
+    private let writeQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-write")
+    private let payloadQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-payload")
+    private var fileSession: BackendFileSession?
     private var buffer = Data()
     private var stderrBuffer = Data()
     private var stderrDroppedBytes = 0
@@ -103,6 +106,8 @@ final class BackendProcess {
         }
 
         let task = Process()
+        let session = try BackendFileSession(inlineBytes: min(65_536, maxStdoutBufferBytes))
+        fileSession = session
         let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
         task.executableURL = executableURL
         task.arguments = argumentsPrefix + [scriptURL.path, "--game", gameID]
@@ -110,6 +115,7 @@ final class BackendProcess {
         environment["PYTHONUNBUFFERED"] = "1"
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         environment["MGT_GAME_ID"] = gameID
+        environment["MGT_JSONL_SESSION_V1"] = session.directory.path
         task.environment = environment
         task.standardInput = stdin
         task.standardOutput = stdout
@@ -142,6 +148,7 @@ final class BackendProcess {
             }
         }
         #endif
+        let cleanupQueue = writeQueue
         task.terminationHandler = { [weak self] task in
             let status = task.terminationStatus
             #if os(Linux)
@@ -150,6 +157,7 @@ final class BackendProcess {
             try? cancellation.fileHandleForWriting.close()
             #endif
             guard let owner = self else {
+                cleanupQueue.async { session.removeFiles() }
                 #if os(Linux)
                 readers.notify(queue: .main) { onTermination(status) }
                 #else
@@ -171,6 +179,8 @@ final class BackendProcess {
                 owner.errorOutput = nil
                 owner.stderrCallback = nil
                 owner.process = nil
+                owner.fileSession = nil
+                owner.writeQueue.async { session.removeFiles() }
                 owner.readQueue.sync {
                     owner.buffer.removeAll(keepingCapacity: false)
                     owner.stderrBuffer.removeAll(keepingCapacity: false)
@@ -182,7 +192,7 @@ final class BackendProcess {
                 onTermination(status)
             }
             #if os(Linux)
-            readers.notify(queue: .main, execute: finish)
+            readers.notify(queue: owner.payloadQueue) { DispatchQueue.main.async(execute: finish) }
             #else
             stdout.fileHandleForReading.readabilityHandler = nil
             stderr.fileHandleForReading.readabilityHandler = nil
@@ -197,12 +207,22 @@ final class BackendProcess {
                     owner.reportProtocolError("后端 stdout 读取失败：\(error.localizedDescription)", callback: onProtocolError)
                 }
                 owner.drainStderrPipeLocked(stderr.fileHandleForReading)
-                DispatchQueue.main.async(execute: finish)
+                owner.payloadQueue.async { DispatchQueue.main.async(execute: finish) }
             }
             #endif
         }
 
         do {
+            let inputDescriptor = stdin.fileHandleForWriting.fileDescriptor
+            let inputFlags = fcntl(inputDescriptor, F_GETFL)
+            guard inputFlags >= 0, fcntl(inputDescriptor, F_SETFL, inputFlags | O_NONBLOCK) == 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+            #if canImport(Darwin)
+            guard fcntl(inputDescriptor, F_SETNOSIGPIPE, 1) == 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+            #endif
             #if os(Linux)
             for handle in [stdout.fileHandleForReading, stderr.fileHandleForReading] {
                 let flags = fcntl(handle.fileDescriptor, F_GETFL)
@@ -243,6 +263,8 @@ final class BackendProcess {
                 stderrHandlerEnabled = false
             }
             process = nil
+            fileSession = nil
+            writeQueue.async { session.removeFiles() }
             throw error
         }
     }
@@ -280,13 +302,31 @@ final class BackendProcess {
         #endif
     }
 
-    func send(_ object: [String: Any]) throws {
-        guard let input, process?.isRunning == true else {
-            throw NSError(domain: "BackendProcess", code: 1, userInfo: [NSLocalizedDescriptionKey: "后端进程未运行。"])
+    struct SendFailure: Error {
+        let error: Error
+        let terminal: Bool
+    }
+
+    func send(_ object: [String: Any], completion: @escaping (SendFailure?) -> Void) {
+        guard let input, let task = process, let session = fileSession, task.isRunning else {
+            completion(SendFailure(error: BackendFileSession.failure("后端进程未运行。"), terminal: true))
+            return
         }
-        var data = try JSONSerialization.data(withJSONObject: object)
-        data.append(10)
-        try input.write(contentsOf: data)
+        writeQueue.async {
+            let data: Data
+            do {
+                data = try session.encode(object)
+            } catch {
+                DispatchQueue.main.async { completion(SendFailure(error: error, terminal: false)) }
+                return
+            }
+            do {
+                try session.write(data, to: input, process: task)
+                DispatchQueue.main.async { completion(nil) }
+            } catch {
+                DispatchQueue.main.async { completion(SendFailure(error: error, terminal: true)) }
+            }
+        }
     }
 
     /// Gracefully terminates the worker and escalates to SIGKILL if it ignores
@@ -294,7 +334,9 @@ final class BackendProcess {
     /// runs, preventing a new backend from racing the old one.
     func stop() {
         let task = process
-        try? input?.close()
+        let oldInput = input
+        fileSession?.cancel()
+        writeQueue.async { try? oldInput?.close() }
         #if !os(Linux)
         output?.readabilityHandler = nil
         errorOutput?.readabilityHandler = nil
@@ -502,16 +544,24 @@ final class BackendProcess {
                     reportProtocolError("后端 stdout 包含非对象 JSON。", callback: onProtocolError)
                     continue
                 }
-                let decodedAt = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
+                let session = fileSession
                 let log = profileLog
-                DispatchQueue.main.async {
-                    if BackendOperationProfile.enabled, let id = object["id"] as? String {
-                        BackendOperationProfile.emit("host.payload_decode", id: id,
-                            seconds: decodedAt - decodeStarted, bytes: line.count + 1, log: log)
-                        BackendOperationProfile.emit("host.reply_delivery_queue", id: id,
-                            seconds: BackendOperationProfile.now() - decodedAt, log: log)
+                payloadQueue.async {
+                    do {
+                        let object = try session?.decode(object) ?? object
+                        let decodedAt = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
+                        DispatchQueue.main.async {
+                            if BackendOperationProfile.enabled, let id = object["id"] as? String {
+                                BackendOperationProfile.emit("host.payload_decode", id: id,
+                                    seconds: decodedAt - decodeStarted, bytes: line.count + 1, log: log)
+                                BackendOperationProfile.emit("host.reply_delivery_queue", id: id,
+                                    seconds: BackendOperationProfile.now() - decodedAt, log: log)
+                            }
+                            onMessage(object)
+                        }
+                    } catch {
+                        self.reportProtocolError("后端私有消息无效：\(error.localizedDescription)", callback: onProtocolError)
                     }
-                    onMessage(object)
                 }
             } catch {
                 reportProtocolError("后端 stdout 包含无效 JSON：\(error.localizedDescription)", callback: onProtocolError)
@@ -529,5 +579,168 @@ final class BackendProcess {
 
     private func reportProtocolError(_ message: String, callback: @escaping (String) -> Void) {
         DispatchQueue.main.async { callback(message) }
+    }
+}
+
+private final class BackendFileSession {
+    let directory: URL
+    let inlineBytes: Int
+    private let descriptor: Int32
+    private let cancellationLock = NSLock()
+    private var cancelled = false
+
+    init(inlineBytes: Int) throws {
+        self.inlineBytes = inlineBytes
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("mgt-ipc-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                               attributes: [.posixPermissions: 0o700])
+        descriptor = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            try? FileManager.default.removeItem(at: directory)
+            throw Self.posixError()
+        }
+        do {
+            let configuration = try JSONSerialization.data(withJSONObject: ["version": 1, "inlineBytes": inlineBytes, "hostPID": getpid()])
+            try configuration.write(to: directory.appendingPathComponent("session.json"), options: .atomic)
+        } catch {
+            close(descriptor)
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    deinit { close(descriptor) }
+
+    func removeFiles() { try? FileManager.default.removeItem(at: directory) }
+
+    func cancel() {
+        cancellationLock.lock()
+        cancelled = true
+        cancellationLock.unlock()
+    }
+
+    private var isCancelled: Bool {
+        cancellationLock.lock()
+        defer { cancellationLock.unlock() }
+        return cancelled
+    }
+
+    static func failure(_ message: String) -> NSError {
+        NSError(domain: "BackendProcess", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    private static func posixError() -> NSError { NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+
+    /// Cancellation also releases a writer when a descendant retains stdin.
+    /// The original handle closes on its writer queue after this loop exits.
+    func write(_ data: Data, to input: FileHandle, process: Process) throws {
+        #if os(Linux)
+        // A reader can exit between poll and write. Keep its SIGPIPE local to
+        // this writer rather than changing the application's signal policy.
+        var blocked = sigset_t()
+        sigemptyset(&blocked)
+        sigaddset(&blocked, SIGPIPE)
+        var previous = sigset_t()
+        let maskError = pthread_sigmask(SIG_BLOCK, &blocked, &previous)
+        guard maskError == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(maskError)) }
+        defer {
+            if sigismember(&previous, SIGPIPE) == 0 {
+                var pending = sigset_t()
+                sigpending(&pending)
+                if sigismember(&pending, SIGPIPE) == 1 {
+                    var signal: Int32 = 0
+                    sigwait(&blocked, &signal)
+                }
+            }
+            pthread_sigmask(SIG_SETMASK, &previous, nil)
+        }
+        #endif
+        try data.withUnsafeBytes { raw in
+            var offset = 0
+            while offset < raw.count {
+                guard !isCancelled, process.isRunning else { throw Self.failure("后端请求已取消。") }
+                var writable = pollfd(fd: input.fileDescriptor, events: Int16(POLLOUT), revents: 0)
+                let ready = poll(&writable, 1, 100)
+                if ready < 0 {
+                    if errno == EINTR { continue }
+                    throw Self.posixError()
+                }
+                if ready == 0 { continue }
+                guard !isCancelled, process.isRunning else { throw Self.failure("后端请求已取消。") }
+                #if canImport(Darwin)
+                let count = Darwin.write(input.fileDescriptor, raw.baseAddress!.advanced(by: offset), raw.count - offset)
+                #else
+                let count = Glibc.write(input.fileDescriptor, raw.baseAddress!.advanced(by: offset), raw.count - offset)
+                #endif
+                if count > 0 {
+                    offset += count
+                } else if count < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue
+                } else {
+                    throw Self.posixError()
+                }
+            }
+        }
+    }
+
+    func encode(_ object: [String: Any]) throws -> Data {
+        let payload = try JSONSerialization.data(withJSONObject: object)
+        if payload.count + 1 <= inlineBytes {
+            var data = payload
+            data.append(10)
+            return data
+        }
+        let name = "payload-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased() + ".json"
+        let temporary = "." + name
+        let file = openat(descriptor, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard file >= 0 else { throw Self.posixError() }
+        let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
+        defer {
+            try? handle.close()
+            _ = unlinkat(descriptor, temporary, 0)
+        }
+        try handle.write(contentsOf: payload)
+        try handle.close()
+        guard renameat(descriptor, temporary, descriptor, name) == 0 else { throw Self.posixError() }
+        do {
+            var control = try JSONSerialization.data(withJSONObject: [
+                "id": object["id"]!, "type": "mgt.file", "file": name, "bytes": payload.count,
+            ])
+            control.append(10)
+            return control
+        } catch {
+            _ = unlinkat(descriptor, name, 0)
+            throw error
+        }
+    }
+
+    func decode(_ envelope: [String: Any]) throws -> [String: Any] {
+        guard envelope["type"] as? String == "mgt.file" else { return envelope }
+        guard Set(envelope.keys) == ["id", "type", "file", "bytes"],
+              let id = envelope["id"] as? String, !id.isEmpty, id.count <= 128,
+              let name = envelope["file"] as? String,
+              name.range(of: "^payload-[0-9a-f]{32}\\.json$", options: .regularExpression) != nil,
+              let bytes = envelope["bytes"] as? Int, bytes >= inlineBytes else {
+            throw Self.failure("私有消息描述无效。")
+        }
+        let file = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard file >= 0 else { throw Self.posixError() }
+        let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
+        defer {
+            try? handle.close()
+            _ = unlinkat(descriptor, name, 0)
+        }
+        var metadata = stat()
+        guard fstat(file, &metadata) == 0 else { throw Self.posixError() }
+        guard metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG), metadata.st_size == off_t(bytes) else {
+            throw Self.failure("私有消息文件类型或长度无效。")
+        }
+        let payload = try handle.readToEnd() ?? Data()
+        guard payload.count == bytes,
+              let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              object["id"] as? String == id else {
+            throw Self.failure("私有消息内容或请求标识无效。")
+        }
+        return object
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreFoundation
 
 enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all
@@ -67,7 +68,7 @@ struct Hades2SaveEditorView: View {
             }
             Divider()
             inlineResults
-                .id(model.workspaceID)
+                .id(model.baselineGeneration)
                 .frame(height: model.pendingCount > 0 ? 445 : 610)
             if model.total > Hades2SaveEditorModel.pageSize {
                 Divider()
@@ -79,6 +80,19 @@ struct Hades2SaveEditorView: View {
                 Divider()
                 reviewDrawer
                     .frame(height: 240)
+            }
+            if !model.retiredDrafts.isEmpty {
+                Divider()
+                DisclosureGroup(text("hades2.saveEditor.retiredDrafts")) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(model.retiredDrafts) { draft in
+                                Text(draft.name).font(.caption.weight(.semibold))
+                                Text(draft.text).font(.caption.monospaced()).textSelection(.enabled)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.frame(maxHeight: 120)
+                }.padding(theme.controlPadding)
             }
             if let receipt = model.lastApplyReceipt {
                 Divider()
@@ -140,9 +154,10 @@ struct Hades2SaveEditorView: View {
                 drafts.removeAll()
             }
         }
-        .onChange(of: model.workspaceID) { _, _ in
+        .onChange(of: model.baselineGeneration) { previous, _ in
+            if previous != nil { drafts = drafts.filter { model.continuousDraftEntryIDs.contains($0.key) } }
+            else { drafts.removeAll() }
             advancedEditingEntry = nil
-            drafts.removeAll()
             section = .all
         }
     }
@@ -447,7 +462,7 @@ struct Hades2SaveEditorView: View {
             Text(text("hades2.saveEditor.advanced.removed")).font(.caption).foregroundStyle(.secondary)
             if let before = removed.typedBefore, removed.beforePresent {
                 Button(text("hades2.saveEditor.advanced.restore")) {
-                    model.stage(entryID: entry.id, operation: "set", value: before.object)
+                    model.stage(entryID: entry.id, operation: "set", value: before.object, baseline: entry.baselineGeneration)
                 }.disabled(model.busy)
             }
         } else if entry.domain == "advanced" &&
@@ -457,7 +472,7 @@ struct Hades2SaveEditorView: View {
                 .disabled(model.busy)
         } else if entry.id.hasPrefix("dialogueReset:") {
             Button(entry.displayName) {
-                model.stage(entryID: entry.id, operation: "set", value: false)
+                model.stage(entryID: entry.id, operation: "set", value: false, baseline: entry.baselineGeneration)
             }
             .accessibilityIdentifier("saveEditor.reset." + entry.rawID)
             .disabled(model.busy)
@@ -468,7 +483,7 @@ struct Hades2SaveEditorView: View {
                 enabled: !model.busy,
                 helpText: entry.displayName,
                 onChange: { value in
-                    guard !model.busy, model.workspaceID == workspaceID else { return }
+                    guard !model.busy, model.workspaceID == workspaceID && entry.baselineGeneration == model.baselineGeneration else { return }
                     _ = model.completeTextEdit(entry, text: value ? "true" : "false")
                 }
             )
@@ -478,7 +493,7 @@ struct Hades2SaveEditorView: View {
                 selection: Binding<String>(
                     get: { enumToken(stagedValue(for: entry)) },
                     set: { choice in
-                        guard !model.busy, model.workspaceID == workspaceID else { return }
+                        guard !model.busy, model.workspaceID == workspaceID && entry.baselineGeneration == model.baselineGeneration else { return }
                         _ = model.completeTextEdit(entry, text: choice)
                     }
                 )
@@ -496,7 +511,7 @@ struct Hades2SaveEditorView: View {
                 text: draft,
                 accessibilityLabel: entry.displayName,
                 onCommit: { edit in
-                    guard model.workspaceID == workspaceID else { return edit.text }
+                    guard model.workspaceID == workspaceID && entry.baselineGeneration == model.baselineGeneration else { return edit.text }
                     return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
                 }
             )
@@ -553,7 +568,7 @@ struct Hades2SaveEditorView: View {
                 }
                 if entry.mutationKinds.contains("unset") {
                     Button(text("hades2.saveEditor.advanced.removeField")) {
-                        model.stage(entryID: entry.id, operation: "unset", value: nil)
+                        model.stage(entryID: entry.id, operation: "unset", value: nil, baseline: entry.baselineGeneration)
                     }
                     .accessibilityIdentifier("saveEditor.unset." + entry.id)
                     .disabled(model.busy)
@@ -607,7 +622,8 @@ struct Hades2SaveEditorView: View {
 
 
     private var reviewDrawer: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        let baseline = model.baselineGeneration
+        return VStack(alignment: .leading, spacing: 9) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(text("hades2.saveEditor.review"))
@@ -621,14 +637,14 @@ struct Hades2SaveEditorView: View {
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(text("hades2.saveEditor.cancelChanges")) { model.cancel() }
+                Button(text("hades2.saveEditor.cancelChanges")) { model.cancel(baseline: baseline) }
                     .disabled(model.busy)
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
                     systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: !model.busy && model.hasWriteTarget
                 ) {
-                    model.apply()
+                    model.apply(baseline: baseline)
                 }
             }
             Text(text("hades2.saveEditor.workbench.target", arguments: [
@@ -670,7 +686,7 @@ struct Hades2SaveEditorView: View {
                     identity: "basket:" + action.entryID
                 )
                 Button {
-                    model.unstage(entryID: action.entryID)
+                    model.unstage(entryID: action.entryID, baseline: action.baselineGeneration)
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -809,7 +825,8 @@ struct Hades2SaveEditorView: View {
         if operation == "setEnum", let raw = value?.base as? String {
             return enumTitle(raw)
         }
-        if let bool = value?.base as? Bool {
+        if let number = value?.base as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+            let bool = number.boolValue
             if domain == "dialogue" || domain == "flags" {
                 return text(bool ? "hades2.saveEditor.true" : "hades2.saveEditor.false")
             }
@@ -830,7 +847,10 @@ struct Hades2SaveEditorView: View {
         let workspaceID = model.workspaceID
         return Binding(
             get: { drafts[entry.id] ?? valueText(stagedValue(for: entry)) },
-            set: { if model.workspaceID == workspaceID { drafts[entry.id] = $0 } }
+            set: { if model.workspaceID == workspaceID && entry.baselineGeneration == model.baselineGeneration {
+                drafts[entry.id] = $0
+                model.retainTextDraft($0, for: entry)
+            } }
         )
     }
 
@@ -868,7 +888,11 @@ struct Hades2SaveEditorView: View {
 
     private func valueText(_ value: AnyHashable?) -> String {
         guard let value else { return "—" }
-        if let bool = value.base as? Bool { return bool ? "true" : "false" }
+        if let number = value.base as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
+            let type = String(cString: number.objCType)
+            return type == "f" || type == "d" ? TrainerJSONNumericInput.numberText(number.doubleValue) : number.stringValue
+        }
         return String(describing: value.base)
     }
 }

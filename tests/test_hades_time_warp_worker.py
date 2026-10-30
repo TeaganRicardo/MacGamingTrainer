@@ -5,7 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
-from games.hades.time_warp_worker import HADES_TIME_WARP_IMAGE_NAMES, HadesTimeWarpWorker
+from games.hades.time_warp_worker import HADES_TIME_WARP_IMAGE_NAMES, HadesTimeWarpWorker, error_payload
 
 
 class FakeTransport:
@@ -83,5 +83,13 @@ except AdapterError as error:
 else:
     raise AssertionError('uncertain speed reset was hidden')
 assert transport3.attached and transport3.detaches == 0, 'uncertain reset detached the only recovery transport'
+
+for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required', 'restartRequired')):
+    failure = AdapterError(code, 'host.timeWarp.error.' + suffix, arguments=['native detail'], diagnostic='native detail')
+    payload = error_payload(failure)
+    assert payload['code'] == code and payload['presentation'] == 'hades.error.' + suffix
+    assert payload['arguments'] == [] and payload['diagnostic'] == 'native detail'
+known_failure = AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed')
+assert error_payload(known_failure)['presentation'] == known_failure.presentation
 
 print('hades_time_warp_worker_reset_and_outcome_contract_ok')

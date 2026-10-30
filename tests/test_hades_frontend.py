@@ -159,7 +159,7 @@ for raw in sys.stdin:
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
         'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':True,'result':result}
     if command=='status' and state.get('fixtureError'):
-        reply.update(ok=False,error={'code':'fixture','presentation':state['fixtureError']},state=state)
+        reply.update(ok=False,error={'code':state.get('fixtureErrorCode','fixture'),'presentation':state['fixtureError']},state=state)
         reply.pop('result')
     emit(reply)
 '''
@@ -243,6 +243,12 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(Double(text)?.bitPattern == number.bitPattern, "Save Editor numeric text lost precision: " + text)
         }
         check(HadesSaveValue.number(25).scalarText == "25", "Save Editor integer text lost its compact form")
+        let negativeZeroWire=HadesSaveValue.number(-0.0).object
+        check(negativeZeroWire["encoding"] as? String == "ieee754" && negativeZeroWire["value"] as? String == "0000000000000080",
+            "Save Editor numeric encoding lost the negative-zero sign")
+        let negativeZeroInput=HadesSaveValue.inputJSON(#"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[{"key":{"luaType":"string","value":"zero"},"value":{"luaType":"number","value":-0.0}}]}"#)
+        check(negativeZeroInput == .table(arraySize:0,hashSize:1,entries:[.init(key:.string("zero"),value:.number(-0.0))]),
+            "typed numeric input lost nested negative-zero bits before wire encoding")
         let folder=URL(fileURLWithPath:CommandLine.arguments[1])
         let python=URL(fileURLWithPath:CommandLine.arguments[2])
         let stateURL=folder.appendingPathComponent("state.json")
@@ -256,9 +262,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
             state["health"]=health;state["target"]=["heroId":hero]
             try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
         }
-        func setFixtureError(_ error: String?) throws {
+        func setFixtureError(_ error: String?, code: String = "fixture") throws {
             var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
             state["fixtureError"]=error
+            state["fixtureErrorCode"]=code
             try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
         }
         func setConnection(_ connected: Bool, heroReady: Bool) throws {
@@ -545,6 +552,13 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("native statistics input coordinator missing")
         }
         check(Double(statsField.stringValue) == 4.123456789012345,"native Save Editor initial value lost decimal precision")
+        let beforeRoundedInteger=commands().count
+        statsCoordinator.begin();statsField.stringValue="9007199254740993"
+        statsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:statsField))
+        statsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:statsField))
+        pump()
+        check(commands().count==beforeRoundedInteger && editor.failures["entry:statistics"] != nil,
+            "an unrepresentable integer draft was silently rounded and staged")
         let preciseStatistic=123.45678901234567
         statsCoordinator.begin();statsField.stringValue=String(preciseStatistic)
         statsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:statsField))
@@ -574,6 +588,16 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("equipment sheet did not finish dismissal") { editorWindow.attachedSheet == nil }
         editor.selectDomain(.advanced);wait("Advanced save_editor_query reply: table row accepted") { !editor.queryLoading && editor.rows.first?.id == "entry:advanced" }
         let advanced=editor.rows.first!
+        let beforeInvalidJSON=commands().count
+        check(!editor.commitJSON(advanced,text:"3",workspace:pinnedWorkspace),"an untyped JSON fragment was accepted")
+        check(!editor.commitJSON(advanced,text:#"{"luaType":"number","value":9007199254740993}"#,workspace:pinnedWorkspace),
+            "typed JSON silently rounded an integer value")
+        check(!editor.commitJSON(advanced,text:#"{"luaType":"table","arraySize":0,"hashSize":1,"entries":[{"key":{"luaType":"number","value":9007199254740993},"value":{"luaType":"nil"}}]}"#,workspace:pinnedWorkspace),
+            "typed JSON silently rounded a nested integer key")
+        check(!editor.commitJSON(advanced,text:HadesSaveValue.number(1).json,
+            appendKey:#"{"luaType":"number","value":9007199254740993}"#,workspace:pinnedWorkspace),
+            "typed append silently rounded its integer key")
+        check(commands().count==beforeInvalidJSON,"invalid typed numeric input reached the backend")
         let raw=HadesSaveValue.table(arraySize:0,hashSize:2,entries:[
             .init(key:.string("unknown"),value:.number(8)),.init(key:.rawString("/wA="),value:.rawNumber("000000000000f87f"))])
         check(editor.commitJSON(advanced,text:raw.json,workspace:pinnedWorkspace),"typed Advanced value was rejected locally")
@@ -937,8 +961,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         try setConnection(true,heroReady:true)
         model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
-        for key in ["hades.error.outcomeUnknown","hades.error.restartRequired","hades.error.debuggerProtocol"] {
-            try setFixtureError(key)
+        try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
+        model.refreshFromHost();wait("known Time Warp verification failure: trainer idle") { !model.busy && model.backendStatus.errorCode=="time_warp_verify_failed" }
+        check(model.connected && model.canMutate,"a known verification failure discarded a trusted runtime")
+        for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
+                           ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
+                           ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
+                           ("host.timeWarp.error.restartRequired","restart_required")] {
+            try setFixtureError(key,code:code)
             model.refreshFromHost();wait("unsafe status error reply: \(key), trainer idle") { !model.busy && model.backendStatus.error==key }
             check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
                 "unsafe runtime error retained mutation authority: \(key)")

@@ -94,6 +94,16 @@ def verify_module_build(game_id, dist_dir):
     if manifest.product and (not marker.is_file() or json.loads(marker.read_text()) != list(manifest.ids)):
         raise ValueError(f'Packaged module set differs from product: {marker}')
     verify_python_runtime(resources, manifest)
+    if any(module.requirements.lldb_python for module in manifest.modules):
+        source = ROOT / 'Backend/debugger'
+        packaged = resources / 'Backend/debugger'
+        expected = {path.relative_to(source): path for path in source.rglob('*.py')}
+        actual = {path.relative_to(packaged): path for path in packaged.rglob('*.py')}
+        if packaged.is_symlink() or not expected or actual.keys() != expected.keys():
+            raise ValueError(f'Packaged debugger backend is missing or differs from source: {packaged}')
+        for relative, path in actual.items():
+            if path.is_symlink() or path.read_bytes() != expected[relative].read_bytes():
+                raise ValueError(f'Packaged debugger backend differs from source: {path}')
     for module in manifest.modules:
         for library in module.native_libraries:
             native = games_dir / module.id / 'native' / library.filename

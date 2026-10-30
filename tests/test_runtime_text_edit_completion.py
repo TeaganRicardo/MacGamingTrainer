@@ -1,5 +1,7 @@
+import json
 """Real Hades SwiftUI text editing uses a temporary backend, never the game/save tree."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -35,7 +37,7 @@ for raw in sys.stdin:
  if command=='status': time.sleep(.20)
  if command=='set_resource':
   if params['amount']==888:
-   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':17,'gameID':args.game,'ok':False,
+   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':False,
                      'error':{'code':'fixture_rejected','presentation':'hades2.error.exactNotEligible'}}),flush=True)
    continue
   if params['resource']=='Money': state['money']=params['amount']
@@ -59,14 +61,29 @@ for raw in sys.stdin:
  if command=='load_profile': state['money']=200
  if command=='disconnect': state['connected']=False
  result={'sources':[],'targets':[],'defaultSource':None} if command=='save_editor_inventory' else state
- print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':17,'gameID':args.game,'ok':True,'result':result}),flush=True)
+ print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,'result':result}),flush=True)
 """
 HARNESS = r"""
 import AppKit
 import SwiftUI
 import Foundation
+enum RuntimeTextTrace {
+ static var updateDepth=0
+ static var currentPhase=""
+ static var active: Bool { currentPhase.hasPrefix("editing:") }
+ static func write(_ message: String) {
+  guard active else { return }
+  FileHandle.standardError.write(Data("text_edit_trace:\(ProcessInfo.processInfo.systemUptime):\(currentPhase):\(message)\n".utf8))
+ }
+ static func native(_ event: String) {
+  guard active else { return }
+  write("\(event) updateDepth=\(updateDepth)")
+  write(Thread.callStackSymbols.prefix(12).joined(separator:"\n"))
+ }
+}
 func phase(_ name: String) {
- FileHandle.standardOutput.write(Data("runtime_text_edit_completion:\(name)\n".utf8))
+ RuntimeTextTrace.currentPhase=name
+ FileHandle.standardError.write(Data("runtime_text_edit_completion:\(name)\n".utf8))
 }
 func check(_ test: @autoclosure () -> Bool, _ message: String) { if !test() { fatalError(message) } }
 func pump(_ time: TimeInterval = 0.10) { RunLoop.current.run(until: Date().addingTimeInterval(time)) }
@@ -87,6 +104,52 @@ func edit(_ field: NSTextField, to draft: String, in window: NSWindow) -> NSText
 func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
  NSEvent.mouseEvent(with:.leftMouseDown, location:point, modifierFlags:[], timestamp:0,
                    windowNumber:window.windowNumber, context:nil, eventNumber:1, clickCount:1, pressure:1)!
+}
+func checkTeardownNotifications() {
+ var text="observed"
+ var focused: String?
+ var changes=[Bool]()
+ var commits=0
+ var dismantling=false
+ let binding=Binding(get:{text},set:{text=$0})
+ let tracked=TrainerTextField.editingTracker(Binding(get:{focused},set:{focused=$0}),equals:"shared-key")
+ let owner=TrainerTextField(title:"Lifecycle fixture",text:binding,onEditingChanged:{ active in
+  check(!dismantling,"teardown synchronously re-entered its editing owner")
+  tracked(active); changes.append(active)
+ },onCommit:{ completed in commits += 1; return completed.text })
+ let old=owner.makeCoordinator()
+ let oldField=NSTextField(string:"abandoned")
+ oldField.delegate=old
+ old.begin()
+ dismantling=true
+ TrainerTextField.dismantleNSView(oldField,coordinator:old)
+ dismantling=false
+ check(old.edit==nil && oldField.delegate==nil && changes==[true] && commits==0,
+       "teardown committed or synchronously notified its abandoned edit")
+ // Repeated teardown must not queue a second end. A new coordinator can begin
+ // the same logical field before the old asynchronous notification is drained.
+ TrainerTextField.dismantleNSView(oldField,coordinator:old)
+ let replacement=owner.makeCoordinator()
+ let replacementField=NSTextField(string:"completed")
+ replacementField.delegate=replacement
+ replacement.begin()
+ check(changes==[true,false,true] && focused=="shared-key",
+       "a replacement began before its previous owner's end notification")
+ pump()
+ check(changes==[true,false,true] && focused=="shared-key" && commits==0,
+       "a delayed old end cleared the replacement's same-key focus")
+ replacement.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:replacementField))
+ check(changes==[true,false,true,false] && focused==nil && commits==1 && text=="completed",
+       "normal native completion lost its synchronous end notification")
+ let removed=owner.makeCoordinator()
+ removed.begin()
+ dismantling=true
+ TrainerTextField.dismantleNSView(NSTextField(),coordinator:removed)
+ dismantling=false
+ check(focused=="shared-key","teardown ended editing before leaving SwiftUI's update")
+ pump()
+ check(focused==nil && changes==[true,false,true,false,true,false] && commits==1,
+       "a removed editor retained focus or delivered its end more than once")
 }
 final class GenerateAction: NSObject {
  let model: Hades2TrainerModel
@@ -160,6 +223,7 @@ struct HeaderFixture: View {
    session.stop(); window.close(); phase("navigation:complete"); return
   }
   if journey == "controls" {
+   checkTeardownNotifications()
    let backdrop=Color(nsColor: .magenta)
    let reference=ImageRenderer(content:TrainerRow { Color.clear.frame(height:40) }
     .trainerGroupedRows().frame(width:900).background(backdrop))
@@ -351,10 +415,12 @@ struct HeaderFixture: View {
   guard let amount=fields(host).first(where:{$0.isEditable && $0.stringValue=="17"})
   else { fatalError("selected material amount field missing") }
   window.makeFirstResponder(nil); pump()
+  phase("editing:material:idle-observation")
   model.resources=[material("MetaCurrency",31)]; pump()
   check(amount.stringValue=="31" && mutations().isEmpty,
         "external selected-material observation left the unfocused amount stale: \(amount.stringValue)")
   check(window.makeFirstResponder(amount), "could not focus selected material")
+  phase("editing:material:focused-observation")
   model.resources=[material("MetaCurrency",32)]; pump()
   check((amount.currentEditor() as? NSTextView)?.string=="31" && mutations().isEmpty,
         "observation replaced a focused material before typing")
@@ -362,30 +428,45 @@ struct HeaderFixture: View {
   check(amount.stringValue=="32" && mutations().isEmpty,
         "unchanged material blur did not restore the latest observation")
   let materialEditor=edit(amount,to:"41",in:window)
+  phase("editing:material:draft-observation")
   model.resources=[material("MetaCurrency",33)]; pump()
   check(materialEditor.string=="41" && mutations().isEmpty,
         "external material change overwrote or submitted an in-progress draft")
+  phase("editing:material:return")
   materialEditor.doCommand(by:#selector(NSResponder.insertNewline(_:)))
   waitForCommand("set_resource",count:1)
   check((mutations()[0]["params"] as? [String:Any])?["resource"] as? String=="MetaCurrency"
         && model.resources.first?.count==41,
         "material Return did not commit exactly once to the captured owner")
   _ = edit(amount,to:"51",in:window)
-  model.resources=[material("PlantFNightshade",73)]; pump()
+  phase("editing:material:replace-owner:before")
+  model.resources=[material("PlantFNightshade",73)]
+  phase("editing:material:replace-owner:assigned"); pump()
+  phase("editing:material:replace-owner:after")
   guard let replacementAmount=fields(host).first(where:{$0.isEditable && $0.stringValue=="73"})
   else { fatalError("material owner replacement did not reset the displayed amount") }
   window.makeFirstResponder(nil); pump()
   check(amount.currentEditor()==nil && mutations().count==1,
         "material owner replacement submitted an abandoned draft")
-  _ = edit(replacementAmount,to:"81",in:window)
-  model.resources=[]; pump()
+  let replacementEditor=edit(replacementAmount,to:"81",in:window)
+  phase("editing:material:replacement-observation")
+  model.resources=[material("PlantFNightshade",74)]; pump()
+  check(replacementEditor.string=="81" && replacementAmount.currentEditor() != nil && mutations().count==1,
+        "the replacement material lost its focused draft to an old end notification")
+  phase("editing:material:remove-owner:before")
+  model.resources=[]
+  phase("editing:material:remove-owner:assigned"); pump()
+  phase("editing:material:remove-owner:after")
   window.makeFirstResponder(nil); pump()
   check(replacementAmount.currentEditor()==nil && mutations().count==1,
         "losing every material submitted an abandoned draft")
+  phase("editing:material:restore-owner")
   model.refreshFromHost(); wait { !model.busy }; pump()
   check(fields(host).contains(where:{$0.isEditable && $0.stringValue=="41"}),
         "restored material owner did not restore its observed amount")
+  phase("editing:material:complete")
   try? FileManager.default.removeItem(at:log)
+  phase("editing:money:untyped-observation")
   check(window.makeFirstResponder(money), "could not restore money focus after material checks")
   guard let untyped=money.currentEditor() as? NSTextView else { fatalError("focused field editor missing") }
   model.money=777; pump()
@@ -395,19 +476,23 @@ struct HeaderFixture: View {
   model.money=123; pump()
   check(window.makeFirstResponder(money), "could not refocus after unchanged completion")
   guard let editor=money.currentEditor() as? NSTextView else { fatalError("field editor missing") }
+  phase("editing:money:typing")
   for draft in ["4", "40", "400"] {
    editor.selectAll(nil); editor.insertText(draft, replacementRange:editor.selectedRange()); pump(0.45)
    check(mutations().isEmpty, "typing submitted a runtime mutation before completion")
   }
+  phase("editing:money:blur")
   check(window.makeFirstResponder(nil), "could not leave editing")
   waitForCommand("set_resource", count:1)
   check(mutations().count==1, "blur did not submit one changed value")
   let params=mutations()[0]["params"] as? [String:Any]
   check(params?["amount"] as? Int == 400, "blur submitted a partial draft")
   check(model.money==400, "completed edit remained deferred")
+  phase("editing:money:second-blur")
   _ = edit(money, to:"123", in:window)
   window.makeFirstResponder(nil); waitForCommand("set_resource",count:2)
   check(model.money==123, "latest completed intent lost the return to the initial value")
+  phase("editing:money:quick-blur")
   _ = edit(money, to:"401", in:window)
   check(window.makeFirstResponder(nil), "could not finish quick edit")
   waitForCommand("set_resource", count:3)
@@ -416,18 +501,31 @@ struct HeaderFixture: View {
 
   // A marked composition remains a draft across a real model refresh. Return
   // then completes the final text, and a following blur cannot submit it again.
+  phase("editing:composition:focus")
   check(window.makeFirstResponder(money), "could not focus for composition"); pump()
   let composing=money.currentEditor() as! NSTextView
   composing.selectAll(nil)
+  phase("editing:composition:marked-text:before")
   composing.setMarkedText("4.", selectedRange:NSRange(location:2,length:0), replacementRange:composing.selectedRange())
+  phase("editing:composition:marked-text:after")
   check(composing.hasMarkedText(), "native marked-text fixture did not start")
-  model.money=777; pump(0.45)
+  phase("editing:composition:observation:before")
+  model.money=777
+  phase("editing:composition:observation:assigned"); pump(0.45)
+  phase("editing:composition:observation:after")
   check(composing.string=="4." && mutations().count==3, "refresh or composition submitted/overwrote the draft")
+  phase("editing:composition:insert-text:before")
   composing.insertText("402", replacementRange:NSRange(location:0,length:composing.string.utf16.count))
+  phase("editing:composition:insert-text:after")
+  phase("editing:composition:return:before")
   composing.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+  phase("editing:composition:return:after")
   waitForCommand("set_resource", count:4)
   check(money.currentEditor()==nil && model.money==402, "Return did not finish: editor=\(String(describing: money.currentEditor())) money=\(String(describing: model.money)) draft=\(money.stringValue) responder=\(String(describing: window.firstResponder))")
-  window.makeFirstResponder(nil); pump(0.45)
+  phase("editing:composition:following-blur:before")
+  window.makeFirstResponder(nil)
+  phase("editing:composition:following-blur:resigned"); pump(0.45)
+  phase("editing:composition:following-blur:after")
   check(mutations().count==4, "Return followed by blur submitted twice")
 
   phase("editing:validation")
@@ -633,14 +731,103 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
+    # A18's unresolved CI cycle needs native/SwiftUI ordering evidence. These
+    # traces affect only compiled fixture copies and only the editing journey.
+    traces = {
+        ROOT / "Sources/Core/UI/Primitives/TrainerTextField.swift": [
+            ("        func begin() {", r'''
+        func begin() {
+            RuntimeTextTrace.native("begin \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")'''),
+            ("            for notify in notifications { notify() }", r'''
+            for notify in notifications {
+                RuntimeTextTrace.native("teardown-notification:before")
+                notify()
+                RuntimeTextTrace.write("teardown-notification:after")
+            }'''),
+            ("        func controlTextDidChange(_ notification: Notification) {", r'''
+        func controlTextDidChange(_ notification: Notification) {
+            RuntimeTextTrace.native("change \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title)")'''),
+            ("        func controlTextDidEndEditing(_ notification: Notification) {", r'''
+        func controlTextDidEndEditing(_ notification: Notification) {
+            RuntimeTextTrace.native("end:enter \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")
+            defer { RuntimeTextTrace.write("end:exit \(ObjectIdentifier(self))") }'''),
+            ("            let normalized = completed.onCommit(Completion(text: draft, changed: draft != completed.initial))", r'''
+            RuntimeTextTrace.write("commit:before \(ObjectIdentifier(self)) draft=\(draft)")
+            let normalized = completed.onCommit(Completion(text: draft, changed: draft != completed.initial))
+            RuntimeTextTrace.write("commit:after \(ObjectIdentifier(self)) normalized=\(normalized)")'''),
+            ("        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {", r'''
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+            RuntimeTextTrace.native("command \(ObjectIdentifier(self)) \(command) marked=\(textView.hasMarkedText())")'''),
+            ("        func cancel(_ field: NSTextField) {", r'''
+        func cancel(_ field: NSTextField) {
+            RuntimeTextTrace.native("cancel:enter \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")
+            defer { RuntimeTextTrace.write("cancel:exit \(ObjectIdentifier(self))") }'''),
+            ("    func updateNSView(_ field: NSTextField, context: Context) {", r'''
+    func updateNSView(_ field: NSTextField, context: Context) {
+        RuntimeTextTrace.updateDepth += 1
+        let trace = RuntimeTextTrace.active && context.coordinator.edit != nil
+        if trace { RuntimeTextTrace.write("update:enter \(ObjectIdentifier(context.coordinator)) \(accessibilityLabel ?? title)") }
+        defer {
+            if trace { RuntimeTextTrace.write("update:exit \(ObjectIdentifier(context.coordinator))") }
+            RuntimeTextTrace.updateDepth -= 1
+        }'''),
+            ("        configure(field)\n        // A background observation", r'''
+        if trace { RuntimeTextTrace.write("configure:before \(ObjectIdentifier(context.coordinator)) enabled=\(enabled)") }
+        configure(field)
+        if trace { RuntimeTextTrace.write("configure:after \(ObjectIdentifier(context.coordinator))") }
+        // A background observation'''),
+            ("    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {\n        CGSize(", r'''
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
+        let trace = RuntimeTextTrace.active && context.coordinator.edit != nil
+        if trace { RuntimeTextTrace.write("size:enter \(ObjectIdentifier(context.coordinator))") }
+        defer { if trace { RuntimeTextTrace.write("size:exit \(ObjectIdentifier(context.coordinator))") } }
+        return CGSize('''),
+            ("        { active in\n            if active { focus.wrappedValue = field }", r'''
+        { active in
+            RuntimeTextTrace.write("focus-notification:before \(String(describing:field)) active=\(active)")
+            defer { RuntimeTextTrace.write("focus-notification:after \(String(describing:field)) active=\(active)") }
+            if active { focus.wrappedValue = field }'''),
+        ],
+        ROOT / "Sources/Hades2/Hades2View.swift": [
+            ("    private func syncConnectionSnapshot(_ snapshot: Hades2ViewConnectionSnapshot) {", r'''
+    private func syncConnectionSnapshot(_ snapshot: Hades2ViewConnectionSnapshot) {
+        RuntimeTextTrace.write("connection:enter money=\(String(describing:snapshot.money)) focus=\(String(describing:focusedField))")
+        defer { RuntimeTextTrace.write("connection:exit") }'''),
+            ("    private func applyCatalogChanges(from oldValue: Hades2ViewCatalogSnapshot, to newValue: Hades2ViewCatalogSnapshot) {", r'''
+    private func applyCatalogChanges(from oldValue: Hades2ViewCatalogSnapshot, to newValue: Hades2ViewCatalogSnapshot) {
+        RuntimeTextTrace.write("catalog:enter \(String(describing:oldValue)) -> \(String(describing:newValue))")
+        defer { RuntimeTextTrace.write("catalog:exit") }'''),
+        ],
+    }
+    for source, replacements in traces.items():
+        text = source.read_text()
+        for anchor, replacement in replacements:
+            assert text.count(anchor) == 1, (source, anchor)
+            text = text.replace(anchor, replacement)
+        traced = td / source.name
+        traced.write_text(text)
+        sources[sources.index(source)] = traced
     binary = td / "text_edit"
     subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
     # Keep independent native journeys within their existing execution budget.
     for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls,navigation").split(","):
         fixture = td / journey; fixture.mkdir()
-        worker = fixture / "worker.py"; worker.write_text(WORKER)
+        worker = fixture / "worker.py"; worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
         home = fixture / "home"; home.mkdir()
         env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
         print(f"runtime_text_edit_completion_launch:{journey}", flush=True)
-        subprocess.run([str(binary), PYTHON, str(worker), journey], env=env, check=True, timeout=45)
+        try:
+            result = subprocess.run([str(binary), PYTHON, str(worker), journey], env=env,
+                                    capture_output=True, text=True, timeout=45)
+        except subprocess.TimeoutExpired as error:
+            for output, stream in ((error.stdout, sys.stdout), (error.stderr, sys.stderr)):
+                if output is not None:
+                    text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output
+                    print(text, end="", file=stream, flush=True)
+            raise
+        print(result.stdout, end="", flush=True)
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+        result.check_returncode()
+        assert not re.search(r"AttributeGraph: cycle detected through attribute [0-9]+", result.stderr), \
+            f"{journey}: text editing re-entered the SwiftUI attribute graph"
     print("runtime_text_edit_completion_ok")

@@ -239,4 +239,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     assert not json.loads(router.handle_encoded({'id': 'closed', 'command': 'save_editor_review',
         'params': {'workspaceId': identifier}}))['ok']
 
+    precision_saves, precision_service = environment(base / 'precision')
+    precision_state = root_state()
+    precision_state['GameState']['UnknownFutureField']['Precise'] = 1.0
+    (precision_saves / 'Profile1.sav').write_bytes(build_save(state=precision_state))
+    precision = HadesSaveWorkspace.open(precision_service, source=source)
+    set_target(precision, target)
+    precise_id = entry(precision, ('GameState', 'UnknownFutureField', 'Precise'))
+    review = stage(precision, precise_id, 'set', scalar(1.0000000000000002))
+    action = review['actions'][0]
+    assert action['before'] == '1' and action['after'] == '1.0000000000000002'
+    assert action['effects'] == [], 'A raw physical edit has no linked semantic effects'
+    apply(precision)
+    assert state(precision_saves / 'Profile2.sav')['UnknownFutureField']['Precise'] == 1.0000000000000002
+
 print('hades_save_workspace_complete_pinned_journeys_and_isolation_ok')

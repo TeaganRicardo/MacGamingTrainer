@@ -93,7 +93,7 @@ On success the workspace adopts **its own verified candidate** as the in-memory 
 
 The frontend reuses Host `TrainerToolWindowStore` and the optional module `managedBackupEditor` factory. Reopening one tool focuses its existing model/drafts; different managed backups have different window IDs/workspaces. Native controls commit completed valid drafts; focused or rejected drafts remain visible and block Apply until completed, corrected or discarded. Requests retain their session lifecycle, workspace, document baseline and query/detail authority. Apply disables the old controls through the verified receipt and replacement with matching-generation rows; the new baseline starts on its first page. Close/quit waits for pending writes and releases only the affected workspace.
 
-## Authored verification and pending execution
+## Verification coverage and acceptance
 
 `tests/fixtures/hades_save.py` independently writes synthetic version-16 headers, literal LZ4 and luabins bytes from this evidence. It contains no captured user/game save data. `test_hades_save_document.py` covers no-op bytes, unrelated-edit raw-bit/string preservation, duplicate/typed/table keys, physical paths, extra top-level values, malformed input/native depth and cross-game raw-LZ4 use. Existing Hades II save regressions continue to own its differing representation.
 

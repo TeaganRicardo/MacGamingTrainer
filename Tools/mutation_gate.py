@@ -633,7 +633,7 @@ def _is_verdict(text: str) -> bool:
         # bare asserts, so without these a real catch reads as an error.
         # Measured: no crash output matches either pattern.
         or re.search(r"^FAIL(?:ED)?: \S", text, re.M) is not None
-        or re.search(r"^FAILED \((?:failures|errors)=\d+", text, re.M) is not None
+        or re.search(r"^FAILED \(failures=[1-9]\d*", text, re.M) is not None
     )
 
 

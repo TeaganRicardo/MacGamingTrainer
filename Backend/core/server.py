@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Game-agnostic JSONL host. Game behavior lives under Backend/games/<game_id>."""
 import argparse
-import json
 import logging
 import os
 import signal
@@ -14,6 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from core.operation_profile import correlation, operation, record
+from core.framing import JsonLineFileSession, decode_json
 from core.protocol import JsonlRequestRouter
 from core.registry import available_games, create_adapter
 
@@ -63,14 +63,18 @@ def encode_reply(router, reply):
 def process_line(router, line):
     """One ordinary JSONL record, shared by the server and offline probes."""
     started = time.perf_counter()
-    request = json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError('非有限 JSON 数值：' + value)))
+    request = decode_json(line)
     decode = time.perf_counter() - started
+    return _process_request(router, request, decode,
+                            len(line.encode('utf-8')) if isinstance(line, str) else len(line))
+
+
+def _process_request(router, request, decode_seconds, request_bytes):
     identity = request.get('id') if isinstance(request, dict) else None
     command = request.get('command', '') if isinstance(request, dict) else ''
     with operation(identity, command):
         if correlation() is not None:
-            record('backend.request_decode', decode,
-                   request_bytes=len(line.encode('utf-8')) if isinstance(line, str) else len(line))
+            record('backend.request_decode', decode_seconds, request_bytes=request_bytes)
         encoded = router.handle_encoded(request)
         if correlation() is not None:
             record('backend.reply_ready', 0.0,
@@ -92,7 +96,9 @@ def main(argv=None):
 
     logging_session = _BackendLoggingSession()
     router = None
+    framing = None
     try:
+        framing = JsonLineFileSession.from_environment()
         try:
             adapter = create_adapter(game_id)
         except Exception:
@@ -108,25 +114,33 @@ def main(argv=None):
         signal.signal(signal.SIGINT, interrupt)
         try:
             input_stream = getattr(sys.stdin, 'buffer', sys.stdin)
+            inline_bytes = framing.inline_bytes if framing is not None else 65536
             while True:
-                line = input_stream.readline(65537)
+                line = input_stream.readline(inline_bytes + 1)
                 if not line:
                     break
                 line_bytes = 0
+                request_id = None
                 try:
                     line_bytes = len(line.encode('utf-8')) if isinstance(line, str) else len(line)
-                    if line_bytes > 65536:
+                    if line_bytes > inline_bytes:
                         raise ValueError('请求过长。')
-                    encoded = process_line(router, line)
+                    started = time.perf_counter()
+                    request = framing.decode(line) if framing is not None else decode_json(line)
+                    request_id = request.get('id') if isinstance(request, dict) else None
+                    encoded = _process_request(router, request, time.perf_counter() - started, line_bytes)
                 except Exception as error:
-                    reply = router.core_error_reply(None, 'invalid_request', str(error))
+                    request_id = getattr(error, 'request_id', request_id)
+                    reply = router.core_error_reply(request_id, 'invalid_request', str(error))
                     encoded = encode_reply(router, reply)
+                if framing is not None:
+                    encoded = framing.encode(encoded, request_id)
                 print(encoded, flush=True)
-                if line_bytes > 65536:
+                if line_bytes > inline_bytes:
                     # Stay in sync with the next JSONL record without holding
                     # the rest of this untrusted line in memory.
                     while line and line[-1:] not in ('\n', b'\n'):
-                        line = input_stream.readline(65537)
+                        line = input_stream.readline(inline_bytes + 1)
         except KeyboardInterrupt:
             pass
     finally:
@@ -135,6 +149,8 @@ def main(argv=None):
                 router.close()
             except Exception:
                 logging.exception('Backend close failed')
+        if framing is not None:
+            framing.close(remove_if_orphaned=True)
         logging_session.close()
 
 

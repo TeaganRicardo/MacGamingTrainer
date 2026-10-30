@@ -452,6 +452,3 @@ class Hades2LuaTransport:
     def close(self):
         self.detach()
         if self.debugger:lldb.SBDebugger.Destroy(self.debugger);self.debugger=None
-
-
-LuaTransport = Hades2LuaTransport

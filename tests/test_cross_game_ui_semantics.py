@@ -1,11 +1,15 @@
 """Cross-game presentation/icon semantics stay aligned to the Hades II authority."""
 import json
 import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+manifest = json.loads((ROOT / "Backend/games/hades2/module.json").read_text())
+reference_path = ROOT / manifest["supportedBuild"]["referenceDirectory"] / "ui_terminology.json"
 reference = json.loads(reference_path.read_text())
 hades_presentation = (ROOT / "Sources/Hades/HadesPresentation.swift").read_text()
 
@@ -91,8 +95,41 @@ for hades_key, hades2_key in shared_labels.items():
         )
 
 hades2_presentation = (ROOT / "Sources/Hades2/Presentation/Hades2Presentation.swift").read_text()
-assert "1.143476-25481925/ui_terminology.json" in hades2_presentation
-assert "1.139672-24556151/ui_terminology.json" not in hades2_presentation
+# Run the unmodified Swift source in a temporary repository whose manifest
+# points elsewhere. Source fallback must follow the manifest's reference owner.
+swiftc = shutil.which("swiftc")
+if not swiftc:
+    raise SystemExit("swiftc required")
+with tempfile.TemporaryDirectory(prefix="mgt-terminology-manifest-") as temporary:
+    repository = Path(temporary)
+    source = repository / "Sources/Hades2/Presentation/Hades2Presentation.swift"
+    source.parent.mkdir(parents=True)
+    source.write_text(hades2_presentation)
+    module = repository / "Backend/games/hades2/module.json"
+    module.parent.mkdir(parents=True)
+    module.write_text(json.dumps({"supportedBuild": {"referenceDirectory": "docs/relocated-reference"}}))
+    registry = repository / "docs/relocated-reference/ui_terminology.json"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(json.dumps({"officialTerms": {"probe": {
+        "value": "迁移术语", "englishValue": "Relocated term",
+    }}}))
+    main = repository / "main.swift"
+    main.write_text('''
+struct TrainerTextToken {
+    let key: String
+    let arguments: [String]
+    init(key: String, arguments: [String] = []) { self.key = key; self.arguments = arguments }
+}
+enum TrainerPresentationLanguage: String, CaseIterable { case zhCN = "zh-CN", en }
+let terms = Hades2TerminologyCatalog()
+precondition(terms.value(forTerm: "officialTerms.probe", language: .en) == "Relocated term",
+             "Swift source fallback did not follow the manifest referenceDirectory")
+precondition(terms.value(forTerm: "officialTerms.probe", language: .zhCN) == "迁移术语",
+             "Swift source fallback lost the manifest's bilingual reference")
+''')
+    binary = repository / "terminology-reference"
+    subprocess.run([swiftc, str(source), str(main), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)
 
 # Heal Fully was a redundant one-shot beside the durable Infinite Life control.
 # It is retired end-to-end; only the preference migration tombstone may retain

@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -46,7 +47,7 @@ for raw in sys.stdin:
   state['status'] = 'restart_required'
   state['gatheringTargets'] = {}
   state['lastAction'] = {'requestId': generated, 'command': 'generate_gathering', 'outcome': 'outcome_unknown'}
- reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 17, 'gameID': args.game, 'ok': True, 'result': state}
+ reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__, 'gameID': args.game, 'ok': True, 'result': state}
  print(json.dumps(reply), flush=True)
 '''
 HARNESS = r'''
@@ -148,7 +149,7 @@ func wait(_ predicate: () -> Bool) {
 with tempfile.TemporaryDirectory(prefix='mgt-gathering-frontend-') as td:
     td = Path(td)
     main, binary, worker = td / 'main.swift', td / 'reroll', td / 'worker.py'
-    main.write_text(HARNESS); worker.write_text(WORKER)
+    main.write_text(HARNESS); worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
     home = td / 'home'; home.mkdir()
     generated = td / 'ActiveGame.generated.swift'
     subprocess.run([PYTHON, str(ROOT / 'Tools/generate_game_binding.py'), 'hades2', str(generated)], check=True)

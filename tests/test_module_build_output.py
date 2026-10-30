@@ -1,5 +1,6 @@
 import json
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     games.mkdir(parents=True)
     (resources / 'Backend/games/__init__.py').write_text('')
     (games / 'module.json').write_text(MANIFEST_PATH.read_text())
+    if MANIFEST.get('buildRequirements', {}).get('lldbPython', False):
+        shutil.copytree(ROOT / 'Backend/debugger', resources / 'Backend/debugger')
     for library in MANIFEST.get('nativeLibraries', []):
         native = games / 'native' / library['filename']
         native.parent.mkdir(exist_ok=True)

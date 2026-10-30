@@ -31,10 +31,20 @@ struct TrainerTextField: NSViewRepresentable {
         }
         var parent: TrainerTextField
         var edit: Edit?
+        private static var pendingCancellations: [() -> Void] = []
         init(_ parent: TrainerTextField) { self.parent = parent }
+
+        private static func finishPendingCancellations() {
+            let notifications = pendingCancellations
+            pendingCancellations.removeAll()
+            for notify in notifications { notify() }
+        }
 
         func begin() {
             guard edit == nil else { return }
+            // A replacement can acquire native focus before the queued teardown
+            // callback runs. End the old edit before announcing the new one.
+            Self.finishPendingCancellations()
             edit = Edit(initial: parent.text, text: parent.$text,
                 onEditingChanged: parent.onEditingChanged, onCommit: parent.onCommit,
                 onCancel: parent.onCancel)
@@ -78,9 +88,14 @@ struct TrainerTextField: NSViewRepresentable {
         func cancel(_ field: NSTextField) {
             let cancelled = edit
             edit = nil
-            cancelled?.onEditingChanged(false)
             field.delegate = nil
             if field.currentEditor() != nil { field.window?.makeFirstResponder(nil) }
+            if let notify = cancelled?.onEditingChanged {
+                // Dismantling runs inside a SwiftUI update. Its owner may mutate
+                // State or a published model when this edit ends.
+                Self.pendingCancellations.append { notify(false) }
+                DispatchQueue.main.async { Self.finishPendingCancellations() }
+            }
         }
     }
 

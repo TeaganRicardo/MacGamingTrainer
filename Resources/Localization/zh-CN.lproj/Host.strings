@@ -88,6 +88,7 @@
 "host.save.notice.created" = "已创建存档备份";
 "host.save.notice.renamed" = "已重命名存档";
 "host.save.notice.restoreSubmitted" = "恢复请求已提交";
+"host.save.warning.refreshFailed" = "存档操作已完成，但无法刷新备份状态。请刷新列表，无需重复操作。";
 "host.save.notice.pendingCancelled" = "已取消等待恢复";
 "host.save.notice.pendingApplied" = "已应用等待恢复";
 "host.save.notice.deletedOne" = "已删除 1 个存档";

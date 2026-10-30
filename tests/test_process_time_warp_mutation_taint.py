@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.process_time_warp import ProcessTimeWarpError
-from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
+from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 
 class FakeError:

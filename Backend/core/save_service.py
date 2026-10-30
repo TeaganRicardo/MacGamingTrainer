@@ -153,7 +153,7 @@ class CoreSaveService:
         # are separate maintenance feedback, never a failed Apply or rollback.
         try:
             pending = self.pending_restore()
-            pinned = (pending['snapshotId'],) if pending else ()
+            pinned = (pending['snapshotId'],) if pending and pending.get('snapshotId') else ()
             result['retention'] = self.retention.after_successful_edit(
                 result['previousSnapshotId'], pinned,
                 recovery_pending=bool(self._recovery_paths()) or bool(pending and pending.get('indeterminate')),
@@ -253,10 +253,9 @@ class CoreSaveService:
             # never infer an outcome or replay it automatically.
             try:
                 pending = self._read_staged_marker(applying[0])
-            except Exception as error:
-                raise SaveStagedIndeterminateError(
-                    'A previous staged restore was interrupted and its state cannot be verified.'
-                ) from error
+            except Exception:
+                logging.exception('Staged restore claim remains indeterminate; its intent is unavailable')
+                pending = {}
             pending['indeterminate'] = True
             pending['indeterminateCount'] = len(applying)
             return pending

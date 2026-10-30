@@ -150,8 +150,13 @@ class JsonlRequestRouter:
             raise ValueError('snapshotId 无效。')
         return snapshot_id
 
-    def _with_state(self, operation):
-        return {'operation': operation, **self.save_service.list_state()}
+    def _with_state(self, result):
+        try:
+            result.update(self.save_service.list_state())
+        except Exception:
+            logging.exception('Save result is available but its observation could not be refreshed')
+            result['stateRefreshFailed'] = True
+        return result
 
     def _dispatch_core_save(self, command, params):
         if command == 'core.save.list':
@@ -161,38 +166,38 @@ class JsonlRequestRouter:
             name = params.get('name')
             if name is not None and not isinstance(name, str):
                 raise ValueError('name 无效。')
-            return self._with_state(self.save_service.backup(display_name=name))
+            return self._with_state({'operation': self.save_service.backup(display_name=name)})
         if command == 'core.save.rename':
             snapshot_id = self._snapshot_id(params)
             name = params.get('name')
             if not isinstance(name, str):
                 raise ValueError('name 无效。')
-            return self._with_state(self.save_service.rename(snapshot_id, name))
+            return self._with_state({'operation': self.save_service.rename(snapshot_id, name)})
         if command == 'core.save.set_retention':
-            return self._with_state(self.save_service.configure_retention(
-                params.get('maxCount'), params.get('maxBytes')))
+            return self._with_state({'operation': self.save_service.configure_retention(
+                params.get('maxCount'), params.get('maxBytes'))})
         if command == 'core.save.protect':
-            return self._with_state(self.save_service.protect(
-                self._snapshot_id(params), params.get('protected')))
+            return self._with_state({'operation': self.save_service.protect(
+                self._snapshot_id(params), params.get('protected'))})
         if command == 'core.save.delete':
-            return self._with_state(self.save_service.delete(self._snapshot_id(params)))
+            return self._with_state({'operation': self.save_service.delete(self._snapshot_id(params))})
         if command == 'core.save.open_folder':
             snapshot_id = params.get('snapshotId')
             if snapshot_id is not None and (not isinstance(snapshot_id, str) or not snapshot_id):
                 raise ValueError('snapshotId 无效。')
-            return {'folder': self.save_service.folder(snapshot_id), **self.save_service.list_state()}
+            return self._with_state({'folder': self.save_service.folder(snapshot_id)})
         if command == 'core.save.restore':
             snapshot_id = self._snapshot_id(params)
             preserve_current = params.get('preserveCurrent', True)
             if type(preserve_current) is not bool:
                 raise ValueError('preserveCurrent 必须为布尔值。')
-            return self._with_state(self.save_service.restore(snapshot_id, preserve_current=preserve_current))
+            return self._with_state({'operation': self.save_service.restore(snapshot_id, preserve_current=preserve_current)})
         if command == 'core.save.cancel_staged':
             self._require_empty(params)
-            return self._with_state(self.save_service.cancel_staged())
+            return self._with_state({'operation': self.save_service.cancel_staged()})
         if command == 'core.save.apply_staged':
             self._require_empty(params)
-            return self._with_state(self.save_service.apply_staged())
+            return self._with_state({'operation': self.save_service.apply_staged()})
         raise ValueError('未知 Core 存档命令。')
 
     def handle(self, request):

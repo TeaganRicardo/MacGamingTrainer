@@ -42,7 +42,7 @@ class LLDBProcessTimeWarpDriver:
             raise ProcessTimeWarpError(
                 "restart_required",
                 "host.timeWarp.error.restartRequired",
-                diagnostic="Debugger connection state is unknown; restart the backend or reconnect to the game.",
+                diagnostic="Debugger connection state is unknown; the transport is tainted.",
             )
         lldb = self._lldb()
         process = self.transport.process
@@ -154,7 +154,7 @@ class LLDBProcessTimeWarpDriver:
                     "outcome_unknown",
                     "host.timeWarp.error.outcomeUnknown",
                     arguments=(str(result.GetError()),),
-                    diagnostic="Time Warp mutation outcome is unknown; no retry was attempted. Restart the backend or reconnect: " + str(result.GetError()),
+                    diagnostic="Time Warp mutation outcome is unknown; no retry was attempted: " + str(result.GetError()),
                 )
             raise ProcessTimeWarpError(
                 "time_warp_call_failed",

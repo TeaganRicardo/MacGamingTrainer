@@ -337,14 +337,14 @@ def _decode_luabins(data):
     return values
 
 
-def _encode_luabins(values):
+def _encode_luabins(values, *, max_depth=_MAX_LUABINS_DEPTH):
     if not values or len(values) > 255:
         raise HadesSaveFormatError("invalid luabins top-level value count")
     writer = _Writer()
     writer.u8(len(values))
 
     def write_value(value, depth):
-        if depth > _MAX_LUABINS_DEPTH:
+        if depth > max_depth:
             raise HadesSaveFormatError("luabins table nesting too deep")
         if value is None:
             writer.u8(_LUABINS_NIL)

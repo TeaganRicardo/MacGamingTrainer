@@ -200,6 +200,16 @@ assert interrupt_pending['indeterminate'] is True
 assert interrupt_service.apply_staged()['indeterminate'] is True
 assert interrupt_service.cancel_staged()['cancelled'] is True
 
+# A valid claim whose snapshot later becomes unreadable is still an unresolved
+# transaction, with optional intent rather than a failed complete inventory.
+missing_claim = interrupt_service.store.ensure_storage_root() / '.staged-restore-applying-missing-source.json'
+missing_claim.write_text('{"snapshotId":"snap-20000101-000000-12345678","preserveCurrent":false,"stagedAt":"test"}', encoding='utf-8')
+missing_pending = interrupt_service.list_state()['pendingRestore']
+assert missing_pending == {'indeterminate': True, 'indeterminateCount': 1}
+assert interrupt_service.apply_staged() == {'applied': False, 'indeterminate': True}
+assert missing_claim.exists()
+assert interrupt_service.cancel_staged()['cancelled'] is True
+
 # An interruption while preparing the rollback copy is known to precede save
 # mutation: remove its temporary directory and return the staged marker to pending.
 precopy_saves = base / 'precopy-interrupt-saves'; precopy_saves.mkdir()

@@ -35,8 +35,12 @@ replacement = folder / 'replacement.sav'; replacement.write_bytes(b'edited tempo
 
 class FixtureAdapter(GameAdapter):
     def dispatch(self, command, params, request_id):
-        assert command == 'fixture.observe_policy'
-        self.save_service.configure_retention(9, 8 * 1024 * 1024)
+        if command == 'fixture.interrupted_restore':
+            claim = self.save_service.store.ensure_storage_root() / '.staged-restore-applying-invalid.json'
+            claim.write_text('{interrupted', encoding='utf-8')
+        else:
+            assert command == 'fixture.observe_policy'
+            self.save_service.configure_retention(9, 8 * 1024 * 1024)
         return {}
     def close(self):
         pass
@@ -236,6 +240,23 @@ struct Main {
         check(protectionParams.count == 2 && protectionParams[0]["protected"] as? Bool == true &&
               protectionParams[1]["protected"] as? Bool == false,
               "native protection actions did not dispatch their explicit intent")
+
+        var interrupted = false
+        session.send("fixture.interrupted_restore", operation: "fixture interruption", announceSuccess: false,
+                     completion: { interrupted = $0 })
+        wait("interrupted restore fixture did not complete") { interrupted }
+        model.refresh()
+        wait("malformed restore claim hid the complete inventory") {
+            !model.busy && model.pendingRestore?.indeterminate == true && !model.snapshots.isEmpty
+        }
+        check(model.pendingRestore?.snapshotID == nil && model.error.isEmpty,
+              "unavailable restore intent was required to display recovery state")
+        press(host, title: localization.localized("host.clearStatus"))
+        wait("actual Clear status did not clear the unresolved claim") {
+            !model.busy && model.pendingRestore == nil
+        }
+        check(requests("core.save.cancel_staged", log: log).count == 1,
+              "recovery button did not send the explicit cancellation once")
         window.close()
         print("core_save_retention_controls_ok")
     }

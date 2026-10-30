@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -25,7 +26,7 @@ for raw in sys.stdin:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     print(json.dumps({
         'type':'result','id':req['id'],'protocolVersion':6,
-        'moduleProtocolVersion':17,'gameID':args.game,'ok':True,
+        'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,
         'result':{'connected':True},
     }), flush=True)
 '''
@@ -224,7 +225,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     binary = td / "view_state_flow"
     home = td / "home"
     home.mkdir()
-    worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
+    worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
@@ -294,7 +295,7 @@ for raw in sys.stdin:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     print(json.dumps({
         'type':'result','id':req['id'],'protocolVersion':6,
-        'moduleProtocolVersion':17,'gameID':args.game,'ok':True,
+        'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,
         'result':{'connected':True},
     }), flush=True)
 '''
@@ -627,7 +628,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     binary = td / "live_trait_model_flow"
     home = td / "home"
     home.mkdir()
-    worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
+    worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"

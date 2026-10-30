@@ -78,11 +78,14 @@ private func fields(_ view: NSView) -> [NSTextField] {
             else { fatalError("actual Save button missing: \(key)") }
             pump()
         }
+        func scalarInput(_ row: Hades2SaveEditorEntry) -> NSTextField {
+            guard let input = fields(root).first(where: { $0.isEditable && $0.accessibilityLabel() == row.displayName })
+            else { fatalError("editable Advanced scalar has no actual inline control: \(row.rawID)") }
+            return input
+        }
         func numericOrText(_ name: String, _ value: String) {
             let row = search(name)
-            guard let input = fields(root).first(where: { $0.isEditable && $0.accessibilityLabel() == row.displayName })
-            else { fatalError("editable Advanced scalar has no actual inline control: \(name)") }
-            edit(input, value)
+            edit(scalarInput(row), value)
             until("Advanced completed scalar did not stage") { !model.busy && model.pendingActions.contains { $0.entryID == row.id } }
         }
         func openValue(_ row: Hades2SaveEditorEntry) -> NSView {
@@ -161,7 +164,30 @@ private func fields(_ view: NSView) -> [NSTextField] {
                     && !model.lastApplyReceipt!.runtimeReloaded, "Advanced receipt lost source/target or promised runtime reload")
         }
 
+        numericOrText("Number", "-0.0")
+        require(model.pendingActions.first?.typedAfter?.object["encoding"] as? String == "ieee754",
+                "scalar negative zero was lost through the actual backend wire")
         numericOrText("Number", "8.25")
+        for (name, expected) in [("NumericZero", "0"), ("NumericOne", "1")] {
+            let row = search(name)
+            let input = scalarInput(row)
+            require(row.valueType == "number" && input.stringValue == expected,
+                    "numeric zero/one was rendered as a Boolean scalar")
+            let count = model.pendingCount
+            edit(input, input.stringValue + ".0")
+            until("unchanged zero/one input did not finish") { !model.busy }
+            require(model.pendingCount == count && model.editFailures[row.id] == nil,
+                    "unchanged zero/one input did not round-trip as a number")
+        }
+        let largeScalar = search("LargeScalar")
+        require(scalarInput(largeScalar).stringValue == "1267650600228229401496703205376",
+                "actual large scalar prefill used an inexact mathematical integer")
+        numericOrText("LargeScalar", "2535301200456458802993406410752")
+        model.query()
+        until("large scalar did not refresh") { !model.querying }
+        require(scalarInput(model.items.first { $0.rawID == "LargeScalar" }!).stringValue
+                    == "2535301200456458802993406410752",
+                "large staged scalar prefill changed across observation refresh")
         let boolean = search("Boolean")
         require(namedNativeControl(root, role: "AXCheckBox", name: boolean.displayName)?.press() == true, "Advanced boolean is not a native inline control")
         until("Advanced boolean did not stage") { !model.busy && model.pendingActions.contains { $0.entryID == boolean.id } }
@@ -169,6 +195,24 @@ private func fields(_ view: NSView) -> [NSTextField] {
         typed(search("Binary"), "{\"luaType\":\"string\",\"encoding\":\"base64\",\"value\":\"AP4=\"}", probeLanguage: true)
         typed(search("Nil"), "{\"luaType\":\"number\",\"value\":3}", probeBackend: true)
         typed(search("Members"), "{\"luaType\":\"table\",\"entries\":[{\"key\":{\"luaType\":\"boolean\",\"value\":true},\"value\":{\"luaType\":\"string\",\"value\":\"boolean changed\"}},{\"key\":{\"luaType\":\"number\",\"value\":1},\"value\":{\"luaType\":\"string\",\"value\":\"number changed\"}},{\"key\":{\"luaType\":\"string\",\"value\":\"1\"},\"value\":{\"luaType\":\"string\",\"value\":\"string changed\"}},{\"key\":{\"luaType\":\"string\",\"encoding\":\"base64\",\"value\":\"/w==\"},\"value\":{\"luaType\":\"string\",\"value\":\"binary changed\"}}]}")
+        let precision = search("Precision")
+        let precisionSheet = openValue(precision)
+        let precisionInput = fields(precisionSheet).first {
+            $0.isEditable && $0.accessibilityLabel()?.contains(text("hades2.saveEditor.advanced.typedValue")) == true
+        }!
+        let precisionPrefill = precisionInput.stringValue
+        require(precisionPrefill.contains("1267650600228229401496703205376")
+                && Hades2SaveTypedValue(text: precisionPrefill) != nil,
+                "the actual typed table prefill refused its unchanged exact large number")
+        let siblingEdit = precisionPrefill.replacingOccurrences(of: "\"original\"", with: "\"changed\"")
+        require(siblingEdit != precisionPrefill, "precision fixture sibling text was not present in the typed control")
+        edit(precisionInput, siblingEdit)
+        until("sibling-only typed edit did not stage with unchanged large numbers") {
+            !model.busy && model.pendingActions.contains { $0.entryID == precision.id }
+        }
+        require(model.editFailures[precision.id] == nil, "valid exact-number prefill retained an edit failure")
+        press(precisionSheet, "host.done")
+        until("precision structure sheet did not close") { window.attachedSheet == nil }
         let removed = search("Removed")
         guard let remove = nativeAccessibilityControls(root).first(where: { $0.identifier == "saveEditor.unset." + removed.id })
         else { fatalError("Advanced field removal control missing") }
@@ -176,7 +220,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         until("Advanced unset did not stage") { !model.busy && model.pendingActions.contains { $0.entryID == removed.id } }
         let untouched = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
         require(untouched == targetBefore, "Advanced staging wrote before explicit Apply")
-        apply(8)
+        apply(10)
         try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav")).write(to: base.appendingPathComponent("after-advanced-first.sav"))
 
         let membershipRow = search("Members")
@@ -222,9 +266,20 @@ private func fields(_ view: NSView) -> [NSTextField] {
         until("reopened Advanced root missing") { !reopened.querying && !reopened.items.isEmpty }
         enter("GameState", in: reopened); enter("AdvancedFixture", in: reopened)
         require(reopened.items.first { $0.rawID == "Number" }?.value == AnyHashable(8.25), "reopened numeric value disagrees with acknowledged Apply")
+        require(reopened.items.first { $0.rawID == "LargeScalar" }?.value
+                    == AnyHashable(Double(sign: .plus, exponent: 101, significand: 1)),
+                "large scalar changed through native input, Apply or reopening")
         require(reopened.items.first { $0.rawID == "Text" }?.value == AnyHashable("  exact  "), "Advanced text whitespace was normalized away")
         require(reopened.items.first { $0.rawID == "Empty" }?.value == AnyHashable(""), "Advanced empty string was refused")
         require(!reopened.items.contains { $0.rawID == "Removed" } && reopened.items.contains { $0.rawID == "Nil" }, "nil and field absence were conflated")
+        enter("Precision", in: reopened)
+        require(reopened.items.first { $0.rawID == "Sibling" }?.value == AnyHashable("changed"),
+                "sibling-only typed edit did not survive reopening")
+        require(reopened.items.first { $0.rawID == "Large" }?.value == AnyHashable(Double(sign: .plus, exponent: 100, significand: 1))
+                && reopened.items.first { $0.rawID == "Huge" }?.value == AnyHashable(Double(sign: .plus, exponent: 1023, significand: 1)),
+                "sibling-only typed edit changed a large IEEE value")
+        reopened.leaveAdvanced()
+        until("precision parent did not reload") { !reopened.querying && reopened.items.contains { $0.rawID == "Members" } }
         enter("Members", in: reopened)
         require(reopened.items.contains { $0.rawID == "base64:/w==" } && reopened.items.contains { $0.rawID == "Added" && $0.value == AnyHashable(false) },
                 "binary key navigation or new member revision did not survive reopening")

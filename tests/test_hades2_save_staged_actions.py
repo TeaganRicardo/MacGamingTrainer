@@ -320,6 +320,7 @@ class SaveActionJSONLAdapter(GameAdapter):
     def validate_save_workspace(self, identifier):
         if identifier != self.workspace.identifier:
             raise ValueError("Save Editor document is no longer selected.")
+        return self.workspace
 
     def stage_save_editor(self, params):
         return self.workspace.stage(
@@ -348,6 +349,7 @@ try:
         "command": "save_editor_stage",
         "params": {
             "workspaceId": jsonl_workspace.identifier,
+            "baselineGeneration": jsonl_workspace.baseline_generation,
             "entryId": "weapon:WeaponDagger",
             "operation": "set",
             "value": False,
@@ -360,6 +362,7 @@ try:
         "command": "save_editor_stage",
         "params": {
             "workspaceId": jsonl_workspace.identifier,
+            "baselineGeneration": jsonl_workspace.baseline_generation,
             "entryId": "aspect:DaggerBlockAspect",
             "operation": "set",
             "value": 4,
@@ -416,6 +419,7 @@ def familiar_conflict_in_order(name, ordered_actions):
             "command": "save_editor_stage",
             "params": {
                 "workspaceId": familiar_workspace.identifier,
+                "baselineGeneration": familiar_workspace.baseline_generation,
                 "entryId": entry_id,
                 "operation": operation,
                 "value": value,
