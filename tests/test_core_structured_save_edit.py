@@ -231,6 +231,43 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         assert (recovery / "files/main/Profile1.sav").read_bytes() == original
         assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
 
+        # If recovery inspection itself fails after an interrupted rollback,
+        # Core locks the session and reports the unresolved state without
+        # inventing a recovery path.
+        saves, service, original = environment(base / "recovery-uninspectable")
+        session = open_session(service)
+        session.document.value = 16
+        real_paths = service.recovery_paths
+        path_queries = []
+
+        def fail_recovery_inspection():
+            path_queries.append(True)
+            if len(path_queries) == 1:
+                return real_paths()
+            raise OSError("synthetic recovery inventory failure")
+
+        service.recovery_paths = fail_recovery_inspection
+        calls = []
+
+        def interrupt_uninspectable_rollback(self, source, destination, digest, **options):
+            if Path(destination) == (saves / "Profile1.sav").resolve():
+                calls.append(str(destination))
+                if len(calls) == 1:
+                    real_replace(self, source, destination, digest, **options)
+                    raise OSError("simulated lost install acknowledgement")
+                raise KeyboardInterrupt()
+            return real_replace(self, source, destination, digest, **options)
+
+        with patch.object(SaveRestoreTransaction, "_replace_file", interrupt_uninspectable_rollback):
+            rejects(KeyboardInterrupt, session.apply)
+        assert session.recovery_unresolved is True
+        assert session.recovery_path is None
+        service.recovery_paths = real_paths
+        blocked = rejects(ValueError, session.apply)
+        assert blocked.code == "rollback_failed"
+        assert blocked.presentation == "host.save.error.recoveryUnresolved"
+        assert str(Path(service.list_state()["recoveryPaths"][0]).resolve()).endswith(".rollback-" + Path(service.list_state()["recoveryPaths"][0]).name.split(".rollback-", 1)[-1])
+
 
 if __name__ == "__main__":
     test_structured_edit_session_owns_the_complete_recoverable_lifecycle()
