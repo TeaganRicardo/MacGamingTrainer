@@ -124,6 +124,31 @@ var reservedStore = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(reservedStore.set(.spawnPickup, chord: disableAllDefault) == .disableAll,
              "the disable-all chord must be reserved")
 precondition(reservedStore.chord(.disableAll) == disableAllDefault)
+precondition(TrainerHotkeyLayout.disableAllChord == disableAllDefault)
+let samePhysical = HotkeyChord(keyCode: 51, modifiers: disableAllDefault.modifiers, keyLabel: "Backspace")
+precondition(TrainerHotkeyLayout.isDisableAllChord(samePhysical))
+precondition(reservedStore.set(.spawnPickup, chord: samePhysical) == .disableAll,
+             "physical identity must win over display label")
+let unrelatedChord = HotkeyChord(keyCode: 98, modifiers: HotkeyChord.commandModifier, keyLabel: "F4")
+precondition(reservedStore.set(.disableAll, chord: unrelatedChord) == .disableAll,
+             "Disable All cannot be rebound even to an unused key")
+precondition(reservedStore.set(.disableAll, chord: samePhysical) == nil)
+precondition(reservedStore.chord(.disableAll) == disableAllDefault)
+precondition(reservedStore.payload()["disableAll"] == nil)
+let coreOrder: [ShortcutAction] = [.invincibility, .disableAll, .infiniteHealth]
+let coreDefaults = TrainerHotkeyLayout.defaultLayout(
+    orderedActions: coreOrder, dedicated: [.disableAll: disableAllDefault]
+)
+precondition(coreDefaults[.invincibility] == HotkeyChord.defaultShortcut(index: 0))
+precondition(coreDefaults[.infiniteHealth] == HotkeyChord.defaultShortcut(index: 1))
+let coreResolved = TrainerHotkeyLayout.resolvedLayout(
+    orderedActions: coreOrder, defaults: coreDefaults,
+    overrides: [.infiniteHealth: coreDefaults[.invincibility]!],
+    locked: [.disableAll: disableAllDefault]
+)
+precondition(coreResolved[.infiniteHealth] == coreDefaults[.invincibility])
+precondition(coreResolved[.invincibility] == coreDefaults[.infiniteHealth])
+precondition(coreResolved[.disableAll] == disableAllDefault)
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)
 let common: [ShortcutAction] = [.invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney,
@@ -203,6 +228,34 @@ partialWithExistingOverride.applyProfile([ShortcutAction.invincibility.rawValue:
 precondition(partialWithExistingOverride.chord(.invincibility) == custom)
 precondition(partialWithExistingOverride.chord(.infiniteHealth) != custom)
 precondition(unique(partialWithExistingOverride))
+
+// Versioned preferences and Profile imports must never restore a stale panic
+// reassignment. Valid non-reserved explicit overrides remain in place.
+let savedPreferences = makeDefaults()
+savedPreferences.set(6, forKey: "shortcut.layoutVersion")
+savedPreferences.set(unrelatedChord.payload, forKey: shortcutKey(.disableAll))
+savedPreferences.set(samePhysical.payload, forKey: shortcutKey(.spawnPickup))
+savedPreferences.set(custom.payload, forKey: shortcutKey(.invincibility))
+let reloaded = Hades2ShortcutStore(defaults: savedPreferences)
+precondition(reloaded.chord(.disableAll) == disableAllDefault)
+precondition(reloaded.chord(.invincibility) == custom)
+precondition(reloaded.chord(.spawnPickup) == Hades2ShortcutStore.defaultLayout()[.spawnPickup])
+precondition(savedPreferences.object(forKey: shortcutKey(.disableAll)) == nil)
+precondition(savedPreferences.object(forKey: shortcutKey(.spawnPickup)) == nil)
+precondition(unique(reloaded))
+
+var imported = Hades2ShortcutStore(defaults: makeDefaults())
+let applied = imported.applyProfile([
+    "_layoutVersion": 1,
+    "disableAll": unrelatedChord.payload,
+    "spawnPickup": samePhysical.payload,
+    "infiniteHealth": custom.payload,
+])
+precondition(applied == .applied)
+precondition(imported.chord(.disableAll) == disableAllDefault)
+precondition(imported.chord(.infiniteHealth) == custom)
+precondition(imported.payload()["disableAll"] == nil && imported.payload()["spawnPickup"] == nil)
+precondition(unique(imported))
 
 precondition(HotkeyChord(payload: ["keyCode":18,"modifiers":Int(UInt32.max)+1,"keyLabel":"1"]) == nil)
 precondition(HotkeyChord(payload: ["keyCode":18,"modifiers":1,"keyLabel":"1"]) == nil)

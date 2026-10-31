@@ -374,10 +374,31 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let custom=HotkeyChord(keyCode:99,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F3")
         check(store.set(.invincibility,chord:custom)==nil,"valid shortcut failed")
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==custom,"shortcut override was not persisted")
-        check(store.set(.disableAll,chord:custom) == .invincibility,"Disable All conflict was not detected")
-        let another=HotkeyChord(keyCode:98,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F4")
-        check(store.set(.disableAll,chord:another)==nil,"Disable All is incorrectly hardcoded")
-        check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==another,"Disable All override was not persisted")
+        let panic=TrainerHotkeyLayout.disableAllChord
+        check(store.chord(.disableAll)==panic,"Disable All did not use the Core-owned panic chord")
+        check(store.set(.disableAll,chord:custom) == .disableAll,"Disable All was editable")
+        check(store.set(.disableAll,chord:panic)==nil,"reasserting the fixed chord should be harmless")
+        let alternateLabel=HotkeyChord(keyCode:51,modifiers:panic.modifiers,keyLabel:"Backspace")
+        check(store.set(.fullHealth,chord:alternateLabel) == .disableAll,
+              "a display-label change bypassed the panic chord reservation")
+        check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==panic,"Disable All chord drifted after reload")
+        let saved=InMemoryDefaults()
+        saved.set(HotkeyChord(keyCode:98,modifiers:HotkeyChord.commandModifier,keyLabel:"F4").payload,
+                  forKey:"hades.shortcut.disableAll")
+        saved.set(alternateLabel.payload,forKey:"hades.shortcut.fullHealth")
+        saved.set(custom.payload,forKey:"hades.shortcut.invincibility")
+        let reloaded=HadesShortcutStore(defaults:saved)
+        check(reloaded.chord(.disableAll)==panic && reloaded.chord(.invincibility)==custom,
+              "saved overrides displaced the fixed chord or a valid choice")
+        check(reloaded.chord(.fullHealth)==HadesShortcutAction.fullHealth.defaultChord,
+              "an invalid reserved override survived reload")
+        check(saved.object(forKey:"hades.shortcut.disableAll")==nil
+              && saved.object(forKey:"hades.shortcut.fullHealth")==nil,
+              "invalid panic-key preferences were not retired")
+        let identities=HadesWorkbenchCatalog.orderedShortcutActions.map {
+            TrainerHotkeyLayout.identity(reloaded.chord($0))
+        }
+        check(Set(identities).count==identities.count,"reloaded Hades I shortcuts collide")
         store.reset()
         check(HadesShortcutStore(defaults:defaults).chord(.invincibility)==HadesShortcutAction.invincibility.defaultChord,"shortcut reset failed")
 

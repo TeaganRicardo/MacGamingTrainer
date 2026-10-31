@@ -701,6 +701,7 @@ private struct HadesShortcutSettingsView: View {
                         Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
                             .font(.system(.body, design: .monospaced)).frame(width: theme.shortcutCaptureWidth)
                     }.buttonStyle(.bordered)
+                        .disabled(action == .disableAll)
                 }
             }
             if !model.shortcutError.isEmpty { Text(text(model.shortcutError)).foregroundStyle(theme.warning) }
@@ -710,6 +711,7 @@ private struct HadesShortcutSettingsView: View {
         .onDisappear(perform: stop)
     }
     private func begin(_ action: HadesShortcutAction) {
+        guard action != .disableAll else { return }
         stop(); capturing = action
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 { DispatchQueue.main.async { stop() }; return nil }

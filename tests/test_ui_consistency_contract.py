@@ -81,6 +81,19 @@ assert ".frame(width: width)" in primary_button
 assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in management
 assert ".frame(minWidth: 110)" not in management
 
+# The safety chord remains visible in shortcut settings, without a capture
+# affordance or an inline badge on either management action.
+hades1_shortcuts = (HADES1 / "HadesTrainerView.swift").read_text()
+for source, capture_method in (
+    (hades1_shortcuts, "private func begin(_ action: HadesShortcutAction)"),
+    (management, "private func beginCapture(_ action: ShortcutAction)"),
+):
+    assert ".disabled(action == .disableAll)" in source
+    assert (
+        "guard action != .disableAll else { return }" in source[source.index(capture_method):]
+    ), "reserved panic chord must never enter key capture"
+
+
 # Shared visual controls are adopted by the owning Core controls as well as
 # feature views; do not reintroduce a second search or primary-action treatment.
 assert "TrainerSearchField(" in resource

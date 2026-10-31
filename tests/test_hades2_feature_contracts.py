@@ -90,7 +90,8 @@ family_order = enum_cases(
 assert "static let uiOrder" not in types
 assert "ShortcutAction.uiOrder" not in store + model + management
 assert "ShortcutAction.allCases" in store
-assert "Hades2WorkbenchCatalog.orderedShortcutActions.filter" in store
+assert "TrainerHotkeyLayout.defaultLayout(" in store
+assert "orderedActions: Hades2WorkbenchCatalog.orderedShortcutActions" in store
 assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
