@@ -168,6 +168,7 @@ struct Hades2ShortcutSettingsView: View {
                                     .frame(width: theme.shortcutCaptureWidth, alignment: .center)
                             }
                             .buttonStyle(.bordered)
+                            .disabled(action == .disableAll)
                         }
                     }
                 }
@@ -192,6 +193,7 @@ struct Hades2ShortcutSettingsView: View {
     }
 
     private func beginCapture(_ action: ShortcutAction) {
+        guard action != .disableAll else { return }
         stopCapture()
         capturing = action
         model.clearShortcutIssue()
