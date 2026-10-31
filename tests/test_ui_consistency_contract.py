@@ -89,8 +89,9 @@ for source, capture_method in (
     (management, "private func beginCapture(_ action: ShortcutAction)"),
 ):
     assert ".disabled(action == .disableAll)" in source
-    assert "guard action != .disableAll else { return }" in source[source.index(capture_method):],
-        "reserved panic chord must never enter key capture"
+    assert (
+        "guard action != .disableAll else { return }" in source[source.index(capture_method):]
+    ), "reserved panic chord must never enter key capture"
 
 
 # Shared visual controls are adopted by the owning Core controls as well as
