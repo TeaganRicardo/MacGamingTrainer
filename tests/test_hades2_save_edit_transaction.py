@@ -14,6 +14,7 @@ from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, HadesSaveFormatError
 from games.hades2.save_edit import Hades2SaveEditSession
+from games.hades2.save_workspace import Hades2SaveWorkspace
 
 
 def _u32(out, value):
@@ -352,8 +353,12 @@ assert str(recovery_path.resolve()) in service.list_state()["recoveryPaths"]
 # recovery evidence. Recreating/listing the service does not replay the edit,
 # and there is no staged instruction to apply later.
 service, save_path, original, _state, spec, data_root = make_environment("interrupted")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 700.0
+workspace = Hades2SaveWorkspace.open(
+    service,
+    source={"rootId": "main", "relativePath": "Profile1.sav"},
+    target={"rootId": "main", "relativePath": "Profile1.sav"},
+)
+workspace.stage("advanced:GameState/MetaPoints", "set", 700.0)
 real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 target_replace_calls = 0
 
@@ -372,9 +377,14 @@ def interrupt_rollback(self, source, destination, digest, **options):
 
 save_restore_module.SaveRestoreTransaction._replace_file = interrupt_rollback
 try:
-    expect_error(KeyboardInterrupt, session.apply, "interrupted rollback")
+    expect_error(KeyboardInterrupt, workspace.apply, "interrupted rollback")
 finally:
     save_restore_module.SaveRestoreTransaction._replace_file = real_replace
+assert target_replace_calls == 2
+assert workspace.summary()["recoveryPath"] is not None
+# A later Apply on the same workspace cannot replay the uncertain candidate.
+expect_error(ValueError, workspace.apply, "retry after interrupted rollback")
+assert target_replace_calls == 2
 bytes_before_reload = save_path.read_bytes()
 reloaded = CoreSaveService(
     "interrupted",
