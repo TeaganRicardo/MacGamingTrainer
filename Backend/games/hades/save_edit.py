@@ -62,6 +62,10 @@ class HadesSaveEditSession:
     def recovery_paths(self):
         return self._core.recovery_paths
 
+    @property
+    def recovery_unresolved(self):
+        return self._core.recovery_unresolved
+
     @staticmethod
     def _resolve_target(save_service, identity):
         if not isinstance(identity, dict) or set(identity) != {"rootId", "relativePath"}:
