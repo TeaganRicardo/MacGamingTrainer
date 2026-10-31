@@ -117,7 +117,7 @@
 "host.launchGame" = "启动游戏";
 "host.refreshStatus" = "刷新状态";
 "host.disableAll" = "全部关闭";
-"host.hotkeys.help" = "点击任一快捷键后直接按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。";
+"host.hotkeys.help" = "点击可编辑快捷键，再按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。";
 "host.hotkeys.pressNew" = "按下新快捷键…";
 "host.hotkeys.unrecognized" = "无法识别该按键，请换一个组合。";
 "host.hotkeys.captureUnavailable" = "无法开始捕获快捷键，请重新打开快捷键设置后重试。";
