@@ -193,7 +193,10 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
             failure = rejects(SaveRollbackError, session.apply)
             assert session.recovery_path == str(failure.recovery_path)
             assert session.recovery_unresolved is True
-            rejects(ValueError, session.apply)
+            blocked = rejects(ValueError, session.apply)
+            assert blocked.code == "rollback_failed"
+            assert blocked.presentation == "host.save.error.rollbackFailed"
+            assert blocked.recovery_path == str(failure.recovery_path)
         assert len(calls) == 2
         recovery = Path(session.recovery_path)
         assert recovery.is_dir()
