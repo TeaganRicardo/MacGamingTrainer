@@ -179,6 +179,10 @@ class StructuredSaveEditSession:
     def recovery_paths(self):
         return self._recovery_paths
 
+    @property
+    def recovery_unresolved(self):
+        return self._recovery_unresolved
+
     def set_target(self, identity):
         self._target = self._resolve_target(identity)
         return self.target
