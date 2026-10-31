@@ -1,12 +1,6 @@
 import Foundation
 import AppKit
 
-enum Hades2ShortcutIssue: Equatable {
-    case unrecognized
-    case conflict(chordText: String, action: ShortcutAction)
-    case registration(TrainerHotkeyRegistrationFailure)
-}
-
 struct Hades2RuntimeIssuePresentation: Hashable {
     let featureID: String
     let token: TrainerTextToken
@@ -250,7 +244,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var diagnosticsTotal = 0
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
-    @Published var shortcutIssue: Hades2ShortcutIssue?
+    @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
     @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
@@ -1626,21 +1620,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
     func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
 
-    func setShortcut(action: ShortcutAction, chord: HotkeyChord) {
+    @discardableResult
+    func setShortcut(action: ShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {
         if let conflict = shortcutStore.set(action, chord: chord) {
-            shortcutIssue = .conflict(chordText: chord.displayText, action: conflict)
-        } else {
-            clearShortcutIssue()
-            installHotkeys()
+            return .conflict(actionID: conflict.rawValue)
         }
-    }
-
-    func clearShortcutIssue() {
-        shortcutIssue = nil
-    }
-
-    func setUnrecognizedShortcutIssue() {
-        shortcutIssue = .unrecognized
+        installHotkeys()
+        return .applied
     }
 
     private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback {
@@ -1842,8 +1828,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         hotkeys = nil
         let instance = GlobalHotkeys(gameID: Hades2GameModule.descriptor.id,
                                      registrationChanged: { [weak self] failure in
-            if let failure { self?.shortcutIssue = .registration(failure) }
-            else { self?.clearShortcutIssue() }
+            self?.shortcutRegistrationFailure = failure
         }) { [weak self] actionID in
             guard let self, let action = ShortcutAction(rawValue: actionID) else { return }
             self.performShortcut(action)

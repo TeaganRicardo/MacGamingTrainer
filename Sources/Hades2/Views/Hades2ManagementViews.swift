@@ -133,113 +133,28 @@ struct Hades2DiagnosticsView: View {
 
 struct Hades2ShortcutSettingsView: View {
     @ObservedObject var model: Hades2TrainerModel
-    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @State private var capturing: ShortcutAction?
-    @State private var keyMonitor: Any?
-
-    /// Resolve one Hades presentation key against the live Host language.
-    ///
-    /// Some shell actions the module hosts (Disable All) deliberately keep their
-    /// Host key and Host resource, so a non-Hades prefix must resolve through the
-    /// Host table rather than being looked up as a Hades key.
-    private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
-    }
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
-            EmptyView()
-        } content: {
-            Text(localization.localized("host.hotkeys.help"))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
-                    ForEach(Hades2WorkbenchCatalog.orderedShortcutActions) { action in
-                        HStack {
-                            Label(text(action.presentationKey), systemImage: action.icon)
-                            Spacer()
-                            Button {
-                                beginCapture(action)
-                            } label: {
-                                Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
-                                    .font(.system(.body, design: .monospaced))
-                                    .frame(width: theme.shortcutCaptureWidth, alignment: .center)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(action == .disableAll)
-                        }
-                    }
+        TrainerShortcutSettingsView(
+            isPresented: $model.shortcutSettingsPresented,
+            entries: Hades2WorkbenchCatalog.orderedShortcutActions.map { action in
+                TrainerShortcutSettingsEntry(
+                    id: action.rawValue,
+                    title: Hades2GameModule.resolveText(key: action.presentationKey, localization: localization),
+                    icon: action.icon,
+                    chordText: model.shortcutText(action),
+                    isEditable: action != .disableAll
+                )
+            },
+            registrationFailure: model.shortcutRegistrationFailure,
+            onAssign: { actionID, chord in
+                guard let action = ShortcutAction(rawValue: actionID) else {
+                    return .rejected(messageKey: "host.hotkeys.unrecognized")
                 }
+                return model.setShortcut(action: action, chord: chord)
             }
-            .frame(maxHeight: 560)
-            if let issue = model.shortcutIssue {
-                Text(shortcutIssueText(issue))
-                    .foregroundStyle(theme.warning)
-                    .font(.caption)
-            }
-        } footer: {
-            HStack {
-                Spacer()
-                Button(localization.localized("host.done")) {
-                    stopCapture()
-                    model.shortcutSettingsPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .onDisappear { stopCapture() }
-    }
-
-    private func beginCapture(_ action: ShortcutAction) {
-        guard action != .disableAll else { return }
-        stopCapture()
-        capturing = action
-        model.clearShortcutIssue()
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 {
-                DispatchQueue.main.async { stopCapture() }
-                return nil
-            }
-            guard let chord = HotkeyChord.capture(event) else {
-                model.setUnrecognizedShortcutIssue()
-                return nil
-            }
-            DispatchQueue.main.async {
-                model.setShortcut(action: action, chord: chord)
-                stopCapture()
-            }
-            return nil
-        }
-    }
-
-    private func shortcutIssueText(_ issue: Hades2ShortcutIssue) -> String {
-        switch issue {
-        case .unrecognized:
-            return localization.localized("host.hotkeys.unrecognized")
-        case let .conflict(chordText, action):
-            return localization.localized(
-                "host.hotkeys.conflict",
-                arguments: [chordText, text(action.presentationKey)]
-            )
-        case let .registration(.listenerInitialization(status)):
-            return localization.localized("host.hotkeys.listenerFailed", arguments: [String(status)])
-        case let .registration(.registrationConflicts(conflicts)):
-            let details = conflicts.map { conflict in
-                let title = ShortcutAction(rawValue: conflict.actionID).map { text($0.presentationKey) } ?? conflict.actionID
-                return "\(conflict.chordText) \(title) (\(conflict.status))"
-            }.joined(separator: ", ")
-            return localization.localized("host.hotkeys.registrationFailed", arguments: [details])
-        }
-    }
-
-    private func stopCapture() {
-        if let keyMonitor {
-            NSEvent.removeMonitor(keyMonitor)
-            self.keyMonitor = nil
-        }
-        capturing = nil
+        )
     }
 }
 

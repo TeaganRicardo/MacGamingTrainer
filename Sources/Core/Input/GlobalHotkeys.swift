@@ -54,6 +54,9 @@ private final class TrainerGlobalHotkeyRegistry {
     private var references: [UInt32: EventHotKeyRef] = [:]
     private(set) var selectedGameID: String?
     private var owners: [UUID: WeakOwner] = [:]
+    private var activeCaptureTokens: Set<UUID> = []
+
+    var isCapturingShortcut: Bool { !activeCaptureTokens.isEmpty }
 
     private final class WeakOwner {
         weak var value: GlobalHotkeys?
@@ -62,6 +65,22 @@ private final class TrainerGlobalHotkeyRegistry {
 
     func add(_ owner: GlobalHotkeys, id: UUID) { owners[id] = WeakOwner(owner) }
     func remove(id: UUID) { owners.removeValue(forKey: id) }
+
+    /// Temporarily release Carbon registrations so a captured chord reaches
+    /// the local NSEvent monitor. A token protects nested/reopened sheets.
+    func beginShortcutCapture() -> UUID {
+        let token = UUID()
+        if activeCaptureTokens.isEmpty {
+            for owner in owners.values.compactMap(\.value) { owner.unregister() }
+        }
+        activeCaptureTokens.insert(token)
+        return token
+    }
+
+    func endShortcutCapture(_ token: UUID) {
+        guard activeCaptureTokens.remove(token) != nil, activeCaptureTokens.isEmpty else { return }
+        for owner in owners.values.compactMap(\.value) { owner.updateRegistration() }
+    }
 
     func selectGame(_ id: String?) {
         guard selectedGameID != id else { return }
@@ -121,6 +140,9 @@ final class GlobalHotkeys {
     let action: (String) -> Void
 
     static func selectGame(_ id: String?) { TrainerGlobalHotkeyRegistry.shared.selectGame(id) }
+    static var isShortcutCaptureActive: Bool { TrainerGlobalHotkeyRegistry.shared.isCapturingShortcut }
+    static func beginShortcutCapture() -> UUID { TrainerGlobalHotkeyRegistry.shared.beginShortcutCapture() }
+    static func endShortcutCapture(_ token: UUID) { TrainerGlobalHotkeyRegistry.shared.endShortcutCapture(token) }
 
     init(gameID: String,
          registrationChanged: @escaping (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
@@ -145,7 +167,7 @@ final class GlobalHotkeys {
     @discardableResult
     fileprivate func updateRegistration() -> TrainerHotkeyRegistrationFailure? {
         unregister()
-        guard registry.selectedGameID == gameID else { return nil }
+        guard registry.selectedGameID == gameID, !registry.isCapturingShortcut else { return nil }
         guard registry.handlerInstallStatus == noErr else {
             let failure = TrainerHotkeyRegistrationFailure.listenerInitialization(status: registry.handlerInstallStatus)
             registrationChanged(failure)
@@ -156,7 +178,7 @@ final class GlobalHotkeys {
         let scope = gameID
         for binding in bindings {
             let (id, status) = registry.register(binding.chord) { [weak registry] in
-                guard registry?.selectedGameID == scope else { return }
+                guard registry?.selectedGameID == scope, registry?.isCapturingShortcut == false else { return }
                 perform(binding.actionID)
             }
             if let id {

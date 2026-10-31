@@ -27,6 +27,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var target: HadesHeroTarget?
     @Published private(set) var localError = ""
     @Published private(set) var shortcutError = ""
+    @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
     @Published private(set) var shortcutRevision = 0
     @Published private(set) var feedback: TrainerFeedbackNotice?
     @Published var shortcutSettingsPresented = false
@@ -44,6 +45,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private var targetObservation: TrainerTargetObservation?
     private var shortcuts: HadesShortcutStore
     private lazy var hotkeys = GlobalHotkeys(gameID: "hades", registrationChanged: { [weak self] failure in
+        self?.shortcutRegistrationFailure = failure
         self?.shortcutError = failure == nil ? "" : "hades.error.shortcutRegistration"
     }) { [weak self] action in self?.performShortcut(action) }
 
@@ -245,14 +247,20 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func shortcutText(_ action: HadesShortcutAction) -> String { shortcuts.chord(action).displayText }
-    func setShortcut(_ action: HadesShortcutAction, chord: HotkeyChord) {
+    @discardableResult
+    func setShortcut(_ action: HadesShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {
         guard chord.modifiers & (HotkeyChord.controlModifier | HotkeyChord.optionModifier | HotkeyChord.commandModifier) != 0 else {
-            shortcutError = "hades.error.shortcutModifier"; return
+            shortcutError = "hades.error.shortcutModifier"
+            return .rejected(messageKey: "hades.error.shortcutModifier")
         }
-        if shortcuts.set(action, chord: chord) != nil { shortcutError = "hades.error.shortcutConflict"; return }
+        if let conflict = shortcuts.set(action, chord: chord) {
+            shortcutError = "hades.error.shortcutConflict"
+            return .conflict(actionID: conflict.rawValue)
+        }
         shortcutError = ""
         shortcutRevision += 1
         installShortcuts()
+        return .applied
     }
     func resetShortcuts() { shortcuts.reset(); shortcutRevision += 1; installShortcuts() }
     private func installShortcuts() {

@@ -1,0 +1,149 @@
+import SwiftUI
+
+/// Game modules supply their own ordered actions, translated labels, icon
+/// semantics, live chord values and storage callbacks. This view knows none of
+/// their action identities, validation rules or persistence formats.
+struct TrainerShortcutSettingsEntry: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let chordText: String
+    let isEditable: Bool
+}
+
+struct TrainerShortcutSettingsView: View {
+    @Binding private var isPresented: Bool
+    let entries: [TrainerShortcutSettingsEntry]
+    let registrationFailure: TrainerHotkeyRegistrationFailure?
+    let resetTitle: String?
+    let onReset: (() -> Void)?
+    let onAssign: (String, HotkeyChord) -> TrainerShortcutAssignmentResult
+
+    @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @StateObject private var capture = TrainerShortcutCaptureController()
+
+    init(
+        isPresented: Binding<Bool>,
+        entries: [TrainerShortcutSettingsEntry],
+        registrationFailure: TrainerHotkeyRegistrationFailure? = nil,
+        resetTitle: String? = nil,
+        onReset: (() -> Void)? = nil,
+        onAssign: @escaping (String, HotkeyChord) -> TrainerShortcutAssignmentResult
+    ) {
+        _isPresented = isPresented
+        self.entries = entries
+        self.registrationFailure = registrationFailure
+        self.resetTitle = resetTitle
+        self.onReset = onReset
+        self.onAssign = onAssign
+    }
+
+    var body: some View {
+        TrainerSheetScaffold(
+            title: localization.localized("host.shortcutSettings"),
+            icon: TrainerSemanticIcon.Tool.shortcuts, width: 560
+        ) {
+            if let resetTitle, let onReset {
+                Button(resetTitle) {
+                    capture.cancel()
+                    onReset()
+                }
+            }
+        } content: {
+            Text(localization.localized("host.hotkeys.help"))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
+                    ForEach(entries) { entry in
+                        HStack {
+                            Label(entry.title, systemImage: entry.icon)
+                            Spacer()
+                            if entry.isEditable {
+                                Button {
+                                    capture.begin(actionID: entry.id, onAssign: onAssign)
+                                } label: {
+                                    shortcutLabel(
+                                        capture.capturingActionID == entry.id
+                                        ? localization.localized("host.hotkeys.pressNew") : entry.chordText
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier("trainer.shortcut.capture." + entry.id)
+                            } else {
+                                // Fixed panic bindings are displayed, not clickable.
+                                shortcutLabel(entry.chordText)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityIdentifier("trainer.shortcut.fixed." + entry.id)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 560)
+            if let message = issueText {
+                Text(message)
+                    .foregroundStyle(theme.warning)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } footer: {
+            HStack {
+                Spacer()
+                Button(localization.localized("host.done")) {
+                    capture.cancel()
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .onDisappear { capture.cancel() }
+        .onChange(of: isPresented) { _, visible in
+            if !visible { capture.cancel() }
+        }
+        .onChange(of: pageVisible, initial: true) { _, visible in
+            if !visible {
+                capture.cancel()
+                isPresented = false
+            }
+        }
+        .onChange(of: entries.map(\.id)) { _, ids in
+            if let selected = capture.capturingActionID, !ids.contains(selected) {
+                capture.cancel()
+            }
+        }
+    }
+
+    private func shortcutLabel(_ value: String) -> some View {
+        Text(value)
+            .font(.system(.body, design: .monospaced))
+            .frame(width: theme.shortcutCaptureWidth, alignment: .center)
+    }
+
+    private var issueText: String? {
+        if let issue = capture.issue {
+            switch issue {
+            case .unrecognized:
+                return localization.localized("host.hotkeys.unrecognized")
+            case .conflict(let chord, let actionID):
+                let title = entries.first(where: { $0.id == actionID })?.title ?? actionID
+                return localization.localized("host.hotkeys.conflict", arguments: [chord, title])
+            case .rejected(let key):
+                return localization.string(key)
+            }
+        }
+        guard let failure = registrationFailure else { return nil }
+        switch failure {
+        case .listenerInitialization(let status):
+            return localization.localized("host.hotkeys.listenerFailed", arguments: [String(status)])
+        case .registrationConflicts(let conflicts):
+            let details = conflicts.map { conflict in
+                let title = entries.first(where: { $0.id == conflict.actionID })?.title ?? conflict.actionID
+                return "\(conflict.chordText) \(title) (\(conflict.status))"
+            }.joined(separator: ", ")
+            return localization.localized("host.hotkeys.registrationFailed", arguments: [details])
+        }
+    }
+}
