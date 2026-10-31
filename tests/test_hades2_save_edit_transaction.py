@@ -382,6 +382,8 @@ finally:
     save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 assert target_replace_calls == 2
 assert workspace.summary()["recoveryPath"] is not None
+assert workspace.summary()["recoveryUnresolved"] is True
+assert workspace.summary()["recoveryPaths"] == [workspace.summary()["recoveryPath"]]
 # A later Apply on the same workspace cannot replay the uncertain candidate.
 expect_error(ValueError, workspace.apply, "retry after interrupted rollback")
 assert target_replace_calls == 2
