@@ -41,19 +41,15 @@ struct Hades2ShortcutStore {
     }
 
     static func defaultLayout() -> [ShortcutAction: HotkeyChord] {
-        // Actions with a dedicated, hand-picked chord keep it out of the
-        // sequential allocation so they never consume a positional slot.
-        let dedicated: Set<ShortcutAction> = [.decreaseGameSpeed, .increaseGameSpeed, .disableAll]
-        let ordinary = Hades2WorkbenchCatalog.orderedShortcutActions.filter { !dedicated.contains($0) }
-        var result = Dictionary(uniqueKeysWithValues: ordinary.enumerated().compactMap { index, action in
-            HotkeyChord.defaultShortcut(index: index).map { (action, $0) }
-        })
         let modifiers = HotkeyChord.controlModifier | HotkeyChord.optionModifier
-        result[.decreaseGameSpeed] = HotkeyChord(keyCode: 27, modifiers: modifiers, keyLabel: "−")
-        result[.increaseGameSpeed] = HotkeyChord(keyCode: 24, modifiers: modifiers, keyLabel: "+")
-        // "Disable all" is a panic key: one fixed chord, never reallocated.
-        result[.disableAll] = HotkeyChord(keyCode: 51, modifiers: modifiers, keyLabel: "⌫")
-        return result
+        return TrainerHotkeyLayout.defaultLayout(
+            orderedActions: Hades2WorkbenchCatalog.orderedShortcutActions,
+            dedicated: [
+                .decreaseGameSpeed: HotkeyChord(keyCode: 27, modifiers: modifiers, keyLabel: "−"),
+                .increaseGameSpeed: HotkeyChord(keyCode: 24, modifiers: modifiers, keyLabel: "+"),
+                .disableAll: TrainerHotkeyLayout.disableAllChord,
+            ]
+        )
     }
 
     func chord(_ action: ShortcutAction) -> HotkeyChord {
@@ -74,18 +70,15 @@ struct Hades2ShortcutStore {
     }
 
     mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> ShortcutAction? {
-        // "Disable all" is a panic chord. It is reserved, so no other action can
-        // claim it and displace the panic key to some arbitrary free slot.
-        if action != .disableAll, newChord == Self.defaultLayout()[.disableAll] {
-            return .disableAll
+        if action == .disableAll {
+            return TrainerHotkeyLayout.isDisableAllChord(newChord) ? nil : .disableAll
         }
+        if TrainerHotkeyLayout.isDisableAllChord(newChord) { return .disableAll }
         if let other = ShortcutAction.allCases.first(where: {
-            $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers
-        }) {
-            return other
-        }
+            $0 != action && TrainerHotkeyLayout.sameKeys(chord($0), newChord)
+        }) { return other }
 
-        if newChord == Self.defaultLayout()[action] {
+        if TrainerHotkeyLayout.sameKeys(newChord, Self.defaultLayout()[action]!) {
             overrides[action] = nil
         } else {
             overrides[action] = newChord
@@ -107,8 +100,9 @@ struct Hades2ShortcutStore {
         var patch: [ShortcutAction: HotkeyChord] = [:]
         var patchTokens = Set<String>()
 
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value) else { continue }
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value),
+                  !TrainerHotkeyLayout.isDisableAllChord(proposed) else { continue }
             if !isCurrentPayload,
                (proposed == legacyV4Defaults[action.rawValue] || proposed == legacyV3Defaults[action.rawValue]) {
                 // Old Profiles serialized derived defaults as if they were
@@ -196,14 +190,19 @@ struct Hades2ShortcutStore {
     private mutating func loadPersistedOverrides() {
         overrides.removeAll()
         var used = Set<String>()
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
             guard let value = defaults.object(forKey: key(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
+            if TrainerHotkeyLayout.isDisableAllChord(parsed) {
+                defaults.removeObject(forKey: key(action))
+                continue
+            }
             let token = Self.token(parsed)
             guard !used.contains(token) else { continue }
             overrides[action] = parsed
             used.insert(token)
         }
+        defaults.removeObject(forKey: key(.disableAll))
     }
 
     private mutating func migrateV5Identity() {
@@ -286,35 +285,16 @@ struct Hades2ShortcutStore {
     }
 
     private mutating func rebuildResolvedLayout() {
-        let defaultLayout = Self.defaultLayout()
-        var next: [ShortcutAction: HotkeyChord] = [:]
-        // The panic chord is allocated first and its token marked used, so
-        // neither an override nor a fallback allocation can take it away.
-        let reserved = Self.defaultLayout()[.disableAll]!
-        next[.disableAll] = reserved
-        var used = Set(overrides.values.map(Self.token))
-        used.insert(Self.token(reserved))
-
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
-            if let explicit = overrides[action], Self.token(explicit) != Self.token(reserved) {
-                next[action] = explicit
-                continue
-            }
-
-            if let preferred = defaultLayout[action], !used.contains(Self.token(preferred)) {
-                next[action] = preferred
-                used.insert(Self.token(preferred))
-                continue
-            }
-
-            if let free = (0..<HotkeyChord.defaultShortcutCapacity)
-                .compactMap({ HotkeyChord.defaultShortcut(index: $0) })
-                .first(where: { !used.contains(Self.token($0)) }) {
-                next[action] = free
-                used.insert(Self.token(free))
-            }
+        // Historic migration detection remains local; Core owns resolution.
+        overrides = overrides.filter {
+            $0.key != .disableAll && !TrainerHotkeyLayout.isDisableAllChord($0.value)
         }
-        chords = next
+        chords = TrainerHotkeyLayout.resolvedLayout(
+            orderedActions: Hades2WorkbenchCatalog.orderedShortcutActions,
+            defaults: Self.defaultLayout(),
+            overrides: overrides,
+            locked: [.disableAll: TrainerHotkeyLayout.disableAllChord]
+        )
     }
 
     private static func token(_ chord: HotkeyChord) -> String {
