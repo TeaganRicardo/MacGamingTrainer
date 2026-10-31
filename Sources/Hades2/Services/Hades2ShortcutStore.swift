@@ -78,7 +78,7 @@ struct Hades2ShortcutStore {
             $0 != action && TrainerHotkeyLayout.sameKeys(chord($0), newChord)
         }) { return other }
 
-        if TrainerHotkeyLayout.sameKeys(newChord, Self.defaultLayout()[action]!) {
+        if newChord == Self.defaultLayout()[action] {
             overrides[action] = nil
         } else {
             overrides[action] = newChord
@@ -298,7 +298,7 @@ struct Hades2ShortcutStore {
     }
 
     private static func token(_ chord: HotkeyChord) -> String {
-        "\(chord.keyCode):\(chord.modifiers)"
+        TrainerHotkeyLayout.identity(chord)
     }
 
     private func key(_ action: ShortcutAction) -> String {
