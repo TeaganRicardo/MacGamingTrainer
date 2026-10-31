@@ -117,7 +117,7 @@
 "host.launchGame" = "Launch Game";
 "host.refreshStatus" = "Refresh Status";
 "host.disableAll" = "Disable All";
-"host.hotkeys.help" = "Click a shortcut, then press the new key combination. Esc cancels capture; Control / Option / Shift / Command with numbers, letters, arrow keys, and function keys are supported.";
+"host.hotkeys.help" = "Select an editable shortcut, then press a new key combination. Esc cancels capture; Control / Option / Shift / Command with numbers, letters, arrow keys, and function keys are supported.";
 "host.hotkeys.pressNew" = "Press new shortcut…";
 "host.hotkeys.unrecognized" = "That key could not be recognized. Try another combination.";
 "host.hotkeys.captureUnavailable" = "Shortcut capture could not start. Reopen shortcut settings and try again.";
