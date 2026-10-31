@@ -33,6 +33,8 @@ required = {
     "host.hotkeys.listenerFailed",
     "host.hotkeys.registrationFailed",
     "host.hotkeys.conflict",
+    "host.save.error.rollbackFailed",
+    "host.save.error.recoveryUnresolved",
     "host.feature.enable",
     "host.feature.disable",
 }
