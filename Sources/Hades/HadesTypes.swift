@@ -208,33 +208,75 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
     var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
-    var defaultChord: HotkeyChord {
-        HotkeyChord.defaultShortcut(index: HadesWorkbenchCatalog.orderedShortcutActions.firstIndex(of: self)!)!
-    }
+    var defaultChord: HotkeyChord { HadesShortcutStore.defaultLayout()[self]! }
 }
 
 struct HadesShortcutStore {
     private let defaults: UserDefaults
     private(set) var overrides: [HadesShortcutAction: HotkeyChord] = [:]
+    private var resolved: [HadesShortcutAction: HotkeyChord] = [:]
+
+    static func defaultLayout() -> [HadesShortcutAction: HotkeyChord] {
+        TrainerHotkeyLayout.defaultLayout(
+            orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
+            dedicated: [.disableAll: TrainerHotkeyLayout.disableAllChord]
+        )
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.removeObject(forKey: "hades.shortcut.heal")
-        for action in HadesShortcutAction.allCases {
-            if let payload = defaults.object(forKey: "hades.shortcut.\(action.rawValue)"),
-               let chord = HotkeyChord(payload: payload) {
-                overrides[action] = chord
+        var seen = Set<String>()
+        for action in HadesWorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            let storageKey = Self.key(action)
+            guard let saved = defaults.object(forKey: storageKey),
+                  let chord = HotkeyChord(payload: saved) else { continue }
+            guard !TrainerHotkeyLayout.isDisableAllChord(chord),
+                  seen.insert(TrainerHotkeyLayout.identity(chord)).inserted else {
+                defaults.removeObject(forKey: storageKey)
+                continue
             }
+            overrides[action] = chord
         }
+        // Retired editable panic-key preferences must never win registration.
+        defaults.removeObject(forKey: Self.key(.disableAll))
+        rebuild()
     }
-    func chord(_ action: HadesShortcutAction) -> HotkeyChord { overrides[action] ?? action.defaultChord }
+
+    func chord(_ action: HadesShortcutAction) -> HotkeyChord {
+        resolved[action] ?? action.defaultChord
+    }
+
     mutating func set(_ action: HadesShortcutAction, chord proposed: HotkeyChord) -> HadesShortcutAction? {
-        if let conflict = HadesShortcutAction.allCases.first(where: { $0 != action && chord($0).keyCode == proposed.keyCode && chord($0).modifiers == proposed.modifiers }) { return conflict }
+        if action == .disableAll {
+            return TrainerHotkeyLayout.isDisableAllChord(proposed) ? nil : .disableAll
+        }
+        if TrainerHotkeyLayout.isDisableAllChord(proposed) { return .disableAll }
+        if let conflict = HadesWorkbenchCatalog.orderedShortcutActions.first(where: {
+            $0 != action && TrainerHotkeyLayout.sameKeys(chord($0), proposed)
+        }) { return conflict }
         overrides[action] = proposed
-        defaults.set(proposed.payload, forKey: "hades.shortcut.\(action.rawValue)")
+        defaults.set(proposed.payload, forKey: Self.key(action))
+        rebuild()
         return nil
     }
+
     mutating func reset() {
-        for action in HadesShortcutAction.allCases { defaults.removeObject(forKey: "hades.shortcut.\(action.rawValue)") }
+        for action in HadesShortcutAction.allCases { defaults.removeObject(forKey: Self.key(action)) }
         overrides = [:]
+        rebuild()
+    }
+
+    private static func key(_ action: HadesShortcutAction) -> String {
+        "hades.shortcut.\(action.rawValue)"
+    }
+
+    private mutating func rebuild() {
+        resolved = TrainerHotkeyLayout.resolvedLayout(
+            orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
+            defaults: Self.defaultLayout(),
+            overrides: overrides,
+            locked: [.disableAll: TrainerHotkeyLayout.disableAllChord]
+        )
     }
 }
