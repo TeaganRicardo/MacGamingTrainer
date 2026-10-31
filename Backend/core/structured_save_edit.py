@@ -231,6 +231,8 @@ class StructuredSaveEditSession:
             "An earlier structured Save Editor Apply has unresolved recovery evidence" + detail
         )
         error.recovery_paths = self._recovery_paths
+        if self._recovery_paths:
+            error.recovery_path = "\n".join(self._recovery_paths)
         raise error
 
     def apply(self):
