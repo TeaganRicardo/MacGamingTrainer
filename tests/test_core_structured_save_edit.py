@@ -11,7 +11,6 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_restore import SaveRestoreError, SaveRestoreTransaction, SaveRollbackError
-from core.save_resolution import ResolvedSaveFile
 from core.save_service import CoreSaveService
 from core.structured_save_edit import StructuredSaveEditSession
 
@@ -123,6 +122,7 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
 
         # An explicit target must be a currently declared physical save file.
         rejects(ValueError, lambda: session.set_target(identity("../outside.sav")))
+        assert session.target == identity("Profile2.sav")
 
         # An unchanged edit, malformed structured candidate, or stale original
         # digest is rejected before any destructive transaction or backup.
@@ -192,6 +192,7 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         with patch.object(SaveRestoreTransaction, "_replace_file", fail_install_and_rollback):
             failure = rejects(SaveRollbackError, session.apply)
             assert session.recovery_path == str(failure.recovery_path)
+            assert session.recovery_unresolved is True
             rejects(ValueError, session.apply)
         assert len(calls) == 2
         recovery = Path(session.recovery_path)
@@ -219,6 +220,7 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         with patch.object(SaveRestoreTransaction, "_replace_file", interrupt_rollback):
             rejects(KeyboardInterrupt, session.apply)
             assert session.recovery_path is not None
+            assert session.recovery_unresolved is True
             rejects(ValueError, session.apply)
         assert len(calls) == 2
         recovery = Path(session.recovery_path)
