@@ -115,3 +115,73 @@ struct HotkeyChord: Equatable {
         )
     }
 }
+
+ 
+/// Shared physical-key reservation and visible-order allocation. Modules own
+/// action identities, persistence and migrations; Core owns this pure policy.
+enum TrainerHotkeyLayout {
+    static let disableAllChord = HotkeyChord(
+        keyCode: 51,
+        modifiers: HotkeyChord.controlModifier | HotkeyChord.optionModifier,
+        keyLabel: "⌫"
+    )
+
+    static func identity(_ chord: HotkeyChord) -> String {
+        "\(chord.keyCode):\(chord.modifiers)"
+    }
+
+    static func sameKeys(_ lhs: HotkeyChord, _ rhs: HotkeyChord) -> Bool {
+        lhs.keyCode == rhs.keyCode && lhs.modifiers == rhs.modifiers
+    }
+
+    static func isDisableAllChord(_ chord: HotkeyChord) -> Bool {
+        sameKeys(chord, disableAllChord)
+    }
+
+    static func defaultLayout<Action: Hashable>(
+        orderedActions: [Action], dedicated: [Action: HotkeyChord]
+    ) -> [Action: HotkeyChord] {
+        var result = dedicated
+        var used = Set(dedicated.values.map(identity))
+        var slot = 0
+        for action in orderedActions where result[action] == nil {
+            while slot < HotkeyChord.defaultShortcutCapacity {
+                let candidate = HotkeyChord.defaultShortcut(index: slot)!
+                slot += 1
+                if used.insert(identity(candidate)).inserted {
+                    result[action] = candidate
+                    break
+                }
+            }
+        }
+        return result
+    }
+
+    static func resolvedLayout<Action: Hashable>(
+        orderedActions: [Action], defaults: [Action: HotkeyChord],
+        overrides: [Action: HotkeyChord], locked: [Action: HotkeyChord]
+    ) -> [Action: HotkeyChord] {
+        var result = locked
+        var used = Set(locked.values.map(identity))
+        var accepted: [Action: HotkeyChord] = [:]
+        // Explicit choices are reserved before recomputing derived defaults.
+        for action in orderedActions where locked[action] == nil {
+            if let value = overrides[action], used.insert(identity(value)).inserted {
+                accepted[action] = value
+            }
+        }
+        for action in orderedActions where locked[action] == nil {
+            if let value = accepted[action] {
+                result[action] = value
+            } else if let value = defaults[action], used.insert(identity(value)).inserted {
+                result[action] = value
+            } else if let free = (0..<HotkeyChord.defaultShortcutCapacity)
+                .compactMap({ HotkeyChord.defaultShortcut(index: $0) })
+                .first(where: { !used.contains(identity($0)) }) {
+                result[action] = free
+                used.insert(identity(free))
+            }
+        }
+        return result
+    }
+}
