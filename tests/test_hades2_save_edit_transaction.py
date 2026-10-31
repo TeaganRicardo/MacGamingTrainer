@@ -385,7 +385,9 @@ assert workspace.summary()["recoveryPath"] is not None
 assert workspace.summary()["recoveryUnresolved"] is True
 assert workspace.summary()["recoveryPaths"] == [workspace.summary()["recoveryPath"]]
 # A later Apply on the same workspace cannot replay the uncertain candidate.
-expect_error(ValueError, workspace.apply, "retry after interrupted rollback")
+blocked = expect_error(ValueError, workspace.apply, "retry after interrupted rollback")
+assert blocked.code == "rollback_failed"
+assert blocked.recovery_path == workspace.summary()["recoveryPath"]
 assert target_replace_calls == 2
 bytes_before_reload = save_path.read_bytes()
 reloaded = CoreSaveService(
