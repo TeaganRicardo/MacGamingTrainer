@@ -149,6 +149,10 @@ The last recoverable copy must never be destroyed merely to make an operation ap
 - For an intentionally version-pinned editor, target bytes written **before** the transaction baseline is captured are deliberate overwrite input. A target change during capture or after mutation begins is a transaction race: it cannot be reported as confirmed success, and failed/uncertain rollback retains recovery evidence.
 - `hot=true` proves only that the disk replacement completed and survived the transaction's immediate verification window while the target process was running. It does not mean the game reloaded in-memory state, and it does not promise that a later game-authored save will preserve the edited bytes.
 
+### Structured Save Editor sessions
+
+Core's `StructuredSaveEditSession` owns the shared structured-document lifecycle: a pinned source identity and digest, explicit current physical target identity, temporary candidate staging, Core's verified selected-file replacement, rolling baseline advancement, and terminal recovery evidence. A game adapter supplies its structured codec and retains source/target eligibility, native schema validation, and all domain meaning. The session has no arbitrary-byte Apply entrypoint. A failed transaction with verified rollback remains retryable; retained or uninspectable recovery evidence locks that session against another Apply and remains visible in its workspace summary. A successful edit advances only the rolling candidate baseline; the original source identity/digest remain fixed. Version-pinned editors retain their explicit overwrite policy, and running replacement retains the existing disk-only meaning of `hot=true`.
+
 ### Staged restore
 
 ```text
