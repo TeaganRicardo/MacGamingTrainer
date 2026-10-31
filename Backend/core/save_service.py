@@ -301,7 +301,7 @@ class CoreSaveService:
     def list_state(self):
         self._require_supported()
         snapshots = self.store.list_snapshots()
-        recovery_paths = list(self.recovery_paths())
+        recovery_paths = self._recovery_paths()
         return {
             'snapshots': snapshots,
             'pendingRestore': self.pending_restore(),
