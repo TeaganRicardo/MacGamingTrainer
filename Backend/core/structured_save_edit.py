@@ -194,9 +194,8 @@ class StructuredSaveEditSession:
         return payload
 
     def _recovery_snapshot(self):
-        state = self._save_service.list_state()
-        paths = state.get("recoveryPaths")
-        if not isinstance(paths, list) or any(not isinstance(path, str) for path in paths):
+        paths = self._save_service.recovery_paths()
+        if not isinstance(paths, (list, tuple)) or any(not isinstance(path, str) for path in paths):
             raise RuntimeError("Core Save returned invalid recovery evidence.")
         return frozenset(paths)
 
