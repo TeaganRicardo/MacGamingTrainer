@@ -11,6 +11,7 @@ game_module = (ROOT / "Sources/Hades2/Hades2Module.swift").read_text(encoding="u
 app = (ROOT / "Sources/App.swift").read_text(encoding="utf-8")
 protocol = (ROOT / "Sources/Core/Host/TrainerGameModule.swift").read_text(encoding="utf-8")
 global_hotkeys = (ROOT / "Sources/Core/Input/GlobalHotkeys.swift").read_text(encoding="utf-8")
+core_shortcuts = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text(encoding="utf-8")
 backend_client = (ROOT / "Sources/Core/Runtime/BackendClient.swift").read_text(encoding="utf-8")
 reference = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 en = (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8")
@@ -28,6 +29,7 @@ required = {
     "host.hotkeys.help",
     "host.hotkeys.pressNew",
     "host.hotkeys.unrecognized",
+    "host.hotkeys.captureUnavailable",
     "host.hotkeys.listenerFailed",
     "host.hotkeys.registrationFailed",
     "host.hotkeys.conflict",
@@ -108,8 +110,13 @@ for token in (
     'localization.localized("host.shortcutSettings")',
     'localization.localized("host.hotkeys.help")',
     'localization.localized("host.hotkeys.pressNew")',
-    'Text(shortcutIssueText(issue))',
     'localization.localized("host.done")',
+    'localization.localized("host.hotkeys.conflict"',
+    'localization.localized("host.hotkeys.registrationFailed"',
+):
+    assert token in core_shortcuts, token
+for token in (
+    'TrainerShortcutSettingsView(',
     'title: localization.localized("host.shortcutSettings")',
     'title: localization.localized("host.viewLog")',
     'title: localization.localized("host.saveManagement")',
@@ -137,7 +144,7 @@ assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in glob
 assert "presentationKey" not in global_hotkeys
 assert "let title: String" not in global_hotkeys, "Core hotkey binding must not carry module presentation"
 assert "host.hotkeys." not in model, "Hades shortcut state must remain typed, not store Host localization keys"
-assert "@Published var shortcutIssue: Hades2ShortcutIssue?" in model
+assert "@Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?" in model
 assert not re.search(r"[\u3400-\u9fff]", global_hotkeys), (
     "Core hotkey registration must not emit one-language presentation"
 )
