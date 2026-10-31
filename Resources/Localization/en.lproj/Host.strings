@@ -98,6 +98,7 @@
 "host.save.error.incomplete" = "The save operation did not complete.";
 "host.save.error.failed" = "The save operation failed.";
 "host.save.error.rollbackFailed" = "Restore failed and rollback could not be completed. A recovery copy was preserved at: {0}";
+"host.save.error.recoveryUnresolved" = "A previous structured save edit has unresolved recovery evidence. This editor session is locked because its recovery state could not be inspected.";
 "host.save.error.busy" = "Save files are currently busy. Try again later.";
 "host.save.error.notFound" = "The save backup could not be found.";
 "host.save.error.unsupported" = "This game does not support save management.";
