@@ -379,7 +379,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(store.set(.disableAll,chord:custom) == .disableAll,"Disable All was editable")
         check(store.set(.disableAll,chord:panic)==nil,"reasserting the fixed chord should be harmless")
         let alternateLabel=HotkeyChord(keyCode:51,modifiers:panic.modifiers,keyLabel:"Backspace")
-        check(store.set(.fullHealth,chord:alternateLabel)==.disableAll,
+        check(store.set(.fullHealth,chord:alternateLabel) == .disableAll,
               "a display-label change bypassed the panic chord reservation")
         check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==panic,"Disable All chord drifted after reload")
         let saved=InMemoryDefaults()
