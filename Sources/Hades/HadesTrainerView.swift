@@ -684,45 +684,29 @@ private struct HadesCurrentTraitRow: View {
 private struct HadesShortcutSettingsView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
-    @State private var capturing: HadesShortcutAction?
-    @State private var keyMonitor: Any?
-    private func text(_ key: String) -> String { localization.presentation(key) }
+
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), icon: TrainerSemanticIcon.Tool.shortcuts, width: 560) {
-            Button(text("hades.reset"), action: model.resetShortcuts)
-        } content: {
-            Text(localization.localized("host.hotkeys.help")).foregroundStyle(.secondary)
-            ForEach(HadesWorkbenchCatalog.orderedShortcutActions) { action in
-                HStack {
-                    Label(text(action.key), systemImage: action.icon)
-                    Spacer()
-                    Button { begin(action) } label: {
-                        Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
-                            .font(.system(.body, design: .monospaced)).frame(width: theme.shortcutCaptureWidth)
-                    }.buttonStyle(.bordered)
-                        .disabled(action == .disableAll)
+        TrainerShortcutSettingsView(
+            isPresented: $model.shortcutSettingsPresented,
+            entries: HadesWorkbenchCatalog.orderedShortcutActions.map { action in
+                TrainerShortcutSettingsEntry(
+                    id: action.rawValue,
+                    title: localization.string(action.key),
+                    icon: action.icon,
+                    chordText: model.shortcutText(action),
+                    isEditable: action != .disableAll
+                )
+            },
+            registrationFailure: model.shortcutRegistrationFailure,
+            resetTitle: localization.string("hades.reset"),
+            onReset: model.resetShortcuts,
+            onAssign: { actionID, chord in
+                guard let action = HadesShortcutAction(rawValue: actionID) else {
+                    return .rejected(messageKey: "host.hotkeys.unrecognized")
                 }
+                return model.setShortcut(action, chord: chord)
             }
-            if !model.shortcutError.isEmpty { Text(text(model.shortcutError)).foregroundStyle(theme.warning) }
-        } footer: {
-            HStack { Spacer(); Button(localization.localized("host.done")) { model.shortcutSettingsPresented = false } }
-        }
-        .onDisappear(perform: stop)
-    }
-    private func begin(_ action: HadesShortcutAction) {
-        guard action != .disableAll else { return }
-        stop(); capturing = action
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 { DispatchQueue.main.async { stop() }; return nil }
-            guard let chord = HotkeyChord.capture(event) else { return nil }
-            DispatchQueue.main.async { model.setShortcut(action, chord: chord); stop() }
-            return nil
-        }
-    }
-    private func stop() {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
-        capturing = nil
+        )
     }
 }
 
