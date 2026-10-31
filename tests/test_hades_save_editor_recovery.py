@@ -99,6 +99,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-recovery-') as tempora
         failure = rejects(SaveRollbackError, lambda: apply(workspace))
         assert workspace.session.recovery_path == failure.recovery_path
         assert workspace.summary()["recoveryPath"] == failure.recovery_path
+        assert workspace.summary()["recoveryUnresolved"] is True
+        assert workspace.summary()["recoveryPaths"] == [failure.recovery_path]
         rejects(ValueError, lambda: apply(workspace))
         assert len(calls) == 2, 'Uncertain Apply was replayed'
     recovery = Path(failure.recovery_path)
