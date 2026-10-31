@@ -50,7 +50,10 @@ final class TrainerShortcutCaptureController: ObservableObject {
         self.onAssign = onAssign
         registrationToken = GlobalHotkeys.beginShortcutCapture()
         monitor = installMonitor { [weak self] event in
-            self?.handleKeyDown(event) ?? event
+            guard let self else { return event }
+            // nil means the handler consumed the key. Optional-coalescing here
+            // would accidentally forward captured input to native controls.
+            return self.handleKeyDown(event)
         }
         if monitor == nil {
             cancel()
