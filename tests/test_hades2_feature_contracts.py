@@ -99,8 +99,10 @@ assert "clearProfileShortcutWarning()" in model + management
 assert '.onDisappear { model.clearProfileShortcutWarning() }' in management
 assert 'Text(localization.string(warning))' in management
 shortcut_settings = management[management.index("struct Hades2ShortcutSettingsView"):management.index("struct Hades2ManagementUtilities")]
-assert "ScrollView {" in shortcut_settings
-assert ".frame(maxHeight: 560)" in shortcut_settings
+shared_settings = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text()
+assert "TrainerShortcutSettingsView(" in shortcut_settings
+assert "ScrollView {" in shared_settings
+assert ".frame(maxHeight: 560)" in shared_settings
 assert "ShortcutAction.allCases" in model
 assert "Hades2WorkbenchCatalog.orderedShortcutActions" in management
 assert 'title: "hades2.op.acquireSelectedReward"' in model
@@ -166,8 +168,11 @@ assert "M.damageMultiplier = 1" in lua[lua.index("local function disable()"):lua
 assert len(set(action_order)) == len(action_order)
 assert "Color.clear" not in badge
 assert "if let text, !text.isEmpty" in badge
-assert 'NSEvent.addLocalMonitorForEvents(matching: .keyDown)' in management
-assert 'HotkeyChord.capture(event)' in management
+capture = (ROOT / "Sources/Core/Input/TrainerShortcutCapture.swift").read_text()
+assert "GlobalHotkeys.beginShortcutCapture()" in capture
+assert "HotkeyChord.capture(event)" in capture
+assert "NSEvent.addLocalMonitorForEvents(matching: .keyDown" in capture
+assert "NSEvent.addLocalMonitorForEvents" not in management
 
 required_shortcut_labels = {
     "hades2.shortcut.generateFlora",
