@@ -30,6 +30,31 @@ class StructuredSaveEditValidationError(ValueError):
     """A structured candidate did not survive the game's codec validation."""
 
 
+class StructuredSaveEditRecoveryError(ValueError):
+    """A prior uncertain Apply locks this session until recovery is inspected."""
+
+    code = "rollback_failed"
+
+    def __init__(self, recovery_paths):
+        self.recovery_paths = tuple(recovery_paths)
+        if self.recovery_paths:
+            display = "\n".join(self.recovery_paths)
+            super().__init__(
+                "A previous structured Save Editor Apply could not be rolled back. "
+                "Recovery evidence was preserved at: " + display
+            )
+            self.presentation = "host.save.error.rollbackFailed"
+            self.arguments = (display,)
+            self.recovery_path = display
+        else:
+            super().__init__(
+                "A previous structured Save Editor Apply has unresolved recovery evidence; "
+                "the recovery location could not be inspected."
+            )
+            self.presentation = "host.save.error.recoveryUnresolved"
+            self.arguments = ()
+
+
 class StructuredSaveEditSession:
     """One pinned structured source and explicit physical replacement target."""
 
@@ -220,20 +245,8 @@ class StructuredSaveEditSession:
             self._record_recovery(added)
 
     def _require_resolved(self):
-        if not self._recovery_unresolved:
-            return
-        detail = (
-            ": " + ", ".join(self._recovery_paths)
-            if self._recovery_paths
-            else "; recovery state could not be inspected"
-        )
-        error = ValueError(
-            "An earlier structured Save Editor Apply has unresolved recovery evidence" + detail
-        )
-        error.recovery_paths = self._recovery_paths
-        if self._recovery_paths:
-            error.recovery_path = "\n".join(self._recovery_paths)
-        raise error
+        if self._recovery_unresolved:
+            raise StructuredSaveEditRecoveryError(self._recovery_paths)
 
     def apply(self):
         self._require_resolved()
