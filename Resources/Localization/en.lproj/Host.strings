@@ -120,6 +120,7 @@
 "host.hotkeys.help" = "Click a shortcut, then press the new key combination. Esc cancels capture; Control / Option / Shift / Command with numbers, letters, arrow keys, and function keys are supported.";
 "host.hotkeys.pressNew" = "Press new shortcut…";
 "host.hotkeys.unrecognized" = "That key could not be recognized. Try another combination.";
+"host.hotkeys.captureUnavailable" = "Shortcut capture could not start. Reopen shortcut settings and try again.";
 "host.hotkeys.listenerFailed" = "Hotkey listener initialization failed ({0}).";
 "host.hotkeys.registrationFailed" = "Some hotkeys could not be registered because they may already be used by the system or another app: {0}";
 "host.feature.enable" = "Enable Feature";
