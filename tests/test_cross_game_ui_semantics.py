@@ -238,9 +238,11 @@ assert "extension HadesShortcutAction {" in hades_nav
 assert "extension ShortcutAction {" in hades2_nav
 assert "TrainerSemanticIcon" not in hades_types
 assert "TrainerSemanticIcon" not in hades2_types
-assert "Label(text(action.key), systemImage: action.icon)" in hades_view
+assert "TrainerShortcutSettingsView(" in hades_view
+assert "icon: action.icon" in hades_view
 hades2_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
-assert "Label(text(action.presentationKey), systemImage: action.icon)" in hades2_management
+assert "TrainerShortcutSettingsView(" in hades2_management
+assert "icon: action.icon" in hades2_management
 assert "if let icon = HadesWorkbenchIcon.icon(for: titleKey)" in hades_nav
 assert "if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey })" in hades_nav
 assert "Hades2WorkbenchIcon.icon(for: titleKey)" in hades2_nav
