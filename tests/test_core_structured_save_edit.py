@@ -83,6 +83,17 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
     with tempfile.TemporaryDirectory(prefix="mgt-core-structured-edit-") as temporary:
         base = Path(temporary)
 
+        # A source can be opened without a write target. Apply remains
+        # unavailable until a game adapter explicitly selects a physical target.
+        saves, service, original = environment(base / "no-target")
+        unbound = open_session(service, target=None)
+        unbound.document.value = 19
+        rejects(ValueError, unbound.apply)
+        assert service.list_state()["snapshots"] == []
+        unbound.set_target(identity("Profile1.sav"))
+        unbound.apply()
+        assert CODEC.decode((saves / "Profile1.sav").read_bytes()).value == 19
+
         # Source identity and source digest stay pinned while the rolling
         # baseline advances after each verified edit to an explicitly chosen target.
         saves, service, original = environment(base / "repeat", two_files=True)
