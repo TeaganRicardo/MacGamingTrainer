@@ -116,7 +116,7 @@ struct HotkeyChord: Equatable {
     }
 }
 
- 
+
 /// Shared physical-key reservation and visible-order allocation. Modules own
 /// action identities, persistence and migrations; Core owns this pure policy.
 enum TrainerHotkeyLayout {
@@ -146,7 +146,7 @@ enum TrainerHotkeyLayout {
         var slot = 0
         for action in orderedActions where result[action] == nil {
             while slot < HotkeyChord.defaultShortcutCapacity {
-                let candidate = HotkeyChord.defaultShortcut(index: slot)!
+                guard let candidate = HotkeyChord.defaultShortcut(index: slot) else { break }
                 slot += 1
                 if used.insert(identity(candidate)).inserted {
                     result[action] = candidate
