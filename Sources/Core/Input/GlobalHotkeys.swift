@@ -140,6 +140,7 @@ final class GlobalHotkeys {
     let action: (String) -> Void
 
     static func selectGame(_ id: String?) { TrainerGlobalHotkeyRegistry.shared.selectGame(id) }
+    static var isShortcutCaptureActive: Bool { TrainerGlobalHotkeyRegistry.shared.isCapturingShortcut }
     static func beginShortcutCapture() -> UUID { TrainerGlobalHotkeyRegistry.shared.beginShortcutCapture() }
     static func endShortcutCapture(_ token: UUID) { TrainerGlobalHotkeyRegistry.shared.endShortcutCapture(token) }
 
