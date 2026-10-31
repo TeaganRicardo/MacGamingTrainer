@@ -266,7 +266,12 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         blocked = rejects(ValueError, session.apply)
         assert blocked.code == "rollback_failed"
         assert blocked.presentation == "host.save.error.recoveryUnresolved"
-        assert str(Path(service.list_state()["recoveryPaths"][0]).resolve()).endswith(".rollback-" + Path(service.list_state()["recoveryPaths"][0]).name.split(".rollback-", 1)[-1])
+        assert len(path_queries) == 2
+        recovery_paths = service.list_state()["recoveryPaths"]
+        assert len(recovery_paths) == 1
+        recovery = Path(recovery_paths[0])
+        assert recovery.is_dir()
+        assert (recovery / "files/main/Profile1.sav").read_bytes() == original
 
 
 if __name__ == "__main__":
