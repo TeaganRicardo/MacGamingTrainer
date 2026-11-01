@@ -12,7 +12,7 @@ struct TrainerProfileManagerLabels {
 
 struct TrainerProfileManagerActions {
     let refresh: () -> Void
-    let save: (String) -> Void
+    let save: (String, @escaping (Bool) -> Void) -> Void
     let load: (String) -> Void
     let delete: (String) -> Void
     let dismiss: () -> Void
@@ -33,13 +33,13 @@ struct TrainerProfileManagerView: View {
     var error = ""
     let actions: TrainerProfileManagerActions
 
-    private var canAct: Bool { enabled && !busy }
+    private var canAct: Bool { enabled && !busy && !selection.saving }
     private var names: [String] { entries.map(\.name) }
     private var canUseSelection: Bool { canAct && names.contains(selection.selectedName) }
 
     var body: some View {
         TrainerSheetScaffold(title: labels.title, icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
-            if busy {
+            if busy || selection.saving {
                 ProgressView().controlSize(.small)
                     .accessibilityLabel(localization.localized("host.operation.inProgress"))
             }
@@ -58,8 +58,10 @@ struct TrainerProfileManagerView: View {
                 TrainerPrimaryActionButton(title: labels.save,
                     systemImage: TrainerSemanticIcon.Action.save,
                     enabled: canAct && !selection.trimmedName.isEmpty) {
-                    guard canAct, let name = selection.beginSave() else { return }
-                    actions.save(name)
+                    guard canAct, let request = selection.beginSave() else { return }
+                    actions.save(request.name) { succeeded in
+                        selection.completeSave(request, succeeded: succeeded)
+                    }
                 }
             }
             Divider()
@@ -93,15 +95,20 @@ struct TrainerProfileManagerView: View {
         } footer: {
             HStack {
                 Spacer()
-                Button(localization.localized("host.done"), action: actions.dismiss).keyboardShortcut(.cancelAction)
+                Button(localization.localized("host.done"), action: dismiss).keyboardShortcut(.cancelAction)
             }
         }
         .onChange(of: entries, initial: true) { _, _ in reconcileSelection() }
-        .onChange(of: busy) { _, _ in reconcileSelection() }
-        .onChange(of: error) { _, _ in reconcileSelection() }
+        .onChange(of: selection.savedNameToSelect) { _, _ in reconcileSelection() }
+        .onDisappear { selection.invalidateSave() }
     }
 
     private func reconcileSelection() {
-        selection.reconcile(names, busy: busy)
+        selection.reconcile(names)
+    }
+
+    private func dismiss() {
+        selection.invalidateSave()
+        actions.dismiss()
     }
 }

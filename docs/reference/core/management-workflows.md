@@ -7,8 +7,10 @@ name/date entries, current availability and commands. Profile contents, storage,
 migration, replay and shortcut compatibility stay in their original game owners.
 
 `TrainerProfileSelection` keeps the editable name separate from the selected
-stored profile. A save requests selection of its name; an acknowledged inventory
-must contain that name before it can become a load/delete target. Failure keeps
+stored profile. A save retains a request identity and selects its name only after
+successful module acknowledgement and a matching inventory, regardless of their
+publication order. Dismissal invalidates the request, so its later completion
+cannot claim a replacement sheet or newer save. Failure keeps
 the previous stored selection and name draft. Deletion/refresh reconciles to an
 existing entry or clears selection for an empty inventory. Closing the sheet
 does not cancel or replay an in-flight module command. Hades II clears its

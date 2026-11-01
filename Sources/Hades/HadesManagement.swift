@@ -112,7 +112,8 @@ struct HadesProfileManagerView: View {
             entries: model.profiles.map { .init(name: $0.name, updatedAt: $0.updatedAt) },
             busy: model.busy, enabled: model.hostActionsEnabled,
             error: hadesManagementError(model, localization: localization),
-            actions: .init(refresh: model.listProfiles, save: model.saveProfile, load: model.loadProfile,
+            actions: .init(refresh: model.listProfiles,
+                save: { name, completion in model.saveProfile(name, completion: completion) }, load: model.loadProfile,
                 delete: model.deleteProfile, dismiss: { model.profilesPresented = false })
         )
     }

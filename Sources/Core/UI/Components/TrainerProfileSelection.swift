@@ -7,29 +7,46 @@ struct TrainerProfileEntry: Identifiable, Equatable {
     var title: String { updatedAt.isEmpty ? name : "\(name) · \(updatedAt)" }
 }
 
-/// The draft is independent of the selected stored profile. A save can request
-/// a selection, but only a refreshed inventory can make that name selectable.
+/// The draft is independent of the selected stored profile. A save's own
+/// acknowledgement and refreshed inventory must agree before selecting its name.
 struct TrainerProfileSelection {
-    var draftName = ""
-    var selectedName = ""
-    private(set) var pendingSavedName: String?
-
-    var trimmedName: String { draftName.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    mutating func beginSave() -> String? {
-        guard !trimmedName.isEmpty else { return nil }
-        pendingSavedName = trimmedName
-        return trimmedName
+    struct SaveRequest: Equatable {
+        let id = UUID()
+        let name: String
     }
 
-    mutating func reconcile(_ names: [String], busy: Bool) {
-        if let pendingSavedName, names.contains(pendingSavedName) {
-            selectedName = pendingSavedName
-            self.pendingSavedName = nil
+    var draftName = ""
+    var selectedName = ""
+    private(set) var pendingSave: SaveRequest?
+    private(set) var savedNameToSelect: String?
+
+    var trimmedName: String { draftName.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var saving: Bool { pendingSave != nil }
+
+    mutating func beginSave() -> SaveRequest? {
+        guard !saving, !trimmedName.isEmpty else { return nil }
+        let request = SaveRequest(name: trimmedName)
+        pendingSave = request
+        savedNameToSelect = nil
+        return request
+    }
+
+    mutating func completeSave(_ request: SaveRequest, succeeded: Bool) {
+        guard pendingSave == request else { return }
+        pendingSave = nil
+        savedNameToSelect = succeeded ? request.name : nil
+    }
+
+    mutating func invalidateSave() {
+        pendingSave = nil
+        savedNameToSelect = nil
+    }
+
+    mutating func reconcile(_ names: [String]) {
+        if let savedNameToSelect, names.contains(savedNameToSelect) {
+            selectedName = savedNameToSelect
+            self.savedNameToSelect = nil
         }
         if !names.contains(selectedName) { selectedName = names.first ?? "" }
-        // An unsuccessful save leaves the stored selection and draft intact.
-        // Do not let its old requested name redirect a later unrelated refresh.
-        if !busy { pendingSavedName = nil }
     }
 }

@@ -15,35 +15,58 @@ with tempfile.TemporaryDirectory(prefix="mgt-profile-selection-") as directory:
     main = folder / "main.swift"
     main.write_text(r'''
 var state = TrainerProfileSelection()
-state.reconcile([], busy: false)
+state.reconcile([])
 precondition(state.selectedName.isEmpty)
 state.draftName = " \n "
 precondition(state.beginSave() == nil)
-state.reconcile(["First", "Second"], busy: false)
+state.reconcile(["First", "Second"])
 precondition(state.selectedName == "First")
 state.selectedName = "Second"
 state.draftName = " New profile "
-precondition(state.beginSave() == "New profile")
-state.reconcile(["First", "Second"], busy: true)
-precondition(state.selectedName == "Second", "unacknowledged name became selectable")
-state.reconcile(["First", "New profile", "Second"], busy: false)
+let created = state.beginSave()!
+precondition(created.name == "New profile" && state.beginSave() == nil)
+state.reconcile(["First", "New profile", "Second"])
+precondition(state.selectedName == "Second", "inventory update alone selected an unacknowledged save")
+state.completeSave(created, succeeded: true)
+state.reconcile(["First", "New profile", "Second"])
 precondition(state.selectedName == "New profile", "successful creation did not select its stored row")
 precondition(state.draftName == " New profile ", "refresh replaced the user's draft")
 
+// Completion and inventory publications may arrive in either order.
+state.draftName = "Later inventory"
+let later = state.beginSave()!
+state.completeSave(later, succeeded: true)
+state.reconcile(["First", "New profile", "Second"])
+precondition(state.selectedName == "New profile")
+state.reconcile(["First", "Later inventory", "New profile", "Second"])
+precondition(state.selectedName == "Later inventory")
+
 state.draftName = "Rejected"
-precondition(state.beginSave() == "Rejected")
-state.reconcile(["First", "New profile", "Second"], busy: false)
-precondition(state.selectedName == "New profile" && state.pendingSavedName == nil)
+let rejected = state.beginSave()!
+state.completeSave(rejected, succeeded: false)
+state.reconcile(["First", "Later inventory", "Second"])
+precondition(state.selectedName == "Later inventory" && state.savedNameToSelect == nil)
 state.selectedName = "Second"
-state.reconcile(["First", "New profile", "Rejected", "Second"], busy: false)
+state.reconcile(["First", "Later inventory", "Rejected", "Second"])
 precondition(state.selectedName == "Second", "failed save redirected a later external refresh")
 precondition(state.draftName == "Rejected", "failed save discarded the editable name")
 
-state.reconcile(["First"], busy: false)
+state.draftName = "First"
+let dismissed = state.beginSave()!
+state.invalidateSave()
+state.draftName = "Second"
+let current = state.beginSave()!
+state.completeSave(dismissed, succeeded: true)
+precondition(state.pendingSave == current && state.savedNameToSelect == nil,
+             "dismissed sheet completion took ownership of a later request")
+state.completeSave(current, succeeded: true)
+state.reconcile(["First", "Second"])
+precondition(state.selectedName == "Second")
+state.reconcile(["First"])
 precondition(state.selectedName == "First", "deleted selection did not reconcile")
-state.reconcile([], busy: false)
+state.reconcile([])
 precondition(state.selectedName.isEmpty, "empty inventory retained a load/delete target")
-state.reconcile(["Restored"], busy: false)
+state.reconcile(["Restored"])
 precondition(state.selectedName == "Restored")
 precondition(TrainerProfileEntry(name: "Restored", updatedAt: "").title == "Restored")
 precondition(TrainerProfileEntry(name: "Restored", updatedAt: "Today").title == "Restored · Today")

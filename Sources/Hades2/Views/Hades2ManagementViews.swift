@@ -20,7 +20,8 @@ struct Hades2ProfileManagerView: View {
             enabled: model.backendAvailable && model.protocolCompatible && !model.exiting && model.canAcceptRuntimeAction,
             warning: model.profileShortcutWarning.map { localization.string($0) } ?? "",
             error: hades2ManagementError(model, localization: localization),
-            actions: .init(refresh: model.listProfiles, save: model.saveProfile, load: model.loadProfile,
+            actions: .init(refresh: model.listProfiles,
+                save: { name, completion in model.saveProfile(name, completion: completion) }, load: model.loadProfile,
                 delete: model.deleteProfile, dismiss: { isPresented = false })
         )
         .onDisappear { model.clearProfileShortcutWarning() }

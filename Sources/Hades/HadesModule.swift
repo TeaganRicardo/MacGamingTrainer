@@ -176,7 +176,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         HadesSaveEditorModel(session: session, snapshotID: snapshotID)
     }
     func listProfiles() { send("list_profiles", operation: "hades.manage.profiles", announceSuccess: false) }
-    func saveProfile(_ name: String) { send("save_profile", params: ["name": name], operation: "hades.profile.save") }
+    func saveProfile(_ name: String, completion: ((Bool) -> Void)? = nil) {
+        send("save_profile", params: ["name": name], operation: "hades.profile.save", completion: completion)
+    }
     func loadProfile(_ name: String) { send("load_profile", params: ["name": name], operation: "hades.profile.load") }
     func deleteProfile(_ name: String) { send("delete_profile", params: ["name": name], operation: "host.delete") }
     func runDiagnostics() { send("diagnostics", operation: "hades.manage.diagnostics", announceSuccess: false) }
