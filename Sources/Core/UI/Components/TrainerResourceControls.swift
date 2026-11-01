@@ -194,7 +194,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             if inline {
                 if let title, let icon {
                     TrainerLabeledControlRow(title: title, icon: icon, tint: state.indicatorColor,
-                                             emphasized: state.isOn) {
+                                             emphasized: state.isOn, layout: .pickerAction) {
                         optionPicker
                         actionControls
                     }

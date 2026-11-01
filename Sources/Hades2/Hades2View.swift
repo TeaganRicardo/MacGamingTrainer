@@ -1243,7 +1243,8 @@ struct Hades2TrainerView: View {
         TrainerLabeledControlRow(
             title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired
+            emphasized: model.canEditDesired,
+            layout: .pickerAction
         ) {
             Picker(text("hades2.nextRoom.title"), selection: $model.selectedNextRoomReward) {
                 Text(text("hades2.nextRoom.noOverride")).tag("")
@@ -1280,7 +1281,8 @@ struct Hades2TrainerView: View {
         return TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired
+            emphasized: model.canEditDesired,
+            layout: .pickerAction
         ) {
             if model.nextOccurrenceTarget != nil {
                 Text(text("hades2.occurrence.pending"))

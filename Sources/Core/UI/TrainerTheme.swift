@@ -37,6 +37,7 @@ struct TrainerTheme {
     let pickerCompactWidth: CGFloat
     let pickerStandardWidth: CGFloat
     let pickerWideWidth: CGFloat
+    let pickerActionLabelWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -80,6 +81,7 @@ struct TrainerTheme {
         pickerCompactWidth: 152,
         pickerStandardWidth: 216,
         pickerWideWidth: 288,
+        pickerActionLabelWidth: 200,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24

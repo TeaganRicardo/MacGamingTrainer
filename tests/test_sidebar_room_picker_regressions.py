@@ -70,10 +70,13 @@ for block in (next_room, next_occurrence):
 grouped = region(source("Sources/Core/UI/Components/TrainerResourceControls.swift"),
                  "struct TrainerGroupedOptionPicker")
 assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in grouped
-assert "TrainerLabeledControlRow(" in region(grouped, "if inline {", "} else {")
+inline_group = region(grouped, "if inline {", "} else {")
+assert "TrainerLabeledControlRow(" in inline_group
+assert "layout: .pickerAction" in inline_group
 assert "inline: true" in region(hades2, "private func spawnRow(", "private func multiplierRow(")
 assert "spawnRow(" in region(hades2, "private var rewardSpawningPanel", "private var boonAcquisitionPanel")
 hades1_rooms = source("Sources/Hades/HadesRoomsPanel.swift")
 assert hades1_rooms.count(".trainerPickerWidth(.rowAction)") >= 6
+assert hades1_rooms.count("layout: .pickerAction") >= 6
 
 print("sidebar_and_room_picker_regressions_ok")

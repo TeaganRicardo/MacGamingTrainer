@@ -245,6 +245,7 @@ assert "enum TrainerPickerWidthRole" in theme
 assert "pickerCompactWidth: 152" in theme
 assert "pickerStandardWidth: 216" in theme
 assert "pickerWideWidth: 288" in theme
+assert "pickerActionLabelWidth: 200" in theme
 for role in ("case compactValue", "case rowValue", "case rowAction", "case form", "case expanding"):
     assert role in theme
 assert "idealWidth: theme.pickerWideWidth" in theme
@@ -269,6 +270,10 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
 assert ".trainerPickerWidth(.rowAction)" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
 assert ".trainerPickerWidth(.rowAction)" in view
 assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_controls
+assert "layout: .pickerAction" in resource_controls
+row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
+assert "enum TrainerLabeledControlLayout" in row_primitive
+assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" in row_primitive
 
 # Raw action widths cannot leak back into game modules. TrainerRow supplies
 # the compact action column; standalone controls opt into a semantic role.

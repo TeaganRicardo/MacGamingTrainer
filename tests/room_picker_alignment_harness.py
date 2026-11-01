@@ -22,7 +22,8 @@ private struct RoomPickerAlignmentFixture: View {
     private func directPicker(_ english: String, _ chinese: String, _ key: String) -> some View {
         let label = title(english, chinese)
         TrainerLabeledControlRow(title: label, icon: "door.left.hand.open",
-                                 tint: TrainerTheme.standard.accent, emphasized: true) {
+                                 tint: TrainerTheme.standard.accent, emphasized: true,
+                                 layout: .pickerAction) {
             Picker(label, selection: .constant("reward")) {
                 Text(choice.name).tag("reward")
                 Text(title("Original", "原生")).tag("original")
