@@ -383,15 +383,19 @@ func exerciseSharedControlMotion(localization: TrainerLocalizationStore) {
     managementCheck(native.animation == nil && native.disablesAnimations,
                     "native controls inherited a moving reduced-motion transaction")
 
+    // SwiftUI exposes Reduce Motion as a read-only system environment value.
+    // The policy assertions above exercise both settings; native controls run
+    // with the current setting, without changing the user's preferences.
+    print("native_control_motion_reduce_motion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)")
     let previousLanguage = localization.language
     defer { localization.language = previousLanguage }
     for language in [TrainerPresentationLanguage.en, .zhCN] {
         localization.language = language
-        for (reduced, width) in [(false, CGFloat(420)), (true, CGFloat(340))] {
+        for width: CGFloat in [420, 340] {
             let state = ControlMotionState()
             let title = language == .en ? "Fixture control" : "测试功能"
             let host = NSHostingView(rootView: ControlMotionFixture(state: state, title: title)
-                .environmentObject(localization).environment(\.accessibilityReduceMotion, reduced))
+                .environmentObject(localization))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 260),
                 styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -449,7 +453,7 @@ func exerciseSharedControlMotion(localization: TrainerLocalizationStore) {
                 timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "k",
                 charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40)!
             let beforeKey = state.requests.count
-            _ = window.performKeyEquivalent(key)
+            _ = window.performKeyEquivalent(with: key)
             managementWait(host, "native button keyboard equivalent") { state.requests.count == beforeKey + 1 }
             managementCheck(state.requests.last == "primary", "keyboard action targeted the wrong control")
 
@@ -460,7 +464,7 @@ func exerciseSharedControlMotion(localization: TrainerLocalizationStore) {
             let beforeDisabled = state.requests.count
             for id in ids { _ = button(id)!.press() }
             _ = toggle()!.press()
-            _ = window.performKeyEquivalent(key)
+            _ = window.performKeyEquivalent(with: key)
             RunLoop.current.run(until: Date().addingTimeInterval(0.02))
             managementCheck(state.requests.count == beforeDisabled, "disabled control dispatched an action")
 
