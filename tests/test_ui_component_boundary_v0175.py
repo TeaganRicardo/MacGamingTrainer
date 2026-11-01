@@ -51,7 +51,8 @@ status_controls = (CORE / 'Components/TrainerStatusControls.swift').read_text()
 assert not re.search(r'(?<![A-Za-z0-9_])TextField\(', hades_views), 'Hades views must use Core-owned input primitives'
 assert 'TrainerSearchField(' in hades_views
 assert '.buttonStyle(.borderedProminent)' not in hades_views
-assert 'TrainerPrimaryActionButton(' in management_view
+assert 'TrainerProfileManagerView(' in management_view
+assert 'TrainerPrimaryActionButton(' in (CORE / 'Components/TrainerProfileManagerView.swift').read_text()
 assert 'TrainerPrimaryActionButton(' in save_editor_view
 assert 'TrainerSearchField(' in resource_controls
 assert 'TrainerPrimaryActionButton(' in status_controls

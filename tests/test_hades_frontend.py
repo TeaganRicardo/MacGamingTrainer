@@ -1,6 +1,7 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
 from pathlib import Path
+from management_ui_harness import PROFILE_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ import argparse,json,pathlib,sys,time
 parser=argparse.ArgumentParser();parser.add_argument('--game');args=parser.parse_args()
 folder=pathlib.Path(__file__).parent
 workspaces={};next_workspace=0
+profiles=[{"name":"Fixture","updatedAt":"Today"}]
 files=[{'rootId':'fixture','relativePath':f'Profile{n}.sav','profile':f'Profile{n}','variant':''} for n in (1,2)]
 values={'resources':25,'progression':False,'equipment':1,'relationships':1,'narrative':'Fixture dialogue',
     'statistics':4.123456789012345,'history':2,'shiftA':11,'shiftB':22,'shiftC':33,'narrativeNyx':True,'narrativeNyxShared':False,'narrativeAchilles':False,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
@@ -145,7 +147,10 @@ for raw in sys.stdin:
     elif command=='catalog':result=json.loads((folder/'catalog.json').read_text())
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
     elif command in ('list_profiles','save_profile','delete_profile'):
-        result={'profiles':[{'name':'Fixture','updatedAt':'2026-10-27T00:00:00+00:00'}] if command!='delete_profile' else []}
+        if command=='save_profile' and params['name']!='__error__':
+            profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
+        if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
+        result={'profiles':profiles}
     elif command=='diagnostics':
         result={**state,'diagnostics':{'gameID':'hades','checks':[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]}}
     else:
@@ -158,6 +163,9 @@ for raw in sys.stdin:
     time.sleep(.02)
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
         'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':True,'result':result}
+    if command=='save_profile' and params.get('name')=='__error__':
+        reply.update(ok=False,error={'code':'fixture_profile','presentation':'Profile fixture rejected.'})
+        reply.pop('result')
     if command=='status' and state.get('fixtureError'):
         reply.update(ok=False,error={'code':state.get('fixtureErrorCode','fixture'),'presentation':state['fixtureError']},state=state)
         reply.pop('result')
@@ -406,6 +414,17 @@ func pump(_ seconds: TimeInterval = 0.1) {
         localization.language = .en
         localization.registerModulePresentation(prefix:HadesGameModule.presentationKeyPrefix,
             resolver:HadesGameModule.presentationText)
+        model.profilesPresented = true
+        exerciseProfileManager(
+            HadesProfileManagerView(model: model),
+            labels: .init(title: HadesPresentation.text("hades.manage.profiles", language: .en), explanation: "",
+                name: HadesPresentation.text("hades.profile.name", language: .en), picker: "",
+                save: HadesPresentation.text("hades.profile.save", language: .en),
+                load: HadesPresentation.text("hades.profile.load", language: .en),
+                empty: HadesPresentation.text("hades.profile.empty", language: .en)),
+            localization: localization, inventory: { model.profiles.map(\.name) }, busy: { model.busy },
+            dismissed: { !model.profilesPresented }, commands: commands
+        )
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
@@ -1068,7 +1087,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
     (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
-    (folder / 'main.swift').write_text(HARNESS)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()

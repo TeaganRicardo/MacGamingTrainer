@@ -99,55 +99,22 @@ struct HadesManagementUtilities: View {
 struct HadesProfileManagerView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @State private var name = ""
-    @State private var selected = ""
 
     private func text(_ key: String) -> String {
         HadesGameModule.resolveText(key: key, localization: localization)
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
-            Button { model.listProfiles() } label: {
-                Label(text("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
-            }.disabled(!model.hostActionsEnabled)
-        } content: {
-            Text(text("hades.profile.explanation")).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                TrainerTextField(title: text("hades.profile.name"), text: $name)
-                TrainerPrimaryActionButton(title: text("hades.profile.save"),
-                    systemImage: TrainerSemanticIcon.Action.save,
-                    enabled: model.hostActionsEnabled && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
-                    model.saveProfile(name)
-                    selected = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-            Divider()
-            if model.profiles.isEmpty { TrainerEmptyState(text: text("hades.profile.empty")) }
-            else {
-                Picker(text("hades.manage.profiles"), selection: $selected) {
-                    ForEach(model.profiles) { profile in
-                        Text("\(profile.name) · \(profile.updatedAt)").tag(profile.name)
-                    }
-                }
-                .trainerPickerWidth(.wide)
-                HStack {
-                    TrainerPrimaryActionButton(title: text("hades.profile.load"),
-                        systemImage: TrainerSemanticIcon.Action.load,
-                        enabled: model.hostActionsEnabled && !selected.isEmpty) { model.loadProfile(selected) }
-                    Button(role: .destructive) { model.deleteProfile(selected) } label: {
-                        Label(text("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
-                    }.disabled(!model.hostActionsEnabled || selected.isEmpty)
-                    Spacer()
-                }
-            }
-            HadesManagementError(model: model)
-        } footer: {
-            HStack { Spacer(); Button(text("host.done")) { model.profilesPresented = false } }
-        }
-        .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
-            if !names.contains(selected) { selected = names.first ?? "" }
-        }
+        TrainerProfileManagerView(
+            labels: .init(title: text("hades.manage.profiles"), explanation: text("hades.profile.explanation"),
+                name: text("hades.profile.name"), picker: text("hades.manage.profiles"),
+                save: text("hades.profile.save"), load: text("hades.profile.load"), empty: text("hades.profile.empty")),
+            entries: model.profiles.map { .init(name: $0.name, updatedAt: $0.updatedAt) },
+            busy: model.busy, enabled: model.hostActionsEnabled,
+            error: hadesManagementError(model, localization: localization),
+            actions: .init(refresh: model.listProfiles, save: model.saveProfile, load: model.loadProfile,
+                delete: model.deleteProfile, dismiss: { model.profilesPresented = false })
+        )
     }
 }
 
@@ -208,4 +175,10 @@ private struct HadesManagementError: View {
                 .foregroundStyle(theme.warning).fixedSize(horizontal: false, vertical: true)
         }
     }
+}
+
+@MainActor
+private func hadesManagementError(_ model: HadesTrainerModel, localization: TrainerLocalizationStore) -> String {
+    let key = model.localError.isEmpty ? model.backendStatus.error : model.localError
+    return key.isEmpty ? "" : localization.presentation(key, arguments: model.backendStatus.errorArguments)
 }

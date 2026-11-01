@@ -6,6 +6,7 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
+from management_ui_harness import PROFILE_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -20,15 +21,25 @@ worker = r'''
 import argparse, json, pathlib, sys
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
 log_path=pathlib.Path(__file__).with_suffix('.commands.jsonl')
+profiles=[{'name':'Fixture','updatedAt':'Today'}]
 for raw in sys.stdin:
     req=json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
-    print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':6,
-        'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,
-        'result':{'connected':True},
-    }), flush=True)
+    command=req['command'];params=req.get('params',{})
+    result={'connected':True}
+    if command in ('list_profiles','save_profile','delete_profile'):
+        if command=='save_profile' and params['name']!='__error__':
+            profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
+        if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
+        result={'profiles':profiles}
+    if command=='load_profile':result={'shortcuts':{'_layoutVersion':999}}
+    reply={'type':'result','id':req['id'],'protocolVersion':6,
+        'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,'result':result}
+    if command=='save_profile' and params.get('name')=='__error__':
+        reply.update(ok=False,error={'code':'fixture_profile','presentation':'Profile fixture rejected.'})
+        reply.pop('result')
+    print(json.dumps(reply), flush=True)
 '''
 
 harness = r'''
@@ -56,6 +67,8 @@ func commands(at url: URL) -> [[String: Any]] {
 struct Main {
     @MainActor
     static func main() throws {
+        _ = NSApplication.shared
+        enableNativeAccessibility()
         let args = CommandLine.arguments
         guard args.count == 3 else { fail("expected python + worker") }
         let python = URL(fileURLWithPath: args[1])
@@ -213,6 +226,37 @@ struct Main {
 
         session.stop()
         pump(0.20)
+        let managementSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+            executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
+        let managementModel = Hades2TrainerModel(session: managementSession,
+            logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("management.log")),
+            backendScriptURL: worker)
+        managementModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+        managementWait(host, "management backend startup") { managementModel.backendAvailable && !managementModel.busy }
+        managementModel.listProfiles()
+        managementWait(host, "management inventory") { !managementModel.busy && managementModel.profiles.count == 1 }
+        localization.language = .en
+        localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
+            resolver: Hades2GameModule.presentationText)
+        var profilesPresented = true
+        func text(_ key: String) -> String { Hades2GameModule.resolveText(key: key, localization: localization) }
+        exerciseProfileManager(
+            Hades2ProfileManagerView(model: managementModel,
+                isPresented: Binding(get: { profilesPresented }, set: { profilesPresented = $0 })),
+            labels: .init(title: text("hades2.manage.profiles"), explanation: "",
+                name: text("hades2.profile.namePlaceholder"), picker: "", save: text("hades2.profile.saveCurrent"),
+                load: text("hades2.profile.load"), empty: text("hades2.profile.empty")),
+            localization: localization, inventory: { managementModel.profiles.map(\.name) },
+            busy: { managementModel.busy }, dismissed: { !profilesPresented },
+            commands: { commands(at: commandLog) }, afterLoad: { view in
+                managementWait(view, "shortcut compatibility warning") {
+                    managementModel.profileShortcutWarning.map { managementHasText(localization.string($0), in: view) } == true
+                }
+            }
+        )
+        managementCheck(managementModel.profileShortcutWarning == nil, "profile dismissal retained its compatibility warning")
+        managementSession.stop()
+        pump(0.20)
         print("hades2_view_state_flow_ok")
     }
 }
@@ -226,7 +270,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     home = td / "home"
     home.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(
@@ -239,6 +283,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
         + [
             ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
             generated,
             main_path,
         ]

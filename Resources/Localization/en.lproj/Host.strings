@@ -193,3 +193,5 @@
 "host.save.recoveryProtected" = "Recovery evidence kept";
 "host.save.keepBackup" = "Keep This Backup";
 "host.save.allowAutomaticCleanup" = "Allow Automatic Cleanup";
+
+"host.operation.inProgress" = "Working…";

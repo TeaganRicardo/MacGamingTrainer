@@ -193,3 +193,5 @@
 "host.save.recoveryProtected" = "保留恢复证据";
 "host.save.keepBackup" = "保护此备份";
 "host.save.allowAutomaticCleanup" = "允许自动整理";
+
+"host.operation.inProgress" = "正在处理…";
