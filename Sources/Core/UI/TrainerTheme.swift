@@ -133,6 +133,19 @@ private struct TrainerPickerWidthModifier: ViewModifier {
     }
 }
 
+// Inline feature rows share a compact action column. Standalone/sheet
+// actions retain their native content width unless the caller specifies one.
+private struct TrainerActionWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var trainerActionWidth: CGFloat? {
+        get { self[TrainerActionWidthKey.self] }
+        set { self[TrainerActionWidthKey.self] = newValue }
+    }
+}
+
 private struct TrainerThemeKey: EnvironmentKey {
     static let defaultValue = TrainerTheme.standard
 }
