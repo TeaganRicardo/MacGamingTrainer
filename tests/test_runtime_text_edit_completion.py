@@ -216,10 +216,18 @@ struct HeaderFixture: View {
     NSApp.windows.contains { $0.isVisible && $0.accessibilityRole() == .popover }
    }
    let searchLabel=Hades2GameModule.resolveText(key:"hades2.workbench.search",localization:localization)
-   guard let searchField=fields(host).first(where:{$0.isEditable && $0.accessibilityLabel()==searchLabel}) else {
+   // SwiftUI owns the authored AX label; its backing NSTextField exposes the
+   // placeholder used by the other search-field native journeys. Inspect both
+   // surfaces rather than requiring SwiftUI's AX label on the AppKit editor.
+   guard let searchField=fields(host).first(where:{$0.isEditable && $0.placeholderString==searchLabel}) else {
     fatalError("shared workbench search field missing")
    }
+   wait("shared workbench search lost its localized accessibility name") {
+    namedNativeControl(host,role:"AXTextField",name:searchLabel) != nil
+   }
    check(window.makeFirstResponder(searchField),"workbench search could not receive keyboard focus")
+   // Let SwiftUI observe the native focus transition before hiding the page.
+   pump()
    wait("workbench search did not enter native editing") { searchField.currentEditor() != nil }
    visibility.visible=false
    wait("hiding the game retained search-field focus") { searchField.currentEditor() == nil }
