@@ -24,7 +24,14 @@ struct HadesChaosPairControls: View {
                 .trainerPickerWidth(.standard)
             }
             TrainerLabeledControlRow(title: text("hades.chaosEncounters"), icon: TrainerSemanticIcon.Concept.duration, tint: theme.accent, emphasized: model.canMutate) {
-                TrainerNumberField(text: $encounters, accessibilityLabel: text("hades.chaosEncounters"), width: 60)
+                TrainerNumberField(text: $encounters, accessibilityLabel: text("hades.chaosEncounters"), width: 60,
+                    onCommit: { completion in
+                        guard let count = Int(completion.text), (1...100).contains(count) else {
+                            return completion.rejected(message: text("hades.error.invalidValue"))
+                        }
+                        return String(count)
+                    })
+                    .id(blessing.id)
                 TrainerSecondaryActionButton(title: text("hades.chaosPair"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate && !curse.isEmpty) {
                     guard let count = Int(encounters), (1...100).contains(count) else {
                         model.rejectInvalidValue(); return
@@ -61,7 +68,8 @@ struct HadesEffectLifecycleControls: View {
                         onCommit: { completed in
                             guard completed.changed else { return completed.text }
                             guard let value = Int(completed.text), (0...1000).contains(value) else {
-                                model.rejectInvalidValue(); return completed.text
+                                model.rejectInvalidValue()
+                                return completed.rejected(message: text("hades.error.invalidValue"))
                             }
                             model.setTraitUses(trait, uses: value, target: uses.target)
                             return String(value)

@@ -2,17 +2,35 @@
   "test_hades_frontend.py": [
     "tests/management_ui_harness.py",
     "tests/slider_ui_harness.py",
-    "tests/visual_hierarchy_harness.py"
+    "tests/visual_hierarchy_harness.py",
+    "tests/disclosure_ui_harness.py",
+    "tests/feedback_ui_harness.py",
+    "tests/search_ui_harness.py",
+    "tests/sheet_ui_harness.py",
+    "tests/native_picker_harness.py"
   ],
   "test_hades2_view_state_flow.py": [
     "tests/management_ui_harness.py",
     "tests/slider_ui_harness.py",
-    "tests/visual_hierarchy_harness.py"
+    "tests/visual_hierarchy_harness.py",
+    "tests/disclosure_ui_harness.py",
+    "tests/feedback_ui_harness.py",
+    "tests/search_ui_harness.py",
+    "tests/sheet_ui_harness.py"
   ],
   "test_hades2_lldb_breakpoint_lifetime.py": [
     "tests/hades2_lldb_worker_support.py",
     "tests/hades2_lldb_fixture.py",
     "tests/hades2_debugserver_owner.py",
     "Tools/profile_hades2_operations.py"
+  ],
+  "test_runtime_text_edit_completion.py": [
+    "tests/native_picker_harness.py"
+  ],
+  "test_trainer_text_field_appearance.py": [
+    "tests/native_picker_harness.py"
+  ],
+  "test_multi_game_contexts.py": [
+    "tests/real_module_navigation_harness.py"
   ]
 }

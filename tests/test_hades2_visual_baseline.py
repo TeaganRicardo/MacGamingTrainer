@@ -20,6 +20,7 @@ save_editor = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
 resource_controls = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
 lock_button = (CORE_UI / 'Primitives/TrainerToggleControl.swift').read_text()
 status_controls = (CORE_UI / 'Components/TrainerStatusControls.swift').read_text()
+disclosure = (CORE_UI / 'Components/TrainerDisclosure.swift').read_text()
 management = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
 
 # v0.17.5 keeps v0.11 visuals but the implementation now lives in Core.
@@ -71,8 +72,10 @@ assert 'HStack(spacing: 2)' in stats
 assert stats.count('.frame(width: 54)') >= 2
 assert 'HStack(spacing: 3)' in stats
 assert '.frame(width: 58)' in stats
-assert 'HStack(spacing: 5)' in view
-assert '.contentShape(Rectangle())' in view
+assert 'TrainerDisclosureButton(' in view
+disclosure_button = disclosure[disclosure.index('struct TrainerDisclosureButton'):]
+assert 'HStack(spacing: 5)' in disclosure_button
+assert '.contentShape(Rectangle())' in disclosure_button
 
 # Search controls and primary actions use the same Core-owned presentation.
 assert 'theme.compactControlSpacing' in search_field

@@ -84,6 +84,7 @@ final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate
               content: () -> TrainerToolWindowContent) -> NSWindow {
         if let entry = entries[id] {
             entry.window.title = title
+            if entry.window.isMiniaturized { entry.window.deminiaturize(nil) }
             entry.window.makeKeyAndOrderFront(nil)
             return entry.window
         }

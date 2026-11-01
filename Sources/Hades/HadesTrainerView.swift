@@ -44,12 +44,12 @@ struct HadesTrainerView: View {
                 )
             }
 
-            runDataSection.id(HadesWorkbenchSection.values.id)
-            commonSection.id(HadesWorkbenchSection.common.id)
-            boonsSection.id(HadesWorkbenchSection.boons.id)
-            resourcesSection.id(HadesWorkbenchSection.resources.id)
-            HadesRoomsPanel(model: model).id(HadesWorkbenchSection.rooms.id)
-            managementSection.id(HadesWorkbenchSection.management.id)
+            runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
+            commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
+            boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
+            resourcesSection.trainerSectionTarget(HadesWorkbenchSection.resources.id)
+            HadesRoomsPanel(model: model).trainerSectionTarget(HadesWorkbenchSection.rooms.id)
+            managementSection.trainerSectionTarget(HadesWorkbenchSection.management.id)
         }
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
         .sheet(isPresented: $model.profilesPresented) { HadesProfileManagerView(model: model) }
@@ -69,36 +69,26 @@ struct HadesTrainerView: View {
                 title: text(HadesWorkbenchSection.values.titleKey),
                 icon: HadesWorkbenchSection.values.icon
             ) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        model.numericControlsExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(text(model.numericControlsExpanded
-                                  ? "hades.section.collapse" : "hades.section.expand"))
-                        Image(systemName: model.numericControlsExpanded ? "chevron.up" : "chevron.down")
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                TrainerDisclosureButton(isExpanded: $model.numericControlsExpanded,
+                    expandTitle: text("hades.section.expand"), collapseTitle: text("hades.section.collapse"))
+                    .accessibilityIdentifier("hades.numericDisclosure")
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                HadesVitalMetricCard(model: model)
-                HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency,
-                                      value: model.money, field: "money")
-                HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
-                                      value: model.rerolls, field: "rerolls")
-                HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
-                                      value: model.godGauge, field: "godGauge")
-                if model.numericControlsExpanded {
-                    ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
-                        HadesFeatureMetricCard(model: model, feature: feature)
-                    }
+            VStack(spacing: 0) {
+                TrainerMetricGrid {
+                    HadesVitalMetricCard(model: model)
+                    HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency,
+                                          value: model.money, field: "money")
+                    HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
+                                          value: model.rerolls, field: "rerolls")
+                    HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
+                                          value: model.godGauge, field: "godGauge")
+                }
+                TrainerDisclosure(isExpanded: model.numericControlsExpanded) {
+                    TrainerMetricGrid {
+                        ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
+                            HadesFeatureMetricCard(model: model, feature: feature)
+                        }
+                    }.padding(.top, 12)
                 }
             }
         }
@@ -175,7 +165,7 @@ struct HadesTrainerView: View {
                         guard completed.changed else { return completed.text }
                         guard let value = Double(completed.text), value.isFinite, (0...10).contains(value) else {
                             model.rejectInvalidValue()
-                            return completed.text
+                            return completed.rejected(message: text("hades.error.invalidValue"))
                         }
                         let normalized = speedNumber((value * 10).rounded() / 10)
                         gameSpeedInput = normalized
@@ -283,7 +273,8 @@ private struct HadesVitalMetricCard: View {
         guard completion.changed else { return completion.text }
         guard let number = Double(completion.text), number.isFinite,
               number.rounded() == number, number >= 1, number <= 1_000_000_000 else {
-            model.rejectInvalidValue(); return completion.text
+            model.rejectInvalidValue()
+            return completion.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
         }
         model.setValue(field, value: number, target: draft.target)
         return HadesNumberDraft.format(number)
@@ -322,6 +313,7 @@ private struct HadesVitalMetricCard: View {
 
 private struct HadesAmountMetricCard: View {
     @ObservedObject var model: HadesTrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     let value: Double
@@ -348,7 +340,8 @@ private struct HadesAmountMetricCard: View {
                     guard completed.changed else { return completed.text }
                     guard let number = Double(completed.text), number.isFinite,
                           number.rounded() == number, number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue(); return completed.text
+                        model.rejectInvalidValue()
+                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
                     }
                     model.setValue(field, value: number, target: draft.target)
                     return HadesNumberDraft.format(number)
@@ -361,6 +354,7 @@ private struct HadesAmountMetricCard: View {
 
 private struct HadesValueRow: View {
     @ObservedObject var model: HadesTrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     let value: Double
@@ -382,7 +376,8 @@ private struct HadesValueRow: View {
                     guard completed.changed else { return completed.text }
                     guard let number = Double(completed.text), number.isFinite, number.rounded() == number,
                           number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue(); return completed.text
+                        model.rejectInvalidValue()
+                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
                     }
                     onCommit(number, draft.target)
                     return HadesNumberDraft.format(number)
@@ -422,7 +417,10 @@ private struct HadesFeatureMetricCard: View {
                         if active { draft.begin(target: nil) } else { draft.end() }
                     },
                     onCommit: { completed in
-                        completed.changed ? model.setNumber(feature, text: completed.text) : completed.text
+                        guard completed.changed else { return completed.text }
+                        return model.setNumber(feature, text: completed.text) { key in
+                            _ = completed.rejected(message: HadesPresentation.text(key, language: localization.language))
+                        }
                     }
                 )
                 if feature != .dashBonus { Text("×").foregroundStyle(.secondary) }
@@ -548,7 +546,14 @@ private struct HadesCatalogView: View {
                             .trainerPickerWidth(.compact)
                             if selected.supportsLevel {
                                 Text(text("hades.level"))
-                                TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
+                                TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
+                                    onCommit: { completion in
+                                        guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                            return completion.rejected(message: text("hades.error.invalidValue"))
+                                        }
+                                        return String(amount)
+                                    })
+                                    .id(selected.id)
                             }
                             Spacer()
                             TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
@@ -660,7 +665,13 @@ private struct HadesCurrentTraitRow: View {
                         .trainerPickerWidth(.compact)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
-                            TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60)
+                            TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
+                                onCommit: { completion in
+                                    guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                        return completion.rejected(message: text("hades.error.invalidValue"))
+                                    }
+                                    return String(amount)
+                                })
                         }
                         Spacer()
                         TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,

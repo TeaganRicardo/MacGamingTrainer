@@ -20,7 +20,10 @@ assert 'onRefresh: {' in host_view
 refresh_action = host_view[host_view.index('onRefresh: {'):host_view.index('onPrimary:', host_view.index('onRefresh: {'))]
 assert 'targetMonitor.refresh()' in refresh_action
 assert 'model.refreshFromHost()' in refresh_action
-launch_action = host_view[host_view.index('private var launchAction'):host_view.index('private var managementActions')]
+sidebar = host_view[host_view.index('struct TrainerHostSidebarCard<'):]
+launch_start = sidebar.index('    private var launchAction:')
+launch_action = sidebar[launch_start:sidebar.index('    var body: some View', launch_start)]
+assert 'onLaunch: launchAction' in sidebar
 assert 'targetMonitor.refresh()' in launch_action
 assert 'if targetMonitor.isRunning' in launch_action
 assert 'context.toggleConnection()' in launch_action

@@ -18,20 +18,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         _saveManager = ObservedObject(wrappedValue: context.saveManager)
     }
 
-    private var launchAction: (() -> Void)? {
-        guard let launch = model.launchActionFromHost else { return nil }
-        return {
-            // The displayed state may be stale if a launch/activation event was
-            // missed. Re-snapshot before deciding whether to launch or connect.
-            targetMonitor.refresh()
-            if targetMonitor.isRunning {
-                context.toggleConnection()
-            } else {
-                launch()
-            }
-        }
-    }
-
     private var managementActions: TrainerManagementActions {
         guard Module.descriptor.supportsSaveManagement else { return .none }
         return TrainerManagementActions(openSaveManagement: {
@@ -47,35 +33,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     }
 
     var body: some View {
-        TrainerShell {
-            TrainerSidebar {
-                TrainerSidebarCard(
-                    descriptor: Module.descriptor,
-                    presentation: Module.presentation,
-                    connected: model.connected,
-                    busy: model.busy,
-                    targetRunning: targetMonitor.isRunning,
-                    operationToken: model.operation,
-                    statusToken: model.statusTitle,
-                    detailToken: model.connectionDetailText
-                ) {
-                    TrainerConnectionStatusCard(
-                        connected: model.connected,
-                        backendAvailable: model.backendAvailable,
-                        actionsEnabled: model.hostActionsEnabled,
-                        onRefresh: {
-                            targetMonitor.refresh()
-                            model.refreshFromHost()
-                        },
-                        onPrimary: context.toggleConnection,
-                        onRestart: model.restartBackendFromHost,
-                        targetRunning: targetMonitor.isRunning,
-                        onLaunch: launchAction
-                    )
-                    Module.makeSidebarActions(model: model)
-                }
-            }
-        } content: {
+        TrainerWorkbenchViewport(navigation: context.navigation) {
             VStack(alignment: .leading, spacing: theme.pageSpacing) {
                 Module.makeHeaderActions(model: model)
                 Module.makeContent(model: model)
@@ -93,15 +51,34 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     }
 }
 
-struct TrainerCollapsedGameCard<Module: TrainerGameModule>: View {
+struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
+    @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    private let context: TrainerGameContext<Module>
     @ObservedObject private var model: Module.Model
     @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
+    @ObservedObject private var navigation: TrainerSectionNavigation
+    let selected: Bool
     let onSelect: () -> Void
 
-    init(context: TrainerGameContext<Module>, onSelect: @escaping () -> Void) {
+    init(context: TrainerGameContext<Module>, selected: Bool, onSelect: @escaping () -> Void) {
+        self.context = context
         _model = ObservedObject(wrappedValue: context.model)
         _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
+        _navigation = ObservedObject(wrappedValue: context.navigation)
+        self.selected = selected
         self.onSelect = onSelect
+    }
+
+    private var launchAction: (() -> Void)? {
+        guard let launch = model.launchActionFromHost else { return nil }
+        return {
+            // Retain the existing owner and refresh before choosing launch or
+            // connection; sidebar animation does not choose either action.
+            targetMonitor.refresh()
+            if targetMonitor.isRunning { context.toggleConnection() }
+            else { launch() }
+        }
     }
 
     var body: some View {
@@ -109,7 +86,25 @@ struct TrainerCollapsedGameCard<Module: TrainerGameModule>: View {
             descriptor: Module.descriptor, presentation: Module.presentation,
             connected: model.connected, busy: model.busy, targetRunning: targetMonitor.isRunning,
             operationToken: model.operation, statusToken: model.statusTitle,
-            detailToken: model.connectionDetailText, selected: false, onSelect: onSelect
-        ) { EmptyView() }
+            detailToken: model.connectionDetailText, selected: selected, onSelect: onSelect
+        ) {
+            TrainerConnectionStatusCard(
+                connected: model.connected,
+                backendAvailable: model.backendAvailable,
+                actionsEnabled: model.hostActionsEnabled,
+                onRefresh: {
+                    targetMonitor.refresh()
+                    model.refreshFromHost()
+                },
+                onPrimary: context.toggleConnection,
+                onRestart: model.restartBackendFromHost,
+                targetRunning: targetMonitor.isRunning,
+                onLaunch: launchAction
+            )
+            Module.makeSidebarActions(model: model)
+        }
+        .environment(\.trainerNavigateToSection, navigation.navigate)
+        .environment(\.trainerSelectedSection, navigation.selection)
+        .environment(\.trainerToolWindows, context.toolWindows.actions(localization: localization, theme: theme))
     }
 }

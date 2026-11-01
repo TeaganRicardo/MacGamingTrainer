@@ -28,6 +28,7 @@ worker = r'''
 import argparse, json, pathlib, sys, time
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
+reply_gate = pathlib.Path(__file__).with_suffix('.hold-reply')
 resource_value = 123
 pending_value = None
 pending_entry_id = None
@@ -90,6 +91,16 @@ for raw in sys.stdin:
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(req, sort_keys=True) + '\\n')
     command = req['command']
+    try:
+        held_command = reply_gate.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        held_command = None
+    if held_command == command:
+        deadline = time.monotonic() + 5
+        while reply_gate.exists():
+            if time.monotonic() >= deadline:
+                raise SystemExit('Save fixture did not release the held ' + command + ' reply')
+            time.sleep(0.005)
     if command == 'save_editor_inventory':
         backup = req['params'].get('snapshotId') is not None
         sources = [
@@ -620,7 +631,14 @@ func fail(_ message: String) -> Never {
 }
 
 func pump(_ seconds: TimeInterval) {
-    RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+        if let event = NSApp.nextEvent(matching: .any,
+            until: min(deadline, Date().addingTimeInterval(0.01)), inMode: .default, dequeue: true) {
+            NSApp.sendEvent(event)
+        }
+        NSApp.updateWindows()
+    }
 }
 
 func pumpUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) {
@@ -679,6 +697,11 @@ struct Main {
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
+        let replyGate = worker.deletingPathExtension().appendingPathExtension("hold-reply")
+        func holdReply(_ command: String) throws {
+            try command.write(to: replyGate, atomically: true, encoding: .utf8)
+        }
+        func releaseReply() throws { try FileManager.default.removeItem(at: replyGate) }
 
         let process = BackendProcess(executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)
         let session = TrainerBackendSession(client: BackendClient(process: process))
@@ -797,7 +820,7 @@ struct Main {
             Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
         let app = NSApplication.shared
-        app.setActivationPolicy(.prohibited)
+        app.setActivationPolicy(.regular)
         app.finishLaunching()
         enableNativeAccessibility()
         let toolWindows = TrainerToolWindowStore()
@@ -911,6 +934,15 @@ struct Main {
         }
         if model.items[0].value != AnyHashable(123) {
             fail("staging mutated the loaded source row before Apply")
+        }
+        window.contentView?.layoutSubtreeIfNeeded();pump(0.3)
+        let applyTitle = Hades2GameModule.resolveText(key: "hades2.saveEditor.apply", localization: localization)
+        guard let applyControl = namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) else {
+            fail("revealed review drawer has no native Apply control")
+        }
+        let windowBounds = window.convertToScreen(window.contentView!.bounds).insetBy(dx: -1, dy: -1)
+        if applyControl.frame.width <= 0 || !windowBounds.contains(applyControl.frame) {
+            fail("review reveal clipped its native Apply control")
         }
 
         let stagedCommands = commands(at: commandLog)
@@ -1069,14 +1101,94 @@ struct Main {
             target: removeTarget,
             action: NSSelectorFromString("removeClicked:")
         )
+        window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
+        let activationDeadline = Date().addingTimeInterval(2)
+        while !(app.isActive && window.isKeyWindow) && Date() < activationDeadline { pump(0.02) }
+        guard app.isActive && window.isKeyWindow,
+              let retainedDraft = inlineField("3.5"), window.makeFirstResponder(retainedDraft) else {
+            fail("could not retain a focused correction through review collapse")
+        }
+        let retainedEditor = window.firstResponder
+        func retainedDraftGeometry() -> [String: Any] {
+            var result: [String: Any] = [
+                "fieldBounds": NSStringFromRect(retainedDraft.bounds),
+                "fieldVisibleRect": NSStringFromRect(retainedDraft.visibleRect),
+                "fieldWindowFrame": NSStringFromRect(retainedDraft.convert(retainedDraft.bounds, to: nil)),
+                "windowFrame": NSStringFromRect(window.frame),
+                "contentBounds": NSStringFromRect(window.contentView!.bounds)]
+            if let scroll = retainedDraft.enclosingScrollView {
+                result["scrollFrame"] = NSStringFromRect(scroll.frame)
+                result["clipBounds"] = NSStringFromRect(scroll.contentView.bounds)
+                if let document = scroll.documentView {
+                    result["documentFrame"] = NSStringFromRect(document.frame)
+                    result["fieldDocumentFrame"] = NSStringFromRect(retainedDraft.convert(retainedDraft.bounds, to: document))
+                }
+            }
+            return result
+        }
+        var beforeCollapseGeometry = retainedDraftGeometry()
+        beforeCollapseGeometry["editorText"] = retainedDraft.currentEditor()?.string ?? "<none>"
+        beforeCollapseGeometry["editorDelegateIsField"] = retainedDraft.currentEditor()?.delegate as? NSTextField === retainedDraft
+        beforeCollapseGeometry["fieldWindowIsOwner"] = retainedDraft.window === window
+        beforeCollapseGeometry["busy"] = model.busy
+        let affectedFields = fields(window.contentView!).filter {
+            $0.isEditable && $0.accessibilityLabel() == "Ashes"
+        }
+        guard affectedFields.count == 2 else {
+            fail("entry-lock fixture did not mount both inline and review inputs")
+        }
+        let beforeReviewCollapse = commands(at: commandLog).count
+        try holdReply("save_editor_unstage")
         removeButton.performClick(nil)
+        pumpUntil {
+            model.busy && affectedFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeReviewCollapse + 1
+        }
+        if !model.busy || toolWindows.canCloseAll || affectedFields.contains(where: { $0.isEnabled })
+            || window.firstResponder !== retainedEditor || retainedDraft.currentEditor()?.string != "3.5" {
+            fail("pending unstage did not lock its entry while retaining the unrelated native editor")
+        }
+        _ = model.completeTextEdit(entry, text: "999")
+        if model.editFailures[entry.id]?.key != "hades2.saveEditor.unavailableDraft"
+            || commands(at: commandLog).count != beforeReviewCollapse + 1 {
+            fail("a busy edit completion bypassed command admission")
+        }
+        try releaseReply()
         pumpUntil { model.pendingCount == 0 && !model.busy }
         if removeTarget.presses != 1
             || !model.pendingActions.isEmpty
             || commands(at: commandLog).last?["command"] as? String != "save_editor_unstage" {
             fail("Native per-action remove control did not unstage exactly one action")
         }
-        pump(0.15)
+        pump(0.3)
+        let retainedFirstResponder = window.firstResponder === retainedEditor
+        let retainedEditorText = retainedDraft.currentEditor()?.string
+        let retainedVisible = retainedDraft.visibleRect.contains(retainedDraft.bounds)
+        if !retainedFirstResponder || retainedEditorText != "3.5" || !retainedVisible {
+            // Freeze the original predicate first. In particular, reading the
+            // NSTextField/stringValue here would validate a live native edit.
+            let diagnostic: [String: Any] = [
+                "sameFirstResponder": retainedFirstResponder,
+                "editorText": retainedEditorText ?? "<none>",
+                "fullyVisible": retainedVisible,
+                "sameMountedField": fields(window.contentView!).contains { $0 === retainedDraft },
+                "editorDelegateIsField": retainedDraft.currentEditor()?.delegate as? NSTextField === retainedDraft,
+                "fieldEnabled": retainedDraft.isEnabled,
+                "fieldWindowIsOwner": retainedDraft.window === window,
+                "active": app.isActive, "key": window.isKeyWindow, "busy": model.busy,
+                "pendingCount": model.pendingCount,
+                "before": beforeCollapseGeometry, "after": retainedDraftGeometry(),
+                "commandDelta": Array(commands(at: commandLog).dropFirst(beforeReviewCollapse))]
+            let data = try! JSONSerialization.data(withJSONObject: diagnostic, options: [.sortedKeys])
+            FileHandle.standardError.write(Data("save_review_collapse_failure=".utf8) + data + Data("\n".utf8))
+            fail("review collapse lost a focused draft or pushed it outside the result viewport")
+        }
+        if namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) != nil
+            || commands(at: commandLog).count != beforeReviewCollapse + 1 {
+            fail("collapsed review retained an Apply action or its transition emitted another mutation")
+        }
+        window.makeFirstResponder(nil);pump(0.05)
         if inlineField("3.5") == nil {
             fail("Removing the last staged action discarded an unrelated invalid field draft")
         }
@@ -1086,8 +1198,31 @@ struct Main {
 
         let previousBaseline = model.baselineGeneration!
         let previousEntry = model.items.first!
+        guard window.makeFirstResponder(retainedDraft),
+              let stageRetainedEditor = retainedDraft.currentEditor() else {
+            fail("could not refocus the retained correction before staging another entry")
+        }
+        let stageAffectedFields = fields(window.contentView!).filter {
+            $0.isEditable && $0.accessibilityLabel() == "Ashes"
+        }
+        guard !stageAffectedFields.isEmpty else { fail("stage-lock fixture lost the affected input") }
+        let beforeHeldStage = commands(at: commandLog).count
+        try holdReply("save_editor_stage")
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500, baseline: model.baselineGeneration!)
-        pumpUntil { !model.busy && model.pendingCount == 1 }
+        pumpUntil {
+            model.busy && stageAffectedFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeHeldStage + 1
+        }
+        if !model.busy || toolWindows.canCloseAll || stageAffectedFields.contains(where: { $0.isEnabled })
+            || window.firstResponder !== stageRetainedEditor || retainedDraft.currentEditor()?.string != "3.5" {
+            fail("pending stage retired an unrelated draft or unlocked mutation controls")
+        }
+        try releaseReply()
+        pumpUntil { !model.busy && model.pendingCount == 1 && stageAffectedFields.allSatisfy { $0.isEnabled } }
+        if model.busy || !toolWindows.canCloseAll || stageAffectedFields.contains(where: { !$0.isEnabled }) {
+            fail("stage acknowledgment did not release its input and close locks")
+        }
+        window.makeFirstResponder(nil)
         guard let sameActionDraft = fields(window.contentView!).first(where: {
             $0.isEditable && $0.accessibilityLabel() == "Ashes"
         }), window.makeFirstResponder(sameActionDraft),
@@ -1097,7 +1232,29 @@ struct Main {
         sameActionEditor.selectAll(nil)
         sameActionEditor.insertText("3.5", replacementRange: sameActionEditor.selectedRange())
         window.makeFirstResponder(nil); pump(0.10)
+        guard window.makeFirstResponder(retainedDraft), retainedDraft.currentEditor()?.string == "3.5" else {
+            fail("could not focus an existing correction before the authority-changing Apply")
+        }
+        let applyFields = fields(window.contentView!).filter {
+            $0.isEditable && ["Ashes", "Nectar"].contains($0.accessibilityLabel() ?? "")
+        }
+        let capturedDraftIDs = Set(model.textDrafts.keys)
+            .union(model.typedDrafts.keys).union(model.membershipDrafts.keys)
+        let beforeHeldApply = commands(at: commandLog).count
+        try holdReply("save_editor_apply")
         model.apply(baseline: model.baselineGeneration)
+        pumpUntil {
+            model.busy && applyFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeHeldApply + 1
+        }
+        guard model.busy, !toolWindows.canCloseAll, !applyFields.isEmpty,
+              applyFields.allSatisfy({ !$0.isEnabled }),
+              let applyParams = commands(at: commandLog).last?["params"] as? [String: Any],
+              let appliedDraftIDs = applyParams["draftEntryIds"] as? [String],
+              Set(appliedDraftIDs) == capturedDraftIDs else {
+            fail("Apply unlocked native input/closure or changed its captured draft set while busy")
+        }
+        try releaseReply()
         pump(0.35)
         if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("successful Apply did not clear the committed batch")

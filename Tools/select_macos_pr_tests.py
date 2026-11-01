@@ -53,20 +53,57 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
             chosen.add(Path(path).name)
         if path.startswith("Sources/Core/") or path == "Sources/App.swift":
             chosen.update(SHARED_SMOKE)
+        if path in (
+            "Sources/Hades/HadesTrainerView.swift", "Sources/Hades/HadesWorkbenchNavigation.swift",
+            "Sources/Hades/HadesModule.swift", "Sources/Hades2/Hades2View.swift",
+            "Sources/Hades2/Views/Hades2HostActions.swift", "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
+            "Sources/Hades2/Hades2Module.swift", "Sources/Hades2/Hades2Model.swift",
+        ):
+            # These adapters own the section IDs, reveal handlers and native
+            # targets exercised together by the real two-module Host journey.
+            chosen.add("test_multi_game_contexts.py")
         if path in ("Sources/Core/UI/Primitives/TrainerMappedSlider.swift", "Sources/Core/UI/Primitives/TrainerSliderMapping.swift"):
             chosen.add("test_mapped_slider_interaction.py")
         if path in (
+            "Sources/Core/UI/Primitives/TrainerTextField.swift", "Sources/Core/UI/Primitives/TrainerField.swift",
+            "Sources/Core/UI/Components/TrainerResourceControls.swift",
+        ):
+            chosen.update(("test_trainer_text_field_appearance.py", "test_runtime_text_edit_completion.py", "test_hades_frontend.py"))
+        if path == "Sources/Core/UI/TrainerTheme.swift":
+            chosen.add("test_trainer_text_field_appearance.py")
+        if path == "Sources/Core/UI/Components/TrainerSearchField.swift":
+            chosen.add("test_trainer_search_field_appearance.py")
+        if path in ("Sources/Hades2/Hades2View.swift", "Sources/Hades2/Hades2Model.swift"):
+            chosen.add("test_runtime_text_edit_completion.py")
+        if path in (
             "Sources/Core/UI/TrainerMotion.swift",
+            "Sources/Core/UI/TrainerWorkbenchSearch.swift",
+            "Sources/Core/UI/Components/TrainerSearchField.swift",
+            "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift",
             "Sources/Core/UI/Primitives/TrainerToggleControl.swift",
             "Sources/Core/UI/Components/TrainerFeatureControls.swift",
             "Sources/Core/UI/TrainerTheme.swift", "Sources/Core/UI/TrainerShell.swift",
             "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/StatusComponents.swift",
             "Sources/Core/UI/Primitives/TrainerRow.swift", "Sources/Core/UI/Primitives/TrainerCard.swift",
+            "Sources/Core/UI/Components/TrainerDisclosure.swift",
+            "Sources/Core/UI/Components/TrainerMetricGrid.swift",
             "Sources/Core/UI/Components/TrainerListControls.swift",
+            "Sources/Core/UI/Components/TrainerSheetScaffold.swift",
+            "Sources/Core/UI/Components/TrainerSheetLifetime.swift",
+            "Sources/Core/UI/Components/TrainerProfileManagerView.swift",
+            "Sources/Core/UI/Components/TrainerDiagnosticsView.swift",
+            "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift",
         ):
             chosen.update(("test_hades_frontend.py", "test_hades2_view_state_flow.py"))
+        if path in ("Sources/Core/UI/TrainerFeedbackOverlay.swift", "Sources/Core/UI/TrainerFeedbackTiming.swift",
+                    "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/Components/TrainerStatusControls.swift"):
+            chosen.update(("test_viewport_feedback.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py"))
+        if path == "Sources/Core/UI/TrainerToolWindows.swift":
+            chosen.add("test_trainer_tool_windows.py")
         if path.startswith("ContractFixtures/reference_module/"):
             chosen.add("test_reference_fixture_session_integration.py")
+        if path in ("Sources/Hades2/Views/Hades2SaveEditorView.swift", "Sources/Hades2/Hades2SaveEditorModel.swift"):
+            chosen.add("test_hades2_save_editor_frontend.py")
         if path.startswith("Native/") or path == "build.sh":
             chosen.add(BUILD_SMOKE)
         if path in ("Tools/run_macos_checks.sh", "Tools/select_macos_pr_tests.py"):

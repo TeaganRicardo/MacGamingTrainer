@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from native_picker_harness import NATIVE_PICKER
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only runtime text-edit behavior")
@@ -454,6 +455,44 @@ struct HeaderFixture: View {
    return
   }
   phase("editing:materials")
+  // Actual selected-trait fields must lose their native editor when the menu
+  // or an observation replaces that trait, without applying its old draft.
+  func inputTrait(_ id: String, level: Int, uses: Double) -> CurrentRunTrait {
+   CurrentRunTrait(generationID:"input-generation",runID:"input-run",instanceID:id,
+    name:id,displayName:id,englishName:id,family:"temporary",sourceID:"fixture",sourceName:"Fixture",sourceEnglishName:"Fixture",
+    level:level,rarity:"Common",availableRarities:["Common","Rare"],sameNameCount:1,remainingUses:uses,
+    lifecycleState:"",linkedTrait:"",linkedDisplayName:"",linkedEnglishName:"",canAdvanceLifecycle:false,
+    canSetRemainingUses:true,canExpire:true,levelCapability:.increaseOne,levelReason:"",rarityCapability:.setExact,
+    rarityReason:"",removalCapability:.singleInstanceForce,removalReason:"",removalScopeAllMatching:false,deferredIssue:nil)
+  }
+  let firstTrait=inputTrait("Input First",level:2,uses:7)
+  let secondTrait=inputTrait("Input Second",level:4,uses:9)
+  model.capabilities["traitMutation"]=true
+  model.currentRunTraits=[firstTrait,secondTrait];pump()
+  let levelName=Hades2GameModule.resolveText(key:"hades2.traits.targetLevel",localization:localization)
+  let usesName=Hades2GameModule.resolveText(key:"hades2.traits.remainingUses",localization:localization)
+  let traitPickerName=Hades2GameModule.resolveText(key:"hades2.traits.manager",localization:localization)
+  guard let oldLevel=fields(host).first(where:{$0.accessibilityLabel()==levelName && $0.isEnabled}),
+        let picker=namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName),
+        picker.valueText?.contains("Input First")==true else {
+   fatalError("native Hades II selected-trait inputs missing")
+  }
+  let beforeTraitSelection=commands().count
+  _ = edit(oldLevel,to:"42",in:window)
+  selectNativePicker(picker,in:window,moving:1,opening:.accessibility);pump()
+  let selectedLevel=fields(host).first { $0.accessibilityLabel()==levelName && $0.isEnabled }
+  check(namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName)?.valueText?.contains("Input Second")==true
+        && oldLevel.currentEditor()==nil && selectedLevel?.stringValue=="5" && commands().count==beforeTraitSelection,
+        "native trait selection redirected a focused level draft")
+  guard let oldUses=fields(host).first(where:{$0.accessibilityLabel()==usesName && $0.isEnabled}) else {
+   fatalError("native remaining-use input missing")
+  }
+  _ = edit(oldUses,to:"77",in:window)
+  model.currentRunTraits=[firstTrait];pump()
+  let selectedUses=fields(host).first { $0.accessibilityLabel()==usesName && $0.isEnabled }
+  check(oldUses.currentEditor()==nil && selectedUses?.stringValue=="7" && commands().count==beforeTraitSelection,
+        "an observation-selected replacement inherited or submitted another trait's remaining-use draft")
+  model.currentRunTraits=[];model.capabilities["traitMutation"]=false;pump()
   guard var money=fields(host).first(where:{$0.isEditable && $0.stringValue == "123"}) else { fatalError("money text field not found: \(fields(host).map(\.stringValue))") }
   check(window.makeFirstResponder(money), "could not focus money field"); pump()
   // Selected-material observations refresh idle controls without taking over
@@ -584,9 +623,22 @@ struct HeaderFixture: View {
    _ = edit(money, to:invalid, in:window); window.makeFirstResponder(nil); pump(0.45)
    check(mutations().count==4 && money.stringValue=="402", "invalid draft was applied or not restored: '\(invalid)' draft=\(money.stringValue) mutations=\(mutations().count) feedback=\(String(describing:model.feedbackNotice))")
    check(model.feedbackNotice?.text.key=="hades2.input.invalid", "invalid draft lost validation feedback")
+   let native = money as! TrainerTextField.Field
+   check(native.presentation == .invalid && native.validationMessage == Hades2GameModule.resolveText(key:"hades2.input.invalid",localization:localization)
+         && native.accessibilityHelp() == native.validationMessage,
+         "invalid numeric input lost its field-local visible/accessibility feedback")
   }
   _ = edit(money, to:"000402", in:window); window.makeFirstResponder(nil); pump(0.45)
   check(mutations().count==4 && money.stringValue=="402", "normalization submitted an unchanged number")
+  check((money as! TrainerTextField.Field).validationMessage == nil, "a corrected value retained stale validation")
+  let cancelledMoneyEditor = edit(money, to:"999", in:window)
+  cancelledMoneyEditor.doCommand(by:#selector(NSResponder.cancelOperation(_:)))
+  window.makeFirstResponder(nil); pump()
+  check(mutations().count==4 && money.stringValue=="402" && money.currentEditor()==nil,
+        "Escape submitted a runtime numeric draft or retained native focus")
+  model.money=406; pump()
+  check(money.stringValue=="406" && mutations().count==4, "an observation after Escape did not refresh the idle field")
+  model.money=402; pump()
 
   // The shared click seam keeps native control events intact and ignores a
   // field's own content and other windows. Actual empty window space blurs.
@@ -614,6 +666,8 @@ struct HeaderFixture: View {
   model.refreshFromHost(); check(model.busy, "busy fixture did not begin")
   _ = edit(money,to:"405",in:window); window.makeFirstResponder(nil)
   check(model.feedbackNotice?.text.key=="hades2.input.unavailable", "busy edit lost its feedback")
+  check((money as! TrainerTextField.Field).validationMessage != nil,
+        "an unavailable completion lost the field's recovery cue")
   wait { !model.busy }
   check(mutations().count==6 && money.stringValue=="404", "busy edit was deferred or not restored")
 
@@ -778,7 +832,7 @@ struct HeaderFixture: View {
 """
 with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     td = Path(temporary)
-    main = td / "main.swift"; main.write_text(HARNESS)
+    main = td / "main.swift"; main.write_text(HARNESS + NATIVE_PICKER)
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
@@ -793,8 +847,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
             RuntimeTextTrace.native("become:before field=\(ObjectIdentifier(self))")
             let acquired = super.becomeFirstResponder()
             RuntimeTextTrace.window("become:after acquired=\(acquired)", field: self)'''),
-            ("        func begin() {", r'''
-        func begin() {
+            ("        func begin(validationMessage: String? = nil) {", r'''
+        func begin(validationMessage: String? = nil) {
             RuntimeTextTrace.native("begin \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")'''),
             ("            for notify in notifications { notify() }", r'''
             for notify in notifications {
@@ -809,9 +863,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         func controlTextDidEndEditing(_ notification: Notification) {
             RuntimeTextTrace.native("end:enter \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")
             defer { RuntimeTextTrace.write("end:exit \(ObjectIdentifier(self))") }'''),
-            ("            let normalized = completed.onCommit(Completion(text: draft, changed: draft != completed.initial))", r'''
+            ("            let normalized = completed.onCommit(completion)", r'''
             RuntimeTextTrace.write("commit:before \(ObjectIdentifier(self)) draft=\(draft)")
-            let normalized = completed.onCommit(Completion(text: draft, changed: draft != completed.initial))
+            let normalized = completed.onCommit(completion)
             RuntimeTextTrace.write("commit:after \(ObjectIdentifier(self)) normalized=\(normalized)")'''),
             ("        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {", r'''
         func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
@@ -835,10 +889,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         if trace { RuntimeTextTrace.write("parent:before field=\(ObjectIdentifier(field))") }
         context.coordinator.parent = self
         if trace { RuntimeTextTrace.write("parent:after field=\(ObjectIdentifier(field))") }'''),
-            ("        if context.coordinator.edit == nil && field.stringValue != text { field.stringValue = text }", r'''
-        if context.coordinator.edit == nil && field.stringValue != text {
+            ("        if context.coordinator.acceptsSourceObservation && field.stringValue != text {\n            field.stringValue = text\n            (field as? Field)?.refreshObservation()\n        }", r'''
+        if context.coordinator.acceptsSourceObservation && field.stringValue != text {
             RuntimeTextTrace.write("stringValue:before field=\(ObjectIdentifier(field))")
             field.stringValue = text
+            (field as? Field)?.refreshObservation()
             RuntimeTextTrace.write("stringValue:after field=\(ObjectIdentifier(field))")
         }'''),
             ("    private func configure(_ field: NSTextField) {", r'''

@@ -16,10 +16,11 @@ struct TrainerFeedbackNotice: Identifiable {
 struct TrainerFeedbackOverlay: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.trainerGamePageVisible) private var pageVisible
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var timing = TrainerFeedbackTiming()
-    @State private var hoveredNoticeID: UUID?
-    @State private var focusedNoticeID: UUID?
+    @State private var hovered = false
+    @State private var interactiveNoticeID: UUID?
     @FocusState private var focusedAction: Action?
 
     let notice: TrainerFeedbackNotice?
@@ -30,6 +31,7 @@ struct TrainerFeedbackOverlay: View {
     private struct Schedule: Hashable {
         let noticeID: UUID?
         let paused: Bool
+        let visible: Bool
     }
 
     private enum Action: Hashable {
@@ -38,7 +40,7 @@ struct TrainerFeedbackOverlay: View {
 
     private var paused: Bool {
         guard let id = notice?.id else { return false }
-        return detailsNoticeID == id || hoveredNoticeID == id || focusedNoticeID == id
+        return detailsNoticeID == id || hovered || focusedAction != nil
     }
 
     private var color: Color {
@@ -59,7 +61,7 @@ struct TrainerFeedbackOverlay: View {
 
     var body: some View {
         ZStack {
-            if let notice, timing.currentID == notice.id {
+            if pageVisible, let notice {
                 let text = localization.string(notice.text)
                 HStack(alignment: .top, spacing: 12) {
                     Label(text, systemImage: icon)
@@ -69,24 +71,32 @@ struct TrainerFeedbackOverlay: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(text)
                         .allowsHitTesting(false)
+                        .contentTransition(.opacity)
+                        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion),
+                                   value: notice.text)
                     HStack(spacing: 8) {
                         if let onDetails {
-                            Button(localization.localized("host.feedback.details")) { onDetails(notice.id) }
+                            Button(localization.localized("host.feedback.details")) {
+                                guard interactiveNoticeID == notice.id else { return }
+                                onDetails(notice.id)
+                            }
                                 .focused($focusedAction, equals: .details)
+                                .accessibilityIdentifier("host.feedback.details")
                         }
-                        Button { onDismiss(notice.id) } label: {
+                        Button {
+                            guard interactiveNoticeID == notice.id else { return }
+                            onDismiss(notice.id)
+                        } label: {
                             Image(systemName: "xmark")
                         }
                         .accessibilityLabel(localization.localized("host.feedback.collapse"))
                         .help(localization.localized("host.feedback.collapse"))
                         .focused($focusedAction, equals: .dismiss)
+                        .accessibilityIdentifier("host.feedback.dismiss")
                     }
                     .buttonStyle(.plain)
                     .font(.caption)
-                    .onHover { hoveredNoticeID = $0 ? notice.id : nil }
-                    .onChange(of: focusedAction) { _, focused in
-                        focusedNoticeID = focused != nil ? notice.id : nil
-                    }
+                    .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -95,14 +105,35 @@ struct TrainerFeedbackOverlay: View {
                     RoundedRectangle(cornerRadius: theme.controlCornerRadius)
                         .fill(theme.panelRaised).allowsHitTesting(false)
                 }
-                .opacity(timing.isFading ? 0 : 1)
+                // The timer is asynchronous. A replacement is immediately
+                // visible, while retaining the same controls and their focus.
+                .opacity(timing.currentID == notice.id && timing.isFading ? 0 : 1)
+                .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion),
+                           value: timing.currentID == notice.id && timing.isFading)
+                .onHover { hovered = $0 }
+                .onExitCommand {
+                    guard interactiveNoticeID == notice.id else { return }
+                    onDismiss(notice.id)
+                }
+                .transition(.opacity)
             }
         }
-        .task(id: Schedule(noticeID: notice?.id, paused: paused)) {
-            guard let notice else { timing.clear(); return }
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: notice != nil)
+        .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
+        .onChange(of: pageVisible) { _, visible in
+            if !visible { focusedAction = nil; hovered = false }
+        }
+        .onChange(of: Schedule(noticeID: notice?.id, paused: false, visible: pageVisible), initial: true) { _, schedule in
+            interactiveNoticeID = schedule.visible ? schedule.noticeID : nil
+        }
+        .onDisappear { interactiveNoticeID = nil }
+        .task(id: Schedule(noticeID: notice?.id, paused: paused, visible: pageVisible)) {
             let now = ProcessInfo.processInfo.systemUptime
-            let duration = notice.tone == .warning ? TrainerFeedbackTiming.errorDuration : TrainerFeedbackTiming.ordinaryDuration
-            if timing.show(notice.id, duration: duration, at: now) {
+            let duration = notice?.tone == .warning ? TrainerFeedbackTiming.errorDuration : TrainerFeedbackTiming.ordinaryDuration
+            let announce = timing.synchronize(noticeID: notice?.id, duration: duration,
+                                              visible: pageVisible, paused: paused, at: now)
+            guard pageVisible, let notice else { return }
+            if announce {
                 NSAccessibility.post(
                     element: NSApplication.shared,
                     notification: .announcementRequested,
@@ -110,14 +141,11 @@ struct TrainerFeedbackOverlay: View {
                                .priority: NSAccessibilityPriorityLevel.medium.rawValue]
                 )
             }
-            if paused { timing.pause(notice.id, at: now); return }
-            timing.resume(notice.id, at: now)
+            guard !paused else { return }
             do {
                 try await Task.sleep(for: .seconds(timing.remainingReadableTime(at: now)))
                 guard !Task.isCancelled else { return }
-                withAnimation(reduceMotion ? nil : .easeOut(duration: TrainerFeedbackTiming.fadeDuration)) {
-                    timing.advance(notice.id, at: ProcessInfo.processInfo.systemUptime)
-                }
+                timing.advance(notice.id, at: ProcessInfo.processInfo.systemUptime)
                 try await Task.sleep(for: .seconds(TrainerFeedbackTiming.fadeDuration))
                 guard !Task.isCancelled else { return }
                 timing.advance(notice.id, at: ProcessInfo.processInfo.systemUptime)

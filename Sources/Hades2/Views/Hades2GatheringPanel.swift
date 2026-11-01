@@ -39,6 +39,7 @@ struct Hades2GatheringPanel: View {
                     onCommit: { completion in
                         model.completeTextEdit(.gathering(family), text: completion.text,
                             changed: completion.changed, generation: generation)
+                        { key in _ = completion.rejected(message: text(key)) }
                     },
                     onReset: { model.setGatheringProbability(family, probability: nil) },
                     generateLabel: text("hades2.gathering.generate"),

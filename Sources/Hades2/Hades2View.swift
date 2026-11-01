@@ -323,31 +323,23 @@ struct Hades2TrainerView: View {
 
     private var rootContent: some View {
         VStack(alignment: .leading, spacing: theme.pageSpacing) {
-            statusAndSessionSection.id(Hades2WorkbenchSection.values.id)
-            commonSection.id(Hades2WorkbenchSection.common.id)
-            boonsSection.id(Hades2WorkbenchSection.boons.id)
-            resourceSection.id(Hades2WorkbenchSection.resources.id)
-            roomsSection.id(Hades2WorkbenchSection.rooms.id)
-            management.id(Hades2WorkbenchSection.management.id)
+            statusAndSessionSection
+            commonSection.trainerSectionTarget(Hades2WorkbenchSection.common.id)
+            boonsSection.trainerSectionTarget(Hades2WorkbenchSection.boons.id)
+            resourceSection.trainerSectionTarget(Hades2WorkbenchSection.resources.id)
+            roomsSection.trainerSectionTarget(Hades2WorkbenchSection.rooms.id)
+            management.trainerSectionTarget(Hades2WorkbenchSection.management.id)
         }
     }
 
     @ViewBuilder
     private var statusAndSessionSection: some View {
         TrainerSectionHeader(title: text("hades2.section.runData"), icon: Hades2WorkbenchSection.values.icon) {
-            Button { withAnimation(.easeInOut(duration: 0.18)) { model.numericControlsExpanded.toggle() } } label: {
-                HStack(spacing: 5) {
-                    Text(model.numericControlsExpanded ? text("hades2.section.collapse") : text("hades2.section.expand"))
-                    Image(systemName: model.numericControlsExpanded ? "chevron.up" : "chevron.down")
-                }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            TrainerDisclosureButton(isExpanded: $model.numericControlsExpanded,
+                expandTitle: text("hades2.section.expand"), collapseTitle: text("hades2.section.collapse"))
+                .accessibilityIdentifier("hades2.numericDisclosure")
         }
+        .trainerSectionTarget(Hades2WorkbenchSection.values.id)
         sessionStatsPanel
     }
 
@@ -610,8 +602,17 @@ struct Hades2TrainerView: View {
                 TrainerTextField(
                     title: text("hades2.traits.remainingUses"),
                     text: $traitRemainingUsesInput,
-                    onEditingChanged: tracking(.traitRemainingUses)
+                    onEditingChanged: tracking(.traitRemainingUses),
+                    onCommit: { completion in
+                        guard completion.changed else { return completion.text }
+                        let raw = completion.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard let uses = Int(raw), (1...999_999).contains(uses) else {
+                            return completion.rejected(message: text("hades2.input.invalid"))
+                        }
+                        return String(uses)
+                    }
                 )
+                .id(trait.id)
                 .frame(width: 58)
                 .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
@@ -672,7 +673,16 @@ struct Hades2TrainerView: View {
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TrainerTextField(title: "—", text: traitLevelInput(trait), accessibilityLabel: text("hades2.traits.targetLevel"))
+                    TrainerTextField(title: "—", text: traitLevelInput(trait), accessibilityLabel: text("hades2.traits.targetLevel"),
+                        onCommit: { completion in
+                            guard completion.changed else { return completion.text }
+                            let raw = completion.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard let level = Int(raw), level > trait.level, level <= 999_999 else {
+                                return completion.rejected(message: text("hades2.input.invalid"))
+                            }
+                            return String(level)
+                        })
+                        .id(trait.id)
                         .frame(width: 58)
                         .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
@@ -837,7 +847,7 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private var gameSpeedPanel: some View {
-        if model.featureSupport["gameSpeed"] == true {
+        TrainerDisclosure(isExpanded: model.featureSupport["gameSpeed"] == true) {
             TrainerLabeledControlRow(
                 title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditDesired ? theme.accent : theme.inactive,
@@ -848,7 +858,7 @@ struct Hades2TrainerView: View {
                     placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
                     width: 62,
-                    enabled: model.canEditDesired,
+                    enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
                     onEditingChanged: tracking(.gameSpeed),
                     onCommit: completing(.gameSpeed)
                 )
@@ -859,7 +869,7 @@ struct Hades2TrainerView: View {
                     mapping: gameSpeedMapping,
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
                     accessibilityHint: text("hades2.gameSpeed.hint"),
-                    enabled: model.canEditDesired && pageVisible,
+                    enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
                     onPreviewValue: { preview in
                         gameSpeedPreview = preview.map(speedNumber)
                         if preview == nil && focusedField != .gameSpeed {
@@ -1143,11 +1153,10 @@ struct Hades2TrainerView: View {
     }
 
     private var sessionStatsPanel: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-        return LazyVGrid(columns: columns, spacing: 12) {
-            primarySessionMetrics
-            if model.numericControlsExpanded {
-                expandedSessionMetrics
+        VStack(spacing: 0) {
+            TrainerMetricGrid { primarySessionMetrics }
+            TrainerDisclosure(isExpanded: model.numericControlsExpanded) {
+                TrainerMetricGrid { expandedSessionMetrics }.padding(.top, 12)
             }
         }
     }
@@ -1733,6 +1742,7 @@ struct Hades2TrainerView: View {
         let generation = model.editGeneration
         return { draft in
             model.completeTextEdit(edit, text: draft.text, changed: draft.changed, generation: generation)
+            { key in _ = draft.rejected(message: text(key)) }
         }
     }
 

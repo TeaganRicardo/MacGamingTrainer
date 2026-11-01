@@ -1116,7 +1116,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     /// Validation and runtime meaning stay with Hades; Core only owns completion.
     /// Invalid/unavailable edits restore the observed value and emit one notice.
-    func completeTextEdit(_ edit: Hades2RuntimeTextEdit, text: String, changed: Bool = true, generation: UInt64) -> String {
+    func completeTextEdit(_ edit: Hades2RuntimeTextEdit, text: String, changed: Bool = true, generation: UInt64,
+                          onRejection: (String) -> Void = { _ in }) -> String {
         var current: Double?
         var range = 0.0...999_999.0
         var integer = false
@@ -1193,12 +1194,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard generation == editGeneration else { return restored }
         guard changed else { return localTarget ? text : restored }
         guard available && !busy && pendingBlockingRequests == 0 && protocolCompatible else {
+            onRejection("hades2.input.unavailable")
             presentFeedback(presentation("hades2.input.unavailable"), tone: .warning)
             return restored
         }
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = Double(raw), value.isFinite, range.contains(value),
               !integer || (Int(raw) != nil && value.rounded() == value) else {
+            onRejection("hades2.input.invalid")
             presentFeedback(presentation("hades2.input.invalid"), tone: .warning)
             return restored
         }

@@ -14,6 +14,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-profile-selection-") as directory:
     folder = Path(directory)
     main = folder / "main.swift"
     main.write_text(r'''
+var lifetime = TrainerSheetLifetime()
+let firstPresentation = lifetime.id
+precondition(lifetime.accepts(firstPresentation))
+lifetime.appear()
+precondition(lifetime.id == firstPresentation, "incidental appearance reset an active sheet")
+lifetime.invalidate()
+precondition(!lifetime.accepts(firstPresentation), "a closing sheet admitted a captured control")
+lifetime.appear()
+precondition(lifetime.accepts(lifetime.id) && !lifetime.accepts(firstPresentation),
+             "an old callback acquired a replacement presentation")
+
 var state = TrainerProfileSelection()
 state.reconcile([])
 precondition(state.selectedName.isEmpty)
@@ -73,7 +84,8 @@ precondition(TrainerProfileEntry(name: "Restored", updatedAt: "Today").title == 
 print("profile_selection_workflow_ok")
 ''', encoding="utf-8")
     binary = folder / "selection"
-    subprocess.run([swiftc, str(SOURCE), str(main), "-o", str(binary)], check=True)
+    subprocess.run([swiftc, str(SOURCE), str(ROOT / "Sources/Core/UI/Components/TrainerSheetLifetime.swift"),
+                    str(main), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
 # Both modules bind the same workflow. Contents, transport and shortcut

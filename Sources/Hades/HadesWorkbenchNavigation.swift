@@ -226,6 +226,7 @@ struct HadesSidebarActions: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
+    @Environment(\.trainerSelectedSection) private var selectedSection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -234,11 +235,12 @@ struct HadesSidebarActions: View {
                 if section == .management { Divider().padding(.vertical, 2) }
                 TrainerSectionButton(
                     title: HadesPresentation.text(section.titleKey, language: localization.language),
-                    systemImage: section.icon
+                    systemImage: section.icon,
+                    selected: selectedSection == section.id
                 ) {
                     navigate(section.id)
                 }
-                .focusEffectDisabled()
+                .accessibilityIdentifier("trainer.section.\(section.id)")
             }
         }
     }

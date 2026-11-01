@@ -13,6 +13,22 @@ struct TrainerFeedbackTiming {
     private var readableDuration: TimeInterval = 0
     private var pausedAt: TimeInterval?
 
+    /// Reconcile presentation without replacing a retained notice's lifetime.
+    /// A hidden page pauses its existing notice. A new hidden notice starts
+    /// its readable interval and requests an announcement only on return.
+    mutating func synchronize(noticeID: UUID?, duration: TimeInterval,
+                              visible: Bool, paused: Bool, at time: TimeInterval) -> Bool {
+        guard let noticeID else { clear(); return false }
+        guard visible else {
+            if let currentID { pause(currentID, at: time) }
+            return false
+        }
+        let isNew = show(noticeID, duration: duration, at: time)
+        if paused { pause(noticeID, at: time) }
+        else { resume(noticeID, at: time) }
+        return isNew
+    }
+
     /// Returns true only for a new event, which may be announced once.
     mutating func show(_ id: UUID, duration: TimeInterval, at time: TimeInterval) -> Bool {
         guard currentID != id else { return false }

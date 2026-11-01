@@ -1,26 +1,9 @@
 import SwiftUI
 
-struct TrainerSidebarAdditionalCards {
-    let before: AnyView
-    let after: AnyView
-}
-
-private struct TrainerSidebarAdditionalCardsKey: EnvironmentKey {
-    static var defaultValue: TrainerSidebarAdditionalCards {
-        .init(before: AnyView(EmptyView()), after: AnyView(EmptyView()))
-    }
-}
-
-extension EnvironmentValues {
-    var trainerSidebarAdditionalCards: TrainerSidebarAdditionalCards {
-        get { self[TrainerSidebarAdditionalCardsKey.self] }
-        set { self[TrainerSidebarAdditionalCardsKey.self] = newValue }
-    }
-}
-
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
@@ -70,20 +53,26 @@ struct TrainerSidebarCard<Actions: View>: View {
     private var statusIndicator: some View {
         Group {
             if busy {
-                ProgressView().controlSize(.mini).frame(width: 8, height: 8)
+                ProgressView().controlSize(.mini)
             } else {
-                Circle()
-                    .fill(connected ? theme.success : targetRunning ? theme.warning : theme.inactive)
-                    .frame(width: 6, height: 6)
+                Image(systemName: connected ? "checkmark.circle.fill" : targetRunning ? "minus.circle" : "circle.dashed")
+                    .font(.caption2)
+                    .foregroundStyle(connected ? theme.success : targetRunning ? theme.warning : theme.inactive)
+                    .contentTransition(.opacity)
             }
         }
+        .frame(width: 12, height: 12)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: connected)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: targetRunning)
+        .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
         .help(statusHelp)
         .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
         .accessibilityValue(localization.string(detailToken))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: selected ? 14 : 0) {
             Button(action: onSelect) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
@@ -105,7 +94,14 @@ struct TrainerSidebarCard<Actions: View>: View {
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")
             .accessibilityAddTraits(selected ? .isSelected : [])
-            actions.buttonStyle(.plain)
+            VStack(alignment: .leading, spacing: 14) { actions }
+                .buttonStyle(.plain)
+                .frame(height: selected ? nil : 0, alignment: .top)
+                .clipped()
+                .opacity(selected ? 1 : 0)
+                .allowsHitTesting(selected)
+                .disabled(!selected)
+                .accessibilityHidden(!selected)
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
@@ -119,21 +115,19 @@ struct TrainerSidebarCard<Actions: View>: View {
                     .accessibilityHidden(true)
             }
         }
+        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
     }
 }
 
 struct TrainerSidebar<Card: View>: View {
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerSidebarAdditionalCards) private var additionalCards
     let card: Card
 
     init(@ViewBuilder card: () -> Card) { self.card = card() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            additionalCards.before
             card
-            additionalCards.after
             Spacer()
         }
         .padding(18)

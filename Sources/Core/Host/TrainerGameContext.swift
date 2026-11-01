@@ -9,6 +9,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     let targetMonitor: TrainerTargetProcessMonitor
     let saveManager: TrainerSaveManagerModel
     let toolWindows = TrainerToolWindowStore()
+    let navigation = TrainerSectionNavigation()
     private var ownership: TrainerTargetOwnership?
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
@@ -37,7 +38,9 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             executablePathSuffix: Module.descriptor.targetExecutablePathSuffix
         )
         previousTarget = targetMonitor.targetObservation
-        previousBackendAvailable = model.backendAvailable
+        // This tracks the availability processed by this Context. A module
+        // can finish starting before the Context installs its subscription.
+        previousBackendAvailable = false
         previousConnected = model.connected
         model.hostTargetLifetimeChanged(observation: previousTarget)
         connectionPolicy.observeTarget(running: previousTarget.isRunning, launchGeneration: previousTarget.launchGeneration)
@@ -56,6 +59,9 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
             self?.applicationBecameActive()
         }.store(in: &subscriptions)
+        // Reuse the transition owner once for an already-running backend.
+        // Leave an unavailable module's startup/recovery lifecycle unchanged.
+        if model.backendAvailable { modelChanged() }
     }
 
     var canTerminate: Bool { !model.busy && !saveManager.busy && toolWindows.canCloseAll }
@@ -152,7 +158,8 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
     nonisolated let descriptor: GameModuleDescriptor
     nonisolated var id: String { descriptor.id }
     let content: AnyView
-    private let collapsedSidebarCard: (@escaping () -> Void) -> AnyView
+    private let sidebarCard: (Bool, @escaping () -> Void) -> AnyView
+    private let setPageVisible: (Bool) -> Void
     private let storage: Any
     private let connectedValue: () -> Bool
     private let canTerminateValue: () -> Bool
@@ -164,7 +171,10 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
         descriptor = Module.descriptor
         storage = context
         content = AnyView(TrainerHostView(context: context))
-        collapsedSidebarCard = { onSelect in AnyView(TrainerCollapsedGameCard(context: context, onSelect: onSelect)) }
+        sidebarCard = { selected, onSelect in
+            AnyView(TrainerHostSidebarCard(context: context, selected: selected, onSelect: onSelect))
+        }
+        setPageVisible = context.navigation.setVisible
         connectedValue = { context.model.connected }
         canTerminateValue = { context.canTerminate }
         terminate = context.model.prepareForTermination
@@ -176,7 +186,10 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
     var connected: Bool { connectedValue() }
     var canTerminate: Bool { canTerminateValue() }
 
-    func makeCollapsedSidebarCard(onSelect: @escaping () -> Void) -> AnyView { collapsedSidebarCard(onSelect) }
+    func makeSidebarCard(selected: Bool, onSelect: @escaping () -> Void) -> AnyView {
+        sidebarCard(selected, onSelect)
+    }
+    func pageVisibilityChanged(_ visible: Bool) { setPageVisible(visible) }
 
     func typed<Module: TrainerGameModule>(as module: Module.Type) -> TrainerGameContext<Module>? {
         storage as? TrainerGameContext<Module>
@@ -192,7 +205,12 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
 final class TrainerApplicationCoordinator: ObservableObject {
     let contexts: [AnyTrainerGameContext]
     @Published var selectedGameID: String {
-        didSet { if !terminationRequested { GlobalHotkeys.selectGame(selectedGameID) } }
+        didSet {
+            // Cancel pending navigation synchronously, before SwiftUI updates
+            // visibility. A captured old-page callback cannot scroll it later.
+            contexts.forEach { $0.pageVisibilityChanged($0.id == selectedGameID) }
+            if !terminationRequested { GlobalHotkeys.selectGame(selectedGameID) }
+        }
     }
     private var subscriptions: Set<AnyCancellable> = []
     @Published private(set) var terminationRequested = false
@@ -205,6 +223,7 @@ final class TrainerApplicationCoordinator: ObservableObject {
         precondition(!contexts.isEmpty)
         self.contexts = contexts
         selectedGameID = contexts[0].id
+        contexts.forEach { $0.pageVisibilityChanged($0.id == selectedGameID) }
         GlobalHotkeys.selectGame(selectedGameID)
         for context in contexts {
             context.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in

@@ -113,10 +113,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canEditIntent else { return }
         send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key)
     }
-    func setNumber(_ feature: HadesFeature, text: String) -> String {
+    func setNumber(_ feature: HadesFeature, text: String, onRejection: (String) -> Void = { _ in }) -> String {
         guard let value = Double(text), value.isFinite,
               feature == .dashBonus ? (value >= 0 && value <= 20 && value.rounded() == value) : (value >= 0.1 && value <= 100) else {
             localError = "hades.error.invalidValue"
+            onRejection(localError)
             return text
         }
         setFeature(feature, value: value)

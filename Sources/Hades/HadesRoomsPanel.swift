@@ -96,10 +96,10 @@ struct HadesRoomsPanel: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                 }
                 .help(text("hades.chaosGateHelp"))
-                if let objects = model.world?.objects, !objects.isEmpty {
+                TrainerDisclosure(isExpanded: !(model.world?.objects.isEmpty ?? true)) {
                     TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false) {
                         Picker(text("hades.chamberObject"), selection: $chamberObject) {
-                            ForEach(objects, id: \.self) { item in Text(termName(item)).tag(item) }
+                            ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
                         }
                         .labelsHidden().trainerPickerWidth(.standard)
                         TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate) {
