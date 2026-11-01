@@ -34,6 +34,9 @@ class FixtureCodec:
             raise ValueError("Malformed structured fixture document.")
         return FixtureDocument(decoded["value"])
 
+    def load(self, path):
+        return self.decode(Path(path).read_bytes())
+
 
 CODEC = FixtureCodec()
 
