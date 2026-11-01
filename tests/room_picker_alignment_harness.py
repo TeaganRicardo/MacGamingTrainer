@@ -70,7 +70,7 @@ private func exerciseRoomPickerAlignment() {
     let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
     for language in [TrainerPresentationLanguage.en, .zhCN] {
         localization.language = language
-        for width: CGFloat in [theme.contentMinWidth, 1050] {
+        for width in [theme.contentMinWidth, CGFloat(1050)] {
             let host = NSHostingView(rootView:
                 RoomPickerAlignmentFixture(language: language)
                     .frame(width: width, height: 600, alignment: .topLeading)
