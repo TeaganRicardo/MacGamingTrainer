@@ -464,8 +464,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var language: TrainerPresentationLanguage = .zhCN
     private var pendingRequests = 0
     private var knownDisplayNames: [String: String] = [:]
-    private var queryGeneration = 0
-    private var detailGeneration = 0
+    private let requests = TrainerSaveEditorReplyCoordinator()
     private var lastRequestedSearch: String?
     private var scheduledSearch: DispatchWorkItem?
 
@@ -483,7 +482,7 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func refreshFiles(openDefault: Bool = false) {
         perform(.saveEditorInventory(snapshotID: snapshotID), operation: "hades2.saveEditor.operation.open",
-                announceSuccess: false) { [weak self] reply in
+                announceSuccess: false, lane: .inventory) { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
             guard let sources = result["sources"] as? [[String: Any]],
                   let targets = result["targets"] as? [[String: Any]] else {
@@ -559,9 +558,11 @@ final class Hades2SaveEditorModel: ObservableObject {
         scheduledSearch = nil
         invalidateQuery()
         invalidateDetail()
+        requests.retire()
         if let workspaceID { releaseWorkspace(workspaceID) }
         workspaceID = nil
         baselineGeneration = nil
+        lastRequestedSearch = nil
         continuousDraftEntryIDs = []
         retiredDrafts = []
         operationFailures = [:]
@@ -588,6 +589,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             selectedTargetIdentity = file.identity
             return
         }
+        invalidateQuery()
+        invalidateDetail()
         perform(.saveEditorTarget(file.identity), operation: "hades2.saveEditor.operation.target",
                 announceSuccess: false) { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
@@ -610,7 +613,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func invalidateDetail() {
-        detailGeneration += 1
+        requests.invalidate(.detail)
+        requests.invalidate(.advancedDetail)
         selectedInvestigationID = nil
         investigationDetail = nil
         detailFailure = nil
@@ -619,7 +623,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     private func invalidateQuery() {
         scheduledSearch?.cancel()
         scheduledSearch = nil
-        queryGeneration += 1
+        requests.invalidate(.query)
         querying = false
         queryFailure = nil
     }
@@ -652,9 +656,8 @@ final class Hades2SaveEditorModel: ObservableObject {
         guard !profile.isEmpty, workspaceID != nil else { return }
         scheduledSearch?.cancel()
         scheduledSearch = nil
-        queryGeneration += 1
-        let generation = queryGeneration
         let workspace = workspaceID
+        let requestedBaseline = baselineGeneration
         let requestedDomain = selectedDomain
         let requestedScope = selectedScope
         let requestedSearch = search
@@ -689,10 +692,10 @@ final class Hades2SaveEditorModel: ObservableObject {
             operation: "hades2.saveEditor.operation.query",
             announceSuccess: false,
             occupy: false,
-            presentFailure: false
+            presentFailure: false,
+            lane: .query
         ) { [weak self] reply in
-            guard let self, self.queryGeneration == generation,
-                  self.workspaceID == workspace,
+            guard let self, self.workspaceID == workspace,
                   self.selectedDomain == requestedDomain,
                   self.selectedScope == requestedScope,
                   self.search == requestedSearch,
@@ -713,7 +716,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             }
             guard let domain = result["domain"] as? String,
                   domain == requestedDomain.rawValue,
-                  result["baselineGeneration"] as? String == self.baselineGeneration,
+                  result["baselineGeneration"] as? String == requestedBaseline,
                   let total = Self.intValue(result["total"]),
                   let offset = Self.intValue(result["offset"]), offset == boundedOffset
             else {
@@ -738,7 +741,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                         self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                         return
                     }
-                    let entries = fields.compactMap { Self.decodeEntry($0, baseline: self.baselineGeneration!) }
+                    let entries = fields.compactMap { Self.decodeEntry($0, baseline: requestedBaseline!) }
                     guard entries.count == fields.count, entries.allSatisfy({
                         ($0.entityID ?? "entry:" + $0.id) == id
                     }) else {
@@ -753,7 +756,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                     self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                     return
                 }
-                decoded = rows.compactMap { Self.decodeEntry($0, baseline: self.baselineGeneration!) }
+                decoded = rows.compactMap { Self.decodeEntry($0, baseline: requestedBaseline!) }
                 guard decoded.count == rows.count else {
                     self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                     return
@@ -806,8 +809,6 @@ final class Hades2SaveEditorModel: ObservableObject {
                || selectedDomain == .discover),
               entry.domain == "investigate", entry.baselineGeneration == baselineGeneration,
               let workspace = workspaceID else { return }
-        detailGeneration += 1
-        let generation = detailGeneration
         let requestedLanguage = language
         let scene = entry.rawID
         selectedInvestigationID = scene
@@ -816,10 +817,9 @@ final class Hades2SaveEditorModel: ObservableObject {
         perform(
             .saveEditorDetail(entryID: entry.id, language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
-            occupy: false, presentFailure: false
+            occupy: false, presentFailure: false, lane: .detail
         ) { [weak self] reply in
             guard let self,
-                  self.detailGeneration == generation,
                   self.workspaceID == workspace,
                   self.language == requestedLanguage,
                   self.selectedInvestigationID == scene else { return }
@@ -956,7 +956,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         guard entry.domain == "advanced", owns(entry.baselineGeneration), let workspace = workspaceID else { return }
         perform(.saveEditorDetail(entryID: entry.id, language: requestedLanguage.rawValue),
                 operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
-                occupy: false, presentFailure: false) { [weak self] reply in
+                occupy: false, presentFailure: false, lane: .advancedDetail) { [weak self] reply in
             guard let self, self.workspaceID == workspace else { return }
             guard reply.success, let result = reply.result,
                   result["baselineGeneration"] as? String == entry.baselineGeneration,
@@ -1022,7 +1022,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func owns(_ baseline: String?) -> Bool {
-        workspaceID != nil && baseline != nil && baseline == baselineGeneration
+        requests.owns(workspaceID: workspaceID, baselineGeneration: baseline)
     }
 
     func stage(entryID: String, operation: String, value: Any?, baseline: String) {
@@ -1103,7 +1103,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             .saveEditorReview(language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.review",
             announceSuccess: false,
-            occupy: false
+            occupy: false, lane: .review
         ) { [weak self] reply in
             guard let self,
                   self.workspaceID == workspace,
@@ -1177,6 +1177,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.textDrafts = self.textDrafts.filter { continuous.contains($0.key) }
             self.typedDrafts = self.typedDrafts.filter { continuous.contains($0.key) }
             self.membershipDrafts = self.membershipDrafts.filter { continuous.contains($0.key) }
+            self.requests.bind(workspaceID: workspace!, baselineGeneration: nextBaseline)
             self.baselineGeneration = nextBaseline
             self.items = []
             self.entityResults = []
@@ -1261,6 +1262,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 )
             }
         }
+        requests.bind(workspaceID: identifier, baselineGeneration: baseline)
         workspaceID = identifier
         baselineGeneration = baseline
         selectedTargetID = targetID
@@ -1383,11 +1385,16 @@ final class Hades2SaveEditorModel: ObservableObject {
         occupy: Bool = true,
         presentFailure: Bool = true,
         draftEntryIDs: [String]? = nil,
+        lane: TrainerSaveEditorReplyCoordinator.Lane? = nil,
         reply: @escaping (BackendReply) -> Void
     ) {
         let ownsWorkspace = request.command != .saveEditorOpen && request.command != .saveEditorInventory
         let requestWorkspaceID = ownsWorkspace ? workspaceID : nil
         let requestBaseline = ownsWorkspace ? baselineGeneration : nil
+        let ticket = request.command == .saveEditorOpen
+            ? requests.beginNewDocumentRead()
+            : requests.capture(request.command == .saveEditorInventory ? .inventory : lane,
+                               bindsDocument: ownsWorkspace)
         if occupy {
             pendingRequests += 1
             busy = true
@@ -1400,7 +1407,16 @@ final class Hades2SaveEditorModel: ObservableObject {
             saveBaselineGeneration: requestBaseline,
             saveDraftEntryIDs: draftEntryIDs,
             reply: { [weak self] backendReply in
-                guard let self, !ownsWorkspace || (self.workspaceID == requestWorkspaceID
+                guard let self else { return }
+                guard self.requests.accepts(ticket) else {
+                    if request.command == .saveEditorOpen, backendReply.success,
+                       let abandoned = backendReply.result?["workspaceId"] as? String,
+                       abandoned != self.workspaceID {
+                        self.releaseWorkspace(abandoned)
+                    }
+                    return
+                }
+                guard !ownsWorkspace || (self.workspaceID == requestWorkspaceID
                     && self.baselineGeneration == requestBaseline) else { return }
                 if presentFailure, (!ownsWorkspace || self.workspaceID == requestWorkspaceID),
                    !backendReply.success,
