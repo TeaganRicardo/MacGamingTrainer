@@ -26,11 +26,16 @@ from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 from hades2_debugserver_owner import DarwinProcesses
 executable = Path(os.environ['LLDB_DEBUGSERVER_PATH']).resolve()
-child = subprocess.Popen([str(executable), '60'], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+child = subprocess.Popen([str(executable)], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                         text=True, start_new_session=True)
 try:
-    token = next(token for token in DarwinProcesses().matching(executable) if token[5] == child.pid)
+    if child.stdout.readline().strip() != 'ready':
+        raise RuntimeError('native cleanup fixture exited before readiness: ' + str(child.poll()))
+    tokens = [token for token in DarwinProcesses().matching(executable) if token[5] == child.pid]
+    if len(tokens) != 1:
+        raise RuntimeError('ready cleanup fixture is absent from its lifetime inventory')
+    token = tokens[0]
     record = json.dumps({'token': list(token), 'executable': str(executable)})
     Path(sys.argv[2]).write_text(record)
     print(record, flush=True)
@@ -51,6 +56,24 @@ time.sleep(60)
     processes = DarwinProcesses()
     with tempfile.TemporaryDirectory(prefix='mgt-debugserver-cleanup-contract-') as directory:
         directory = Path(directory)
+        # Relocated protected system binaries can be killed before main on
+        # macOS. Build our own native fixture and observe its readiness; the
+        # copied SDK debugserver remains covered by the LLDB scenarios below.
+        native_source = directory / 'cleanup_fixture.c'
+        native_source.write_text('''#include <stdio.h>
+#include <unistd.h>
+int main(void) {
+    puts("ready");
+    fflush(stdout);
+    sleep(60);
+    return 0;
+}
+''')
+        native_executable = directory / 'cleanup_fixture'
+        subprocess.run(
+            ['/usr/bin/xcrun', 'clang', str(native_source), '-o', str(native_executable)],
+            check=True, capture_output=True, text=True, timeout=15,
+        )
         probe = directory / 'worker.py'
         probe.write_text(cleanup_worker)
         with subprocess.Popen(['/bin/sleep', '60'], start_new_session=True) as unrelated:
@@ -60,7 +83,7 @@ time.sleep(60)
                     try:
                         output = run_lldb_worker(
                             [sys.executable, str(probe), str(ROOT / 'tests'), str(record_path), mode],
-                            dict(os.environ), timeout=2, debugserver_path='/bin/sleep',
+                            dict(os.environ), timeout=2, debugserver_path=native_executable,
                         )
                     except subprocess.TimeoutExpired as error:
                         assert mode == 'timeout', worker_failure_output(error)
