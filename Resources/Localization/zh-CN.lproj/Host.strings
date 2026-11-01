@@ -98,6 +98,7 @@
 "host.save.error.incomplete" = "存档操作未完成。";
 "host.save.error.failed" = "存档操作失败。";
 "host.save.error.rollbackFailed" = "存档恢复失败，且回滚无法完成。恢复副本保留在：{0}";
+"host.save.error.recoveryUnresolved" = "上一次结构化存档编辑的恢复状态尚未确认。由于无法检查恢复状态，当前编辑会话已锁定。";
 "host.save.error.busy" = "存档当前正在使用，请稍后重试。";
 "host.save.error.notFound" = "找不到该存档备份。";
 "host.save.error.unsupported" = "当前游戏不支持存档管理。";

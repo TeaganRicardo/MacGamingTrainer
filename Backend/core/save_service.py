@@ -293,6 +293,11 @@ class CoreSaveService:
         self._write_staged(payload)
         return {'staged': True, **payload}
 
+    def recovery_paths(self):
+        """Return validated terminal rollback evidence without enumerating snapshots."""
+        self._require_supported()
+        return tuple(self._recovery_paths())
+
     def list_state(self):
         self._require_supported()
         snapshots = self.store.list_snapshots()

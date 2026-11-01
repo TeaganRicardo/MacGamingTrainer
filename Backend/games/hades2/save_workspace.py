@@ -1138,6 +1138,9 @@ class Hades2SaveWorkspace:
             "source": dict(self._session.source),
             "sourceSHA256": self._session.source_sha256,
             "target": self._session.target,
+            "recoveryPath": self._session.recovery_path,
+            "recoveryPaths": list(self._session.recovery_paths),
+            "recoveryUnresolved": self._session.recovery_unresolved,
             "domains": list(SAVE_EDITOR_DOMAINS),
             "pendingCount": len(self._pending),
             "coverage": [

@@ -202,7 +202,9 @@ class HadesSaveWorkspace:
         return {'workspaceId': self.identifier, 'baselineGeneration': self.baseline_generation, 'source': self.session.source,
                 'sourceSHA256': self.session.source_sha256, 'target': self.session.target,
                 'domains': list(DOMAINS), 'review': self.review(language),
-                'recoveryPath': self.session.recovery_path}
+                'recoveryPath': self.session.recovery_path,
+                'recoveryPaths': list(self.session.recovery_paths),
+                'recoveryUnresolved': self.session.recovery_unresolved}
 
     def set_target(self, target, *, baseline_generation):
         self._require_generation(baseline_generation)

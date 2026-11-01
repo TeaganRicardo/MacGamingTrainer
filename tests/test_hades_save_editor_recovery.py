@@ -98,7 +98,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-recovery-') as tempora
     with patch.object(SaveRestoreTransaction, '_replace_file', lost_ack_and_rollback):
         failure = rejects(SaveRollbackError, lambda: apply(workspace))
         assert workspace.session.recovery_path == failure.recovery_path
-        rejects(ValueError, lambda: apply(workspace))
+        assert workspace.summary()["recoveryPath"] == failure.recovery_path
+        assert workspace.summary()["recoveryUnresolved"] is True
+        assert workspace.summary()["recoveryPaths"] == [failure.recovery_path]
+        blocked = rejects(ValueError, lambda: apply(workspace))
+        assert blocked.code == "rollback_failed"
+        assert blocked.recovery_path == failure.recovery_path
         assert len(calls) == 2, 'Uncertain Apply was replayed'
     recovery = Path(failure.recovery_path)
     assert recovery.is_dir() and (recovery / 'files/main/Profile2.sav').read_bytes() == original
