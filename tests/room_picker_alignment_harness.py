@@ -99,9 +99,9 @@ private func exerciseRoomPickerAlignment() {
             for (index, control) in pickers.enumerated() {
                 let frame = control.frame
                 hierarchyCheck(frame.width > 0 && frame.height > 0,
-                               "room popup #\\(index) collapsed")
+                               "room popup #\(index) collapsed")
                 hierarchyCheck(abs(frame.minX - first.minX) <= 1 && abs(frame.width - first.width) <= 1,
-                               "room popups have unequal columns: language=\\(language.rawValue) window=\\(width) first=\\(first) #\\(index)=\\(frame)")
+                               "room popups have unequal columns: language=\(language.rawValue) window=\(width) first=\(first) #\(index)=\(frame)")
             }
             window.contentView = nil
             window.close()
