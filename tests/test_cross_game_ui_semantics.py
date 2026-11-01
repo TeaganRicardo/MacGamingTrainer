@@ -324,15 +324,18 @@ search_field = (ROOT / "Sources/Core/UI/Components/TrainerWorkbenchSearchField.s
 assert "systemImage: icon(entry)" in search_field
 assert "icon: { $0.icon }" in hades_nav
 
-# Executable product actions must carry an icon. This deliberately scans both
-# game UI trees so new actions cannot silently regress to text-only controls.
-for root in (ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
-    for path in root.rglob("*.swift"):
-        lines = path.read_text().splitlines()
-        for index, line in enumerate(lines):
-            if "TrainerPrimaryActionButton(" not in line and "TrainerSecondaryActionButton(" not in line:
-                continue
-            window = "\n".join(lines[index:index + 7])
-            assert "systemImage:" in window, f"missing action icon: {path}:{index + 1}"
+# Labeled verbs no longer carry ornamental icons: this behavior belongs
+# to the same shared Core action primitive for every game. Keep the separate
+# icon contracts for feature rows, navigation and command discovery above.
+action_controls = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text()
+label = action_controls[
+    action_controls.index("private struct TrainerActionButtonLabel"):
+    action_controls.index("struct TrainerPrimaryActionButton")
+]
+assert "Text(title)" in label
+assert "Label(title, systemImage:" not in label
+for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton"):
+    owner = action_controls[action_controls.index(type_name):]
+    assert "TrainerActionButtonLabel(title: title)" in owner
 
 print("cross_game_ui_semantics_ok")
