@@ -48,7 +48,6 @@ assert '.toggleStyle(.switch)' in toggle
 assert '.controlSize(.regular)' in toggle
 assert '.tint(tint ?? theme.accent)' in toggle
 assert features.count('tint: state.indicatorColor') >= 2
-assert '.animation(.easeInOut(duration: 0.16), value: isOn)' in toggle
 assert 'HStack(spacing: 16)' in row
 assert features.count('TrainerLabeledControlRow(') == 2
 assert 'TrainerIconLabel(' in row

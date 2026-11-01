@@ -1,12 +1,13 @@
 import SwiftUI
 
 /// Single shared switch implementation used by every trainer game surface.
-/// It intentionally mirrors the compact native macOS switch: small control
-/// size, purple accent and native thumb animation. Feature rows may supply
+/// It uses the native macOS switch: regular control size, purple accent and
+/// system thumb animation. Feature rows may supply
 /// their neutral presentation tint so the switch and its corresponding
 /// indicator communicate the same phase.
 struct TrainerToggleControl: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let isOn: Bool
     let enabled: Bool
@@ -55,7 +56,9 @@ struct TrainerToggleControl: View {
             .disabled(!enabled)
             .help(helpText)
             .fixedSize()
-            .animation(.easeInOut(duration: 0.16), value: isOn)
+            .transaction { transaction in
+                TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+            }
     }
 }
 
@@ -63,6 +66,7 @@ struct TrainerToggleControl: View {
 /// checkbox here prevents game modules from owning another Toggle rendering
 /// path while preserving the native checkbox appearance.
 struct TrainerCheckboxControl: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let isOn: Bool
     let enabled: Bool
@@ -79,11 +83,15 @@ struct TrainerCheckboxControl: View {
         Toggle(title, isOn: Binding(get: { isOn }, set: onChange))
             .toggleStyle(.checkbox)
             .disabled(!enabled)
+            .transaction { transaction in
+                TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+            }
     }
 }
 
 struct TrainerLockButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let locked: Bool
@@ -95,11 +103,17 @@ struct TrainerLockButton: View {
             Image(systemName: locked ? "lock.fill" : "lock.open")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(locked ? theme.accent : .secondary)
-                .frame(width: 26, height: 24)
-                .background((locked ? theme.mutedFill.opacity(0.62) : theme.subtleFill.opacity(0.875)), in: RoundedRectangle(cornerRadius: theme.compactCornerRadius))
+                .frame(width: 14, height: 16)
+                .contentTransition(.opacity)
+                .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: locked)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .frame(width: 26, height: 24)
         .disabled(!enabled)
+        .transaction { transaction in
+            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+        }
         .accessibilityLabel(localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title]))
         .help(localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title]))
     }

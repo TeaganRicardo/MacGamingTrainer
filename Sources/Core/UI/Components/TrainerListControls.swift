@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct TrainerResetButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let enabled: Bool
     let action: () -> Void
@@ -11,10 +12,15 @@ struct TrainerResetButton: View {
             Image(systemName: "arrow.uturn.backward")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 26, height: 24)
+                .frame(width: 14, height: 16)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .frame(width: 26, height: 24)
         .disabled(!enabled)
+        .transaction { transaction in
+            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+        }
         .help(title)
         .accessibilityLabel(title)
     }
@@ -71,6 +77,7 @@ private struct TrainerActionButtonLabel: View {
 
 struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
@@ -98,11 +105,15 @@ struct TrainerPrimaryActionButton: View {
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
         .disabled(!enabled)
+        .transaction { transaction in
+            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+        }
         .frame(width: width)
     }
 }
 
 struct TrainerSecondaryActionButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
@@ -135,6 +146,9 @@ struct TrainerSecondaryActionButton: View {
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
+        .transaction { transaction in
+            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+        }
         .help(helpText ?? "")
         .accessibilityLabel(accessibilityLabel ?? title)
         .frame(width: width)
@@ -160,6 +174,7 @@ struct TrainerInlineNameEditor: View {
 
 struct TrainerSelectionControl: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let selected: Bool
     let enabled: Bool
@@ -176,13 +191,20 @@ struct TrainerSelectionControl: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: selected ? "checkmark.square.fill" : "square")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(selected ? theme.accent : .secondary)
-                .frame(width: 24, height: 24)
+                .frame(width: 12, height: 16)
                 .contentShape(Rectangle())
+                .contentTransition(.opacity)
+                .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .frame(width: 24, height: 24)
         .disabled(!enabled)
+        .transaction { transaction in
+            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+        }
         .help(helpText)
         .accessibilityLabel(localization.localized(selected ? "host.selection.deselect" : "host.selection.select"))
         .accessibilityValue(localization.localized(selected ? "host.selection.selected" : "host.selection.notSelected"))
