@@ -939,6 +939,41 @@ func pump(_ seconds: TimeInterval = 0.1) {
             commands().contains { $0["command"] as? String == "save_editor_close"
                 && ($0["params"] as? [String:Any])?["workspaceId"] as? String == pinnedWorkspace }
         }
+        // Reuse the very same model after a close while its prior query
+        // remains in flight. The late response must never re-own this model,
+        // and a row captured before close cannot stage into the new document.
+        let reusedModel = model.makeSaveEditorModel()
+        reusedModel.open(language: .en)
+        wait("reusable Hades editor opened") { reusedModel.workspaceID != nil && !reusedModel.busy && !reusedModel.queryLoading && !reusedModel.rows.isEmpty }
+        let originalReusedWorkspace = reusedModel.workspaceID!
+        let originalReusedRow = reusedModel.rows.first!
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorHoldQuery"]=true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        let priorQueryCount = commands().filter { $0["command"] as? String == "save_editor_query" }.count
+        reusedModel.query()
+        wait("delayed Hades query admitted") {
+            commands().filter { $0["command"] as? String == "save_editor_query" }.count > priorQueryCount
+        }
+        reusedModel.close()
+        check(reusedModel.workspaceID == nil && !reusedModel.queryLoading,
+              "closing a pending query retained the retired document")
+        saveState["editorHoldQuery"]=false
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        reusedModel.open(language: .en)
+        wait("Hades editor reopened after a stale query") {
+            reusedModel.workspaceID != nil && reusedModel.workspaceID != originalReusedWorkspace
+                && !reusedModel.busy && !reusedModel.queryLoading && !reusedModel.rows.isEmpty
+        }
+        let postReopenWorkspace = reusedModel.workspaceID!
+        let priorStageCount = commands().filter { $0["command"] as? String == "save_editor_stage" }.count
+        _ = reusedModel.commit(originalReusedRow, text: "123", workspace: originalReusedWorkspace)
+        pump(0.10)
+        check(reusedModel.workspaceID == postReopenWorkspace
+              && reusedModel.rows.allSatisfy { $0.baselineGeneration == reusedModel.baselineGeneration }
+              && commands().filter { $0["command"] as? String == "save_editor_stage" }.count == priorStageCount,
+              "late Hades response or stale row escaped the retired document baseline")
+        reusedModel.close()
         print("hades_save_editor_native_control_journeys_ok")
 
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
