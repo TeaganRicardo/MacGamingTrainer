@@ -461,6 +461,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     var pendingCount: Int { pendingActions.count }
 
     private let api: Hades2API
+    private let backendSession: TrainerBackendSession
     private var language: TrainerPresentationLanguage = .zhCN
     private var pendingRequests = 0
     private var knownDisplayNames: [String: String] = [:]
@@ -469,6 +470,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var scheduledSearch: DispatchWorkItem?
 
     init(session: TrainerBackendSession, snapshotID: String? = nil) {
+        backendSession = session
         api = Hades2API(session: session)
         self.snapshotID = snapshotID
     }
@@ -525,6 +527,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             }
             self.continuousDraftEntryIDs = []
             guard self.applySummary(result) else {
+                if let abandoned = result["workspaceId"] as? String,
+                   abandoned != previousWorkspace { self.releaseWorkspace(abandoned) }
                 self.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 self.restoreLoadedSourceSelection()
                 return
@@ -1391,10 +1395,14 @@ final class Hades2SaveEditorModel: ObservableObject {
         let ownsWorkspace = request.command != .saveEditorOpen && request.command != .saveEditorInventory
         let requestWorkspaceID = ownsWorkspace ? workspaceID : nil
         let requestBaseline = ownsWorkspace ? baselineGeneration : nil
+        if [.saveEditorStage, .saveEditorUnstage, .saveEditorCancel, .saveEditorApply].contains(request.command) {
+            requests.invalidate(.review)
+        }
         let ticket = request.command == .saveEditorOpen
             ? requests.beginNewDocumentRead()
             : requests.capture(request.command == .saveEditorInventory ? .inventory : lane,
                                bindsDocument: ownsWorkspace)
+        let backendLifecycle = backendSession.lifecycleID
         if occupy {
             pendingRequests += 1
             busy = true
@@ -1408,8 +1416,9 @@ final class Hades2SaveEditorModel: ObservableObject {
             saveDraftEntryIDs: draftEntryIDs,
             reply: { [weak self] backendReply in
                 guard let self else { return }
-                guard self.requests.accepts(ticket) else {
-                    if request.command == .saveEditorOpen, backendReply.success,
+                guard self.requests.accepts(ticket), self.backendSession.lifecycleID == backendLifecycle else {
+                    if request.command == .saveEditorOpen, self.backendSession.lifecycleID == backendLifecycle,
+                       backendReply.success,
                        let abandoned = backendReply.result?["workspaceId"] as? String,
                        abandoned != self.workspaceID {
                         self.releaseWorkspace(abandoned)
