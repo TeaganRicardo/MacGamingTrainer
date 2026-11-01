@@ -28,6 +28,7 @@ struct TrainerResetButton: View {
 
 struct TrainerSectionButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String?
@@ -65,24 +66,30 @@ struct TrainerSectionButton: View {
             }
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .leading) {
+            if selected {
+                Capsule()
+                    .fill(theme.accent)
+                    .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
+                    .offset(x: -12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
 private struct TrainerActionButtonLabel: View {
     let title: String
-    let systemImage: String?
-    let fillsWidth: Bool
 
+    // Labeled actions already describe their purpose. Core renders verb
+    // buttons as text only; section icons and icon-only commands stay distinct.
     var body: some View {
-        Group {
-            if let systemImage {
-                Label(title, systemImage: systemImage)
-            } else {
-                Text(title)
-            }
-        }
-        .frame(maxWidth: fillsWidth ? .infinity : nil)
+        Text(title)
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity)
     }
 }
 
@@ -111,7 +118,7 @@ struct TrainerPrimaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+            TrainerActionButtonLabel(title: title)
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
@@ -119,11 +126,12 @@ struct TrainerPrimaryActionButton: View {
         .transaction { transaction in
             TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
         }
-        .frame(width: width)
+        .frame(width: width ?? theme.compactActionWidth)
     }
 }
 
 struct TrainerSecondaryActionButton: View {
+    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
@@ -153,7 +161,7 @@ struct TrainerSecondaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+            TrainerActionButtonLabel(title: title)
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
@@ -162,7 +170,7 @@ struct TrainerSecondaryActionButton: View {
         }
         .help(helpText ?? "")
         .accessibilityLabel(accessibilityLabel ?? title)
-        .frame(width: width)
+        .frame(width: width ?? theme.compactActionWidth)
     }
 }
 
