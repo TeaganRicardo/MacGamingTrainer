@@ -172,7 +172,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             }
         }
         .labelsHidden()
-        .trainerPickerWidth(.flexible)
+        .trainerPickerWidth(inline ? .wide : .flexible)
         .disabled(!enabled || allItems.isEmpty)
     }
 
