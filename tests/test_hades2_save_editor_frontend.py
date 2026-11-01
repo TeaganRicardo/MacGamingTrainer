@@ -1832,6 +1832,7 @@ struct Main {
         backupModel.openSelection()
         backupModel.selectedSourceID = "main/Profile2_Archive.sav"
         backupModel.openSelection()
+        backupModel.search = ""
         pumpUntil(timeout: 4.0) {
             !backupModel.busy && !backupModel.querying
                 && backupModel.sourceRelativePath == "Profile2_Archive.sav"
@@ -1862,6 +1863,7 @@ struct Main {
             commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count > beforeCloseQuery
         }
         backupModel.close()
+        backupModel.search = ""
         backupModel.open(language: .en)
         pumpUntil(timeout: 4.0) {
             backupModel.workspaceID != nil && backupModel.workspaceID != closingWorkspace
