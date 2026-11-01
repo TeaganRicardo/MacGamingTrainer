@@ -21,7 +21,7 @@ struct HadesChaosPairControls: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.standard)
+                .trainerPickerWidth(.rowValue)
             }
             TrainerLabeledControlRow(title: text("hades.chaosEncounters"), icon: TrainerSemanticIcon.Concept.duration, tint: theme.accent, emphasized: model.canMutate) {
                 TrainerNumberField(text: $encounters, accessibilityLabel: text("hades.chaosEncounters"), width: 60,

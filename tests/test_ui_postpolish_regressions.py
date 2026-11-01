@@ -29,7 +29,9 @@ theme = read("Sources/Core/UI/TrainerTheme.swift")
 # heavy stack/sidebar layout when retained models and native controls update.
 assert '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)' not in pages
 card = section(sidebar, "struct TrainerSidebarCard", "struct TrainerSidebar<")
-assert '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)' not in card
+selection_motion = '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)'
+assert card.count(selection_motion) == 1
+assert card.index(selection_motion) < card.index(".frame(width: 24)")
 assert ".opacity(context.id == application.selectedGameID ? 1 : 0)" in pages
 assert ".allowsHitTesting(context.id == application.selectedGameID)" in pages
 
@@ -57,12 +59,17 @@ assert 'if !model.heroReady {' not in root
 assert 'runDataSection.trainerSectionTarget(' in root
 assert "if !error.isEmpty" in root
 
-# Compact labeled action widths belong to Core, not Hades-specific call sites.
+# Labeled action widths belong to one Core semantic policy, not game call sites.
+assert "enum TrainerActionWidthRole" in controls
+width_owner = section(controls, "private struct TrainerActionWidthModifier", "struct TrainerPrimaryActionButton")
+assert "case .compactRow:" in width_owner and "theme.compactActionWidth" in width_owner
+assert "case .connection:" in width_owner and "theme.connectionActionWidth" in width_owner
+assert "case .sheet:" in width_owner
 primary = section(controls, "struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton")
 secondary = section(controls, "struct TrainerSecondaryActionButton", "struct TrainerInlineNameEditor")
 for action in (primary, secondary):
-    assert "theme.compactActionWidth" in action
-    assert ".frame(width: width ?? theme.compactActionWidth)" in action
+    assert "widthRole: TrainerActionWidthRole = .compactRow" in action
+    assert "TrainerActionWidthModifier(role: widthRole)" in action
 assert 'compactActionWidth: 88' in theme
 assert "TrainerSecondaryActionButton(" in read("Sources/Hades/HadesRoomsPanel.swift")
 assert "TrainerSecondaryActionButton(" in hades2

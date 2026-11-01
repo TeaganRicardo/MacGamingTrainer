@@ -504,7 +504,7 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
@@ -514,7 +514,7 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                     }
                 }
             }
@@ -539,7 +539,7 @@ private struct HadesCatalogView: View {
                             Picker(text("hades.rarity"), selection: $rarity) {
                                 ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                             }
-                            .trainerPickerWidth(.compact)
+                            .trainerPickerWidth(.compactValue)
                             if selected.supportsLevel {
                                 Text(text("hades.level"))
                                 TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
@@ -615,7 +615,7 @@ private struct HadesCurrentTraitsPanel: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.flexible)
+                .trainerPickerWidth(.expanding)
                 if let selected {
                     HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
                 }
@@ -658,7 +658,7 @@ private struct HadesCurrentTraitRow: View {
                         Picker(text("hades.rarity"), selection: $rarity) {
                             ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPickerWidth(.compact)
+                        .trainerPickerWidth(.compactValue)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,

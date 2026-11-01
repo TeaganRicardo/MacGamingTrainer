@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct TrainerConnectionStatusCard: View {
-    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let connected: Bool
@@ -51,7 +50,7 @@ struct TrainerConnectionStatusCard: View {
             TrainerPrimaryActionButton(
                 title: localization.localized(primaryActionTitleKey),
                 enabled: actionsEnabled,
-                width: theme.connectionActionWidth,
+                widthRole: .connection,
                 action: performPrimaryAction
             )
             .contentTransition(.opacity)

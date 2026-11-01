@@ -69,7 +69,7 @@ private struct VisualHierarchyFixture: View {
                                 Text(title("A long localized option", "较长的本地化选项")).tag("first")
                             }
                             .labelsHidden()
-                            .trainerPickerWidth(.standard)
+                            .trainerPickerWidth(.rowValue)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }

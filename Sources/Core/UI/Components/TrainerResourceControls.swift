@@ -90,7 +90,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.flexible)
+                .trainerPickerWidth(.expanding)
                 .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerNumberField(
@@ -181,8 +181,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
         TrainerShortcutBadgeSlot(text: shortcutText)
         TrainerSecondaryActionButton(
             title: actionTitle,
-            enabled: actionAvailable,
-            width: theme.compactActionWidth
+            enabled: actionAvailable
         ) {
             guard actionAvailable else { return }
             onAction(selection)

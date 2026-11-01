@@ -94,27 +94,33 @@ struct TrainerTheme {
     }
 }
 
-enum TrainerPickerWidth {
-    case compact
-    case standard
-    case wide
-    case flexible
+enum TrainerPickerWidthRole {
+    case compactValue
+    case rowValue
+    case rowAction
+    case form
+    case expanding
 }
 
 private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
-    let role: TrainerPickerWidth
+    let role: TrainerPickerWidthRole
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         Group {
             switch role {
-            case .compact:
+            case .compactValue:
                 content.frame(width: theme.pickerCompactWidth)
-            case .standard:
+            case .rowValue:
                 content.frame(width: theme.pickerStandardWidth)
-            case .wide:
-                content.frame(width: theme.pickerWideWidth)
-            case .flexible:
+            case .rowAction, .form:
+                content.frame(
+                    minWidth: theme.pickerStandardWidth,
+                    idealWidth: theme.pickerWideWidth,
+                    maxWidth: theme.pickerWideWidth
+                )
+            case .expanding:
                 content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
             }
         }
@@ -143,7 +149,7 @@ extension View {
         environment(\.trainerTheme, theme)
     }
 
-    func trainerPickerWidth(_ role: TrainerPickerWidth = .standard) -> some View {
+    func trainerPickerWidth(_ role: TrainerPickerWidthRole = .rowValue) -> some View {
         modifier(TrainerPickerWidthModifier(role: role))
     }
 

@@ -55,7 +55,6 @@ struct Hades2OccurrenceSetting: View {
                     title: generateLabel,
                     systemImage: TrainerSemanticIcon.Action.generate,
                     enabled: canGenerate,
-                    width: theme.compactActionWidth,
                     helpText: generateHelp,
                     accessibilityLabel: title + " " + generateLabel,
                     action: onGenerate

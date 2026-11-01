@@ -28,7 +28,7 @@ private struct RoomPickerAlignmentFixture: View {
                 Text(title("Original", "原生")).tag("original")
             }
             .labelsHidden()
-            .trainerPickerWidth(.wide)
+            .trainerPickerWidth(.rowAction)
             TrainerShortcutBadgeSlot(text: key)
             TrainerSecondaryActionButton(title: title("Apply", "应用"), enabled: true) {}
         }
@@ -95,7 +95,7 @@ private func exerciseRoomPickerAlignment() {
             hierarchyCheck(pickers.count == 5, "five real Rooms & Rewards popups not mounted")
             let first = pickers[0].frame
             hierarchyCheck(first.width > 180 && first.width <= theme.pickerWideWidth + 1,
-                           "the native popup did not occupy its shared wide allocation")
+                           "the native popup did not occupy its shared row-action allocation")
             for (index, control) in pickers.enumerated() {
                 let frame = control.frame
                 hierarchyCheck(frame.width > 0 && frame.height > 0,

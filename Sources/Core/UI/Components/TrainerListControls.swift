@@ -27,7 +27,6 @@ struct TrainerResetButton: View {
 }
 
 struct TrainerSectionButton: View {
-    @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
@@ -80,45 +79,68 @@ struct TrainerSectionButton: View {
     }
 }
 
+enum TrainerActionWidthRole {
+    case compactRow
+    case connection
+    case sheet
+}
+
 private struct TrainerActionButtonLabel: View {
     let title: String
+    let fillsWidth: Bool
 
     // Labeled actions already describe their purpose. Core renders verb
     // buttons as text only; section icons and icon-only commands stay distinct.
     var body: some View {
         Text(title)
             .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .frame(maxWidth: .infinity)
+            .allowsTightening(true)
+            .minimumScaleFactor(0.78)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
+    }
+}
+
+private struct TrainerActionWidthModifier: ViewModifier {
+    let role: TrainerActionWidthRole
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch role {
+        case .compactRow:
+            content.frame(width: theme.compactActionWidth)
+        case .connection:
+            content.frame(width: theme.connectionActionWidth)
+        case .sheet:
+            content.frame(minWidth: theme.compactActionWidth)
+        }
     }
 }
 
 struct TrainerPrimaryActionButton: View {
-    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
-    let width: CGFloat?
+    let widthRole: TrainerActionWidthRole
     let action: () -> Void
 
     init(
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        width: CGFloat? = nil,
+        widthRole: TrainerActionWidthRole = .compactRow,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
-        self.width = width
+        self.widthRole = widthRole
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
@@ -126,17 +148,16 @@ struct TrainerPrimaryActionButton: View {
         .transaction { transaction in
             TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
         }
-        .frame(width: width ?? theme.compactActionWidth)
+        .modifier(TrainerActionWidthModifier(role: widthRole))
     }
 }
 
 struct TrainerSecondaryActionButton: View {
-    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
-    let width: CGFloat?
+    let widthRole: TrainerActionWidthRole
     let helpText: String?
     let accessibilityLabel: String?
     let action: () -> Void
@@ -145,7 +166,7 @@ struct TrainerSecondaryActionButton: View {
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        width: CGFloat? = nil,
+        widthRole: TrainerActionWidthRole = .compactRow,
         helpText: String? = nil,
         accessibilityLabel: String? = nil,
         action: @escaping () -> Void
@@ -153,7 +174,7 @@ struct TrainerSecondaryActionButton: View {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
-        self.width = width
+        self.widthRole = widthRole
         self.helpText = helpText
         self.accessibilityLabel = accessibilityLabel
         self.action = action
@@ -161,7 +182,7 @@ struct TrainerSecondaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
@@ -170,7 +191,7 @@ struct TrainerSecondaryActionButton: View {
         }
         .help(helpText ?? "")
         .accessibilityLabel(accessibilityLabel ?? title)
-        .frame(width: width ?? theme.compactActionWidth)
+        .modifier(TrainerActionWidthModifier(role: widthRole))
     }
 }
 
@@ -192,7 +213,6 @@ struct TrainerInlineNameEditor: View {
 }
 
 struct TrainerSelectionControl: View {
-    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let selected: Bool
@@ -259,7 +279,6 @@ struct TrainerOverflowMenu<Content: View>: View {
 }
 
 struct TrainerEmptyState: View {
-    @Environment(\.trainerTheme) private var theme
     let text: String
 
     var body: some View {
@@ -287,7 +306,6 @@ struct TrainerInlineNotice<Content: View>: View {
 }
 
 struct TrainerListCard<Content: View>: View {
-    @Environment(\.trainerTheme) private var theme
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -302,7 +320,6 @@ struct TrainerListCard<Content: View>: View {
 }
 
 private struct TrainerGroupedRowsModifier: ViewModifier {
-    @Environment(\.trainerTheme) private var theme
 
     func body(content: Content) -> some View {
         content

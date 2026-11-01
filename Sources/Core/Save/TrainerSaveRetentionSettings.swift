@@ -50,7 +50,7 @@ struct TrainerSaveRetentionSettings: View {
             HStack {
                 Button(localization.localized("host.cancel"), action: onClose).disabled(model.busy)
                 Spacer()
-                TrainerPrimaryActionButton(title: localization.localized("host.save.retention.save"), enabled: !model.busy && values != nil) {
+                TrainerPrimaryActionButton(title: localization.localized("host.save.retention.save"), enabled: !model.busy && values != nil, widthRole: .sheet) {
                     guard let values else { return }
                     saving = true
                     model.configureRetention(maxCount: values.0, maxBytes: values.1) { success in

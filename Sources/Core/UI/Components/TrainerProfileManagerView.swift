@@ -63,6 +63,7 @@ struct TrainerProfileManagerView: View {
                 TrainerTextField(title: labels.name, text: $selection.draftName)
                     .frame(maxWidth: .infinity)
                 TrainerPrimaryActionButton(title: labels.save,
+                    widthRole: .sheet,
                     systemImage: TrainerSemanticIcon.Action.save,
                     enabled: canAct && !selection.trimmedName.isEmpty) {
                     guard lifetime.accepts(presentationID), canAct, let request = selection.beginSave() else { return }
@@ -79,10 +80,11 @@ struct TrainerProfileManagerView: View {
                     Picker(labels.picker, selection: $selection.selectedName) {
                         ForEach(entries) { entry in Text(entry.title).tag(entry.name) }
                     }
-                    .trainerPickerWidth(.wide)
+                    .trainerPickerWidth(.form)
                     .disabled(!canAct)
                     HStack {
                         TrainerPrimaryActionButton(title: labels.load,
+                            widthRole: .sheet,
                             systemImage: TrainerSemanticIcon.Action.load, enabled: canUseSelection) {
                             guard lifetime.accepts(presentationID), canUseSelection else { return }
                             actions.load(selection.selectedName)

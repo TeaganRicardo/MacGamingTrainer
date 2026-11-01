@@ -694,7 +694,7 @@ action_label = shared_actions[
     shared_actions.index('struct TrainerPrimaryActionButton')
 ]
 assert '.lineLimit(1)' in action_label
-assert '.minimumScaleFactor(0.85)' in action_label
+assert '.minimumScaleFactor(0.78)' in action_label
 assert common_controls.count('.lineLimit(1)') >= 4
 assert '"hades2.traits.targetRarity": "稀有度"' in zh_presentation
 assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation
