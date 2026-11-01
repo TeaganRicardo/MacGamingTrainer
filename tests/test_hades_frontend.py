@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
+from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -256,7 +257,12 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enableNativeAccessibility()
         guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
         let journey = CommandLine.arguments[3]
-        guard ["frontend", "management", "slider"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        guard ["frontend", "recovery", "management", "slider", "hierarchy"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        if journey == "hierarchy" {
+            exerciseVisualHierarchy(descriptor: HadesGameModule.descriptor, presentation: HadesGameModule.presentation)
+            print("hades_visual_hierarchy_ok")
+            return
+        }
         let precisionCases: [Double] = [0, -0.0, 25, 1.2345678901234567, 123.45678901234567,
                                        .leastNonzeroMagnitude, .leastNormalMagnitude, .greatestFiniteMagnitude]
         for number in precisionCases {
@@ -637,6 +643,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "language switch failed to relabel native fields")
         check(commands().count==count,"language switch performed a runtime operation")
         localization.language = .en;host.layoutSubtreeIfNeeded();pump()
+        if journey == "frontend" {
         check(searchFunctions("存档编辑器").contains { $0.id == "hades.saveEditor.title" },
             "Save Editor was absent from bilingual Management discovery")
         check(HadesGameModule.managedBackupEditor != nil,"verified backups have no Hades editor factory")
@@ -1099,6 +1106,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "late Hades response or stale row escaped the retired document baseline")
         reusedModel.close()
         print("hades_save_editor_native_control_journeys_ok")
+        stopBackend()
+        window.close()
+        return
+        }
 
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
@@ -1174,7 +1185,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
 
 with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
@@ -1200,14 +1211,17 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     binary = folder / 'frontend'
     subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(binary)], check=True, cwd=ROOT)
 
-    # Compile once, then give the original editor/lifecycle and added management
-    # journeys independent workers, windows and journals. Keep the original 65s
-    # frontend deadline and every 5s operation limit; management cannot consume
-    # their remaining process time or retain observers in their process.
+    # Compile once and give Save editing, runtime recovery and management their
+    # own workers and budgets. The hosted runner exhausted the combined 65s
+    # journey while recovery was still making progress. Keep every assertion,
+    # the original 65s editor deadline and each 5s operation limit; the separate
+    # recovery process prevents unrelated editor work from consuming that gate.
     for journey, budget, completion_marker in (
-        ('frontend', 65, 'hades_frontend_native_drafts_and_target_ownership_ok'),
+        ('frontend', 65, 'hades_save_editor_native_control_journeys_ok'),
+        ('recovery', 30, 'hades_frontend_native_drafts_and_target_ownership_ok'),
         ('management', 30, 'hades_management_native_workflows_ok'),
         ('slider', 20, 'hades_slider_module_journey_ok'),
+        ('hierarchy', 20, 'hades_visual_hierarchy_ok'),
     ):
         case_folder = folder / 'journeys' / journey
         case_folder.mkdir(parents=True)

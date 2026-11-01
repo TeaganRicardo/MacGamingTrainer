@@ -13,6 +13,7 @@ extension EnvironmentValues {
 
 struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
     private let sidebar: Sidebar
     private let content: Content
     private let feedback: Feedback
@@ -28,7 +29,10 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
         ScrollViewReader { proxy in
             HStack(spacing: 0) {
                 sidebar
-                Divider().overlay(theme.separator)
+                Rectangle()
+                    .fill(theme.boundaryColor(for: contrast))
+                    .frame(width: 1)
+                    .accessibilityHidden(true)
                 ScrollView {
                     content
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -42,7 +46,7 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
                 withAnimation(.easeInOut(duration: 0.18)) { proxy.scrollTo(destination, anchor: .top) }
             }
         }
-        .background(theme.background.ignoresSafeArea())
+        .trainerSurface(.canvas)
         .trainerDismissTextEditingOnClickAway()
     }
 }

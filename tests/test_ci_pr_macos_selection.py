@@ -43,13 +43,17 @@ for path in (
 assert selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES) == sorted({
     "test_hades2_lldb_breakpoint_lifetime.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
 })
-assert selected_tests(["tests/management_ui_harness.py"], TESTS, SOURCES) == sorted({
-    "test_hades_frontend.py", "test_hades2_view_state_flow.py",
-})
+for path in ("tests/management_ui_harness.py", "tests/visual_hierarchy_harness.py"):
+    assert selected_tests([path], TESTS, SOURCES) == sorted({
+        "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+    })
 for path in (
     "Sources/Core/UI/TrainerMotion.swift",
     "Sources/Core/UI/Primitives/TrainerToggleControl.swift",
     "Sources/Core/UI/Components/TrainerFeatureControls.swift",
+    "Sources/Core/UI/TrainerTheme.swift", "Sources/Core/UI/TrainerShell.swift",
+    "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/StatusComponents.swift",
+    "Sources/Core/UI/Primitives/TrainerRow.swift", "Sources/Core/UI/Primitives/TrainerCard.swift",
     "Sources/Core/UI/Components/TrainerListControls.swift",
 ):
     assert selected_tests([path], TESTS, SOURCES) == sorted({

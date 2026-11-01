@@ -6,6 +6,7 @@ struct TrainerTheme {
     let panel: Color
     let panelRaised: Color
     let sidebarBackground: Color
+    let selectedFill: Color
     let deferred: Color
     let warning: Color
     let success: Color
@@ -41,25 +42,28 @@ struct TrainerTheme {
     let emptyStatePadding: CGFloat
 
     static let standard = TrainerTheme(
-        background: Color(red: 0.065, green: 0.072, blue: 0.102),
+        // Opaque graphite surfaces keep the accepted dark identity predictable
+        // under every window backdrop. Accent is reserved for actions/state.
+        background: Color(red: 0.075, green: 0.078, blue: 0.090),
         accent: Color(red: 0.64, green: 0.51, blue: 1.0),
-        panel: Color(red: 0.105, green: 0.115, blue: 0.155),
-        panelRaised: Color(red: 0.125, green: 0.135, blue: 0.18),
-        sidebarBackground: Color.white.opacity(0.018),
+        panel: Color(red: 0.120, green: 0.124, blue: 0.140),
+        panelRaised: Color(red: 0.158, green: 0.163, blue: 0.183),
+        sidebarBackground: Color(red: 0.092, green: 0.096, blue: 0.110),
+        selectedFill: Color(red: 0.190, green: 0.184, blue: 0.238),
         deferred: .orange,
         warning: .orange,
         success: .green,
         mutedFill: Color.white.opacity(0.13),
         subtleFill: Color.white.opacity(0.04),
-        separator: Color.white.opacity(0.04),
+        separator: Color.white.opacity(0.09),
         info: .cyan,
         inactive: .gray,
-        panelCornerRadius: 16,
-        cardCornerRadius: 14,
-        controlCornerRadius: 10,
+        panelCornerRadius: 12,
+        cardCornerRadius: 10,
+        controlCornerRadius: 8,
         controlPadding: 10,
         compactControlSpacing: 8,
-        compactCornerRadius: 7,
+        compactCornerRadius: 6,
         pageMaxWidth: 1000,
         contentMinWidth: 760,
         contentMinHeight: 740,
@@ -80,6 +84,14 @@ struct TrainerTheme {
         sheetSpacing: 16,
         emptyStatePadding: 24
     )
+
+    func boundaryColor(for contrast: ColorSchemeContrast) -> Color {
+        contrast == .increased ? Color.primary.opacity(0.42) : separator
+    }
+
+    func selectionMarkerWidth(for contrast: ColorSchemeContrast) -> CGFloat {
+        contrast == .increased ? 3 : 2
+    }
 }
 
 enum TrainerPickerWidth {
@@ -141,6 +153,7 @@ enum TrainerSurfaceRole {
     case canvas
     case sidebar
     case panel
+    case raised
     case subtle
     case selected
     case clear
@@ -148,6 +161,7 @@ enum TrainerSurfaceRole {
 
 private struct TrainerSurfaceModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
     let role: TrainerSurfaceRole
     let cornerRadius: CGFloat?
 
@@ -156,16 +170,33 @@ private struct TrainerSurfaceModifier: ViewModifier {
         case .canvas: return theme.background
         case .sidebar: return theme.sidebarBackground
         case .panel: return theme.panel
+        case .raised: return theme.panelRaised
         case .subtle: return theme.subtleFill
-        case .selected: return theme.mutedFill
+        case .selected: return theme.selectedFill
         case .clear: return .clear
+        }
+    }
+
+    private var boundary: Color {
+        switch role {
+        case .panel, .raised, .selected:
+            return theme.boundaryColor(for: contrast)
+        default:
+            return .clear
         }
     }
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if let cornerRadius {
-            content.background(fill, in: RoundedRectangle(cornerRadius: cornerRadius))
+            content
+                .background(fill, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .strokeBorder(boundary, lineWidth: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
         } else if case .canvas = role {
             content.background(fill.ignoresSafeArea())
         } else {
@@ -182,6 +213,6 @@ private struct TrainerPanelModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(padding ?? theme.panelPadding)
-            .background(theme.panel, in: RoundedRectangle(cornerRadius: cornerRadius ?? theme.panelCornerRadius))
+            .trainerSurface(.panel, cornerRadius: cornerRadius ?? theme.panelCornerRadius)
     }
 }

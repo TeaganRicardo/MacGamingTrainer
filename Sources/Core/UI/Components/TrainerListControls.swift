@@ -286,7 +286,9 @@ private struct TrainerGroupedRowsModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
 
     func body(content: Content) -> some View {
-        content.clipShape(RoundedRectangle(cornerRadius: theme.panelCornerRadius))
+        content
+            .clipShape(RoundedRectangle(cornerRadius: theme.panelCornerRadius, style: .continuous))
+            .trainerSurface(.panel, cornerRadius: theme.panelCornerRadius)
     }
 }
 

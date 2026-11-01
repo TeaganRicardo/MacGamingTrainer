@@ -175,6 +175,9 @@ for source in (
     assert_scope([source], docs_only=False, linux=True, macos=True,
                  module_build=True, build=True, full_build=False)
 
+assert_scope(["tests/visual_hierarchy_harness.py"],
+             docs_only=False, linux=True, macos=True, module_build=False, build=False)
+
 # Native support ownership is data from the test inventory, independent of
 # module identities. Invalid consumers/paths cannot silently skip native checks.
 with tempfile.TemporaryDirectory() as temporary:

@@ -25,10 +25,16 @@ struct TrainerMetricCard<Content: View, Accessory: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
-                Label(title, systemImage: icon)
-                    .font(.caption)
-                    .foregroundStyle(tint.opacity(0.9))
-                Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .foregroundStyle(tint)
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption.weight(.medium))
+                Spacer(minLength: 4)
                 accessory
             }
             content
@@ -41,7 +47,7 @@ struct TrainerMetricCard<Content: View, Accessory: View>: View {
         .padding(.top, 6)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+        .trainerSurface(.panel, cornerRadius: theme.cardCornerRadius)
     }
 }
 

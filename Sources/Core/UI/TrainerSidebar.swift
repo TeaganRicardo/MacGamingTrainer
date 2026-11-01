@@ -20,6 +20,7 @@ extension EnvironmentValues {
 
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
@@ -86,16 +87,20 @@ struct TrainerSidebarCard<Actions: View>: View {
             Button(action: onSelect) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
-                        .font(.title2)
-                        .foregroundStyle(theme.accent)
-                    Text(descriptor.displayName).font(.headline)
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(selected ? theme.accent : .secondary)
+                        .frame(width: 24)
+                        .accessibilityHidden(true)
+                    Text(descriptor.displayName)
+                        .font(.headline.weight(selected ? .semibold : .medium))
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     statusIndicator
                 }
+                .frame(minHeight: 30)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .focusEffectDisabled()
             .accessibilityLabel(descriptor.displayName)
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")
@@ -103,7 +108,17 @@ struct TrainerSidebarCard<Actions: View>: View {
             actions.buttonStyle(.plain)
         }
         .padding(14)
-        .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+        .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
+        .overlay(alignment: .leading) {
+            if selected {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(theme.accent)
+                    .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
+                    .padding(.leading, 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 
@@ -123,6 +138,6 @@ struct TrainerSidebar<Card: View>: View {
         }
         .padding(18)
         .frame(width: 260)
-        .background(theme.sidebarBackground)
+        .trainerSurface(.sidebar)
     }
 }

@@ -6,8 +6,9 @@ struct TrainerSectionHeading: View {
 
     var body: some View {
         Label(title, systemImage: icon)
-            .font(.title3.weight(.semibold))
+            .font(.headline)
             .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -23,8 +24,8 @@ struct TrainerPageHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .top) {
             Text(title)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .tracking(2)
+                .font(.largeTitle.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Spacer()
             trailing
         }
