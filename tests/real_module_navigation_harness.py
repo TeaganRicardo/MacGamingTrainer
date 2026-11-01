@@ -323,10 +323,17 @@ struct StartupAvailabilityModule: TrainerGameModule {
             }
             return result
         }
-        func selectGame(_ id: String) {
+        var measuredSwitches: [(game: String, press: Double, settle: Double)] = []
+        func selectGame(_ id: String, measure: Bool = false) {
+            let began = ProcessInfo.processInfo.systemUptime
             journeyCheck(control("host.game." + id).press(), "game card rejected native AX press")
+            let pressed = ProcessInfo.processInfo.systemUptime
             journeyWait("selected game \(id)") { application.selectedGameID == id }
             expectSections(id == "hades" ? HadesWorkbenchSection.visible.map(\.id) : Hades2WorkbenchSection.allCases.map(\.id))
+            let settled = ProcessInfo.processInfo.systemUptime
+            if measure {
+                measuredSwitches.append((id, pressed - began, settled - began))
+            }
             journeyPump(0.03)
         }
         func navigate(_ id: String, _ navigation: TrainerSectionNavigation) {
@@ -350,6 +357,21 @@ struct StartupAvailabilityModule: TrainerGameModule {
         }
 
         expectSections(HadesWorkbenchSection.visible.map(\.id))
+        // Warm both retained real module trees before measuring the steady-state
+        // interaction the user reported. The settle boundary is the first point
+        // where the destination module's native section index is actually exposed.
+        for _ in 0..<2 {
+            selectGame("hades2")
+            selectGame("hades")
+        }
+        for _ in 0..<6 {
+            selectGame("hades2", measure: true)
+            selectGame("hades", measure: true)
+        }
+        let switchPresses = measuredSwitches.map(\.press).sorted()
+        let switchSettles = measuredSwitches.map(\.settle).sorted()
+        let p95Index = max(0, Int(ceil(Double(switchSettles.count) * 0.95)) - 1)
+        print("real_module_switch_timing samples=\(measuredSwitches.count) press_max=\(switchPresses.last ?? 0) settle_p95=\(switchSettles[p95Index]) settle_max=\(switchSettles.last ?? 0)")
         let firstSearch = searchField(), firstScroll = scroll()
         // Every shipped section ID must resolve to its own mounted native
         // target. No test-only target registry or fake module replaces it.
