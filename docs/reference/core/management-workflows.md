@@ -20,3 +20,17 @@ frontend fixtures drive the same shared sheet through their real module
 adapters, including name edits, save/load/delete, backend failure feedback,
 shortcut compatibility and dismissal. These fixtures use temporary synthetic
 backends and do not establish actual game acceptance.
+
+`TrainerDiagnosticsView` owns the diagnostic summary, result cards, status
+accessibility, empty/error feedback and refresh/export/dismiss controls. Each
+module maps its check names, details and explicit outcome to neutral entries;
+probes, runtime safety and report/export behavior remain game-owned. Hades I
+retains warning presentation for nonpassing checks and Hades II retains failure
+presentation. Missing/unknown observations never count as passed. The summary
+counts the displayed entries rather than trusting a separate backend aggregate.
+
+The same existing native frontend fixtures exercise each module's diagnostic
+refresh, details, empty report, backend failure, recovery and dismissal. A Core
+fixture covers all four status presentations, including unknown, and independent
+refresh/export availability while idle and busy. These use synthetic reports;
+they do not execute game-specific probes or export user data.

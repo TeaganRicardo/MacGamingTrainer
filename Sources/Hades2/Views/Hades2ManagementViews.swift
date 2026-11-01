@@ -30,51 +30,28 @@ struct Hades2ProfileManagerView: View {
 struct Hades2DiagnosticsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Binding var isPresented: Bool
-    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
-    /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
+    private var enabled: Bool {
+        model.backendAvailable && model.protocolCompatible && !model.exiting && model.canAcceptRuntimeAction
+    }
+
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
-            Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
-            Button { model.exportDiagnostics() } label: {
-                Label(text("hades2.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
-            }
-                .disabled(model.busy || !model.backendAvailable)
-            Button { model.runDiagnostics() } label: {
-                Label(text("hades2.diagnostics.rerun"), systemImage: TrainerSemanticIcon.Concept.refresh)
-            }.disabled(model.busy)
-        } content: {
-            Text(text("hades2.diagnostics.explanation"))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(model.diagnostics) { check in
-                        TrainerListCard {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: check.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundStyle(check.ok ? theme.success : theme.warning)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(check.name).font(.subheadline.weight(.semibold))
-                                    if !check.detail.isEmpty {
-                                        Text(check.detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                                    }
-                                }
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(minHeight: 260, maxHeight: 430)
-        } footer: {
-            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
-        }
+        TrainerDiagnosticsView(
+            labels: .init(title: text("hades2.diagnostics.title"), explanation: text("hades2.diagnostics.explanation"),
+                refresh: text("hades2.diagnostics.rerun"), export: text("hades2.diagnostics.export")),
+            checks: model.diagnostics.map {
+                .init(id: $0.id, name: $0.name, detail: $0.detail, status: $0.ok ? .passed : .failed)
+            },
+            busy: model.busy, canRefresh: enabled, canExport: enabled,
+            error: hades2ManagementError(model, localization: localization),
+            actions: .init(refresh: model.runDiagnostics, export: model.exportDiagnostics,
+                dismiss: { isPresented = false })
+        )
     }
 }
 

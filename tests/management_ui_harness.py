@@ -98,3 +98,94 @@ func exerciseProfileManager<Content: View>(
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
 }
 '''
+
+DIAGNOSTICS_JOURNEY = r'''
+@MainActor
+func exerciseDiagnostics<Content: View>(
+    _ content: Content, localization: TrainerLocalizationStore,
+    refreshTitle: String, exportTitle: String, checkName: String, nonpassingStatus: String,
+    busy: () -> Bool, count: () -> Int, dismissed: () -> Bool,
+    commands: () -> [[String: Any]], setMode: (String) throws -> Void
+) rethrows {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 620),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let host = NSHostingView(rootView: content.environmentObject(localization))
+    window.contentView = host
+    host.frame = NSRect(x: 0, y: 0, width: 700, height: 620)
+    managementWait(host, "diagnostic names, details and truthful summary") {
+        managementHasText(checkName, in: host)
+            && managementHasText("Fixture caution", in: host)
+            && managementHasText(localization.localized("host.diagnostics.summary", arguments: ["1", "2"]), in: host)
+            && managementHasText(localization.localized(nonpassingStatus), in: host)
+    }
+    managementCheck(namedNativeControl(host, role: "AXButton", name: exportTitle)?.enabled == true,
+                    "module diagnostic export became inaccessible")
+    func refresh() {
+        let before = commands().count
+        managementPress(refreshTitle, in: host)
+        managementWait(host, "diagnostic refresh reply") { !busy() && commands().count > before }
+        managementCheck(commands().last?["command"] as? String == "diagnostics",
+                        "diagnostic refresh lost its game-owned command")
+    }
+    try setMode("empty")
+    refresh()
+    managementWait(host, "diagnostic empty state") {
+        count() == 0 && managementHasText(localization.localized("host.diagnostics.empty"), in: host)
+    }
+    try setMode("error")
+    refresh()
+    managementWait(host, "diagnostic failure feedback") {
+        managementHasText("Diagnostic fixture rejected.", in: host)
+    }
+    try setMode("viewer")
+    refresh()
+    managementWait(host, "diagnostic recovery") { count() == 2 && !busy() }
+    managementPress(localization.localized("host.done"), in: host)
+    managementCheck(dismissed(), "diagnostic Done did not dismiss the owning module sheet")
+    window.contentView = nil
+    window.close()
+}
+
+@MainActor
+func exerciseDiagnosticStatuses(localization: TrainerLocalizationStore) {
+    var refreshes = 0, exports = 0, dismissed = false
+    let labels = TrainerDiagnosticsLabels(title: "Fixture Diagnostics", explanation: "",
+        refresh: "Refresh fixture", export: "Export fixture")
+    let checks = [TrainerDiagnosticStatus.passed, .warning, .failed, .unknown].map { status in
+        TrainerDiagnosticEntry(id: status.rawValue, name: "Fixture " + status.rawValue, detail: "", status: status)
+    }
+    func content(busy: Bool, refresh: Bool, export: Bool) -> some View {
+        TrainerDiagnosticsView(labels: labels, checks: checks, busy: busy, canRefresh: refresh, canExport: export,
+            actions: .init(refresh: { refreshes += 1 }, export: { exports += 1 }, dismiss: { dismissed = true }))
+            .environmentObject(localization)
+    }
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 620),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let host = NSHostingView(rootView: content(busy: false, refresh: true, export: true))
+    window.contentView = host
+    host.frame = NSRect(x: 0, y: 0, width: 700, height: 620)
+    managementWait(host, "unknown diagnostic remains nonpassing and accessible") {
+        managementHasText(localization.localized("host.diagnostics.summary", arguments: ["1", "4"]), in: host)
+            && managementHasText(localization.localized("host.diagnostics.unknown"), in: host)
+    }
+    managementPress(labels.refresh, in: host)
+    managementPress(labels.export, in: host)
+    managementCheck(refreshes == 1 && exports == 1, "diagnostic action callbacks did not remain independent")
+    host.rootView = content(busy: true, refresh: true, export: true)
+    managementWait(host, "busy diagnostic controls disabled") {
+        namedNativeControl(host, role: "AXButton", name: labels.refresh)?.enabled == false
+            && namedNativeControl(host, role: "AXButton", name: labels.export)?.enabled == false
+    }
+    host.rootView = content(busy: false, refresh: false, export: true)
+    managementWait(host, "independent diagnostic action availability") {
+        namedNativeControl(host, role: "AXButton", name: labels.refresh)?.enabled == false
+            && namedNativeControl(host, role: "AXButton", name: labels.export)?.enabled == true
+    }
+    managementPress(localization.localized("host.done"), in: host)
+    managementCheck(dismissed, "unavailable refresh trapped the diagnostic sheet")
+    window.contentView = nil
+    window.close()
+}
+'''

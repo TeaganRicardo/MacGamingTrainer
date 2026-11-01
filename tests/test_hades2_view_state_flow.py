@@ -6,7 +6,7 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
-from management_ui_harness import PROFILE_JOURNEY
+from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -34,8 +34,19 @@ for raw in sys.stdin:
         if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
         result={'profiles':profiles}
     if command=='load_profile':result={'shortcuts':{'_layoutVersion':999}}
+    mode_path=log_path.with_suffix('.mode')
+    mode=mode_path.read_text() if mode_path.exists() else 'viewer'
+    if command=='diagnostics':
+        checks=[{'name':'Fixture connection','ok':True,'detail':'42'},
+                {'name':'Fixture runtime','detail':'Fixture caution'}]
+        if mode=='empty':checks=[]
+        result={'checks':checks,'passed':100,'total':100}
+
     reply={'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':__MGT_MODULE_PROTOCOL__,'gameID':args.game,'ok':True,'result':result}
+    if command=='diagnostics' and mode=='error':
+        reply.update(ok=False,error={'code':'fixture_diagnostics','presentation':'Diagnostic fixture rejected.'})
+        reply.pop('result')
     if command=='save_profile' and params.get('name')=='__error__':
         reply.update(ok=False,error={'code':'fixture_profile','presentation':'Profile fixture rejected.'})
         reply.pop('result')
@@ -255,6 +266,22 @@ struct Main {
             }
         )
         managementCheck(managementModel.profileShortcutWarning == nil, "profile dismissal retained its compatibility warning")
+        func setDiagnosticsMode(_ mode: String) throws {
+            let path = commandLog.deletingPathExtension().appendingPathExtension("mode")
+            try mode.write(to: path, atomically: true, encoding: .utf8)
+        }
+        try setDiagnosticsMode("viewer")
+        managementModel.runDiagnostics()
+        managementWait(host, "module diagnostic checks") { !managementModel.busy && managementModel.diagnostics.count == 2 }
+        var diagnosticsPresented = true
+        try exerciseDiagnostics(Hades2DiagnosticsView(model: managementModel,
+                isPresented: Binding(get: { diagnosticsPresented }, set: { diagnosticsPresented = $0 })),
+            localization: localization, refreshTitle: text("hades2.diagnostics.rerun"),
+            exportTitle: text("hades2.diagnostics.export"), checkName: "Fixture runtime",
+            nonpassingStatus: "host.diagnostics.failed", busy: { managementModel.busy },
+            count: { managementModel.diagnostics.count }, dismissed: { !diagnosticsPresented },
+            commands: { commands(at: commandLog) }, setMode: setDiagnosticsMode)
+        exerciseDiagnosticStatuses(localization: localization)
         managementSession.stop()
         pump(0.20)
         print("hades2_view_state_flow_ok")
@@ -270,7 +297,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     home = td / "home"
     home.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(

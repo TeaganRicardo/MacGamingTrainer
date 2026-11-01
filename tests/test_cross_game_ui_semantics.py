@@ -221,7 +221,7 @@ for path in (
     ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift",
 ):
     source = path.read_text()
-    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics", "exportDiagnostics"):
+    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
@@ -303,8 +303,19 @@ assert 'static let garden = "tree.fill"' in hades2_nav
 assert 'static let hexReady = "moon.fill"' in hades2_nav
 assert 'static let shades = "person.3.fill"' in hades2_nav
 assert "Image(systemName: TrainerSemanticIcon.Action.remove)" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
-assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
+diagnostics_view = (ROOT / "Sources/Core/UI/Components/TrainerDiagnosticsView.swift").read_text()
+assert "TrainerSemanticIcon.Tool.exportDiagnostics" in diagnostics_view
+assert "TrainerListCard" in diagnostics_view
+for path, start, end in (
+    ("Sources/Hades/HadesManagement.swift", "struct HadesDiagnosticsView", "@MainActor\nprivate func hadesManagementError"),
+    ("Sources/Hades2/Views/Hades2ManagementViews.swift", "struct Hades2DiagnosticsView", "struct Hades2ShortcutSettingsView"),
+):
+    source = (ROOT / path).read_text()
+    adapter = source[source.index(start):source.index(end, source.index(start))]
+    assert "TrainerDiagnosticsView(" in adapter
+    assert "TrainerListCard" not in adapter and "TrainerSheetScaffold" not in adapter
+    assert "model.runDiagnostics" in adapter and "model.exportDiagnostics" in adapter
+    assert "ManagementError(model, localization: localization)" in adapter
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
 assert "systemImage: entry.icon" in hades_nav
 

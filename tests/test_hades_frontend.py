@@ -1,7 +1,7 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
 from pathlib import Path
-from management_ui_harness import PROFILE_JOURNEY
+from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -152,7 +152,10 @@ for raw in sys.stdin:
         if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
         result={'profiles':profiles}
     elif command=='diagnostics':
-        result={**state,'diagnostics':{'gameID':'hades','checks':[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]}}
+        checks=[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]
+        if state.get('diagnosticsMode')=='viewer':checks.append({'name':'hades.diagnostics.hero','ok':False,'detail':'Fixture caution'})
+        if state.get('diagnosticsMode')=='empty':checks=[]
+        result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
@@ -163,6 +166,9 @@ for raw in sys.stdin:
     time.sleep(.02)
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
         'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':True,'result':result}
+    if command=='diagnostics' and state.get('diagnosticsMode')=='error':
+        reply.update(ok=False,error={'code':'fixture_diagnostics','presentation':'Diagnostic fixture rejected.'})
+        reply.pop('result')
     if command=='save_profile' and params.get('name')=='__error__':
         reply.update(ok=False,error={'code':'fixture_profile','presentation':'Profile fixture rejected.'})
         reply.pop('result')
@@ -425,6 +431,21 @@ func pump(_ seconds: TimeInterval = 0.1) {
             localization: localization, inventory: { model.profiles.map(\.name) }, busy: { model.busy },
             dismissed: { !model.profilesPresented }, commands: commands
         )
+        func setDiagnosticsMode(_ mode: String) throws {
+            var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+            state["diagnosticsMode"] = mode
+            try JSONSerialization.data(withJSONObject: state).write(to: stateURL, options: .atomic)
+        }
+        try setDiagnosticsMode("viewer")
+        model.runDiagnostics()
+        wait("shared diagnostic viewer fixture") { !model.busy && model.diagnostics.count == 2 }
+        model.diagnosticsPresented = true
+        try exerciseDiagnostics(HadesDiagnosticsView(model: model), localization: localization,
+            refreshTitle: localization.localized("host.refresh"),
+            exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
+            checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
+            nonpassingStatus: "host.diagnostics.warning", busy: { model.busy }, count: { model.diagnostics.count },
+            dismissed: { !model.diagnosticsPresented }, commands: commands, setMode: setDiagnosticsMode)
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
@@ -1087,7 +1108,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
     (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
