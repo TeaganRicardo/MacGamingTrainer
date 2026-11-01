@@ -4,6 +4,7 @@ from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
 from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
+from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 from native_picker_harness import NATIVE_PICKER
@@ -286,6 +287,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         guard ["frontend", "recovery", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         if journey == "hierarchy" {
             exerciseVisualHierarchy(descriptor: HadesGameModule.descriptor, presentation: HadesGameModule.presentation)
+            exerciseRoomPickerAlignment()
             print("hades_visual_hierarchy_ok")
             return
         }
@@ -1466,7 +1468,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
 
 with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY + NATIVE_PICKER)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + ROOM_PICKER_ALIGNMENT_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY + NATIVE_PICKER)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
