@@ -81,7 +81,7 @@ assert "targetMonitor.refresh()" in host
 assert "if targetMonitor.isRunning" in host
 assert "var launchActionFromHost: (() -> Void)?" in protocol
 header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
-assert "TrainerSearchField(" in header_actions
+assert "TrainerWorkbenchSearchField(" in header_actions
 assert "launchGame" not in header_actions
 
 sidebar_actions = host_actions[

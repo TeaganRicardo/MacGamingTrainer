@@ -437,6 +437,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "Chinese workbench feature lookup failed")
         check(searchFunctions("gem").contains { $0.section == .resources && $0.resource != nil },
             "resource search did not include bilingual catalog names")
+        let dynamicResources = [
+            HadesResourceDefinition(id:"z-elixir",names:["en":"Élixir","zh-CN":"药水"]),
+            HadesResourceDefinition(id:"a-elixir",names:["en":"Elixir","zh-CN":"药水"]),
+        ]
+        let dynamicWorld = ["z-door":["en":"Exit","zh-CN":"出口"],
+                            "a-door":["en":"Exit","zh-CN":"出口"]]
+        func dynamicSearch(_ query:String) -> [HadesWorkbenchEntry] {
+            HadesWorkbenchCatalog.matches(query,resources:dynamicResources,worldTerms:dynamicWorld) { _ in [] }
+        }
+        check(dynamicSearch("ELIXIR 药水").map(\.id)==["resource.z-elixir","resource.a-elixir"],
+              "dynamic bilingual resource aliases lost diacritics, multiple tokens or supplied order")
+        check(dynamicSearch("EXIT 出口").map(\.id)==["world.a-door","world.z-door"],
+              "dynamic world terms lost bilingual matching or stable destination order")
+        check(dynamicSearch("elixir missing").isEmpty,"dynamic resources matched only part of the query")
         check(searchFunctions("稀有度").contains { $0.id == "shortcut.boonRarityEnabled"
             && $0.section == .boons }, "boon rarity function not localized to the effect area")
         let mutations = commands().filter { $0["command"] as? String == "set_feature" }.count

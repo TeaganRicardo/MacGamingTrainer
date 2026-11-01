@@ -258,16 +258,9 @@ enum Hades2WorkbenchCatalog {
     }()
 
     static func matches(_ query: String, resolving labels: (String) -> [String]) -> [Hades2WorkbenchEntry] {
-        let words = query.split(whereSeparator: \.isWhitespace).map { normalized(String($0)) }
-        guard !words.isEmpty else { return [] }
-        return entries.filter { entry in
-            let searchable = normalized((labels(entry.titleKey) + labels(entry.section.titleKey)).joined(separator: " "))
-            return words.allSatisfy { searchable.contains($0) }
+        TrainerWorkbenchSearch.matches(query, entries: entries) { entry in
+            labels(entry.titleKey) + labels(entry.section.titleKey)
         }
-    }
-
-    private static func normalized(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private static func section(for action: ShortcutAction) -> Hades2WorkbenchSection {

@@ -165,6 +165,7 @@ final class GenerateAction: NSObject {
 }
 @MainActor final class PageVisibility: ObservableObject {
  @Published var visible = true
+ var destinations: [String] = []
 }
 struct HeaderFixture: View {
  @ObservedObject var model: Hades2TrainerModel
@@ -174,6 +175,7 @@ struct HeaderFixture: View {
    Hades2SidebarActions(model:model)
    Hades2HeaderActions(model:model)
   }.environment(\.trainerGamePageVisible,visibility.visible)
+   .environment(\.trainerNavigateToSection) { visibility.destinations.append($0) }
  }
 }
 @main struct Main {
@@ -209,9 +211,19 @@ struct HeaderFixture: View {
    let window=NSWindow(contentRect:NSRect(x:0,y:0,width:700,height:700),styleMask:[.titled],backing:.buffered,defer:false)
    window.isReleasedWhenClosed=false
    window.contentView=host; window.makeKeyAndOrderFront(nil); host.layoutSubtreeIfNeeded(); pump()
+   let beforeNavigation=(try? String(contentsOf:log,encoding:.utf8)) ?? ""
    func hasPopover() -> Bool {
     NSApp.windows.contains { $0.isVisible && $0.accessibilityRole() == .popover }
    }
+   let searchLabel=Hades2GameModule.resolveText(key:"hades2.workbench.search",localization:localization)
+   guard let searchField=fields(host).first(where:{$0.isEditable && $0.accessibilityLabel()==searchLabel}) else {
+    fatalError("shared workbench search field missing")
+   }
+   check(window.makeFirstResponder(searchField),"workbench search could not receive keyboard focus")
+   wait("workbench search did not enter native editing") { searchField.currentEditor() != nil }
+   visibility.visible=false
+   wait("hiding the game retained search-field focus") { searchField.currentEditor() == nil }
+   visibility.visible=true; pump()
    model.workbenchSearch="Invincibility"
    wait("search results did not open") { hasPopover() }
    visibility.visible=false
@@ -221,6 +233,31 @@ struct HeaderFixture: View {
    check(!hasPopover(), "a background search change reopened a hidden popover")
    visibility.visible=true; pump()
    check(!hasPopover() && model.workbenchSearch=="Gold", "returning to the page lost input or reopened stale results")
+   model.workbenchSearch="Grasp"
+   wait("numeric search results did not open") { hasPopover() }
+   var graspResult:NativeAccessibilityControl?
+   wait("numeric search destination missing from the shared result rows") {
+    graspResult=NSApp.windows.filter { $0.isVisible && $0.accessibilityRole() == .popover }
+     .flatMap { nativeAccessibilityControls($0) }
+     .first { $0.identifier == "trainer.workbench.result.hades2.stat.grasp" && $0.role == "AXButton" }
+    return graspResult != nil
+   }
+   check(graspResult!.press(),"shared search destination could not be selected")
+   wait("search selection did not dismiss its popover") { !hasPopover() }
+   check(visibility.destinations==[Hades2WorkbenchSection.values.id]
+         && model.numericControlsExpanded && model.workbenchSearch.isEmpty,
+         "shared search lost the module's numeric reveal, destination or query policy")
+   model.workbenchSearch="Invincibility"
+   wait("clear-action search results did not open") { hasPopover() }
+   guard let clear=nativeAccessibilityControls(host).first(where:{$0.identifier=="trainer.search.clear"}) else {
+    fatalError("workbench clear action missing")
+   }
+   check(clear.press(),"workbench clear action could not be pressed")
+   wait("clearing search retained a query or popover") { model.workbenchSearch.isEmpty && !hasPopover() }
+   check(visibility.destinations==[Hades2WorkbenchSection.values.id],
+         "clear submitted a stale search result")
+   check(((try? String(contentsOf:log,encoding:.utf8)) ?? "")==beforeNavigation,
+         "workbench query, selection, clear or page switching issued a backend request")
    model.error="host.operationFailed"; pump(); model.showFeedbackDetails()
    wait("feedback details did not open") { model.feedbackDetailsPresented && hasPopover() }
    visibility.visible=false

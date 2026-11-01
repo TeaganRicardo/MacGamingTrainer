@@ -229,8 +229,9 @@ assert 'TrainerSection(title: text("hades2.section.elements")' not in view
 assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
 assert "specialSearch" not in view
-assert "resultsPresented" in host_actions
-assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions
+assert "TrainerWorkbenchSearchField(" in host_actions
+search_field = read('Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift')
+assert ".popover(isPresented: $presentation.resultsPresented, arrowEdge: .bottom)" in search_field
 
 
 gathering_action_key = "hades2.gathering.generate"
