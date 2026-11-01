@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-from ci_docs_only import ROOT, changed_paths, load_macos_only_tests
+from ci_docs_only import MACOS_TEST_DEPENDENCIES, ROOT, changed_paths, load_macos_only_tests
 from module_inventory import discover_module_ids
 
 SHARED_SMOKE = (
@@ -39,6 +39,7 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
 
     chosen: set[str] = set()
     for path in paths:
+        chosen.update(name for name, dependencies in MACOS_TEST_DEPENDENCIES.items() if path in dependencies)
         if path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
             # These fixtures are shared across native behavior tests; a narrow
             # name match would miss consumers and provide false confidence.

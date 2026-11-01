@@ -1,5 +1,6 @@
 import os
 import mmap
+import json
 import subprocess
 import sys
 import tempfile
@@ -9,12 +10,76 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 from hades2_lldb_worker_support import run_lldb_worker, phase, worker_failure_output
+from hades2_debugserver_owner import _AuditToken, DarwinProcesses, debugserver_executable
 
 # GitHub's runner Python is not ABI-matched to Xcode's private _lldb
 # extension. Run the regression under the same Xcode Python + LLDB module path
 # used by the production Hades sidecar. Do not nest a second SBDebugger inside
 # LLDB's own command-interpreter Python: that re-entrant harness can deadlock.
 if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
+    # Exercise actual Darwin token-bound cleanup with an ordinary native binary
+    # before the debugger scenarios. Each disposable child deliberately starts
+    # a new session, matching debugserver's ownership escape.
+    cleanup_worker = r'''
+import json, os, signal, subprocess, sys, time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from hades2_debugserver_owner import DarwinProcesses
+executable = Path(os.environ['LLDB_DEBUGSERVER_PATH']).resolve()
+child = subprocess.Popen([str(executable), '60'], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+try:
+    token = next(token for token in DarwinProcesses().matching(executable) if token[5] == child.pid)
+    record = json.dumps({'token': list(token), 'executable': str(executable)})
+    Path(sys.argv[2]).write_text(record)
+    print(record, flush=True)
+    print('phase=escaped.native.ready', file=sys.stderr, flush=True)
+except BaseException:
+    child.kill()
+    child.wait()
+    raise
+mode = sys.argv[3]
+if mode == 'success':
+    raise SystemExit(0)
+if mode == 'failure':
+    raise SystemExit(7)
+if mode == 'interrupt':
+    os.kill(os.getppid(), signal.SIGINT)
+time.sleep(60)
+'''
+    processes = DarwinProcesses()
+    with tempfile.TemporaryDirectory(prefix='mgt-debugserver-cleanup-contract-') as directory:
+        directory = Path(directory)
+        probe = directory / 'worker.py'
+        probe.write_text(cleanup_worker)
+        with subprocess.Popen(['/bin/sleep', '60'], start_new_session=True) as unrelated:
+            try:
+                for mode in ('success', 'failure', 'timeout', 'interrupt'):
+                    record_path = directory / (mode + '.json')
+                    try:
+                        output = run_lldb_worker(
+                            [sys.executable, str(probe), str(ROOT / 'tests'), str(record_path), mode],
+                            dict(os.environ), timeout=2, debugserver_path='/bin/sleep',
+                        )
+                    except subprocess.TimeoutExpired as error:
+                        assert mode == 'timeout', worker_failure_output(error)
+                        assert 'phase=escaped.native.ready' in worker_failure_output(error)
+                    except subprocess.CalledProcessError as error:
+                        assert mode == 'failure' and error.returncode == 7, worker_failure_output(error)
+                        assert 'phase=escaped.native.ready' in worker_failure_output(error)
+                    except KeyboardInterrupt:
+                        assert mode == 'interrupt'
+                    else:
+                        assert mode == 'success' and json.loads(output)['token']
+                    record = json.loads(record_path.read_text())
+                    token = _AuditToken(*record['token'])
+                    assert processes.path(token) is None, 'escaped native session survived worker cleanup'
+                    assert not Path(record['executable']).parent.exists(), 'confirmed cleanup retained its private copy'
+                    assert unrelated.poll() is None, 'cleanup signaled an unrelated executable'
+            finally:
+                unrelated.kill()
+                unrelated.wait()
     path = str(Path(__file__).resolve())
     environment = dict(os.environ)
     environment["MGT_LLDB_EMBEDDED_TEST"] = "1"
@@ -41,6 +106,7 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
                     environment,
                     timeout=30,
                     diagnostics=True,
+                    debugserver_path=debugserver_executable(lldb_python_path, environment),
                 )
         except subprocess.TimeoutExpired as error:
             raise AssertionError(

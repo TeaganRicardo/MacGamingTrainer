@@ -5,9 +5,11 @@ This module can load under any Python ABI; native LLDB imports stay in the worke
 import os
 import signal
 import subprocess
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import time
+
+from hades2_debugserver_owner import DebugserverOwner
 
 _PHASE_STARTED = time.monotonic()
 
@@ -42,23 +44,39 @@ def worker_failure_output(error):
     # both streams so the outer assertion identifies the last flushed phase.
     def decoded(output):
         return output.decode('utf-8', errors='replace') if isinstance(output, bytes) else output or ''
-    return decoded(error.stdout) + decoded(error.stderr)
+    output = decoded(error.stdout) + decoded(error.stderr)
+    cleanup_error = getattr(error, 'debugserver_cleanup_error', None)
+    return output + ('\n' + cleanup_error if cleanup_error else '')
 
 
-def run_lldb_worker(command, environment, timeout, *, diagnostics=False):
+def run_lldb_worker(command, environment, timeout, *, diagnostics=False, debugserver_path=None):
     # A killed/interrupted worker cannot run its Python finally to clean up its
     # native target. Own the whole temporary process group from the parent.
-    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          text=True, env=environment, start_new_session=True) as worker:
-        try:
-            stdout, stderr = worker.communicate(timeout=timeout)
-            if worker.returncode:
-                raise subprocess.CalledProcessError(worker.returncode, command, stdout, stderr)
-            return stdout
-        finally:
-            with phase('cleanup.workerGroup', enabled=diagnostics):
+    deadline = time.monotonic() + timeout
+    owner = DebugserverOwner(debugserver_path) if debugserver_path is not None else nullcontext()
+    with owner as debugserver:
+        worker_environment = dict(environment)
+        if debugserver is not None:
+            worker_environment['LLDB_DEBUGSERVER_PATH'] = str(debugserver.executable)
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(command, timeout)
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True, env=worker_environment, start_new_session=True) as worker:
+            try:
                 try:
-                    os.killpg(worker.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                worker.wait()
+                    stdout, stderr = worker.communicate(timeout=max(0, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired as error:
+                    # Report the original whole-worker budget, retaining the
+                    # exception's captured streams and the final native phase.
+                    error.timeout = timeout
+                    raise
+                if worker.returncode:
+                    raise subprocess.CalledProcessError(worker.returncode, command, stdout, stderr)
+                return stdout
+            finally:
+                with phase('cleanup.workerGroup', enabled=diagnostics):
+                    try:
+                        os.killpg(worker.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    worker.wait()

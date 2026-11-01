@@ -155,6 +155,13 @@ assert_scope(
     macos=False,
     module_build=False,
 )
+for path in (
+    "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
+    "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
+):
+    assert_scope([path], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope(["tests/test_debugserver_ownership.py"],
+             docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(
     ["Tools/supported_build.py"],
     docs_only=False,

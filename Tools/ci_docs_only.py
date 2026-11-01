@@ -27,6 +27,17 @@ PORTABLE_TOOL_PATHS = {
     "Tools/ci_docs_only.py",
     "Tools/select_macos_pr_tests.py",
 }
+# A Python support file can own native behavior without being an executable
+# test itself. Share these consumer edges with the bounded PR test selector.
+MACOS_TEST_DEPENDENCIES = {
+    "test_hades2_lldb_breakpoint_lifetime.py": frozenset({
+        "tests/hades2_lldb_worker_support.py",
+        "tests/hades2_lldb_fixture.py",
+        "tests/hades2_debugserver_owner.py",
+        "Tools/profile_hades2_operations.py",
+    }),
+}
+MACOS_TEST_SUPPORT_PATHS = frozenset().union(*MACOS_TEST_DEPENDENCIES.values())
 # Only native/module composition boundaries need the reference-fixture compiler lane.
 # Pure Backend implementation and game-owned Swift changes are verified by their
 # owning lanes; invoking a second macOS app build adds no isolation evidence.
@@ -102,6 +113,8 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
+    if path in MACOS_TEST_SUPPORT_PATHS:
+        return False
     if path.startswith("Backend/"):
         # Portable Backend source is explicitly typed. An unrecognized or
         # native input must not silently become Linux-only.
@@ -134,7 +147,7 @@ def needs_build_for_path(
     # package; changes to this builder's own recipe do.
     if path == ".github/workflows/build2-macos.yml":
         return True
-    if path.startswith(("tests/", ".github/workflows/")) or path in {
+    if path in MACOS_TEST_SUPPORT_PATHS or path.startswith(("tests/", ".github/workflows/")) or path in {
         "Tools/macos_only_tests.txt",
         "Tools/run_macos_checks.sh",
         "Tools/select_macos_pr_tests.py",

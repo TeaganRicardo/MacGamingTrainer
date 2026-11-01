@@ -15,6 +15,7 @@ TESTS = {
     "test_build_signing_metadata_macos.py",
     "test_hades2_save_editor_frontend.py",
     "test_mapped_slider_interaction.py",
+    "test_hades2_lldb_breakpoint_lifetime.py",
 }
 SOURCES = {"hades": "Sources/Hades/", "hades2": "Sources/Hades2/"}
 
@@ -34,6 +35,12 @@ for path in ("Sources/Core/UI/Primitives/TrainerMappedSlider.swift", "Sources/Co
 assert selected_tests(["tests/test_hades2_save_editor_frontend.py"], TESTS, SOURCES) == [
     "test_hades2_save_editor_frontend.py"
 ]
+for path in (
+    "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
+    "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
+):
+    assert selected_tests([path], TESTS, SOURCES) == ["test_hades2_lldb_breakpoint_lifetime.py"]
+assert selected_tests(["tests/test_debugserver_ownership.py"], TESTS, SOURCES) == []
 assert selected_tests(["Tools/macos_only_tests.txt"], TESTS, SOURCES) == sorted(TESTS)
 assert selected_tests(["tests/fixtures/swift/InMemoryDefaults.swift"], TESTS, SOURCES) == sorted(TESTS)
 assert selected_tests(["Native/ProcessTimeWarp/ProcessTimeWarp.c"], TESTS, SOURCES) == [

@@ -30,6 +30,7 @@ SOURCE_ROOT = Path(os.environ.get("MGT_PROFILE_SOURCE_ROOT", ROOT))
 sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests")]
 
 from hades2_lldb_worker_support import phase, run_lldb_worker
+from hades2_debugserver_owner import debugserver_executable
 
 
 def summarize(samples):
@@ -267,6 +268,7 @@ def profile_first_touch():
             raw = run_lldb_worker(
                 ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()), "--mode", "first-touch",
                  "--first-touch-worker", variant], environment, timeout=30,
+                debugserver_path=debugserver_executable(lldb_path, environment),
             )
             row = json.loads(raw.splitlines()[-1])
             row["phases"] = [json.loads(line.removeprefix("lldb_phase "))
@@ -438,11 +440,13 @@ def main():
             print(json.dumps(profile_transport(args.samples, args.tick_microseconds)))
             return
         environment = dict(os.environ, MGT_PROFILE_LLDB_EMBEDDED="1")
+        lldb_path = subprocess.check_output(["/usr/bin/xcrun", "lldb", "-P"], text=True).strip()
         raw = run_lldb_worker(
             ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()),
              "--mode", "transport", "--samples", str(args.samples),
              "--tick-microseconds", str(args.tick_microseconds)],
             environment, 30 + (args.samples + 6) * 4,
+            debugserver_path=debugserver_executable(lldb_path, environment),
         )
         report["transport"] = json.loads(raw)
     if args.mode == "first-touch":
@@ -458,7 +462,7 @@ def main():
                      "Tools/fixtures/hades2_operation_profile.lua", "Tools/fixtures/hades2_profile_backend.py",
                      "Tools/fixtures/hades2_profile_host.swift", "Tools/fixtures/hades2_time_warp_profile.c",
                      "Backend/core/operation_profile.py", "tests/test_process_time_warp_install_contract.py",
-                     "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py",
+                     "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py", "tests/hades2_debugserver_owner.py",
                      "tests/hades2_resident_session_fakes.py", "tests/lua_runtime_support.py")}
     if args.mode in ("all", "offline", "resident"):
         report["resident"] = profile_resident(args.samples, args.resident_traits, args.resident_catalog_traits, args.resident_resources)
