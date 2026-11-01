@@ -58,7 +58,7 @@ struct TrainerIconLabel: View {
     }
 }
 
-enum TrainerLabeledControlLayout {
+enum TrainerLabeledControlLayout: Equatable {
     case natural
     case pickerAction
 }
@@ -95,8 +95,9 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                     .frame(width: layout == .pickerAction ? theme.pickerActionLabelWidth : nil,
                            alignment: .leading)
                     .help(helpText)
-                Spacer(minLength: 8)
+                if layout == .natural { Spacer(minLength: 8) }
                 controls
+                if layout == .pickerAction { Spacer(minLength: 0) }
             }
         }
     }

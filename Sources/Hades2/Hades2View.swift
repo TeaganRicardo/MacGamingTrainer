@@ -1284,11 +1284,6 @@ struct Hades2TrainerView: View {
             emphasized: model.canEditDesired,
             layout: .pickerAction
         ) {
-            if model.nextOccurrenceTarget != nil {
-                Text(text("hades2.occurrence.pending"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Picker(text("hades2.occurrence.title"), selection: $model.selectedNextOccurrenceTarget) {
                 Text(text("hades2.occurrence.noRequest")).tag("")
                 if !characters.isEmpty {
@@ -1320,6 +1315,11 @@ struct Hades2TrainerView: View {
                         ? nil
                         : model.selectedNextOccurrenceTarget
                 )
+            }
+            if model.nextOccurrenceTarget != nil {
+                Text(text("hades2.occurrence.pending"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .trainerGroupedRows()
