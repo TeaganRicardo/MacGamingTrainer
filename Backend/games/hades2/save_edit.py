@@ -16,6 +16,9 @@ class _Hades2SaveCodec:
     def decode(self, payload):
         return Hades2SaveDocument.from_bytes(payload)
 
+    def load(self, path):
+        return Hades2SaveDocument.load(path)
+
 
 _CODEC = _Hades2SaveCodec()
 
