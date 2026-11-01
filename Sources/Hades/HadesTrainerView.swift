@@ -37,13 +37,6 @@ struct HadesTrainerView: View {
                     icon: "exclamationmark.triangle.fill", color: theme.warning
                 )
             }
-            if !model.heroReady {
-                TrainerMessageBanner(
-                    text: text("hades.waitingForHero"),
-                    icon: "person.crop.circle.badge.clock", color: theme.info
-                )
-            }
-
             runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
             commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
             boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
