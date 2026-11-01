@@ -13,6 +13,7 @@ private final class NativePickerSelectionState {
     var returnQueued = false
     var failure: String?
     var reportedFailure = false
+    var accessibilityAction: [String: Any] = [:]
 }
 
 @MainActor
@@ -89,6 +90,7 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
         let opened = state.opened, awaitingArrow = state.awaitingArrow, returnQueued = state.returnQueued
         let trackingMenu = state.trackingMenu
         let failure = state.failure, destination = state.destinationTitle, previousHighlight = state.previousHighlightTitle
+        let accessibilityAction = state.accessibilityAction
         let currentHighlight = trackingMenu?.highlightedItem?.title
         let active = NSApp.isActive, key = window.isKeyWindow, running = NSApp.isRunning
         let extraWindows = NSApp.windows.filter { $0.isVisible && !before.contains(ObjectIdentifier($0)) }
@@ -102,6 +104,7 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
             "active": active, "key": key, "running": running,
             "opened": opened, "awaitingArrow": awaitingArrow, "returnQueued": returnQueued,
             "failure": failure ?? "nil", "destination": destination ?? "nil",
+            "accessibilityAction": accessibilityAction,
             "previousHighlight": previousHighlight ?? "nil",
             "currentHighlight": currentHighlight ?? "nil",
             "trackingMenu": trackingMenu.map { String(describing: ObjectIdentifier($0)) } ?? "nil",
@@ -112,6 +115,61 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
         let payload = (try? JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]))
             ?? Data(String(describing: context).utf8)
         FileHandle.standardError.write(Data("NATIVE_PICKER_FAILURE ".utf8) + payload + Data("\n".utf8))
+    }
+    @MainActor
+    func openAccessibilityMenu() -> Bool {
+        let object = picker.object
+        let names = NSSelectorFromString("accessibilityActionNames")
+        let rawActions = object.responds(to: names)
+            ? object.perform(names)?.takeUnretainedValue() as? [Any] ?? [] : []
+        let advertised = rawActions.compactMap { item -> String? in
+            (item as? String) ?? (item as? NSAccessibility.Action)?.rawValue
+        }
+        func allowed(_ action: Selector) -> Bool? {
+            let selector = NSSelectorFromString("isAccessibilitySelectorAllowed:")
+            guard object.responds(to: selector) else { return nil }
+            typealias Getter = @convention(c) (AnyObject, Selector, Selector) -> Bool
+            return unsafeBitCast(object.method(for: selector), to: Getter.self)(object, selector, action)
+        }
+        let legacy = NSSelectorFromString("accessibilityPerformAction:")
+        let legacyResponds = object.responds(to: legacy), legacyAllowed = allowed(legacy)
+        let actions = [("AXPress", "accessibilityPerformPress"), ("AXShowMenu", "accessibilityPerformShowMenu")]
+            .map { name, method in
+                let selector = NSSelectorFromString(method)
+                return (name: name, method: method, selector: selector,
+                        responds: object.responds(to: selector), allowed: allowed(selector))
+            }
+        state.accessibilityAction = [
+            "advertised": advertised, "legacyResponds": legacyResponds,
+            "legacyAllowed": legacyAllowed.map { String($0) } ?? "unavailable",
+            "modern": actions.map {
+                ["name": $0.name, "method": $0.method, "responds": $0.responds,
+                 "allowed": $0.allowed.map { String($0) } ?? "unavailable"] as [String: Any]
+            }]
+        // Default modern implementations can respond without supporting an
+        // action. Prefer the element's advertised action contract; never send
+        // an unadvertised legacy action or a disallowed modern selector.
+        let routes = actions.filter { advertised.contains($0.name) }
+            + actions.filter { !advertised.contains($0.name) }
+        for action in routes {
+            if advertised.contains(action.name), legacyResponds, legacyAllowed != false {
+                state.accessibilityAction["route"] = "accessibilityPerformAction:" + action.name
+                state.accessibilityAction["return"] = "void; real menu completion remains required"
+                typealias Action = @convention(c) (AnyObject, Selector, NSString) -> Void
+                unsafeBitCast(object.method(for: legacy), to: Action.self)(object, legacy, action.name as NSString)
+                return true
+            }
+            if action.responds, action.allowed == true {
+                state.accessibilityAction["route"] = action.method
+                state.accessibilityAction["return"] = "pending"
+                typealias Action = @convention(c) (AnyObject, Selector) -> Bool
+                let triggered = unsafeBitCast(object.method(for: action.selector), to: Action.self)(object, action.selector)
+                state.accessibilityAction["return"] = triggered
+                return triggered
+            }
+        }
+        state.accessibilityAction["route"] = "no supported public menu action"
+        return false
     }
     @MainActor
     func postKey(_ characters: String, code: UInt16) {
@@ -222,7 +280,12 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
         nativePickerPump()
         postKey(" ", code: 49)
     case .accessibility:
-        precondition(picker.press(), "native popup refused accessibility Press")
+        let dispatched = openAccessibilityMenu()
+        if !dispatched {
+            state.failure = "native popup has no triggered public accessibility menu action"
+            reportFailure("accessibility menu opening")
+        }
+        precondition(dispatched, "native popup refused its supported accessibility menu action")
     }
     nativePickerWait("real menu opened, accepted Arrow/Return and dismissed",
                      onFailure: { reportFailure("menu completion wait deadline") }) {

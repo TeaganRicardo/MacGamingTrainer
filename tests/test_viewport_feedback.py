@@ -102,6 +102,32 @@ final class FeedbackPageVisibility: ObservableObject {
     @Published var visible = true
 }
 
+@MainActor
+final class FeedbackInteractionWindow: NSWindow {
+    struct PointerDelivery {
+        let type: NSEvent.EventType
+        let windowNumber: Int
+        let location: NSPoint
+        let timestamp: TimeInterval
+    }
+    private(set) var pointerDeliveries: [PointerDelivery] = []
+
+    override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .mouseMoved, .mouseEntered, .mouseExited:
+            // Observe dispatch without manufacturing tracking events, changing
+            // the pointer, or intercepting the native hover implementation.
+            if pointerDeliveries.count == 16 { pointerDeliveries.removeFirst() }
+            pointerDeliveries.append(PointerDelivery(type: event.type,
+                windowNumber: event.windowNumber, location: event.locationInWindow,
+                timestamp: event.timestamp))
+        default:
+            break
+        }
+        super.sendEvent(event)
+    }
+}
+
 struct FeedbackInteractionPage: View {
     @ObservedObject var model: Hades2TrainerModel
     @ObservedObject var visibility: FeedbackPageVisibility
@@ -154,8 +180,8 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
     let editor = NSTextField(string: "unsubmitted feedback interaction draft")
     let host = NSHostingView(rootView: FeedbackInteractionPage(model: model, visibility: visibility, editor: editor)
         .environmentObject(localization))
-    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 600),
-                          styleMask: [.titled], backing: .buffered, defer: false)
+    let window = FeedbackInteractionWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 600),
+                                          styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.acceptsMouseMovedEvents = true
     window.contentView = host
@@ -200,6 +226,81 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
         typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
         return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
     }
+    func reportHoverFailure(_ notice: TrainerFeedbackNotice, targetInWindow: NSRect,
+                            targetOnScreen: NSRect, elapsed: TimeInterval,
+                            expectedResponder: NSResponder?, requestsBefore: Int) {
+        // The original short-circuit predicate has already failed. Read all
+        // geometry, AX and visibility context only after freezing that result.
+        // Never read an active text control's stringValue: it can validate edits.
+        let currentNotice = model.feedbackNotice?.id
+        let currentResponder = window.firstResponder
+        let detailsPresented = model.feedbackDetailsPresented
+        let detailsNotice = model.feedbackDetailsNoticeID
+        let visible = visibility.visible
+        let cursor = NSEvent.mouseLocation
+        let deliveries = window.pointerDeliveries
+        let dismiss = control("dismiss")
+        let details = control("details")
+        let point = NSPoint(x: targetInWindow.midX, y: targetInWindow.midY)
+        var tracking: [[String: Any]] = []
+        func inspectTracking(_ view: NSView) {
+            guard tracking.count < 32 else { return }
+            let localPoint = view.convert(point, from: nil)
+            for area in view.trackingAreas where tracking.count < 32 {
+                let bounds = area.options.contains(.inVisibleRect) ? view.visibleRect : area.rect
+                guard bounds.contains(localPoint) else { continue }
+                tracking.append([
+                    "view": String(describing: type(of: view)),
+                    "owner": area.owner.map { String(describing: type(of: $0)) } ?? "nil",
+                    "boundsInWindow": NSStringFromRect(view.convert(bounds, to: nil)),
+                    "hidden": view.isHiddenOrHasHiddenAncestor, "options": area.options.rawValue,
+                ])
+            }
+            for child in view.subviews { inspectTracking(child) }
+        }
+        inspectTracking(host)
+        func identity(_ responder: NSResponder?) -> String {
+            responder.map { String(describing: ObjectIdentifier($0)) } ?? "nil"
+        }
+        let context: [String: Any] = [
+            "originalPredicatePassed": false,
+            "expectedNotice": notice.id.uuidString, "currentNotice": currentNotice?.uuidString ?? "nil",
+            "elapsed": elapsed, "ordinaryDuration": TrainerFeedbackTiming.ordinaryDuration,
+            "fadeDuration": TrainerFeedbackTiming.fadeDuration,
+            "pageVisible": visible, "detailsPresented": detailsPresented,
+            "detailsNotice": detailsNotice?.uuidString ?? "nil",
+            "dismissExists": dismiss != nil, "dismissEnabled": dismiss?.enabled ?? false,
+            "dismissFocused": dismiss.map { isFocused($0) } ?? false,
+            "detailsFocused": details.map { isFocused($0) } ?? false,
+            "expectedResponder": identity(expectedResponder), "currentResponder": identity(currentResponder),
+            "responderPreserved": currentResponder === expectedResponder,
+            "active": app.isActive, "running": app.isRunning,
+            "window": window.windowNumber, "key": window.isKeyWindow,
+            "visible": window.isVisible, "occlusionState": window.occlusionState.rawValue,
+            "windowFrame": NSStringFromRect(window.frame),
+            "hostVisibleInWindow": NSStringFromRect(host.convert(host.visibleRect, to: nil)),
+            "targetInWindow": NSStringFromRect(targetInWindow),
+            "targetOnScreenAtInput": NSStringFromRect(targetOnScreen),
+            "targetInHostVisibleRect": host.visibleRect.contains(host.convert(targetInWindow, from: nil)),
+            "cursorOnScreen": NSStringFromPoint(cursor), "cursorInOriginalTarget": targetOnScreen.contains(cursor),
+            "cursorOutsideEventStream": NSStringFromPoint(window.mouseLocationOutsideOfEventStream),
+            "screens": NSScreen.screens.map { NSStringFromRect($0.visibleFrame) },
+            "requestsBefore": requestsBefore, "requestsAfter": requestCount(),
+            "pointerDeliveries": deliveries.map {
+                ["type": $0.type.rawValue, "window": $0.windowNumber,
+                 "point": NSStringFromPoint($0.location), "timestamp": $0.timestamp] as [String: Any]
+            },
+            "trackingAtOriginalTargetAfterFailure": tracking,
+            "visibleWindows": Array(app.windows.filter(\.isVisible).prefix(12)).map {
+                ["number": $0.windowNumber, "type": String(describing: type(of: $0)),
+                 "frame": NSStringFromRect($0.frame), "key": $0.isKeyWindow,
+                 "sheet": $0.sheetParent != nil] as [String: Any]
+            },
+        ]
+        let payload = (try? JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]))
+            ?? Data(String(describing: context).utf8)
+        FileHandle.standardError.write(Data("FEEDBACK_HOVER_FAILURE ".utf8) + payload + Data("\n".utf8))
+    }
     func next(_ key: String) -> TrainerFeedbackNotice {
         let previous = model.feedbackNotice?.id
         let before = requestCount()
@@ -227,12 +328,19 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
     let hoverNotice = next("hades2.receipt.accepted")
     check(hoverNotice.tone != .warning, "hover fixture requires the ordinary readable interval")
     let hoverRequests = requestCount()
-    let dismissBounds = window.convertFromScreen(control("dismiss")!.frame)
+    let dismissScreenBounds = control("dismiss")!.frame
+    let dismissBounds = window.convertFromScreen(dismissScreenBounds)
     check(dismissBounds.width > 0 && dismissBounds.height > 0, "feedback hover target has no native bounds")
+    let hoverStarted = ProcessInfo.processInfo.systemUptime
     movePointer(to: NSPoint(x: dismissBounds.midX, y: dismissBounds.midY))
     feedbackInputPump(TrainerFeedbackTiming.ordinaryDuration + TrainerFeedbackTiming.fadeDuration + 0.2)
-    check(model.feedbackNotice?.id == hoverNotice.id && control("dismiss")?.enabled == true,
-          "native pointer hover failed to pause the feedback lifetime")
+    let hoverRetained = model.feedbackNotice?.id == hoverNotice.id && control("dismiss")?.enabled == true
+    if !hoverRetained {
+        reportHoverFailure(hoverNotice, targetInWindow: dismissBounds, targetOnScreen: dismissScreenBounds,
+            elapsed: ProcessInfo.processInfo.systemUptime - hoverStarted,
+            expectedResponder: focusedEditor, requestsBefore: hoverRequests)
+    }
+    check(hoverRetained, "native pointer hover failed to pause the feedback lifetime")
     check(window.firstResponder === focusedEditor && !model.feedbackDetailsPresented,
           "hover pause was confounded by stolen focus or open details")
     check(requestCount() == hoverRequests, "hover or feedback timing dispatched a backend request")

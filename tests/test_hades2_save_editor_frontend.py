@@ -1094,6 +1094,28 @@ struct Main {
             fail("could not retain a focused correction through review collapse")
         }
         let retainedEditor = window.firstResponder
+        func retainedDraftGeometry() -> [String: Any] {
+            var result: [String: Any] = [
+                "fieldBounds": NSStringFromRect(retainedDraft.bounds),
+                "fieldVisibleRect": NSStringFromRect(retainedDraft.visibleRect),
+                "fieldWindowFrame": NSStringFromRect(retainedDraft.convert(retainedDraft.bounds, to: nil)),
+                "windowFrame": NSStringFromRect(window.frame),
+                "contentBounds": NSStringFromRect(window.contentView!.bounds)]
+            if let scroll = retainedDraft.enclosingScrollView {
+                result["scrollFrame"] = NSStringFromRect(scroll.frame)
+                result["clipBounds"] = NSStringFromRect(scroll.contentView.bounds)
+                if let document = scroll.documentView {
+                    result["documentFrame"] = NSStringFromRect(document.frame)
+                    result["fieldDocumentFrame"] = NSStringFromRect(retainedDraft.convert(retainedDraft.bounds, to: document))
+                }
+            }
+            return result
+        }
+        var beforeCollapseGeometry = retainedDraftGeometry()
+        beforeCollapseGeometry["editorText"] = retainedDraft.currentEditor()?.string ?? "<none>"
+        beforeCollapseGeometry["editorDelegateIsField"] = retainedDraft.currentEditor()?.delegate as? NSTextField === retainedDraft
+        beforeCollapseGeometry["fieldWindowIsOwner"] = retainedDraft.window === window
+        beforeCollapseGeometry["busy"] = model.busy
         let beforeReviewCollapse = commands(at: commandLog).count
         removeButton.performClick(nil)
         pumpUntil { model.pendingCount == 0 && !model.busy }
@@ -1103,8 +1125,26 @@ struct Main {
             fail("Native per-action remove control did not unstage exactly one action")
         }
         pump(0.3)
-        if window.firstResponder !== retainedEditor || retainedDraft.currentEditor()?.string != "3.5"
-            || !retainedDraft.visibleRect.contains(retainedDraft.bounds) {
+        let retainedFirstResponder = window.firstResponder === retainedEditor
+        let retainedEditorText = retainedDraft.currentEditor()?.string
+        let retainedVisible = retainedDraft.visibleRect.contains(retainedDraft.bounds)
+        if !retainedFirstResponder || retainedEditorText != "3.5" || !retainedVisible {
+            // Freeze the original predicate first. In particular, reading the
+            // NSTextField/stringValue here would validate a live native edit.
+            let diagnostic: [String: Any] = [
+                "sameFirstResponder": retainedFirstResponder,
+                "editorText": retainedEditorText ?? "<none>",
+                "fullyVisible": retainedVisible,
+                "sameMountedField": fields(window.contentView!).contains { $0 === retainedDraft },
+                "editorDelegateIsField": retainedDraft.currentEditor()?.delegate as? NSTextField === retainedDraft,
+                "fieldEnabled": retainedDraft.isEnabled,
+                "fieldWindowIsOwner": retainedDraft.window === window,
+                "active": app.isActive, "key": window.isKeyWindow, "busy": model.busy,
+                "pendingCount": model.pendingCount,
+                "before": beforeCollapseGeometry, "after": retainedDraftGeometry(),
+                "commandDelta": Array(commands(at: commandLog).dropFirst(beforeReviewCollapse))]
+            let data = try! JSONSerialization.data(withJSONObject: diagnostic, options: [.sortedKeys])
+            FileHandle.standardError.write(Data("save_review_collapse_failure=".utf8) + data + Data("\n".utf8))
             fail("review collapse lost a focused draft or pushed it outside the result viewport")
         }
         if namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) != nil

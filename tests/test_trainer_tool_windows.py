@@ -39,13 +39,67 @@ struct DraftView: View {
     }
 }
 
-@MainActor func wait(_ message: String, _ condition: () -> Bool) {
+@MainActor func wait(_ message: String, onFailure: () -> Void = {}, _ condition: () -> Bool) {
     let deadline = Date().addingTimeInterval(4)
     repeat {
         if condition() { return }
         pump(0.02)
     } while Date() < deadline
+    onFailure()
     fatalError(message)
+}
+
+@MainActor final class WindowLifecycleTrace {
+    private var events: [[String: Any]] = []
+    private var observers: [NSObjectProtocol] = []
+    private let began = ProcessInfo.processInfo.systemUptime
+
+    init(window: NSWindow) {
+        for name in [NSWindow.willMiniaturizeNotification, NSWindow.didMiniaturizeNotification,
+                     NSWindow.didDeminiaturizeNotification, NSWindow.didBecomeKeyNotification,
+                     NSWindow.didResignKeyNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) {
+                [weak self, weak window] notification in
+                let phase = notification.name.rawValue
+                MainActor.assumeIsolated {
+                    if let window { self?.record(phase, window: window) }
+                }
+            })
+        }
+    }
+
+    func record(_ phase: String, window: NSWindow) {
+        guard events.count < 24 else { return }
+        events.append(["phase": phase, "elapsed": ProcessInfo.processInfo.systemUptime - began,
+                       "miniaturized": window.isMiniaturized, "visible": window.isVisible,
+                       "key": window.isKeyWindow, "active": NSApp.isActive])
+    }
+
+    func dump(_ phase: String, window: NSWindow, field: NSTextField, editor: NSTextView,
+              originalContent: NSView?, draft: DocumentDraft, source: UUID, factories: Int) {
+        let currentEditor = field.currentEditor()
+        let snapshot: [String: Any] = [
+            "phase": phase, "miniaturized": window.isMiniaturized, "visible": window.isVisible,
+            "key": window.isKeyWindow, "main": window.isMainWindow,
+            "active": NSApp.isActive, "running": NSApp.isRunning,
+            "appKeyWindow": NSApp.keyWindow?.windowNumber ?? -1,
+            "window": window.windowNumber, "canBecomeKey": window.canBecomeKey,
+            "sameContent": window.contentView === originalContent,
+            "sameResponder": window.firstResponder === editor,
+            "currentEditorIsOriginal": currentEditor === editor,
+            "currentEditorIdentity": currentEditor.map { String(describing: ObjectIdentifier($0)) } ?? "<none>",
+            "responder": String(describing: window.firstResponder),
+            "editorText": currentEditor?.string ?? "<none>", "draft": draft.text,
+            "sameSource": draft.source == source, "factories": factories,
+            "events": events]
+        let data = try! JSONSerialization.data(withJSONObject: snapshot, options: [.sortedKeys])
+        FileHandle.standardError.write(Data("tool_window_restore_failure=".utf8) + data + Data("\n".utf8))
+    }
+
+    func stop() {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+    }
 }
 
 func fields(_ view: NSView) -> [NSTextField] {
@@ -87,12 +141,21 @@ struct Main {
         precondition(first.firstResponder === editor && draft.source == source
                      && field.stringValue == "retained document draft",
                      "raising an existing tool replaced its focused draft or document source")
+        let trace = WindowLifecycleTrace(window: first)
+        defer { trace.stop() }
+        @MainActor func restorationFailure(_ phase: String) {
+            trace.dump(phase, window: first, field: field, editor: editor, originalContent: originalContent,
+                       draft: draft, source: source, factories: factories)
+        }
+        trace.record("before miniaturize", window: first)
         first.miniaturize(nil)
-        wait("native tool did not minimize") { first.isMiniaturized }
+        wait("native tool did not minimize", onFailure: { restorationFailure("minimize") }) { first.isMiniaturized }
+        trace.record("before reopen", window: first)
         let restored = store.open(id: "first", title: "Restored", localization: localization, theme: .standard) {
             fatalError("Restoring a minimized tool reread its document")
         }
-        wait("reopening a minimized tool did not restore its native window") {
+        trace.record("reopen returned", window: first)
+        wait("reopening a minimized tool did not restore its native window", onFailure: { restorationFailure("reopen") }) {
             !first.isMiniaturized && first.isVisible && first.isKeyWindow
         }
         precondition(restored === first && first.contentView === originalContent

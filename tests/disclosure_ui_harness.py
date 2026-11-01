@@ -535,6 +535,14 @@ func exerciseModuleDisclosure<Content: View>(
             let before = commands().count
             let primary = field(primaryLabel(language))!
             let detail = field(expandedLabel(language))!
+            // AppKit can apply the native scroller's minimum window width
+            // after SwiftUI has already mounted the controls. A child viewport
+            // wider than its host is not a settled baseline for row movement.
+            disclosureWait(host, "initial native viewport fits its window") {
+                guard let scroll = primary.enclosingScrollView else { return false }
+                let viewportFrame = scroll.convert(scroll.bounds, to: host)
+                return host.bounds.insetBy(dx: -1, dy: -1).contains(viewportFrame)
+            }
             let primaryFrame = primary.convert(primary.bounds, to: nil)
             let headerButtonFrame = window.convertFromScreen(button()!.frame)
             disclosureCheck(headerButtonFrame.width > 0 && headerButtonFrame.height > 0,
