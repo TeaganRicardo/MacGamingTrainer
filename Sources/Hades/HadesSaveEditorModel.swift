@@ -290,8 +290,13 @@ final class HadesSaveEditorModel: ObservableObject {
         let oldWorkspace = workspaceID
         searchTask?.cancel(); queryLoading = false
         perform("open", params: params, scope: "open", workspace: nil) { [weak self] result in
-            guard let self, let summary: Summary = self.decode(result, scope: "open"),
-                  summary.review.baselineGeneration == summary.baselineGeneration else { return }
+            guard let self else { return }
+            guard let summary: Summary = self.decode(result, scope: "open"),
+                  summary.review.baselineGeneration == summary.baselineGeneration else {
+                if let abandoned = result["workspaceId"] as? String,
+                   abandoned != self.workspaceID { self.release(abandoned) }
+                return
+            }
             self.requests.bind(workspaceID: summary.workspaceId, baselineGeneration: summary.baselineGeneration)
             self.workspaceID = summary.workspaceId; self.baselineGeneration = summary.baselineGeneration; self.readyGeneration = nil
             self.source = summary.source; self.sourceSHA256 = summary.sourceSHA256
@@ -477,6 +482,7 @@ final class HadesSaveEditorModel: ObservableObject {
                          blocking: Bool = true, lane: TrainerSaveEditorReplyCoordinator.Lane? = nil,
                          failed: @escaping () -> Void = {}, finished: @escaping () -> Void = {},
                          receive: @escaping ([String: Any]) -> Void) {
+        if ["stage", "unstage", "cancel", "apply"].contains(suffix) { requests.invalidate(.review) }
         let ticket = suffix == "open"
             ? requests.beginNewDocumentRead()
             : requests.capture(lane, bindsDocument: workspace != nil)
@@ -495,7 +501,7 @@ final class HadesSaveEditorModel: ObservableObject {
                 // A discarded source read still created a real backend
                 // workspace. Release that exact owner without touching the
                 // document now visible in this tool window.
-                if suffix == "open", reply.success,
+                if suffix == "open", self.session.lifecycleID == lifecycle, reply.success,
                    let abandoned = reply.result?["workspaceId"] as? String,
                    abandoned != self.workspaceID {
                     self.release(abandoned)
