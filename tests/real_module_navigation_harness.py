@@ -75,6 +75,34 @@ import SwiftUI
     fatalError("real module navigation timed out: " + message)
 }
 
+@MainActor final class MainRunLoopGapSampler {
+    private var timer: Timer?
+    private var lastTick = ProcessInfo.processInfo.systemUptime
+    private(set) var gaps: [Double] = []
+
+    func start() {
+        timer?.invalidate()
+        gaps.removeAll(keepingCapacity: true)
+        lastTick = ProcessInfo.processInfo.systemUptime
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                self.gaps.append(now - self.lastTick)
+                self.lastTick = now
+            }
+        }
+        timer.tolerance = 0.001
+        self.timer = timer
+    }
+
+    func stop() -> [Double] {
+        timer?.invalidate()
+        timer = nil
+        return gaps
+    }
+}
+
 func journeyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(journeyFields)
 }
@@ -364,14 +392,20 @@ struct StartupAvailabilityModule: TrainerGameModule {
             selectGame("hades2")
             selectGame("hades")
         }
+        let mainLoopSampler = MainRunLoopGapSampler()
+        mainLoopSampler.start()
         for _ in 0..<6 {
             selectGame("hades2", measure: true)
             selectGame("hades", measure: true)
         }
+        journeyPump(0.05)
+        let mainLoopGaps = mainLoopSampler.stop().sorted()
         let switchPresses = measuredSwitches.map(\.press).sorted()
         let switchSettles = measuredSwitches.map(\.settle).sorted()
         let p95Index = max(0, Int(ceil(Double(switchSettles.count) * 0.95)) - 1)
-        print("real_module_switch_timing samples=\(measuredSwitches.count) press_max=\(switchPresses.last ?? 0) settle_p95=\(switchSettles[p95Index]) settle_max=\(switchSettles.last ?? 0)")
+        let gapP95Index = max(0, Int(ceil(Double(mainLoopGaps.count) * 0.95)) - 1)
+        let gapP95 = mainLoopGaps.isEmpty ? 0 : mainLoopGaps[gapP95Index]
+        print("real_module_switch_timing samples=\(measuredSwitches.count) press_max=\(switchPresses.last ?? 0) settle_p95=\(switchSettles[p95Index]) settle_max=\(switchSettles.last ?? 0) main_loop_samples=\(mainLoopGaps.count) main_loop_gap_p95=\(gapP95) main_loop_gap_max=\(mainLoopGaps.last ?? 0)")
         let firstSearch = searchField(), firstScroll = scroll()
         // Every shipped section ID must resolve to its own mounted native
         // target. No test-only target registry or fake module replaces it.
