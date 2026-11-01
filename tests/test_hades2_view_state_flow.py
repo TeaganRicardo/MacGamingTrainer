@@ -8,6 +8,7 @@ import textwrap
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
+from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -89,6 +90,11 @@ struct Main {
         enableNativeAccessibility()
         let args = CommandLine.arguments
         guard args.count == 3 || args.count == 4 else { fail("expected python + worker and optional journey") }
+        if args.count == 4 && args[3] == "hierarchy" {
+            exerciseVisualHierarchy(descriptor: Hades2GameModule.descriptor, presentation: Hades2GameModule.presentation)
+            print("hades2_visual_hierarchy_ok")
+            return
+        }
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
@@ -373,8 +379,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     binary = td / "view_state_flow"
     home = td / "home"
     home.mkdir()
+    for language in ("en", "zh-CN"):
+        localized = td / f"{language}.lproj"
+        localized.mkdir()
+        shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(
@@ -399,6 +409,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
+    hierarchy = subprocess.run([str(binary), PYTHON, str(worker_path), "hierarchy"],
+                               cwd=ROOT, env=env, text=True, capture_output=True, timeout=20)
+    if hierarchy.returncode != 0:
+        print(hierarchy.stdout)
+        print(hierarchy.stderr)
+        raise SystemExit(hierarchy.returncode)
+    if "hades2_visual_hierarchy_ok" not in hierarchy.stdout:
+        raise SystemExit("Hades II hierarchy fixture exited without completion")
+    print(hierarchy.stdout.strip())
     # Reuse the compiled real module, while keeping pointer/field timing out of
     # the existing state-flow budget and using its own backend process/journal.
     slider_worker = td / "slider_worker.py"

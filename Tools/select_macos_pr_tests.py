@@ -59,6 +59,9 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
             "Sources/Core/UI/TrainerMotion.swift",
             "Sources/Core/UI/Primitives/TrainerToggleControl.swift",
             "Sources/Core/UI/Components/TrainerFeatureControls.swift",
+            "Sources/Core/UI/TrainerTheme.swift", "Sources/Core/UI/TrainerShell.swift",
+            "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/StatusComponents.swift",
+            "Sources/Core/UI/Primitives/TrainerRow.swift", "Sources/Core/UI/Primitives/TrainerCard.swift",
             "Sources/Core/UI/Components/TrainerListControls.swift",
         ):
             chosen.update(("test_hades_frontend.py", "test_hades2_view_state_flow.py"))

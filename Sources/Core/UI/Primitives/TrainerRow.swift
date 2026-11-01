@@ -48,8 +48,11 @@ struct TrainerIconLabel: View {
                 .font(.title3)
                 .foregroundStyle(tint ?? theme.accent)
                 .frame(width: 40, height: 40)
-                .background((tint ?? theme.accent).opacity(emphasized ? 0.15 : 0.06), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
-            Text(title).font(.subheadline.weight(.semibold))
+                .background((tint ?? theme.accent).opacity(emphasized ? 0.12 : 0.045), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius, style: .continuous))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

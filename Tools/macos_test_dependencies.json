@@ -1,11 +1,13 @@
 {
   "test_hades_frontend.py": [
     "tests/management_ui_harness.py",
-    "tests/slider_ui_harness.py"
+    "tests/slider_ui_harness.py",
+    "tests/visual_hierarchy_harness.py"
   ],
   "test_hades2_view_state_flow.py": [
     "tests/management_ui_harness.py",
-    "tests/slider_ui_harness.py"
+    "tests/slider_ui_harness.py",
+    "tests/visual_hierarchy_harness.py"
   ],
   "test_hades2_lldb_breakpoint_lifetime.py": [
     "tests/hades2_lldb_worker_support.py",
