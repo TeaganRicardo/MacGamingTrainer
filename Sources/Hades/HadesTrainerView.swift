@@ -189,8 +189,13 @@ struct HadesTrainerView: View {
                     mapping: gameSpeedMapping,
                     accessibilityLabel: localization.localized("host.timeWarp.title"),
                     accessibilityHint: localization.localized("host.timeWarp.hint"),
-                    enabled: model.canMutate,
-                    onPreviewValue: { gameSpeedPreview = $0 }
+                    enabled: model.canMutate && pageVisible,
+                    onPreviewValue: { preview in
+                        gameSpeedPreview = preview
+                        if preview == nil && !gameSpeedEditing {
+                            gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                        }
+                    }
                 )
                 .frame(width: 200)
             }

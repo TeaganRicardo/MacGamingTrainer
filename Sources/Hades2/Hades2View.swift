@@ -859,8 +859,13 @@ struct Hades2TrainerView: View {
                     mapping: gameSpeedMapping,
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
                     accessibilityHint: text("hades2.gameSpeed.hint"),
-                    enabled: model.canEditDesired,
-                    onPreviewValue: { gameSpeedPreview = speedNumber($0) }
+                    enabled: model.canEditDesired && pageVisible,
+                    onPreviewValue: { preview in
+                        gameSpeedPreview = preview.map(speedNumber)
+                        if preview == nil && focusedField != .gameSpeed {
+                            gameSpeedInput = speedNumber(model.gameSpeed)
+                        }
+                    }
                 )
                 .frame(width: 200)
                 TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))

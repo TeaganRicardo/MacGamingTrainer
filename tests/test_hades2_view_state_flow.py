@@ -7,6 +7,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
+from slider_ui_harness import SLIDER_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -25,9 +26,15 @@ profiles=[{'name':'Fixture','updatedAt':'Today'}]
 for raw in sys.stdin:
     req=json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
-        handle.write(json.dumps(req, sort_keys=True) + '\n')
+        handle.write(json.dumps({**req, 'fixtureGame': args.game}, sort_keys=True) + '\n')
     command=req['command'];params=req.get('params',{})
     result={'connected':True}
+    speed_path=log_path.with_suffix('.speed')
+    if speed_path.exists():
+        speed=float(speed_path.read_text())
+        if command=='set_desired' and params.get('feature')=='gameSpeed':
+            speed=params['value'];speed_path.write_text(str(speed))
+        result.update(gameSpeed=speed,featureSupport={'gameSpeed':True})
     if command in ('list_profiles','save_profile','delete_profile'):
         if command=='save_profile' and params['name']!='__error__':
             profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
@@ -81,10 +88,40 @@ struct Main {
         _ = NSApplication.shared
         enableNativeAccessibility()
         let args = CommandLine.arguments
-        guard args.count == 3 else { fail("expected python + worker") }
+        guard args.count == 3 || args.count == 4 else { fail("expected python + worker and optional journey") }
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
+
+        if args.count == 4 && args[3] == "slider" {
+            let speedURL = commandLog.deletingPathExtension().appendingPathExtension("speed")
+            try "1.0".write(to: speedURL, atomically: true, encoding: .utf8)
+            let sliderSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+                executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
+            let sliderModel = Hades2TrainerModel(session: sliderSession,
+                logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("slider.log")),
+                backendScriptURL: worker,
+                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"))
+            sliderModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+            let deadline = Date().addingTimeInterval(4)
+            while (!sliderModel.backendAvailable || sliderModel.busy) && Date() < deadline { pump(0.02) }
+            guard sliderModel.backendAvailable && !sliderModel.busy else { fail("slider backend startup") }
+            let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+            localization.language = .en
+            localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
+                resolver: Hades2GameModule.presentationText)
+            let name = Hades2GameModule.resolveText(key: "hades2.gameSpeed.a11y", localization: localization)
+            try exerciseModuleSlider(Hades2TrainerView(model: sliderModel), localization: localization,
+                sliderLabel: name, fieldLabel: name, gameID: "hades2", mutation: "set_desired",
+                currentValue: { sliderModel.gameSpeed }, busy: { sliderModel.busy },
+                commands: { commands(at: commandLog) }, observe: { speed in
+                    try String(speed).write(to: speedURL, atomically: true, encoding: .utf8)
+                    sliderModel.refreshFromHost()
+                })
+            sliderSession.stop()
+            pump(0.1)
+            return
+        }
 
         let process = BackendProcess(
             executableURL: python,
@@ -337,7 +374,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     home = td / "home"
     home.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(
@@ -362,6 +399,20 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
+    # Reuse the compiled real module, while keeping pointer/field timing out of
+    # the existing state-flow budget and using its own backend process/journal.
+    slider_worker = td / "slider_worker.py"
+    shutil.copy2(worker_path, slider_worker)
+    slider_proc = subprocess.run(
+        [str(binary), PYTHON, str(slider_worker), "slider"], cwd=ROOT, env=env,
+        text=True, capture_output=True, timeout=20,
+    )
+    if slider_proc.returncode != 0:
+        print(slider_proc.stdout)
+        print(slider_proc.stderr)
+        raise SystemExit(slider_proc.returncode)
+    assert "hades2_slider_module_journey_ok" in slider_proc.stdout, slider_proc.stdout
+    print(slider_proc.stdout.strip())
     proc = subprocess.run(
         [str(binary), PYTHON, str(worker_path)],
         cwd=ROOT,

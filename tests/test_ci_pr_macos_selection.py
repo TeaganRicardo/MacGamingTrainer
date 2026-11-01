@@ -56,6 +56,9 @@ for path in (
         "test_multi_game_contexts.py", "test_reference_fixture_session_integration.py",
         "test_global_hotkey_routing.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
     })
+assert selected_tests(["tests/slider_ui_harness.py"], TESTS, SOURCES) == sorted({
+    "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+})
 assert selected_tests(["tests/test_debugserver_ownership.py"], TESTS, SOURCES) == []
 assert selected_tests(["Tools/macos_only_tests.txt"], TESTS, SOURCES) == sorted(TESTS)
 assert selected_tests(["tests/fixtures/swift/InMemoryDefaults.swift"], TESTS, SOURCES) == sorted(TESTS)
