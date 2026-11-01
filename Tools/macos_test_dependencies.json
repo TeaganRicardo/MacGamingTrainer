@@ -1,0 +1,8 @@
+{
+  "test_hades2_lldb_breakpoint_lifetime.py": [
+    "tests/hades2_lldb_worker_support.py",
+    "tests/hades2_lldb_fixture.py",
+    "tests/hades2_debugserver_owner.py",
+    "Tools/profile_hades2_operations.py"
+  ]
+}

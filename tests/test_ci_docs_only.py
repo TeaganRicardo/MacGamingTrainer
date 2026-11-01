@@ -158,10 +158,51 @@ assert_scope(
 for path in (
     "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
     "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
+    "Tools/macos_test_dependencies.json",
 ):
     assert_scope([path], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope(["tests/test_debugserver_ownership.py"],
              docs_only=False, linux=True, macos=False, module_build=False)
+
+# Native support ownership is data from the test inventory, independent of
+# module identities. Invalid consumers/paths cannot silently skip native checks.
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    (root / "Tools").mkdir()
+    (root / "Tools/macos_only_tests.txt").write_text("test_native_fixture.py\n")
+    metadata = root / "Tools/macos_test_dependencies.json"
+    metadata.write_text(json.dumps({"test_native_fixture.py": ["tests/fixture.py"]}))
+    assert module.load_macos_test_dependencies(root) == {
+        "test_native_fixture.py": frozenset({"tests/fixture.py"}),
+    }
+    for invalid in (
+        [], {"test_unknown.py": ["tests/fixture.py"]},
+        {"test_native_fixture.py": "tests/fixture.py"},
+        {"test_native_fixture.py": ["../fixture.py"]},
+        {"test_native_fixture.py": ["/fixture.py"]},
+        {"test_native_fixture.py": ["./tests/fixture.py"]},
+    ):
+        metadata.write_text(json.dumps(invalid))
+        try:
+            module.load_macos_test_dependencies(root)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid native dependency metadata accepted: {invalid!r}")
+    metadata.write_text("{")
+    try:
+        module.load_macos_test_dependencies(root)
+    except json.JSONDecodeError:
+        pass
+    else:
+        raise AssertionError("malformed native dependency metadata was ignored")
+    metadata.unlink()
+    try:
+        module.load_macos_test_dependencies(root)
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError("missing native dependency metadata was ignored")
 assert_scope(
     ["Tools/supported_build.py"],
     docs_only=False,

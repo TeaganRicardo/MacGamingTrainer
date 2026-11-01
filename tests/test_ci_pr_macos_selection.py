@@ -38,6 +38,7 @@ assert selected_tests(["tests/test_hades2_save_editor_frontend.py"], TESTS, SOUR
 for path in (
     "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
     "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
+    "Tools/macos_test_dependencies.json",
 ):
     assert selected_tests([path], TESTS, SOURCES) == ["test_hades2_lldb_breakpoint_lifetime.py"]
 assert selected_tests(["tests/test_debugserver_ownership.py"], TESTS, SOURCES) == []
