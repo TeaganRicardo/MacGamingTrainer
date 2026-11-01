@@ -1,0 +1,299 @@
+"""Portable contracts for exact-executable, kernel-version-bound cleanup."""
+import ctypes
+import errno
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+from unittest.mock import patch
+
+from hades2_debugserver_owner import (
+    _AuditToken, _ProcessIdentity, DarwinProcesses, DebugserverOwner,
+    debugserver_executable,
+)
+from hades2_lldb_worker_support import worker_failure_output
+import hades2_lldb_worker_support as worker_support
+
+
+class Function:
+    def __init__(self, implementation):
+        self.implementation = implementation
+
+    def __call__(self, *arguments):
+        return self.implementation(*arguments)
+
+
+class Kernel:
+    def __init__(self):
+        self.rows = {}
+        self.signals = []
+        self.signal_error = 0
+        self.proc_listpidspath = Function(self.list_paths)
+        self.proc_pidinfo = Function(self.identity)
+        self.proc_pidpath_audittoken = Function(self.path)
+        self.proc_signal_with_audittoken = Function(self.kill)
+
+    def list_paths(self, kind, uid, path, flags, buffer, size):
+        assert kind == 4 and flags == 0, 'inventory must be UID and exact-path scoped'
+        assert Path(path.decode()).is_absolute()
+        if buffer is not None:
+            for index, pid in enumerate(self.rows):
+                buffer[index] = pid
+        return len(self.rows) * ctypes.sizeof(ctypes.c_int)
+
+    def identity(self, pid, flavor, argument, buffer, size):
+        assert flavor == 17 and argument == 0 and size == 56
+        ctypes.cast(buffer, ctypes.POINTER(_ProcessIdentity)).contents.pid_version = self.rows[pid][0]
+        return size
+
+    def path(self, token_pointer, buffer, size):
+        token = ctypes.cast(token_pointer, ctypes.POINTER(_AuditToken)).contents
+        row = self.rows.get(token[5])
+        if row is None or row[0] != token[7]:
+            ctypes.set_errno(errno.ESRCH)
+            return 0
+        value = str(row[1]).encode()
+        assert len(value) < size
+        ctypes.memmove(buffer, value + b'\0', len(value) + 1)
+        return len(value)
+
+    def kill(self, token_pointer, sig):
+        token = ctypes.cast(token_pointer, ctypes.POINTER(_AuditToken)).contents
+        self.signals.append((token[5], token[7], sig))
+        row = self.rows.get(token[5])
+        if row is None or row[0] != token[7]:
+            return errno.ESRCH
+        if self.signal_error:
+            return self.signal_error
+        del self.rows[token[5]]
+        return 0
+
+
+kernel = Kernel()
+processes = DarwinProcesses(kernel)
+assert ctypes.sizeof(_ProcessIdentity) == 56
+assert _ProcessIdentity.pid_version.offset == 32
+assert ctypes.sizeof(_AuditToken) == 32
+owned = Path('/private/tmp/unique/debugserver')
+foreign = Path('/private/tmp/another/debugserver')
+kernel.rows = {101: (7, owned), 102: (9, foreign)}
+tokens = processes.matching(owned)
+assert len(tokens) == 1 and (tokens[0][5], tokens[0][7]) == (101, 7)
+
+# Reusing a PID after the path check cannot authorize signaling its new owner.
+kernel.rows[101] = (8, foreign)
+processes.kill(tokens[0])
+assert kernel.rows[101] == (8, foreign)
+assert processes.path(tokens[0]) is None
+assert kernel.signals == [(101, 7, signal.SIGKILL)]
+kernel.rows[101] = (10, owned)
+processes.kill(processes.matching(owned)[0])
+assert kernel.rows == {102: (9, foreign)}
+
+# The native symbols are required before a worker can launch. No unsupported
+# platform may silently replace version-bound signaling with os.kill(pid).
+try:
+    DarwinProcesses(object())
+except RuntimeError as error:
+    assert 'Required Darwin lifetime API unavailable' in str(error)
+else:
+    raise AssertionError('missing kernel identity API was accepted')
+
+missing_signal = Kernel()
+del missing_signal.proc_signal_with_audittoken
+try:
+    DarwinProcesses(missing_signal)
+except RuntimeError as error:
+    assert 'proc_signal_with_audittoken' in str(error)
+else:
+    raise AssertionError('missing version-bound signal API was accepted')
+
+# System executables may have restricted macOS flags that a temporary copy
+# cannot acquire. Metadata-copy refusal must not prevent owning native bytes.
+with patch('hades2_debugserver_owner.shutil.copystat',
+           side_effect=PermissionError(errno.EPERM, 'restricted source flags')):
+    owner = DebugserverOwner(sys.executable, processes=processes)
+kernel.rows[201] = (11, owner.executable)
+with owner:
+    assert owner.executable.read_bytes() == Path(sys.executable).read_bytes()
+    assert stat.S_IMODE(owner.executable.stat().st_mode) == stat.S_IMODE(Path(sys.executable).stat().st_mode)
+    assert os.access(owner.executable, os.X_OK)
+assert not owner.directory.exists()
+assert kernel.rows == {102: (9, foreign)}, 'cleanup crossed executable ownership'
+
+owner = DebugserverOwner(sys.executable, processes=processes)
+kernel.rows[202] = (12, owner.executable)
+interruption = KeyboardInterrupt()
+try:
+    with owner:
+        raise interruption
+except KeyboardInterrupt as error:
+    assert error is interruption
+else:
+    raise AssertionError('owner swallowed interruption')
+assert not owner.directory.exists() and 202 not in kernel.rows
+
+# A refused cleanup retains executable evidence and the original timeout's
+# stdout/stderr and exception identity rather than claiming success.
+owner = DebugserverOwner(sys.executable, processes=processes)
+kernel.rows[203] = (13, owner.executable)
+kernel.signal_error = errno.EPERM
+failure = subprocess.TimeoutExpired(['worker'], 30, output=b'last stdout\n', stderr=b'last phase\n')
+try:
+    try:
+        with owner:
+            raise failure
+    except subprocess.TimeoutExpired as error:
+        assert error is failure
+        report = worker_failure_output(error)
+        assert 'last stdout' in report and 'last phase' in report
+        assert str(owner.directory) in report and 'cleanup failed' in report
+    assert owner.directory.exists() and 203 in kernel.rows
+finally:
+    kernel.signal_error = 0
+    owner.close()
+
+owner = DebugserverOwner(sys.executable, processes=processes)
+kernel.rows[204] = (14, owner.executable)
+kernel.signal_error = errno.EPERM
+try:
+    try:
+        with owner:
+            pass
+    except RuntimeError as error:
+        assert 'cleanup failed' in str(error) and str(owner.directory) in str(error)
+    else:
+        raise AssertionError('cleanup failure was reported as success')
+    assert owner.directory.exists()
+finally:
+    kernel.signal_error = 0
+    owner.close()
+
+assert debugserver_executable('/X/LLDB.framework/Resources/Python', {}) == Path('/X/LLDB.framework/Resources/debugserver')
+assert debugserver_executable('/unused', {'LLDB_DEBUGSERVER_PATH': '/selected/debugserver'}) == Path('/selected/debugserver')
+
+# Slow preparation consumes the original budget and must not launch a worker
+# after that budget expires. The unlaunched owner's cleanup still runs.
+clock = [0]
+closed = []
+
+
+class SlowPreparation:
+    executable = Path('/private/selected/debugserver')
+
+    def __init__(self, source):
+        clock[0] += 6
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *arguments):
+        closed.append(True)
+
+
+with patch.object(worker_support, 'DebugserverOwner', SlowPreparation), \
+     patch.object(worker_support.time, 'monotonic', side_effect=lambda: clock[0]), \
+     patch.object(worker_support.subprocess, 'Popen') as launch:
+    try:
+        worker_support.run_lldb_worker(['worker'], {}, timeout=5, debugserver_path='selected')
+    except subprocess.TimeoutExpired as error:
+        assert error.timeout == 5 and error.cmd == ['worker']
+    else:
+        raise AssertionError('preparation reset the worker timeout budget')
+    assert not launch.called and closed == [True]
+
+# Xcode discovery is a subprocess, not an unbounded parent preflight. Exercise
+# its actual launch/communicate/cleanup seam without launching native tools.
+lookup_command = ['/usr/bin/xcrun', 'lldb', '-P']
+lldb_python_path = '/X/LLDB.framework/Resources/Python'
+for outcome in ('stall', 'failure', 'interrupt', 'success', 'override'):
+    clock = [0]
+    events = []
+    environment = {'PYTHONPATH': '/preexisting'}
+    if outcome == 'override':
+        environment['LLDB_DEBUGSERVER_PATH'] = '/selected/debugserver'
+    original_environment = dict(environment)
+    lookup_failure = subprocess.TimeoutExpired(
+        lookup_command, 10, output=b'lookup stdout\n', stderr=b'lookup phase\n',
+    ) if outcome == 'stall' else KeyboardInterrupt()
+
+    class PreparedOwner:
+        executable = Path('/private/owned/debugserver')
+
+        def __init__(self, source):
+            expected = '/selected/debugserver' if outcome == 'override' else '/X/LLDB.framework/Resources/debugserver'
+            assert source == Path(expected), 'worker selected a different debugserver from Xcode/override'
+            events.append(('prepare', source))
+            clock[0] += 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *arguments):
+            events.append(('close',))
+
+    class Process:
+        def __init__(self, command, **options):
+            self.command = command
+            self.pid = 301 if command == lookup_command else 302
+            self.returncode = 7 if self.pid == 301 and outcome == 'failure' else 0
+            assert options['start_new_session'] and options['text']
+            if self.pid == 302:
+                assert outcome in ('success', 'override'), 'worker launched after unsuccessful lookup'
+                assert options['env']['PYTHONPATH'] == lldb_python_path + os.pathsep + '/preexisting'
+                assert options['env']['LLDB_DEBUGSERVER_PATH'] == str(PreparedOwner.executable)
+            events.append(('launch', self.pid))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *arguments):
+            return False
+
+        def communicate(self, timeout):
+            events.append(('communicate', self.pid, timeout))
+            if self.pid == 301:
+                assert timeout == 10
+                clock[0] += timeout if outcome == 'stall' else 4
+                if outcome in ('stall', 'interrupt'):
+                    raise lookup_failure
+                if outcome == 'failure':
+                    return 'lookup stdout\n', 'lookup phase\n'
+                return lldb_python_path + '\n', ''
+            assert timeout == 5, 'lookup or copy time reset the original worker budget'
+            return 'worker result', ''
+
+        def wait(self):
+            events.append(('wait', self.pid))
+            return self.returncode
+
+    with patch.object(worker_support, 'DebugserverOwner', side_effect=PreparedOwner) as prepare, \
+         patch.object(worker_support.time, 'monotonic', side_effect=lambda: clock[0]), \
+         patch.object(worker_support.subprocess, 'Popen', side_effect=Process) as launch, \
+         patch.object(worker_support.os, 'killpg', side_effect=lambda pid, sig: events.append(('kill', pid, sig))):
+        try:
+            result = worker_support.run_lldb_worker(['worker'], environment, timeout=10, xcode_lldb=True)
+        except subprocess.TimeoutExpired as error:
+            assert outcome == 'stall' and error is lookup_failure
+            assert error.timeout == 10 and error.cmd == lookup_command
+            assert worker_failure_output(error) == 'lookup stdout\nlookup phase\n'
+        except subprocess.CalledProcessError as error:
+            assert outcome == 'failure' and error.returncode == 7 and error.cmd == lookup_command
+            assert worker_failure_output(error) == 'lookup stdout\nlookup phase\n'
+        except KeyboardInterrupt as error:
+            assert outcome == 'interrupt' and error is lookup_failure
+        else:
+            assert outcome in ('success', 'override') and result == 'worker result'
+        assert events[:4] == [
+            ('launch', 301), ('communicate', 301, 10),
+            ('kill', 301, signal.SIGKILL), ('wait', 301),
+        ], 'lookup group was not cleaned up before preparation/worker launch'
+        if outcome in ('stall', 'failure', 'interrupt'):
+            assert launch.call_count == 1 and not prepare.called
+        else:
+            assert launch.call_count == 2 and prepare.call_count == 1
+            assert events[-3:] == [('kill', 302, signal.SIGKILL), ('wait', 302), ('close',)]
+        assert environment == original_environment, 'preparation modified the caller environment'
+print('debugserver_ownership_ok')

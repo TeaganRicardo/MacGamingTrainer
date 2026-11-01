@@ -13,6 +13,8 @@ model = read('Sources/Hades2/Hades2Model.swift')
 store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
 navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
+core_management = read('Sources/Core/UI/Components/TrainerManagementGroups.swift')
+core_profiles = read('Sources/Core/UI/Components/TrainerProfileManagerView.swift')
 schema = read('Backend/games/hades2/schema.py')
 feature_generator = read('Tools/generate_hades2_feature_bindings.py')
 feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
@@ -96,8 +98,16 @@ assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
 assert "clearProfileShortcutWarning()" in model + management
-assert '.onDisappear { model.clearProfileShortcutWarning() }' in management
-assert 'Text(localization.string(warning))' in management
+# The module resolves its warning token before the shared profile sheet renders
+# the text; dismissal still clears the module-owned warning.
+profile_manager = source_section(management, "struct Hades2ProfileManagerView: View {", "struct Hades2DiagnosticsView: View {")
+assert "TrainerProfileManagerView(" in profile_manager
+assert 'warning: model.profileShortcutWarning.map { localization.string($0) } ?? ""' in profile_manager
+assert '.onDisappear { model.clearProfileShortcutWarning() }' in profile_manager
+profile_warning = source_section(core_profiles, "if !warning.isEmpty {", "            HStack(spacing: 10)")
+assert "Text(warning)" in profile_warning
+assert ".foregroundStyle(theme.warning)" in profile_warning
+assert ".fixedSize(horizontal: false, vertical: true)" in profile_warning
 shortcut_settings = management[management.index("struct Hades2ShortcutSettingsView"):management.index("struct Hades2ManagementUtilities")]
 shared_settings = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text()
 assert "TrainerShortcutSettingsView(" in shortcut_settings
@@ -142,8 +152,8 @@ if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
 visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
 # Disable All remains a visible action, but its fixed global shortcut is not
 # rendered as a badge beside the button.
-assert 'title: localization.localized("host.disableAll")' in management
-assert "systemImage: TrainerSemanticIcon.Tool.disableAll" in management
+assert 'case .disableAll: "host.disableAll"' in core_management
+assert "case .disableAll: TrainerSemanticIcon.Tool.disableAll" in core_management
 assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management
 visible_actions.append("disableAll")
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
@@ -229,8 +239,9 @@ assert 'TrainerSection(title: text("hades2.section.elements")' not in view
 assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
 assert "specialSearch" not in view
-assert "resultsPresented" in host_actions
-assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions
+assert "TrainerWorkbenchSearchField(" in host_actions
+search_field = read('Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift')
+assert ".popover(isPresented: $presentation.resultsPresented, arrowEdge: .bottom)" in search_field
 
 
 gathering_action_key = "hades2.gathering.generate"

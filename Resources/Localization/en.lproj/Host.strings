@@ -193,3 +193,12 @@
 "host.save.recoveryProtected" = "Recovery evidence kept";
 "host.save.keepBackup" = "Keep This Backup";
 "host.save.allowAutomaticCleanup" = "Allow Automatic Cleanup";
+
+"host.operation.inProgress" = "Working…";
+
+"host.diagnostics.summary" = "{0} of {1} checks passed";
+"host.diagnostics.empty" = "No diagnostic results yet.";
+"host.diagnostics.passed" = "Passed";
+"host.diagnostics.warning" = "Warning";
+"host.diagnostics.failed" = "Failed";
+"host.diagnostics.unknown" = "Unknown";

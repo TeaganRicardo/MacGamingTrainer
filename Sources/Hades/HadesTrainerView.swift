@@ -714,20 +714,7 @@ struct HadesManagementCommands: Commands {
     @ObservedObject var model: HadesTrainerModel
     @ObservedObject var localization: TrainerLocalizationStore
     var body: some Commands {
-        CommandMenu(localization.localized("host.trainerMenu")) {
-            Button(localization.localized("host.refreshStatus"), action: model.refreshFromHost).disabled(model.busy)
-            Button(localization.localized("host.disableAll"), action: model.disableAll).disabled(!model.hostActionsEnabled)
-            Divider()
-            Button(localization.localized("host.shortcutSettings")) { model.shortcutSettingsPresented = true }
-            Button(HadesPresentation.text("hades.manage.profiles", language: localization.language)) {
-                model.profilesPresented = true; model.listProfiles()
-            }.disabled(!model.hostActionsEnabled)
-            Button(localization.localized("host.viewLog"), action: model.openLog)
-            Button(localization.localized("host.viewLogHistory"), action: model.openLogHistory)
-            Button(localization.localized("host.clearCompletedLogs"), action: model.clearCompletedLogs)
-            Button(HadesPresentation.text("hades.manage.diagnostics", language: localization.language)) {
-                model.diagnosticsPresented = true; model.runDiagnostics()
-            }.disabled(!model.hostActionsEnabled)
-        }
+        TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"),
+            groups: HadesManagementCatalog.make(model: model, localization: localization).groups)
     }
 }

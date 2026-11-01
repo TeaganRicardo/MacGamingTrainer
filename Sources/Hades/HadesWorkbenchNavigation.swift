@@ -206,28 +206,19 @@ enum HadesWorkbenchCatalog {
         worldTerms: [String: [String: String]] = [:],
         resolving labels: (String) -> [String]
     ) -> [HadesWorkbenchEntry] {
-        let words = query.split(whereSeparator: \.isWhitespace).map { normalized(String($0)) }
-        guard !words.isEmpty else { return [] }
         let dynamic = resources.map {
             HadesWorkbenchEntry(id: "resource.\($0.id)", titleKey: "hades.resources",
                                 section: .resources, resource: $0)
         }
-        let world = worldTerms.map { key, names in
+        let world = worldTerms.sorted { $0.key < $1.key }.map { key, names in
             HadesWorkbenchEntry(id: "world.\(key)", titleKey: "hades.chamberObject",
                 section: key == "fishing" ? .resources : .rooms, worldNames: names)
         }
-        return (entries + dynamic + world).filter { entry in
-            let names = labels(entry.titleKey) + labels(entry.section.titleKey)
+        return TrainerWorkbenchSearch.matches(query, entries: entries + dynamic + world) { entry in
+            labels(entry.titleKey) + labels(entry.section.titleKey)
                 + (entry.resource.map { Array($0.names.values) + [$0.id] } ?? [])
                 + (entry.worldNames.map { Array($0.values) } ?? [])
-            let searchable = normalized(names.joined(separator: " "))
-            return words.allSatisfy { searchable.contains($0) }
         }
-    }
-
-    private static func normalized(_ value: String) -> String {
-        value.folding(options: [.caseInsensitive, .diacriticInsensitive],
-                      locale: Locale(identifier: "en_US_POSIX"))
     }
 }
 
@@ -257,16 +248,6 @@ struct HadesHeaderActions: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
-    @Environment(\.trainerGamePageVisible) private var pageVisible
-    @State private var resultsPresented = false
-
-    private var results: [HadesWorkbenchEntry] {
-        HadesWorkbenchCatalog.matches(model.workbenchSearch, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
-            TrainerPresentationLanguage.allCases.map {
-                HadesGameModule.resolveText(key: key, language: $0, localization: localization)
-            }
-        }
-    }
 
     private func label(_ entry: HadesWorkbenchEntry) -> String {
         if let names = entry.worldNames {
@@ -281,50 +262,25 @@ struct HadesHeaderActions: View {
     private func locate(_ entry: HadesWorkbenchEntry) {
         if entry.requiresExpandedMetrics { model.numericControlsExpanded = true }
         navigate(entry.section.id)
-        resultsPresented = false
     }
 
     var body: some View {
-        TrainerSearchField(
+        TrainerWorkbenchSearchField(
             text: $model.workbenchSearch,
             placeholder: HadesPresentation.text("hades.workbench.search", language: localization.language),
-            clearLabel: localization.localized("host.search.clear")
-        ) {
-            if let first = results.first { locate(first) }
-            else { resultsPresented = false }
-        }
-        .popover(isPresented: $resultsPresented, arrowEdge: .bottom) {
-            Group {
-                if results.isEmpty {
-                    TrainerEmptyState(text: HadesPresentation.text("hades.workbench.searchEmpty",
-                                                                  language: localization.language))
-                } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(results) { entry in
-                                TrainerSectionButton(
-                                    title: label(entry),
-                                    detail: HadesGameModule.resolveText(
-                                        key: entry.section.titleKey, localization: localization),
-                                    systemImage: entry.icon
-                                ) {
-                                    locate(entry)
-                                }
-                            }
-                        }
+            clearLabel: localization.localized("host.search.clear"),
+            emptyLabel: HadesPresentation.text("hades.workbench.searchEmpty", language: localization.language),
+            search: { query in
+                HadesWorkbenchCatalog.matches(query, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
+                    TrainerPresentationLanguage.allCases.map {
+                        HadesGameModule.resolveText(key: key, language: $0, localization: localization)
                     }
-                    .frame(height: min(CGFloat(results.count) * 52, 312))
                 }
-            }
-            .frame(width: 420)
-            .padding(8)
-        }
-        .onChange(of: model.workbenchSearch) { _, query in
-            guard pageVisible else { return }
-            resultsPresented = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible { resultsPresented = false }
-        }
+            },
+            title: label,
+            detail: { HadesGameModule.resolveText(key: $0.section.titleKey, localization: localization) },
+            icon: { $0.icon },
+            onNavigate: locate
+        )
     }
 }

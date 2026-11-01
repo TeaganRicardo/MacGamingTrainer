@@ -259,14 +259,13 @@ __attribute__((constructor)) static void load_frameworks(void) {
 
 def profile_first_touch():
     environment = dict(os.environ)
-    lldb_path = subprocess.check_output(["/usr/bin/xcrun", "lldb", "-P"], text=True).strip()
-    environment["PYTHONPATH"] = lldb_path + os.pathsep + environment.get("PYTHONPATH", "")
     trials = []
     for _ in range(5):
         for variant in ("baseline", "production"):
             raw = run_lldb_worker(
                 ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()), "--mode", "first-touch",
                  "--first-touch-worker", variant], environment, timeout=30,
+                xcode_lldb=True,
             )
             row = json.loads(raw.splitlines()[-1])
             row["phases"] = [json.loads(line.removeprefix("lldb_phase "))
@@ -443,6 +442,7 @@ def main():
              "--mode", "transport", "--samples", str(args.samples),
              "--tick-microseconds", str(args.tick_microseconds)],
             environment, 30 + (args.samples + 6) * 4,
+            xcode_lldb=True,
         )
         report["transport"] = json.loads(raw)
     if args.mode == "first-touch":
@@ -458,7 +458,7 @@ def main():
                      "Tools/fixtures/hades2_operation_profile.lua", "Tools/fixtures/hades2_profile_backend.py",
                      "Tools/fixtures/hades2_profile_host.swift", "Tools/fixtures/hades2_time_warp_profile.c",
                      "Backend/core/operation_profile.py", "tests/test_process_time_warp_install_contract.py",
-                     "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py",
+                     "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py", "tests/hades2_debugserver_owner.py",
                      "tests/hades2_resident_session_fakes.py", "tests/lua_runtime_support.py")}
     if args.mode in ("all", "offline", "resident"):
         report["resident"] = profile_resident(args.samples, args.resident_traits, args.resident_catalog_traits, args.resident_resources)

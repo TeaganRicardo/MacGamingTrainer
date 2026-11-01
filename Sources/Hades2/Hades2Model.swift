@@ -248,6 +248,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
+    @Published var profilesPresented = false
+    @Published var diagnosticsPresented = false
 
     private lazy var runLogWatcher = Hades2RunLogWatcher(directoryURL: runLogDirectoryURL) { [weak self] event in
         self?.handleRunLogEvent(event)
@@ -1384,10 +1386,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
 
-    func saveProfile(_ name: String) {
+    func saveProfile(_ name: String, completion: ((Bool) -> Void)? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile")
+        guard !trimmed.isEmpty else { completion?(false); return }
+        send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile", completion: completion)
     }
 
     func clearProfileShortcutWarning() {

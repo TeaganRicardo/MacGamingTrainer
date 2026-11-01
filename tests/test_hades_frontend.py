@@ -1,6 +1,7 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
 from pathlib import Path
+from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ import argparse,json,pathlib,sys,time
 parser=argparse.ArgumentParser();parser.add_argument('--game');args=parser.parse_args()
 folder=pathlib.Path(__file__).parent
 workspaces={};next_workspace=0
+profiles=[{"name":"Fixture","updatedAt":"Today"}]
 files=[{'rootId':'fixture','relativePath':f'Profile{n}.sav','profile':f'Profile{n}','variant':''} for n in (1,2)]
 values={'resources':25,'progression':False,'equipment':1,'relationships':1,'narrative':'Fixture dialogue',
     'statistics':4.123456789012345,'history':2,'shiftA':11,'shiftB':22,'shiftC':33,'narrativeNyx':True,'narrativeNyxShared':False,'narrativeAchilles':False,'advancedScalar':3,'advanced':{'luaType':'table','arraySize':0,'hashSize':1,'entries':[
@@ -145,9 +147,15 @@ for raw in sys.stdin:
     elif command=='catalog':result=json.loads((folder/'catalog.json').read_text())
     elif command=='disconnect':result={**state,'connected':False,'heroReady':False}
     elif command in ('list_profiles','save_profile','delete_profile'):
-        result={'profiles':[{'name':'Fixture','updatedAt':'2026-10-27T00:00:00+00:00'}] if command!='delete_profile' else []}
+        if command=='save_profile' and params['name']!='__error__':
+            profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
+        if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
+        result={'profiles':profiles}
     elif command=='diagnostics':
-        result={**state,'diagnostics':{'gameID':'hades','checks':[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]}}
+        checks=[{'name':'hades.diagnostics.connection','ok':state['connected'],'detail':'42'}]
+        if state.get('diagnosticsMode')=='viewer':checks.append({'name':'hades.diagnostics.hero','ok':False,'detail':'Fixture caution'})
+        if state.get('diagnosticsMode')=='empty':checks=[]
+        result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
@@ -158,6 +166,12 @@ for raw in sys.stdin:
     time.sleep(.02)
     reply={'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,
         'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':True,'result':result}
+    if command=='diagnostics' and state.get('diagnosticsMode')=='error':
+        reply.update(ok=False,error={'code':'fixture_diagnostics','presentation':'Diagnostic fixture rejected.'})
+        reply.pop('result')
+    if command=='save_profile' and params.get('name')=='__error__':
+        reply.update(ok=False,error={'code':'fixture_profile','presentation':'Profile fixture rejected.'})
+        reply.pop('result')
     if command=='status' and state.get('fixtureError'):
         reply.update(ok=False,error={'code':state.get('fixtureErrorCode','fixture'),'presentation':state['fixtureError']},state=state)
         reply.pop('result')
@@ -236,6 +250,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
     @MainActor static func main() throws {
         _ = NSApplication.shared
         enableNativeAccessibility()
+        guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
+        let journey = CommandLine.arguments[3]
+        guard ["frontend", "management"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         let precisionCases: [Double] = [0, -0.0, 25, 1.2345678901234567, 123.45678901234567,
                                        .leastNonzeroMagnitude, .leastNormalMagnitude, .greatestFiniteMagnitude]
         for number in precisionCases {
@@ -325,8 +342,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 + "\nlast 12 worker requests:\n"+json(Array(received.suffix(12)))+"\nlast 12 emitted replies:\n"+json(Array(emitted.suffix(12)))
                 + "\nwindows:\n"+windows+"\ntrainer log tail:\n"+log.split(separator:"\n").suffix(12).joined(separator:"\n")
         }
-        // The outer Python harness retains only the last native phase if the
-        // entire expanded fixture exceeds its global process budget.
+        // Each independently owned journey has its own process budget and
+        // journal, so a slow sheet cannot consume the editor/lifecycle budget.
         func recordPhase(_ stage: String) {
             try? (String(Date().timeIntervalSince1970)+" "+stage).write(
                 to: folder.appendingPathComponent("native-phase.txt"), atomically: true, encoding: .utf8)
@@ -338,6 +355,12 @@ func pump(_ seconds: TimeInterval = 0.1) {
             if !condition() { fatalError("Timed out after 5s waiting for "+expectation+"\n"+fixtureDiagnostics(),file:file,line:line) }
             recordPhase("passed: "+expectation)
         }
+        func stopBackend() {
+            var complete = false
+            model.prepareForTermination { complete = true }
+            wait("prepareForTermination: backend shutdown completion") { complete }
+        }
+        recordPhase("start: " + journey)
         wait("startup status/catalog replies: connected, catalog populated, trainer idle") { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
         model.listProfiles()
@@ -406,6 +429,72 @@ func pump(_ seconds: TimeInterval = 0.1) {
         localization.language = .en
         localization.registerModulePresentation(prefix:HadesGameModule.presentationKeyPrefix,
             resolver:HadesGameModule.presentationText)
+        if journey == "management" {
+            recordPhase("management: routing and layout")
+            exerciseManagementRouting(localization: localization)
+            let menuCatalog = HadesManagementCatalog.make(model: model, localization: localization)
+            check(menuCatalog.additionalMaintenance.isEmpty && menuCatalog.saveEditor == nil && menuCatalog.saveManagement == nil,
+                  "Hades app menu fabricated unavailable image or document commands")
+            menuCatalog.profiles.perform()
+            wait("profile menu routed to Hades") { !model.busy && model.profilesPresented && commands().last?["command"] as? String == "list_profiles" }
+            model.profilesPresented = false
+            menuCatalog.diagnostics.perform()
+            wait("diagnostics menu routed to Hades") { !model.busy && model.diagnosticsPresented && commands().last?["command"] as? String == "diagnostics" }
+            model.diagnosticsPresented = false
+            var editorOpens = 0, backupOpens = 0
+            let documentCatalog = HadesManagementCatalog.make(model: model, localization: localization,
+                openSaveEditor: { editorOpens += 1 }, openSaveManagement: { backupOpens += 1 })
+            documentCatalog.saveEditor?.perform(); documentCatalog.saveManagement?.perform()
+            check(editorOpens == 1 && backupOpens == 1, "Hades optional document actions lost their original callbacks")
+            exerciseManagementLayout(content: {
+                HadesManagementUtilities(model: model)
+                    .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
+            }, catalog: { HadesManagementCatalog.make(model: model, localization: localization,
+                    openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
+            exerciseManagementPageDismissal(HadesTrainerView(model: model), localization: localization,
+                show: { model.diagnosticsPresented = true }, dismissed: { !model.diagnosticsPresented })
+            recordPhase("management: profile workflow")
+            model.profilesPresented = true
+            exerciseProfileManager(
+                HadesProfileManagerView(model: model),
+                labels: .init(title: HadesPresentation.text("hades.manage.profiles", language: .en), explanation: "",
+                    name: HadesPresentation.text("hades.profile.name", language: .en), picker: "",
+                    save: HadesPresentation.text("hades.profile.save", language: .en),
+                    load: HadesPresentation.text("hades.profile.load", language: .en),
+                    empty: HadesPresentation.text("hades.profile.empty", language: .en)),
+                localization: localization, inventory: { model.profiles.map(\.name) }, busy: { model.busy },
+                dismissed: { !model.profilesPresented }, commands: commands
+            )
+            func setDiagnosticsMode(_ mode: String) throws {
+                var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+                state["diagnosticsMode"] = mode
+                try JSONSerialization.data(withJSONObject: state).write(to: stateURL, options: .atomic)
+            }
+            recordPhase("management: diagnostic workflow")
+            try setDiagnosticsMode("viewer")
+            model.runDiagnostics()
+            wait("shared diagnostic viewer fixture") { !model.busy && model.diagnostics.count == 2 }
+            model.diagnosticsPresented = true
+            try exerciseDiagnostics(HadesDiagnosticsView(model: model), localization: localization,
+                refreshTitle: localization.localized("host.refresh"),
+                exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
+                checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
+                nonpassingStatus: "host.diagnostics.warning", busy: { model.busy }, count: { model.diagnostics.count },
+                dismissed: { !model.diagnosticsPresented }, commands: commands, setMode: setDiagnosticsMode)
+            stopBackend()
+            model.profilesPresented = false; model.diagnosticsPresented = false
+            let afterShutdown = commands().count
+            wait("captured Hades commands disabled after backend shutdown") {
+                !menuCatalog.refresh.isEnabled && !menuCatalog.profiles.isEnabled && !menuCatalog.diagnostics.isEnabled
+            }
+            menuCatalog.refresh.perform(); menuCatalog.profiles.perform(); menuCatalog.diagnostics.perform()
+            pump()
+            check(commands().count == afterShutdown && !model.profilesPresented && !model.diagnosticsPresented,
+                  "captured Hades commands crossed their retired backend lifetime")
+            recordPhase("passed: management")
+            print("hades_management_native_workflows_ok")
+            return
+        }
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
@@ -437,6 +526,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "Chinese workbench feature lookup failed")
         check(searchFunctions("gem").contains { $0.section == .resources && $0.resource != nil },
             "resource search did not include bilingual catalog names")
+        let dynamicResources = [
+            HadesResourceDefinition(id:"z-elixir",names:["en":"Élixir","zh-CN":"药水"]),
+            HadesResourceDefinition(id:"a-elixir",names:["en":"Elixir","zh-CN":"药水"]),
+        ]
+        let dynamicWorld = ["z-door":["en":"Exit","zh-CN":"出口"],
+                            "a-door":["en":"Exit","zh-CN":"出口"]]
+        func dynamicSearch(_ query:String) -> [HadesWorkbenchEntry] {
+            HadesWorkbenchCatalog.matches(query,resources:dynamicResources,worldTerms:dynamicWorld) { _ in [] }
+        }
+        check(dynamicSearch("ELIXIR 药水").map(\.id)==["resource.z-elixir","resource.a-elixir"],
+              "dynamic bilingual resource aliases lost diacritics, multiple tokens or supplied order")
+        check(dynamicSearch("EXIT 出口").map(\.id)==["world.a-door","world.z-door"],
+              "dynamic world terms lost bilingual matching or stable destination order")
+        check(dynamicSearch("elixir missing").isEmpty,"dynamic resources matched only part of the query")
         check(searchFunctions("稀有度").contains { $0.id == "shortcut.boonRarityEnabled"
             && $0.section == .boons }, "boon rarity function not localized to the effect area")
         let mutations = commands().filter { $0["command"] as? String == "set_feature" }.count
@@ -1041,9 +1144,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
         model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
         check(model.localError=="hades.error.protocol" && !model.canMutate,"malformed observation retained mutation authority")
-        var complete=false
-        model.prepareForTermination { complete=true }
-        wait("prepareForTermination: backend shutdown completion") { complete }
+        stopBackend()
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")
     }
@@ -1052,56 +1153,73 @@ func pump(_ seconds: TimeInterval = 0.1) {
 
 with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
-    (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
-        'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
-    (folder / 'main.swift').write_text(HARNESS)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
         shutil.copy2(ROOT / 'Resources/Localization' / f'{language}.lproj' / 'Host.strings',
                      destination / 'Host.strings')
-    (folder / 'state.json').write_text(json.dumps({'connected': True, 'pid': 42, 'heroReady': True,
+    worker_source = WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
+        'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion']))
+    initial_state = {'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
-        'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}))
+        'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
     selected = next(row for row in data['entries'] if row['id'] == 'AmmoBoltTrait')
-    (folder / 'catalog.json').write_text(json.dumps({'catalog': [selected], 'resourceCatalog': data['resources'],
+    catalog = {'catalog': [selected], 'resourceCatalog': data['resources'],
         'traitNames': data['traitNames'], 'worldRewards': list(json.loads(
             (ROOT / 'Backend/games/hades/world_catalog.json').read_text())['rewards'].values()),
-        'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}))
+        'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}
     generated = folder / 'ActiveGame.generated.swift'
     subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades').rglob('*.swift')) + [
         ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
         generated, folder / 'main.swift']
-    subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(folder / 'frontend')], check=True, cwd=ROOT)
-    # The expanded native editor fixture already reached late checks after ~28s
-    # on the previous head. Preserve the per-expectation 5s fail-fast limits;
-    # use a separate bounded 65s budget for the whole fixture process.
-    try:
-        proc = subprocess.run([str(folder / 'frontend'), str(folder), sys.executable],
-                              capture_output=True, text=True, timeout=65)
-    except subprocess.TimeoutExpired as error:
-        phase = folder / 'native-phase.txt'
-        print('Native frontend exceeded 65s; last phase: ' +
-              (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
-              file=sys.stderr)
-        for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):
-            journal = folder / filename
-            if journal.exists():
-                print(filename + ' tail:', file=sys.stderr)
-                for line in journal.read_text(encoding='utf-8', errors='replace').splitlines()[-12:]:
-                    print(line, file=sys.stderr)
-        for stream in ('stdout', 'stderr'):
-            captured = getattr(error, stream)
-            if captured:
-                print('Partial ' + stream + ':', file=sys.stderr)
-                print(captured.decode(errors='replace') if isinstance(captured, bytes) else captured,
-                      file=sys.stderr)
-        raise SystemExit(1)
-    if proc.returncode:
-        print(proc.stdout)
-        print(proc.stderr)
-        raise SystemExit(proc.returncode)
-    print(proc.stdout.strip())
+    binary = folder / 'frontend'
+    subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(binary)], check=True, cwd=ROOT)
+
+    # Compile once, then give the original editor/lifecycle and added management
+    # journeys independent workers, windows and journals. Keep the original 65s
+    # frontend deadline and every 5s operation limit; management cannot consume
+    # their remaining process time or retain observers in their process.
+    for journey, budget, completion_marker in (
+        ('frontend', 65, 'hades_frontend_native_drafts_and_target_ownership_ok'),
+        ('management', 30, 'hades_management_native_workflows_ok'),
+    ):
+        case_folder = folder / 'journeys' / journey
+        case_folder.mkdir(parents=True)
+        (case_folder / 'worker.py').write_text(worker_source)
+        (case_folder / 'state.json').write_text(json.dumps(initial_state))
+        (case_folder / 'catalog.json').write_text(json.dumps(catalog))
+        print('hades_frontend_launch:' + journey, flush=True)
+        try:
+            proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
+                                  capture_output=True, text=True, timeout=budget)
+        except subprocess.TimeoutExpired as error:
+            phase = case_folder / 'native-phase.txt'
+            print(f'Native {journey} fixture exceeded {budget}s; last phase: ' +
+                  (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
+                  file=sys.stderr)
+            for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):
+                journal = case_folder / filename
+                if journal.exists():
+                    print(filename + ' tail:', file=sys.stderr)
+                    for line in journal.read_text(encoding='utf-8', errors='replace').splitlines()[-12:]:
+                        print(line, file=sys.stderr)
+            for stream in ('stdout', 'stderr'):
+                captured = getattr(error, stream)
+                if captured:
+                    print('Partial ' + stream + ':', file=sys.stderr)
+                    print(captured.decode(errors='replace') if isinstance(captured, bytes) else captured,
+                          file=sys.stderr)
+            raise SystemExit(1)
+        if proc.returncode:
+            print(proc.stdout)
+            print(proc.stderr)
+            raise SystemExit(proc.returncode)
+        if completion_marker not in proc.stdout.splitlines():
+            print(proc.stdout)
+            print(proc.stderr)
+            raise SystemExit(f'{journey} fixture exited without its completion marker')
+        print(proc.stdout.strip())

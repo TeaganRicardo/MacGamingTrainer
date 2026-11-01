@@ -193,3 +193,12 @@
 "host.save.recoveryProtected" = "保留恢复证据";
 "host.save.keepBackup" = "保护此备份";
 "host.save.allowAutomaticCleanup" = "允许自动整理";
+
+"host.operation.inProgress" = "正在处理…";
+
+"host.diagnostics.summary" = "{0}/{1} 项检查通过";
+"host.diagnostics.empty" = "暂无诊断结果。";
+"host.diagnostics.passed" = "通过";
+"host.diagnostics.warning" = "警告";
+"host.diagnostics.failed" = "未通过";
+"host.diagnostics.unknown" = "未知";

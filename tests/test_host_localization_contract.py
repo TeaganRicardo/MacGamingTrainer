@@ -5,6 +5,8 @@ localization = (ROOT / "Sources/Core/Host/TrainerLocalization.swift").read_text(
 sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text(encoding="utf-8")
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
 hades_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
+hades_management_actions = (ROOT / "Sources/Hades2/Services/Hades2ManagementActions.swift").read_text(encoding="utf-8")
+shared_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
 app = (ROOT / "Sources/App.swift").read_text(encoding="utf-8")
 build = (ROOT / "build.sh").read_text(encoding="utf-8")
 
@@ -20,9 +22,16 @@ assert 'packaged.read_bytes() != source.read_bytes()' in build, "build must veri
 
 assert "Bundle.standard" in localization and "url(forResource: language.rawValue, withExtension: \"lproj\")" in localization, "lookup must load the selected table from Bundle.standard"
 assert "host.gameLibrary" not in sidebar, "sidebar must use shared localization lookup"
-assert 'localization.localized("host.saveManagement")' in hades_management, (
-    "module-composed Save Management entry must use shared Host localization lookup"
-)
+# The module forwards the Host capability into the common action catalogue;
+# Core localizes that action's key and renders the resulting title unchanged.
+assert "openSaveManagement: managementActions.openSaveManagement" in hades_management
+assert "TrainerManagementGroups(groups: catalog.groups)" in hades_management
+save_management = hades_management_actions.split("saveManagement: openSaveManagement.map { open in", 1)[1].split("additionalMaintenance:", 1)[0]
+assert ".init(.saveManagement, localization: localization, enabled: canUseBackend, action: open)" in save_management
+assert 'case .saveManagement: "host.saveManagement"' in shared_management
+assert "title: localization.localized(common.titleKey)" in shared_management
+assert "[saveEditor, saveManagement].compactMap { $0 }" in shared_management
+assert "TrainerSecondaryActionButton(title: action.title, systemImage: action.icon," in shared_management
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
 assert 'localization.localized(primaryActionTitleKey)' in status_controls
 assert 'return "host.connectGame"' in status_controls and 'return "host.disconnectGame"' in status_controls

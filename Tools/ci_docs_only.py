@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,7 @@ PORTABLE_TOOL_PATHS = {
     "Tools/ci_docs_only.py",
     "Tools/select_macos_pr_tests.py",
 }
+MACOS_TEST_DEPENDENCIES_PATH = "Tools/macos_test_dependencies.json"
 # Only native/module composition boundaries need the reference-fixture compiler lane.
 # Pure Backend implementation and game-owned Swift changes are verified by their
 # owning lanes; invoking a second macOS app build adds no isolation evidence.
@@ -88,6 +90,31 @@ def load_macos_only_tests(root: Path = ROOT) -> set[str]:
     }
 
 
+def load_macos_test_dependencies(root: Path = ROOT) -> dict[str, frozenset[str]]:
+    # Dependency edges belong beside the test inventory; shared scope routing
+    # only interprets the generic relationship between support paths and tests.
+    dependencies = json.loads((root / MACOS_TEST_DEPENDENCIES_PATH).read_text(encoding="utf-8"))
+    inventory = load_macos_only_tests(root)
+    if not isinstance(dependencies, dict):
+        raise ValueError("macOS test dependencies must be an object")
+    for consumer, paths in dependencies.items():
+        if consumer not in inventory:
+            raise ValueError(f"macOS dependency consumer missing from inventory: {consumer}")
+        if not isinstance(paths, list) or not paths or any(
+            not isinstance(path, str) or not path or path == "." or Path(path).is_absolute()
+            or ".." in Path(path).parts or Path(path).as_posix() != path
+            for path in paths
+        ):
+            raise ValueError(f"invalid macOS test dependency paths for {consumer}")
+    return {consumer: frozenset(paths) for consumer, paths in dependencies.items()}
+
+
+# Missing or malformed ownership metadata must fail routing, never become an
+# empty map that silently skips a native consumer.
+MACOS_TEST_DEPENDENCIES = load_macos_test_dependencies()
+MACOS_TEST_SUPPORT_PATHS = frozenset({MACOS_TEST_DEPENDENCIES_PATH}).union(*MACOS_TEST_DEPENDENCIES.values())
+
+
 def needs_module_build_for_path(path: str) -> bool:
     return (
         path in MODULE_EXACT_PATHS
@@ -102,6 +129,8 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
+    if path in MACOS_TEST_SUPPORT_PATHS:
+        return False
     if path.startswith("Backend/"):
         # Portable Backend source is explicitly typed. An unrecognized or
         # native input must not silently become Linux-only.
@@ -134,7 +163,7 @@ def needs_build_for_path(
     # package; changes to this builder's own recipe do.
     if path == ".github/workflows/build2-macos.yml":
         return True
-    if path.startswith(("tests/", ".github/workflows/")) or path in {
+    if path in MACOS_TEST_SUPPORT_PATHS or path.startswith(("tests/", ".github/workflows/")) or path in {
         "Tools/macos_only_tests.txt",
         "Tools/run_macos_checks.sh",
         "Tools/select_macos_pr_tests.py",

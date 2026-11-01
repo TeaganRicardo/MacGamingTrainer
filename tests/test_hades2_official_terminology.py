@@ -170,12 +170,18 @@ assert 'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"' in types
 assert 'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"' in types
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
+shared_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
 host_zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encoding="utf-8")
 host_en = (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8")
-assert 'CommandMenu(localization.localized("host.trainerMenu"))' in host_actions
+# The module supplies the localized title and Core passes it to CommandMenu.
+module_commands = host_actions[host_actions.index("struct Hades2ManagementCommands: Commands {"):]
+shared_menu = shared_management[shared_management.index("struct TrainerManagementCommandMenu: Commands {"):]
+assert 'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"),' in module_commands
+assert "let title: String" in shared_menu
+assert "CommandMenu(title)" in shared_menu
 assert '"host.trainerMenu" = "修改器";' in host_zh
 assert '"host.trainerMenu" = "Trainer";' in host_en
-assert 'CommandMenu("训练器")' not in host_actions
-assert 'CommandMenu("修改器")' not in host_actions
+assert 'CommandMenu("训练器")' not in host_actions + shared_menu
+assert 'CommandMenu("修改器")' not in host_actions + shared_menu
 
 print("hades2_official_terminology_ok")

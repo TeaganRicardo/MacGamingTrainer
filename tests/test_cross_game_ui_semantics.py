@@ -217,12 +217,15 @@ for path in (
         assert f"TrainerSemanticIcon.Section.{semantic}" in source
 
 for path in (
-    ROOT / "Sources/Hades/HadesManagement.swift",
-    ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift",
+    ROOT / "Sources/Hades/HadesManagementActions.swift",
+    ROOT / "Sources/Hades2/Services/Hades2ManagementActions.swift",
 ):
     source = path.read_text()
-    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics", "exportDiagnostics"):
+    for semantic in ("saveEditor", "profiles", "diagnostics"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
+core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text()
+for semantic in ("saveManagement", "disableAll", "shortcuts", "log", "logHistory", "clearLogs", "refreshStatus"):
+    assert f"TrainerSemanticIcon.Tool.{semantic}" in core_management
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
     ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
@@ -289,7 +292,7 @@ for key in (
 
 assert "searchAliasKeys" not in hades_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
-assert "systemImage: entry.icon" in hades2_host
+assert "icon: { $0.icon }" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
@@ -303,10 +306,23 @@ assert 'static let garden = "tree.fill"' in hades2_nav
 assert 'static let hexReady = "moon.fill"' in hades2_nav
 assert 'static let shades = "person.3.fill"' in hades2_nav
 assert "Image(systemName: TrainerSemanticIcon.Action.remove)" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades/HadesManagement.swift").read_text()
-assert "TrainerSemanticIcon.Tool.exportDiagnostics" in (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text()
+diagnostics_view = (ROOT / "Sources/Core/UI/Components/TrainerDiagnosticsView.swift").read_text()
+assert "TrainerSemanticIcon.Tool.exportDiagnostics" in diagnostics_view
+assert "TrainerListCard" in diagnostics_view
+for path, start, end in (
+    ("Sources/Hades/HadesManagement.swift", "struct HadesDiagnosticsView", "@MainActor\nprivate func hadesManagementError"),
+    ("Sources/Hades2/Views/Hades2ManagementViews.swift", "struct Hades2DiagnosticsView", "struct Hades2ShortcutSettingsView"),
+):
+    source = (ROOT / path).read_text()
+    adapter = source[source.index(start):source.index(end, source.index(start))]
+    assert "TrainerDiagnosticsView(" in adapter
+    assert "TrainerListCard" not in adapter and "TrainerSheetScaffold" not in adapter
+    assert "model.runDiagnostics" in adapter and "model.exportDiagnostics" in adapter
+    assert "ManagementError(model, localization: localization)" in adapter
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
-assert "systemImage: entry.icon" in hades_nav
+search_field = (ROOT / "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift").read_text()
+assert "systemImage: icon(entry)" in search_field
+assert "icon: { $0.icon }" in hades_nav
 
 # Executable product actions must carry an icon. This deliberately scans both
 # game UI trees so new actions cannot silently regress to text-only controls.

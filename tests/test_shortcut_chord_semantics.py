@@ -271,6 +271,7 @@ with tempfile.TemporaryDirectory() as td:
         swiftc,
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
         str(ROOT / 'Sources/Core/UI/TrainerSemanticIcon.swift'),
+        str(ROOT / 'Sources/Core/UI/TrainerWorkbenchSearch.swift'),
         str(ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
         str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
         str(ROOT / 'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),

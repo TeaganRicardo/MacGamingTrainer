@@ -2,11 +2,10 @@
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
-import tempfile
 
 from core.adapter import AdapterError
+from core.persistence import atomic_write_text
 from .schema import preference_document
 
 
@@ -56,21 +55,12 @@ class HadesProfileStore:
         document = {'schemaVersion': 1, 'gameID': 'hades', 'name': name,
                     'updatedAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
                     'features': preference_document(features)}
-        temporary = None
         try:
-            self.root.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary_name = tempfile.mkstemp(prefix='.profile-', dir=self.root)
-            temporary = Path(temporary_name)
-            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                json.dump(document, stream, ensure_ascii=False, allow_nan=False)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self.path(name))
+            atomic_write_text(
+                self.path(name), json.dumps(document, ensure_ascii=False, allow_nan=False),
+            )
         except OSError as error:
             raise AdapterError('profile_write_failed', 'hades.error.profileWriteFailed', diagnostic=str(error)) from error
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
 
     def delete(self, name):
         try:

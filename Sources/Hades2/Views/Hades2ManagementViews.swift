@@ -4,130 +4,55 @@ import AppKit
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
     @Binding var isPresented: Bool
-    @State private var profileName = ""
-    @State private var selectedProfile = ""
 
-    /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: TrainerSemanticIcon.Tool.profiles, width: 620) {
-            Button { model.listProfiles() } label: {
-                Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)
-            }.disabled(model.busy)
-        } content: {
-            Text(text("hades2.profile.explanation"))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if let warning = model.profileShortcutWarning {
-                Text(localization.string(warning))
-                    .foregroundStyle(theme.warning)
-                    .font(.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack(spacing: 10) {
-                TrainerTextField(
-                    title: text("hades2.profile.namePlaceholder"),
-                    text: $profileName
-                )
-                .frame(maxWidth: .infinity)
-                TrainerPrimaryActionButton(
-                    title: text("hades2.profile.saveCurrent"),
-                    systemImage: TrainerSemanticIcon.Action.save,
-                    enabled: !model.busy && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
-                    model.saveProfile(profileName)
-                    selectedProfile = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-            Divider()
-            if model.profiles.isEmpty {
-                TrainerEmptyState(text: text("hades2.profile.empty"))
-            } else {
-                Picker(text("hades2.profile.picker"), selection: $selectedProfile) {
-                    ForEach(model.profiles) { profile in
-                        Text(profile.updatedAt.isEmpty ? profile.name : "\(profile.name) · \(profile.updatedAt)").tag(profile.name)
-                    }
-                }
-                .trainerPickerWidth(.wide)
-                HStack {
-                    TrainerPrimaryActionButton(
-                        title: text("hades2.profile.load"),
-                        systemImage: TrainerSemanticIcon.Action.load,
-                        enabled: !model.busy && !selectedProfile.isEmpty,
-                        action: { model.loadProfile(selectedProfile) }
-                    )
-                    Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
-                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
-                    }
-                        .disabled(model.busy || selectedProfile.isEmpty)
-                    Spacer()
-                }
-            }
-        } footer: {
-            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
-        }
+        TrainerProfileManagerView(
+            labels: .init(title: text("hades2.manage.profiles"), explanation: text("hades2.profile.explanation"),
+                name: text("hades2.profile.namePlaceholder"), picker: text("hades2.profile.picker"),
+                save: text("hades2.profile.saveCurrent"), load: text("hades2.profile.load"), empty: text("hades2.profile.empty")),
+            entries: model.profiles.map { .init(name: $0.name, updatedAt: $0.updatedAt) },
+            busy: model.busy,
+            enabled: model.backendAvailable && model.protocolCompatible && !model.exiting && model.canAcceptRuntimeAction,
+            warning: model.profileShortcutWarning.map { localization.string($0) } ?? "",
+            error: hades2ManagementError(model, localization: localization),
+            actions: .init(refresh: model.listProfiles,
+                save: { name, completion in model.saveProfile(name, completion: completion) }, load: model.loadProfile,
+                delete: model.deleteProfile, dismiss: { isPresented = false })
+        )
         .onDisappear { model.clearProfileShortcutWarning() }
-        .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
-            if !names.contains(selectedProfile) {
-                selectedProfile = names.first ?? ""
-            }
-        }
     }
 }
 
 struct Hades2DiagnosticsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Binding var isPresented: Bool
-    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
-    /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
+    private var enabled: Bool {
+        model.backendAvailable && model.protocolCompatible && !model.exiting && model.canAcceptRuntimeAction
+    }
+
     var body: some View {
-        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: TrainerSemanticIcon.Tool.diagnostics, width: 700) {
-            Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
-            Button { model.exportDiagnostics() } label: {
-                Label(text("hades2.diagnostics.export"), systemImage: TrainerSemanticIcon.Tool.exportDiagnostics)
-            }
-                .disabled(model.busy || !model.backendAvailable)
-            Button { model.runDiagnostics() } label: {
-                Label(text("hades2.diagnostics.rerun"), systemImage: TrainerSemanticIcon.Concept.refresh)
-            }.disabled(model.busy)
-        } content: {
-            Text(text("hades2.diagnostics.explanation"))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(model.diagnostics) { check in
-                        TrainerListCard {
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: check.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundStyle(check.ok ? theme.success : theme.warning)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(check.name).font(.subheadline.weight(.semibold))
-                                    if !check.detail.isEmpty {
-                                        Text(check.detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                                    }
-                                }
-                                Spacer()
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(minHeight: 260, maxHeight: 430)
-        } footer: {
-            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
-        }
+        TrainerDiagnosticsView(
+            labels: .init(title: text("hades2.diagnostics.title"), explanation: text("hades2.diagnostics.explanation"),
+                refresh: text("hades2.diagnostics.rerun"), export: text("hades2.diagnostics.export")),
+            checks: model.diagnostics.map {
+                .init(id: $0.id, name: $0.name, detail: $0.detail, status: $0.ok ? .passed : .failed)
+            },
+            busy: model.busy, canRefresh: enabled, canExport: enabled,
+            error: hades2ManagementError(model, localization: localization),
+            actions: .init(refresh: model.runDiagnostics, export: model.exportDiagnostics,
+                dismiss: { isPresented = false })
+        )
     }
 }
 
@@ -162,122 +87,18 @@ struct Hades2ManagementUtilities: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerManagementActions) private var managementActions
-    @Environment(\.trainerTheme) private var theme
-    let openProfiles: () -> Void
     let openSaveEditor: () -> Void
-    let openDiagnostics: () -> Void
-
-    private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
-    }
-
-    private var canUseBackend: Bool {
-        model.backendAvailable && model.protocolCompatible && !model.exiting
-    }
-
-    private var canStartBackendAction: Bool { canUseBackend && !model.busy }
-
-    private var canChangeSignature: Bool {
-        canStartBackendAction && !model.connected && model.pid == nil
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: theme.sheetSpacing) {
-            managementGroup("hades2.manage.daily") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.saveEditor.title"),
-                        systemImage: TrainerSemanticIcon.Tool.saveEditor,
-                        enabled: canUseBackend,
-                        action: openSaveEditor
-                    )
-                    if let openSaveManagement = managementActions.openSaveManagement {
-                        TrainerSecondaryActionButton(
-                            title: localization.localized("host.saveManagement"),
-                            systemImage: TrainerSemanticIcon.Tool.saveManagement,
-                            enabled: canUseBackend,
-                            action: openSaveManagement
-                        )
-                    }
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.disableAll"),
-                        systemImage: TrainerSemanticIcon.Tool.disableAll,
-                        enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
-                        action: model.disableAll
-                    )
-                }
-            }
-            Divider()
-            managementGroup("hades2.manage.settings") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.profiles"),
-                        systemImage: TrainerSemanticIcon.Tool.profiles,
-                        enabled: canStartBackendAction,
-                        action: openProfiles
-                    )
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.shortcutSettings"),
-                        systemImage: TrainerSemanticIcon.Tool.shortcuts,
-                        enabled: !model.exiting,
-                        action: { model.shortcutSettingsPresented = true }
-                    )
-                }
-            }
-            Divider()
-            managementGroup("hades2.manage.maintenance") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.viewLog"),
-                        systemImage: TrainerSemanticIcon.Tool.log,
-                        action: model.openLog
-                    )
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.diagnostics"),
-                        systemImage: TrainerSemanticIcon.Tool.diagnostics,
-                        enabled: canStartBackendAction,
-                        action: openDiagnostics
-                    )
-                }
-                Text(text("hades2.manage.signatureExplanation"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.prepareSigning"),
-                        systemImage: Hades2WorkbenchIcon.prepareSigning,
-                        enabled: canChangeSignature,
-                        action: model.prepareDebugging
-                    )
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.restoreSigning"),
-                        systemImage: Hades2WorkbenchIcon.restoreSigning,
-                        enabled: canChangeSignature,
-                        action: model.restoreOriginalSignature
-                    )
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .trainerPanel()
+        let catalog = Hades2ManagementCatalog.make(model: model, localization: localization,
+            openSaveEditor: openSaveEditor, openSaveManagement: managementActions.openSaveManagement)
+        TrainerManagementGroups(groups: catalog.groups)
+            .trainerPanel()
     }
+}
 
-    private func managementGroup<Content: View>(
-        _ titleKey: String, @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: theme.controlPadding) {
-            Text(text(titleKey))
-                .font(.subheadline.weight(.semibold))
-                .accessibilityAddTraits(.isHeader)
-            content()
-        }
-    }
-
-    private func actionButtons<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: theme.controlPadding) { content() }
-            VStack(alignment: .leading, spacing: theme.controlPadding) { content() }
-        }
-    }
+@MainActor
+private func hades2ManagementError(_ model: Hades2TrainerModel, localization: TrainerLocalizationStore) -> String {
+    let token = model.errorText.key.isEmpty ? model.backendErrorText : model.errorText
+    return token.key.isEmpty ? "" : localization.string(token)
 }

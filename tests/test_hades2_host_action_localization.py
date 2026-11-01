@@ -5,6 +5,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
+core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
+core_profiles = (ROOT / "Sources/Core/UI/Components/TrainerProfileManagerView.swift").read_text(encoding="utf-8")
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 model = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
 game_module = (ROOT / "Sources/Hades2/Hades2Module.swift").read_text(encoding="utf-8")
@@ -62,11 +64,8 @@ assert not re.search(r"[\u3400-\u9fff]", host_actions), (
 
 for token in (
     '@EnvironmentObject private var localization: TrainerLocalizationStore',
-    'CommandMenu(localization.localized("host.trainerMenu"))',
-    'Button(localization.localized("host.refreshStatus"))',
-    'Button(localization.localized("host.disableAll"))',
-    'Button(localization.localized("host.shortcutSettings"))',
-    'Button(localization.localized("host.viewLog"))',
+    'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu")',
+    'Hades2ManagementCatalog.make(model: model, localization: localization).groups',
 ):
     assert token in host_actions, token
 
@@ -81,7 +80,7 @@ assert "targetMonitor.refresh()" in host
 assert "if targetMonitor.isRunning" in host
 assert "var launchActionFromHost: (() -> Void)?" in protocol
 header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
-assert "TrainerSearchField(" in header_actions
+assert "TrainerWorkbenchSearchField(" in header_actions
 assert "launchGame" not in header_actions
 
 sidebar_actions = host_actions[
@@ -119,17 +118,18 @@ for token in (
     assert token in core_shortcuts, token
 for token in (
     'TrainerShortcutSettingsView(',
-    'title: localization.localized("host.shortcutSettings")',
-    'title: localization.localized("host.viewLog")',
-    'title: localization.localized("host.saveManagement")',
+    'TrainerManagementGroups(',
 ):
     assert token in management, token
+
+for key in ("host.refreshStatus", "host.disableAll", "host.shortcutSettings", "host.viewLog", "host.saveManagement"):
+    assert f'"{key}"' in core_management
 
 for token in (
     'Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)',
     'Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)',
 ):
-    assert token in management, token
+    assert token in core_profiles, token
 
 # The user-facing log action must expose the whole active Session Bundle.
 # Opening only host.log hides the Backend and Runtime source streams; no
@@ -166,8 +166,8 @@ for token in (
     'title: "host.disableAll"',
 ):
     assert token in model, token
-assert 'localization.localized("host.disableAll")' in hades_view + management
-assert 'localization.localized("host.viewLog")' in management
+assert 'case .disableAll: "host.disableAll"' in core_management
+assert 'case .log: "host.viewLog"' in core_management
 
 # The cross-game fixture proves the exact same seam, including in-flight
 # operations rather than only static labels.
