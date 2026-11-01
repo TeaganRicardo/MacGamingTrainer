@@ -95,7 +95,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     show: () -> Void, isPresented: () -> Bool, chord: () -> String,
     commands: () -> [[String: Any]]
 ) {
-    let visibility = ManagementPageVisibility()
+    let visibility = TrainerGamePageVisibility()
     let host = NSHostingView(rootView: ManagementPageFixture(content: content, visibility: visibility)
         .environmentObject(localization))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),

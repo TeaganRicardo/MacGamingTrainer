@@ -1390,7 +1390,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
             && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
             "remaining-use commit lost its selected effect or hero")
-        let feedbackVisibility = ManagementPageVisibility()
+        let feedbackVisibility = TrainerGamePageVisibility()
         let feedbackHost = NSHostingView(rootView: ManagementPageFixture(
             content: HadesGameModule.makeFeedback(model: model), visibility: feedbackVisibility)
             .environmentObject(localization))
