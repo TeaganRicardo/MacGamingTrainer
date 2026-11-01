@@ -15,6 +15,7 @@ from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, HadesSaveFormatError
 from games.hades2.save_edit import Hades2SaveEditSession
 from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2 import save_advanced
 
 
 def _u32(out, value):
@@ -358,7 +359,13 @@ workspace = Hades2SaveWorkspace.open(
     source={"rootId": "main", "relativePath": "Profile1.sav"},
     target={"rootId": "main", "relativePath": "Profile1.sav"},
 )
-workspace.stage("advanced:GameState/MetaPoints", "set", 700.0)
+meta_points_owner = workspace.document.lua_state["GameState"]
+meta_points_index = next(
+    index for index, key, _value, _kind in meta_points_owner.physical_entries()
+    if key == "MetaPoints"
+)
+meta_points_id = save_advanced.entry_id(["GameState", "MetaPoints"], meta_points_index)
+workspace.stage(meta_points_id, "set", 700.0)
 real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 target_replace_calls = 0
 
