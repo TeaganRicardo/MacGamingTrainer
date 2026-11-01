@@ -3,6 +3,7 @@
 These source-ownership checks supplement native focus/layout tests; they do not
 claim a rendered screenshot or a real-game observation.
 """
+from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
