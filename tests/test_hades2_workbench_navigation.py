@@ -46,31 +46,78 @@ precondition(genericMatches("材料 ether missing").isEmpty, "every query token 
 precondition(genericMatches(" \n\t ").isEmpty)
 precondition(genericMatches("AETHER MATERIALS") == [1])
 
-var presentation = TrainerWorkbenchSearchPresentation()
+var presentation = TrainerWorkbenchSearchPresentation<Int>()
 var destinations: [Int] = []
-presentation.queryChanged("ether 材料", pageVisible: true)
-precondition(presentation.resultsPresented)
-presentation.submit(query: "ether 材料", pageVisible: true, search: genericMatches) { destinations.append($0) }
+func show(_ query: String, visible: Bool = true) {
+    presentation.queryChanged(query, pageVisible: visible, results: genericMatches(query))
+}
+func submit(_ query: String, visible: Bool = true) {
+    presentation.submit(query: query, pageVisible: visible, search: genericMatches,
+                        identifier: { $0 }) { destinations.append($0) }
+}
+func select(_ id: Int, query: String, visible: Bool = true) {
+    presentation.select(id, query: query, pageVisible: visible, search: genericMatches,
+                        identifier: { $0 }) { destinations.append($0) }
+}
+show("ether 材料")
+precondition(presentation.resultsPresented && presentation.selectedID == 2)
+submit("ether 材料")
 precondition(destinations == [2] && !presentation.resultsPresented, "submit must navigate to the first ordered result and dismiss")
-presentation.queryChanged("unmatched", pageVisible: true)
-precondition(presentation.resultsPresented, "a nonempty unmatched query must present the empty state")
-presentation.submit(query: "unmatched", pageVisible: true, search: genericMatches) { destinations.append($0) }
+show("unmatched")
+precondition(presentation.resultsPresented && presentation.selectedID == nil, "a nonempty unmatched query must present the empty state")
+submit("unmatched")
 precondition(destinations == [2] && !presentation.resultsPresented)
-presentation.queryChanged("ether", pageVisible: true)
-presentation.submit(query: "", pageVisible: true, search: genericMatches) { destinations.append($0) }
+show("ether")
+submit("")
 precondition(destinations == [2] && !presentation.resultsPresented, "clearing must not submit a captured previous result")
-presentation.queryChanged("ether", pageVisible: true)
+show("ether")
 presentation.pageVisibilityChanged(false)
-precondition(!presentation.resultsPresented)
-presentation.queryChanged("materials", pageVisible: false)
+precondition(!presentation.resultsPresented && presentation.selectedID == nil)
+show("materials", visible: false)
 presentation.pageVisibilityChanged(true)
 precondition(!presentation.resultsPresented, "returning to a page must not reopen a stale popover")
-presentation.select(0, pageVisible: false) { destinations.append($0) }
-presentation.submit(query: "ether", pageVisible: false, search: genericMatches) { destinations.append($0) }
+select(0, query: "ether", visible: false)
+submit("ether", visible: false)
 precondition(destinations == [2], "hidden-page callbacks must not navigate another page")
-presentation.queryChanged("ether", pageVisible: true)
+show("ether")
 presentation.dismiss()
-precondition(!presentation.resultsPresented)
+precondition(!presentation.resultsPresented && presentation.selectedID == nil)
+select(0, query: "ether")
+precondition(destinations == [2], "a queued row action must not outlive its popover")
+
+// Keyboard selection follows stable identities through filtering and catalog
+// refreshes, stops at either edge, and resolves today's result on Return.
+show("ether")
+precondition(presentation.moveSelection(by: 1, query: "ether", pageVisible: true, results: genericMatches("ether")))
+precondition(presentation.selectedID == 0)
+show("ETHER 材料")
+precondition(presentation.selectedID == 0, "query refinement reset a still-present keyboard selection")
+presentation.moveSelection(by: 1, query: "ETHER 材料", pageVisible: true, results: genericMatches("ETHER 材料"))
+precondition(presentation.selectedID == 0, "Down wrapped past the last result")
+presentation.moveSelection(by: -1, query: "ETHER 材料", pageVisible: true, results: genericMatches("ETHER 材料"))
+presentation.moveSelection(by: -1, query: "ETHER 材料", pageVisible: true, results: genericMatches("ETHER 材料"))
+precondition(presentation.selectedID == 2, "Up wrapped past the first result")
+presentation.moveSelection(by: 1, query: "ether", pageVisible: true, results: genericMatches("ether"))
+submit("ether")
+precondition(destinations == [2, 0], "Return ignored the keyboard-selected destination")
+presentation.moveSelection(by: -1, query: "ether", pageVisible: true, results: genericMatches("ether"))
+precondition(presentation.resultsPresented && presentation.selectedID == 1, "Up did not reopen the retained query at its last result")
+presentation.resultsChanged([2, 1])
+precondition(presentation.selectedID == 1, "dynamic aliases reset a surviving result")
+presentation.resultsChanged([2])
+precondition(presentation.selectedID == 2, "removed selection did not fall back to the first current result")
+presentation.resultsChanged([])
+precondition(presentation.selectedID == nil && presentation.resultsPresented, "an empty refresh closed the discovery panel")
+show("ether")
+select(0, query: "aether")
+precondition(destinations == [2, 0] && presentation.resultsPresented, "a removed row changed today's query presentation or navigated")
+show("ether")
+presentation.moveSelection(by: 1, query: "ether", pageVisible: true, results: genericMatches("ether"))
+submit("aether")
+precondition(destinations == [2, 0, 1], "Return used a stale array while the current query had changed")
+precondition(!presentation.moveSelection(by: 1, query: " ", pageVisible: true, results: []))
+precondition(!presentation.moveSelection(by: 1, query: "ether", pageVisible: false, results: [2, 0, 1]))
+precondition(!presentation.resultsPresented && presentation.selectedID == nil)
 
 precondition(matches("  \n ").isEmpty, "an empty query must preserve the ordinary workbench")
 precondition(matches("无限金币").contains { $0.shortcut == .infiniteMoney && $0.section == .common })

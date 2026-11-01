@@ -202,3 +202,6 @@
 "host.diagnostics.warning" = "Warning";
 "host.diagnostics.failed" = "Failed";
 "host.diagnostics.unknown" = "Unknown";
+
+"host.disclosure.expanded" = "Expanded";
+"host.disclosure.collapsed" = "Collapsed";

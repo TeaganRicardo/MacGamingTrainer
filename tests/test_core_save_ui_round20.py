@@ -68,7 +68,10 @@ for token in (
 ):
     assert token in host, token
 
-sidebar = host[host.index("TrainerSidebar {"):host.index("} content: {")]
+sidebar_start = host.index("struct TrainerHostSidebarCard<")
+sidebar = host[sidebar_start:host.index("\n}", sidebar_start) + 2]
+assert "TrainerSidebarCard(" in sidebar
+assert "Module.makeSidebarActions(model: model)" in sidebar
 assert 'host.saveManagement' not in sidebar
 assert "saveManagerPresented = true" not in sidebar
 

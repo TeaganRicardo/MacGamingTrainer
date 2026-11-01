@@ -32,6 +32,7 @@ struct Hades2ChaosGatePanel: View {
             onCommit: { completion in
                 model.completeTextEdit(.chaosGate, text: completion.text,
                     changed: completion.changed, generation: generation)
+                { key in _ = completion.rejected(message: text(key)) }
             },
             onReset: { model.setChaosGateProbability(nil) }
         )

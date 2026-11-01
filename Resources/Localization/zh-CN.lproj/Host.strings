@@ -202,3 +202,6 @@
 "host.diagnostics.warning" = "警告";
 "host.diagnostics.failed" = "未通过";
 "host.diagnostics.unknown" = "未知";
+
+"host.disclosure.expanded" = "已展开";
+"host.disclosure.collapsed" = "已折叠";

@@ -4,6 +4,9 @@ from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
 from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
+from disclosure_ui_harness import DISCLOSURE_JOURNEY
+from search_ui_harness import SEARCH_JOURNEY
+from native_picker_harness import NATIVE_PICKER
 import shutil
 import subprocess
 import sys
@@ -139,6 +142,7 @@ for raw in sys.stdin:
     with (folder/'commands.jsonl').open('a') as stream:stream.write(json.dumps({**request,'fixtureGame':args.game})+'\n')
     state=json.loads((folder/'state.json').read_text())
     command=request['command'];params=request.get('params',{})
+    if command=='save_profile' and params.get('name')=='Closing while saving':time.sleep(.2)
     if command.startswith('save_editor_'):
         try:result=save_command(command,params,state)
         except (ValueError,OSError) as error:
@@ -252,12 +256,34 @@ func pump(_ seconds: TimeInterval = 0.1) {
     RunLoop.current.run(until: Date().addingTimeInterval(seconds))
 }
 @main struct Main {
-    @MainActor static func main() throws {
+    @MainActor static func main() {
+        let app=NSApplication.shared
+        app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        // Run the unchanged synchronous journey from AppKit's event loop.
+        // A main-queue block would prevent its nested native pumps from
+        // receiving the module/backend callbacks queued on that same queue.
+        Timer.scheduledTimer(withTimeInterval:0.01,repeats:false) { _ in
+            MainActor.assumeIsolated {
+                do { try exerciseJourney() }
+                catch { fatalError("Hades I native fixture: " + String(describing:error)) }
+                app.stop(nil)
+                let wake=NSEvent.otherEvent(with:.applicationDefined,location:.zero,modifierFlags:[],
+                    timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,
+                    subtype:0,data1:0,data2:0)!
+                app.postEvent(wake,atStart:false)
+            }
+        }
+        app.run()
+    }
+
+    @MainActor static func exerciseJourney() throws {
         _ = NSApplication.shared
+        check(NSApp.isRunning,"Hades I native journey did not enter the AppKit application event loop")
         enableNativeAccessibility()
         guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
         let journey = CommandLine.arguments[3]
-        guard ["frontend", "recovery", "management", "slider", "hierarchy"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        guard ["frontend", "recovery", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         if journey == "hierarchy" {
             exerciseVisualHierarchy(descriptor: HadesGameModule.descriptor, presentation: HadesGameModule.presentation)
             print("hades_visual_hierarchy_ok")
@@ -456,6 +482,42 @@ func pump(_ seconds: TimeInterval = 0.1) {
             stopBackend()
             return
         }
+        if journey == "disclosure" {
+            recordPhase("disclosure: real Hades dashboard and capability rows")
+            try exerciseModuleDisclosure(HadesTrainerView(model: model), localization: localization, gameID: "hades",
+                expanded: Binding(get: { model.numericControlsExpanded }, set: { model.numericControlsExpanded = $0 }),
+                primaryLabel: { HadesPresentation.text("hades.money", language: $0) },
+                expandedLabel: { HadesPresentation.text("hades.damageMultiplier", language: $0) },
+                outsideLabel: { _ in localization.localized("host.timeWarp.title") },
+                conditionalRole: "AXPopUpButton",
+                conditionalLabel: { HadesPresentation.text("hades.chamberObject", language: $0) },
+                busy: { model.busy }, commands: commands, observeAvailability: { count in
+                    var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+                    var world = state["world"] as! [String: Any]
+                    world["objects"] = Array(["trove", "well", "fishing"].prefix(count))
+                    state["world"] = world
+                    try JSONSerialization.data(withJSONObject: state).write(to: stateURL, options: .atomic)
+                    model.refreshFromHost()
+                })
+            stopBackend()
+            return
+        }
+        if journey == "search" {
+            recordPhase("search: native focus and discovery")
+            exerciseWorkbenchSearch(HadesHeaderActions(model: model), localization: localization,
+                placeholder: { HadesPresentation.text("hades.workbench.search", language: localization.language) },
+                emptyLabel: { HadesPresentation.text("hades.workbench.searchEmpty", language: localization.language) },
+                query: { model.workbenchSearch }, matches: { query in
+                    HadesWorkbenchCatalog.matches(query, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
+                        TrainerPresentationLanguage.allCases.map {
+                            HadesGameModule.resolveText(key: key, language: $0, localization: localization)
+                        }
+                    }.map { (id: $0.id, destination: $0.section.id) }
+                }, commands: commands)
+            stopBackend()
+            print("hades_workbench_search_native_ok")
+            return
+        }
         if journey == "management" {
             recordPhase("management: routing and layout")
             exerciseManagementRouting(localization: localization)
@@ -480,6 +542,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
                     openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
             exerciseManagementPageDismissal(HadesTrainerView(model: model), localization: localization,
                 show: { model.diagnosticsPresented = true }, dismissed: { !model.diagnosticsPresented })
+            exerciseModuleShortcutSheet(HadesTrainerView(model: model), localization: localization,
+                show: { model.shortcutSettingsPresented = true }, isPresented: { model.shortcutSettingsPresented },
+                chord: { model.shortcutText(.invincibility) }, commands: commands)
             recordPhase("management: profile workflow")
             model.profilesPresented = true
             exerciseProfileManager(
@@ -592,10 +657,17 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
         model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
         wait("generate_fishing shortcut reply: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
-        let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:2400),styleMask:[.titled],backing:.buffered,defer:false)
+        let viewportHeight=min(CGFloat(780),NSScreen.main!.visibleFrame.height-80)
+        let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:viewportHeight),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
-        let host=NSHostingView(rootView:HadesTrainerView(model:model).environmentObject(localization))
-        window.contentView=host;host.frame=NSRect(x:0,y:0,width:1150,height:2400)
+        // Keep the same real module and native editors mounted in a bounded
+        // viewport. A full-height workbench window puts lower pointer targets
+        // outside the screen even when their accessibility frames are nonempty.
+        let host=NSHostingView(rootView:ScrollView {
+            HadesTrainerView(model:model).frame(maxWidth:.infinity,alignment:.leading)
+        }.environmentObject(localization))
+        window.contentView=host;host.frame=NSRect(x:0,y:0,width:1150,height:viewportHeight)
+        window.center()
         diagnosticWindows.append(("trainer",window))
         host.layoutSubtreeIfNeeded();pump()
         check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.money",language:.en) },
@@ -633,6 +705,165 @@ func pump(_ seconds: TimeInterval = 0.1) {
         try updateState(hero:"run:hero:2",health:31)
         model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="31","unfocused native value did not refresh")
+        // Drive the actual field editor, then the actual native rarity popup.
+        // These are input/selection checks on a synthetic worker, not gameplay.
+        func enterNative(_ value: String) -> NSTextView {
+            check(window.makeFirstResponder(field), "Hades I numeric field refused focus")
+            let editor=field.currentEditor() as! NSTextView
+            editor.selectAll(nil); editor.insertText(value,replacementRange:editor.selectedRange())
+            return editor
+        }
+        let nativeField=field as! TrainerTextField.Field
+        let beforeInvalid=commands().count
+        enterNative("-1").doCommand(by:#selector(NSResponder.insertNewline(_:)))
+        pump()
+        check(commands().count==beforeInvalid && model.health==31 && field.stringValue=="-1",
+              "Hades I invalid numeric completion dispatched or lost its correction draft")
+        check(nativeField.presentation == .invalid && nativeField.validationMessage == HadesPresentation.text("hades.error.invalidValue",language:.en)
+              && nativeField.accessibilityHelp() == nativeField.validationMessage,
+              "Hades I invalid field lacked local visible/accessibility feedback")
+        enterNative("99").doCommand(by:#selector(NSResponder.cancelOperation(_:)))
+        pump()
+        check(commands().count==beforeInvalid && field.stringValue=="-1" && nativeField.presentation == .invalid,
+              "Escape committed a numeric draft or hid its previously rejected input")
+        enterNative("32").doCommand(by:#selector(NSResponder.insertNewline(_:)))
+        window.makeFirstResponder(nil)
+        wait("native Return corrected health exactly once") { !model.busy && model.health==32 }
+        check(commands().filter { $0["command"] as? String == "set_value" }.count==2
+              && nativeField.validationMessage==nil, "Hades I correction duplicated dispatch or retained its old error")
+        let bilingualDraft=enterNative("33")
+        localization.language = .zhCN
+        window.setContentSize(NSSize(width:760,height:viewportHeight));window.center()
+        host.layoutSubtreeIfNeeded();pump()
+        check(bilingualDraft.string=="33" && field.currentEditor() === bilingualDraft,
+              "bilingual narrow layout reset the focused Hades I draft")
+        bilingualDraft.doCommand(by:#selector(NSResponder.cancelOperation(_:)))
+        localization.language = .en;host.layoutSubtreeIfNeeded();pump()
+        activateNativePickerWindow(window)
+        let epic=HadesPresentation.text("hades.rarity.Epic",language:.en)
+        let heroic=HadesPresentation.text("hades.rarity.Heroic",language:.en)
+        let rarityLabel=HadesPresentation.text("hades.rarity",language:.en)
+        func revealPicker(named title: String, value: String) -> NativeAccessibilityControl {
+            guard let scroll=field.enclosingScrollView, let document=scroll.documentView else {
+                fatalError("Hades I native workbench viewport missing")
+            }
+            func picker() -> NativeAccessibilityControl? {
+                nativeAccessibilityControls(host).first {
+                    $0.role=="AXPopUpButton" && nativePickerHasName($0,title) && $0.valueText==value
+                }
+            }
+            nativePickerWait("Hades I picker fully inside its native viewport and screen") {
+                host.layoutSubtreeIfNeeded()
+                guard let current=picker(), !current.frame.isEmpty else { return false }
+                let target=document.convert(window.convertFromScreen(current.frame),from:nil)
+                _ = document.scrollToVisible(target)
+                host.layoutSubtreeIfNeeded()
+                let viewport=window.convertToScreen(scroll.contentView.convert(scroll.contentView.bounds,to:nil))
+                return viewport.contains(current.frame)
+                    && window.screen?.visibleFrame.contains(current.frame)==true
+            }
+            let result=picker()!
+            print("hades_native_picker_visible title=\(title) frame=\(result.frame) window=\(window.frame)")
+            return result
+        }
+        _ = field.scrollToVisible(field.bounds)
+        nativePickerPump()
+        let pickerDraft=enterNative("34")
+        let popup=revealPicker(named:rarityLabel,value:heroic)
+        let pickerWidth=popup.frame.width
+        check(fields(in:host).contains { $0 === field } && field.currentEditor() === pickerDraft
+              && pickerDraft.string=="34", "revealing the native picker replaced the focused numeric draft")
+        // Match the Host's event order: its existing dismissal owner observes
+        // the actual mouse-down immediately before AppKit routes that same
+        // event to the native popup. A separate pre-call commits before the
+        // helper's activation/layout work and is not this input sequence.
+        var pickerMouseDowns=0
+        do {
+            let monitor=NSEvent.addLocalMonitorForEvents(matching:.leftMouseDown) { event in
+                MainActor.assumeIsolated {
+                    guard event.window === window else { return event }
+                    pickerMouseDowns += 1
+                    let result=TrainerTextEditingDismissal.handle(event,in:window)
+                    check(result === event,"Hades I click-away consumed a native popup click")
+                    return result
+                }
+            }
+            check(monitor != nil,"Hades I native click-away monitor was not installed")
+            defer { if let monitor { NSEvent.removeMonitor(monitor) } }
+            selectNativePicker(popup,in:window,moving:-1,opening:.pointer)
+        }
+        check(pickerMouseDowns==1,"native picker click-away did not observe exactly one mouse-down")
+        wait("native picker click-away health commit") { !model.busy && model.health==34 }
+        let chosenRarity=nativeAccessibilityControls(host).first {
+            $0.role=="AXPopUpButton" && nativePickerHasName($0,rarityLabel) && $0.valueText==epic
+        }
+        check(chosenRarity?.frame.width==pickerWidth,
+              "native rarity selection did not display immediately within its width role")
+        let pickerCommits=commands().filter { $0["command"] as? String == "set_value" }
+        let pickerCommit=pickerCommits.last?["params"] as? [String:Any]
+        check(pickerCommits.count==3 && pickerCommit?["field"] as? String == "health"
+              && pickerCommit?["value"] as? Double == 34
+              && (pickerCommit?["target"] as? [String:String])?["heroId"]=="run:hero:2",
+              "native picker click-away duplicated or lost the numeric commit")
+        let primaryName=model.catalog.first { $0.id=="ArtemisWeaponTrait" }!.name(language:"en")
+        let secondaryName=model.catalog.first { $0.id=="ArtemisSecondaryTrait" }!.name(language:"en")
+        let traitLabel=HadesPresentation.text("hades.selectTrait",language:.en)
+        guard let choices=nativeAccessibilityControls(host).first(where:{
+                  $0.role=="AXPopUpButton" && $0.label==traitLabel && $0.valueText==primaryName
+              }),
+              let oldLevel=fields(in:host).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en)}) else {
+            fatalError("Hades I selected-catalog native inputs missing")
+        }
+        let beforeSelection=commands().count
+        check(window.makeFirstResponder(oldLevel), "catalog level refused focus")
+        let levelEditor=oldLevel.currentEditor() as! NSTextView
+        levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
+        // Native menu input can also begin through accessibility. Replacing
+        // selection while its field still edits must retire the old identity.
+        selectNativePicker(choices,in:window,moving:1,opening:.accessibility);pump()
+        let newLevel=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en) }
+        let catalogOwnerPassed=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText==secondaryName
+              && oldLevel.currentEditor()==nil && newLevel?.stringValue=="1" && commands().count==beforeSelection
+        if !catalogOwnerPassed {
+            // Preserve the original short-circuit result before diagnostics.
+            // Active text comes from its editor: stringValue can validate edits.
+            let mounted=fields(in:host)
+            let actualSelection=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText
+            let afterSelection=commands()
+            func identity(_ object: AnyObject?) -> String {
+                object.map { String(describing:ObjectIdentifier($0)) } ?? "nil"
+            }
+            func snapshot(_ input: NSTextField?) -> [String:Any] {
+                guard let input else { return ["present":false] }
+                let editor=input.currentEditor()
+                return ["present":true,"identity":identity(input),"editor":identity(editor),
+                    "originalEditor":editor === levelEditor,"hasEditor":editor != nil,
+                    "mounted":mounted.contains { $0 === input },"enabled":input.isEnabled,
+                    "text":editor?.string ?? input.stringValue,
+                    "textSource":editor == nil ? "unfocused control" : "owned native editor",
+                    "ownerEditing":(input.delegate as? TrainerTextField.Coordinator)?.edit != nil,
+                    "frame":input.window.map { NSStringFromRect($0.convertToScreen(input.convert(input.bounds,to:nil))) } ?? "unmounted"]
+            }
+            let oldState=snapshot(oldLevel), newState=snapshot(newLevel)
+            let context: [String:Any] = [
+                "originalPredicatePassed":catalogOwnerPassed,"stage":"after original short-circuit failure; no intervening pump",
+                "popupMatches":actualSelection==secondaryName,"actualPopupValue":actualSelection ?? "nil",
+                "expectedPopupValue":secondaryName,"oldHasNoEditor":oldState["hasEditor"] as? Bool == false,
+                "newObservedTextIsOne":newState["text"] as? String == "1",
+                "commandsUnchanged":afterSelection.count==beforeSelection,
+                "oldField":oldState,"newField":newState,"originalEditor":identity(levelEditor),
+                "matchingLevelFields":mounted.filter {
+                    $0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en)
+                }.map { snapshot($0) },
+                "commandsBefore":beforeSelection,"commandsAfter":afterSelection.count,
+                "commandsAdded":Array(afterSelection.dropFirst(beforeSelection))]
+            let payload=(try? JSONSerialization.data(withJSONObject:context,options:[.sortedKeys]))
+                ?? Data(String(describing:context).utf8)
+            FileHandle.standardError.write(Data("HADES_CATALOG_OWNER_FAILURE ".utf8)+payload+Data("\n".utf8))
+        }
+        check(catalogOwnerPassed,
+              "a catalog selection retained or submitted the previous target's numeric draft")
+        window.setContentSize(NSSize(width:1150,height:viewportHeight));window.center();host.layoutSubtreeIfNeeded();pump()
         let count=commands().count
         _=model.setNumber(.damageMultiplier,text:"nan");pump()
         check(commands().count==count,"invalid multiplier crossed the backend boundary")
@@ -671,8 +902,12 @@ func pump(_ seconds: TimeInterval = 0.1) {
         editor.refreshInventory();wait("active save_editor_inventory reply after active-profile change") { !editor.busy }
         check(editor.workspaceID == pinnedWorkspace && editor.sourceSHA256 == pinnedSHA
             && editor.source?.relativePath == "Profile1.sav","active profile switch redirected a pinned document")
-        guard let gemsField=fields(in:editorWindow.contentView!).first(where:{$0.accessibilityLabel()=="Gems"}),
-              let gemsCoordinator=gemsField.delegate as? TrainerTextField.Coordinator else { fatalError("native save resource field missing") }
+        let gemsField=requireNativeControl("native save resource field",in:editorWindow.contentView!) {
+            fields(in:$0).first(where:{$0.accessibilityLabel()=="Gems"})
+        }
+        guard let gemsCoordinator=gemsField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("native save resource input coordinator missing")
+        }
         gemsCoordinator.begin();gemsField.stringValue="80"
         gemsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:gemsField))
         editor.query();wait("active save_editor_query reply while native Gems draft focused") { !editor.queryLoading };editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
@@ -681,13 +916,31 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(!tools.canCloseAll,"Host allowed close/quit during a pending editor write")
         wait("native Gems 80 save_editor_stage/query replies: one acknowledged action, editor idle") { !editor.busy && editor.review.count == 1 && !editor.queryLoading }
         check(editor.review.actions.first?.typedValue == .number(80),"completed native input did not enter Changes")
+        editorWindow.contentView?.layoutSubtreeIfNeeded();pump(0.3)
+        let applyTitle=HadesGameModule.resolveText(key:"hades.apply",localization:localization)
+        guard let applyControl=namedNativeControl(editorWindow.contentView!,role:"AXButton",name:applyTitle) else {
+            fatalError("revealed Changes has no native Apply action")
+        }
+        let editorBounds=editorWindow.convertToScreen(editorWindow.contentView!.bounds).insetBy(dx:-1,dy:-1)
+        check(applyControl.frame.width > 0 && editorBounds.contains(applyControl.frame),
+            "revealing Changes clipped its actionable native review area")
         gemsCoordinator.begin();gemsField.stringValue="90"
         gemsCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:gemsField))
         gemsCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:gemsField))
         wait("native Gems revision save_editor_stage reply: acknowledged value 90") { !editor.busy && editor.review.actions.first?.typedValue == .number(90) }
         check(editor.review.count == 1,"revising a field duplicated the user action")
+        check(editorWindow.makeFirstResponder(gemsField),"could not focus Save row before review collapse")
+        let retainedEditor=editorWindow.firstResponder
         editor.unstage("entry:resources",baseline:editor.baselineGeneration!);wait("resource save_editor_unstage reply: empty Changes") { !editor.busy && editor.review.count == 0 }
-        editorWindow.contentView?.layoutSubtreeIfNeeded();pump()
+        editorWindow.contentView?.layoutSubtreeIfNeeded();pump(0.3)
+        check(editorWindow.firstResponder === retainedEditor && gemsField.currentEditor()?.string == "90",
+            "review collapse replaced a focused native Save draft")
+        check(gemsField.visibleRect.contains(gemsField.bounds),"review reflow pushed focused Save input outside its viewport")
+        check(namedNativeControl(editorWindow.contentView!,role:"AXButton",name:applyTitle) == nil,
+            "collapsed Changes retained an actionable Apply control")
+        let afterCollapse=commands().count
+        editorWindow.makeFirstResponder(nil);pump()
+        check(commands().count == afterCollapse,"ending an unchanged draft after review reflow staged another mutation")
         check(gemsField.stringValue == "25","removing an intent did not restore the source observation")
         editor.stage("entry:resources",operation:"set",value:HadesSaveValue.number(75).object,workspace:pinnedWorkspace,baseline:editor.baselineGeneration!)
         wait("resource 75 save_editor_stage reply: one acknowledged action") { !editor.busy && editor.review.count == 1 }
@@ -1135,6 +1388,18 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
             && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
             "remaining-use commit lost its selected effect or hero")
+        let feedbackVisibility = ManagementPageVisibility()
+        let feedbackHost = NSHostingView(rootView: ManagementPageFixture(
+            content: HadesGameModule.makeFeedback(model: model), visibility: feedbackVisibility)
+            .environmentObject(localization))
+        let feedbackWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 150),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        feedbackWindow.isReleasedWhenClosed = false
+        feedbackWindow.contentView = feedbackHost
+        feedbackWindow.makeKeyAndOrderFront(nil)
+        func feedbackDismiss() -> NativeAccessibilityControl? {
+            nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.dismiss" && $0.role == "AXButton" }
+        }
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait("no-hero status reply: connected=\(connected), trainer idle") { !model.busy && model.connected==connected && !model.heroReady }
@@ -1146,10 +1411,26 @@ func pump(_ seconds: TimeInterval = 0.1) {
             }
             check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
                 "Disable All feedback did not distinguish native cleanup from detached desired reset")
+            let noticeID = model.feedback!.id
+            let feedbackRequests = commands().count
+            wait("real Hades feedback adapter exposes acknowledged receipt") { feedbackDismiss()?.enabled == true }
+            let retiredDismiss = feedbackDismiss()!
+            feedbackVisibility.visible = false
+            wait("hidden Hades feedback adapter retires its controls") { feedbackDismiss() == nil }
+            _ = retiredDismiss.press(); pump()
+            check(model.feedback?.id == noticeID, "hidden Hades feedback callback consumed its retained notice")
+            feedbackVisibility.visible = true
+            wait("returning Hades feedback keeps its receipt") { feedbackDismiss()?.enabled == true }
+            check(model.feedback?.id == noticeID, "page selection generated another Hades feedback event")
+            check(feedbackDismiss()!.press(), "real Hades feedback dismissal refused native AX input")
+            wait("native Hades feedback dismissal") { model.feedback == nil }
+            check(commands().count == feedbackRequests && model.connected == connected,
+                  "Hades feedback presentation replayed a command or changed connection truth")
             let afterDisable=commands().count
             model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
             check(commands().count==afterDisable,"a hero-owned shortcut ran without a hero")
         }
+        feedbackWindow.contentView = nil; feedbackWindow.close()
         try setConnection(true,heroReady:true)
         model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
         try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
@@ -1185,7 +1466,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
 
 with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY + NATIVE_PICKER)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
@@ -1199,7 +1480,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
     selected = next(row for row in data['entries'] if row['id'] == 'AmmoBoltTrait')
-    catalog = {'catalog': [selected], 'resourceCatalog': data['resources'],
+    picker_entries = [next(row for row in data['entries'] if row['id'] == name)
+                      for name in ('ArtemisWeaponTrait', 'ArtemisSecondaryTrait')]
+    catalog = {'catalog': [selected, *picker_entries], 'resourceCatalog': data['resources'],
         'traitNames': data['traitNames'], 'worldRewards': list(json.loads(
             (ROOT / 'Backend/games/hades/world_catalog.json').read_text())['rewards'].values()),
         'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}
@@ -1222,6 +1505,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         ('management', 30, 'hades_management_native_workflows_ok'),
         ('slider', 20, 'hades_slider_module_journey_ok'),
         ('hierarchy', 20, 'hades_visual_hierarchy_ok'),
+        ('disclosure', 25, 'hades_disclosure_module_journey_ok'),
+        ('search', 20, 'hades_workbench_search_native_ok'),
     ):
         case_folder = folder / 'journeys' / journey
         case_folder.mkdir(parents=True)

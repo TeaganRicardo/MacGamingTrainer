@@ -105,17 +105,24 @@ private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
     let role: TrainerPickerWidth
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        switch role {
-        case .compact:
-            content.frame(width: theme.pickerCompactWidth)
-        case .standard:
-            content.frame(width: theme.pickerStandardWidth)
-        case .wide:
-            content.frame(width: theme.pickerWideWidth)
-        case .flexible:
-            content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
+        Group {
+            switch role {
+            case .compact:
+                content.frame(width: theme.pickerCompactWidth)
+            case .standard:
+                content.frame(width: theme.pickerStandardWidth)
+            case .wide:
+                content.frame(width: theme.pickerWideWidth)
+            case .flexible:
+                content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
+            }
+        }
+        .transaction { transaction in
+            // The selected value is direct input. An ancestor's disclosure or
+            // navigation animation must not interpolate the native popup.
+            transaction.animation = nil
+            transaction.disablesAnimations = true
         }
     }
 }

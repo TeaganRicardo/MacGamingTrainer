@@ -620,7 +620,14 @@ func fail(_ message: String) -> Never {
 }
 
 func pump(_ seconds: TimeInterval) {
-    RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+        if let event = NSApp.nextEvent(matching: .any,
+            until: min(deadline, Date().addingTimeInterval(0.01)), inMode: .default, dequeue: true) {
+            NSApp.sendEvent(event)
+        }
+        NSApp.updateWindows()
+    }
 }
 
 func pumpUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) {
@@ -797,7 +804,7 @@ struct Main {
             Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
         let app = NSApplication.shared
-        app.setActivationPolicy(.prohibited)
+        app.setActivationPolicy(.regular)
         app.finishLaunching()
         enableNativeAccessibility()
         let toolWindows = TrainerToolWindowStore()
@@ -911,6 +918,15 @@ struct Main {
         }
         if model.items[0].value != AnyHashable(123) {
             fail("staging mutated the loaded source row before Apply")
+        }
+        window.contentView?.layoutSubtreeIfNeeded();pump(0.3)
+        let applyTitle = Hades2GameModule.resolveText(key: "hades2.saveEditor.apply", localization: localization)
+        guard let applyControl = namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) else {
+            fail("revealed review drawer has no native Apply control")
+        }
+        let windowBounds = window.convertToScreen(window.contentView!.bounds).insetBy(dx: -1, dy: -1)
+        if applyControl.frame.width <= 0 || !windowBounds.contains(applyControl.frame) {
+            fail("review reveal clipped its native Apply control")
         }
 
         let stagedCommands = commands(at: commandLog)
@@ -1069,6 +1085,16 @@ struct Main {
             target: removeTarget,
             action: NSSelectorFromString("removeClicked:")
         )
+        window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
+        let activationDeadline = Date().addingTimeInterval(2)
+        while !(app.isActive && window.isKeyWindow) && Date() < activationDeadline { pump(0.02) }
+        guard app.isActive && window.isKeyWindow,
+              let retainedDraft = inlineField("3.5"), window.makeFirstResponder(retainedDraft) else {
+            fail("could not retain a focused correction through review collapse")
+        }
+        let retainedEditor = window.firstResponder
+        let beforeReviewCollapse = commands(at: commandLog).count
         removeButton.performClick(nil)
         pumpUntil { model.pendingCount == 0 && !model.busy }
         if removeTarget.presses != 1
@@ -1076,7 +1102,16 @@ struct Main {
             || commands(at: commandLog).last?["command"] as? String != "save_editor_unstage" {
             fail("Native per-action remove control did not unstage exactly one action")
         }
-        pump(0.15)
+        pump(0.3)
+        if window.firstResponder !== retainedEditor || retainedDraft.currentEditor()?.string != "3.5"
+            || !retainedDraft.visibleRect.contains(retainedDraft.bounds) {
+            fail("review collapse lost a focused draft or pushed it outside the result viewport")
+        }
+        if namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) != nil
+            || commands(at: commandLog).count != beforeReviewCollapse + 1 {
+            fail("collapsed review retained an Apply action or its transition emitted another mutation")
+        }
+        window.makeFirstResponder(nil);pump(0.05)
         if inlineField("3.5") == nil {
             fail("Removing the last staged action discarded an unrelated invalid field draft")
         }

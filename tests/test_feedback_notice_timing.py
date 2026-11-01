@@ -65,6 +65,29 @@ for index in 0..<1000 {
 }
 timing.clear()
 check(timing.currentID == nil && !timing.isFading, "clear must discard only presentation timing")
+
+check(timing.synchronize(noticeID: first, duration: 6, visible: true, paused: false, at: 1000),
+      "first visible event should announce")
+check(!timing.synchronize(noticeID: first, duration: 6, visible: false, paused: false, at: 1002),
+      "hidden retained event should not announce")
+check(timing.currentID == first && timing.remainingReadableTime(at: 2000) == 4,
+      "page switch lost the notice identity or remaining readable interval")
+check(!timing.synchronize(noticeID: first, duration: 6, visible: true, paused: false, at: 2000),
+      "returning to a retained notice announced it twice")
+timing.advance(first, at: 2004.25)
+check(timing.currentID == nil, "returning page restarted the full notice lifetime")
+
+_ = timing.synchronize(noticeID: first, duration: 6, visible: true, paused: true, at: 3000)
+_ = timing.synchronize(noticeID: first, duration: 6, visible: false, paused: false, at: 3002)
+check(timing.remainingReadableTime(at: 4000) == 6, "hiding an already focused notice lost its pause")
+check(!timing.synchronize(noticeID: second, duration: 8, visible: false, paused: false, at: 4000),
+      "a new hidden event announced before it became visible")
+check(timing.synchronize(noticeID: second, duration: 8, visible: true, paused: true, at: 5000),
+      "new hidden event should first announce on return")
+check(timing.currentID == second && timing.remainingReadableTime(at: 6000) == 8,
+      "replacement while focused lost its full readable interval")
+_ = timing.synchronize(noticeID: nil, duration: 6, visible: false, paused: false, at: 6000)
+check(timing.currentID == nil, "notice removal on a hidden page retained stale timing")
 print("feedback_notice_timing_ok")
 '''
 

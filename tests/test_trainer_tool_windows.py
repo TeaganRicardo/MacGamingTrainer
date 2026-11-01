@@ -16,28 +16,89 @@ HARNESS = r'''
 import AppKit
 import SwiftUI
 
+@MainActor final class DocumentDraft: ObservableObject {
+    @Published var text = "first draft"
+    let source = UUID()
+}
+
+struct DraftView: View {
+    @ObservedObject var draft: DocumentDraft
+    var body: some View {
+        TextField("Document draft", text: $draft.text)
+            .frame(width: 400).padding(25)
+    }
+}
+
+@MainActor func pump(_ duration: TimeInterval = 0.06) {
+    let deadline = Date().addingTimeInterval(duration)
+    while Date() < deadline {
+        if let event = NSApp.nextEvent(matching: .any,
+            until: min(deadline, Date().addingTimeInterval(0.01)),
+            inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+        NSApp.updateWindows()
+    }
+}
+
+@MainActor func wait(_ message: String, _ condition: () -> Bool) {
+    let deadline = Date().addingTimeInterval(4)
+    repeat {
+        if condition() { return }
+        pump(0.02)
+    } while Date() < deadline
+    fatalError(message)
+}
+
+func fields(_ view: NSView) -> [NSTextField] {
+    (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+
 @main
 struct Main {
     @MainActor static func main() {
         let app = NSApplication.shared
-        app.setActivationPolicy(.prohibited)
+        app.setActivationPolicy(.regular)
         app.finishLaunching()
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         let store = TrainerToolWindowStore()
+        let draft = DocumentDraft()
+        let source = draft.source
         var factories = 0
         var closed: [String] = []
         var allowFirstClose = false
         let first = store.open(id: "first", title: "First", localization: localization, theme: .standard) {
             factories += 1
             return TrainerToolWindowContent(canClose: { allowFirstClose }, onClose: { closed.append("first") }) {
-                Text("first draft").frame(width: 450, height: 300)
+                DraftView(draft: draft)
             }
         }
+        NSApp.activate(ignoringOtherApps: true)
+        pump(0.2)
         let originalContent = first.contentView
+        let field = fields(originalContent!).first { $0.isEditable }!
+        precondition(first.makeFirstResponder(field), "tool draft refused native focus")
+        let editor = field.currentEditor() as! NSTextView
+        editor.selectAll(nil)
+        editor.insertText("retained document draft", replacementRange: editor.selectedRange())
+        wait("native tool typing did not update its owner") { draft.text == "retained document draft" }
         let reused = store.open(id: "first", title: "First", localization: localization, theme: .standard) {
             fatalError("Reopening an existing entry recreated its document")
         }
         precondition(first === reused && first.contentView === originalContent)
+        precondition(first.firstResponder === editor && draft.source == source
+                     && field.stringValue == "retained document draft",
+                     "raising an existing tool replaced its focused draft or document source")
+        first.miniaturize(nil)
+        wait("native tool did not minimize") { first.isMiniaturized }
+        let restored = store.open(id: "first", title: "Restored", localization: localization, theme: .standard) {
+            fatalError("Restoring a minimized tool reread its document")
+        }
+        wait("reopening a minimized tool did not restore its native window") {
+            !first.isMiniaturized && first.isVisible && first.isKeyWindow
+        }
+        precondition(restored === first && first.contentView === originalContent
+                     && first.firstResponder === editor && draft.text == "retained document draft"
+                     && draft.source == source && factories == 1,
+                     "native window restoration discarded its source, focus or draft")
         let second = store.open(id: "second", title: "Second", localization: localization, theme: .standard) {
             factories += 1
             return TrainerToolWindowContent(onClose: { closed.append("second") }) {
@@ -47,9 +108,19 @@ struct Main {
         precondition(first !== second && factories == 2)
         precondition(first.sheetParent == nil && second.sheetParent == nil)
         precondition(first.isVisible && second.isVisible)
+        precondition(!store.canCloseAll, "a pending tool allowed application termination")
+        store.setInteractionEnabled(false)
+        pump()
+        precondition(!field.isEnabled && draft.text == "retained document draft" && closed.isEmpty,
+                     "termination gating changed a draft, allowed editing or closed its owner")
+        store.setInteractionEnabled(true)
+        pump()
+        precondition(field.isEnabled && first.contentView === originalContent,
+                     "cancelled termination did not restore the same tool")
         first.performClose(nil)
         precondition(first.isVisible && closed.isEmpty, "busy tools must retain their native window")
         allowFirstClose = true
+        precondition(store.canCloseAll, "completed tools did not release termination guard")
         first.performClose(nil)
         precondition(closed == ["first"] && second.isVisible, "closing one tool closed another tool")
         let reopened = store.open(id: "first", title: "Fresh", localization: localization, theme: .standard) {

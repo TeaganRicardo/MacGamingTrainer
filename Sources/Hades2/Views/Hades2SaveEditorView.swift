@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import CoreFoundation
 
@@ -18,6 +19,7 @@ struct Hades2SaveEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trainerCloseToolWindow) private var closeWindow
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     @State private var section: Hades2SaveWorkbenchSection = .all
@@ -38,6 +40,13 @@ struct Hades2SaveEditorView: View {
     private var entities: [Hades2SaveEditorEntity] {
         model.entityResults
     }
+    private var hasReview: Bool { model.pendingCount > 0 }
+    private enum ResultPhase: Equatable { case source, loading, empty, content }
+    private var resultPhase: ResultPhase {
+        if model.profile.isEmpty { return model.busy ? .loading : .source }
+        if model.items.isEmpty { return model.busy || model.querying ? .loading : .empty }
+        return .content
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,6 +63,7 @@ struct Hades2SaveEditorView: View {
                     }
                     .padding(.horizontal, theme.rowHorizontalPadding)
                     .padding(.top, theme.controlPadding)
+                    .transition(.opacity)
                 }
             }
             workbenchToolbar
@@ -65,22 +75,31 @@ struct Hades2SaveEditorView: View {
                 }
                 .padding(.horizontal, theme.rowHorizontalPadding)
                 .padding(.bottom, theme.compactControlSpacing)
+                .transition(.opacity)
             }
             Divider()
-            inlineResults
-                .id(model.baselineGeneration)
-                .frame(height: model.pendingCount > 0 ? 445 : 610)
-            if model.total > Hades2SaveEditorModel.pageSize {
-                Divider()
-                pagingControls
-                    .padding(.horizontal, theme.rowHorizontalPadding)
-                    .padding(.vertical, theme.inlineRowVerticalPadding)
+            VStack(spacing: 0) {
+                inlineResults
+                    .id(model.baselineGeneration)
+                    .frame(minHeight: 300, idealHeight: hasReview ? 445 : 610, maxHeight: .infinity)
+                if model.total > Hades2SaveEditorModel.pageSize {
+                    Divider()
+                    pagingControls
+                        .padding(.horizontal, theme.rowHorizontalPadding)
+                        .padding(.vertical, theme.inlineRowVerticalPadding)
+                }
+                VStack(spacing: 0) {
+                    if hasReview {
+                        Divider()
+                        reviewDrawer.frame(height: 240).transition(.opacity)
+                    }
+                }
+                .frame(height: hasReview ? 241 : 0, alignment: .top)
+                .clipped()
+                .allowsHitTesting(hasReview && !model.busy)
+                .accessibilityHidden(!hasReview)
             }
-            if model.pendingCount > 0 {
-                Divider()
-                reviewDrawer
-                    .frame(height: 240)
-            }
+            .animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: hasReview)
             if !model.retiredDrafts.isEmpty {
                 Divider()
                 DisclosureGroup(text("hades2.saveEditor.retiredDrafts")) {
@@ -94,13 +113,19 @@ struct Hades2SaveEditorView: View {
                     }.frame(maxHeight: 120)
                 }.padding(theme.controlPadding)
             }
-            if let receipt = model.lastApplyReceipt {
-                Divider()
-                applyReceipt(receipt)
+            VStack(spacing: 0) {
+                if let receipt = model.lastApplyReceipt {
+                    Divider()
+                    applyReceipt(receipt).transition(.opacity)
+                }
             }
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.lastApplyReceipt)
         }
         .frame(width: 980)
+        .frame(minHeight: 700, idealHeight: 850, maxHeight: .infinity)
         .trainerSurface(.canvas)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.operationFailures)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.queryFailure)
         .trainerDismissTextEditingOnClickAway()
         .sheet(item: $advancedEditingEntry) { entry in
             Hades2SaveAdvancedValueView(model: model, entry: entry)
@@ -126,6 +151,12 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.search) { _, _ in
             model.searchChanged()
+        }
+        .onChange(of: model.pendingCount) { _, count in
+            if count > 0 || model.lastApplyReceipt == nil { announce(text("hades2.saveEditor.review") + " (\(count))") }
+        }
+        .onChange(of: model.lastApplyReceipt) { _, receipt in
+            if receipt != nil { announce(text("hades2.saveEditor.applyOutcome.title")) }
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
             guard !identifier.isEmpty, identifier != loadedSourceID else { return }
@@ -160,6 +191,11 @@ struct Hades2SaveEditorView: View {
             advancedEditingEntry = nil
             section = .all
         }
+    }
+
+    private func announce(_ message: String) {
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }
 
     private var windowHeader: some View {
@@ -312,16 +348,18 @@ struct Hades2SaveEditorView: View {
 
     private var inlineResults: some View {
         Group {
-            if model.profile.isEmpty && !model.busy {
+            if resultPhase == .source {
                 TrainerEmptyState(text: text("hades2.saveEditor.source.choose"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.profile.isEmpty
-                || ((model.busy || model.querying) && model.items.isEmpty) {
+                    .transition(.opacity)
+            } else if resultPhase == .loading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.items.isEmpty {
+                    .transition(.opacity)
+            } else if resultPhase == .empty {
                 TrainerEmptyState(text: text("hades2.saveEditor.empty"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: theme.pageSpacing) {
@@ -362,9 +400,11 @@ struct Hades2SaveEditorView: View {
                     .padding(.horizontal, theme.rowHorizontalPadding)
                     .padding(.vertical, theme.sectionSpacing)
                 }
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: resultPhase)
     }
 
     @ViewBuilder

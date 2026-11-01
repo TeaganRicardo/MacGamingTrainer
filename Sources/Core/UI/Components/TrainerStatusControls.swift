@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrainerConnectionStatusCard: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let connected: Bool
     let backendAvailable: Bool
@@ -53,6 +54,8 @@ struct TrainerConnectionStatusCard: View {
                 width: theme.connectionActionWidth,
                 action: performPrimaryAction
             )
+            .contentTransition(.opacity)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: primaryActionTitleKey)
             Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
                 .help(localization.localized("host.refreshStatusHelp"))
                 .accessibilityLabel(localization.localized("host.refreshStatus"))

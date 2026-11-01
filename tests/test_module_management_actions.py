@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 module_contract = (ROOT / "Sources/Core/Host/TrainerGameModule.swift").read_text(encoding="utf-8")
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
+pages = (ROOT / "Sources/Core/Host/TrainerGamePages.swift").read_text(encoding="utf-8")
+context = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text(encoding="utf-8")
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
@@ -29,9 +31,17 @@ for forbidden in ("TrainerSaveManagerModel(", "TrainerSaveManagerView("):
 
 # The Host sidebar no longer injects Save Management. Hades also contributes no
 # shortcut/log copies there, so every moved utility has exactly one game-area entry.
-host_sidebar = host[host.index("TrainerSidebar {"):host.index("} content: {")]
-assert "host.saveManagement" not in host_sidebar
-assert "saveManagerPresented = true" not in host_sidebar
+sidebar_start = host.index("struct TrainerHostSidebarCard<")
+host_sidebar = host[sidebar_start:host.index("\n}", sidebar_start) + 2]
+shell_start = pages.index("            TrainerSidebar {")
+sidebar_shell = pages[shell_start:pages.index("\n            }", shell_start) + len("\n            }")]
+assert "context.makeSidebarCard(selected:" in sidebar_shell
+assert "TrainerHostSidebarCard(context: context, selected: selected, onSelect: onSelect)" in context
+assert "TrainerSidebarCard(" in host_sidebar
+assert "Module.makeSidebarActions(model: model)" in host_sidebar
+for sidebar in (sidebar_shell, host_sidebar):
+    assert "host.saveManagement" not in sidebar
+    assert "saveManagerPresented = true" not in sidebar
 
 hades_sidebar = host_actions[
     host_actions.index("struct Hades2SidebarActions"):

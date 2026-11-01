@@ -25,6 +25,8 @@ count = 0
 status_count = 0
 for raw in sys.stdin:
     req = json.loads(raw)
+    with pathlib.Path(__file__).with_suffix('.commands.jsonl').open('a') as log:
+        log.write(json.dumps(req) + '\n')
     payload = {'connected': True, 'status': 'ready', 'scene': 'run',
                'capabilities': {'sellTraits': True}}
     issues_path = pathlib.Path(__file__).with_name('issues.json')
@@ -95,6 +97,217 @@ struct EditorProbe: NSViewRepresentable {
     func updateNSView(_ nsView: NSTextField, context: Context) {}
 }
 
+@MainActor
+final class FeedbackPageVisibility: ObservableObject {
+    @Published var visible = true
+}
+
+struct FeedbackInteractionPage: View {
+    @ObservedObject var model: Hades2TrainerModel
+    @ObservedObject var visibility: FeedbackPageVisibility
+    let editor: NSTextField
+
+    var body: some View {
+        TrainerShell {
+            Hades2GameModule.makeSidebarActions(model: model).frame(width: 220)
+        } content: {
+            VStack {
+                EditorProbe(field: editor).frame(height: 24)
+                Color.clear.frame(height: 1100)
+            }
+        } feedback: {
+            Hades2GameModule.makeFeedback(model: model)
+        }
+        .environment(\.trainerGamePageVisible, visibility.visible)
+    }
+}
+
+@MainActor
+func feedbackInputPump(_ duration: TimeInterval) {
+    // Dispatch AppKit activation, tracking and focus events as well as timers.
+    let deadline = Date().addingTimeInterval(duration)
+    while Date() < deadline {
+        if let event = NSApp.nextEvent(matching: .any,
+            until: min(deadline, Date().addingTimeInterval(0.01)),
+            inMode: .default, dequeue: true) {
+            NSApp.sendEvent(event)
+        }
+        NSApp.updateWindows()
+    }
+}
+
+@MainActor
+func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    app.finishLaunching()
+    app.activate(ignoringOtherApps: true)
+    enableNativeAccessibility()
+    let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+    localization.language = .en
+    localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix) {
+        Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
+    }
+    check(localization.localized("host.feedback.closeDetails") != "host.feedback.closeDetails",
+          "feedback interaction fixture did not load shipped Host translations")
+    let visibility = FeedbackPageVisibility()
+    let editor = NSTextField(string: "unsubmitted feedback interaction draft")
+    let host = NSHostingView(rootView: FeedbackInteractionPage(model: model, visibility: visibility, editor: editor)
+        .environmentObject(localization))
+    let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 1000, height: 600),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.acceptsMouseMovedEvents = true
+    window.contentView = host
+    window.makeKeyAndOrderFront(nil)
+    app.activate(ignoringOtherApps: true)
+    defer { window.contentView = nil; window.close() }
+
+    func waitInput(_ description: String, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(3)
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            if condition() { return }
+            feedbackInputPump(0.02)
+        } while Date() < deadline
+        check(condition(), "native feedback interaction timed out: " + description)
+    }
+    func control(_ name: String) -> NativeAccessibilityControl? {
+        nativeAccessibilityControls(host).first {
+            $0.identifier == "host.feedback." + name && $0.role == "AXButton"
+        }
+    }
+    func requestCount() -> Int {
+        let log = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
+        return ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n").count
+    }
+    func movePointer(to point: NSPoint) {
+        let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+        app.sendEvent(event)
+        feedbackInputPump(0.1)
+    }
+    func focus(_ target: NativeAccessibilityControl) {
+        let selector = NSSelectorFromString("setAccessibilityFocused:")
+        check(target.object.responds(to: selector), "feedback action has no documented AX focus setter")
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(target.object.method(for: selector), to: Setter.self)(target.object, selector, true)
+    }
+    func isFocused(_ target: NativeAccessibilityControl) -> Bool {
+        let selector = NSSelectorFromString("isAccessibilityFocused")
+        guard target.object.responds(to: selector) else { return false }
+        typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+        return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+    }
+    func next(_ key: String) -> TrainerFeedbackNotice {
+        let previous = model.feedbackNotice?.id
+        let before = requestCount()
+        model.openSellTraits()
+        waitInput("real module receipt " + key) {
+            !model.busy && model.feedbackNotice != nil && model.feedbackNotice?.id != previous
+                && control("dismiss")?.enabled == true
+        }
+        let notice = model.feedbackNotice!
+        check(notice.text.key == key, "native interaction changed the module receipt meaning")
+        check(requestCount() == before + 1, "fixture operation did not dispatch exactly once")
+        return notice
+    }
+
+    waitInput("active native window and initial feedback") {
+        app.keyWindow === window && control("dismiss")?.enabled == true && editor.window === window
+    }
+    check(window.makeFirstResponder(editor), "feedback editor refused native focus")
+    let focusedEditor = window.firstResponder
+    let initialRequests = requestCount()
+    check(control("dismiss")!.press(), "initial feedback refused native dismissal")
+    waitInput("initial native dismissal") { model.feedbackNotice == nil }
+    check(requestCount() == initialRequests, "feedback dismissal sent a backend request")
+
+    let hoverNotice = next("hades2.receipt.accepted")
+    check(hoverNotice.tone != .warning, "hover fixture requires the ordinary readable interval")
+    let hoverRequests = requestCount()
+    let dismissBounds = window.convertFromScreen(control("dismiss")!.frame)
+    check(dismissBounds.width > 0 && dismissBounds.height > 0, "feedback hover target has no native bounds")
+    movePointer(to: NSPoint(x: dismissBounds.midX, y: dismissBounds.midY))
+    feedbackInputPump(TrainerFeedbackTiming.ordinaryDuration + TrainerFeedbackTiming.fadeDuration + 0.2)
+    check(model.feedbackNotice?.id == hoverNotice.id && control("dismiss")?.enabled == true,
+          "native pointer hover failed to pause the feedback lifetime")
+    check(window.firstResponder === focusedEditor && !model.feedbackDetailsPresented,
+          "hover pause was confounded by stolen focus or open details")
+    check(requestCount() == hoverRequests, "hover or feedback timing dispatched a backend request")
+    movePointer(to: editor.convert(NSPoint(x: editor.bounds.midX, y: editor.bounds.midY), to: nil))
+    check(control("dismiss")!.press(), "hovered notice refused native dismissal")
+    waitInput("dismissal after hover") { model.feedbackNotice == nil }
+    // Retire pointer presentation before the separate keyboard episode, so
+    // focus pausing cannot accidentally pass because hover remained active.
+    visibility.visible = false
+    feedbackInputPump(0.1)
+    visibility.visible = true
+    feedbackInputPump(0.1)
+
+    let focusedNotice = next("hades2.receipt.opened")
+    let focusedRequests = requestCount()
+    let dismiss = control("dismiss")!
+    focus(dismiss)
+    waitInput("feedback button receives native keyboard focus") { isFocused(dismiss) }
+    feedbackInputPump(TrainerFeedbackTiming.ordinaryDuration + TrainerFeedbackTiming.fadeDuration + 0.2)
+    check(model.feedbackNotice?.id == focusedNotice.id && isFocused(dismiss) && !model.feedbackDetailsPresented,
+          "native feedback button focus failed to pause its lifetime")
+    for type in [NSEvent.EventType.keyDown, .keyUp] {
+        let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+            isARepeat: false, keyCode: 53)!
+        app.sendEvent(event)
+    }
+    waitInput("native Escape dismisses the focused notice") { model.feedbackNotice == nil && control("dismiss") == nil }
+    check(requestCount() == focusedRequests && editor.stringValue == "unsubmitted feedback interaction draft",
+          "focus or Escape changed a draft or sent a backend request")
+
+    _ = next("hades2.receipt.completed")
+    _ = next("hades2.receipt.completed")
+    let failure = next("hades2.receipt.failed")
+    waitInput("real module exposes retained failure details") { control("details")?.enabled == true }
+    let detailRequests = requestCount()
+    let staleDetails = control("details")!
+    let staleDismiss = control("dismiss")!
+    visibility.visible = false
+    waitInput("hidden page retires both native feedback actions") {
+        control("details") == nil && control("dismiss") == nil
+    }
+    _ = staleDetails.press()
+    _ = staleDismiss.press()
+    feedbackInputPump(0.1)
+    check(!model.feedbackDetailsPresented && model.feedbackNotice?.id == failure.id,
+          "a hidden page's retained native callback opened details or dismissed its notice")
+    check(requestCount() == detailRequests && !model.currentIssues.isEmpty,
+          "hidden feedback callbacks changed backend traffic or retained failure state")
+    visibility.visible = true
+    waitInput("returning page restores its own feedback") {
+        model.feedbackNotice?.id == failure.id && control("details")?.enabled == true
+    }
+    check(control("details")!.press(), "real module Details refused native AX input")
+    waitInput("real module opens its own failure details") {
+        model.feedbackDetailsPresented && model.feedbackDetailsNoticeID == failure.id
+    }
+    func closeDetails() -> NativeAccessibilityControl? {
+        app.windows.filter(\.isVisible).lazy.flatMap { nativeAccessibilityControls($0) }.first {
+            $0.role == "AXButton" && $0.label == localization.localized("host.feedback.closeDetails")
+        }
+    }
+    waitInput("actual module details popover has a native Close button") { closeDetails()?.enabled == true }
+    check(closeDetails()!.press(), "actual module details refused native Close")
+    waitInput("native Close retires only details presentation") { !model.feedbackDetailsPresented }
+    check(model.feedbackNotice?.id == failure.id && !model.currentIssues.isEmpty,
+          "closing native details erased the originating failure")
+    check(control("dismiss")!.press(), "real failed notice refused native dismissal")
+    waitInput("native dismissal leaves failure details available") { model.feedbackNotice == nil }
+    check(!model.currentIssues.isEmpty && requestCount() == detailRequests,
+          "native Details/Close/Dismiss changed failure authority or dispatched a backend request")
+    print("hades2_feedback_native_hover_focus_escape_and_lifetime_ok")
+}
+
 @main
 struct Main {
     @MainActor
@@ -116,6 +329,11 @@ struct Main {
         )
         model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
         wait { model.backendAvailable && !model.busy && model.feedbackNotice != nil }
+        if CommandLine.arguments.count == 4 && CommandLine.arguments[3] == "interactions" {
+            try exerciseFeedbackInput(model: model, worker: worker)
+            session.stop(suppressTerminationError: true)
+            return
+        }
         model.dismissFeedback(model.feedbackNotice!.id)
         check(model.currentIssues.isEmpty, "routine success became a retained issue")
         model.showFeedbackDetails()
@@ -421,6 +639,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     stub = td / "worker.py"
     home = td / "home"
     home.mkdir()
+    for language in ("en", "zh-CN"):
+        destination = td / f"{language}.lproj"
+        destination.mkdir()
+        shutil.copy2(ROOT / "Resources/Localization" / f"{language}.lproj/Host.strings",
+                     destination / "Host.strings")
     main.write_text(textwrap.dedent(harness))
     stub.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))))
     generated = td / "ActiveGame.generated.swift"
@@ -428,6 +651,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
     subprocess.run([SWIFTC, "-parse-as-library", "-whole-module-optimization", *map(str, sources),
                     str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
+                    str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
                     str(generated), str(main), "-o", str(binary)], check=True, cwd=ROOT)
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
     subprocess.run([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, timeout=45)
+    interaction_directory = td / "interactions"
+    interaction_directory.mkdir()
+    interaction_worker = interaction_directory / "worker.py"
+    shutil.copy2(stub, interaction_worker)
+    subprocess.run([str(binary), PYTHON, str(interaction_worker), "interactions"],
+                   check=True, cwd=ROOT, env=env, timeout=30)

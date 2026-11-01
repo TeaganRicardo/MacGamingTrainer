@@ -28,15 +28,18 @@ DYNAMIC_PREFIXES = {
 
 
 def quoted_strings(source, language):
-    """Yield string literal contents while ignoring comments."""
+    """Yield localization candidates outside comments and explicit Swift AX IDs."""
     index = 0
     size = len(source)
+    swift_context = []
     while index < size:
         if language == "swift" and source.startswith("//", index):
+            swift_context.append(" ")
             newline = source.find("\n", index + 2)
             index = size if newline < 0 else newline + 1
             continue
         if language == "swift" and source.startswith("/*", index):
+            swift_context.append(" ")
             index += 2
             depth = 1
             while index < size and depth:
@@ -63,9 +66,17 @@ def quoted_strings(source, language):
             continue
 
         if source[index] not in ("'", '"'):
+            if language == "swift":
+                swift_context.append(source[index])
             index += 1
             continue
 
+        # An identifier is not displayed copy. Classify this occurrence only:
+        # the same literal in a label/localization call must still be checked.
+        is_accessibility_identifier = language == "swift" and re.search(
+            r"\.\s*accessibilityIdentifier\s*\(\s*$", "".join(swift_context)
+        ) is not None
+        swift_context = ["<literal>"]
         quote = source[index]
         delimiter = quote * 3 if source.startswith(quote * 3, index) else quote
         index += len(delimiter)
@@ -76,7 +87,8 @@ def quoted_strings(source, language):
                 index += 2
                 continue
             if source.startswith(delimiter, index):
-                yield "".join(parts)
+                if not is_accessibility_identifier:
+                    yield "".join(parts)
                 index += len(delimiter)
                 break
             parts.append(source[index])
@@ -323,6 +335,28 @@ def analyze_key_usage(entries, references):
 
 
 class LocalizationKeyUsageTests(unittest.TestCase):
+    def test_swift_accessibility_identifiers_are_not_display_copy(self):
+        keys, prefixes = scan_source_keys({"Example.swift": ('''
+            view.accessibilityIdentifier("hades2.identifierOnly")
+            view.accessibilityIdentifier(
+                /* identifier ownership */ "hades2.multilineIdentifierOnly"
+            )
+            view.accessibilityIdentifier("hades2.shared")
+                .accessibilityLabel(localization.localized("hades2.shared"))
+            view.accessibilityIdentifier(localization.localized("hades2.displayedIdentifier"))
+            view.accessibilityHint("hades2.hint")
+            let title =
+                // .accessibilityIdentifier(
+                "hades2.afterComment"
+            let example = ".accessibilityIdentifier("
+            let detail = "hades2.afterString"
+        ''', "swift")})
+        self.assertEqual(keys, {
+            "hades2.shared", "hades2.displayedIdentifier", "hades2.hint",
+            "hades2.afterComment", "hades2.afterString",
+        })
+        self.assertEqual(prefixes, set())
+
     def test_analyzer_detects_missing_and_orphan_keys(self):
         missing, orphan = analyze_key_usage(
             {"hades2.present", "hades2.orphan"},

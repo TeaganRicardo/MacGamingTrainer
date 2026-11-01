@@ -9,6 +9,8 @@ from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
 from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
+from disclosure_ui_harness import DISCLOSURE_JOURNEY
+from search_ui_harness import SEARCH_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -20,7 +22,7 @@ if not SWIFTC or not PYTHON:
     raise SystemExit("swiftc/python3 required")
 
 worker = r'''
-import argparse, json, pathlib, sys
+import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
 log_path=pathlib.Path(__file__).with_suffix('.commands.jsonl')
 profiles=[{'name':'Fixture','updatedAt':'Today'}]
@@ -29,6 +31,7 @@ for raw in sys.stdin:
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps({**req, 'fixtureGame': args.game}, sort_keys=True) + '\n')
     command=req['command'];params=req.get('params',{})
+    if command=='save_profile' and params.get('name')=='Closing while saving':time.sleep(.2)
     result={'connected':True}
     speed_path=log_path.with_suffix('.speed')
     if speed_path.exists():
@@ -36,6 +39,9 @@ for raw in sys.stdin:
         if command=='set_desired' and params.get('feature')=='gameSpeed':
             speed=params['value'];speed_path.write_text(str(speed))
         result.update(gameSpeed=speed,featureSupport={'gameSpeed':True})
+    disclosure_path=log_path.with_suffix('.disclosure')
+    if disclosure_path.exists():
+        result.update(gameSpeed=1.0,featureSupport={'gameSpeed':int(disclosure_path.read_text())>0})
     if command in ('list_profiles','save_profile','delete_profile'):
         if command=='save_profile' and params['name']!='__error__':
             profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
@@ -85,8 +91,31 @@ func commands(at url: URL) -> [[String: Any]] {
 @main
 struct Main {
     @MainActor
-    static func main() throws {
+    static func main() {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        app.finishLaunching()
+        // Native menu, responder and field-editor work runs inside AppKit's
+        // application loop. A Timer also leaves nested native pumps free to
+        // receive the original model/backend callbacks on the main queue.
+        Timer.scheduledTimer(withTimeInterval: 0.01, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                do { try exerciseJourney() }
+                catch { fail("Hades II native fixture: " + String(describing: error)) }
+                app.stop(nil)
+                let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0, context: nil,
+                    subtype: 0, data1: 0, data2: 0)!
+                app.postEvent(wake, atStart: false)
+            }
+        }
+        app.run()
+    }
+
+    @MainActor
+    static func exerciseJourney() throws {
         _ = NSApplication.shared
+        guard NSApp.isRunning else { fail("Hades II native journey did not enter the AppKit application event loop") }
         enableNativeAccessibility()
         let args = CommandLine.arguments
         guard args.count == 3 || args.count == 4 else { fail("expected python + worker and optional journey") }
@@ -129,6 +158,40 @@ struct Main {
             return
         }
 
+        if args.count == 4 && args[3] == "disclosure" {
+            let availability = commandLog.deletingPathExtension().appendingPathExtension("disclosure")
+            try "3".write(to: availability, atomically: true, encoding: .utf8)
+            let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+                executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
+            let model = Hades2TrainerModel(session: session,
+                logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("disclosure.log")),
+                backendScriptURL: worker,
+                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"))
+            model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+            let deadline = Date().addingTimeInterval(4)
+            while (!model.backendAvailable || model.busy) && Date() < deadline { pump(0.02) }
+            guard model.backendAvailable && !model.busy else { fail("disclosure backend startup") }
+            let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+            localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
+                resolver: Hades2GameModule.presentationText)
+            func label(_ key: String, _ language: TrainerPresentationLanguage) -> String {
+                Hades2GameModule.resolveText(key: key, language: language, localization: localization)
+            }
+            try exerciseModuleDisclosure(Hades2TrainerView(model: model), localization: localization, gameID: "hades2",
+                expanded: Binding(get: { model.numericControlsExpanded }, set: { model.numericControlsExpanded = $0 }),
+                primaryLabel: { label("hades2.vital.runGold", $0) },
+                expandedLabel: { label("hades2.feature.damageMultiplier", $0) },
+                outsideLabel: { label("hades2.gameSpeed.a11y", $0) },
+                conditionalRole: "AXSlider", conditionalLabel: { label("hades2.gameSpeed.a11y", $0) },
+                busy: { model.busy }, commands: { commands(at: commandLog) }, observeAvailability: { count in
+                    try String(count).write(to: availability, atomically: true, encoding: .utf8)
+                    model.refreshFromHost()
+                })
+            session.stop()
+            pump(0.1)
+            return
+        }
+
         let process = BackendProcess(
             executableURL: python,
             argumentsPrefix: ["-u"],
@@ -150,6 +213,22 @@ struct Main {
         // afterwards.
         let localizationDefaults = InMemoryDefaults()
         let localization = TrainerLocalizationStore(defaults: localizationDefaults)
+        if args.count == 4 && args[3] == "search" {
+            exerciseWorkbenchSearch(Hades2HeaderActions(model: model), localization: localization,
+                placeholder: { Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization) },
+                emptyLabel: { Hades2GameModule.resolveText(key: "hades2.workbench.searchEmpty", localization: localization) },
+                query: { model.workbenchSearch }, matches: { query in
+                    Hades2WorkbenchCatalog.matches(query) { key in
+                        TrainerPresentationLanguage.allCases.map {
+                            Hades2GameModule.resolveText(key: key, language: $0, localization: localization)
+                        }
+                    }.map { (id: $0.id, destination: $0.section.id) }
+                }, commands: { commands(at: commandLog) })
+            session.stop()
+            pump(0.15)
+            print("hades2_workbench_search_native_ok")
+            return
+        }
         let host = NSHostingView(
             rootView: Hades2TrainerView(model: model)
                 .environmentObject(localization)
@@ -348,6 +427,9 @@ struct Main {
                 openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
         exerciseManagementPageDismissal(Hades2TrainerView(model: managementModel), localization: localization,
             show: { managementModel.diagnosticsPresented = true }, dismissed: { !managementModel.diagnosticsPresented })
+        exerciseModuleShortcutSheet(Hades2TrainerView(model: managementModel), localization: localization,
+            show: { managementModel.shortcutSettingsPresented = true }, isPresented: { managementModel.shortcutSettingsPresented },
+            chord: { managementModel.shortcutText(.invincibility) }, commands: { commands(at: commandLog) })
         managementModel.connected = false; managementModel.pid = nil
         managementCheck(!menuCatalog.disableAll.isEnabled && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled),
                         "detached Hades II command eligibility changed")
@@ -384,7 +466,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         localized.mkdir()
         shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(
@@ -432,6 +514,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         raise SystemExit(slider_proc.returncode)
     assert "hades2_slider_module_journey_ok" in slider_proc.stdout, slider_proc.stdout
     print(slider_proc.stdout.strip())
+    disclosure_worker = td / "disclosure_worker.py"
+    shutil.copy2(worker_path, disclosure_worker)
+    disclosure_proc = subprocess.run(
+        [str(binary), PYTHON, str(disclosure_worker), "disclosure"], cwd=ROOT, env=env,
+        text=True, capture_output=True, timeout=25,
+    )
+    if disclosure_proc.returncode != 0:
+        print(disclosure_proc.stdout)
+        print(disclosure_proc.stderr)
+        raise SystemExit(disclosure_proc.returncode)
+    assert "hades2_disclosure_module_journey_ok" in disclosure_proc.stdout, disclosure_proc.stdout
+    print(disclosure_proc.stdout.strip())
+    search_proc = subprocess.run([str(binary), PYTHON, str(worker_path), "search"],
+                                 cwd=ROOT, env=env, text=True, capture_output=True, timeout=20)
+    if search_proc.returncode != 0:
+        print(search_proc.stdout)
+        print(search_proc.stderr)
+        raise SystemExit(search_proc.returncode)
+    assert "hades2_workbench_search_native_ok" in search_proc.stdout, search_proc.stdout
+    print(search_proc.stdout.strip())
     proc = subprocess.run(
         [str(binary), PYTHON, str(worker_path)],
         cwd=ROOT,

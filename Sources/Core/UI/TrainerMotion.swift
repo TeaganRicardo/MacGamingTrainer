@@ -11,6 +11,18 @@ enum TrainerMotion {
         case transientFeedback
     }
 
+    /// AppKit presentation uses the same role timing as SwiftUI without
+    /// animating native editing, focus, or popup tracking themselves.
+    static func duration(_ role: Role, reduceMotion: Bool) -> TimeInterval {
+        guard !reduceMotion else { return 0 }
+        switch role {
+        case .directManipulation: return 0
+        case .selection: return 0.18
+        case .disclosure: return 0.24
+        case .transientFeedback: return 0.16
+        }
+    }
+
     static func animation(_ role: Role, reduceMotion: Bool) -> Animation? {
         guard !reduceMotion else { return nil }
         switch role {
@@ -19,12 +31,12 @@ enum TrainerMotion {
         case .selection:
             // A short, zero-bounce spring can retarget without a timing-curve
             // restart when someone reverses a selection rapidly.
-            return .smooth(duration: 0.18)
+            return .smooth(duration: duration(role, reduceMotion: reduceMotion))
         case .disclosure:
-            return .smooth(duration: 0.24)
+            return .smooth(duration: duration(role, reduceMotion: reduceMotion))
         case .transientFeedback:
             // This role is for opacity, not moving a notice through content.
-            return .easeOut(duration: 0.16)
+            return .easeOut(duration: duration(role, reduceMotion: reduceMotion))
         }
     }
 

@@ -21,8 +21,10 @@ struct TrainerShortcutSettingsView: View {
 
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerGamePageVisible) private var pageVisible
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @StateObject private var capture = TrainerShortcutCaptureController()
+    @State private var lifetime = TrainerSheetLifetime()
 
     init(
         isPresented: Binding<Bool>,
@@ -41,12 +43,14 @@ struct TrainerShortcutSettingsView: View {
     }
 
     var body: some View {
+        let presentationID = lifetime.id
         TrainerSheetScaffold(
             title: localization.localized("host.shortcutSettings"),
-            icon: TrainerSemanticIcon.Tool.shortcuts, width: 560
+            icon: TrainerSemanticIcon.Tool.shortcuts, width: 560, minimumWidth: 360
         ) {
             if let resetTitle, let onReset {
                 Button(resetTitle) {
+                    guard lifetime.accepts(presentationID), isPresented, pageVisible else { return }
                     capture.cancel()
                     onReset()
                 }
@@ -60,15 +64,20 @@ struct TrainerShortcutSettingsView: View {
                     ForEach(entries) { entry in
                         HStack {
                             Label(entry.title, systemImage: entry.icon)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer()
                             if entry.isEditable {
                                 Button {
+                                    guard lifetime.accepts(presentationID), isPresented, pageVisible else { return }
                                     capture.begin(actionID: entry.id, onAssign: onAssign)
                                 } label: {
                                     shortcutLabel(
                                         capture.capturingActionID == entry.id
                                         ? localization.localized("host.hotkeys.pressNew") : entry.chordText
                                     )
+                                    .contentTransition(.opacity)
+                                    .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion),
+                                               value: capture.capturingActionID == entry.id)
                                 }
                                 .buttonStyle(.bordered)
                                 .accessibilityIdentifier("trainer.shortcut.capture." + entry.id)
@@ -88,23 +97,37 @@ struct TrainerShortcutSettingsView: View {
                     .foregroundStyle(theme.warning)
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: message)
             }
         } footer: {
             HStack {
                 Spacer()
                 Button(localization.localized("host.done")) {
+                    guard lifetime.accepts(presentationID) else { return }
+                    lifetime.invalidate()
                     capture.cancel()
                     isPresented = false
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .onDisappear { capture.cancel() }
+        .onAppear { lifetime.appear() }
+        .onDisappear { lifetime.invalidate(); capture.cancel() }
+        .onExitCommand {
+            if capture.capturingActionID != nil { capture.cancel() }
+            else if lifetime.accepts(presentationID) {
+                lifetime.invalidate()
+                isPresented = false
+            }
+        }
         .onChange(of: isPresented) { _, visible in
-            if !visible { capture.cancel() }
+            if visible { lifetime.appear() }
+            else { lifetime.invalidate(); capture.cancel() }
         }
         .onChange(of: pageVisible, initial: true) { _, visible in
             if !visible {
+                lifetime.invalidate()
                 capture.cancel()
                 isPresented = false
             }

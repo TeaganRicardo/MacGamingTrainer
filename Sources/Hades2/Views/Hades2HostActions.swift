@@ -4,6 +4,7 @@ struct Hades2SidebarActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
+    @Environment(\.trainerSelectedSection) private var selectedSection
     @Environment(\.trainerGamePageVisible) private var pageVisible
 
     var body: some View {
@@ -13,16 +14,13 @@ struct Hades2SidebarActions: View {
                 if section == .management { Divider().padding(.vertical, 2) }
                 TrainerSectionButton(
                     title: Hades2GameModule.resolveText(key: section.titleKey, localization: localization),
-                    systemImage: section.icon
+                    systemImage: section.icon,
+                    selected: selectedSection == section.id
                 ) {
                     model.showWorkbenchSection(section)
                     navigate(section.id)
                 }
-                // Section rows are navigation shortcuts, not form controls: the
-                // window's initial key view lands on the first row and would
-                // otherwise keep a focus ring on it until something else takes
-                // focus. Keep them keyboard-reachable without the persistent box.
-                .focusEffectDisabled()
+                .accessibilityIdentifier("trainer.section.\(section.id)")
             }
             if !model.currentIssues.isEmpty {
                 Button { model.showFeedbackDetails() } label: {

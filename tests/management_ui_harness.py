@@ -1,9 +1,13 @@
 """Shared native-control journeys included by both existing macOS frontend tests."""
 
+from feedback_ui_harness import FEEDBACK_JOURNEY
+from sheet_ui_harness import SHEET_JOURNEY
+
 MANAGEMENT_JOURNEY = r'''
 @MainActor
 func exerciseManagementRouting(localization: TrainerLocalizationStore) {
     exerciseSharedControlMotion(localization: localization)
+    exerciseFeedbackPresentation(localization: localization)
     var available = ["first": true, "second": true]
     var events: [String] = []
     @MainActor func catalog(_ owner: String) -> TrainerManagementCatalog {
@@ -176,6 +180,15 @@ func exerciseProfileManager<Content: View>(
     }
 
     managementWait(host, "initial profile inventory") { inventory() == ["Fixture"] && !busy() }
+    sheetJourneyActivate(window)
+    enter("Retained name draft")
+    let draftField = managementFields(host).first { $0.accessibilityLabel() == labels.name }!
+    exerciseSheetLayout(window, localization: localization, draft: draftField)
+    let focusedDraft = window.firstResponder
+    run(localization.localized("host.refresh"), command: "list_profiles")
+    managementCheck(window.firstResponder === focusedDraft && draftField.stringValue == "Retained name draft",
+                    "profile refresh replaced the native name draft or its focus")
+    managementCheck(window.makeFirstResponder(nil), "profile draft refused native completion after refresh")
     run(labels.load, command: "load_profile", name: "Fixture")
     afterLoad(host)
     enter(" Renamed ")
@@ -199,8 +212,24 @@ func exerciseProfileManager<Content: View>(
     managementCheck(namedNativeControl(host, role: "AXButton", name: labels.load)?.enabled != true,
                     "empty inventory retained an enabled load action")
     run(localization.localized("host.refresh"), command: "list_profiles")
+    enter("Baseline")
+    run(labels.save, command: "save_profile", name: "Baseline")
+    enter("Closing while saving")
+    let oldSave = namedNativeControl(host, role: "AXButton", name: labels.save)!
+    let oldRefresh = namedNativeControl(host, role: "AXButton", name: localization.localized("host.refresh"))!
+    let beforePending = commands().count
+    managementPress(labels.save, in: host)
+    managementWait(host, "pending profile save before Done") { busy() }
     managementPress(localization.localized("host.done"), in: host)
-    managementCheck(dismissed(), "Done did not dismiss the owning module sheet")
+    managementCheck(dismissed(), "Done did not dismiss the owning module sheet during a save")
+    managementWait(host, "dismissed save still receives its original acknowledgement") {
+        !busy() && inventory().contains("Closing while saving")
+    }
+    managementCheck(commands().count == beforePending + 1, "dismissal cancelled or replayed the pending profile save")
+    _ = oldSave.press(); _ = oldRefresh.press()
+    sheetJourneyPump()
+    managementCheck(commands().count == beforePending + 1 && dismissed(),
+                    "a closing profile sheet admitted a stale button action")
     window.contentView = nil
     window.close()
     RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -229,6 +258,8 @@ func exerciseDiagnostics<Content: View>(
     }
     managementCheck(namedNativeControl(host, role: "AXButton", name: exportTitle)?.enabled == true,
                     "module diagnostic export became inaccessible")
+    sheetJourneyActivate(window)
+    exerciseSheetLayout(window, localization: localization)
     func refresh() {
         let before = commands().count
         managementPress(refreshTitle, in: host)
@@ -249,8 +280,13 @@ func exerciseDiagnostics<Content: View>(
     try setMode("viewer")
     refresh()
     managementWait(host, "diagnostic recovery") { count() == 2 && !busy() }
+    let oldRefresh = namedNativeControl(host, role: "AXButton", name: refreshTitle)!
+    let beforeDismiss = commands().count
     managementPress(localization.localized("host.done"), in: host)
     managementCheck(dismissed(), "diagnostic Done did not dismiss the owning module sheet")
+    _ = oldRefresh.press()
+    sheetJourneyPump()
+    managementCheck(commands().count == beforeDismiss, "dismissed diagnostics ran a stale refresh")
     window.contentView = nil
     window.close()
 }
@@ -291,14 +327,17 @@ func exerciseDiagnosticStatuses(localization: TrainerLocalizationStore) {
         namedNativeControl(host, role: "AXButton", name: labels.refresh)?.enabled == false
             && namedNativeControl(host, role: "AXButton", name: labels.export)?.enabled == true
     }
+    let oldExport = namedNativeControl(host, role: "AXButton", name: labels.export)!
     managementPress(localization.localized("host.done"), in: host)
     managementCheck(dismissed, "unavailable refresh trapped the diagnostic sheet")
+    _ = oldExport.press()
+    managementCheck(exports == 1, "a dismissed diagnostic sheet exported through a stale control")
     window.contentView = nil
     window.close()
 }
 '''
 
-MANAGEMENT_JOURNEY += r'''
+MANAGEMENT_JOURNEY += FEEDBACK_JOURNEY + SHEET_JOURNEY + r'''
 @MainActor private final class ControlMotionState: ObservableObject {
     @Published var enabled = true
     @Published var isOn = false

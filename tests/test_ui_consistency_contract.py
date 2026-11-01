@@ -95,7 +95,7 @@ for source in (hades1_shortcuts, management):
 assert "if entry.isEditable {" in shortcut_sheet
 assert "shortcutLabel(entry.chordText)" in shortcut_sheet
 assert "trainer.shortcut.fixed." in shortcut_sheet
-assert ".onDisappear { capture.cancel() }" in shortcut_sheet
+assert ".onDisappear { lifetime.invalidate(); capture.cancel() }" in shortcut_sheet
 assert ".onChange(of: pageVisible, initial: true)" in shortcut_sheet
 assert "GlobalHotkeys.beginShortcutCapture()" in capture
 assert "GlobalHotkeys.endShortcutCapture(token)" in capture

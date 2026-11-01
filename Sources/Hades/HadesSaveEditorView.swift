@@ -5,11 +5,13 @@ struct HadesSaveEditorView: View {
     @StateObject private var model: HadesSaveEditorModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.trainerCloseToolWindow) private var closeWindow
     @State private var confirmingRead = false
 
     init(model: HadesSaveEditorModel) { _model = StateObject(wrappedValue: model) }
     private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
+    private var hasReview: Bool { model.review.count > 0 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,32 +24,60 @@ struct HadesSaveEditorView: View {
                         if let failure = model.failures[key] {
                             Text(localization.string(failure)).font(.caption).foregroundStyle(theme.warning)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .contentTransition(.opacity)
+                                .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: failure)
                         }
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(theme.controlPadding)
+                    .transition(.opacity)
             }
             if let recovery = model.recoveryPath {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.saveEditor.recovery")).foregroundStyle(theme.warning)
                     Text(recovery).font(.caption.monospaced()).textSelection(.enabled)
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(theme.controlPadding)
+                    .transition(.opacity)
             }
             Divider()
             toolbar
             Divider()
-            results
-                .id(model.workspaceID)
-                .frame(minHeight: 300, idealHeight: model.review.count > 0 ? 350 : 500, maxHeight: .infinity)
-            if model.total > HadesSaveEditorModel.pageSize { Divider(); paging }
-            if model.review.count > 0 { Divider(); changes.frame(height: 215) }
-            if let receipt = model.receipt { Divider(); applied(receipt) }
+            VStack(spacing: 0) {
+                results
+                    .id(model.workspaceID)
+                    .frame(minHeight: 300, idealHeight: hasReview ? 350 : 500, maxHeight: .infinity)
+                if model.total > HadesSaveEditorModel.pageSize { Divider(); paging }
+                VStack(spacing: 0) {
+                    if hasReview {
+                        Divider()
+                        changes.frame(height: 215)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(height: hasReview ? 216 : 0, alignment: .top)
+                .clipped()
+                .allowsHitTesting(hasReview && !model.busy)
+                .accessibilityHidden(!hasReview)
+            }
+            .animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: hasReview)
+            VStack(spacing: 0) {
+                if let receipt = model.receipt { Divider(); applied(receipt).transition(.opacity) }
+            }
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.receipt?.installedSHA256)
         }
         .frame(minWidth: 880, idealWidth: 980, minHeight: 700, idealHeight: 850)
         .trainerSurface(.canvas)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.failures.keys.sorted())
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.recoveryPath)
         .trainerDismissTextEditingOnClickAway()
         .onAppear { model.open(language: localization.language) }
         .onChange(of: localization.language) { _, value in model.setLanguage(value) }
         .onChange(of: model.search) { _, _ in model.searchChanged() }
+        .onChange(of: model.review.count) { _, count in
+            if count > 0 || model.receipt == nil { announce(text("hades.saveEditor.changes") + " (\(count))") }
+        }
+        .onChange(of: model.receipt?.installedSHA256) { _, receipt in
+            if receipt != nil { announce(text("hades.saveEditor.applied")) }
+        }
         .confirmationDialog(text("hades.saveEditor.readConfirm"), isPresented: $confirmingRead) {
             Button(text("hades.saveEditor.read"), role: .destructive, action: model.openSelection)
             Button(text("host.cancel"), role: .cancel) {}
@@ -55,6 +85,10 @@ struct HadesSaveEditorView: View {
         .sheet(item: Binding(get: { model.editingRow }, set: { if $0 == nil { model.dismissDetail() } })) { row in
             HadesSaveTypedEditor(model: model, row: row, workspace: model.workspaceID, forceTyped: model.editingTyped)
         }
+    }
+    private func announce(_ message: String) {
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }
     private var header: some View {
         HStack(spacing: theme.controlPadding) {
@@ -134,6 +168,7 @@ struct HadesSaveEditorView: View {
             LazyVStack(alignment: .leading, spacing: theme.controlPadding) {
                 if model.rows.isEmpty && !model.queryLoading {
                     TrainerEmptyState(text: text("hades.saveEditor.empty"))
+                        .transition(.opacity)
                 }
                 ForEach(owners, id: \.self) { ownerID in
                     TrainerListCard {
@@ -158,6 +193,12 @@ struct HadesSaveEditorView: View {
                 }
             }.padding(theme.rowHorizontalPadding)
         }
+        .overlay {
+            if model.rows.isEmpty && model.queryLoading {
+                ProgressView().controlSize(.small).allowsHitTesting(false).transition(.opacity)
+            }
+        }
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.rows.isEmpty && model.queryLoading)
     }
     private var paging: some View {
         HStack {
@@ -191,6 +232,8 @@ struct HadesSaveEditorView: View {
                                     Button(text("hades.remove")) { model.unstage(action.id, baseline: baseline) }.disabled(model.busy || !model.canEditRows)
                                 }
                                 Text(action.before + " → " + action.after).font(.caption).textSelection(.enabled)
+                                    .contentTransition(.opacity)
+                                    .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: action.after)
                                 ForEach(action.effects) { effect in
                                     Text(effect.name + ": " + effect.before + " → " + effect.after)
                                         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -299,7 +342,13 @@ private struct HadesSaveEditorField: View {
                     focused = $0
                     model.editingChanged(row.id, baseline: row.baselineGeneration, active: $0)
                 }, onCommit: { completed in
-                    guard completed.changed else { return completed.text }
+                    guard completed.changed else {
+                        // A review update can remove this row's staged value
+                        // while its native draft remains focused. On unchanged
+                        // completion, resume the latest acknowledged value;
+                        // failed drafts still belong to the user's correction.
+                        return model.hasFailedDraft(row) ? completed.text : (value?.scalarText ?? completed.text)
+                    }
                     return model.commit(row, text: completed.text, workspace: workspace)
                 })
                 .frame(width: row.valueType == "number" ? 155 : 280)

@@ -27,15 +27,20 @@ struct TrainerResetButton: View {
 }
 
 struct TrainerSectionButton: View {
+    @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String?
     let systemImage: String
+    let selected: Bool
     let action: () -> Void
 
-    init(title: String, detail: String? = nil, systemImage: String, action: @escaping () -> Void) {
+    init(title: String, detail: String? = nil, systemImage: String, selected: Bool = false,
+         action: @escaping () -> Void) {
         self.title = title
         self.detail = detail
         self.systemImage = systemImage
+        self.selected = selected
         self.action = action
     }
 
@@ -53,8 +58,14 @@ struct TrainerSectionButton: View {
             .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous)
+                    .fill(selected ? theme.accent.opacity(0.12) : .clear)
+                    .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

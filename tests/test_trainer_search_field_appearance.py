@@ -118,6 +118,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-search-field-appearance-") as tempo
     subprocess.run([
         SWIFTC, "-parse-as-library",
         str(ROOT / "Sources/Core/UI/TrainerTheme.swift"),
+        str(ROOT / "Sources/Core/UI/TrainerMotion.swift"),
         str(ROOT / "Sources/Core/UI/Components/TrainerSearchField.swift"),
         str(swift), "-o", str(binary),
     ], cwd=ROOT, check=True)
