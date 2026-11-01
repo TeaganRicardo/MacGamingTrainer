@@ -101,6 +101,7 @@ private struct TrainerActionButtonLabel: View {
 }
 
 private struct TrainerActionWidthModifier: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
     let role: TrainerActionWidthRole
 
     @ViewBuilder
@@ -117,6 +118,7 @@ private struct TrainerActionWidthModifier: ViewModifier {
 }
 
 struct TrainerPrimaryActionButton: View {
+    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?

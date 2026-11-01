@@ -694,7 +694,7 @@ struct Hades2TrainerView: View {
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
-                        enabled: false
+                        enabled: false,
                         action: {}
                     )
                 }
@@ -742,7 +742,7 @@ struct Hades2TrainerView: View {
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
                         systemImage: TrainerSemanticIcon.Action.apply,
-                        enabled: false
+                        enabled: false,
                         action: {}
                     )
                 }
