@@ -1,4 +1,6 @@
+import ctypes
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -15,6 +17,55 @@ SWIFTC = shutil.which("swiftc")
 PYTHON = shutil.which("python3")
 if not SWIFTC or not PYTHON:
     raise SystemExit("swiftc/python3 required")
+
+
+def run_with_restored_pointer(command, **kwargs):
+    """Restore the runner's cursor even if the native child traps or times out."""
+    class Point(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
+
+    graphics = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+    foundation = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    graphics.CGEventCreate.argtypes = [ctypes.c_void_p]
+    graphics.CGEventCreate.restype = ctypes.c_void_p
+    graphics.CGEventGetLocation.argtypes = [ctypes.c_void_p]
+    graphics.CGEventGetLocation.restype = Point
+    graphics.CGWarpMouseCursorPosition.argtypes = [Point]
+    graphics.CGWarpMouseCursorPosition.restype = ctypes.c_int32
+    foundation.CFRelease.argtypes = [ctypes.c_void_p]
+    foundation.CFRelease.restype = None
+
+    def position():
+        event = graphics.CGEventCreate(None)
+        if not event:
+            raise RuntimeError("could not capture the native pointer position")
+        try:
+            point = graphics.CGEventGetLocation(event)
+            if not math.isfinite(point.x) or not math.isfinite(point.y):
+                raise RuntimeError("native pointer coordinates are not finite")
+            return point
+        finally:
+            foundation.CFRelease(event)
+
+    original = position()
+    try:
+        return subprocess.run(command, **kwargs)
+    finally:
+        # subprocess.run kills and reaps a timed-out child before unwinding.
+        # A Swift defer cannot restore the cursor after fatalError/SIGTRAP.
+        child_failed = sys.exc_info()[0] is not None
+        try:
+            result = graphics.CGWarpMouseCursorPosition(original)
+            if result != 0:
+                raise RuntimeError(f"cursor restoration failed with CGError {result}")
+            restored = position()
+            if abs(restored.x - original.x) > 1 or abs(restored.y - original.y) > 1:
+                raise RuntimeError("cursor restoration did not reach the saved position")
+        except Exception as error:
+            print(f"FEEDBACK_POINTER_RESTORE_FAILURE {error}", file=sys.stderr, flush=True)
+            if not child_failed:
+                raise
+
 
 worker = r'''
 import argparse, json, pathlib, sys, time
@@ -66,6 +117,7 @@ for raw in sys.stdin:
 harness = r'''
 import AppKit
 import Combine
+import CoreGraphics
 import Foundation
 import SwiftUI
 
@@ -208,11 +260,50 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
         return ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n").count
     }
     func movePointer(to point: NSPoint) {
+        // The CI trace proved sendEvent reached this window while the physical
+        // cursor stayed elsewhere. Move that cursor, then retain the original
+        // AppKit event route; warp alone is never evidence of hover delivery.
+        guard let primary = NSScreen.screens.first else {
+            fatalError("native pointer input has no primary screen")
+        }
+        let screenPoint = window.convertPoint(toScreen: point)
+        let targetOwner = NSWindow.windowNumber(at: screenPoint, belowWindowWithWindowNumber: 0)
+        check(app.isActive && window.isKeyWindow && window.isVisible
+                && window.occlusionState.contains(.visible) && targetOwner == window.windowNumber
+                && NSScreen.screens.contains(where: { $0.visibleFrame.contains(screenPoint) }),
+              "native pointer target is not in the fixture's active visible front window")
+        // AppKit uses the primary screen's lower-left origin; Quartz uses its
+        // upper-left origin. Both are display points, not backing pixels.
+        let quartzPoint = CGPoint(x: screenPoint.x, y: primary.frame.maxY - screenPoint.y)
+        let warp = CGWarpMouseCursorPosition(quartzPoint)
+        check(warp == .success, "native cursor warp failed: \(warp.rawValue)")
         let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [],
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
             context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
         app.sendEvent(event)
         feedbackInputPump(0.1)
+        let cursor = NSEvent.mouseLocation
+        let outsideEventStream = window.mouseLocationOutsideOfEventStream
+        let delivered = window.pointerDeliveries.contains {
+            $0.type == .mouseMoved && $0.windowNumber == window.windowNumber
+                && $0.timestamp == event.timestamp && $0.location == point
+        }
+        let positioned = abs(cursor.x - screenPoint.x) <= 1 && abs(cursor.y - screenPoint.y) <= 1
+            && abs(outsideEventStream.x - point.x) <= 1 && abs(outsideEventStream.y - point.y) <= 1
+        let inputArrived = delivered && positioned
+        if !inputArrived {
+            let context: [String: Any] = [
+                "originalInputPredicatePassed": false, "delivered": delivered, "positioned": positioned,
+                "targetInWindow": NSStringFromPoint(point), "targetOnScreen": NSStringFromPoint(screenPoint),
+                "cursorOnScreen": NSStringFromPoint(cursor),
+                "cursorOutsideEventStream": NSStringFromPoint(outsideEventStream),
+                "active": app.isActive, "key": window.isKeyWindow, "window": window.windowNumber,
+            ]
+            let payload = (try? JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]))
+                ?? Data(String(describing: context).utf8)
+            FileHandle.standardError.write(Data("FEEDBACK_POINTER_INPUT_FAILURE ".utf8) + payload + Data("\n".utf8))
+        }
+        check(inputArrived, "native pointer position and original window event did not agree")
     }
     func focus(_ target: NativeAccessibilityControl) {
         let selector = NSSelectorFromString("setAccessibilityFocused:")
@@ -333,6 +424,7 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
     check(dismissBounds.width > 0 && dismissBounds.height > 0, "feedback hover target has no native bounds")
     let hoverStarted = ProcessInfo.processInfo.systemUptime
     movePointer(to: NSPoint(x: dismissBounds.midX, y: dismissBounds.midY))
+    check(dismissScreenBounds.contains(NSEvent.mouseLocation), "native pointer missed the actual feedback control")
     feedbackInputPump(TrainerFeedbackTiming.ordinaryDuration + TrainerFeedbackTiming.fadeDuration + 0.2)
     let hoverRetained = model.feedbackNotice?.id == hoverNotice.id && control("dismiss")?.enabled == true
     if !hoverRetained {
@@ -341,6 +433,7 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
             expectedResponder: focusedEditor, requestsBefore: hoverRequests)
     }
     check(hoverRetained, "native pointer hover failed to pause the feedback lifetime")
+    check(dismissScreenBounds.contains(NSEvent.mouseLocation), "native pointer left the feedback control during hover")
     check(window.firstResponder === focusedEditor && !model.feedbackDetailsPresented,
           "hover pause was confounded by stolen focus or open details")
     check(requestCount() == hoverRequests, "hover or feedback timing dispatched a backend request")
@@ -767,5 +860,5 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     interaction_directory.mkdir()
     interaction_worker = interaction_directory / "worker.py"
     shutil.copy2(stub, interaction_worker)
-    subprocess.run([str(binary), PYTHON, str(interaction_worker), "interactions"],
-                   check=True, cwd=ROOT, env=env, timeout=30)
+    run_with_restored_pointer([str(binary), PYTHON, str(interaction_worker), "interactions"],
+                              check=True, cwd=ROOT, env=env, timeout=30)

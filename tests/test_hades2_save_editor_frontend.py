@@ -28,6 +28,7 @@ worker = r'''
 import argparse, json, pathlib, sys, time
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
+reply_gate = pathlib.Path(__file__).with_suffix('.hold-reply')
 resource_value = 123
 pending_value = None
 pending_entry_id = None
@@ -90,6 +91,16 @@ for raw in sys.stdin:
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(req, sort_keys=True) + '\\n')
     command = req['command']
+    try:
+        held_command = reply_gate.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        held_command = None
+    if held_command == command:
+        deadline = time.monotonic() + 5
+        while reply_gate.exists():
+            if time.monotonic() >= deadline:
+                raise SystemExit('Save fixture did not release the held ' + command + ' reply')
+            time.sleep(0.005)
     if command == 'save_editor_inventory':
         backup = req['params'].get('snapshotId') is not None
         sources = [
@@ -686,6 +697,11 @@ struct Main {
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
+        let replyGate = worker.deletingPathExtension().appendingPathExtension("hold-reply")
+        func holdReply(_ command: String) throws {
+            try command.write(to: replyGate, atomically: true, encoding: .utf8)
+        }
+        func releaseReply() throws { try FileManager.default.removeItem(at: replyGate) }
 
         let process = BackendProcess(executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)
         let session = TrainerBackendSession(client: BackendClient(process: process))
@@ -1116,8 +1132,29 @@ struct Main {
         beforeCollapseGeometry["editorDelegateIsField"] = retainedDraft.currentEditor()?.delegate as? NSTextField === retainedDraft
         beforeCollapseGeometry["fieldWindowIsOwner"] = retainedDraft.window === window
         beforeCollapseGeometry["busy"] = model.busy
+        let affectedFields = fields(window.contentView!).filter {
+            $0.isEditable && $0.accessibilityLabel() == "Ashes"
+        }
+        guard affectedFields.count == 2 else {
+            fail("entry-lock fixture did not mount both inline and review inputs")
+        }
         let beforeReviewCollapse = commands(at: commandLog).count
+        try holdReply("save_editor_unstage")
         removeButton.performClick(nil)
+        pumpUntil {
+            model.busy && affectedFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeReviewCollapse + 1
+        }
+        if !model.busy || toolWindows.canCloseAll || affectedFields.contains(where: { $0.isEnabled })
+            || window.firstResponder !== retainedEditor || retainedDraft.currentEditor()?.string != "3.5" {
+            fail("pending unstage did not lock its entry while retaining the unrelated native editor")
+        }
+        _ = model.completeTextEdit(entry, text: "999")
+        if model.editFailures[entry.id]?.key != "hades2.saveEditor.unavailableDraft"
+            || commands(at: commandLog).count != beforeReviewCollapse + 1 {
+            fail("a busy edit completion bypassed command admission")
+        }
+        try releaseReply()
         pumpUntil { model.pendingCount == 0 && !model.busy }
         if removeTarget.presses != 1
             || !model.pendingActions.isEmpty
@@ -1161,8 +1198,31 @@ struct Main {
 
         let previousBaseline = model.baselineGeneration!
         let previousEntry = model.items.first!
+        guard window.makeFirstResponder(retainedDraft),
+              let stageRetainedEditor = retainedDraft.currentEditor() else {
+            fail("could not refocus the retained correction before staging another entry")
+        }
+        let stageAffectedFields = fields(window.contentView!).filter {
+            $0.isEditable && $0.accessibilityLabel() == "Ashes"
+        }
+        guard !stageAffectedFields.isEmpty else { fail("stage-lock fixture lost the affected input") }
+        let beforeHeldStage = commands(at: commandLog).count
+        try holdReply("save_editor_stage")
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500, baseline: model.baselineGeneration!)
-        pumpUntil { !model.busy && model.pendingCount == 1 }
+        pumpUntil {
+            model.busy && stageAffectedFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeHeldStage + 1
+        }
+        if !model.busy || toolWindows.canCloseAll || stageAffectedFields.contains(where: { $0.isEnabled })
+            || window.firstResponder !== stageRetainedEditor || retainedDraft.currentEditor()?.string != "3.5" {
+            fail("pending stage retired an unrelated draft or unlocked mutation controls")
+        }
+        try releaseReply()
+        pumpUntil { !model.busy && model.pendingCount == 1 && stageAffectedFields.allSatisfy { $0.isEnabled } }
+        if model.busy || !toolWindows.canCloseAll || stageAffectedFields.contains(where: { !$0.isEnabled }) {
+            fail("stage acknowledgment did not release its input and close locks")
+        }
+        window.makeFirstResponder(nil)
         guard let sameActionDraft = fields(window.contentView!).first(where: {
             $0.isEditable && $0.accessibilityLabel() == "Ashes"
         }), window.makeFirstResponder(sameActionDraft),
@@ -1172,7 +1232,29 @@ struct Main {
         sameActionEditor.selectAll(nil)
         sameActionEditor.insertText("3.5", replacementRange: sameActionEditor.selectedRange())
         window.makeFirstResponder(nil); pump(0.10)
+        guard window.makeFirstResponder(retainedDraft), retainedDraft.currentEditor()?.string == "3.5" else {
+            fail("could not focus an existing correction before the authority-changing Apply")
+        }
+        let applyFields = fields(window.contentView!).filter {
+            $0.isEditable && ["Ashes", "Nectar"].contains($0.accessibilityLabel() ?? "")
+        }
+        let capturedDraftIDs = Set(model.textDrafts.keys)
+            .union(model.typedDrafts.keys).union(model.membershipDrafts.keys)
+        let beforeHeldApply = commands(at: commandLog).count
+        try holdReply("save_editor_apply")
         model.apply(baseline: model.baselineGeneration)
+        pumpUntil {
+            model.busy && applyFields.allSatisfy { !$0.isEnabled }
+                && commands(at: commandLog).count == beforeHeldApply + 1
+        }
+        guard model.busy, !toolWindows.canCloseAll, !applyFields.isEmpty,
+              applyFields.allSatisfy({ !$0.isEnabled }),
+              let applyParams = commands(at: commandLog).last?["params"] as? [String: Any],
+              let appliedDraftIDs = applyParams["draftEntryIds"] as? [String],
+              Set(appliedDraftIDs) == capturedDraftIDs else {
+            fail("Apply unlocked native input/closure or changed its captured draft set while busy")
+        }
+        try releaseReply()
         pump(0.35)
         if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("successful Apply did not clear the committed batch")

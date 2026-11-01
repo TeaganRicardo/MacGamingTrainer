@@ -112,6 +112,40 @@ struct Main {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         app.finishLaunching()
+        Timer.scheduledTimer(withTimeInterval: 0.01, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                exercise()
+                app.stop(nil)
+                app.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero,
+                    modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: false)
+            }
+        }
+        app.run()
+    }
+
+    @MainActor static func exercise() {
+        precondition(NSApp.isRunning, "tool-window fixture did not enter the AppKit application loop")
+        let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 240),
+                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        host.isReleasedWhenClosed = false
+        host.title = "Tool-window fixture Host"
+        host.center()
+        defer { host.close() }
+        @MainActor func activateHost(before operation: String) {
+            // In the product, the user opens a tool from the active Host.
+            // Keep that independent native window present while a tool is minimized.
+            host.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            wait("fixture Host did not become active/key before " + operation, onFailure: {
+                FileHandle.standardError.write(Data(("tool_window_fixture_activation_failure "
+                    + "operation=\(operation) running=\(NSApp.isRunning) active=\(NSApp.isActive) "
+                    + "visible=\(host.isVisible) key=\(host.isKeyWindow)\n").utf8))
+            }) {
+                NSApp.isRunning && NSApp.isActive && host.isVisible && host.isKeyWindow
+            }
+        }
+        activateHost(before: "initial open")
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         let store = TrainerToolWindowStore()
         let draft = DocumentDraft()
@@ -125,8 +159,10 @@ struct Main {
                 DraftView(draft: draft)
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
         pump(0.2)
+        wait("initial tool did not become the active key window") {
+            NSApp.isActive && first.isVisible && first.isKeyWindow
+        }
         let originalContent = first.contentView
         let field = fields(originalContent!).first { $0.isEditable }!
         precondition(first.makeFirstResponder(field), "tool draft refused native focus")
@@ -150,6 +186,10 @@ struct Main {
         trace.record("before miniaturize", window: first)
         first.miniaturize(nil)
         wait("native tool did not minimize", onFailure: { restorationFailure("minimize") }) { first.isMiniaturized }
+        // Restore through an active Host action. The Store must itself make
+        // the retained tool key; the fixture never raises it after open returns.
+        activateHost(before: "minimized tool reopen")
+        precondition(first.isMiniaturized, "Host activation restored the tool before Store.open")
         trace.record("before reopen", window: first)
         let restored = store.open(id: "first", title: "Restored", localization: localization, theme: .standard) {
             fatalError("Restoring a minimized tool reread its document")

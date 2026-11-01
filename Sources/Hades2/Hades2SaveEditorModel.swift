@@ -448,7 +448,6 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var pendingPhysicalChangeCount = 0
     @Published private(set) var editRevision = 0
     private(set) var reconciledEntryIDs: Set<String>?
-    @Published private(set) var busy = false
     @Published private(set) var operationFailures: [Hades2Command: TrainerTextToken] = [:]
     @Published private(set) var editFailures: [String: TrainerTextToken] = [:]
     @Published private(set) var textDrafts: [String: String] = [:]
@@ -459,11 +458,31 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingActions.count }
+    var busy: Bool { !pendingRequests.isEmpty }
+
+    /// A pending stage/unstage owns one entry, not another field's native draft.
+    /// Command admission and window closure still use the full busy lifetime.
+    func canEditText(_ entry: Hades2SaveEditorEntry) -> Bool {
+        guard owns(entry.baselineGeneration) else { return false }
+        return pendingRequests.values.allSatisfy { lock in
+            switch lock {
+            case .workspace: return false
+            case .entry(let identifier, let workspace, let baseline):
+                // An older workspace's completion cannot grant an exemption
+                // to fields in a replacement document, even if IDs repeat.
+                return workspace == workspaceID && baseline == baselineGeneration && identifier != entry.id
+            }
+        }
+    }
 
     private let api: Hades2API
     private let backendSession: TrainerBackendSession
     private var language: TrainerPresentationLanguage = .zhCN
-    private var pendingRequests = 0
+    private enum TextEditLock {
+        case workspace
+        case entry(String, workspaceID: String?, baseline: String?)
+    }
+    @Published private var pendingRequests: [UUID: TextEditLock] = [:]
     private var knownDisplayNames: [String: String] = [:]
     private let requests = TrainerSaveEditorReplyCoordinator()
     private var lastRequestedSearch: String?
@@ -1403,9 +1422,16 @@ final class Hades2SaveEditorModel: ObservableObject {
             : requests.capture(request.command == .saveEditorInventory ? .inventory : lane,
                                bindsDocument: ownsWorkspace)
         let backendLifecycle = backendSession.lifecycleID
+        let requestID = UUID()
         if occupy {
-            pendingRequests += 1
-            busy = true
+            switch request {
+            case .saveEditorStage(let entryID, _, _, _), .saveEditorUnstage(let entryID, _):
+                pendingRequests[requestID] = .entry(entryID, workspaceID: requestWorkspaceID, baseline: requestBaseline)
+            default:
+                // Reads, target changes, Apply and whole-batch cancellation can
+                // replace a draft's authority. They keep every input disabled.
+                pendingRequests[requestID] = .workspace
+            }
         }
         api.request(
             request,
@@ -1439,8 +1465,9 @@ final class Hades2SaveEditorModel: ObservableObject {
             },
             completion: { [weak self] _ in
                 guard let self, occupy else { return }
-                self.pendingRequests = max(0, self.pendingRequests - 1)
-                self.busy = self.pendingRequests > 0
+                // A superseded reply can finish after a newer document request;
+                // only its own lock retires, even when the backend reused IDs.
+                self.pendingRequests.removeValue(forKey: requestID)
             }
         )
     }

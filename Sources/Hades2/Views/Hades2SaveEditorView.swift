@@ -556,7 +556,7 @@ struct Hades2SaveEditorView: View {
                 }
             )
             .id(identity ?? entry.id)
-            .disabled(model.busy)
+            .disabled(!model.canEditText(entry))
             .frame(width: 175)
         }
     }
