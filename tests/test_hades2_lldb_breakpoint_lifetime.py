@@ -12,6 +12,91 @@ ROOT = Path(__file__).resolve().parents[1]
 from hades2_lldb_worker_support import run_lldb_worker, phase, worker_failure_output
 from hades2_debugserver_owner import _AuditToken, DarwinProcesses
 
+
+def observe_supported_rosetta_once():
+    """Diagnostic-PR-only comparison for #565; this branch is not for merging."""
+    from argparse import Namespace
+    from contextlib import redirect_stderr, redirect_stdout
+    import hashlib
+    import signal
+    import traceback
+    import hades_rosetta_diagnostic as diagnostic
+
+    diagnostic_path = Path(diagnostic.__file__).resolve()
+    diagnostic_sha = hashlib.sha256(diagnostic_path.read_bytes()).hexdigest()
+    assert diagnostic_sha == "e7315084f16348a2d17b620228d7c6600a9831c1b50bbceb16018f10e7e42d01", (
+        "The comparison must use the unchanged RDC diagnostic", diagnostic_sha,
+    )
+    # Run only the frozen probe's parent here. It launches its own Xcode-Python
+    # worker and owns the default Rosetta server through Darwin audit identity.
+    # run_lldb_worker(xcode_lldb=True) would force a different SDK server.
+    # Its preparation has 15s compile, 5s discovery and six 5s identity bounds;
+    # its worker keeps the original 30s bound and cleanup its two 2s bounds.
+    # An exceptional outer overrun raises in Python so that parent's finally
+    # still performs its audit-token cleanup; never SIGKILL the parent first.
+    parent_budget_seconds = 100
+
+    def parent_deadline(_signum, _frame):
+        raise TimeoutError("Rosetta diagnostic parent exceeded its 100-second envelope")
+
+    with tempfile.TemporaryDirectory(prefix="mgt-565-ci-observation-") as temporary:
+        directory = Path(temporary)
+        observation = directory / "observation"
+        parent_stdout = directory / "parent.stdout"
+        parent_stderr = directory / "parent.stderr"
+        print("rosetta565.begin " + json.dumps({
+            "purpose": "One synthetic translated attach and first Hades execute; no real game acceptance",
+            "probe_sha256": diagnostic_sha, "iterations": 1,
+            "worker_timeout_seconds": 30, "parent_budget_seconds": parent_budget_seconds,
+            "ci": {key: os.environ.get(key) for key in (
+                "HEAD_SHA", "RUNNER_ARCH", "MGT_MACOS_RUNNER_LABEL", "DEVELOPER_DIR",
+            )},
+        }), flush=True)
+        result = None
+        try:
+            with parent_stdout.open("w") as output, parent_stderr.open("w") as errors, \
+                    redirect_stdout(output), redirect_stderr(errors):
+                if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
+                    raise RuntimeError("Rosetta diagnostic cannot replace an existing parent timer")
+                previous_handler = signal.signal(signal.SIGALRM, parent_deadline)
+                signal.setitimer(signal.ITIMER_REAL, parent_budget_seconds)
+                try:
+                    result = diagnostic.parent(Namespace(
+                        repo=ROOT, output=observation, iterations=1,
+                        timeout=30, scenario="normal",
+                    ))
+                except BaseException:
+                    traceback.print_exc()
+                    raise
+                finally:
+                    signal.setitimer(signal.ITIMER_REAL, 0)
+                    signal.signal(signal.SIGALRM, previous_handler)
+        finally:
+            # The existing PR lane retains its console, not diagnostic artifacts,
+            # and deletes its temporary tree. Emit complete textual traces and
+            # their byte hashes before cleanup, including setup/attach failures.
+            # Prefix every line so packet data cannot become a workflow command.
+            evidence = [parent_stdout, parent_stderr] + [observation / name for name in (
+                "environment.json", "summary.json", "operations.jsonl",
+                "owned-servers.json", "worker-go", "server-owned", "attached",
+                "worker.stdout", "worker.stderr", "gdb-remote.log", "lldb-process.log",
+            )]
+            for path in evidence:
+                if not path.is_file():
+                    print(f"rosetta565.file {path.name}: <not written>", flush=True)
+                    continue
+                data = path.read_bytes()
+                print("rosetta565.file " + json.dumps({
+                    "name": path.name, "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }), flush=True)
+                for line in data.decode("utf-8", errors="backslashreplace").splitlines():
+                    print(f"rosetta565[{path.name}] {line}", flush=True)
+            print("rosetta565.end " + json.dumps({"returncode": result}), flush=True)
+        if result != 0:
+            raise AssertionError(f"Rosetta diagnostic failed ({result}); retained evidence is in the PR log")
+
+
 # GitHub's runner Python is not ABI-matched to Xcode's private _lldb
 # extension. Run the regression under the same Xcode Python + LLDB module path
 # used by the production Hades sidecar. Do not nest a second SBDebugger inside
@@ -135,6 +220,7 @@ int main(void) {
                 f"Xcode-Python LLDB {scenario} regression failed:\n" + stdout
             )
         print(stdout, end='')
+    observe_supported_rosetta_once()
     print("hades2_lldb_breakpoint_lifetime_ok")
     raise SystemExit(0)
 
