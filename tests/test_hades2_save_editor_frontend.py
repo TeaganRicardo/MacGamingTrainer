@@ -1816,6 +1816,62 @@ struct Main {
             fail("explicit read did not replace the document and reset its staged batch")
         }
 
+        // A delayed query and two consecutive source reads race on the same
+        // persistent model. Only the final source may update its projection;
+        // stale first-read workspaces are released rather than adopted.
+        guard let preRaceEntry = backupModel.items.first else { fail("race fixture has no entry") }
+        let preRaceBaseline = preRaceEntry.baselineGeneration
+        backupModel.retainTextDraft("unfinished source draft", for: preRaceEntry)
+        backupModel.search = "detail-race"
+        let previousQueryCount = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
+        backupModel.query()
+        pumpUntil {
+            commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count > previousQueryCount
+        }
+        backupModel.selectedSourceID = "main/Profile2_Temp.sav"
+        backupModel.openSelection()
+        backupModel.selectedSourceID = "main/Profile2_Archive.sav"
+        backupModel.openSelection()
+        pumpUntil(timeout: 4.0) {
+            !backupModel.busy && !backupModel.querying
+                && backupModel.sourceRelativePath == "Profile2_Archive.sav"
+                && backupModel.items.first?.value == AnyHashable(902)
+                && backupModel.baselineGeneration != preRaceBaseline
+        }
+        if backupModel.selectedTargetID != "main/Profile1.sav"
+            || backupModel.items.first?.value != AnyHashable(902)
+            || !backupModel.textDrafts.isEmpty || !backupModel.typedDrafts.isEmpty {
+            fail("rapid source switching kept a superseded query or redirected old draft ownership")
+        }
+        let afterRead = commands(at: commandLog)
+        let beforeOldStage = afterRead.filter { $0["command"] as? String == "save_editor_stage" }.count
+        backupModel.stage(entryID: preRaceEntry.id, operation: "set", value: 990,
+                          baseline: preRaceEntry.baselineGeneration)
+        pump(0.05)
+        if commands(at: commandLog).filter({ $0["command"] as? String == "save_editor_stage" }).count != beforeOldStage {
+            fail("stale row staged against a newly opened source")
+        }
+
+        // Closing before a pending query returns must prevent the old reply
+        // from mutating the same model reopened on a fresh baseline.
+        let closingWorkspace = backupModel.workspaceID
+        backupModel.search = "detail-race"
+        let beforeCloseQuery = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
+        backupModel.query()
+        pumpUntil {
+            commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count > beforeCloseQuery
+        }
+        backupModel.close()
+        backupModel.open(language: .en)
+        pumpUntil(timeout: 4.0) {
+            backupModel.workspaceID != nil && backupModel.workspaceID != closingWorkspace
+                && !backupModel.busy && !backupModel.querying && !backupModel.items.isEmpty
+        }
+        if backupModel.sourceRelativePath != "Profile2_Temp.sav"
+            || backupModel.items.first?.value != AnyHashable(901) {
+            fail("close/reopen accepted a delayed query from the retired workspace")
+        }
+
         let finalWorkspace = model.workspaceID
         let backupOwnerBeforeClose = backupModel.workspaceID
         let beforeFocus = commands(at: commandLog).count
