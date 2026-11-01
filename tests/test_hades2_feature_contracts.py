@@ -14,6 +14,7 @@ store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
 navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
 core_management = read('Sources/Core/UI/Components/TrainerManagementGroups.swift')
+core_profiles = read('Sources/Core/UI/Components/TrainerProfileManagerView.swift')
 schema = read('Backend/games/hades2/schema.py')
 feature_generator = read('Tools/generate_hades2_feature_bindings.py')
 feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
@@ -97,8 +98,16 @@ assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
 assert "clearProfileShortcutWarning()" in model + management
-assert '.onDisappear { model.clearProfileShortcutWarning() }' in management
-assert 'Text(localization.string(warning))' in management
+# The module resolves its warning token before the shared profile sheet renders
+# the text; dismissal still clears the module-owned warning.
+profile_manager = source_section(management, "struct Hades2ProfileManagerView: View {", "struct Hades2DiagnosticsView: View {")
+assert "TrainerProfileManagerView(" in profile_manager
+assert 'warning: model.profileShortcutWarning.map { localization.string($0) } ?? ""' in profile_manager
+assert '.onDisappear { model.clearProfileShortcutWarning() }' in profile_manager
+profile_warning = source_section(core_profiles, "if !warning.isEmpty {", "            HStack(spacing: 10)")
+assert "Text(warning)" in profile_warning
+assert ".foregroundStyle(theme.warning)" in profile_warning
+assert ".fixedSize(horizontal: false, vertical: true)" in profile_warning
 shortcut_settings = management[management.index("struct Hades2ShortcutSettingsView"):management.index("struct Hades2ManagementUtilities")]
 shared_settings = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text()
 assert "TrainerShortcutSettingsView(" in shortcut_settings
