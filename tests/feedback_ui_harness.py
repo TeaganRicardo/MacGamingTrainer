@@ -4,7 +4,7 @@ FEEDBACK_JOURNEY = r'''
 @MainActor private final class FeedbackPresentationState: ObservableObject {
     @Published var notice: TrainerFeedbackNotice?
     @Published var detailsID: UUID?
-    @Published var visible = true
+    let pageVisibility = TrainerGamePageVisibility()
     @Published var busy = false
     @Published var connected = false
     var requests = 0
@@ -35,7 +35,7 @@ private struct FeedbackPresentationFixture: View {
                 onPrimary: { state.requests += 1; state.busy = true }, onRestart: { state.requests += 1 })
             TrainerFeedbackOverlay(notice: state.notice, onDismiss: state.dismiss,
                 onDetails: { state.detailsID = $0 }, detailsNoticeID: state.detailsID)
-                .environment(\.trainerGamePageVisible, state.visible)
+                .environment(\.trainerGamePageVisibility, state.pageVisibility)
             Spacer(minLength: 0)
         }.padding(12)
     }
@@ -86,10 +86,10 @@ func exerciseFeedbackPresentation(localization: TrainerLocalizationStore) {
 
             state.notice = TrainerFeedbackNotice(text: .init(key: "host.backend.notice.completed"), tone: .information)
             managementWait(host, "feedback reappears for a later event") { control("dismiss") != nil }
-            state.visible = false
+            state.pageVisibility.setVisible(false)
             managementWait(host, "hidden page cannot expose feedback actions") { control("dismiss") == nil }
             managementCheck(state.notice != nil, "page selection erased its originating operation notice")
-            state.visible = true
+            state.pageVisibility.setVisible(true)
             managementWait(host, "returning page shows its own retained notice") { control("dismiss") != nil }
             managementCheck(state.requests == 0, "feedback transitions generated a backend action")
 

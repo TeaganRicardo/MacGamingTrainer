@@ -164,18 +164,18 @@ final class GenerateAction: NSObject {
  init(_ model: Hades2TrainerModel) { self.model=model }
  @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
 }
-@MainActor final class PageVisibility: ObservableObject {
- @Published var visible = true
+@MainActor final class PageVisibility {
+ let pageVisibility = TrainerGamePageVisibility()
  var destinations: [String] = []
 }
 struct HeaderFixture: View {
  @ObservedObject var model: Hades2TrainerModel
- @ObservedObject var visibility: PageVisibility
+ let visibility: PageVisibility
  var body: some View {
   VStack {
    Hades2SidebarActions(model:model)
    Hades2HeaderActions(model:model)
-  }.environment(\.trainerGamePageVisible,visibility.visible)
+  }.environment(\.trainerGamePageVisibility,visibility.pageVisibility)
    .environment(\.trainerNavigateToSection) { visibility.destinations.append($0) }
  }
 }
@@ -230,17 +230,17 @@ struct HeaderFixture: View {
    // Let SwiftUI observe the native focus transition before hiding the page.
    pump()
    wait("workbench search did not enter native editing") { searchField.currentEditor() != nil }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("hiding the game retained search-field focus") { searchField.currentEditor() == nil }
-   visibility.visible=true; pump()
+   visibility.pageVisibility.setVisible(true); pump()
    model.workbenchSearch="Invincibility"
    wait("search results did not open") { hasPopover() }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("a hidden game retained its search popover") { !hasPopover() }
    check(model.workbenchSearch=="Invincibility", "hiding the page erased its search input")
    model.workbenchSearch="Gold"; pump()
    check(!hasPopover(), "a background search change reopened a hidden popover")
-   visibility.visible=true; pump()
+   visibility.pageVisibility.setVisible(true); pump()
    check(!hasPopover() && model.workbenchSearch=="Gold", "returning to the page lost input or reopened stale results")
    model.workbenchSearch="Grasp"
    wait("numeric search results did not open") { hasPopover() }
@@ -269,7 +269,7 @@ struct HeaderFixture: View {
          "workbench query, selection, clear or page switching issued a backend request")
    model.error="host.operationFailed"; pump(); model.showFeedbackDetails()
    wait("feedback details did not open") { model.feedbackDetailsPresented && hasPopover() }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("a hidden game retained its feedback popover") { !model.feedbackDetailsPresented && !hasPopover() }
    check(!model.currentIssues.isEmpty, "hiding feedback erased the underlying issue")
    session.stop(); window.close(); phase("navigation:complete"); return

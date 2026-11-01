@@ -1,14 +1,10 @@
 """Actual module-view slider journeys shared by the existing frontend owners."""
 
 SLIDER_JOURNEY = r'''
-@MainActor private final class SliderPageVisibility: ObservableObject {
-    @Published var visible = true
-}
-
 private struct SliderPageFixture<Content: View>: View {
     let content: Content
-    @ObservedObject var visibility: SliderPageVisibility
-    var body: some View { content.environment(\.trainerGamePageVisible, visibility.visible) }
+    let visibility: TrainerGamePageVisibility
+    var body: some View { content.environment(\.trainerGamePageVisibility, visibility) }
 }
 
 func sliderJourneyCheck(_ condition: @autoclosure () -> Bool, _ message: String) {
@@ -57,7 +53,7 @@ func exerciseModuleSlider<Content: View>(
     NSApp.setActivationPolicy(.regular)
     NSApp.finishLaunching()
     NSApp.activate(ignoringOtherApps: true)
-    let visibility = SliderPageVisibility()
+    let visibility = TrainerGamePageVisibility()
     let host = NSHostingView(rootView: SliderPageFixture(content: content, visibility: visibility)
         .environmentObject(localization))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1150, height: 2400),
@@ -127,12 +123,12 @@ func exerciseModuleSlider<Content: View>(
     }
     sliderJourneyCheck(value("0.5") && mutations().count == before + 1,
                        "observation overwrote the preview or dispatched a mutation")
-    visibility.visible = false
+    visibility.setVisible(false)
     sliderJourneyWait(host, "hidden-page cancellation restores latest observation") {
         slider()?.enabled == false && value("3.0")
     }
     mouse(.leftMouseUp, position: 0.25)
-    visibility.visible = true
+    visibility.setVisible(true)
     sliderJourneyWait(host, "return to retained game page") { slider()?.enabled == true && value("3.0") }
     sliderJourneyCheck(mutations().count == before + 1 && commands().count == receivedBefore + 2,
                        "hidden or returning page committed a cancelled pointer")
