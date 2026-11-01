@@ -15,7 +15,7 @@ struct Hades2SidebarActions: View {
                 TrainerSectionButton(
                     title: Hades2GameModule.resolveText(key: section.titleKey, localization: localization),
                     systemImage: section.icon,
-                    selected: selectedSection == section.id
+                    selected: selectedSection == section.id || (selectedSection == nil && section == .values)
                 ) {
                     model.showWorkbenchSection(section)
                     navigate(section.id)
