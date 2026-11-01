@@ -1,9 +1,8 @@
 import json
-import os
 from pathlib import Path
-import tempfile
 
 from core.adapter import AdapterError
+from core.persistence import atomic_write_text
 from .schema import DEFAULT_PREFERENCES, preference_document
 
 
@@ -39,18 +38,7 @@ class HadesPreferenceStore:
 
     def save(self, features):
         document = {'schemaVersion': 1, 'features': preference_document(features)}
-        temporary = None
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            fd, name = tempfile.mkstemp(prefix='.preferences-', dir=self.path.parent)
-            temporary = Path(name)
-            with os.fdopen(fd, 'w') as stream:
-                json.dump(document, stream, allow_nan=False)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, self.path)
+            atomic_write_text(self.path, json.dumps(document, allow_nan=False))
         except OSError as error:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed', diagnostic=str(error)) from error
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
