@@ -380,11 +380,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
     # it exists only in this temporary compilation, with no product test hook.
     resource_source = ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift"
     resource_text = resource_source.read_text()
-    allocation_anchor = """                .trainerPickerWidth(.flexible)
+    allocation_anchor = """                .trainerPickerWidth(.expanding)
                 .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))"""
     assert resource_text.count(allocation_anchor) == 1, "actual resource picker role changed"
     observed_resource = directory / "TrainerResourceControls.swift"
-    observed_resource.write_text(resource_text.replace(allocation_anchor, """                .trainerPickerWidth(.flexible)
+    observed_resource.write_text(resource_text.replace(allocation_anchor, """                .trainerPickerWidth(.expanding)
                 .background(PickerAllocationProbe().allowsHitTesting(false).accessibilityHidden(true))
                 .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))"""))
     core_sources = [observed_resource if source == resource_source else source
