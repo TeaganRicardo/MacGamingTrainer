@@ -236,7 +236,7 @@ struct HadesSidebarActions: View {
                 TrainerSectionButton(
                     title: HadesPresentation.text(section.titleKey, language: localization.language),
                     systemImage: section.icon,
-                    selected: selectedSection == section.id
+                    selected: selectedSection == section.id || (selectedSection == nil && section == .values)
                 ) {
                     navigate(section.id)
                 }
