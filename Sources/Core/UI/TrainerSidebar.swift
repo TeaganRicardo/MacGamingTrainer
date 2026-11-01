@@ -105,6 +105,9 @@ struct TrainerSidebarCard<Actions: View>: View {
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
+        // Keep module-selection motion scoped to this small sidebar subtree.
+        // Retained game-page trees are deliberately outside this transaction.
+        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
 
     }
 }

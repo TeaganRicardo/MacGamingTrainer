@@ -30,8 +30,9 @@ theme = read("Sources/Core/UI/TrainerTheme.swift")
 assert '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)' not in pages
 card = section(sidebar, "struct TrainerSidebarCard", "struct TrainerSidebar<")
 selection_motion = '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)'
-assert card.count(selection_motion) == 1
+assert card.count(selection_motion) == 2
 assert card.index(selection_motion) < card.index(".frame(width: 24)")
+assert card.rindex(selection_motion) > card.index(".trainerSurface(selected ? .raised : .panel")
 assert ".opacity(context.id == application.selectedGameID ? 1 : 0)" in pages
 assert ".allowsHitTesting(context.id == application.selectedGameID)" in pages
 
