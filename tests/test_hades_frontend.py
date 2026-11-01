@@ -1,7 +1,7 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
 from pathlib import Path
-from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY
+from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -420,6 +420,28 @@ func pump(_ seconds: TimeInterval = 0.1) {
         localization.language = .en
         localization.registerModulePresentation(prefix:HadesGameModule.presentationKeyPrefix,
             resolver:HadesGameModule.presentationText)
+        exerciseManagementRouting(localization: localization)
+        let menuCatalog = HadesManagementCatalog.make(model: model, localization: localization)
+        check(menuCatalog.additionalMaintenance.isEmpty && menuCatalog.saveEditor == nil && menuCatalog.saveManagement == nil,
+              "Hades app menu fabricated unavailable image or document commands")
+        menuCatalog.profiles.perform()
+        wait("profile menu routed to Hades") { !model.busy && model.profilesPresented && commands().last?["command"] as? String == "list_profiles" }
+        model.profilesPresented = false
+        menuCatalog.diagnostics.perform()
+        wait("diagnostics menu routed to Hades") { !model.busy && model.diagnosticsPresented && commands().last?["command"] as? String == "diagnostics" }
+        model.diagnosticsPresented = false
+        var editorOpens = 0, backupOpens = 0
+        let documentCatalog = HadesManagementCatalog.make(model: model, localization: localization,
+            openSaveEditor: { editorOpens += 1 }, openSaveManagement: { backupOpens += 1 })
+        documentCatalog.saveEditor?.perform(); documentCatalog.saveManagement?.perform()
+        check(editorOpens == 1 && backupOpens == 1, "Hades optional document actions lost their original callbacks")
+        exerciseManagementLayout(content: {
+            HadesManagementUtilities(model: model)
+                .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
+        }, catalog: { HadesManagementCatalog.make(model: model, localization: localization,
+                openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
+        exerciseManagementPageDismissal(HadesTrainerView(model: model), localization: localization,
+            show: { model.diagnosticsPresented = true }, dismissed: { !model.diagnosticsPresented })
         model.profilesPresented = true
         exerciseProfileManager(
             HadesProfileManagerView(model: model),
@@ -1098,6 +1120,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
         var complete=false
         model.prepareForTermination { complete=true }
         wait("prepareForTermination: backend shutdown completion") { complete }
+        model.profilesPresented = false; model.diagnosticsPresented = false
+        let afterShutdown = commands().count
+        wait("captured Hades commands disabled after backend shutdown") {
+            !menuCatalog.refresh.isEnabled && !menuCatalog.profiles.isEnabled && !menuCatalog.diagnostics.isEnabled
+        }
+        menuCatalog.refresh.perform(); menuCatalog.profiles.perform(); menuCatalog.diagnostics.perform()
+        pump()
+        check(commands().count == afterShutdown && !model.profilesPresented && !model.diagnosticsPresented,
+              "captured Hades commands crossed their retired backend lifetime")
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")
     }
@@ -1108,7 +1139,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
     (folder / 'worker.py').write_text(WORKER.replace('HOST_VERSION', str(HOST_PROTOCOL_VERSION)).replace(
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion'])))
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()

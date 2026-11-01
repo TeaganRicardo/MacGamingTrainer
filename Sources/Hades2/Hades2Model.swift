@@ -248,6 +248,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
+    @Published var profilesPresented = false
+    @Published var diagnosticsPresented = false
 
     private lazy var runLogWatcher = Hades2RunLogWatcher(directoryURL: runLogDirectoryURL) { [weak self] event in
         self?.handleRunLogEvent(event)

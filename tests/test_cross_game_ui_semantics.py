@@ -217,12 +217,15 @@ for path in (
         assert f"TrainerSemanticIcon.Section.{semantic}" in source
 
 for path in (
-    ROOT / "Sources/Hades/HadesManagement.swift",
-    ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift",
+    ROOT / "Sources/Hades/HadesManagementActions.swift",
+    ROOT / "Sources/Hades2/Services/Hades2ManagementActions.swift",
 ):
     source = path.read_text()
-    for semantic in ("saveEditor", "saveManagement", "disableAll", "profiles", "shortcuts", "log", "diagnostics"):
+    for semantic in ("saveEditor", "profiles", "diagnostics"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
+core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text()
+for semantic in ("saveManagement", "disableAll", "shortcuts", "log", "logHistory", "clearLogs", "refreshStatus"):
+    assert f"TrainerSemanticIcon.Tool.{semantic}" in core_management
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
     ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
@@ -289,7 +292,7 @@ for key in (
 
 assert "searchAliasKeys" not in hades_nav
 hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
-assert "systemImage: entry.icon" in hades2_host
+assert "icon: { $0.icon }" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
@@ -317,7 +320,9 @@ for path, start, end in (
     assert "model.runDiagnostics" in adapter and "model.exportDiagnostics" in adapter
     assert "ManagementError(model, localization: localization)" in adapter
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
-assert "systemImage: entry.icon" in hades_nav
+search_field = (ROOT / "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift").read_text()
+assert "systemImage: icon(entry)" in search_field
+assert "icon: { $0.icon }" in hades_nav
 
 # Executable product actions must carry an icon. This deliberately scans both
 # game UI trees so new actions cannot silently regress to text-only controls.

@@ -13,6 +13,7 @@ model = read('Sources/Hades2/Hades2Model.swift')
 store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
 navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
+core_management = read('Sources/Core/UI/Components/TrainerManagementGroups.swift')
 schema = read('Backend/games/hades2/schema.py')
 feature_generator = read('Tools/generate_hades2_feature_bindings.py')
 feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
@@ -142,8 +143,8 @@ if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
 visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
 # Disable All remains a visible action, but its fixed global shortcut is not
 # rendered as a badge beside the button.
-assert 'title: localization.localized("host.disableAll")' in management
-assert "systemImage: TrainerSemanticIcon.Tool.disableAll" in management
+assert 'case .disableAll: "host.disableAll"' in core_management
+assert "case .disableAll: TrainerSemanticIcon.Tool.disableAll" in core_management
 assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management
 visible_actions.append("disableAll")
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)

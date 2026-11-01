@@ -413,17 +413,17 @@ struct HeaderFixture: View {
          "exit cleanup left management mutations available or hid diagnostic logs")
    model.exiting=false; model.pid=nil; model.connected=true; pump()
    phase("management:layout")
-   // The same nine native actions remain present exactly once and inside their
+   // All common and optional native actions remain present exactly once and inside their
    // host at narrow and regular widths in both languages. This checks layout
    // bounds; rendered hierarchy and VoiceOver acceptance remain user-run.
-   let managementKeys=["hades2.saveEditor.title","host.saveManagement","host.disableAll",
+   let managementKeys=["host.refreshStatus","hades2.saveEditor.title","host.saveManagement","host.disableAll",
                        "hades2.manage.profiles","host.shortcutSettings","host.viewLog",
-                       "hades2.manage.diagnostics","hades2.manage.prepareSigning","hades2.manage.restoreSigning"]
+                       "host.viewLogHistory","host.clearCompletedLogs","hades2.manage.diagnostics",
+                       "hades2.manage.prepareSigning","hades2.manage.restoreSigning"]
    for width:CGFloat in [420,760] {
     for language in [TrainerPresentationLanguage.en,.zhCN] {
      localization.language=language; pump()
-     let layoutHost=NSHostingView(rootView:Hades2ManagementUtilities(model:model,
-       openProfiles:{},openSaveEditor:{},openDiagnostics:{})
+     let layoutHost=NSHostingView(rootView:Hades2ManagementUtilities(model:model,openSaveEditor:{})
        .environmentObject(localization)
        .environment(\.trainerManagementActions,TrainerManagementActions(openSaveManagement:{}))
        .frame(width:width))

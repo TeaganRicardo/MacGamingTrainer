@@ -87,16 +87,7 @@ struct Hades2ManagementCommands: Commands {
     }
 
     var body: some Commands {
-        CommandMenu(localization.localized("host.trainerMenu")) {
-            Button(localization.localized("host.refreshStatus")) { model.refreshFromHost() }
-                .disabled(model.busy)
-            Button(localization.localized("host.disableAll")) { model.disableAll() }
-                .disabled(model.busy || !model.connected)
-            Divider()
-            Button(localization.localized("host.shortcutSettings")) { model.shortcutSettingsPresented = true }
-            Button(localization.localized("host.viewLog")) { model.openLog() }
-            Button(localization.localized("host.viewLogHistory")) { model.openLogHistory() }
-            Button(localization.localized("host.clearCompletedLogs")) { model.clearCompletedLogs() }
-        }
+        TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"),
+            groups: Hades2ManagementCatalog.make(model: model, localization: localization).groups)
     }
 }

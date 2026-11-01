@@ -16,6 +16,7 @@ sidebar = (CORE_UI / "TrainerSidebar.swift").read_text()
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 hades1_management = (HADES1 / "HadesManagement.swift").read_text()
+core_management = (CORE_UI / "Components/TrainerManagementGroups.swift").read_text()
 primary_button = (CORE_UI / "Components/TrainerListControls.swift").read_text()
 lock_button = (CORE_UI / "Primitives/TrainerToggleControl.swift").read_text()
 occurrence = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
@@ -109,8 +110,9 @@ assert ".padding(.horizontal, theme.panelPadding)" not in save_editor
 assert ".padding(.horizontal, theme.rowHorizontalPadding)" in save_editor
 assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' not in management
 assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' not in hades1_management
-assert "TrainerSemanticIcon.Tool.disableAll" in management
-assert "TrainerSemanticIcon.Tool.disableAll" in hades1_management
+assert "TrainerManagementGroups(" in management
+assert "TrainerManagementGroups(" in hades1_management
+assert "TrainerSemanticIcon.Tool.disableAll" in core_management
 assert 'model.shortcutText(.disableAll))", systemImage: "power"' not in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "if hasContextualControls(for: trait)" not in view
@@ -198,7 +200,8 @@ assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gath
 assert "var shortcutAction: ShortcutAction" in types
 for action in actions:
     if action == "disableAll":
-        assert "TrainerSemanticIcon.Tool.disableAll" in management_view
+        assert "TrainerManagementGroups(" in management_view
+        assert "TrainerSemanticIcon.Tool.disableAll" in core_management
         assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management_view
         continue
     if action in common_actions:

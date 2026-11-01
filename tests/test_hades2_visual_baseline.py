@@ -86,7 +86,8 @@ assert 'TrainerSecondaryActionButton(' in occurrence
 assert 'TrainerSearchField(' in resource_controls
 assert 'TrainerPrimaryActionButton(' in save_editor
 assert 'TrainerPrimaryActionButton(' in status_controls
-assert 'TrainerPrimaryActionButton(' in management
+assert 'TrainerProfileManagerView(' in management
+assert 'TrainerPrimaryActionButton(' in (CORE_UI / 'Components/TrainerProfileManagerView.swift').read_text()
 assert '.buttonStyle(.borderedProminent)' not in status_controls
 assert 'theme.rowHorizontalPadding' in save_editor
 assert 'theme.panelPadding' not in save_editor

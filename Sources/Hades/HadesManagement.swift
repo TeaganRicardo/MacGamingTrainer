@@ -25,73 +25,17 @@ struct HadesManagementUtilities: View {
     }
 
     var body: some View {
+        let catalog = HadesManagementCatalog.make(model: model, localization: localization,
+            openSaveEditor: {
+                toolWindows.open("hades-save-editor", text("hades.saveEditor.title")) {
+                    HadesGameModule.makeSaveEditorWindow(model: model)
+                }
+            }, openSaveManagement: managementActions.openSaveManagement)
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
-            group("hades.manage.daily") {
-                actions {
-                    TrainerSecondaryActionButton(title: text("host.refreshStatus"), systemImage: HadesWorkbenchIcon.refreshStatus,
-                        enabled: model.hostActionsEnabled, action: model.refreshFromHost)
-                    TrainerSecondaryActionButton(title: text("hades.saveEditor.title"), systemImage: TrainerSemanticIcon.Tool.saveEditor,
-                        enabled: model.hostActionsEnabled) {
-                        toolWindows.open("hades-save-editor", text("hades.saveEditor.title")) {
-                            HadesGameModule.makeSaveEditorWindow(model: model)
-                        }
-                    }
-                    if let open = managementActions.openSaveManagement {
-                        TrainerSecondaryActionButton(title: text("host.saveManagement"), systemImage: TrainerSemanticIcon.Tool.saveManagement,
-                            enabled: model.hostActionsEnabled, action: open)
-                    }
-                    TrainerSecondaryActionButton(title: text("host.disableAll"), systemImage: TrainerSemanticIcon.Tool.disableAll,
-                        enabled: model.hostActionsEnabled, action: model.disableAll)
-                }
-            }
-            Divider()
-            group("hades.manage.settings") {
-                actions {
-                    TrainerSecondaryActionButton(title: text("hades.manage.profiles"), systemImage: TrainerSemanticIcon.Tool.profiles,
-                        enabled: model.hostActionsEnabled) {
-                        model.profilesPresented = true
-                        model.listProfiles()
-                    }
-                    TrainerSecondaryActionButton(title: text("host.shortcutSettings"), systemImage: TrainerSemanticIcon.Tool.shortcuts) {
-                        model.shortcutSettingsPresented = true
-                    }
-                }
-            }
-            Divider()
-            group("hades.manage.maintenance") {
-                actions {
-                    TrainerSecondaryActionButton(title: text("host.viewLog"), systemImage: TrainerSemanticIcon.Tool.log,
-                        action: model.openLog)
-                    TrainerSecondaryActionButton(title: text("hades.manage.diagnostics"), systemImage: TrainerSemanticIcon.Tool.diagnostics,
-                        enabled: model.hostActionsEnabled) {
-                        model.diagnosticsPresented = true
-                        model.runDiagnostics()
-                    }
-                }
-                actions {
-                    TrainerSecondaryActionButton(title: text("host.viewLogHistory"), systemImage: TrainerSemanticIcon.Tool.logHistory,
-                        action: model.openLogHistory)
-                    TrainerSecondaryActionButton(title: text("host.clearCompletedLogs"), systemImage: TrainerSemanticIcon.Tool.clearLogs,
-                        action: model.clearCompletedLogs)
-                }
-            }
+            TrainerManagementGroups(groups: catalog.groups)
             if !model.shortcutError.isEmpty {
                 TrainerMessageBanner(text: text(model.shortcutError), icon: "keyboard", color: theme.warning)
             }
-        }
-    }
-
-    private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: theme.controlPadding) {
-            Text(text(title)).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            content()
-        }
-    }
-
-    private func actions<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: theme.controlPadding) { content() }
-            VStack(alignment: .leading, spacing: theme.controlPadding) { content() }
         }
     }
 }

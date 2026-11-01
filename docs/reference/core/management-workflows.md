@@ -1,5 +1,26 @@
 # Shared management workflows
 
+`TrainerManagementCatalog` supplies the shared daily/settings/maintenance
+grouping used by `TrainerManagementGroups` and `TrainerManagementCommandMenu`.
+Core owns common Host labels, semantic icons, adaptive action rows and menu
+composition. Module catalogs bind those actions to their original model and
+retain live eligibility rules; each action rechecks eligibility when invoked.
+Document actions are optional Host/tool-window capabilities, and game-specific
+maintenance actions and explanatory copy remain module-supplied.
+
+The generated application menu still includes only the selected persistent game
+context and disappears during application termination. Both modules expose
+refresh, Disable All, profiles, shortcuts, diagnostics and current/history log
+actions. Hades I can clear durable intent while detached; Hades II retains its
+connected-runtime requirement. Image preparation/restoration remains Hades II's
+optional action pair and requires an idle backend with no connected or known
+running target. Module-owned sheet flags route page buttons and menu commands
+to the same presentation and are dismissed when that page becomes hidden.
+
+Existing native frontend fixtures cover shared command order, live unavailable
+actions, optional capabilities, context-bound callbacks, narrow bilingual
+layout, page dismissal and shutdown. These fixtures use temporary backends.
+
 `TrainerProfileManagerView` owns feature-profile sheet interaction for both
 production modules: name draft, stored selection, refresh, save/load/delete,
 busy admission, feedback and dismissal. Modules supply display strings, neutral

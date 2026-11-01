@@ -7,6 +7,8 @@ host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8"
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
+core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
+action_adapter = (ROOT / "Sources/Hades2/Services/Hades2ManagementActions.swift").read_text(encoding="utf-8")
 hades = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "Sources/Hades2").rglob("*.swift"))
 fixture = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 
@@ -49,12 +51,23 @@ assert "model.openLog()" not in game_management
 for token in (
     "struct Hades2ManagementUtilities",
     "@Environment(\\.trainerManagementActions) private var managementActions",
-    'title: localization.localized("host.shortcutSettings")',
-    'title: localization.localized("host.viewLog")',
-    'title: localization.localized("host.saveManagement")',
+    "TrainerManagementGroups(groups: catalog.groups)",
+    "Hades2ManagementCatalog.make(model: model, localization: localization",
     "managementActions.openSaveManagement",
 ):
     assert token in management, token
+
+for key in ("host.refreshStatus", "host.disableAll", "host.shortcutSettings", "host.viewLog",
+            "host.viewLogHistory", "host.clearCompletedLogs", "host.saveManagement"):
+    assert f'"{key}"' in core_management
+assert "CommandMenu(title)" in core_management
+assert "guard isEnabled else { return }" in core_management
+assert "TrainerManagementCommandMenu(" in host_actions
+assert "openSaveManagement.map" in action_adapter
+assert "canStartBackendAction() && !model.connected && model.pid == nil" in action_adapter
+generator = (ROOT / "Tools/generate_game_binding.py").read_text(encoding="utf-8")
+assert "if !application.terminationRequested && application.selectedGameID ==" in generator
+assert ".makeManagementCommands(model: context.model, localization: localization)" in generator
 
 # A module with no Save support needs no Hades-specific stub and receives the
 # environment default instead of a duplicated Core transaction owner.

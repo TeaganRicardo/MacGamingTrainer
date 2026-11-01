@@ -6,7 +6,7 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
-from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY
+from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -282,6 +282,46 @@ struct Main {
             count: { managementModel.diagnostics.count }, dismissed: { !diagnosticsPresented },
             commands: { commands(at: commandLog) }, setMode: setDiagnosticsMode)
         exerciseDiagnosticStatuses(localization: localization)
+        exerciseManagementRouting(localization: localization)
+        let menuCatalog = Hades2ManagementCatalog.make(model: managementModel, localization: localization)
+        managementCheck(menuCatalog.additionalMaintenance.map(\.id) == ["prepareSigning", "restoreSigning"],
+                        "optional image-maintenance commands lost their module owner")
+        menuCatalog.profiles.perform()
+        managementWait(host, "profile menu routed to Hades II") {
+            !managementModel.busy && managementModel.profilesPresented
+                && commands(at: commandLog).last?["command"] as? String == "list_profiles"
+        }
+        managementModel.profilesPresented = false
+        menuCatalog.diagnostics.perform()
+        managementWait(host, "diagnostics menu routed to Hades II") {
+            !managementModel.busy && managementModel.diagnosticsPresented
+                && commands(at: commandLog).last?["command"] as? String == "diagnostics"
+        }
+        managementModel.diagnosticsPresented = false
+        exerciseManagementLayout(content: {
+            Hades2ManagementUtilities(model: managementModel, openSaveEditor: {})
+                .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
+        }, catalog: { Hades2ManagementCatalog.make(model: managementModel, localization: localization,
+                openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
+        exerciseManagementPageDismissal(Hades2TrainerView(model: managementModel), localization: localization,
+            show: { managementModel.diagnosticsPresented = true }, dismissed: { !managementModel.diagnosticsPresented })
+        managementModel.connected = false; managementModel.pid = nil
+        managementCheck(!menuCatalog.disableAll.isEnabled && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled),
+                        "detached Hades II command eligibility changed")
+        managementModel.pid = 99
+        managementCheck(menuCatalog.additionalMaintenance.allSatisfy { !$0.isEnabled },
+                        "image-maintenance commands ignored a running target")
+        managementModel.pid = nil; managementModel.exiting = true
+        let afterExit = commands(at: commandLog).count
+        menuCatalog.profiles.perform(); menuCatalog.diagnostics.perform(); menuCatalog.shortcuts.perform()
+        menuCatalog.additionalMaintenance.forEach { $0.perform() }
+        pump(0.10)
+        managementCheck(commands(at: commandLog).count == afterExit
+                        && !managementModel.profilesPresented && !managementModel.diagnosticsPresented
+                        && !managementModel.shortcutSettingsPresented,
+                        "captured Hades II commands crossed shutdown")
+        managementCheck(menuCatalog.log.isEnabled && menuCatalog.logHistory.isEnabled,
+                        "shutdown removed diagnostic log access")
         managementSession.stop()
         pump(0.20)
         print("hades2_view_state_flow_ok")
@@ -297,7 +337,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     home = td / "home"
     home.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(

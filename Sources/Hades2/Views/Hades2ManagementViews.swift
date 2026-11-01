@@ -87,123 +87,13 @@ struct Hades2ManagementUtilities: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerManagementActions) private var managementActions
-    @Environment(\.trainerTheme) private var theme
-    let openProfiles: () -> Void
     let openSaveEditor: () -> Void
-    let openDiagnostics: () -> Void
-
-    private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
-    }
-
-    private var canUseBackend: Bool {
-        model.backendAvailable && model.protocolCompatible && !model.exiting
-    }
-
-    private var canStartBackendAction: Bool { canUseBackend && !model.busy }
-
-    private var canChangeSignature: Bool {
-        canStartBackendAction && !model.connected && model.pid == nil
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: theme.sheetSpacing) {
-            managementGroup("hades2.manage.daily") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.saveEditor.title"),
-                        systemImage: TrainerSemanticIcon.Tool.saveEditor,
-                        enabled: canUseBackend,
-                        action: openSaveEditor
-                    )
-                    if let openSaveManagement = managementActions.openSaveManagement {
-                        TrainerSecondaryActionButton(
-                            title: localization.localized("host.saveManagement"),
-                            systemImage: TrainerSemanticIcon.Tool.saveManagement,
-                            enabled: canUseBackend,
-                            action: openSaveManagement
-                        )
-                    }
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.disableAll"),
-                        systemImage: TrainerSemanticIcon.Tool.disableAll,
-                        enabled: model.connected && canUseBackend && model.canAcceptRuntimeAction,
-                        action: model.disableAll
-                    )
-                }
-            }
-            Divider()
-            managementGroup("hades2.manage.settings") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.profiles"),
-                        systemImage: TrainerSemanticIcon.Tool.profiles,
-                        enabled: canStartBackendAction,
-                        action: openProfiles
-                    )
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.shortcutSettings"),
-                        systemImage: TrainerSemanticIcon.Tool.shortcuts,
-                        enabled: !model.exiting,
-                        action: { model.shortcutSettingsPresented = true }
-                    )
-                }
-            }
-            Divider()
-            managementGroup("hades2.manage.maintenance") {
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: localization.localized("host.viewLog"),
-                        systemImage: TrainerSemanticIcon.Tool.log,
-                        action: model.openLog
-                    )
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.diagnostics"),
-                        systemImage: TrainerSemanticIcon.Tool.diagnostics,
-                        enabled: canStartBackendAction,
-                        action: openDiagnostics
-                    )
-                }
-                Text(text("hades2.manage.signatureExplanation"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                actionButtons {
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.prepareSigning"),
-                        systemImage: Hades2WorkbenchIcon.prepareSigning,
-                        enabled: canChangeSignature,
-                        action: model.prepareDebugging
-                    )
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.manage.restoreSigning"),
-                        systemImage: Hades2WorkbenchIcon.restoreSigning,
-                        enabled: canChangeSignature,
-                        action: model.restoreOriginalSignature
-                    )
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .trainerPanel()
-    }
-
-    private func managementGroup<Content: View>(
-        _ titleKey: String, @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: theme.controlPadding) {
-            Text(text(titleKey))
-                .font(.subheadline.weight(.semibold))
-                .accessibilityAddTraits(.isHeader)
-            content()
-        }
-    }
-
-    private func actionButtons<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: theme.controlPadding) { content() }
-            VStack(alignment: .leading, spacing: theme.controlPadding) { content() }
-        }
+        let catalog = Hades2ManagementCatalog.make(model: model, localization: localization,
+            openSaveEditor: openSaveEditor, openSaveManagement: managementActions.openSaveManagement)
+        TrainerManagementGroups(groups: catalog.groups)
+            .trainerPanel()
     }
 }
 

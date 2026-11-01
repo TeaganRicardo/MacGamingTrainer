@@ -1,5 +1,112 @@
 """Shared native-control journeys included by both existing macOS frontend tests."""
 
+MANAGEMENT_JOURNEY = r'''
+@MainActor
+func exerciseManagementRouting(localization: TrainerLocalizationStore) {
+    var available = ["first": true, "second": true]
+    var events: [String] = []
+    @MainActor func catalog(_ owner: String) -> TrainerManagementCatalog {
+        @MainActor func common(_ kind: TrainerManagementAction.Common) -> TrainerManagementAction {
+            .init(kind, localization: localization, enabled: { available[owner] == true }) {
+                events.append(owner + ":" + kind.rawValue)
+            }
+        }
+        func custom(_ id: String) -> TrainerManagementAction {
+            .init(id: id, title: id, icon: "gearshape", enabled: { available[owner] == true }) {
+                events.append(owner + ":" + id)
+            }
+        }
+        return .init(titles: .init(daily: "Daily", settings: "Settings", maintenance: "Maintenance"),
+            refresh: common(.refreshStatus), disableAll: common(.disableAll), profiles: custom("profiles"),
+            shortcuts: common(.shortcuts), log: common(.log), diagnostics: custom("diagnostics"),
+            logHistory: common(.logHistory), clearLogs: common(.clearLogs),
+            additionalMaintenance: owner == "first" ? [custom("optional")] : [])
+    }
+    let first = catalog("first"), second = catalog("second")
+    managementCheck(first.groups.flatMap(\.actions).map(\.id) == [
+        "refreshStatus", "disableAll", "profiles", "shortcuts", "log", "diagnostics", "logHistory", "clearLogs", "optional",
+    ], "common command order drifted or an absent document action was fabricated")
+    managementCheck(!second.groups.flatMap(\.actions).contains { $0.id == "optional" },
+                    "optional command leaked into another context")
+    first.refresh.perform(); second.diagnostics.perform(); first.additionalMaintenance[0].perform()
+    available["first"] = false
+    first.refresh.perform(); first.profiles.perform(); first.additionalMaintenance[0].perform()
+    second.profiles.perform()
+    managementCheck(events == ["first:refreshStatus", "second:diagnostics", "first:optional", "second:profiles"],
+                    "captured commands lost their context or ignored live unavailability")
+}
+
+@MainActor
+func exerciseManagementLayout<Content: View>(
+    content: () -> Content, catalog: () -> TrainerManagementCatalog, localization: TrainerLocalizationStore
+) {
+    let previousLanguage = localization.language
+    defer { localization.language = previousLanguage }
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        localization.language = language
+        for width: CGFloat in [420, 760] {
+            let expected = catalog().groups.flatMap(\.actions)
+            let host = NSHostingView(rootView: content().environmentObject(localization).frame(width: width))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 1000),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            managementWait(host, "common management actions at width \(width)") {
+                let controls = nativeAccessibilityControls(host)
+                return expected.allSatisfy { action in
+                    controls.filter { $0.role == "AXButton" && $0.identifier == "trainer.management." + action.id }.count == 1
+                }
+            }
+            let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
+            for action in expected {
+                let control = nativeAccessibilityControls(host).first { $0.identifier == "trainer.management." + action.id }!
+                managementCheck(control.label == action.title && control.enabled == action.isEnabled,
+                                "management action label or availability drifted: " + action.id)
+                managementCheck(control.frame.width > 0 && control.frame.height > 0 && bounds.contains(control.frame),
+                                "management action overflowed its narrow native host: " + action.id)
+            }
+            window.contentView = nil
+            window.close()
+        }
+    }
+}
+
+@MainActor private final class ManagementPageVisibility: ObservableObject {
+    @Published var visible = true
+}
+
+private struct ManagementPageFixture<Content: View>: View {
+    let content: Content
+    @ObservedObject var visibility: ManagementPageVisibility
+    var body: some View { content.environment(\.trainerGamePageVisible, visibility.visible) }
+}
+
+@MainActor
+func exerciseManagementPageDismissal<Content: View>(
+    _ content: Content, localization: TrainerLocalizationStore,
+    show: () -> Void, dismissed: () -> Bool
+) {
+    let visibility = ManagementPageVisibility()
+    let host = NSHostingView(rootView: ManagementPageFixture(content: content, visibility: visibility)
+        .environmentObject(localization))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    window.makeKeyAndOrderFront(nil)
+    host.layoutSubtreeIfNeeded()
+    show()
+    managementWait(host, "module management sheet presented") { window.attachedSheet != nil }
+    visibility.visible = false
+    managementWait(host, "hidden module management sheet dismissed") { dismissed() && window.attachedSheet == nil }
+    visibility.visible = true
+    host.layoutSubtreeIfNeeded()
+    managementCheck(dismissed(), "returning to the page reopened a stale management presentation")
+    window.contentView = nil
+    window.close()
+}
+'''
+
 PROFILE_JOURNEY = r'''
 func managementCheck(_ condition: @autoclosure () -> Bool, _ message: String) {
     if !condition() { fatalError(message) }

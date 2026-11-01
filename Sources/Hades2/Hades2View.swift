@@ -44,6 +44,7 @@ struct Hades2TrainerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerToolWindows) private var toolWindows
+    @Environment(\.trainerGamePageVisible) private var pageVisible
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @ViewState<EditField?> private var focusedField = nil
 
@@ -61,8 +62,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var selectedMaterial = ""
     @ViewState<String> private var search = ""
     @ViewState<String> private var multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
-    @ViewState<Bool> private var profileManager = false
-    @ViewState<Bool> private var diagnosticSheet = false
     @ViewState<String> private var moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
     @ViewState<String> private var materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
     @ViewState<String> private var gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
@@ -873,8 +872,15 @@ struct Hades2TrainerView: View {
     private var presentedContent: some View {
         rootContent
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
-            .sheet(isPresented: $profileManager) { Hades2ProfileManagerView(model: model, isPresented: $profileManager) }
-            .sheet(isPresented: $diagnosticSheet) { Hades2DiagnosticsView(model: model, isPresented: $diagnosticSheet) }
+            .sheet(isPresented: $model.profilesPresented) { Hades2ProfileManagerView(model: model, isPresented: $model.profilesPresented) }
+            .sheet(isPresented: $model.diagnosticsPresented) { Hades2DiagnosticsView(model: model, isPresented: $model.diagnosticsPresented) }
+            .onChange(of: pageVisible) { _, visible in
+                if !visible {
+                    model.shortcutSettingsPresented = false
+                    model.profilesPresented = false
+                    model.diagnosticsPresented = false
+                }
+            }
     }
 
     private var connectionSnapshot: Hades2ViewConnectionSnapshot {
@@ -1591,13 +1597,11 @@ struct Hades2TrainerView: View {
         TrainerSection(title: text("hades2.section.management"), icon: Hades2WorkbenchSection.management.icon) {
             Hades2ManagementUtilities(
                 model: model,
-                openProfiles: { profileManager = true; model.listProfiles() },
                 openSaveEditor: {
                     toolWindows.open("hades2-save-editor", text("hades2.saveEditor.title")) {
                         Hades2GameModule.makeSaveEditorWindow(model: model)
                     }
-                },
-                openDiagnostics: { diagnosticSheet = true; model.runDiagnostics() }
+                }
             )
         }
     }
