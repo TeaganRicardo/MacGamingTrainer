@@ -616,36 +616,30 @@ struct Hades2TrainerView: View {
                 .frame(width: 58)
                 .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
-                Button {
+                TrainerSecondaryActionButton(
+                    title: text("hades2.traits.apply"),
+                    enabled: canApplyTraitRemainingUses(trait)
+                ) {
                     model.setTraitRemainingUses(
                         trait,
                         targetRemainingUses: traitRemainingUsesInput
                     )
-                } label: {
-                    Label(text("hades2.traits.apply"), systemImage: TrainerSemanticIcon.Action.apply)
                 }
-                .buttonStyle(.bordered)
-                .lineLimit(1)
-                .disabled(!canApplyTraitRemainingUses(trait))
 
-                Button {
+                TrainerSecondaryActionButton(
+                    title: text("hades2.traits.expireNow"),
+                    enabled: model.canMutateTraits && trait.canExpire
+                ) {
                     model.expireTrait(trait)
-                } label: {
-                    Label(text("hades2.traits.expireNow"), systemImage: TrainerSemanticIcon.Concept.duration)
                 }
-                .buttonStyle(.bordered)
-                .lineLimit(1)
-                .disabled(!model.canMutateTraits || !trait.canExpire)
             }
         } else if trait.canAdvanceLifecycle {
-            Button {
+            TrainerSecondaryActionButton(
+                title: text("hades2.traits.chaos.advance"),
+                enabled: model.canMutateTraits
+            ) {
                 model.advanceTraitLifecycle(trait)
-            } label: {
-                Label(text("hades2.traits.chaos.advance"), systemImage: Hades2WorkbenchIcon.chaosAdvance)
             }
-            .buttonStyle(.bordered)
-            .lineLimit(1)
-            .disabled(!model.canMutateTraits)
         }
     }
 
