@@ -18,26 +18,23 @@ def observe_supported_rosetta_once():
     from argparse import Namespace
     from contextlib import redirect_stderr, redirect_stdout
     import hashlib
-    import signal
     import traceback
     import hades_rosetta_diagnostic as diagnostic
 
     diagnostic_path = Path(diagnostic.__file__).resolve()
     diagnostic_sha = hashlib.sha256(diagnostic_path.read_bytes()).hexdigest()
-    assert diagnostic_sha == "e7315084f16348a2d17b620228d7c6600a9831c1b50bbceb16018f10e7e42d01", (
-        "The comparison must use the unchanged RDC diagnostic", diagnostic_sha,
+    assert diagnostic_sha == "856adeaacf0bf7ce565bcffb0bb867044181766cc920fcd7d8bf4cb5688a570e", (
+        "The reviewed CI diagnostic changed unexpectedly", diagnostic_sha,
     )
-    # Run only the frozen probe's parent here. It launches its own Xcode-Python
+    # Run only the probe's parent here. It launches its own Xcode-Python
     # worker and owns the default Rosetta server through Darwin audit identity.
     # run_lldb_worker(xcode_lldb=True) would force a different SDK server.
     # Its preparation has 15s compile, 5s discovery and six 5s identity bounds;
-    # its worker keeps the original 30s bound and cleanup its two 2s bounds.
-    # An exceptional outer overrun raises in Python so that parent's finally
-    # still performs its audit-token cleanup; never SIGKILL the parent first.
-    parent_budget_seconds = 100
-
-    def parent_deadline(_signum, _frame):
-        raise TimeoutError("Rosetta diagnostic parent exceeded its 100-second envelope")
+    # its worker keeps the original 30s bound. Reap and server verification each
+    # wait at most 2s, with one further 2s reap only if the first failed.
+    # Keep those component budgets unchanged. An extra asynchronous deadline
+    # could interrupt that parent's audit-token cleanup after it had begun.
+    # The wrapper therefore installs no signal handler or parent kill timeout.
 
     with tempfile.TemporaryDirectory(prefix="mgt-565-ci-observation-") as temporary:
         directory = Path(temporary)
@@ -47,7 +44,10 @@ def observe_supported_rosetta_once():
         print("rosetta565.begin " + json.dumps({
             "purpose": "One synthetic translated attach and first Hades execute; no real game acceptance",
             "probe_sha256": diagnostic_sha, "iterations": 1,
-            "worker_timeout_seconds": 30, "parent_budget_seconds": parent_budget_seconds,
+            "comparison_probe_sha256": "e7315084f16348a2d17b620228d7c6600a9831c1b50bbceb16018f10e7e42d01",
+            "comparison_changes": "Parent cleanup only; worker, target, transport and server selection unchanged",
+            "worker_timeout_seconds": 30,
+            "budget_policy": "Probe component deadlines; no added asynchronous deadline",
             "ci": {key: os.environ.get(key) for key in (
                 "HEAD_SHA", "RUNNER_ARCH", "MGT_MACOS_RUNNER_LABEL", "DEVELOPER_DIR",
             )},
@@ -56,10 +56,6 @@ def observe_supported_rosetta_once():
         try:
             with parent_stdout.open("w") as output, parent_stderr.open("w") as errors, \
                     redirect_stdout(output), redirect_stderr(errors):
-                if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
-                    raise RuntimeError("Rosetta diagnostic cannot replace an existing parent timer")
-                previous_handler = signal.signal(signal.SIGALRM, parent_deadline)
-                signal.setitimer(signal.ITIMER_REAL, parent_budget_seconds)
                 try:
                     result = diagnostic.parent(Namespace(
                         repo=ROOT, output=observation, iterations=1,
@@ -68,9 +64,6 @@ def observe_supported_rosetta_once():
                 except BaseException:
                     traceback.print_exc()
                     raise
-                finally:
-                    signal.setitimer(signal.ITIMER_REAL, 0)
-                    signal.signal(signal.SIGALRM, previous_handler)
         finally:
             # The existing PR lane retains its console, not diagnostic artifacts,
             # and deletes its temporary tree. Emit complete textual traces and

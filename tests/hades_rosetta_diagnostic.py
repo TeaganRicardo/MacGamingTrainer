@@ -315,9 +315,11 @@ def parent(args):
     timeout_hit = False
     cleanup_errors = []
     with (args.output / "worker.stdout").open("w") as stdout, \
-            (args.output / "worker.stderr").open("w") as stderr, \
-            subprocess.Popen(command, stdout=stdout, stderr=stderr, env=environment,
-                             start_new_session=True) as process:
+            (args.output / "worker.stderr").open("w") as stderr:
+        # Popen.__exit__ performs an unbounded wait. Own this worker explicitly
+        # so a failed reap cannot bypass the escaped-server cleanup below.
+        process = subprocess.Popen(command, stdout=stdout, stderr=stderr, env=environment,
+                                   start_new_session=True)
         worker_identity = None
 
         def capture_owned():
@@ -360,23 +362,46 @@ def parent(args):
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait(timeout=2)
+            except Exception as error:
+                cleanup_errors.append("worker group cleanup: " + repr(error))
+            try:
+                process.wait(timeout=2)
+            except Exception as error:
+                cleanup_errors.append("worker reap: " + repr(error))
             for path, token in owned.values():
                 try:
                     if processes.path(token) == path:
                         processes.kill(token)
                 except Exception as error:
                     cleanup_errors.append("owned server cleanup: " + repr(error))
-            try:
-                cleanup_deadline = time.monotonic() + 2
-                while time.monotonic() < cleanup_deadline and any(
-                        processes.path(token) == path for path, token in owned.values()):
-                    time.sleep(.01)
-                for path, token in owned.values():
-                    if processes.path(token) == path:
+            cleanup_deadline = time.monotonic() + 2
+            pending = list(owned.values())
+            while pending:
+                remaining = []
+                for path, token in pending:
+                    try:
+                        if processes.path(token) == path:
+                            remaining.append((path, token))
+                    except Exception as error:
+                        cleanup_errors.append("cleanup verification: " + repr(error))
+                if not remaining:
+                    break
+                if time.monotonic() >= cleanup_deadline:
+                    for path, token in remaining:
                         cleanup_errors.append("owned server remains: " + str(int(token[5])))
-            except Exception as error:
-                cleanup_errors.append("cleanup verification: " + repr(error))
+                    break
+                pending = remaining
+                time.sleep(.01)
+            if process.returncode is None:
+                try:
+                    process.wait(timeout=2)
+                except Exception as error:
+                    cleanup_errors.append("final worker reap: " + repr(error))
+            # The observation itself may be propagating an exception, which
+            # skips the normal summary below. Keep cleanup evidence in that case.
+            print(json.dumps({"event": "probe.parent.cleanup", "cleanup_errors": cleanup_errors,
+                              "worker_returncode": process.returncode,
+                              "owned_server_count": len(owned)}), flush=True)
         returncode = process.returncode
     text = "\n".join(path.read_text(errors="replace") for path in (
         args.output / "worker.stdout", args.output / "worker.stderr"))
