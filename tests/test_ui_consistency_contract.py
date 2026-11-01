@@ -76,9 +76,14 @@ assert ".help(helpText ?? \"\")" in primary_button
 assert ".accessibilityLabel(accessibilityLabel ?? title)" in primary_button
 assert "helpText: generateHelp" in occurrence
 assert 'accessibilityLabel: title + " " + generateLabel' in occurrence
-assert "TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)" in primary_button
-assert ".frame(maxWidth: fillsWidth ? .infinity : nil)" in primary_button
-assert ".frame(width: width)" in primary_button
+# Core owns the same compact, text-only labeled action geometry for every
+# game. Legacy systemImage arguments on old callers cannot change rendering.
+assert primary_button.count("TrainerActionButtonLabel(title: title)") == 2
+label_body = primary_button[primary_button.index("private struct TrainerActionButtonLabel"):
+                            primary_button.index("struct TrainerPrimaryActionButton")]
+assert "Text(title)" in label_body and "Label(title, systemImage:" not in label_body
+assert ".frame(maxWidth: .infinity)" in label_body
+assert primary_button.count(".frame(width: width ?? theme.compactActionWidth)") == 2
 shortcut_sheet = (CORE_UI / "Components/TrainerShortcutSettingsView.swift").read_text()
 capture = (ROOT / "Sources/Core/Input/TrainerShortcutCapture.swift").read_text()
 assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in shortcut_sheet
