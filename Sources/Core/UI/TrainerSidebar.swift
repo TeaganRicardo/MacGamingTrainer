@@ -4,7 +4,6 @@ struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @FocusState private var headerFocused: Bool
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
     let connected: Bool
@@ -50,10 +49,16 @@ struct TrainerSidebarCard<Actions: View>: View {
         return lines.joined(separator: "\n")
     }
 
+    private var statusColor: Color {
+        if busy { return theme.info }
+        if connected { return theme.success }
+        if targetRunning { return theme.warning }
+        return theme.inactive
+    }
+
     private var statusIndicator: some View {
         Circle()
-            .fill(busy ? theme.warning : connected ? theme.success
-                : targetRunning ? theme.warning : theme.inactive)
+            .fill(statusColor)
             .frame(width: 8, height: 8)
             .frame(width: 12, height: 12)
             .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
@@ -71,6 +76,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title3.weight(.medium))
                         .foregroundStyle(selected ? theme.accent : .secondary)
+                        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
                         .frame(width: 24)
                         .accessibilityHidden(true)
                     Text(descriptor.displayName)
@@ -83,15 +89,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .focused($headerFocused)
             .focusEffectDisabled()
-            .background {
-                if headerFocused {
-                    RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous)
-                        .fill(theme.accent.opacity(0.08))
-                        .allowsHitTesting(false)
-                }
-            }
             .accessibilityLabel(descriptor.displayName)
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")

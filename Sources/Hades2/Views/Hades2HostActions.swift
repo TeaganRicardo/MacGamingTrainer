@@ -5,7 +5,6 @@ struct Hades2SidebarActions: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerNavigateToSection) private var navigate
     @Environment(\.trainerSelectedSection) private var selectedSection
-    @Environment(\.trainerGamePageVisible) private var pageVisible
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -38,8 +37,10 @@ struct Hades2SidebarActions: View {
         .onChange(of: model.currentIssues) { _, issues in
             if issues.isEmpty { model.closeFeedbackDetails() }
         }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible { model.closeFeedbackDetails() }
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                if !visible { model.closeFeedbackDetails() }
+            }
         }
     }
 }

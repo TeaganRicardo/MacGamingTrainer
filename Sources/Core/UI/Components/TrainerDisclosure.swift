@@ -5,7 +5,7 @@ import SwiftUI
 /// Capability changes take effect immediately, independently of the layout phase.
 struct TrainerDisclosure<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @Environment(\.trainerGamePageVisibility) private var pageVisibility
     @Environment(\.trainerDisclosureExpanded) private var parentExpanded
     let isExpanded: Bool
     let content: Content
@@ -31,7 +31,7 @@ struct TrainerDisclosure<Content: View>: View {
             .background(TrainerDisclosureLayoutProbe(anchor: focusAnchor)
                 .allowsHitTesting(false).accessibilityHidden(true))
             .onChange(of: isExpanded) { _, expanded in
-                let generation = focusAnchor.begin(visible: pageVisible)
+                let generation = focusAnchor.begin(visible: pageVisibility?.isVisible ?? true)
                 withTransaction(TrainerMotion.transaction(.disclosure, reduceMotion: reduceMotion)) {
                     withAnimation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion),
                                   completionCriteria: .logicallyComplete) {
@@ -41,8 +41,10 @@ struct TrainerDisclosure<Content: View>: View {
                     }
                 }
             }
-            .onChange(of: pageVisible) { _, visible in
-                if !visible { focusAnchor.cancel() }
+            .background {
+                TrainerGamePageVisibilityObserver { visible in
+                    if !visible { focusAnchor.cancel() }
+                }
             }
             .onDisappear { focusAnchor.cancel() }
     }

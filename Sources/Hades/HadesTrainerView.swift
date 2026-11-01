@@ -10,7 +10,6 @@ struct HadesTrainerView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerGamePageVisible) private var pageVisible
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
@@ -47,11 +46,13 @@ struct HadesTrainerView: View {
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
         .sheet(isPresented: $model.profilesPresented) { HadesProfileManagerView(model: model) }
         .sheet(isPresented: $model.diagnosticsPresented) { HadesDiagnosticsView(model: model) }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible {
-                model.shortcutSettingsPresented = false
-                model.profilesPresented = false
-                model.diagnosticsPresented = false
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                if !visible {
+                    model.shortcutSettingsPresented = false
+                    model.profilesPresented = false
+                    model.diagnosticsPresented = false
+                }
             }
         }
     }
@@ -167,20 +168,22 @@ struct HadesTrainerView: View {
                     }
                 )
                 Text("×").foregroundStyle(.secondary)
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
-                    accessibilityLabel: localization.localized("host.timeWarp.title"),
-                    accessibilityHint: localization.localized("host.timeWarp.hint"),
-                    enabled: model.canMutate && pageVisible,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview
-                        if preview == nil && !gameSpeedEditing {
-                            gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: localization.localized("host.timeWarp.title"),
+                        accessibilityHint: localization.localized("host.timeWarp.hint"),
+                        enabled: model.canMutate && pageVisible,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview
+                            if preview == nil && !gameSpeedEditing {
+                                gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                            }
                         }
-                    }
-                )
-                .frame(width: 200)
+                    )
+                    .frame(width: 200)
+                }
             }
             if let actual = model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber {
                 let key = abs(actual - model.number(.gameSpeed)) < 0.000001

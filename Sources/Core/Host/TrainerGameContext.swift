@@ -3,6 +3,67 @@ import Combine
 import SwiftUI
 
 @MainActor
+final class TrainerGamePageVisibility: ObservableObject {
+    @Published private(set) var isVisible = true
+
+    func setVisible(_ visible: Bool) {
+        guard isVisible != visible else { return }
+        isVisible = visible
+    }
+}
+
+private struct TrainerGamePageVisibilityKey: EnvironmentKey {
+    static let defaultValue: TrainerGamePageVisibility? = nil
+}
+
+extension EnvironmentValues {
+    var trainerGamePageVisibility: TrainerGamePageVisibility? {
+        get { self[TrainerGamePageVisibilityKey.self] }
+        set { self[TrainerGamePageVisibilityKey.self] = newValue }
+    }
+}
+
+/// Subscribe to visibility at the narrowest view that actually needs it.
+/// The retained game-page root receives only the stable reference, so switching
+/// modules does not invalidate every control in both full workbench trees.
+struct TrainerGamePageVisibilityGate<Content: View>: View {
+    @Environment(\.trainerGamePageVisibility) private var visibility
+    let content: (Bool) -> Content
+
+    init(@ViewBuilder content: @escaping (Bool) -> Content) {
+        self.content = content
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if let visibility {
+            TrainerObservedGamePageVisibility(visibility: visibility, content: content)
+        } else {
+            content(true)
+        }
+    }
+}
+
+private struct TrainerObservedGamePageVisibility<Content: View>: View {
+    @ObservedObject var visibility: TrainerGamePageVisibility
+    let content: (Bool) -> Content
+
+    var body: some View { content(visibility.isVisible) }
+}
+
+struct TrainerGamePageVisibilityObserver: View {
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        TrainerGamePageVisibilityGate { visible in
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onChange(of: visible, initial: true) { _, value in onChange(value) }
+        }
+    }
+}
+
+@MainActor
 final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     let model: Module.Model
     let session: TrainerBackendSession
@@ -10,6 +71,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     let saveManager: TrainerSaveManagerModel
     let toolWindows = TrainerToolWindowStore()
     let navigation = TrainerSectionNavigation()
+    let pageVisibility = TrainerGamePageVisibility()
     private var ownership: TrainerTargetOwnership?
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
@@ -174,7 +236,10 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
         sidebarCard = { selected, onSelect in
             AnyView(TrainerHostSidebarCard(context: context, selected: selected, onSelect: onSelect))
         }
-        setPageVisible = context.navigation.setVisible
+        setPageVisible = { visible in
+            context.pageVisibility.setVisible(visible)
+            context.navigation.setVisible(visible)
+        }
         connectedValue = { context.model.connected }
         canTerminateValue = { context.canTerminate }
         terminate = context.model.prepareForTermination

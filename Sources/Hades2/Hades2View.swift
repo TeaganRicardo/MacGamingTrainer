@@ -44,7 +44,6 @@ struct Hades2TrainerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerToolWindows) private var toolWindows
-    @Environment(\.trainerGamePageVisible) private var pageVisible
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @ViewState<EditField?> private var focusedField = nil
 
@@ -858,20 +857,22 @@ struct Hades2TrainerView: View {
                 )
                 Text("×").foregroundStyle(.secondary)
                 TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
-                    accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                    accessibilityHint: text("hades2.gameSpeed.hint"),
-                    enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview.map(speedNumber)
-                        if preview == nil && focusedField != .gameSpeed {
-                            gameSpeedInput = speedNumber(model.gameSpeed)
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: text("hades2.gameSpeed.a11y"),
+                        accessibilityHint: text("hades2.gameSpeed.hint"),
+                        enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview.map(speedNumber)
+                            if preview == nil && focusedField != .gameSpeed {
+                                gameSpeedInput = speedNumber(model.gameSpeed)
+                            }
                         }
-                    }
-                )
-                .frame(width: 200)
+                    )
+                    .frame(width: 200)
+                }
                 TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
             }
             .trainerGroupedRows()
@@ -883,11 +884,13 @@ struct Hades2TrainerView: View {
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
             .sheet(isPresented: $model.profilesPresented) { Hades2ProfileManagerView(model: model, isPresented: $model.profilesPresented) }
             .sheet(isPresented: $model.diagnosticsPresented) { Hades2DiagnosticsView(model: model, isPresented: $model.diagnosticsPresented) }
-            .onChange(of: pageVisible) { _, visible in
-                if !visible {
-                    model.shortcutSettingsPresented = false
-                    model.profilesPresented = false
-                    model.diagnosticsPresented = false
+            .background {
+                TrainerGamePageVisibilityObserver { visible in
+                    if !visible {
+                        model.shortcutSettingsPresented = false
+                        model.profilesPresented = false
+                        model.diagnosticsPresented = false
+                    }
                 }
             }
     }
