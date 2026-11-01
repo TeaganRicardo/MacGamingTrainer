@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
+from slider_ui_harness import SLIDER_JOURNEY
 import shutil
 import subprocess
 import sys
@@ -157,6 +158,9 @@ for raw in sys.stdin:
         if state.get('diagnosticsMode')=='empty':checks=[]
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
+        if command=='set_feature' and params.get('feature')=='gameSpeed':
+            state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
+            (folder/'state.json').write_text(json.dumps(state))
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
@@ -252,7 +256,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enableNativeAccessibility()
         guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
         let journey = CommandLine.arguments[3]
-        guard ["frontend", "management"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        guard ["frontend", "management", "slider"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         let precisionCases: [Double] = [0, -0.0, 25, 1.2345678901234567, 123.45678901234567,
                                        .leastNonzeroMagnitude, .leastNormalMagnitude, .greatestFiniteMagnitude]
         for number in precisionCases {
@@ -429,6 +433,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
         localization.language = .en
         localization.registerModulePresentation(prefix:HadesGameModule.presentationKeyPrefix,
             resolver:HadesGameModule.presentationText)
+        if journey == "slider" {
+            recordPhase("slider: real Hades workbench and backend")
+            try exerciseModuleSlider(HadesTrainerView(model: model), localization: localization,
+                sliderLabel: localization.localized("host.timeWarp.title"),
+                fieldLabel: localization.localized("host.timeWarp.title"),
+                gameID: "hades", mutation: "set_feature", currentValue: { model.number(.gameSpeed) },
+                busy: { model.busy }, commands: commands, observe: { speed in
+                    var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+                    var features = state["features"] as! [String: Any]
+                    features["gameSpeed"] = ["desired": speed, "actual": speed, "active": true] as [String: Any]
+                    state["features"] = features
+                    try JSONSerialization.data(withJSONObject: state).write(to: stateURL, options: .atomic)
+                    model.refreshFromHost()
+                })
+            stopBackend()
+            return
+        }
         if journey == "management" {
             recordPhase("management: routing and layout")
             exerciseManagementRouting(localization: localization)
@@ -1153,7 +1174,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
 
 with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     folder = Path(directory)
-    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY)
+    (folder / 'main.swift').write_text(HARNESS + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY)
     for language in ('en', 'zh-CN'):
         destination = folder / f'{language}.lproj'
         destination.mkdir()
@@ -1186,11 +1207,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     for journey, budget, completion_marker in (
         ('frontend', 65, 'hades_frontend_native_drafts_and_target_ownership_ok'),
         ('management', 30, 'hades_management_native_workflows_ok'),
+        ('slider', 20, 'hades_slider_module_journey_ok'),
     ):
         case_folder = folder / 'journeys' / journey
         case_folder.mkdir(parents=True)
         (case_folder / 'worker.py').write_text(worker_source)
-        (case_folder / 'state.json').write_text(json.dumps(initial_state))
+        case_state = json.loads(json.dumps(initial_state))
+        if journey == 'slider':
+            case_state['features']['gameSpeed'] = {'desired': 1.0, 'actual': 1.0, 'active': True}
+        (case_folder / 'state.json').write_text(json.dumps(case_state))
         (case_folder / 'catalog.json').write_text(json.dumps(catalog))
         print('hades_frontend_launch:' + journey, flush=True)
         try:

@@ -82,3 +82,68 @@ struct TrainerSliderMapping {
         detents.map(position(for:)).min(by: { abs($0 - position) < abs($1 - position) })
     }
 }
+
+/// Shared drawing/hit geometry in view-local points. A collapsed track still
+/// draws a bounded thumb, but has no usable pointer range.
+struct TrainerSliderGeometry {
+    let width: Double
+    let thumbDiameter: Double
+
+    init(width: Double, thumbDiameter: Double) {
+        self.width = max(width, 0)
+        self.thumbDiameter = min(max(thumbDiameter, 0), self.width)
+    }
+
+    var thumbRadius: Double { thumbDiameter / 2 }
+    var trackWidth: Double { width - thumbDiameter }
+
+    func x(at position: Double) -> Double {
+        thumbRadius + trackWidth * min(max(position, 0), 1)
+    }
+
+    func position(at pointerX: Double, grabOffset: Double = 0) -> Double {
+        guard trackWidth > 0 else { return 0.5 }
+        return min(max((pointerX - grabOffset - thumbRadius) / trackWidth, 0), 1)
+    }
+}
+
+/// Own one pointer gesture independently of observations and quantized values.
+/// Cancellation stays terminal until that gesture ends or SwiftUI resets it.
+struct TrainerSliderDrag {
+    private enum Phase {
+        case idle
+        case tracking(grabOffset: Double)
+        case cancelled
+    }
+
+    private var phase = Phase.idle
+
+    var isActive: Bool {
+        if case .tracking = phase { return true }
+        return false
+    }
+
+    mutating func update(startX: Double, pointerX: Double, currentPosition: Double,
+                         geometry: TrainerSliderGeometry) -> Double? {
+        guard geometry.trackWidth > 0 else { cancel(); return nil }
+        if case .idle = phase {
+            let distance = startX - geometry.x(at: currentPosition)
+            let offset = abs(distance) <= geometry.thumbRadius ? distance : 0
+            phase = .tracking(grabOffset: offset)
+        }
+        guard case let .tracking(offset) = phase else { return nil }
+        return geometry.position(at: pointerX, grabOffset: offset)
+    }
+
+    mutating func finish(pointerX: Double, geometry: TrainerSliderGeometry) -> Double? {
+        defer { phase = .idle }
+        guard case let .tracking(offset) = phase, geometry.trackWidth > 0 else { return nil }
+        return geometry.position(at: pointerX, grabOffset: offset)
+    }
+
+    mutating func cancel() {
+        if isActive { phase = .cancelled }
+    }
+
+    mutating func reset() { phase = .idle }
+}
