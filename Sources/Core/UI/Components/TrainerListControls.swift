@@ -76,7 +76,6 @@ struct TrainerSectionButton: View {
                     .accessibilityHidden(true)
             }
         }
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
