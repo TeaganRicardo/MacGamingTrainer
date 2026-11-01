@@ -101,7 +101,7 @@ assert 'TrainerRow(opacity:' in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(' in resource
 assert 'text: $amount' in resource
-assert '.trainerPickerWidth(.flexible)' in resource
+assert '.trainerPickerWidth(.expanding)' in resource
 assert 'TrainerLockButton(' in resource
 assert 'localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title])' in lock_button
 

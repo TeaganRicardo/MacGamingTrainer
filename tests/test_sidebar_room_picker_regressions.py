@@ -22,6 +22,7 @@ def region(text: str, start: str, end: str | None = None) -> str:
 
 sidebar = source("Sources/Core/UI/TrainerSidebar.swift")
 card = region(sidebar, "struct TrainerSidebarCard", "struct TrainerSidebar<")
+status_color = region(card, "private var statusColor", "private var statusIndicator")
 indicator = region(card, "private var statusIndicator", "var body: some View")
 section_controls = source("Sources/Core/UI/Components/TrainerListControls.swift")
 section = region(section_controls, "struct TrainerSectionButton", "private struct TrainerActionButtonLabel")
@@ -40,7 +41,8 @@ assert ".frame(width: 8, height: 8)" in indicator
 assert "Image(systemName:" not in indicator
 assert "ProgressView(" not in indicator
 for state in ("busy", "connected", "targetRunning", "theme.info", "theme.success", "theme.warning", "theme.inactive"):
-    assert state in indicator, state
+    assert state in status_color, state
+assert ".fill(statusColor)" in indicator
 assert ".accessibilityLabel(" in indicator and ".accessibilityValue(" in indicator
 assert "selectionMarkerWidth(" not in card
 assert ".overlay(alignment: .leading)" in section
