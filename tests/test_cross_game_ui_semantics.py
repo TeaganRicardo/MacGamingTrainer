@@ -336,6 +336,6 @@ assert "Text(title)" in label
 assert "Label(title, systemImage:" not in label
 for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton"):
     owner = action_controls[action_controls.index(type_name):]
-    assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)" in owner
+    assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))" in owner
 
 print("cross_game_ui_semantics_ok")

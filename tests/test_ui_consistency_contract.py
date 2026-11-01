@@ -64,7 +64,7 @@ assert ".frame(width: theme.connectionActionWidth)" not in status
 assert "widthRole: .connection" in status
 assert '"MAC GAMING"' not in sidebar
 assert 'host.gameLibrary' not in sidebar
-assert 'targetRunning ? theme.warning : theme.inactive' in sidebar
+assert 'if targetRunning { return theme.warning }' in sidebar
 assert '.accessibilityValue(localization.string(detailToken))' in sidebar
 assert 'busy: model.busy' in host
 assert 'targetRunning: targetMonitor.isRunning' in host
@@ -78,15 +78,18 @@ assert "helpText: generateHelp" in occurrence
 assert 'accessibilityLabel: title + " " + generateLabel' in occurrence
 # Core owns the same compact, text-only labeled action geometry for every
 # game. Legacy systemImage arguments on old callers cannot change rendering.
-assert primary_button.count("TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)") == 2
+assert primary_button.count("TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))") == 2
 label_body = primary_button[primary_button.index("private struct TrainerActionButtonLabel"):
                             primary_button.index("struct TrainerPrimaryActionButton")]
 assert "Text(title)" in label_body and "Label(title, systemImage:" not in label_body
 assert ".frame(maxWidth: fillsWidth ? .infinity : nil)" in label_body
 assert "enum TrainerActionWidthRole" in primary_button
-for role in ("case compactRow", "case connection", "case sheet"):
+for role in ("case automatic", "case compactRow", "case connection", "case sheet"):
     assert role in primary_button
 assert primary_button.count(".modifier(TrainerActionWidthModifier(role: widthRole))") == 2
+assert "inheritedRowWidth" in primary_button
+row_source = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
+assert ".environment(\\.trainerActionWidth, theme.compactActionWidth)" in row_source
 assert "let width: CGFloat?" not in primary_button
 assert "width: CGFloat? = nil" not in primary_button
 shortcut_sheet = (CORE_UI / "Components/TrainerShortcutSettingsView.swift").read_text()
@@ -267,13 +270,15 @@ assert ".trainerPickerWidth(.rowAction)" in (ROOT / "Sources/Hades/HadesRoomsPan
 assert ".trainerPickerWidth(.rowAction)" in view
 assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_controls
 
-# Raw action widths cannot leak back into game modules. Row buttons use the
-# Core compact role by default; connection and sheet surfaces opt into semantics.
-for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+# Raw action widths cannot leak back into game modules. TrainerRow supplies
+# the compact action column; standalone controls opt into a semantic role.
+for source_root in (ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
     for swift_path in source_root.rglob("*.swift"):
         source = swift_path.read_text()
         assert "width: theme.compactActionWidth" not in source, swift_path
         assert "width: theme.connectionActionWidth" not in source, swift_path
+assert "case .automatic:" in primary_button
+assert "if let inheritedRowWidth" in primary_button
 assert "widthRole: .connection" in status
 for action_surface in (
     ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift",

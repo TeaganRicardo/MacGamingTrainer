@@ -27,6 +27,7 @@ struct TrainerResetButton: View {
 }
 
 struct TrainerSectionButton: View {
+    @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
@@ -80,6 +81,7 @@ struct TrainerSectionButton: View {
 }
 
 enum TrainerActionWidthRole {
+    case automatic
     case compactRow
     case connection
     case sheet
@@ -102,11 +104,18 @@ private struct TrainerActionButtonLabel: View {
 
 private struct TrainerActionWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
     let role: TrainerActionWidthRole
 
     @ViewBuilder
     func body(content: Content) -> some View {
         switch role {
+        case .automatic:
+            if let inheritedRowWidth {
+                content.frame(width: inheritedRowWidth)
+            } else {
+                content
+            }
         case .compactRow:
             content.frame(width: theme.compactActionWidth)
         case .connection:
@@ -119,6 +128,7 @@ private struct TrainerActionWidthModifier: ViewModifier {
 
 struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
@@ -130,7 +140,7 @@ struct TrainerPrimaryActionButton: View {
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        widthRole: TrainerActionWidthRole = .compactRow,
+        widthRole: TrainerActionWidthRole = .automatic,
         action: @escaping () -> Void
     ) {
         self.title = title
@@ -142,7 +152,7 @@ struct TrainerPrimaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
@@ -155,6 +165,7 @@ struct TrainerPrimaryActionButton: View {
 }
 
 struct TrainerSecondaryActionButton: View {
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
@@ -168,7 +179,7 @@ struct TrainerSecondaryActionButton: View {
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        widthRole: TrainerActionWidthRole = .compactRow,
+        widthRole: TrainerActionWidthRole = .automatic,
         helpText: String? = nil,
         accessibilityLabel: String? = nil,
         action: @escaping () -> Void
@@ -184,7 +195,7 @@ struct TrainerSecondaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
@@ -215,6 +226,7 @@ struct TrainerInlineNameEditor: View {
 }
 
 struct TrainerSelectionControl: View {
+    @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let selected: Bool
@@ -281,6 +293,7 @@ struct TrainerOverflowMenu<Content: View>: View {
 }
 
 struct TrainerEmptyState: View {
+    @Environment(\.trainerTheme) private var theme
     let text: String
 
     var body: some View {
@@ -308,6 +321,7 @@ struct TrainerInlineNotice<Content: View>: View {
 }
 
 struct TrainerListCard<Content: View>: View {
+    @Environment(\.trainerTheme) private var theme
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -322,6 +336,7 @@ struct TrainerListCard<Content: View>: View {
 }
 
 private struct TrainerGroupedRowsModifier: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
 
     func body(content: Content) -> some View {
         content

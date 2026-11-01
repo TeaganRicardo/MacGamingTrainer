@@ -172,7 +172,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             }
         }
         .labelsHidden()
-        .trainerPickerWidth(inline ? .wide : .flexible)
+        .trainerPickerWidth(inline ? .rowAction : .expanding)
         .disabled(!enabled || allItems.isEmpty)
     }
 
@@ -181,7 +181,8 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
         TrainerShortcutBadgeSlot(text: shortcutText)
         TrainerSecondaryActionButton(
             title: actionTitle,
-            enabled: actionAvailable
+            enabled: actionAvailable,
+            widthRole: .compactRow
         ) {
             guard actionAvailable else { return }
             onAction(selection)

@@ -21,6 +21,7 @@ struct TrainerRow<Content: View>: View {
 
     var body: some View {
         content
+            .environment(\.trainerActionWidth, theme.compactActionWidth)
             .frame(maxWidth: .infinity, minHeight: minimumHeight ?? theme.rowMinimumHeight, alignment: .leading)
             .padding(.horizontal, theme.rowHorizontalPadding)
             .background(theme.panel)

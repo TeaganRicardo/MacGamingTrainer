@@ -682,7 +682,8 @@ struct Hades2TrainerView: View {
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
-                        enabled: canApplyTraitLevel(trait)
+                        enabled: canApplyTraitLevel(trait),
+                        widthRole: .compactRow
                     ) {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
@@ -695,6 +696,7 @@ struct Hades2TrainerView: View {
                         title: text("hades2.traits.applyLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
+                        widthRole: .compactRow,
                         action: {}
                     )
                 }
@@ -726,7 +728,8 @@ struct Hades2TrainerView: View {
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
                         systemImage: TrainerSemanticIcon.Action.apply,
-                        enabled: canApplyTraitRarity(trait)
+                        enabled: canApplyTraitRarity(trait),
+                        widthRole: .compactRow
                     ) {
                         model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
                     }
@@ -743,6 +746,7 @@ struct Hades2TrainerView: View {
                         title: text("hades2.traits.applyRarity"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
+                        widthRole: .compactRow,
                         action: {}
                     )
                 }
@@ -1441,7 +1445,8 @@ struct Hades2TrainerView: View {
                         systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireChaosPair
                             && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
-                            && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse })
+                            && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
+                        widthRole: .compactRow
                     ) {
                         _ = model.acquireChaosPair(
                             blessingReward: model.selectedChaosBlessing,
@@ -1500,7 +1505,8 @@ struct Hades2TrainerView: View {
                         title: text("hades2.spawn.acquire"),
                         systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireExactReward
-                            && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
+                            && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
+                        widthRole: .compactRow
                     ) {
                         _ = model.acquireExactBoon(model.selectedExactBoon)
                     }
@@ -1526,7 +1532,8 @@ struct Hades2TrainerView: View {
                 TrainerSecondaryActionButton(
                     title: text("hades2.spawn.open"),
                     systemImage: ShortcutAction.openSellTraits.icon,
-                    enabled: model.canOpenSellTraits
+                    enabled: model.canOpenSellTraits,
+                    widthRole: .compactRow
                 ) { _ = model.openSellTraits() }
             }
             if model.connected {

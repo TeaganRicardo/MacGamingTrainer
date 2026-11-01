@@ -62,15 +62,18 @@ assert "if !error.isEmpty" in root
 # Labeled action widths belong to one Core semantic policy, not game call sites.
 assert "enum TrainerActionWidthRole" in controls
 width_owner = section(controls, "private struct TrainerActionWidthModifier", "struct TrainerPrimaryActionButton")
+assert "case .automatic:" in width_owner and "inheritedRowWidth" in width_owner
 assert "case .compactRow:" in width_owner and "theme.compactActionWidth" in width_owner
 assert "case .connection:" in width_owner and "theme.connectionActionWidth" in width_owner
 assert "case .sheet:" in width_owner
 primary = section(controls, "struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton")
 secondary = section(controls, "struct TrainerSecondaryActionButton", "struct TrainerInlineNameEditor")
 for action in (primary, secondary):
-    assert "widthRole: TrainerActionWidthRole = .compactRow" in action
+    assert "widthRole: TrainerActionWidthRole = .automatic" in action
     assert "TrainerActionWidthModifier(role: widthRole)" in action
 assert 'compactActionWidth: 88' in theme
+row_source = read("Sources/Core/UI/Primitives/TrainerRow.swift")
+assert ".environment(\\.trainerActionWidth, theme.compactActionWidth)" in row_source
 assert "TrainerSecondaryActionButton(" in read("Sources/Hades/HadesRoomsPanel.swift")
 assert "TrainerSecondaryActionButton(" in hades2
 print("module_motion_actions_lock_banner_widths_ok")
