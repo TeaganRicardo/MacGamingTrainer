@@ -2,9 +2,9 @@ import SwiftUI
 
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @FocusState private var headerFocused: Bool
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
     let connected: Bool
@@ -51,24 +51,17 @@ struct TrainerSidebarCard<Actions: View>: View {
     }
 
     private var statusIndicator: some View {
-        Group {
-            if busy {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: connected ? "checkmark.circle.fill" : targetRunning ? "minus.circle" : "circle.dashed")
-                    .font(.caption2)
-                    .foregroundStyle(connected ? theme.success : targetRunning ? theme.warning : theme.inactive)
-                    .contentTransition(.opacity)
-            }
-        }
-        .frame(width: 12, height: 12)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: connected)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: targetRunning)
-        .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
-        .help(statusHelp)
-        .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
-        .accessibilityValue(localization.string(detailToken))
+        Circle()
+            .fill(busy ? theme.warning : connected ? theme.success
+                : targetRunning ? theme.warning : theme.inactive)
+            .frame(width: 8, height: 8)
+            .frame(width: 12, height: 12)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: connected)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: targetRunning)
+            .help(statusHelp)
+            .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
+            .accessibilityValue(localization.string(detailToken))
     }
 
     var body: some View {
@@ -90,6 +83,15 @@ struct TrainerSidebarCard<Actions: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focused($headerFocused)
+            .focusEffectDisabled()
+            .background {
+                if headerFocused {
+                    RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous)
+                        .fill(theme.accent.opacity(0.08))
+                        .allowsHitTesting(false)
+                }
+            }
             .accessibilityLabel(descriptor.displayName)
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")
@@ -105,17 +107,7 @@ struct TrainerSidebarCard<Actions: View>: View {
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
-        .overlay(alignment: .leading) {
-            if selected {
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(theme.accent)
-                    .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
-                    .padding(.leading, 1)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
-        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
+
     }
 }
 
