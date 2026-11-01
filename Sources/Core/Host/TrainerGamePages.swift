@@ -16,7 +16,6 @@ struct TrainerGamePages: View {
     @ObservedObject var application: TrainerApplicationCoordinator
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
@@ -28,7 +27,6 @@ struct TrainerGamePages: View {
                     .environment(\.trainerGamePageVisible, context.id == application.selectedGameID)
                 }
             }
-            .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)
             Rectangle()
                 .fill(theme.boundaryColor(for: contrast))
                 .frame(width: 1)
