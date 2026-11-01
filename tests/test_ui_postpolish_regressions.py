@@ -40,7 +40,7 @@ assert "Text(title)" in label
 assert "Label(title, systemImage:" not in label
 assert "Image(systemName:" not in label
 assert "TrainerActionButtonLabel(" in section(controls, "struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton")
-assert "TrainerActionButtonLabel(" in section(controls, "struct TrainerSecondaryActionButton", "struct TrainerEditableLabel")
+assert "TrainerActionButtonLabel(" in section(controls, "struct TrainerSecondaryActionButton", "struct TrainerInlineNameEditor")
 
 # Both modules' metric-card lock controls use Core's borderless icon action.
 lock_button = section(lock, "struct TrainerLockButton")
@@ -52,14 +52,14 @@ assert "TrainerLockButton(" in read("Sources/Core/UI/Components/TrainerStatContr
 
 # The Hades I workbench should not show a persistent waiting/hero-ready banner
 # above its actual sections. Error presentations remain intentionally separate.
-root = section(hades, "var body: some View", "private var runDataSection")
+root = section(section(hades, "struct HadesTrainerView"), "var body: some View", "private var runDataSection")
 assert 'if !model.heroReady {' not in root
 assert 'runDataSection.trainerSectionTarget(' in root
 assert "if !error.isEmpty" in root
 
 # Compact labeled action widths belong to Core, not Hades-specific call sites.
 primary = section(controls, "struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton")
-secondary = section(controls, "struct TrainerSecondaryActionButton", "struct TrainerEditableLabel")
+secondary = section(controls, "struct TrainerSecondaryActionButton", "struct TrainerInlineNameEditor")
 for action in (primary, secondary):
     assert "theme.compactActionWidth" in action
     assert ".frame(width: width ?? theme.compactActionWidth)" in action
