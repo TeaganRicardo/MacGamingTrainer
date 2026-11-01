@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 from hades2_lldb_worker_support import run_lldb_worker, phase, worker_failure_output
-from hades2_debugserver_owner import _AuditToken, DarwinProcesses, debugserver_executable
+from hades2_debugserver_owner import _AuditToken, DarwinProcesses
 
 # GitHub's runner Python is not ABI-matched to Xcode's private _lldb
 # extension. Run the regression under the same Xcode Python + LLDB module path
@@ -83,17 +83,6 @@ time.sleep(60)
     path = str(Path(__file__).resolve())
     environment = dict(os.environ)
     environment["MGT_LLDB_EMBEDDED_TEST"] = "1"
-    with phase('environment.lldbPythonPath'):
-        lldb_python_path = subprocess.check_output(
-            ["/usr/bin/xcrun", "lldb", "-P"],
-            text=True,
-        ).strip()
-    existing_pythonpath = environment.get("PYTHONPATH", "")
-    environment["PYTHONPATH"] = (
-        lldb_python_path
-        if not existing_pythonpath
-        else lldb_python_path + os.pathsep + existing_pythonpath
-    )
     # These contracts use independent targets and do not share native state.
     # Give each its own bounded worker instead of making a later contract
     # inherit compilation, debugger startup and earlier scenarios' elapsed time.
@@ -106,7 +95,7 @@ time.sleep(60)
                     environment,
                     timeout=30,
                     diagnostics=True,
-                    debugserver_path=debugserver_executable(lldb_python_path, environment),
+                    xcode_lldb=True,
                 )
         except subprocess.TimeoutExpired as error:
             raise AssertionError(

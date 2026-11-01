@@ -1,6 +1,7 @@
 """Portable contracts for exact-executable, kernel-version-bound cleanup."""
 import ctypes
 import errno
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -195,4 +196,97 @@ with patch.object(worker_support, 'DebugserverOwner', SlowPreparation), \
     else:
         raise AssertionError('preparation reset the worker timeout budget')
     assert not launch.called and closed == [True]
+
+# Xcode discovery is a subprocess, not an unbounded parent preflight. Exercise
+# its actual launch/communicate/cleanup seam without launching native tools.
+lookup_command = ['/usr/bin/xcrun', 'lldb', '-P']
+lldb_python_path = '/X/LLDB.framework/Resources/Python'
+for outcome in ('stall', 'failure', 'interrupt', 'success', 'override'):
+    clock = [0]
+    events = []
+    environment = {'PYTHONPATH': '/preexisting'}
+    if outcome == 'override':
+        environment['LLDB_DEBUGSERVER_PATH'] = '/selected/debugserver'
+    original_environment = dict(environment)
+    lookup_failure = subprocess.TimeoutExpired(
+        lookup_command, 10, output=b'lookup stdout\n', stderr=b'lookup phase\n',
+    ) if outcome == 'stall' else KeyboardInterrupt()
+
+    class PreparedOwner:
+        executable = Path('/private/owned/debugserver')
+
+        def __init__(self, source):
+            expected = '/selected/debugserver' if outcome == 'override' else '/X/LLDB.framework/Resources/debugserver'
+            assert source == Path(expected), 'worker selected a different debugserver from Xcode/override'
+            events.append(('prepare', source))
+            clock[0] += 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *arguments):
+            events.append(('close',))
+
+    class Process:
+        def __init__(self, command, **options):
+            self.command = command
+            self.pid = 301 if command == lookup_command else 302
+            self.returncode = 7 if self.pid == 301 and outcome == 'failure' else 0
+            assert options['start_new_session'] and options['text']
+            if self.pid == 302:
+                assert outcome in ('success', 'override'), 'worker launched after unsuccessful lookup'
+                assert options['env']['PYTHONPATH'] == lldb_python_path + os.pathsep + '/preexisting'
+                assert options['env']['LLDB_DEBUGSERVER_PATH'] == str(PreparedOwner.executable)
+            events.append(('launch', self.pid))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *arguments):
+            return False
+
+        def communicate(self, timeout):
+            events.append(('communicate', self.pid, timeout))
+            if self.pid == 301:
+                assert timeout == 10
+                clock[0] += timeout if outcome == 'stall' else 4
+                if outcome in ('stall', 'interrupt'):
+                    raise lookup_failure
+                if outcome == 'failure':
+                    return 'lookup stdout\n', 'lookup phase\n'
+                return lldb_python_path + '\n', ''
+            assert timeout == 5, 'lookup or copy time reset the original worker budget'
+            return 'worker result', ''
+
+        def wait(self):
+            events.append(('wait', self.pid))
+            return self.returncode
+
+    with patch.object(worker_support, 'DebugserverOwner', side_effect=PreparedOwner) as prepare, \
+         patch.object(worker_support.time, 'monotonic', side_effect=lambda: clock[0]), \
+         patch.object(worker_support.subprocess, 'Popen', side_effect=Process) as launch, \
+         patch.object(worker_support.os, 'killpg', side_effect=lambda pid, sig: events.append(('kill', pid, sig))):
+        try:
+            result = worker_support.run_lldb_worker(['worker'], environment, timeout=10, xcode_lldb=True)
+        except subprocess.TimeoutExpired as error:
+            assert outcome == 'stall' and error is lookup_failure
+            assert error.timeout == 10 and error.cmd == lookup_command
+            assert worker_failure_output(error) == 'lookup stdout\nlookup phase\n'
+        except subprocess.CalledProcessError as error:
+            assert outcome == 'failure' and error.returncode == 7 and error.cmd == lookup_command
+            assert worker_failure_output(error) == 'lookup stdout\nlookup phase\n'
+        except KeyboardInterrupt as error:
+            assert outcome == 'interrupt' and error is lookup_failure
+        else:
+            assert outcome in ('success', 'override') and result == 'worker result'
+        assert events[:4] == [
+            ('launch', 301), ('communicate', 301, 10),
+            ('kill', 301, signal.SIGKILL), ('wait', 301),
+        ], 'lookup group was not cleaned up before preparation/worker launch'
+        if outcome in ('stall', 'failure', 'interrupt'):
+            assert launch.call_count == 1 and not prepare.called
+        else:
+            assert launch.call_count == 2 and prepare.call_count == 1
+            assert events[-3:] == [('kill', 302, signal.SIGKILL), ('wait', 302), ('close',)]
+        assert environment == original_environment, 'preparation modified the caller environment'
 print('debugserver_ownership_ok')

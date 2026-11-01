@@ -30,7 +30,6 @@ SOURCE_ROOT = Path(os.environ.get("MGT_PROFILE_SOURCE_ROOT", ROOT))
 sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests")]
 
 from hades2_lldb_worker_support import phase, run_lldb_worker
-from hades2_debugserver_owner import debugserver_executable
 
 
 def summarize(samples):
@@ -260,15 +259,13 @@ __attribute__((constructor)) static void load_frameworks(void) {
 
 def profile_first_touch():
     environment = dict(os.environ)
-    lldb_path = subprocess.check_output(["/usr/bin/xcrun", "lldb", "-P"], text=True).strip()
-    environment["PYTHONPATH"] = lldb_path + os.pathsep + environment.get("PYTHONPATH", "")
     trials = []
     for _ in range(5):
         for variant in ("baseline", "production"):
             raw = run_lldb_worker(
                 ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()), "--mode", "first-touch",
                  "--first-touch-worker", variant], environment, timeout=30,
-                debugserver_path=debugserver_executable(lldb_path, environment),
+                xcode_lldb=True,
             )
             row = json.loads(raw.splitlines()[-1])
             row["phases"] = [json.loads(line.removeprefix("lldb_phase "))
@@ -440,13 +437,12 @@ def main():
             print(json.dumps(profile_transport(args.samples, args.tick_microseconds)))
             return
         environment = dict(os.environ, MGT_PROFILE_LLDB_EMBEDDED="1")
-        lldb_path = subprocess.check_output(["/usr/bin/xcrun", "lldb", "-P"], text=True).strip()
         raw = run_lldb_worker(
             ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()),
              "--mode", "transport", "--samples", str(args.samples),
              "--tick-microseconds", str(args.tick_microseconds)],
             environment, 30 + (args.samples + 6) * 4,
-            debugserver_path=debugserver_executable(lldb_path, environment),
+            xcode_lldb=True,
         )
         report["transport"] = json.loads(raw)
     if args.mode == "first-touch":
