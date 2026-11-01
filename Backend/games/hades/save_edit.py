@@ -16,6 +16,9 @@ class _HadesSaveCodec:
     def decode(self, payload):
         return HadesSaveDocument.from_bytes(payload)
 
+    def load(self, path):
+        return HadesSaveDocument.load(path)
+
 
 _CODEC = _HadesSaveCodec()
 
@@ -111,7 +114,17 @@ class HadesSaveEditSession:
             source["snapshotId"] = snapshot_id
         source.update(identity)
 
-        target_identity = cls._resolve_target(save_service, target) if target is not None else None
+        target_identity = None
+        if target is not None:
+            target_identity = cls._resolve_target(save_service, target)
+        elif default_target:
+            available = [
+                {"rootId": row["rootId"], "relativePath": row["relativePath"]}
+                for row in editor_files(save_service.resolved_files())
+            ]
+            if identity in available:
+                target_identity = cls._resolve_target(save_service, identity)
+
         core = StructuredSaveEditSession.open(
             save_service,
             identity,
