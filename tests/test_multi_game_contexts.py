@@ -19,6 +19,73 @@ import SwiftUI
         app.setActivationPolicy(.prohibited)
         app.finishLaunching()
         enableNativeAccessibility()
+        // Two games use the identical Core reply lifetime contract. Out-of-
+        // order fixture replies must not adopt retired source/target baselines,
+        // replace focused drafts, or replay an old Apply into a new window.
+        func verifySaveEditorReplies(_ game: String) {
+            let owner = TrainerSaveEditorReplyCoordinator()
+            let inventory = owner.capture(.inventory, bindsDocument: false)
+            let firstRead = owner.beginNewDocumentRead()
+            let secondRead = owner.beginNewDocumentRead()
+            precondition(!owner.accepts(inventory) && !owner.accepts(firstRead) && owner.accepts(secondRead),
+                         "\(game): rapid source reads accepted an obsolete result")
+
+            owner.bind(workspaceID: "workspace:A", baselineGeneration: "baseline:1")
+            precondition(owner.owns(workspaceID: "workspace:A", baselineGeneration: "baseline:1"))
+            let oldQuery = owner.capture(.query)
+            let oldDetail = owner.capture(.detail)
+            let oldReview = owner.capture(.review)
+            let advancedDetail = owner.capture(.advancedDetail)
+            let recentQuery = owner.capture(.query)
+            var visible = "authoritative"
+            var focusedDraft = "unfinished typed correction"
+            func receive(_ ticket: TrainerSaveEditorReplyCoordinator.Ticket, _ value: String) {
+                if owner.accepts(ticket) { visible = value }
+            }
+            receive(oldQuery, "stale search")
+            receive(recentQuery, "latest search")
+            precondition(visible == "latest search" && focusedDraft == "unfinished typed correction",
+                         "\(game): overlapping search overwrote latest result or focused draft")
+            owner.invalidate(.detail)
+            precondition(!owner.accepts(oldDetail) && owner.accepts(advancedDetail) && owner.accepts(oldReview),
+                         "\(game): detail cancellation invalidated an unrelated request")
+            owner.invalidate(.advancedDetail)
+            precondition(!owner.accepts(advancedDetail), "\(game): stale Advanced editor detail was accepted")
+
+            // Target selection retains the same backend workspace/generation,
+            // but still invalidates old query/review tokens.
+            owner.bind(workspaceID: "workspace:A", baselineGeneration: "baseline:1")
+            precondition(!owner.accepts(recentQuery) && !owner.accepts(oldReview),
+                         "\(game): target switch adopted an old response")
+            let capturedRow = ("workspace:A", "baseline:1")
+            let pendingApply = owner.capture()
+            let pendingQuery = owner.capture(.query)
+            owner.bind(workspaceID: "workspace:A", baselineGeneration: "baseline:2")
+            precondition(!owner.accepts(pendingApply) && !owner.accepts(pendingQuery)
+                         && !owner.owns(workspaceID: capturedRow.0, baselineGeneration: capturedRow.1),
+                         "\(game): stale row/Apply crossed an installed document baseline")
+            let committedQuery = owner.capture(.query)
+            owner.invalidate(.query)
+            receive(committedQuery, "cancelled query")
+            precondition(visible == "latest search", "\(game): cancelled search repainted the editor")
+
+            // Closing a window during a read also rejects a late success after
+            // the next window binds identical backend identity strings.
+            let readBeforeClose = owner.beginNewDocumentRead()
+            owner.retire()
+            precondition(!owner.accepts(readBeforeClose) && !owner.owns(
+                workspaceID: "workspace:A", baselineGeneration: "baseline:2"),
+                         "\(game): closing retained pending read authority")
+            owner.bind(workspaceID: "workspace:A", baselineGeneration: "baseline:2")
+            receive(pendingApply, "replayed Apply")
+            precondition(visible == "latest search" && focusedDraft == "unfinished typed correction",
+                         "\(game): close/reopen accepted a reply from the retired tool window")
+            focusedDraft = "new document draft"
+            precondition(owner.accepts(owner.capture(.query)) && focusedDraft == "new document draft",
+                         "\(game): new document cannot issue a fresh request")
+        }
+        verifySaveEditorReplies("Hades I")
+        verifySaveEditorReplies("Hades II")
         let server = URL(fileURLWithPath: CommandLine.arguments[1])
         let python = URL(fileURLWithPath: CommandLine.arguments[2])
         let firstSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
