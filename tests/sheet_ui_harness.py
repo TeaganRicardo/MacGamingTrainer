@@ -132,7 +132,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     let oldCaptureButton = captureButton()!
     managementCheck(oldCaptureButton.press(), "second capture refused native Press")
     sheetJourneyWait(host, "capture before page selection") { GlobalHotkeys.isShortcutCaptureActive }
-    visibility.visible = false
+    visibility.setVisible(false)
     sheetJourneyWait(host, "hidden game cancels native capture and sheet") {
         !isPresented() && window.attachedSheet == nil && !GlobalHotkeys.isShortcutCaptureActive
     }
@@ -140,7 +140,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     sheetJourneyPump()
     managementCheck(!GlobalHotkeys.isShortcutCaptureActive && chord() == original,
                     "a dismissed sheet's old capture button installed a monitor")
-    visibility.visible = true
+    visibility.setVisible(true)
     sheetJourneyPump()
     show()
     sheetJourneyWait(host, "reopened module shortcut sheet") { captureButton() != nil }

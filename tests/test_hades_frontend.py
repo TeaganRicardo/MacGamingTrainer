@@ -1417,11 +1417,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             let feedbackRequests = commands().count
             wait("real Hades feedback adapter exposes acknowledged receipt") { feedbackDismiss()?.enabled == true }
             let retiredDismiss = feedbackDismiss()!
-            feedbackVisibility.visible = false
+            feedbackVisibility.setVisible(false)
             wait("hidden Hades feedback adapter retires its controls") { feedbackDismiss() == nil }
             _ = retiredDismiss.press(); pump()
             check(model.feedback?.id == noticeID, "hidden Hades feedback callback consumed its retained notice")
-            feedbackVisibility.visible = true
+            feedbackVisibility.setVisible(true)
             wait("returning Hades feedback keeps its receipt") { feedbackDismiss()?.enabled == true }
             check(model.feedback?.id == noticeID, "page selection generated another Hades feedback event")
             check(feedbackDismiss()!.press(), "real Hades feedback dismissal refused native AX input")
