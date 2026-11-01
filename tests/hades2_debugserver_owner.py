@@ -125,9 +125,9 @@ class DebugserverOwner:
         self.directory = Path(tempfile.mkdtemp(prefix='mgt-debugserver-')).resolve()
         self.executable = self.directory / 'debugserver'
         try:
-            # Copy the signed native bytes unchanged; LLDB still launches and
-            # monitors the actual debugserver and retains all original arguments.
-            shutil.copy2(source, self.executable)
+            # Preserve signed native bytes and executable mode, but leave
+            # source metadata (including restricted macOS flags) with its owner.
+            shutil.copy(source, self.executable)
         except BaseException:
             shutil.rmtree(self.directory)
             raise

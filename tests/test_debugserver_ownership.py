@@ -4,6 +4,7 @@ import errno
 import os
 from pathlib import Path
 import signal
+import stat
 import subprocess
 import sys
 from unittest.mock import patch
@@ -109,10 +110,16 @@ except RuntimeError as error:
 else:
     raise AssertionError('missing version-bound signal API was accepted')
 
-owner = DebugserverOwner(sys.executable, processes=processes)
+# System executables may have restricted macOS flags that a temporary copy
+# cannot acquire. Metadata-copy refusal must not prevent owning native bytes.
+with patch('hades2_debugserver_owner.shutil.copystat',
+           side_effect=PermissionError(errno.EPERM, 'restricted source flags')):
+    owner = DebugserverOwner(sys.executable, processes=processes)
 kernel.rows[201] = (11, owner.executable)
 with owner:
     assert owner.executable.read_bytes() == Path(sys.executable).read_bytes()
+    assert stat.S_IMODE(owner.executable.stat().st_mode) == stat.S_IMODE(Path(sys.executable).stat().st_mode)
+    assert os.access(owner.executable, os.X_OK)
 assert not owner.directory.exists()
 assert kernel.rows == {102: (9, foreign)}, 'cleanup crossed executable ownership'
 
