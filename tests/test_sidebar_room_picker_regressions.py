@@ -47,10 +47,11 @@ assert ".accessibilityLabel(" in indicator and ".accessibilityValue(" in indicat
 assert "selectionMarkerWidth(" not in card
 assert ".overlay(alignment: .leading)" in section
 assert "selectionMarkerWidth(for: contrast)" in section
-assert ".accessibilityAddTraits(selected ? .isSelected : [])" not in section
-# Selected rows remain ordinary repeatable AX buttons; the native multi-game
-# journey re-presses the current row to verify that selection styling does not
-# turn it into a one-shot radio-style control.
+assert ".accessibilityAddTraits(selected ? .isSelected : [])" in section
+# The marker lives inside the Button label. Keeping it outside the Button turns
+# the caller's accessibility identifier into a composite wrapper that cannot be
+# re-pressed after selection; the native multi-game journey protects this.
+assert section.index(".overlay(alignment: .leading)") < section.index(".buttonStyle(.plain)")
 
 # Both sidebar navigation sets start with the first visible Values section
 # selected; subsequent navigation transfers the marker to the chosen row.

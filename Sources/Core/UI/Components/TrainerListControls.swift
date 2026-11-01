@@ -64,18 +64,19 @@ struct TrainerSectionButton: View {
                     .fill(selected ? theme.accent.opacity(0.12) : .clear)
                     .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
             }
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .leading) {
-            if selected {
-                Capsule()
-                    .fill(theme.accent)
-                    .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
-                    .offset(x: -12)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(theme.accent)
+                        .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
+                        .offset(x: -12)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
