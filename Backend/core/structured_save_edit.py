@@ -25,6 +25,10 @@ class StructuredSaveCodec(Protocol):
         """Encode only the game's structured document type."""
         ...
 
+    def load(self, path: Path):
+        """Reload the installed physical document through the game codec."""
+        ...
+
 
 class StructuredSaveEditValidationError(ValueError):
     """A structured candidate did not survive the game's codec validation."""
@@ -279,7 +283,7 @@ class StructuredSaveEditSession:
             )
 
             def verify_installed():
-                installed = self._codec.decode(target_path.read_bytes())
+                installed = self._codec.load(target_path)
                 if self._encode(installed) != encoded:
                     raise StructuredSaveEditValidationError(
                         "Installed structured save did not round-trip to the edited document."
