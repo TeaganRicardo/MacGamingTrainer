@@ -3,6 +3,7 @@
 MANAGEMENT_JOURNEY = r'''
 @MainActor
 func exerciseManagementRouting(localization: TrainerLocalizationStore) {
+    exerciseSharedControlMotion(localization: localization)
     var available = ["first": true, "second": true]
     var events: [String] = []
     @MainActor func catalog(_ owner: String) -> TrainerManagementCatalog {
@@ -294,5 +295,185 @@ func exerciseDiagnosticStatuses(localization: TrainerLocalizationStore) {
     managementCheck(dismissed, "unavailable refresh trapped the diagnostic sheet")
     window.contentView = nil
     window.close()
+}
+'''
+
+MANAGEMENT_JOURNEY += r'''
+@MainActor private final class ControlMotionState: ObservableObject {
+    @Published var enabled = true
+    @Published var isOn = false
+    @Published var locked = false
+    @Published var selected = false
+    @Published var pending = false
+    @Published var phase = "Ready"
+    var acceptsToggle = true
+    var requests: [String] = []
+
+    func toggle() {
+        requests.append("toggle")
+        if acceptsToggle { isOn.toggle() }
+        else { pending = true; phase = "Pending" }
+    }
+}
+
+private struct ControlMotionFixture: View {
+    @ObservedObject var state: ControlMotionState
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TrainerFeatureToggleRow(title: title, icon: "bolt", state: .init(
+                isOn: state.isOn, isInteractive: state.enabled && !state.pending,
+                canEditValue: false, opacity: state.pending ? 0.65 : 1,
+                indicatorColor: state.phase == "Ready" ? .purple : .orange,
+                helpText: state.phase, isWarning: state.phase != "Ready"
+            ), shortcutText: nil, action: state.toggle)
+            HStack(spacing: 12) {
+                TrainerLockButton(title: title, locked: state.locked, enabled: state.enabled) {
+                    state.requests.append("lock"); state.locked.toggle()
+                }.accessibilityIdentifier("motion.lock")
+                TrainerSelectionControl(selected: state.selected, enabled: state.enabled) {
+                    state.requests.append("selection"); state.selected.toggle()
+                }.accessibilityIdentifier("motion.selection")
+                TrainerResetButton(title: "Reset", enabled: state.enabled) {
+                    state.requests.append("reset")
+                }.accessibilityIdentifier("motion.reset")
+            }
+            TrainerPrimaryActionButton(title: title, enabled: state.enabled, width: 180) {
+                state.requests.append("primary")
+            }
+            .accessibilityIdentifier("motion.primary")
+            .keyboardShortcut("k", modifiers: [.command, .option])
+            TrainerSecondaryActionButton(title: title, enabled: state.enabled, width: 180) {
+                state.requests.append("secondary")
+            }.accessibilityIdentifier("motion.secondary")
+        }.padding(12)
+    }
+}
+
+private func motionToggleValue(_ control: NativeAccessibilityControl) -> Bool? {
+    let selector = NSSelectorFromString("accessibilityValue")
+    guard control.object.responds(to: selector) else { return nil }
+    let value = control.object.perform(selector)?.takeUnretainedValue()
+    if let number = value as? NSNumber { return number.boolValue }
+    if let text = value as? String { return text == "1" || text == "true" }
+    return nil
+}
+
+@MainActor
+func exerciseSharedControlMotion(localization: TrainerLocalizationStore) {
+    let roles: [TrainerMotion.Role] = [.directManipulation, .selection, .disclosure, .transientFeedback]
+    for role in roles {
+        let reduced = TrainerMotion.transaction(role, reduceMotion: true)
+        managementCheck(reduced.animation == nil && reduced.disablesAnimations,
+                        "Reduce Motion allowed a custom or descendant animation")
+    }
+    let direct = TrainerMotion.transaction(.directManipulation, reduceMotion: false)
+    managementCheck(direct.animation == nil && direct.disablesAnimations,
+                    "direct manipulation inherited lagging animation")
+    let selection = TrainerMotion.transaction(.selection, reduceMotion: false)
+    managementCheck(selection.animation != nil && !selection.disablesAnimations,
+                    "normal selection lost its interruptible motion")
+    var native = Transaction(animation: .linear(duration: 9))
+    let inherited = native.animation
+    TrainerMotion.nativeControlTransaction(&native, reduceMotion: false)
+    managementCheck(native.animation == inherited && !native.disablesAnimations,
+                    "native controls replaced normal system transaction behavior")
+    TrainerMotion.nativeControlTransaction(&native, reduceMotion: true)
+    managementCheck(native.animation == nil && native.disablesAnimations,
+                    "native controls inherited a moving reduced-motion transaction")
+
+    let previousLanguage = localization.language
+    defer { localization.language = previousLanguage }
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        localization.language = language
+        for (reduced, width) in [(false, CGFloat(420)), (true, CGFloat(340))] {
+            let state = ControlMotionState()
+            let title = language == .en ? "Fixture control" : "测试功能"
+            let host = NSHostingView(rootView: ControlMotionFixture(state: state, title: title)
+                .environmentObject(localization).environment(\.accessibilityReduceMotion, reduced))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 260),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            window.makeKeyAndOrderFront(nil)
+            func button(_ id: String) -> NativeAccessibilityControl? {
+                nativeAccessibilityControls(host).first { $0.identifier == "motion." + id && $0.role == "AXButton" }
+            }
+            func toggle() -> NativeAccessibilityControl? {
+                nativeAccessibilityControls(host).first {
+                    $0.label == title && ($0.role == "AXCheckBox" || $0.role == "AXSwitch")
+                }
+            }
+            let ids = ["lock", "selection", "reset", "primary", "secondary"]
+            managementWait(host, "shared native controls") {
+                ids.allSatisfy { button($0)?.enabled == true } && toggle()?.enabled == true
+            }
+            let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
+            for id in ids {
+                let frame = button(id)!.frame
+                managementCheck(frame.width > 0 && frame.height > 0 && bounds.contains(frame),
+                                "shared native control clipped at width \(width): " + id)
+                if ["lock", "selection", "reset"].contains(id) {
+                    managementCheck(frame.width <= 27 && frame.height <= 25,
+                                    "native compact control changed the metric-card footprint: " + id)
+                }
+            }
+            for expected in [true, false, true, false] {
+                let before = state.requests.count
+                managementCheck(toggle()!.press(), "native feature toggle refused AX press")
+                managementWait(host, "rapid toggle reversal") {
+                    state.isOn == expected && toggle().flatMap(motionToggleValue) == expected
+                }
+                managementCheck(state.requests.count == before + 1, "toggle double-fired or waited for motion")
+            }
+            state.acceptsToggle = false
+            managementCheck(toggle()!.press(), "pending feature toggle refused AX press")
+            managementWait(host, "pending feature state") { toggle()?.enabled == false }
+            managementCheck(!state.isOn && toggle().flatMap(motionToggleValue) == false,
+                            "pending animation fabricated an acknowledged on state")
+            state.pending = false; state.phase = "Failed"
+            managementWait(host, "failed feature recovery") { toggle()?.enabled == true && toggle()?.help == "Failed" }
+            managementCheck(toggle().flatMap(motionToggleValue) == false, "failed action left false success state")
+            state.acceptsToggle = true; state.phase = "Ready"
+
+            for _ in 0..<2 {
+                for id in ids {
+                    let before = state.requests.count
+                    managementCheck(button(id)!.press(), "native shared button refused AX press: " + id)
+                    managementWait(host, "immediate button action") { state.requests.count == before + 1 }
+                }
+            }
+            managementCheck(!state.locked && !state.selected, "repeated state controls did not reverse")
+            let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .option],
+                timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "k",
+                charactersIgnoringModifiers: "k", isARepeat: false, keyCode: 40)!
+            let beforeKey = state.requests.count
+            _ = window.performKeyEquivalent(key)
+            managementWait(host, "native button keyboard equivalent") { state.requests.count == beforeKey + 1 }
+            managementCheck(state.requests.last == "primary", "keyboard action targeted the wrong control")
+
+            state.enabled = false
+            managementWait(host, "disabled shared controls") {
+                ids.allSatisfy { button($0)?.enabled == false } && toggle()?.enabled == false
+            }
+            let beforeDisabled = state.requests.count
+            for id in ids { _ = button(id)!.press() }
+            _ = toggle()!.press()
+            _ = window.performKeyEquivalent(key)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+            managementCheck(state.requests.count == beforeDisabled, "disabled control dispatched an action")
+
+            state.isOn = true; state.locked = true; state.selected = true
+            managementWait(host, "external observed state") {
+                toggle().flatMap(motionToggleValue) == true
+                    && button("selection")?.valueText == localization.localized("host.selection.selected")
+                    && button("lock")?.label == localization.localized("host.unlockValue", arguments: [title])
+            }
+            managementCheck(state.requests.count == beforeDisabled, "observation animation dispatched an action")
+            window.contentView = nil
+            window.close()
+        }
+    }
 }
 '''

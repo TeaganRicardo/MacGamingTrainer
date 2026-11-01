@@ -38,9 +38,24 @@ assert selected_tests(["tests/test_hades2_save_editor_frontend.py"], TESTS, SOUR
 for path in (
     "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
     "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
-    "Tools/macos_test_dependencies.json",
 ):
     assert selected_tests([path], TESTS, SOURCES) == ["test_hades2_lldb_breakpoint_lifetime.py"]
+assert selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES) == sorted({
+    "test_hades2_lldb_breakpoint_lifetime.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+})
+assert selected_tests(["tests/management_ui_harness.py"], TESTS, SOURCES) == sorted({
+    "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+})
+for path in (
+    "Sources/Core/UI/TrainerMotion.swift",
+    "Sources/Core/UI/Primitives/TrainerToggleControl.swift",
+    "Sources/Core/UI/Components/TrainerFeatureControls.swift",
+    "Sources/Core/UI/Components/TrainerListControls.swift",
+):
+    assert selected_tests([path], TESTS, SOURCES) == sorted({
+        "test_multi_game_contexts.py", "test_reference_fixture_session_integration.py",
+        "test_global_hotkey_routing.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+    })
 assert selected_tests(["tests/test_debugserver_ownership.py"], TESTS, SOURCES) == []
 assert selected_tests(["Tools/macos_only_tests.txt"], TESTS, SOURCES) == sorted(TESTS)
 assert selected_tests(["tests/fixtures/swift/InMemoryDefaults.swift"], TESTS, SOURCES) == sorted(TESTS)

@@ -24,9 +24,9 @@ for path in CORE_UI.rglob('*.swift'):
         switch_files.append(path.relative_to(ROOT).as_posix())
 assert switch_files == ['Sources/Core/UI/Primitives/TrainerToggleControl.swift'], switch_files
 
-# Shared switch is native regular and animated. Purple remains the default, but
+# Shared switch retains native regular sizing and motion. Purple remains the default, but
 # feature rows may pass the same neutral phase tint used by their icon.
-for token in ('.toggleStyle(.switch)', '.controlSize(.regular)', '.tint(tint ?? theme.accent)', '.fixedSize()', '.animation(.easeInOut(duration: 0.16), value: isOn)'):
+for token in ('.toggleStyle(.switch)', '.controlSize(.regular)', '.tint(tint ?? theme.accent)', '.fixedSize()'):
     assert token in toggle, token
 assert 'Capsule()' not in toggle
 assert 'let tint: Color?' in toggle
