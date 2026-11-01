@@ -32,7 +32,7 @@ assert ".focusEffectDisabled()" in card
 assert ".focused($headerFocused)" in card
 assert ".accessibilityIdentifier(\"host.game." in card
 assert ".accessibilityLabel(descriptor.displayName)" in card
-assert ".background(" in card and "headerFocused" in card
+assert ".background {" in card and "headerFocused" in card
 
 # Connection state occupies one constant-sized dot; no glyph, spinner, or
 # module-level selection stripe may substitute for the plain status marker.
