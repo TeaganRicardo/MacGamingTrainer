@@ -33,8 +33,10 @@ card = section(sidebar, "struct TrainerSidebarCard", "struct TrainerSidebar<")
 selection_motion = '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)'
 assert card.count(selection_motion) == 0
 assert card.count('.animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: selected)') == 1
-assert ".frame(height: selected ? nil : 0, alignment: .top)" in card
-assert ".padding(.top, selected ? 14 : 0)" in card
+assert "TrainerSidebarDisclosureClip(" in card
+assert "visibleHeight: selected ? measuredActionHeight : 0" in card
+assert ".fixedSize(horizontal: false, vertical: true)" in card
+assert "TrainerSidebarActionHeightKey" in card
 assert "TrainerGameSelectionFocus(gameID: application.selectedGameID)" in pages
 assert ".opacity(context.id == application.selectedGameID ? 1 : 0)" in pages
 assert ".allowsHitTesting(context.id == application.selectedGameID)" in pages
