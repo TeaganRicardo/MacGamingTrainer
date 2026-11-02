@@ -29,7 +29,6 @@ struct TrainerResetButton: View {
 struct TrainerSectionButton: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String?
     let systemImage: String
@@ -59,11 +58,6 @@ struct TrainerSectionButton: View {
             .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
-            .background {
-                RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous)
-                    .fill(selected ? theme.accent.opacity(0.12) : .clear)
-                    .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
-            }
             .overlay(alignment: .leading) {
                 if selected {
                     Capsule()
@@ -76,6 +70,9 @@ struct TrainerSectionButton: View {
             }
         }
         .buttonStyle(.plain)
+        // Selected sections use only the narrow leading marker. Suppress
+        // AppKit's focus block behind the trailing chevron.
+        .focusEffectDisabled()
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
