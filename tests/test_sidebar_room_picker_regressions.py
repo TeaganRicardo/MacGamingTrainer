@@ -27,13 +27,18 @@ indicator = region(card, "private var statusIndicator", "var body: some View")
 section_controls = source("Sources/Core/UI/Components/TrainerListControls.swift")
 section = region(section_controls, "struct TrainerSectionButton", "private struct TrainerActionButtonLabel")
 
-# The header remains a real keyboard/AX button without any focus-only paint.
-assert ".focusable(true, interactions: .activate)" in card
-assert ".focusEffectDisabled()" in card
+# The header uses one native focus owner with focus-ring drawing disabled.
+# The SwiftUI label remains purely presentation/state; native AX focus cannot
+# introduce focus-only pixels into that presentation.
+assert "struct TrainerModuleHeaderButton: NSViewRepresentable" in sidebar
+assert "override var acceptsFirstResponder: Bool { true }" in sidebar
+assert "button.focusRingType = .none" in sidebar
+assert "button.setAccessibilitySelected(selected)" in sidebar
+assert "TrainerModuleHeaderButton(" in card
+assert "Button(action: onSelect)" not in card
 assert ".focused($headerFocused)" not in card
 assert "headerFocused" not in card
-assert ".accessibilityIdentifier(\"host.game." in card
-assert ".accessibilityLabel(descriptor.displayName)" in card
+assert 'identifier: "host.game.\\(descriptor.id)"' in card
 
 # Connection state occupies one constant-sized dot; no glyph, spinner, or
 # module-level selection stripe may substitute for the plain status marker.

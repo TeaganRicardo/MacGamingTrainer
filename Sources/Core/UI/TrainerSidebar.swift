@@ -1,4 +1,49 @@
+import AppKit
 import SwiftUI
+
+private struct TrainerModuleHeaderButton: NSViewRepresentable {
+    final class FocuslessButton: NSButton {
+        override var acceptsFirstResponder: Bool { true }
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+        init(action: @escaping () -> Void) { self.action = action }
+
+        @objc func activate(_ sender: Any?) { action() }
+    }
+
+    let label: String
+    let value: String
+    let identifier: String
+    let help: String
+    let selected: Bool
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    func makeNSView(context: Context) -> FocuslessButton {
+        let button = FocuslessButton()
+        button.title = ""
+        button.isBordered = false
+        button.isTransparent = true
+        button.focusRingType = .none
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.activate(_:))
+        return button
+    }
+
+    func updateNSView(_ button: FocuslessButton, context: Context) {
+        context.coordinator.action = action
+        button.focusRingType = .none
+        button.setAccessibilityLabel(label)
+        button.setAccessibilityValue(value)
+        button.setAccessibilityIdentifier(identifier)
+        button.setAccessibilityHelp(help)
+        button.setAccessibilitySelected(selected)
+    }
+}
+
 
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
@@ -71,7 +116,7 @@ struct TrainerSidebarCard<Actions: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: selected ? 14 : 0) {
-            Button(action: onSelect) {
+            ZStack {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title3.weight(.medium))
@@ -86,15 +131,18 @@ struct TrainerSidebarCard<Actions: View>: View {
                     statusIndicator
                 }
                 .frame(minHeight: 30)
-                .contentShape(Rectangle())
+
+                TrainerModuleHeaderButton(
+                    label: descriptor.displayName,
+                    value: localization.string(statusToken),
+                    identifier: "host.game.\(descriptor.id)",
+                    help: statusHelp,
+                    selected: selected,
+                    action: onSelect
+                )
+                .frame(maxWidth: .infinity, minHeight: 30)
             }
-            .buttonStyle(.plain)
-            .focusable(true, interactions: .activate)
-            .focusEffectDisabled()
-            .accessibilityLabel(descriptor.displayName)
-            .accessibilityValue(localization.string(statusToken))
-            .accessibilityIdentifier("host.game.\(descriptor.id)")
-            .accessibilityAddTraits(selected ? .isSelected : [])
+            .contentShape(Rectangle())
             VStack(alignment: .leading, spacing: 14) { actions }
                 .buttonStyle(.plain)
                 .frame(height: selected ? nil : 0, alignment: .top)
