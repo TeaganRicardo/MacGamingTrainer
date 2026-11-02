@@ -32,14 +32,9 @@ struct TrainerGamePages: View {
                         .zIndex(context.id == application.selectedGameID ? 1 : 0)
                 }
             }
-            .overlay {
-                TrainerGamePageTransitionSurface(transition: transition)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
         }
         .trainerSurface(.canvas)
-        .background(TrainerGameSelectionFocus(gameID: application.selectedGameID)
+        .background(TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)
             .allowsHitTesting(false).accessibilityHidden(true))
         .trainerDismissTextEditingOnClickAway()
         .disabled(application.terminationRequested)
@@ -56,9 +51,22 @@ struct TrainerGamePages: View {
 /// the sidebar selection, and never resign an independent tool window's editor.
 private struct TrainerGameSelectionFocus: NSViewRepresentable {
     let gameID: String
-    final class Observer: NSView { var gameID: String? }
-    func makeNSView(context: Context) -> Observer { Observer() }
+    let transition: TrainerGamePageTransition
+
+    final class Observer: NSView {
+        var gameID: String?
+        weak var transition: TrainerGamePageTransition?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    func makeNSView(context: Context) -> Observer {
+        let view = Observer()
+        view.transition = transition
+        transition.attach(view)
+        return view
+    }
     func updateNSView(_ view: Observer, context: Context) {
+        transition.attach(view)
         let previous = view.gameID
         view.gameID = gameID
         guard let previous, previous != gameID, let window = view.window,
@@ -69,5 +77,8 @@ private struct TrainerGameSelectionFocus: NSViewRepresentable {
                   editor.delegate as? NSTextField === field else { return }
             window.makeFirstResponder(nil)
         }
+    }
+    static func dismantleNSView(_ view: Observer, coordinator: ()) {
+        view.transition?.detach(view)
     }
 }
