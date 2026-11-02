@@ -104,8 +104,30 @@ enum TrainerPickerWidthRole {
     case expanding
 }
 
+// Inline picker/action rows report their actual native control allocation
+// and supply a parent-measured target. The semantic width role remains shared
+// across game modules, with no fixed menu width in a game view.
+struct TrainerPickerAllocatedWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TrainerPickerActionWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var trainerPickerActionWidth: CGFloat? {
+        get { self[TrainerPickerActionWidthKey.self] }
+        set { self[TrainerPickerActionWidthKey.self] = newValue }
+    }
+}
+
 private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerPickerActionWidth) private var actionWidth
     let role: TrainerPickerWidthRole
 
     @ViewBuilder
@@ -116,7 +138,19 @@ private struct TrainerPickerWidthModifier: ViewModifier {
                 content.frame(width: theme.pickerCompactWidth)
             case .rowValue:
                 content.frame(width: theme.pickerStandardWidth)
-            case .rowAction, .form:
+            case .rowAction:
+                // The hosting row measures the actual shortcut/action width;
+                // allocate the remaining lane explicitly instead of trusting
+                // HStack's unspecified intrinsic Picker size.
+                content
+                    .frame(width: actionWidth ?? theme.pickerStandardWidth)
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: TrainerPickerAllocatedWidthKey.self,
+                                                   value: geometry.size.width)
+                        }
+                    }
+            case .form:
                 content.frame(
                     minWidth: theme.pickerStandardWidth,
                     idealWidth: theme.pickerWideWidth,
