@@ -70,17 +70,16 @@ struct TrainerSidebarCard<Actions: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: selected ? 14 : 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Button(action: onSelect) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title3.weight(.medium))
                         .foregroundStyle(selected ? theme.accent : .secondary)
-                        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
                         .frame(width: 24)
                         .accessibilityHidden(true)
                     Text(descriptor.displayName)
-                        .font(.headline.weight(selected ? .semibold : .medium))
+                        .font(.headline.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     statusIndicator
@@ -95,20 +94,22 @@ struct TrainerSidebarCard<Actions: View>: View {
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")
             .accessibilityAddTraits(selected ? .isSelected : [])
+            // Retain the action tree across selection. Only its clipped
+            // disclosure height and content opacity animate, keeping the header
+            // icon stationary within its card and avoiding window-wide motion.
             VStack(alignment: .leading, spacing: 14) { actions }
                 .buttonStyle(.plain)
+                .padding(.top, selected ? 14 : 0)
                 .frame(height: selected ? nil : 0, alignment: .top)
                 .clipped()
                 .opacity(selected ? 1 : 0)
+                .animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: selected)
                 .allowsHitTesting(selected)
                 .disabled(!selected)
                 .accessibilityHidden(!selected)
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
-        // Avoid interpolating the action stack's height on every frame.
-        // The workbench crossfade is Core Animation-owned; section motion
-        // and the lightweight header icon keep their own native semantics.
     }
 }
 
