@@ -106,10 +106,9 @@ struct TrainerSidebarCard<Actions: View>: View {
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
-        // Keep module-selection motion scoped to this small sidebar subtree.
-        // Retained game-page trees are deliberately outside this transaction.
-        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
-
+        // Avoid interpolating the action stack's height on every frame.
+        // The workbench crossfade is Core Animation-owned; section motion
+        // and the lightweight header icon keep their own native semantics.
     }
 }
 
