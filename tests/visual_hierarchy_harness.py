@@ -167,7 +167,16 @@ private func hierarchyWait(_ host: NSView, _ condition: () -> Bool) {
         if condition() { return }
         hierarchyPump(0.02)
     } while Date() < deadline
-    hierarchyCheck(condition(), "visual hierarchy did not mount its native controls")
+    if !condition() {
+        let fields = hierarchyFields(host)
+        let values = fields.map { field in
+            "\\(field.stringValue){enabled=\\(field.isEnabled),frame=\\(field.frame)}"
+        }
+        fatalError("visual hierarchy did not mount its native controls" +
+            " active=\\(NSApp.isActive) key=\\(host.window?.isKeyWindow == true)" +
+            " hostBounds=\\(host.bounds) windowBounds=\\(host.window?.contentView?.bounds.debugDescription ?? "none")" +
+            " nativeFields=\\(fields.count) values=\\(values)")
+    }
 }
 
 @MainActor
