@@ -35,6 +35,7 @@ private struct VisualHierarchyFixture: View {
                     TrainerSectionButton(title: title("Common functions", "常用功能"),
                         systemImage: "switch.2") {}
                 }
+                .background(HierarchyCardHeightProbe().allowsHitTesting(false).accessibilityHidden(true))
             }
         } content: {
             VStack(alignment: .leading, spacing: TrainerTheme.standard.pageSpacing) {
@@ -82,6 +83,18 @@ private struct VisualHierarchyFixture: View {
         .preferredColorScheme(.dark)
         .trainerTheme(.standard)
     }
+}
+
+// Native geometry of the actual sidebar card at each disclosure frame.
+private struct HierarchyCardHeightProbe: NSViewRepresentable {
+    final class Frame: NSView {}
+    func makeNSView(context: Context) -> Frame { Frame() }
+    func updateNSView(_ view: Frame, context: Context) {}
+}
+
+private func hierarchyCardHeightProbe(_ view: NSView) -> NSView? {
+    if view is HierarchyCardHeightProbe.Frame { return view }
+    return view.subviews.lazy.compactMap(hierarchyCardHeightProbe).first
 }
 
 // The width role owns the SwiftUI allocation. AppKit owns the native bezel's
@@ -288,6 +301,33 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                            "sidebar selection lost its hit target or clipped its label")
             hierarchyCheck(hierarchySelected(game) == state.selected,
                            "module header lost its selected AX state")
+            guard let cardProbe = hierarchyCardHeightProbe(host) else {
+                fatalError("module-card height probe not mounted")
+            }
+            hierarchyPump(0.08)
+            let expandedCardHeight = cardProbe.bounds.height
+            state.selected = false
+            var interpolatedCardHeights: [CGFloat] = []
+            let collapseDeadline = Date().addingTimeInterval(0.36)
+            while Date() < collapseDeadline {
+                hierarchyPump(0.016)
+                host.layoutSubtreeIfNeeded()
+                interpolatedCardHeights.append(cardProbe.bounds.height)
+            }
+            let collapsedCardHeight = cardProbe.bounds.height
+            hierarchyCheck(expandedCardHeight > collapsedCardHeight + 40,
+                           "module card did not collapse its real action stack")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                hierarchyCheck(interpolatedCardHeights.contains {
+                    $0 > collapsedCardHeight + 8 && $0 < expandedCardHeight - 8
+                }, "module-card disclosure snapped instead of interpolating its geometry")
+            }
+            state.selected = true
+            hierarchyPump(0.40)
+            host.layoutSubtreeIfNeeded()
+            hierarchyCheck(abs(cardProbe.bounds.height - expandedCardHeight) < 3,
+                           "module-card disclosure failed to restore its original height")
+            print("sidebar_accordion_native_geometry game=\(descriptor.id) language=\(language.rawValue) width=\(width) expanded=\(expandedCardHeight) collapsed=\(collapsedCardHeight)")
             hierarchyPump(0.08)
             let headerFrame = game.frame
             let unfocusedBitmap = hierarchyBitmap(host, around: headerFrame)
