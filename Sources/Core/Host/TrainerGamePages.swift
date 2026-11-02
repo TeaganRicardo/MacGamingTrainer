@@ -6,7 +6,6 @@ struct TrainerGamePages: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var transition = TrainerGamePageTransition()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -14,7 +13,6 @@ struct TrainerGamePages: View {
                 ForEach(application.contexts) { context in
                     context.makeSidebarCard(selected: context.id == application.selectedGameID) {
                         guard application.selectedGameID != context.id else { return }
-                        transition.prepare(reduceMotion: reduceMotion)
                         application.selectedGameID = context.id
                     }
                 }
@@ -27,6 +25,7 @@ struct TrainerGamePages: View {
                 ForEach(application.contexts) { context in
                     context.content
                         .opacity(context.id == application.selectedGameID ? 1 : 0)
+                        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)
                         .allowsHitTesting(context.id == application.selectedGameID)
                         .accessibilityHidden(context.id != application.selectedGameID)
                         .zIndex(context.id == application.selectedGameID ? 1 : 0)
@@ -34,13 +33,10 @@ struct TrainerGamePages: View {
             }
         }
         .trainerSurface(.canvas)
-        .background(TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)
+        .background(TrainerGameSelectionFocus(gameID: application.selectedGameID)
             .allowsHitTesting(false).accessibilityHidden(true))
         .trainerDismissTextEditingOnClickAway()
         .disabled(application.terminationRequested)
-        .onChange(of: reduceMotion) { _, reduced in
-            if reduced { transition.cancel() }
-        }
     }
 }
 
@@ -48,22 +44,16 @@ struct TrainerGamePages: View {
 /// the sidebar selection, and never resign an independent tool window's editor.
 private struct TrainerGameSelectionFocus: NSViewRepresentable {
     let gameID: String
-    let transition: TrainerGamePageTransition
 
     final class Observer: NSView {
         var gameID: String?
-        weak var transition: TrainerGamePageTransition?
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 
     func makeNSView(context: Context) -> Observer {
-        let view = Observer()
-        view.transition = transition
-        transition.attach(view)
-        return view
+        Observer()
     }
     func updateNSView(_ view: Observer, context: Context) {
-        transition.attach(view)
         let previous = view.gameID
         view.gameID = gameID
         guard let previous, previous != gameID, let window = view.window,
@@ -74,8 +64,5 @@ private struct TrainerGameSelectionFocus: NSViewRepresentable {
                   editor.delegate as? NSTextField === field else { return }
             window.makeFirstResponder(nil)
         }
-    }
-    static func dismantleNSView(_ view: Observer, coordinator: ()) {
-        view.transition?.detach(view)
     }
 }
