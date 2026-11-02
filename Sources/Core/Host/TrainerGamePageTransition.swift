@@ -7,7 +7,8 @@ import SwiftUI
 /// No CPU bitmap capture, duplicate NSHostingView, or per-frame SwiftUI layout.
 @MainActor
 final class TrainerGamePageTransition {
-    private static let animationKey = "trainer.game.page.crossfade"
+    // CALayer normalizes CATransition to the standard "transition" key.
+    private static let animationKey = "transition"
     private weak var surface: TrainerGamePageTransitionAnchor?
     private weak var animatedRoot: NSView?
     private var pendingDestination: String?
