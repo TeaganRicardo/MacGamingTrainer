@@ -25,7 +25,8 @@ assert ".accessibilityHidden(true)" in pages
 assert "CATransition()" in compositor and "fade.type = .fade" in compositor
 assert "CAMediaTimingFunction(name: .easeInEaseOut)" in compositor
 assert "layer.add(fade, forKey: Self.animationKey)" in compositor
-assert "layer?.removeAnimation(forKey: Self.animationKey)" in compositor
+assert "layer.removeAnimation(forKey: Self.animationKey)" in compositor
+assert "layer.animation(forKey: Self.animationKey)?.value(forKey: Self.ownerKey)" in compositor
 assert "pendingDestination" in compositor
 assert 'animationKey = "transition"' in compositor
 assert "guard !reduceMotion" in compositor
