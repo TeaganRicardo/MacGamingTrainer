@@ -25,15 +25,17 @@ hades = read("Sources/Hades/HadesTrainerView.swift")
 hades2 = read("Sources/Hades2/Hades2View.swift")
 theme = read("Sources/Core/UI/TrainerTheme.swift")
 
-# Game selection changes visible pages immediately rather than animating a
-# heavy stack/sidebar layout when retained models and native controls update.
-assert '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)' not in pages
+# Retained workbench content crossfades at its own opacity boundary; the
+# actual selection/hotkey/AX owner still switches immediately. Sidebar motion
+# belongs only to the clipped disclosure stack, not the header icon or window.
+assert '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)' in pages
 card = section(sidebar, "struct TrainerSidebarCard", "struct TrainerSidebar<")
 selection_motion = '.animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)'
-assert card.count(selection_motion) == 1
-assert card.index(selection_motion) < card.index(".frame(width: 24)")
-assert "Avoid interpolating the action stack's height" in card
-assert "TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)" in pages
+assert card.count(selection_motion) == 0
+assert card.count('.animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: selected)') == 1
+assert ".frame(height: selected ? nil : 0, alignment: .top)" in card
+assert ".padding(.top, selected ? 14 : 0)" in card
+assert "TrainerGameSelectionFocus(gameID: application.selectedGameID)" in pages
 assert ".opacity(context.id == application.selectedGameID ? 1 : 0)" in pages
 assert ".allowsHitTesting(context.id == application.selectedGameID)" in pages
 
