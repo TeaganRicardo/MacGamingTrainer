@@ -29,7 +29,7 @@ assert "layer?.removeAnimation(forKey: Self.animationKey)" in compositor
 assert "pendingDestination" in compositor
 assert 'animationKey = "transition"' in compositor
 assert "guard !reduceMotion" in compositor
-assert "override func hitTest(" in compositor
+assert "override func hitTest(" in pages
 for expensive in ("bitmapImageRepForCachingDisplay", "cacheDisplay(in:", "NSImageView", "DispatchQueue.main.asyncAfter"):
     assert expensive not in compositor, expensive
 assert "NSHostingView(" not in compositor
