@@ -9,6 +9,8 @@ import SwiftUI
 final class TrainerGamePageTransition {
     // CALayer normalizes CATransition to the standard "transition" key.
     private static let animationKey = "transition"
+    private static let ownerKey = "mgtGameTransitionOwner"
+    private let ownerToken = UUID().uuidString
     private weak var surface: NSView?
     private weak var animatedRoot: NSView?
     private var pendingDestination: String?
@@ -35,6 +37,7 @@ final class TrainerGamePageTransition {
         fade.type = .fade
         fade.duration = TrainerMotion.duration(.selection, reduceMotion: false)
         fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        fade.setValue(ownerToken, forKey: Self.ownerKey)
         layer.add(fade, forKey: Self.animationKey)
         animatedRoot = root
         pendingDestination = destination
@@ -53,7 +56,13 @@ final class TrainerGamePageTransition {
 
     func cancel() {
         pendingDestination = nil
-        animatedRoot?.layer?.removeAnimation(forKey: Self.animationKey)
+        // NSHostingView and AppKit also use the canonical "transition" key.
+        // Remove only this owner's animation during a rapid reversal or when
+        // Reduce Motion changes; never cancel a native/system transition.
+        if let layer = animatedRoot?.layer,
+           layer.animation(forKey: Self.animationKey)?.value(forKey: Self.ownerKey) as? String == ownerToken {
+            layer.removeAnimation(forKey: Self.animationKey)
+        }
         animatedRoot = nil
     }
 }
