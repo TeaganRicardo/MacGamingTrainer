@@ -88,30 +88,16 @@ struct TrainerLabeledControlRow<Controls: View>: View {
         self.controls = controls()
     }
 
-    @ViewBuilder
     var body: some View {
-        switch layout {
-        case .natural:
-            // Keep the established general-purpose row hierarchy intact.
-            // Picker/action column policy belongs only to the explicit
-            // pickerAction semantic role.
-            TrainerRow(opacity: opacity) {
-                HStack(spacing: 16) {
-                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
-                        .help(helpText)
-                    Spacer(minLength: 8)
-                    controls
-                }
-            }
-        case .pickerAction:
-            TrainerRow(opacity: opacity) {
-                HStack(spacing: 16) {
-                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
-                        .frame(width: theme.pickerActionLabelWidth, alignment: .leading)
-                        .help(helpText)
-                    controls
-                    Spacer(minLength: 0)
-                }
+        TrainerRow(opacity: opacity) {
+            HStack(spacing: 16) {
+                TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                    .frame(width: layout == .pickerAction ? theme.pickerActionLabelWidth : nil,
+                           alignment: .leading)
+                    .help(helpText)
+                if layout == .natural { Spacer(minLength: 8) }
+                controls
+                if layout == .pickerAction { Spacer(minLength: 0) }
             }
         }
     }
