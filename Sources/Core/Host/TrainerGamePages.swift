@@ -14,7 +14,7 @@ struct TrainerGamePages: View {
                 ForEach(application.contexts) { context in
                     context.makeSidebarCard(selected: context.id == application.selectedGameID) {
                         guard application.selectedGameID != context.id else { return }
-                        transition.prepare(destination: context.id, reduceMotion: reduceMotion)
+                        transition.prepare(reduceMotion: reduceMotion)
                         application.selectedGameID = context.id
                     }
                 }
@@ -38,9 +38,6 @@ struct TrainerGamePages: View {
             .allowsHitTesting(false).accessibilityHidden(true))
         .trainerDismissTextEditingOnClickAway()
         .disabled(application.terminationRequested)
-        .onChange(of: application.selectedGameID) { _, newValue in
-            transition.finish(destination: newValue)
-        }
         .onChange(of: reduceMotion) { _, reduced in
             if reduced { transition.cancel() }
         }
