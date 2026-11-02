@@ -95,9 +95,12 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                     .frame(width: layout == .pickerAction ? theme.pickerActionLabelWidth : nil,
                            alignment: .leading)
                     .help(helpText)
-                if layout == .natural { Spacer(minLength: 8) }
+                // The label occupies a predictable leading column for
+                // picker/action rows. Flexible space belongs BEFORE the
+                // controls so every Picker, shortcut and action docks to the
+                // shared trailing edge at both minimum and wide widths.
+                Spacer(minLength: 8)
                 controls
-                if layout == .pickerAction { Spacer(minLength: 0) }
             }
         }
     }
