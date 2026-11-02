@@ -88,7 +88,9 @@ private func exerciseRoomPickerAlignment() {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             hierarchyWait(host) {
-                window.isKeyWindow && nativeAccessibilityControls(host)
+                // This fixture verifies geometry, not keyboard focus.
+                // App activation varies across automated desktop sessions.
+                nativeAccessibilityControls(host)
                     .filter { $0.role == "AXPopUpButton" }.count == 5
             }
             let pickers = nativeAccessibilityControls(host)
