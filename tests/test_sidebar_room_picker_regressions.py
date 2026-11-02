@@ -75,8 +75,9 @@ assert "TrainerGamePageTransition" not in pages
 # between the label and the picker, never after the button group.
 row = source("Sources/Core/UI/Primitives/TrainerRow.swift")
 labeled = region(row, "struct TrainerLabeledControlRow")
-assert "if layout == .pickerAction { Spacer(minLength: 8) }" in labeled
-assert "if layout == .pickerAction { Spacer(minLength: 0) }" not in labeled
+assert "Spacer(minLength: 8)" in labeled
+assert labeled.index("Spacer(minLength: 8)") < labeled.index("\n                controls")
+assert "Spacer(minLength: 0)" not in labeled
 
 
 # Both sidebar navigation sets start with the first visible Values section
