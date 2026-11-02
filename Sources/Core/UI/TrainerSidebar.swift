@@ -26,8 +26,8 @@ private struct TrainerModuleHeaderButton: NSViewRepresentable {
         let button = FocuslessButton()
         button.title = ""
         button.isBordered = false
-        button.isTransparent = true
         button.focusRingType = .none
+        button.setAccessibilityElement(true)
         button.target = context.coordinator
         button.action = #selector(Coordinator.activate(_:))
         return button
@@ -41,6 +41,7 @@ private struct TrainerModuleHeaderButton: NSViewRepresentable {
         button.setAccessibilityIdentifier(identifier)
         button.setAccessibilityHelp(help)
         button.setAccessibilitySelected(selected)
+        button.toolTip = help
     }
 }
 
@@ -127,6 +128,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                     Text(descriptor.displayName)
                         .font(.headline.weight(selected ? .semibold : .medium))
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityHidden(true)
                     Spacer()
                     statusIndicator
                 }

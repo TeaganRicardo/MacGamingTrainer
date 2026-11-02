@@ -108,6 +108,13 @@ private func hierarchyFocused(_ target: NativeAccessibilityControl) -> Bool {
     return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
 }
 
+private func hierarchySelected(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilitySelected")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
 @discardableResult
 private func hierarchySetFocused(_ target: NativeAccessibilityControl, _ focused: Bool) -> Bool {
     let selector = NSSelectorFromString("setAccessibilityFocused:")
@@ -250,6 +257,12 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
             hierarchyCheck(game.frame.height >= 30 && bounds.contains(game.frame),
                            "sidebar selection lost its hit target or clipped its label")
+            hierarchyCheck(game.object is NSButton, "module header is not owned by the native focusless button")
+            hierarchyCheck(hierarchySelected(game) == state.selected,
+                           "module header lost its selected AX state")
+            hierarchyCheck(!controls.contains {
+                $0.role == "AXStaticText" && $0.text == descriptor.displayName
+            }, "module header exposed a duplicate static title beside its AX button")
             hierarchyPump(0.08)
             let unfocusedBitmap = hierarchyBitmap(host)
             hierarchyCheck(hierarchySetFocused(game, true), "module header does not accept native AX focus")

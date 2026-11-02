@@ -33,12 +33,16 @@ section = region(section_controls, "struct TrainerSectionButton", "private struc
 assert "struct TrainerModuleHeaderButton: NSViewRepresentable" in sidebar
 assert "override var acceptsFirstResponder: Bool { true }" in sidebar
 assert "button.focusRingType = .none" in sidebar
+assert "button.setAccessibilityElement(true)" in sidebar
+assert "button.isTransparent = true" not in sidebar
 assert "button.setAccessibilitySelected(selected)" in sidebar
+assert "button.toolTip = help" in sidebar
 assert "TrainerModuleHeaderButton(" in card
 assert "Button(action: onSelect)" not in card
 assert ".focused($headerFocused)" not in card
 assert "headerFocused" not in card
 assert 'identifier: "host.game.\\(descriptor.id)"' in card
+assert ".accessibilityHidden(true)" in card
 
 # Connection state occupies one constant-sized dot; no glyph, spinner, or
 # module-level selection stripe may substitute for the plain status marker.
