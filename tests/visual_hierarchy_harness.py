@@ -101,6 +101,22 @@ private func hierarchyCheck(_ condition: @autoclosure () -> Bool, _ message: Str
     if !condition() { fatalError(message) }
 }
 
+private func hierarchyFocused(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilityFocused")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
+@discardableResult
+private func hierarchySetFocused(_ target: NativeAccessibilityControl, _ focused: Bool) -> Bool {
+    let selector = NSSelectorFromString("setAccessibilityFocused:")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    unsafeBitCast(target.object.method(for: selector), to: Setter.self)(target.object, selector, focused)
+    return true
+}
+
 private func hierarchyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(hierarchyFields)
 }
@@ -236,15 +252,15 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                            "sidebar selection lost its hit target or clipped its label")
             hierarchyPump(0.08)
             let unfocusedBitmap = hierarchyBitmap(host)
-            hierarchyCheck(game.setFocused(true), "module header does not accept native AX focus")
+            hierarchyCheck(hierarchySetFocused(game, true), "module header does not accept native AX focus")
             hierarchyPump(0.08)
             guard let focusedGame = nativeAccessibilityControls(host).first(where: {
                 $0.identifier == "host.game." + descriptor.id
             }) else { fatalError("focused module header disappeared") }
-            hierarchyCheck(focusedGame.focused, "module header did not retain native AX focus")
+            hierarchyCheck(hierarchyFocused(focusedGame), "module header did not retain native AX focus")
             hierarchyCheck(hierarchyBitmap(host) == unfocusedBitmap,
                            "module header focus changed rendered presentation")
-            hierarchyCheck(focusedGame.setFocused(false), "module header rejected native AX focus removal")
+            hierarchyCheck(hierarchySetFocused(focusedGame, false), "module header rejected native AX focus removal")
             hierarchyPump(0.08)
             hierarchyCheck(hierarchyBitmap(host) == unfocusedBitmap,
                            "module header focus removal changed rendered presentation")

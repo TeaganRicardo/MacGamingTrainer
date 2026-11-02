@@ -28,15 +28,6 @@ struct NativeAccessibilityControl {
     var help: String? { value("accessibilityHelp") as? String }
     var identifier: String? { value("accessibilityIdentifier") as? String }
     var enabled: Bool { boolean("isAccessibilityEnabled") }
-    var focused: Bool { boolean("isAccessibilityFocused") }
-    @discardableResult
-    func setFocused(_ focused: Bool) -> Bool {
-        let selector = NSSelectorFromString("setAccessibilityFocused:")
-        guard object.responds(to: selector) else { return false }
-        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
-        unsafeBitCast(object.method(for: selector), to: Setter.self)(object, selector, focused)
-        return true
-    }
     func press() -> Bool { boolean("accessibilityPerformPress") }
     var children: [Any] { value("accessibilityChildren") as? [Any] ?? [] }
     var frame: NSRect {

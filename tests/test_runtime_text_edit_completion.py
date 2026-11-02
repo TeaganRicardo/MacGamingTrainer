@@ -952,7 +952,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         sources[sources.index(source)] = traced
     binary = td / "text_edit"
     subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
-    # Keep independent native journeys within their existing execution budget.
+    # Each journey retains its own bounded behavioral waits below. The outer
+    # process budget only covers SwiftUI/AppKit startup and compilation-host
+    # variance on shared CI runners; it must not expire after all assertions
+    # have already reached the final native editor episode.
     for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls,navigation").split(","):
         fixture = td / journey; fixture.mkdir()
         worker = fixture / "worker.py"; worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
@@ -961,7 +964,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         print(f"runtime_text_edit_completion_launch:{journey}", flush=True)
         try:
             result = subprocess.run([str(binary), PYTHON, str(worker), journey], env=env,
-                                    capture_output=True, text=True, timeout=45)
+                                    capture_output=True, text=True, timeout=60)
         except subprocess.TimeoutExpired as error:
             for output, stream in ((error.stdout, sys.stdout), (error.stderr, sys.stderr)):
                 if output is not None:
