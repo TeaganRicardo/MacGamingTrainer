@@ -1278,7 +1278,8 @@ struct Hades2TrainerView: View {
     private var nextOccurrencePanel: some View {
         let characters = model.occurrenceTargets.filter { $0.kind == "character" }
         let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
-        return TrainerLabeledControlRow(
+        return VStack(alignment: .leading, spacing: 0) {
+            TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
             emphasized: model.canEditDesired,
@@ -1316,10 +1317,16 @@ struct Hades2TrainerView: View {
                         : model.selectedNextOccurrenceTarget
                 )
             }
+            }
+            // Pending status is secondary text below the control row. Keeping
+            // it inside the HStack would push all action columns out of
+            // alignment only while an encounter override is active.
             if model.nextOccurrenceTarget != nil {
                 Text(text("hades2.occurrence.pending"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.leading, theme.rowHorizontalPadding + 54)
+                    .padding(.bottom, 10)
             }
         }
         .trainerGroupedRows()
