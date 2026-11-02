@@ -97,6 +97,15 @@ private func exerciseRoomPickerAlignment() {
             let first = pickers[0].frame
             hierarchyCheck(first.width > 180 && first.width <= theme.pickerWideWidth + 1,
                            "the native popup did not occupy its shared row-action allocation")
+            // Compare the actual native Picker against the shared trailing
+            // shortcut and action columns, not only the other four Pickers.
+            // Previous tests accepted five equally misplaced popups.
+            let contentRight = window.convertToScreen(host.convert(host.bounds, to: nil)).maxX
+            let rightGap = contentRight - first.maxX
+            let expectedGap = theme.rowHorizontalPadding + 16 + 52 + 16 + theme.compactActionWidth
+            hierarchyCheck(abs(rightGap - expectedGap) <= 8,
+                           "room popup is not anchored to trailing action columns: language=\(language.rawValue) window=\(width) actualGap=\(rightGap) expected=\(expectedGap)")
+
             for (index, control) in pickers.enumerated() {
                 let frame = control.frame
                 hierarchyCheck(frame.width > 0 && frame.height > 0,
