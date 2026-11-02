@@ -288,8 +288,10 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             guard let pickerLayout = hierarchyPickerFrame(host) else { fatalError("missing Picker layout probe") }
             let pickerFrame = window.convertToScreen(pickerLayout.convert(pickerLayout.bounds, to: nil))
             print("hierarchy_picker_geometry game=\(descriptor.id) language=\(language.rawValue) window=\(width) allocation=\(pickerFrame) native=\(picker.frame)")
-            hierarchyCheck(abs(pickerFrame.width - theme.pickerStandardWidth) <= 1 && bounds.contains(pickerFrame),
-                           "Picker width allocation changed at a constrained window width")
+            hierarchyCheck(abs(pickerFrame.width - theme.pickerStandardWidth) <= 1,
+                           "Picker width allocation changed at a constrained window width: language=\(language.rawValue) window=\(width) expected=\(theme.pickerStandardWidth) actual=\(pickerFrame.width) frame=\(pickerFrame)")
+            hierarchyCheck(bounds.contains(pickerFrame),
+                           "Picker width allocation escaped the content window: language=\(language.rawValue) window=\(width) bounds=\(bounds) frame=\(pickerFrame)")
             hierarchyCheck(picker.frame.width > 0 && picker.frame.height > 0 && bounds.contains(picker.frame)
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")
