@@ -374,6 +374,8 @@ struct StartupAvailabilityModule: TrainerGameModule {
                 } else if let fade = nativeFade as? CATransition {
                     journeyCheck(fade.duration == TrainerMotion.duration(.selection, reduceMotion: false),
                                  "native compositor fade ignored the shared selection timing")
+                    journeyCheck(fade.value(forKey: "mgtGameTransitionOwner") as? String != nil,
+                                 "module switch collided with an unowned native transition")
                     compositorFadeObserved = true
                 }
             }
