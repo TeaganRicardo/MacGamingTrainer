@@ -255,6 +255,12 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = host
+            // The hosted runner's virtual screen can be only 1024pt wide.
+            // AppKit otherwise shrinks our 1077pt minimum-width fixture to
+            // fit that screen, clipping the final 3pt of a correctly sized
+            // control. Keep the product-width window even if partly offscreen;
+            // allow its height to clamp to the runner's available space.
+            window.minSize = NSSize(width: width, height: 400)
             window.setContentSize(NSSize(width: width, height: 740))
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -263,7 +269,8 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 // its actual screen. Wait for mounted native fields in the
                 // real window instead of assuming NSWindow preserves 740pt.
                 NSApp.isActive && window.isKeyWindow
-                    && host.bounds.width > 0 && host.bounds.height > 0
+                    && abs(host.bounds.width - width) < 1
+                    && host.bounds.height > 0
                     && abs(host.bounds.width - window.contentView!.bounds.width) < 1
                     && abs(host.bounds.height - window.contentView!.bounds.height) < 1
                     && hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }.count == 5
