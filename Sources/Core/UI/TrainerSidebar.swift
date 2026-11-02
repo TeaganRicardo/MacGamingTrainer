@@ -2,8 +2,32 @@ import AppKit
 import SwiftUI
 
 private struct TrainerModuleHeaderButton: NSViewRepresentable {
-    final class FocuslessButton: NSButton {
+    final class FocuslessControl: NSControl {
         override var acceptsFirstResponder: Bool { true }
+        override var focusRingMaskBounds: NSRect { .zero }
+
+        override func draw(_ dirtyRect: NSRect) {}
+        override func drawFocusRingMask() {}
+
+        override func mouseDown(with event: NSEvent) {
+            guard isEnabled else { return }
+            _ = sendAction(action, to: target)
+        }
+
+        override func keyDown(with event: NSEvent) {
+            switch event.keyCode {
+            case 36, 49, 76:
+                guard isEnabled else { return }
+                _ = sendAction(action, to: target)
+            default:
+                super.keyDown(with: event)
+            }
+        }
+
+        override func accessibilityPerformPress() -> Bool {
+            guard isEnabled else { return false }
+            return sendAction(action, to: target)
+        }
     }
 
     final class Coordinator: NSObject {
@@ -22,18 +46,18 @@ private struct TrainerModuleHeaderButton: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(action: action) }
 
-    func makeNSView(context: Context) -> FocuslessButton {
-        let button = FocuslessButton()
-        button.title = ""
-        button.isBordered = false
+    func makeNSView(context: Context) -> FocuslessControl {
+        let button = FocuslessControl()
         button.focusRingType = .none
         button.setAccessibilityElement(true)
+        button.setAccessibilityRole(.button)
+        button.setAccessibilityEnabled(true)
         button.target = context.coordinator
         button.action = #selector(Coordinator.activate(_:))
         return button
     }
 
-    func updateNSView(_ button: FocuslessButton, context: Context) {
+    func updateNSView(_ button: FocuslessControl, context: Context) {
         context.coordinator.action = action
         button.focusRingType = .none
         button.setAccessibilityLabel(label)

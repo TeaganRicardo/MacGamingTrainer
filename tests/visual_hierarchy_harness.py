@@ -257,7 +257,7 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
             hierarchyCheck(game.frame.height >= 30 && bounds.contains(game.frame),
                            "sidebar selection lost its hit target or clipped its label")
-            hierarchyCheck(game.object is NSButton, "module header is not owned by the native focusless button")
+            hierarchyCheck(game.object is NSControl, "module header is not owned by the native focusless control")
             hierarchyCheck(hierarchySelected(game) == state.selected,
                            "module header lost its selected AX state")
             hierarchyCheck(!controls.contains {

@@ -31,9 +31,15 @@ section = region(section_controls, "struct TrainerSectionButton", "private struc
 # The SwiftUI label remains purely presentation/state; native AX focus cannot
 # introduce focus-only pixels into that presentation.
 assert "struct TrainerModuleHeaderButton: NSViewRepresentable" in sidebar
+assert "final class FocuslessControl: NSControl" in sidebar
 assert "override var acceptsFirstResponder: Bool { true }" in sidebar
+assert "override func draw(_ dirtyRect: NSRect) {}" in sidebar
+assert "override func drawFocusRingMask() {}" in sidebar
+assert "override func accessibilityPerformPress() -> Bool" in sidebar
 assert "button.focusRingType = .none" in sidebar
 assert "button.setAccessibilityElement(true)" in sidebar
+assert "button.setAccessibilityRole(.button)" in sidebar
+assert "NSButton" not in sidebar
 assert "button.isTransparent = true" not in sidebar
 assert "button.setAccessibilitySelected(selected)" in sidebar
 assert "button.toolTip = help" in sidebar
