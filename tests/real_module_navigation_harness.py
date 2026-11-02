@@ -359,26 +359,16 @@ struct StartupAvailabilityModule: TrainerGameModule {
             "hades2": control("host.game.hades2")
         ]
         var measuredSwitches: [(game: String, press: Double, settle: Double)] = []
-        var compositorFadeObserved = false
         func selectGame(_ id: String, measure: Bool = false) {
             guard let gameButton = gameButtons[id] else { fatalError("missing cached game card \(id)") }
-            let previous = application.selectedGameID
             let began = ProcessInfo.processInfo.systemUptime
             journeyCheck(gameButton.press(), "game card rejected native AX press")
-            // The real AX click must install a native compositor transaction,
-            // never a snapshot-hosting tree. Reduced Motion bypasses it entirely.
-            if previous != id {
-                let nativeFade = window.contentView?.layer?.animation(forKey: "transition")
-                if reduced {
-                    journeyCheck(nativeFade == nil, "Reduce Motion installed a native game fade")
-                } else if let fade = nativeFade as? CATransition {
-                    journeyCheck(fade.duration == TrainerMotion.duration(.selection, reduceMotion: false),
-                                 "native compositor fade ignored the shared selection timing")
-                    journeyCheck(fade.value(forKey: "mgtGameTransitionOwner") as? String != nil,
-                                 "module switch collided with an unowned native transition")
-                    compositorFadeObserved = true
-                }
-            }
+            // The whole Host must never animate when changing games. Module
+            // accordion geometry belongs to Sidebar; only the retained
+            // workbench visibility receives a small, scoped opacity transition.
+            let nativeFade = window.contentView?.layer?.animation(forKey: "transition")
+            journeyCheck(nativeFade?.value(forKey: "mgtGameTransitionOwner") == nil,
+                         "module selection installed an obsolete Host-wide transition")
             let pressed = ProcessInfo.processInfo.systemUptime
             journeyWait("selected game \(id)") { application.selectedGameID == id }
             // Give SwiftUI/AppKit one event-loop turn and force pending native
@@ -434,11 +424,7 @@ struct StartupAvailabilityModule: TrainerGameModule {
         // Validate the final visible module after timing, when the expensive AX
         // inventory can no longer contaminate the performance sample.
         expectSections(HadesWorkbenchSection.visible.map(\.id))
-        if !reduced {
-            journeyCheck(compositorFadeObserved,
-                         "actual module selection never installed a Core Animation fade")
-        }
-        print("real_module_compositor_fade_observed=\(compositorFadeObserved)")
+        print("real_module_accordion_no_host_fade_ok")
         let switchPresses = measuredSwitches.map(\.press).sorted()
         let switchSettles = measuredSwitches.map(\.settle).sorted()
         let p95Index = max(0, Int(ceil(Double(switchSettles.count) * 0.95)) - 1)
