@@ -274,8 +274,11 @@ assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "enum TrainerLabeledControlLayout" in row_primitive
 assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" in row_primitive
-assert "if layout == .natural { Spacer(minLength: 8) }" in row_primitive
-assert "if layout == .pickerAction { Spacer(minLength: 0) }" in row_primitive
+assert "TrainerPickerActionSizing.width(" in row_primitive
+assert "controls.environment(\\.trainerPickerActionWidth, allocatedPickerWidth)" in row_primitive
+assert "TrainerPickerRowAvailableWidthKey" in row_primitive
+assert "TrainerPickerRowControlWidthKey" in row_primitive
+assert "Spacer(minLength: 8)" in row_primitive
 
 # Raw action widths cannot leak back into game modules. TrainerRow supplies
 # the compact action column; standalone controls opt into a semantic role.

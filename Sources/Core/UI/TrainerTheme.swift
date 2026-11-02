@@ -37,6 +37,7 @@ struct TrainerTheme {
     let pickerCompactWidth: CGFloat
     let pickerStandardWidth: CGFloat
     let pickerWideWidth: CGFloat
+    let pickerActionMaxWidth: CGFloat
     let pickerActionLabelWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
@@ -81,6 +82,7 @@ struct TrainerTheme {
         pickerCompactWidth: 152,
         pickerStandardWidth: 216,
         pickerWideWidth: 288,
+        pickerActionMaxWidth: 420,
         pickerActionLabelWidth: 200,
         sheetPadding: 28,
         sheetSpacing: 16,
@@ -104,8 +106,42 @@ enum TrainerPickerWidthRole {
     case expanding
 }
 
+// The row allocates an explicit width to the native picker, independent of
+// the localized label and trailing shortcut/action columns.
+struct TrainerPickerAllocatedWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TrainerPickerActionWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var trainerPickerActionWidth: CGFloat? {
+        get { self[TrainerPickerActionWidthKey.self] }
+        set { self[TrainerPickerActionWidthKey.self] = newValue }
+    }
+}
+
+private struct TrainerNativeFlexiblePickerSizing: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            // macOS 26+ Pickers default to intrinsic button width. This
+            // opt-in makes the native bezel fill the measured row column.
+            content.buttonSizing(.flexible)
+        } else {
+            content
+        }
+    }
+}
+
 private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerPickerActionWidth) private var rowActionWidth
     let role: TrainerPickerWidthRole
 
     @ViewBuilder
@@ -116,7 +152,17 @@ private struct TrainerPickerWidthModifier: ViewModifier {
                 content.frame(width: theme.pickerCompactWidth)
             case .rowValue:
                 content.frame(width: theme.pickerStandardWidth)
-            case .rowAction, .form:
+            case .rowAction:
+                content
+                    .modifier(TrainerNativeFlexiblePickerSizing())
+                    .frame(width: rowActionWidth ?? theme.pickerStandardWidth)
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: TrainerPickerAllocatedWidthKey.self,
+                                                   value: geometry.size.width)
+                        }
+                    }
+            case .form:
                 content.frame(
                     minWidth: theme.pickerStandardWidth,
                     idealWidth: theme.pickerWideWidth,

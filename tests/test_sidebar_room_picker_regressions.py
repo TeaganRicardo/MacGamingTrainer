@@ -76,7 +76,8 @@ assert "TrainerGamePageTransition" not in pages
 row = source("Sources/Core/UI/Primitives/TrainerRow.swift")
 labeled = region(row, "struct TrainerLabeledControlRow")
 assert "Spacer(minLength: 8)" in labeled
-assert labeled.index("Spacer(minLength: 8)") < labeled.index("HStack(spacing: 16) { controls }")
+assert labeled.index("Spacer(minLength: 8)") < labeled.index("controls.environment(\\.trainerPickerActionWidth, allocatedPickerWidth)")
+assert "TrainerPickerActionSizing.width(" in labeled
 assert "if layout == .pickerAction" in labeled
 assert ".frame(maxWidth: .infinity, alignment: .leading)" in labeled
 assert "Spacer(minLength: 0)" not in labeled

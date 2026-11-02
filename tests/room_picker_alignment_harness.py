@@ -72,6 +72,7 @@ private func exerciseRoomPickerAlignment() {
     for language in [TrainerPresentationLanguage.en, .zhCN] {
         localization.language = language
         var previousGap: CGFloat?
+        var previousPickerWidth: CGFloat?
         for width in [theme.contentMinWidth, CGFloat(1050)] {
             let host = NSHostingView(rootView:
                 RoomPickerAlignmentFixture(language: language)
@@ -98,8 +99,14 @@ private func exerciseRoomPickerAlignment() {
                 .sorted { $0.frame.minY < $1.frame.minY }
             hierarchyCheck(pickers.count == 5, "five real Rooms & Rewards popups not mounted")
             let first = pickers[0].frame
-            hierarchyCheck(first.width > 180 && first.width <= theme.pickerWideWidth + 1,
-                           "the native popup did not occupy its shared row-action allocation")
+            hierarchyCheck(first.width >= theme.pickerStandardWidth - 2
+                           && first.width <= theme.pickerActionMaxWidth + 2,
+                           "native room popup escaped its responsive allocation: language=\(language.rawValue) window=\(width) frame=\(first)")
+            if #available(macOS 26.0, *), let previousPickerWidth {
+                hierarchyCheck(first.width >= previousPickerWidth + 24,
+                               "native room popup did not expand with available row width: language=\(language.rawValue) first=\(previousPickerWidth) wide=\(first.width)")
+            }
+            previousPickerWidth = first.width
             // Compare the actual native Picker against the shared trailing
             // shortcut and action columns, not only the other four Pickers.
             // Previous tests accepted five equally misplaced popups.
