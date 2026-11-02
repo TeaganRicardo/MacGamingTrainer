@@ -25,6 +25,7 @@ assert "CAMediaTimingFunction(name: .easeInEaseOut)" in compositor
 assert "layer.add(fade, forKey: Self.animationKey)" in compositor
 assert "layer?.removeAnimation(forKey: Self.animationKey)" in compositor
 assert "pendingDestination" in compositor
+assert 'animationKey = "transition"' in compositor
 assert "guard !reduceMotion" in compositor
 assert "override func hitTest(" in compositor
 for expensive in ("bitmapImageRepForCachingDisplay", "cacheDisplay(in:", "NSImageView", "DispatchQueue.main.asyncAfter"):
