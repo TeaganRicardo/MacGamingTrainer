@@ -29,7 +29,7 @@ final class TrainerGamePageTransition {
         guard !reduceMotion, let root = surface?.window?.contentView else { return }
         // SwiftUI's NSHostingView already maintains the layer hierarchy.
         // Work only at its existing compositor boundary; do not rasterize the
-        // retained Hades I and II workbenches or interpolate native controls.
+        // retained game-module workbenches or interpolate native controls.
         if root.layer == nil { root.wantsLayer = true }
         guard let layer = root.layer else { return }
         let fade = CATransition()
