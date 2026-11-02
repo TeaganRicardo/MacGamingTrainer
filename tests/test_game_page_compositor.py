@@ -11,9 +11,9 @@ sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text()
 
 # The originating action starts a native transition before the synchronous
 # authoritative selection. A later observer only resolves native ownership.
-assert "transition.prepare(destination: context.id, reduceMotion: reduceMotion)" in pages
-assert pages.index("transition.prepare(destination: context.id, reduceMotion: reduceMotion)") < pages.index("application.selectedGameID = context.id")
-assert "transition.finish(destination: newValue)" in pages
+assert "transition.prepare(reduceMotion: reduceMotion)" in pages
+assert pages.index("transition.prepare(reduceMotion: reduceMotion)") < pages.index("application.selectedGameID = context.id")
+assert "transition.finish(" not in pages
 assert "TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)" in pages
 assert "transition.attach(view)" in pages
 assert "view.transition?.detach(view)" in pages
@@ -27,7 +27,7 @@ assert "CAMediaTimingFunction(name: .easeInEaseOut)" in compositor
 assert "layer.add(fade, forKey: Self.animationKey)" in compositor
 assert "layer.removeAnimation(forKey: Self.animationKey)" in compositor
 assert "layer.animation(forKey: Self.animationKey)?.value(forKey: Self.ownerKey)" in compositor
-assert "pendingDestination" in compositor
+assert "pendingDestination" not in compositor
 assert 'animationKey = "transition"' in compositor
 assert "guard !reduceMotion" in compositor
 assert "override func hitTest(" in pages
