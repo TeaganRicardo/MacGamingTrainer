@@ -13,7 +13,6 @@ final class TrainerGamePageTransition {
     private let ownerToken = UUID().uuidString
     private weak var surface: NSView?
     private weak var animatedRoot: NSView?
-    private var pendingDestination: String?
 
     func attach(_ view: NSView) {
         surface = view
@@ -25,7 +24,7 @@ final class TrainerGamePageTransition {
         surface = nil
     }
 
-    func prepare(destination: String, reduceMotion: Bool) {
+    func prepare(reduceMotion: Bool) {
         cancel()
         guard !reduceMotion, let root = surface?.window?.contentView else { return }
         // SwiftUI's NSHostingView already maintains the layer hierarchy.
@@ -40,22 +39,9 @@ final class TrainerGamePageTransition {
         fade.setValue(ownerToken, forKey: Self.ownerKey)
         layer.add(fade, forKey: Self.animationKey)
         animatedRoot = root
-        pendingDestination = destination
-    }
-
-    func finish(destination: String) {
-        // The Host selection is authoritative. An unrelated programmatic
-        // selection must not leave an earlier game's transition running.
-        guard let pendingDestination else { return }
-        if pendingDestination == destination {
-            self.pendingDestination = nil
-        } else {
-            cancel()
-        }
     }
 
     func cancel() {
-        pendingDestination = nil
         // NSHostingView and AppKit also use the canonical "transition" key.
         // Remove only this owner's animation during a rapid reversal or when
         // Reduce Motion changes; never cancel a native/system transition.
