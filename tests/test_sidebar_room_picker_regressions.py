@@ -58,6 +58,27 @@ assert ".accessibilityAddTraits(selected ? .isSelected : [])" in section
 # re-pressed after selection; the native multi-game journey protects this.
 assert section.index(".overlay(alignment: .leading)") < section.index(".buttonStyle(.plain)")
 
+# Selected Section keeps its thin position marker and a real AX button. The
+# large purple Focus Block behind the chevron is intentionally absent.
+assert ".focusEffectDisabled()" in section
+assert "RoundedRectangle(cornerRadius: theme.compactCornerRadius" not in section
+
+# Module changes use a coordinated accordion: retained action stacks clip
+# open/closed while the header icon has no independent flying animation.
+assert ".animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: selected)" in card
+assert ".animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)" not in card
+pages = source("Sources/Core/Host/TrainerGamePages.swift")
+assert "transition.prepare(" not in pages
+assert "TrainerGamePageTransition" not in pages
+
+# The picker/action role is trailing-anchored. The flexible column belongs
+# between the label and the picker, never after the button group.
+row = source("Sources/Core/UI/Primitives/TrainerRow.swift")
+labeled = region(row, "struct TrainerLabeledControlRow")
+assert "if layout == .pickerAction { Spacer(minLength: 8) }" in labeled
+assert "if layout == .pickerAction { Spacer(minLength: 0) }" not in labeled
+
+
 # Both sidebar navigation sets start with the first visible Values section
 # selected; subsequent navigation transfers the marker to the chosen row.
 for path in ("Sources/Hades/HadesWorkbenchNavigation.swift", "Sources/Hades2/Views/Hades2HostActions.swift"):
