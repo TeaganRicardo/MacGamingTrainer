@@ -14,7 +14,9 @@ sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text()
 assert "transition.prepare(destination: context.id, reduceMotion: reduceMotion)" in pages
 assert pages.index("transition.prepare(destination: context.id, reduceMotion: reduceMotion)") < pages.index("application.selectedGameID = context.id")
 assert "transition.finish(destination: newValue)" in pages
-assert "TrainerGamePageTransitionSurface(transition: transition)" in pages
+assert "TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)" in pages
+assert "transition.attach(view)" in pages
+assert "view.transition?.detach(view)" in pages
 assert ".allowsHitTesting(false)" in pages
 assert ".accessibilityHidden(true)" in pages
 
