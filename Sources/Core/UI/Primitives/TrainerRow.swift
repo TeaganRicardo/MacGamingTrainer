@@ -100,8 +100,17 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                 // controls so every Picker, shortcut and action docks to the
                 // shared trailing edge at both minimum and wide widths.
                 Spacer(minLength: 8)
-                controls
+                if layout == .pickerAction {
+                    // Treat Picker, shortcut and action as one measured trailing
+                    // group. Leaving them as loose HStack children let the
+                    // outer row use only its ideal intrinsic width, even when
+                    // the surrounding panel had ample available space.
+                    HStack(spacing: 16) { controls }
+                } else {
+                    controls
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
