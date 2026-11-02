@@ -88,13 +88,24 @@ struct TrainerLabeledControlRow<Controls: View>: View {
         self.controls = controls()
     }
 
+    @ViewBuilder
+    private var titleLabel: some View {
+        if layout == .pickerAction {
+            TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                .frame(width: theme.pickerActionLabelWidth, alignment: .leading)
+                .help(helpText)
+        } else {
+            // Preserve the original natural row hierarchy exactly. A nil-width
+            // frame still changes HStack layout negotiation on macOS.
+            TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                .help(helpText)
+        }
+    }
+
     var body: some View {
         TrainerRow(opacity: opacity) {
             HStack(spacing: 16) {
-                TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
-                    .frame(width: layout == .pickerAction ? theme.pickerActionLabelWidth : nil,
-                           alignment: .leading)
-                    .help(helpText)
+                titleLabel
                 if layout == .natural { Spacer(minLength: 8) }
                 controls
                 if layout == .pickerAction { Spacer(minLength: 0) }

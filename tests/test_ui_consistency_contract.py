@@ -273,7 +273,9 @@ assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_contr
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "enum TrainerLabeledControlLayout" in row_primitive
-assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" in row_primitive
+assert ".frame(width: theme.pickerActionLabelWidth, alignment: .leading)" in row_primitive
+assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" not in row_primitive
+assert "private var titleLabel: some View" in row_primitive
 assert "if layout == .natural { Spacer(minLength: 8) }" in row_primitive
 assert "if layout == .pickerAction { Spacer(minLength: 0) }" in row_primitive
 
