@@ -28,6 +28,7 @@ struct TrainerResetButton: View {
 
 struct TrainerSectionButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let detail: String?
@@ -63,55 +64,95 @@ struct TrainerSectionButton: View {
                     .fill(selected ? theme.accent.opacity(0.12) : .clear)
                     .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
             }
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(theme.accent)
+                        .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
+                        .offset(x: -12)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
+enum TrainerActionWidthRole {
+    case automatic
+    case compactRow
+    case connection
+    case sheet
+}
+
 private struct TrainerActionButtonLabel: View {
     let title: String
-    let systemImage: String?
     let fillsWidth: Bool
 
+    // Labeled actions already describe their purpose. Core renders verb
+    // buttons as text only; section icons and icon-only commands stay distinct.
     var body: some View {
-        Group {
-            if let systemImage {
-                Label(title, systemImage: systemImage)
+        Text(title)
+            .lineLimit(1)
+            .allowsTightening(true)
+            .minimumScaleFactor(0.78)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
+    }
+}
+
+private struct TrainerActionWidthModifier: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
+    let role: TrainerActionWidthRole
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch role {
+        case .automatic:
+            if let inheritedRowWidth {
+                content.frame(width: inheritedRowWidth)
             } else {
-                Text(title)
+                content
             }
+        case .compactRow:
+            content.frame(width: theme.compactActionWidth)
+        case .connection:
+            content.frame(width: theme.connectionActionWidth)
+        case .sheet:
+            content.frame(minWidth: theme.compactActionWidth)
         }
-        .frame(maxWidth: fillsWidth ? .infinity : nil)
     }
 }
 
 struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
-    let width: CGFloat?
+    let widthRole: TrainerActionWidthRole
     let action: () -> Void
 
     init(
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        width: CGFloat? = nil,
+        widthRole: TrainerActionWidthRole = .automatic,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
-        self.width = width
+        self.widthRole = widthRole
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
@@ -119,16 +160,17 @@ struct TrainerPrimaryActionButton: View {
         .transaction { transaction in
             TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
         }
-        .frame(width: width)
+        .modifier(TrainerActionWidthModifier(role: widthRole))
     }
 }
 
 struct TrainerSecondaryActionButton: View {
+    @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
-    let width: CGFloat?
+    let widthRole: TrainerActionWidthRole
     let helpText: String?
     let accessibilityLabel: String?
     let action: () -> Void
@@ -137,7 +179,7 @@ struct TrainerSecondaryActionButton: View {
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
-        width: CGFloat? = nil,
+        widthRole: TrainerActionWidthRole = .automatic,
         helpText: String? = nil,
         accessibilityLabel: String? = nil,
         action: @escaping () -> Void
@@ -145,7 +187,7 @@ struct TrainerSecondaryActionButton: View {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
-        self.width = width
+        self.widthRole = widthRole
         self.helpText = helpText
         self.accessibilityLabel = accessibilityLabel
         self.action = action
@@ -153,7 +195,7 @@ struct TrainerSecondaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
@@ -162,7 +204,7 @@ struct TrainerSecondaryActionButton: View {
         }
         .help(helpText ?? "")
         .accessibilityLabel(accessibilityLabel ?? title)
-        .frame(width: width)
+        .modifier(TrainerActionWidthModifier(role: widthRole))
     }
 }
 

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let descriptor: GameModuleDescriptor
@@ -50,25 +49,24 @@ struct TrainerSidebarCard<Actions: View>: View {
         return lines.joined(separator: "\n")
     }
 
+    private var statusColor: Color {
+        if busy { return theme.info }
+        if connected { return theme.success }
+        if targetRunning { return theme.warning }
+        return theme.inactive
+    }
+
     private var statusIndicator: some View {
-        Group {
-            if busy {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: connected ? "checkmark.circle.fill" : targetRunning ? "minus.circle" : "circle.dashed")
-                    .font(.caption2)
-                    .foregroundStyle(connected ? theme.success : targetRunning ? theme.warning : theme.inactive)
-                    .contentTransition(.opacity)
-            }
-        }
-        .frame(width: 12, height: 12)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: connected)
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: targetRunning)
-        .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
-        .help(statusHelp)
-        .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
-        .accessibilityValue(localization.string(detailToken))
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+            .frame(width: 12, height: 12)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: connected)
+            .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: targetRunning)
+            .help(statusHelp)
+            .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
+            .accessibilityValue(localization.string(detailToken))
     }
 
     var body: some View {
@@ -78,6 +76,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title3.weight(.medium))
                         .foregroundStyle(selected ? theme.accent : .secondary)
+                        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
                         .frame(width: 24)
                         .accessibilityHidden(true)
                     Text(descriptor.displayName)
@@ -90,6 +89,8 @@ struct TrainerSidebarCard<Actions: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(true, interactions: .activate)
+            .focusEffectDisabled()
             .accessibilityLabel(descriptor.displayName)
             .accessibilityValue(localization.string(statusToken))
             .accessibilityIdentifier("host.game.\(descriptor.id)")
@@ -105,17 +106,10 @@ struct TrainerSidebarCard<Actions: View>: View {
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
-        .overlay(alignment: .leading) {
-            if selected {
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(theme.accent)
-                    .frame(width: theme.selectionMarkerWidth(for: contrast), height: 20)
-                    .padding(.leading, 1)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-        }
+        // Keep module-selection motion scoped to this small sidebar subtree.
+        // Retained game-page trees are deliberately outside this transaction.
         .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: selected)
+
     }
 }
 

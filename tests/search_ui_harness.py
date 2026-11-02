@@ -1,13 +1,9 @@
 """Native workbench search journeys used by both actual module header adapters."""
 
 SEARCH_JOURNEY = r'''
-@MainActor private final class SearchPageVisibility: ObservableObject {
-    @Published var visible = true
-}
-
 private struct SearchPageFixture<Content: View>: View {
     let content: Content
-    @ObservedObject var visibility: SearchPageVisibility
+    let visibility: TrainerGamePageVisibility
     var body: some View {
         VStack(spacing: 16) {
             content
@@ -15,7 +11,7 @@ private struct SearchPageFixture<Content: View>: View {
                 .accessibilityIdentifier("fixture.search.workbench")
         }
         .padding(12)
-        .environment(\.trainerGamePageVisible, visibility.visible)
+        .environment(\.trainerGamePageVisibility, visibility)
     }
 }
 
@@ -165,7 +161,7 @@ func exerciseWorkbenchSearch<Content: View>(
         let clearLabel = localization.localized("host.search.clear")
         searchJourneyCheck(clearLabel != "host.search.clear", "search fixture did not load the shipped Host translations")
         clearLabels.append(clearLabel)
-        let visibility = SearchPageVisibility()
+        let visibility = TrainerGamePageVisibility()
         var destinations: [String] = []
         let host = NSHostingView(rootView: SearchPageFixture(content: content, visibility: visibility)
             .environmentObject(localization)
@@ -355,12 +351,12 @@ func exerciseWorkbenchSearch<Content: View>(
             popover().map { resultControls($0).map(\.identifier) == bilingual.map { "trainer.workbench.result." + $0.id } } == true
         }
         let oldPageRow = resultControls(popover()!).first!
-        visibility.visible = false
+        visibility.setVisible(false)
         searchJourneyWait("page switch dismisses results") { popover() == nil }
         _ = oldPageRow.press()
         searchJourneyPump()
         searchJourneyCheck(destinations.count == 3 && query() == "生命", "hidden page routed a stale result or erased its query")
-        visibility.visible = true
+        visibility.setVisible(true)
         searchJourneyPump()
         searchJourneyCheck(popover() == nil, "returning to a page reopened stale results")
         window.makeKeyAndOrderFront(nil)

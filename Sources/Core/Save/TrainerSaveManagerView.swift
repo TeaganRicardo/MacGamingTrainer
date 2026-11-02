@@ -34,6 +34,7 @@ struct TrainerSaveManagerView: View {
                 title: localization.localized("host.save.createBackup"),
                 systemImage: "plus",
                 enabled: !model.busy,
+                widthRole: .sheet,
                 action: { model.backup() }
             )
         } content: {
@@ -131,6 +132,7 @@ struct TrainerSaveManagerView: View {
                 TrainerPrimaryActionButton(
                     title: localization.localized("host.done"),
                     enabled: !model.busy,
+                    widthRole: .sheet,
                     action: { if let closeWindow { closeWindow() } else { dismiss() } }
                 )
                 .keyboardShortcut(.defaultAction)
@@ -401,7 +403,7 @@ private struct TrainerSaveRestoreConfirmationView: View {
             HStack {
                 Spacer()
                 Button(localization.localized("host.cancel"), action: onCancel)
-                TrainerPrimaryActionButton(title: localization.localized("host.restore"), action: onRestore)
+                TrainerPrimaryActionButton(title: localization.localized("host.restore"), widthRole: .sheet, action: onRestore)
             }
         }
     }

@@ -61,10 +61,10 @@ assert ".padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManage
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
 assert ".frame(width: theme.connectionActionWidth)" not in status
-assert "width: theme.connectionActionWidth" in status
+assert "widthRole: .connection" in status
 assert '"MAC GAMING"' not in sidebar
 assert 'host.gameLibrary' not in sidebar
-assert 'targetRunning ? theme.warning : theme.inactive' in sidebar
+assert 'if targetRunning { return theme.warning }' in sidebar
 assert '.accessibilityValue(localization.string(detailToken))' in sidebar
 assert 'busy: model.busy' in host
 assert 'targetRunning: targetMonitor.isRunning' in host
@@ -76,9 +76,22 @@ assert ".help(helpText ?? \"\")" in primary_button
 assert ".accessibilityLabel(accessibilityLabel ?? title)" in primary_button
 assert "helpText: generateHelp" in occurrence
 assert 'accessibilityLabel: title + " " + generateLabel' in occurrence
-assert "TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)" in primary_button
-assert ".frame(maxWidth: fillsWidth ? .infinity : nil)" in primary_button
-assert ".frame(width: width)" in primary_button
+# Core owns the same compact, text-only labeled action geometry for every
+# game. Legacy systemImage arguments on old callers cannot change rendering.
+assert primary_button.count("TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))") == 2
+label_body = primary_button[primary_button.index("private struct TrainerActionButtonLabel"):
+                            primary_button.index("struct TrainerPrimaryActionButton")]
+assert "Text(title)" in label_body and "Label(title, systemImage:" not in label_body
+assert ".frame(maxWidth: fillsWidth ? .infinity : nil)" in label_body
+assert "enum TrainerActionWidthRole" in primary_button
+for role in ("case automatic", "case compactRow", "case connection", "case sheet"):
+    assert role in primary_button
+assert primary_button.count(".modifier(TrainerActionWidthModifier(role: widthRole))") == 2
+assert "inheritedRowWidth" in primary_button
+row_source = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
+assert ".environment(\\.trainerActionWidth, theme.compactActionWidth)" in row_source
+assert "let width: CGFloat?" not in primary_button
+assert "width: CGFloat? = nil" not in primary_button
 shortcut_sheet = (CORE_UI / "Components/TrainerShortcutSettingsView.swift").read_text()
 capture = (ROOT / "Sources/Core/Input/TrainerShortcutCapture.swift").read_text()
 assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in shortcut_sheet
@@ -96,7 +109,7 @@ assert "if entry.isEditable {" in shortcut_sheet
 assert "shortcutLabel(entry.chordText)" in shortcut_sheet
 assert "trainer.shortcut.fixed." in shortcut_sheet
 assert ".onDisappear { lifetime.invalidate(); capture.cancel() }" in shortcut_sheet
-assert ".onChange(of: pageVisible, initial: true)" in shortcut_sheet
+assert "TrainerGamePageVisibilityObserver" in shortcut_sheet
 assert "GlobalHotkeys.beginShortcutCapture()" in capture
 assert "GlobalHotkeys.endShortcutCapture(token)" in capture
 
@@ -228,21 +241,59 @@ assert "TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, e
 
 # All native Picker instances use the same Core-owned width roles. This prevents
 # content-driven widths and per-view frame constants from reappearing.
-assert "enum TrainerPickerWidth" in theme
+assert "enum TrainerPickerWidthRole" in theme
 assert "pickerCompactWidth: 152" in theme
 assert "pickerStandardWidth: 216" in theme
 assert "pickerWideWidth: 288" in theme
-assert "case .flexible:" in theme
+assert "pickerActionLabelWidth: 200" in theme
+for role in ("case compactValue", "case rowValue", "case rowAction", "case form", "case expanding"):
+    assert role in theme
+assert "idealWidth: theme.pickerWideWidth" in theme
 assert "content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)" in theme
-for source_root in (ROOT / "Sources/Core/UI", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+legacy_picker_roles = re.compile(r"\.trainerPickerWidth\(\.(compact|standard|wide|flexible)\)")
+picker_exceptions = {Path("Sources/Core/Host/TrainerLocalization.swift")}
+for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
     for swift_path in source_root.rglob("*.swift"):
         source = swift_path.read_text()
+        relative = swift_path.relative_to(ROOT)
+        assert not legacy_picker_roles.search(source), f"{relative} still uses a size-named Picker role"
         picker_count = len(re.findall(r"(?<![A-Za-z])Picker\s*\(", source))
-        if picker_count:
-            width_count = source.count(".trainerPickerWidth(")
-            assert picker_count == width_count, (
-                f"{swift_path.relative_to(ROOT)} has {picker_count} Pickers but {width_count} width roles"
-            )
+        if not picker_count:
+            continue
+        if relative in picker_exceptions:
+            assert "CommandMenu(" in source and ".trainerPickerWidth(" not in source
+            continue
+        width_count = source.count(".trainerPickerWidth(")
+        assert picker_count == width_count, (
+            f"{relative} has {picker_count} Pickers but {width_count} semantic width roles"
+        )
+assert ".trainerPickerWidth(.rowAction)" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+assert ".trainerPickerWidth(.rowAction)" in view
+assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_controls
+assert "layout: .pickerAction" in resource_controls
+row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
+assert "enum TrainerLabeledControlLayout" in row_primitive
+assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" in row_primitive
+assert "if layout == .natural { Spacer(minLength: 8) }" in row_primitive
+assert "if layout == .pickerAction { Spacer(minLength: 0) }" in row_primitive
+
+# Raw action widths cannot leak back into game modules. TrainerRow supplies
+# the compact action column; standalone controls opt into a semantic role.
+for source_root in (ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+    for swift_path in source_root.rglob("*.swift"):
+        source = swift_path.read_text()
+        assert "width: theme.compactActionWidth" not in source, swift_path
+        assert "width: theme.connectionActionWidth" not in source, swift_path
+assert "case .automatic:" in primary_button
+assert "if let inheritedRowWidth" in primary_button
+assert "widthRole: .connection" in status
+for action_surface in (
+    ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift",
+    ROOT / "Sources/Core/UI/Components/TrainerProfileManagerView.swift",
+    ROOT / "Sources/Hades/HadesSaveEditorView.swift",
+    ROOT / "Sources/Hades2/Views/Hades2SaveEditorView.swift",
+):
+    assert "widthRole: .sheet" in action_surface.read_text(), action_surface
 
 # The Hades II material editor has exactly two horizontal rows. The selector,
 # amount input and lock stay together on its second row.
@@ -257,7 +308,7 @@ control_row = resource_editor[control_row_start:control_row_end]
 assert "Picker(title" in control_row
 assert "TrainerNumberField(" in control_row
 assert "TrainerLockButton(" in control_row
-assert ".trainerPickerWidth(.flexible)" in control_row
+assert ".trainerPickerWidth(.expanding)" in control_row
 
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert "inline: true" in view

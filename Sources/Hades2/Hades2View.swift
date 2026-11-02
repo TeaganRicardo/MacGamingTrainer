@@ -44,7 +44,6 @@ struct Hades2TrainerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerToolWindows) private var toolWindows
-    @Environment(\.trainerGamePageVisible) private var pageVisible
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @ViewState<EditField?> private var focusedField = nil
 
@@ -554,7 +553,7 @@ struct Hades2TrainerView: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.flexible)
+                .trainerPickerWidth(.expanding)
                 .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerSearchField(
@@ -616,36 +615,30 @@ struct Hades2TrainerView: View {
                 .frame(width: 58)
                 .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
-                Button {
+                TrainerSecondaryActionButton(
+                    title: text("hades2.traits.apply"),
+                    enabled: canApplyTraitRemainingUses(trait)
+                ) {
                     model.setTraitRemainingUses(
                         trait,
                         targetRemainingUses: traitRemainingUsesInput
                     )
-                } label: {
-                    Label(text("hades2.traits.apply"), systemImage: TrainerSemanticIcon.Action.apply)
                 }
-                .buttonStyle(.bordered)
-                .lineLimit(1)
-                .disabled(!canApplyTraitRemainingUses(trait))
 
-                Button {
+                TrainerSecondaryActionButton(
+                    title: text("hades2.traits.expireNow"),
+                    enabled: model.canMutateTraits && trait.canExpire
+                ) {
                     model.expireTrait(trait)
-                } label: {
-                    Label(text("hades2.traits.expireNow"), systemImage: TrainerSemanticIcon.Concept.duration)
                 }
-                .buttonStyle(.bordered)
-                .lineLimit(1)
-                .disabled(!model.canMutateTraits || !trait.canExpire)
             }
         } else if trait.canAdvanceLifecycle {
-            Button {
+            TrainerSecondaryActionButton(
+                title: text("hades2.traits.chaos.advance"),
+                enabled: model.canMutateTraits
+            ) {
                 model.advanceTraitLifecycle(trait)
-            } label: {
-                Label(text("hades2.traits.chaos.advance"), systemImage: Hades2WorkbenchIcon.chaosAdvance)
             }
-            .buttonStyle(.bordered)
-            .lineLimit(1)
-            .disabled(!model.canMutateTraits)
         }
     }
 
@@ -690,7 +683,7 @@ struct Hades2TrainerView: View {
                         title: text("hades2.traits.applyLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitLevel(trait),
-                        width: theme.compactActionWidth
+                        widthRole: .compactRow
                     ) {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
@@ -703,7 +696,7 @@ struct Hades2TrainerView: View {
                         title: text("hades2.traits.applyLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
-                        width: theme.compactActionWidth,
+                        widthRole: .compactRow,
                         action: {}
                     )
                 }
@@ -729,14 +722,14 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPickerWidth(.compact)
+                    .trainerPickerWidth(.compactValue)
                     .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitRarity(trait),
-                        width: theme.compactActionWidth
+                        widthRole: .compactRow
                     ) {
                         model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
                     }
@@ -746,14 +739,14 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPickerWidth(.compact)
+                    .trainerPickerWidth(.compactValue)
                     .disabled(true)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
                         systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
-                        width: theme.compactActionWidth,
+                        widthRole: .compactRow,
                         action: {}
                     )
                 }
@@ -792,7 +785,7 @@ struct Hades2TrainerView: View {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
                     systemImage: ShortcutAction.matureGarden.icon,
-                    enabled: model.canMatureGarden, width: theme.compactActionWidth) {
+                    enabled: model.canMatureGarden) {
                     _ = model.matureGarden()
                 }
                 .help(text(model.canMatureGarden ? "hades2.garden.help" : "hades2.garden.unavailable"))
@@ -864,20 +857,22 @@ struct Hades2TrainerView: View {
                 )
                 Text("×").foregroundStyle(.secondary)
                 TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
-                    accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                    accessibilityHint: text("hades2.gameSpeed.hint"),
-                    enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview.map(speedNumber)
-                        if preview == nil && focusedField != .gameSpeed {
-                            gameSpeedInput = speedNumber(model.gameSpeed)
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: text("hades2.gameSpeed.a11y"),
+                        accessibilityHint: text("hades2.gameSpeed.hint"),
+                        enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview.map(speedNumber)
+                            if preview == nil && focusedField != .gameSpeed {
+                                gameSpeedInput = speedNumber(model.gameSpeed)
+                            }
                         }
-                    }
-                )
-                .frame(width: 200)
+                    )
+                    .frame(width: 200)
+                }
                 TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
             }
             .trainerGroupedRows()
@@ -889,11 +884,13 @@ struct Hades2TrainerView: View {
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
             .sheet(isPresented: $model.profilesPresented) { Hades2ProfileManagerView(model: model, isPresented: $model.profilesPresented) }
             .sheet(isPresented: $model.diagnosticsPresented) { Hades2DiagnosticsView(model: model, isPresented: $model.diagnosticsPresented) }
-            .onChange(of: pageVisible) { _, visible in
-                if !visible {
-                    model.shortcutSettingsPresented = false
-                    model.profilesPresented = false
-                    model.diagnosticsPresented = false
+            .background {
+                TrainerGamePageVisibilityObserver { visible in
+                    if !visible {
+                        model.shortcutSettingsPresented = false
+                        model.profilesPresented = false
+                        model.diagnosticsPresented = false
+                    }
                 }
             }
     }
@@ -1246,7 +1243,8 @@ struct Hades2TrainerView: View {
         TrainerLabeledControlRow(
             title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired
+            emphasized: model.canEditDesired,
+            layout: .pickerAction
         ) {
             Picker(text("hades2.nextRoom.title"), selection: $model.selectedNextRoomReward) {
                 Text(text("hades2.nextRoom.noOverride")).tag("")
@@ -1265,13 +1263,12 @@ struct Hades2TrainerView: View {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }
-            .labelsHidden().trainerPickerWidth(.wide).disabled(!model.canEditDesired)
+            .labelsHidden().trainerPickerWidth(.rowAction).disabled(!model.canEditDesired)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
-                enabled: model.canEditDesired,
-                width: theme.compactActionWidth
+                enabled: model.canEditDesired
             ) {
                 model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward)
             }
@@ -1284,13 +1281,9 @@ struct Hades2TrainerView: View {
         return TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
             tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired
+            emphasized: model.canEditDesired,
+            layout: .pickerAction
         ) {
-            if model.nextOccurrenceTarget != nil {
-                Text(text("hades2.occurrence.pending"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Picker(text("hades2.occurrence.title"), selection: $model.selectedNextOccurrenceTarget) {
                 Text(text("hades2.occurrence.noRequest")).tag("")
                 if !characters.isEmpty {
@@ -1309,20 +1302,24 @@ struct Hades2TrainerView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.wide)
+            .trainerPickerWidth(.rowAction)
             .disabled(!model.canEditDesired)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
-                enabled: model.canEditDesired,
-                width: theme.compactActionWidth
+                enabled: model.canEditDesired
             ) {
                 _ = model.setNextOccurrence(
                     model.selectedNextOccurrenceTarget.isEmpty
                         ? nil
                         : model.selectedNextOccurrenceTarget
                 )
+            }
+            if model.nextOccurrenceTarget != nil {
+                Text(text("hades2.occurrence.pending"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .trainerGroupedRows()
@@ -1423,7 +1420,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                         .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
                     }
 
@@ -1440,7 +1437,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                         .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
@@ -1451,7 +1448,7 @@ struct Hades2TrainerView: View {
                         enabled: model.canAcquireChaosPair
                             && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
                             && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
-                        width: theme.compactActionWidth
+                        widthRole: .compactRow
                     ) {
                         _ = model.acquireChaosPair(
                             blessingReward: model.selectedChaosBlessing,
@@ -1484,7 +1481,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                         .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
                     }
 
@@ -1501,7 +1498,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                         .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
@@ -1511,7 +1508,7 @@ struct Hades2TrainerView: View {
                         systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireExactReward
                             && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
-                        width: theme.compactActionWidth
+                        widthRole: .compactRow
                     ) {
                         _ = model.acquireExactBoon(model.selectedExactBoon)
                     }
@@ -1538,7 +1535,7 @@ struct Hades2TrainerView: View {
                     title: text("hades2.spawn.open"),
                     systemImage: ShortcutAction.openSellTraits.icon,
                     enabled: model.canOpenSellTraits,
-                    width: theme.compactActionWidth
+                    widthRole: .compactRow
                 ) { _ = model.openSellTraits() }
             }
             if model.connected {

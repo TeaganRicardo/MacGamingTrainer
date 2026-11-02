@@ -16,7 +16,7 @@ struct TrainerFeedbackNotice: Identifiable {
 struct TrainerFeedbackOverlay: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @State private var pageVisible = true
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var timing = TrainerFeedbackTiming()
     @State private var hovered = false
@@ -120,8 +120,11 @@ struct TrainerFeedbackOverlay: View {
         }
         .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: notice != nil)
         .transaction { TrainerMotion.nativeControlTransaction(&$0, reduceMotion: reduceMotion) }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible { focusedAction = nil; hovered = false }
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                pageVisible = visible
+                if !visible { focusedAction = nil; hovered = false }
+            }
         }
         .onChange(of: Schedule(noticeID: notice?.id, paused: false, visible: pageVisible), initial: true) { _, schedule in
             interactiveNoticeID = schedule.visible ? schedule.noticeID : nil

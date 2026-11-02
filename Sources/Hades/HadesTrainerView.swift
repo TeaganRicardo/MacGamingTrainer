@@ -10,7 +10,6 @@ struct HadesTrainerView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerGamePageVisible) private var pageVisible
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
@@ -37,13 +36,6 @@ struct HadesTrainerView: View {
                     icon: "exclamationmark.triangle.fill", color: theme.warning
                 )
             }
-            if !model.heroReady {
-                TrainerMessageBanner(
-                    text: text("hades.waitingForHero"),
-                    icon: "person.crop.circle.badge.clock", color: theme.info
-                )
-            }
-
             runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
             commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
             boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
@@ -54,11 +46,13 @@ struct HadesTrainerView: View {
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
         .sheet(isPresented: $model.profilesPresented) { HadesProfileManagerView(model: model) }
         .sheet(isPresented: $model.diagnosticsPresented) { HadesDiagnosticsView(model: model) }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible {
-                model.shortcutSettingsPresented = false
-                model.profilesPresented = false
-                model.diagnosticsPresented = false
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                if !visible {
+                    model.shortcutSettingsPresented = false
+                    model.profilesPresented = false
+                    model.diagnosticsPresented = false
+                }
             }
         }
     }
@@ -174,20 +168,22 @@ struct HadesTrainerView: View {
                     }
                 )
                 Text("×").foregroundStyle(.secondary)
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
-                    accessibilityLabel: localization.localized("host.timeWarp.title"),
-                    accessibilityHint: localization.localized("host.timeWarp.hint"),
-                    enabled: model.canMutate && pageVisible,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview
-                        if preview == nil && !gameSpeedEditing {
-                            gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: localization.localized("host.timeWarp.title"),
+                        accessibilityHint: localization.localized("host.timeWarp.hint"),
+                        enabled: model.canMutate && pageVisible,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview
+                            if preview == nil && !gameSpeedEditing {
+                                gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                            }
                         }
-                    }
-                )
-                .frame(width: 200)
+                    )
+                    .frame(width: 200)
+                }
             }
             if let actual = model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber {
                 let key = abs(actual - model.number(.gameSpeed)) < 0.000001
@@ -508,7 +504,7 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
@@ -518,7 +514,7 @@ private struct HadesCatalogView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.flexible)
+                        .trainerPickerWidth(.expanding)
                     }
                 }
             }
@@ -543,7 +539,7 @@ private struct HadesCatalogView: View {
                             Picker(text("hades.rarity"), selection: $rarity) {
                                 ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                             }
-                            .trainerPickerWidth(.compact)
+                            .trainerPickerWidth(.compactValue)
                             if selected.supportsLevel {
                                 Text(text("hades.level"))
                                 TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
@@ -619,7 +615,7 @@ private struct HadesCurrentTraitsPanel: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.flexible)
+                .trainerPickerWidth(.expanding)
                 if let selected {
                     HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
                 }
@@ -662,7 +658,7 @@ private struct HadesCurrentTraitRow: View {
                         Picker(text("hades.rarity"), selection: $rarity) {
                             ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPickerWidth(.compact)
+                        .trainerPickerWidth(.compactValue)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,

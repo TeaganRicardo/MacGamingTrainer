@@ -685,7 +685,16 @@ contextual_controls = trait_manager[
 common_controls = trait_manager[
     trait_manager.index('private func currentRunTraitCommonControls'):
 ]
-assert contextual_controls.count('.lineLimit(1)') >= 2
+# The named Apply/Expire/Advance controls now use Core's compact
+# text-only button: label containment is owned by the shared primitive.
+assert contextual_controls.count('TrainerSecondaryActionButton(') >= 3
+shared_actions = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text()
+action_label = shared_actions[
+    shared_actions.index('private struct TrainerActionButtonLabel'):
+    shared_actions.index('struct TrainerPrimaryActionButton')
+]
+assert '.lineLimit(1)' in action_label
+assert '.minimumScaleFactor(0.78)' in action_label
 assert common_controls.count('.lineLimit(1)') >= 4
 assert '"hades2.traits.targetRarity": "稀有度"' in zh_presentation
 assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation

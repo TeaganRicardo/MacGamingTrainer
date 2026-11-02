@@ -95,7 +95,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     show: () -> Void, isPresented: () -> Bool, chord: () -> String,
     commands: () -> [[String: Any]]
 ) {
-    let visibility = ManagementPageVisibility()
+    let visibility = TrainerGamePageVisibility()
     let host = NSHostingView(rootView: ManagementPageFixture(content: content, visibility: visibility)
         .environmentObject(localization))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),
@@ -126,13 +126,16 @@ func exerciseModuleShortcutSheet<Content: View>(
     managementCheck(captureButton()!.press(), "shortcut capture refused native Press")
     sheetJourneyWait(host, "native shortcut monitor installed") { GlobalHotkeys.isShortcutCaptureActive }
     key(53, characters: "\u{1b}")
-    managementCheck(!GlobalHotkeys.isShortcutCaptureActive && isPresented() && chord() == original,
+    sheetJourneyWait(host, "Escape cancels active shortcut capture") {
+        !GlobalHotkeys.isShortcutCaptureActive
+    }
+    managementCheck(isPresented() && window.attachedSheet != nil && chord() == original,
                     "Escape assigned a shortcut or dismissed an active capture's sheet")
 
     let oldCaptureButton = captureButton()!
     managementCheck(oldCaptureButton.press(), "second capture refused native Press")
     sheetJourneyWait(host, "capture before page selection") { GlobalHotkeys.isShortcutCaptureActive }
-    visibility.visible = false
+    visibility.setVisible(false)
     sheetJourneyWait(host, "hidden game cancels native capture and sheet") {
         !isPresented() && window.attachedSheet == nil && !GlobalHotkeys.isShortcutCaptureActive
     }
@@ -140,7 +143,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     sheetJourneyPump()
     managementCheck(!GlobalHotkeys.isShortcutCaptureActive && chord() == original,
                     "a dismissed sheet's old capture button installed a monitor")
-    visibility.visible = true
+    visibility.setVisible(true)
     sheetJourneyPump()
     show()
     sheetJourneyWait(host, "reopened module shortcut sheet") { captureButton() != nil }

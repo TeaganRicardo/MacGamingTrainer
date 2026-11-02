@@ -76,14 +76,10 @@ func exerciseManagementLayout<Content: View>(
     }
 }
 
-@MainActor private final class ManagementPageVisibility: ObservableObject {
-    @Published var visible = true
-}
-
 private struct ManagementPageFixture<Content: View>: View {
     let content: Content
-    @ObservedObject var visibility: ManagementPageVisibility
-    var body: some View { content.environment(\.trainerGamePageVisible, visibility.visible) }
+    let visibility: TrainerGamePageVisibility
+    var body: some View { content.environment(\.trainerGamePageVisibility, visibility) }
 }
 
 @MainActor
@@ -91,7 +87,7 @@ func exerciseManagementPageDismissal<Content: View>(
     _ content: Content, localization: TrainerLocalizationStore,
     show: () -> Void, dismissed: () -> Bool
 ) {
-    let visibility = ManagementPageVisibility()
+    let visibility = TrainerGamePageVisibility()
     let host = NSHostingView(rootView: ManagementPageFixture(content: content, visibility: visibility)
         .environmentObject(localization))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),
@@ -102,9 +98,9 @@ func exerciseManagementPageDismissal<Content: View>(
     host.layoutSubtreeIfNeeded()
     show()
     managementWait(host, "module management sheet presented") { window.attachedSheet != nil }
-    visibility.visible = false
+    visibility.setVisible(false)
     managementWait(host, "hidden module management sheet dismissed") { dismissed() && window.attachedSheet == nil }
-    visibility.visible = true
+    visibility.setVisible(true)
     host.layoutSubtreeIfNeeded()
     managementCheck(dismissed(), "returning to the page reopened a stale management presentation")
     window.contentView = nil
@@ -378,12 +374,12 @@ private struct ControlMotionFixture: View {
                     state.requests.append("reset")
                 }.accessibilityIdentifier("motion.reset")
             }
-            TrainerPrimaryActionButton(title: title, enabled: state.enabled, width: 180) {
+            TrainerPrimaryActionButton(title: title, enabled: state.enabled, widthRole: .sheet) {
                 state.requests.append("primary")
             }
             .accessibilityIdentifier("motion.primary")
             .keyboardShortcut("k", modifiers: [.command, .option])
-            TrainerSecondaryActionButton(title: title, enabled: state.enabled, width: 180) {
+            TrainerSecondaryActionButton(title: title, enabled: state.enabled, widthRole: .sheet) {
                 state.requests.append("secondary")
             }.accessibilityIdentifier("motion.secondary")
         }.padding(12)

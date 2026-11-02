@@ -44,6 +44,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             Module.makeFeedback(model: model)
         }
         .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
+        .environment(\.trainerGamePageVisibility, context.pageVisibility)
         .onAppear {
             targetMonitor.refresh()
             context.registerPresentation(localization)
@@ -106,5 +107,6 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
         .environment(\.trainerNavigateToSection, navigation.navigate)
         .environment(\.trainerSelectedSection, navigation.selection)
         .environment(\.trainerToolWindows, context.toolWindows.actions(localization: localization, theme: theme))
+        .environment(\.trainerGamePageVisibility, context.pageVisibility)
     }
 }

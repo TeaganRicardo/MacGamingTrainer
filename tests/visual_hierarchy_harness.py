@@ -31,7 +31,7 @@ private struct VisualHierarchyFixture: View {
                     detailToken: .init(key: "host.refreshStatusHelp"),
                     selected: state.selected, onSelect: { state.selected = true }) {
                     TrainerPrimaryActionButton(title: localization.localized("host.refreshStatus"),
-                        enabled: true, width: 160) {}
+                        enabled: true, widthRole: .connection) {}
                     TrainerSectionButton(title: title("Common functions", "常用功能"),
                         systemImage: "switch.2") {}
                 }
@@ -69,7 +69,7 @@ private struct VisualHierarchyFixture: View {
                                 Text(title("A long localized option", "较长的本地化选项")).tag("first")
                             }
                             .labelsHidden()
-                            .trainerPickerWidth(.standard)
+                            .trainerPickerWidth(.rowValue)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }
@@ -101,8 +101,49 @@ private func hierarchyCheck(_ condition: @autoclosure () -> Bool, _ message: Str
     if !condition() { fatalError(message) }
 }
 
+private func hierarchyFocused(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilityFocused")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
+private func hierarchySelected(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilitySelected")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
+@discardableResult
+private func hierarchySetFocused(_ target: NativeAccessibilityControl, _ focused: Bool) -> Bool {
+    let selector = NSSelectorFromString("setAccessibilityFocused:")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    unsafeBitCast(target.object.method(for: selector), to: Setter.self)(target.object, selector, focused)
+    return true
+}
+
 private func hierarchyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(hierarchyFields)
+}
+
+private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowFrame = window.convertFromScreen(screenFrame)
+    let localFrame = view.convert(windowFrame, from: nil)
+        .insetBy(dx: -8, dy: -8)
+        .intersection(view.bounds)
+    guard !localFrame.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
+        fatalError("native hierarchy bitmap allocation failed")
+    }
+    view.cacheDisplay(in: localFrame, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        fatalError("native hierarchy bitmap encoding failed")
+    }
+    return png
 }
 
 @MainActor
@@ -222,6 +263,28 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
             hierarchyCheck(game.frame.height >= 30 && bounds.contains(game.frame),
                            "sidebar selection lost its hit target or clipped its label")
+            hierarchyCheck(hierarchySelected(game) == state.selected,
+                           "module header lost its selected AX state")
+            hierarchyPump(0.08)
+            let headerFrame = game.frame
+            let unfocusedBitmap = hierarchyBitmap(host, around: headerFrame)
+            hierarchyCheck(hierarchySetFocused(game, true), "module header does not accept native AX focus")
+            hierarchyPump(0.08)
+            guard let focusedGame = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "host.game." + descriptor.id
+            }) else { fatalError("focused module header disappeared") }
+            hierarchyCheck(hierarchyFocused(focusedGame), "module header did not retain native AX focus")
+            hierarchyCheck(abs(focusedGame.frame.minX - headerFrame.minX) < 1
+                           && abs(focusedGame.frame.minY - headerFrame.minY) < 1
+                           && abs(focusedGame.frame.width - headerFrame.width) < 1
+                           && abs(focusedGame.frame.height - headerFrame.height) < 1,
+                           "module header focus changed its geometry")
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
+                           "module header focus changed rendered presentation")
+            hierarchyCheck(hierarchySetFocused(focusedGame, false), "module header rejected native AX focus removal")
+            hierarchyPump(0.08)
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
+                           "module header focus removal changed rendered presentation")
             guard let pickerLayout = hierarchyPickerFrame(host) else { fatalError("missing Picker layout probe") }
             let pickerFrame = window.convertToScreen(pickerLayout.convert(pickerLayout.bounds, to: nil))
             print("hierarchy_picker_geometry game=\(descriptor.id) language=\(language.rawValue) window=\(width) allocation=\(pickerFrame) native=\(picker.frame)")
