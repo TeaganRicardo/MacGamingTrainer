@@ -9,15 +9,15 @@ import SwiftUI
 final class TrainerGamePageTransition {
     // CALayer normalizes CATransition to the standard "transition" key.
     private static let animationKey = "transition"
-    private weak var surface: TrainerGamePageTransitionAnchor?
+    private weak var surface: NSView?
     private weak var animatedRoot: NSView?
     private var pendingDestination: String?
 
-    func attach(_ view: TrainerGamePageTransitionAnchor) {
+    func attach(_ view: NSView) {
         surface = view
     }
 
-    func detach(_ view: TrainerGamePageTransitionAnchor) {
+    func detach(_ view: NSView) {
         guard surface === view else { return }
         cancel()
         surface = nil
@@ -41,10 +41,14 @@ final class TrainerGamePageTransition {
     }
 
     func finish(destination: String) {
-        // No deferred visible selection or queued completion. The native
-        // transition expires naturally after the new layout is committed.
-        guard pendingDestination == destination else { return }
-        pendingDestination = nil
+        // The Host selection is authoritative. An unrelated programmatic
+        // selection must not leave an earlier game's transition running.
+        guard let pendingDestination else { return }
+        if pendingDestination == destination {
+            self.pendingDestination = nil
+        } else {
+            cancel()
+        }
     }
 
     func cancel() {
@@ -54,28 +58,3 @@ final class TrainerGamePageTransition {
     }
 }
 
-/// The anchor only finds the containing AppKit compositor. It never draws a
-/// second game page and cannot intercept pointer, keyboard or AX interaction.
-@MainActor
-final class TrainerGamePageTransitionAnchor: NSView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-struct TrainerGamePageTransitionSurface: NSViewRepresentable {
-    let transition: TrainerGamePageTransition
-
-    func makeNSView(context: Context) -> TrainerGamePageTransitionAnchor {
-        let view = TrainerGamePageTransitionAnchor(frame: .zero)
-        transition.attach(view)
-        return view
-    }
-
-    func updateNSView(_ view: TrainerGamePageTransitionAnchor, context: Context) {
-        transition.attach(view)
-    }
-
-    static func dismantleNSView(_ view: TrainerGamePageTransitionAnchor, coordinator: ()) {
-        // Any in-flight CATransition has the native layer's own lifetime.
-        // The anchor neither captures pixels nor retains an alternate tree.
-    }
-}
