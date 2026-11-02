@@ -33,7 +33,7 @@ selection_motion = '.animation(TrainerMotion.animation(.selection, reduceMotion:
 assert card.count(selection_motion) == 1
 assert card.index(selection_motion) < card.index(".frame(width: 24)")
 assert "Avoid interpolating the action stack's height" in card
-assert "TrainerGamePageTransitionSurface(transition: transition)" in pages
+assert "TrainerGameSelectionFocus(gameID: application.selectedGameID, transition: transition)" in pages
 assert ".opacity(context.id == application.selectedGameID ? 1 : 0)" in pages
 assert ".allowsHitTesting(context.id == application.selectedGameID)" in pages
 
