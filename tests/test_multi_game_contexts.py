@@ -630,6 +630,11 @@ func navigationTrace(_ message: String) {
 }
 '''
 
+# Diagnostic PR #651 measures the shipped dual-module journey before the old
+# reference-fixture re-press regression can terminate this historical source.
+# Production sources remain exactly those of 74078d95.
+run_real_module_navigation(ROOT)
+
 with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
     project = Path(directory)
     shutil.copytree(ROOT / "Backend/core", project / "Backend/core")
@@ -701,6 +706,3 @@ with tempfile.TemporaryDirectory(prefix="mgt-multi-context-") as directory:
     subprocess.run([str(binary), str(project / "Backend/core/server.py"), sys.executable],
                    cwd=project, env=env, check=True, timeout=90)
 
-# Keep the reference-module isolation gate above, then exercise the shipped
-# Hades/Hades II adapters together in a separate bounded native process.
-run_real_module_navigation(ROOT)
