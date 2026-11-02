@@ -89,6 +89,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(true, interactions: .activate)
             .focusEffectDisabled()
             .accessibilityLabel(descriptor.displayName)
             .accessibilityValue(localization.string(statusToken))

@@ -28,6 +28,7 @@ section_controls = source("Sources/Core/UI/Components/TrainerListControls.swift"
 section = region(section_controls, "struct TrainerSectionButton", "private struct TrainerActionButtonLabel")
 
 # The header remains a real keyboard/AX button without any focus-only paint.
+assert ".focusable(true, interactions: .activate)" in card
 assert ".focusEffectDisabled()" in card
 assert ".focused($headerFocused)" not in card
 assert "headerFocused" not in card
