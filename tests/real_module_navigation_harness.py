@@ -368,7 +368,7 @@ struct StartupAvailabilityModule: TrainerGameModule {
             // The real AX click must install a native compositor transaction,
             // never a snapshot-hosting tree. Reduced Motion bypasses it entirely.
             if previous != id {
-                let nativeFade = window.contentView?.layer?.animation(forKey: "trainer.game.page.crossfade")
+                let nativeFade = window.contentView?.layer?.animation(forKey: "transition")
                 if reduced {
                     journeyCheck(nativeFade == nil, "Reduce Motion installed a native game fade")
                 } else if let fade = nativeFade as? CATransition {
