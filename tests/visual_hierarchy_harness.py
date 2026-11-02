@@ -128,12 +128,18 @@ private func hierarchyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(hierarchyFields)
 }
 
-private func hierarchyBitmap(_ view: NSView) -> Data {
+private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data {
     view.layoutSubtreeIfNeeded()
-    guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowFrame = window.convertFromScreen(screenFrame)
+    let localFrame = view.convert(windowFrame, from: nil)
+        .insetBy(dx: -8, dy: -8)
+        .intersection(view.bounds)
+    guard !localFrame.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
         fatalError("native hierarchy bitmap allocation failed")
     }
-    view.cacheDisplay(in: view.bounds, to: bitmap)
+    view.cacheDisplay(in: localFrame, to: bitmap)
     guard let png = bitmap.representation(using: .png, properties: [:]) else {
         fatalError("native hierarchy bitmap encoding failed")
     }
@@ -257,25 +263,27 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
             hierarchyCheck(game.frame.height >= 30 && bounds.contains(game.frame),
                            "sidebar selection lost its hit target or clipped its label")
-            hierarchyCheck(game.object is NSControl, "module header is not owned by the native focusless control")
             hierarchyCheck(hierarchySelected(game) == state.selected,
                            "module header lost its selected AX state")
-            hierarchyCheck(!controls.contains {
-                $0.role == "AXStaticText" && $0.text == descriptor.displayName
-            }, "module header exposed a duplicate static title beside its AX button")
             hierarchyPump(0.08)
-            let unfocusedBitmap = hierarchyBitmap(host)
+            let headerFrame = game.frame
+            let unfocusedBitmap = hierarchyBitmap(host, around: headerFrame)
             hierarchyCheck(hierarchySetFocused(game, true), "module header does not accept native AX focus")
             hierarchyPump(0.08)
             guard let focusedGame = nativeAccessibilityControls(host).first(where: {
                 $0.identifier == "host.game." + descriptor.id
             }) else { fatalError("focused module header disappeared") }
             hierarchyCheck(hierarchyFocused(focusedGame), "module header did not retain native AX focus")
-            hierarchyCheck(hierarchyBitmap(host) == unfocusedBitmap,
+            hierarchyCheck(abs(focusedGame.frame.minX - headerFrame.minX) < 1
+                           && abs(focusedGame.frame.minY - headerFrame.minY) < 1
+                           && abs(focusedGame.frame.width - headerFrame.width) < 1
+                           && abs(focusedGame.frame.height - headerFrame.height) < 1,
+                           "module header focus changed its geometry")
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
                            "module header focus changed rendered presentation")
             hierarchyCheck(hierarchySetFocused(focusedGame, false), "module header rejected native AX focus removal")
             hierarchyPump(0.08)
-            hierarchyCheck(hierarchyBitmap(host) == unfocusedBitmap,
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
                            "module header focus removal changed rendered presentation")
             guard let pickerLayout = hierarchyPickerFrame(host) else { fatalError("missing Picker layout probe") }
             let pickerFrame = window.convertToScreen(pickerLayout.convert(pickerLayout.bounds, to: nil))

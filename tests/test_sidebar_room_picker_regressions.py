@@ -27,28 +27,17 @@ indicator = region(card, "private var statusIndicator", "var body: some View")
 section_controls = source("Sources/Core/UI/Components/TrainerListControls.swift")
 section = region(section_controls, "struct TrainerSectionButton", "private struct TrainerActionButtonLabel")
 
-# The header uses one native focus owner with focus-ring drawing disabled.
-# The SwiftUI label remains purely presentation/state; native AX focus cannot
-# introduce focus-only pixels into that presentation.
-assert "struct TrainerModuleHeaderButton: NSViewRepresentable" in sidebar
-assert "final class FocuslessControl: NSControl" in sidebar
-assert "override var acceptsFirstResponder: Bool { true }" in sidebar
-assert "override func draw(_ dirtyRect: NSRect) {}" in sidebar
-assert "override func drawFocusRingMask() {}" in sidebar
-assert "override func accessibilityPerformPress() -> Bool" in sidebar
-assert "button.focusRingType = .none" in sidebar
-assert "button.setAccessibilityElement(true)" in sidebar
-assert "button.setAccessibilityRole(.button)" in sidebar
-assert "NSButton" not in sidebar
-assert "button.isTransparent = true" not in sidebar
-assert "button.setAccessibilitySelected(selected)" in sidebar
-assert "button.toolTip = help" in sidebar
-assert "TrainerModuleHeaderButton(" in card
-assert "Button(action: onSelect)" not in card
+# The header stays a real SwiftUI keyboard/AX button while disabling the
+# system focus effect. The native visual fixture compares only this header's
+# rendered frame so focus changes elsewhere in the window cannot create noise.
+assert ".buttonStyle(.plain)" in card
+assert ".focusable(true, interactions: .activate)" in card
+assert ".focusEffectDisabled()" in card
 assert ".focused($headerFocused)" not in card
 assert "headerFocused" not in card
-assert 'identifier: "host.game.\\(descriptor.id)"' in card
-assert ".accessibilityHidden(true)" in card
+assert ".accessibilityIdentifier(\"host.game." in card
+assert ".accessibilityLabel(descriptor.displayName)" in card
+assert "NSViewRepresentable" not in sidebar
 
 # Connection state occupies one constant-sized dot; no glyph, spinner, or
 # module-level selection stripe may substitute for the plain status marker.

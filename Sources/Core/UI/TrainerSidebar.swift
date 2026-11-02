@@ -1,74 +1,4 @@
-import AppKit
 import SwiftUI
-
-private struct TrainerModuleHeaderButton: NSViewRepresentable {
-    final class FocuslessControl: NSControl {
-        override var acceptsFirstResponder: Bool { true }
-        override var focusRingMaskBounds: NSRect { .zero }
-
-        override func draw(_ dirtyRect: NSRect) {}
-        override func drawFocusRingMask() {}
-
-        override func mouseDown(with event: NSEvent) {
-            guard isEnabled else { return }
-            _ = sendAction(action, to: target)
-        }
-
-        override func keyDown(with event: NSEvent) {
-            switch event.keyCode {
-            case 36, 49, 76:
-                guard isEnabled else { return }
-                _ = sendAction(action, to: target)
-            default:
-                super.keyDown(with: event)
-            }
-        }
-
-        override func accessibilityPerformPress() -> Bool {
-            guard isEnabled else { return false }
-            return sendAction(action, to: target)
-        }
-    }
-
-    final class Coordinator: NSObject {
-        var action: () -> Void
-        init(action: @escaping () -> Void) { self.action = action }
-
-        @objc func activate(_ sender: Any?) { action() }
-    }
-
-    let label: String
-    let value: String
-    let identifier: String
-    let help: String
-    let selected: Bool
-    let action: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
-
-    func makeNSView(context: Context) -> FocuslessControl {
-        let button = FocuslessControl()
-        button.focusRingType = .none
-        button.setAccessibilityElement(true)
-        button.setAccessibilityRole(.button)
-        button.setAccessibilityEnabled(true)
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.activate(_:))
-        return button
-    }
-
-    func updateNSView(_ button: FocuslessControl, context: Context) {
-        context.coordinator.action = action
-        button.focusRingType = .none
-        button.setAccessibilityLabel(label)
-        button.setAccessibilityValue(value)
-        button.setAccessibilityIdentifier(identifier)
-        button.setAccessibilityHelp(help)
-        button.setAccessibilitySelected(selected)
-        button.toolTip = help
-    }
-}
-
 
 struct TrainerSidebarCard<Actions: View>: View {
     @Environment(\.trainerTheme) private var theme
@@ -141,7 +71,7 @@ struct TrainerSidebarCard<Actions: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: selected ? 14 : 0) {
-            ZStack {
+            Button(action: onSelect) {
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName)
                         .font(.title3.weight(.medium))
@@ -152,23 +82,19 @@ struct TrainerSidebarCard<Actions: View>: View {
                     Text(descriptor.displayName)
                         .font(.headline.weight(selected ? .semibold : .medium))
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityHidden(true)
                     Spacer()
                     statusIndicator
                 }
                 .frame(minHeight: 30)
-
-                TrainerModuleHeaderButton(
-                    label: descriptor.displayName,
-                    value: localization.string(statusToken),
-                    identifier: "host.game.\(descriptor.id)",
-                    help: statusHelp,
-                    selected: selected,
-                    action: onSelect
-                )
-                .frame(maxWidth: .infinity, minHeight: 30)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .focusable(true, interactions: .activate)
+            .focusEffectDisabled()
+            .accessibilityLabel(descriptor.displayName)
+            .accessibilityValue(localization.string(statusToken))
+            .accessibilityIdentifier("host.game.\(descriptor.id)")
+            .accessibilityAddTraits(selected ? .isSelected : [])
             VStack(alignment: .leading, spacing: 14) { actions }
                 .buttonStyle(.plain)
                 .frame(height: selected ? nil : 0, alignment: .top)

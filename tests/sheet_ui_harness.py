@@ -126,7 +126,10 @@ func exerciseModuleShortcutSheet<Content: View>(
     managementCheck(captureButton()!.press(), "shortcut capture refused native Press")
     sheetJourneyWait(host, "native shortcut monitor installed") { GlobalHotkeys.isShortcutCaptureActive }
     key(53, characters: "\u{1b}")
-    managementCheck(!GlobalHotkeys.isShortcutCaptureActive && isPresented() && chord() == original,
+    sheetJourneyWait(host, "Escape cancels active shortcut capture") {
+        !GlobalHotkeys.isShortcutCaptureActive
+    }
+    managementCheck(isPresented() && window.attachedSheet != nil && chord() == original,
                     "Escape assigned a shortcut or dismissed an active capture's sheet")
 
     let oldCaptureButton = captureButton()!
