@@ -116,8 +116,9 @@ private func exerciseRoomPickerAlignment() {
                                "room popup column drifted with available width: language=\(language.rawValue) old=\(previousGap) new=\(rightGap)")
             }
             previousGap = rightGap
+            let actionTitles = language == .en ? ["Apply", "Generate"] : ["应用", "生成"]
             let actions = nativeAccessibilityControls(host)
-                .filter { $0.role == "AXButton" && [title("Apply", "应用"), title("Generate", "生成")].contains($0.label ?? "") }
+                .filter { $0.role == "AXButton" && actionTitles.contains($0.label ?? "") }
             hierarchyCheck(actions.count == 5 && actions.allSatisfy { abs(contentRight - $0.frame.maxX - theme.rowHorizontalPadding) <= 2 },
                            "room action buttons are not anchored to the trailing row inset")
 
