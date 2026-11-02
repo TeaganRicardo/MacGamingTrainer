@@ -246,10 +246,13 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = host
+            window.setContentSize(NSSize(width: width, height: 740))
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             hierarchyWait(host) {
                 NSApp.isActive && window.isKeyWindow
+                    && abs(host.bounds.width - width) < 1
+                    && abs(host.bounds.height - 740) < 1
                     && hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }.count == 5
             }
             let controls = nativeAccessibilityControls(host)
