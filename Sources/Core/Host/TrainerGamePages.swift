@@ -5,12 +5,16 @@ struct TrainerGamePages: View {
     @ObservedObject var application: TrainerApplicationCoordinator
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var transition = TrainerGamePageTransition()
 
     var body: some View {
         HStack(spacing: 0) {
             TrainerSidebar {
                 ForEach(application.contexts) { context in
                     context.makeSidebarCard(selected: context.id == application.selectedGameID) {
+                        guard application.selectedGameID != context.id else { return }
+                        transition.prepare(destination: context.id, reduceMotion: reduceMotion)
                         application.selectedGameID = context.id
                     }
                 }
@@ -28,12 +32,23 @@ struct TrainerGamePages: View {
                         .zIndex(context.id == application.selectedGameID ? 1 : 0)
                 }
             }
+            .overlay {
+                TrainerGamePageTransitionSurface(transition: transition)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
         .trainerSurface(.canvas)
         .background(TrainerGameSelectionFocus(gameID: application.selectedGameID)
             .allowsHitTesting(false).accessibilityHidden(true))
         .trainerDismissTextEditingOnClickAway()
         .disabled(application.terminationRequested)
+        .onChange(of: application.selectedGameID) { _, newValue in
+            transition.finish(destination: newValue)
+        }
+        .onChange(of: reduceMotion) { _, reduced in
+            if reduced { transition.cancel() }
+        }
     }
 }
 
