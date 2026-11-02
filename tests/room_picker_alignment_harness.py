@@ -71,6 +71,7 @@ private func exerciseRoomPickerAlignment() {
     let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
     for language in [TrainerPresentationLanguage.en, .zhCN] {
         localization.language = language
+        var previousGap: CGFloat?
         for width in [theme.contentMinWidth, CGFloat(1050)] {
             let host = NSHostingView(rootView:
                 RoomPickerAlignmentFixture(language: language)
@@ -102,9 +103,21 @@ private func exerciseRoomPickerAlignment() {
             // Previous tests accepted five equally misplaced popups.
             let contentRight = window.convertToScreen(host.convert(host.bounds, to: nil)).maxX
             let rightGap = contentRight - first.maxX
-            let expectedGap = theme.rowHorizontalPadding + 16 + 52 + 16 + theme.compactActionWidth
-            hierarchyCheck(abs(rightGap - expectedGap) <= 8,
-                           "room popup is not anchored to trailing action columns: language=\(language.rawValue) window=\(width) actualGap=\(rightGap) expected=\(expectedGap)")
+            // ShortcutBadge has a minimum width, not a fixed width: the
+            // resolved keyboard glyphs may need a wider native text frame.
+            // Assert stable trailing anchoring without inventing its width.
+            let minimumGap = theme.rowHorizontalPadding + 16 + 52 + 16 + theme.compactActionWidth
+            hierarchyCheck(rightGap >= minimumGap - 2 && rightGap <= minimumGap + 56,
+                           "room popup is too far from trailing actions: language=\(language.rawValue) window=\(width) gap=\(rightGap) minimum=\(minimumGap)")
+            if let previousGap {
+                hierarchyCheck(abs(rightGap - previousGap) < 2,
+                               "room popup column drifted with available width: language=\(language.rawValue) old=\(previousGap) new=\(rightGap)")
+            }
+            previousGap = rightGap
+            let actions = nativeAccessibilityControls(host)
+                .filter { $0.role == "AXButton" && [title("Apply", "应用"), title("Generate", "生成")].contains($0.label ?? "") }
+            hierarchyCheck(actions.count == 5 && actions.allSatisfy { abs(contentRight - $0.frame.maxX - theme.rowHorizontalPadding) <= 2 },
+                           "room action buttons are not anchored to the trailing row inset")
 
             for (index, control) in pickers.enumerated() {
                 let frame = control.frame
