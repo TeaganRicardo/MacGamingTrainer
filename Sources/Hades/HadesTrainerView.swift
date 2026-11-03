@@ -539,7 +539,7 @@ private struct HadesCatalogView: View {
                     }
                     HStack(spacing: 12) {
                         Picker(text("hades.rarity"), selection: $rarity) {
-                            if selected == nil { Text(text("hades.emptyCatalog")).tag("") }
+                            if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }
                             ForEach(selected?.rarities ?? [], id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
                         .trainerPickerWidth(.compactValue)

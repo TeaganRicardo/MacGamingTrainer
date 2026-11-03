@@ -35,6 +35,7 @@ assert 'TrainerPrimaryActionButton(title: text("hades.acquire")' in catalog
 assert ".disabled(sourceGroups.isEmpty)" in catalog
 assert ".disabled(selectedEntries.isEmpty)" in catalog
 assert "selected != nil && model.canMutate" in catalog
+assert 'if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }' in catalog
 assert "if matches.isEmpty { TrainerEmptyState" not in catalog
 
 assert not re.search(r"if\s+matches\.isEmpty\s*\{[\s\S]*?\}\s*else\s*\{\s*Picker\(", traits)
