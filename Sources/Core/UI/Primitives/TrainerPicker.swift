@@ -52,7 +52,7 @@ private struct TrainerPickerPresentationModifier: ViewModifier {
                 TrainerPickerIndicator(state: effectiveState, fill: fill)
             }
             .background {
-                TrainerNativePickerPresentationProbe(state: effectiveState)
+                TrainerNativePickerPresentationBridge(state: effectiveState)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -91,10 +91,10 @@ private struct TrainerPickerIndicator: View {
 /// bezel/focus drawing so it cannot leak system white/blue variants through
 /// retained or reconstructed controls; SwiftUI above owns the two product
 /// presentations. The native button continues to own menu semantics and AX.
-private struct TrainerNativePickerPresentationProbe: NSViewRepresentable {
+private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
     let state: TrainerPickerPresentationState
 
-    final class Probe: NSView {
+    final class BridgeView: NSView {
         var state: TrainerPickerPresentationState = .interactive
         private var scheduled = false
 
@@ -167,13 +167,13 @@ private struct TrainerNativePickerPresentationProbe: NSViewRepresentable {
         }
     }
 
-    func makeNSView(context: Context) -> Probe {
-        let view = Probe(frame: .zero)
+    func makeNSView(context: Context) -> BridgeView {
+        let view = BridgeView(frame: .zero)
         view.update(state: state)
         return view
     }
 
-    func updateNSView(_ view: Probe, context: Context) {
+    func updateNSView(_ view: BridgeView, context: Context) {
         view.update(state: state)
     }
 }
