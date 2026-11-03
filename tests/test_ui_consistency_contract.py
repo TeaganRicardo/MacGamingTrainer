@@ -273,7 +273,7 @@ assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_contr
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "enum TrainerLabeledControlLayout" in row_primitive
-assert "layout == .pickerAction ? theme.pickerActionLabelWidth : nil" in row_primitive
+assert "labelWidth: theme.pickerActionLabelWidth" in row_primitive
 picker_action_layout = (ROOT / "Sources/Core/UI/TrainerPickerActionLayout.swift").read_text()
 assert "TrainerPickerActionLayout(" in row_primitive
 assert "minimumPickerWidth: theme.pickerStandardWidth" in row_primitive
