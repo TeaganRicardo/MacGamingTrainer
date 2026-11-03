@@ -100,8 +100,7 @@ struct HadesRoomsPanel: View {
                     Picker(text("hades.chamberObject"), selection: $chamberObject) {
                         ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
                     }
-                    .labelsHidden().trainerPicker(.rowAction)
-                    .disabled(model.world?.objects.isEmpty != false)
+                    .labelsHidden().trainerPicker(.rowAction, state: model.world?.objects.isEmpty == false ? .interactive : .unavailable)
                     TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
                                                  enabled: model.canMutate && model.world?.objects.isEmpty == false) {
                         guard model.world?.objects.contains(chamberObject) == true else { return }
@@ -122,8 +121,7 @@ struct HadesRoomsPanel: View {
                             Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPicker(.rowAction)
-                    .disabled(doors.isEmpty)
+                    .labelsHidden().trainerPicker(.rowAction, state: doors.isEmpty ? .unavailable : .interactive)
                 }
                 TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
                     Picker(text("hades.reward"), selection: $doorReward) {
@@ -131,8 +129,7 @@ struct HadesRoomsPanel: View {
                             Text(row.name(language: localization.language)).tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPicker(.rowAction)
-                    .disabled(door?.canReward != true)
+                    .labelsHidden().trainerPicker(.rowAction, state: door?.canReward == true ? .interactive : .unavailable)
                     TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
                                                  enabled: model.canMutate && door?.canReward == true) {
                         guard let door, door.canReward else { return }
@@ -145,8 +142,7 @@ struct HadesRoomsPanel: View {
                             Text(text("hades.route.\(item)")).tag(item)
                         }
                     }
-                    .labelsHidden().trainerPicker(.rowAction)
-                    .disabled(door?.routes.isEmpty != false)
+                    .labelsHidden().trainerPicker(.rowAction, state: door?.routes.isEmpty == false ? .interactive : .unavailable)
                     TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
                                                  enabled: model.canMutate && door?.routes.isEmpty == false) {
                         guard let door, !door.routes.isEmpty else { return }
