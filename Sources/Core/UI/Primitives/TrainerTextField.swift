@@ -68,6 +68,7 @@ struct TrainerTextField: NSViewRepresentable {
             let onCommit: (Completion) -> String
             let onCancel: (() -> Void)?
             var draftBeforeNativeDisable: String? = nil
+            var nativeDisableDraftDiscarded = false
         }
         var parent: TrainerTextField
         var edit: Edit?
@@ -96,10 +97,13 @@ struct TrainerTextField: NSViewRepresentable {
             // before AppKit discards an unfinished composition; reading a control
             // or cell value here would itself validate the edit.
             edit?.draftBeforeNativeDisable = editor.string
+            edit?.nativeDisableDraftDiscarded = false
         }
 
         func discardDraftBeforeNativeDisable() {
+            guard edit?.draftBeforeNativeDisable != nil else { return }
             edit?.draftBeforeNativeDisable = nil
+            edit?.nativeDisableDraftDiscarded = true
         }
 
         private static func finishPendingCancellations() {
@@ -193,7 +197,10 @@ struct TrainerTextField: NSViewRepresentable {
             // or delegate begin again. That callback cannot recreate edit authority.
             nativeLifetime = .suspending
             defer { if case .suspending = nativeLifetime { nativeLifetime = .live } }
-            let draft = suspended.draftBeforeNativeDisable ?? field.currentEditor()?.string ?? field.stringValue
+            let draft = suspended.draftBeforeNativeDisable
+                ?? (suspended.nativeDisableDraftDiscarded ? suspended.text.wrappedValue : nil)
+                ?? field.currentEditor()?.string
+                ?? field.stringValue
             suspensionGeneration &+= 1
             let generation = suspensionGeneration
             suspendedDraft = SuspendedDraft(generation: generation, initial: suspended.initial, text: draft)
