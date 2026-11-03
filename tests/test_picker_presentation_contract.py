@@ -15,6 +15,9 @@ assert "button.isBordered = false" in picker
 assert "button.focusRingType = .none" in picker
 assert "button.contentTintColor" in picker
 assert "TrainerPickerIndicator" in picker
+assert "theme.accent" in picker
+assert "NSColor.controlAccentColor" not in picker
+assert "Color.accentColor" not in picker
 
 # Every production visual Picker passes through the shared presentation owner.
 # The language Picker lives inside a command menu rather than the app's control
