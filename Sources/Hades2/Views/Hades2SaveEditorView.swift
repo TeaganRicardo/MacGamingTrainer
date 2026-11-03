@@ -251,7 +251,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.form)
+            .trainerPicker(.form)
             .disabled(model.busy)
 
             Button {
@@ -283,7 +283,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.form)
+            .trainerPicker(.form)
             .disabled(model.busy)
             Spacer(minLength: 0)
         }
@@ -330,7 +330,7 @@ struct Hades2SaveEditorView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .trainerPickerWidth(.rowValue)
+            .trainerPicker(.rowValue)
             .disabled(model.busy || model.profile.isEmpty)
 
             if section == .advanced && !model.advancedPath.isEmpty {
@@ -543,7 +543,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.rowValue)
+            .trainerPicker(.rowValue)
             .disabled(model.busy)
         } else {
             TrainerTextField(
