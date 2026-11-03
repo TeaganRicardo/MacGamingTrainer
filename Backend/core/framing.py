@@ -9,7 +9,29 @@ import time
 import uuid
 
 SESSION_ENVIRONMENT = 'MGT_JSONL_SESSION_V1'
-_PAYLOAD_NAME = re.compile(r'^payload-[0-9a-f]{32}\.json
+_PAYLOAD_NAME = re.compile(r'^payload-[0-9a-f]{32}\.json$')
+_REPARENT_GRACE_SECONDS = 0.05
+_REPARENT_POLL_SECONDS = 0.001
+
+
+def _host_process_departed(host_pid, *, getppid=os.getppid,
+                           monotonic=time.monotonic, sleep=time.sleep):
+    """Confirm Host death across the EOF -> reparent ordering window.
+
+    On Linux, exiting a parent can close its pipe descriptors before the
+    child's parent identity is updated. A worker may therefore observe stdin
+    EOF while getppid() still returns the exiting Host PID. Keep the ordinary
+    Host-owned cleanup path when that PID remains the parent after a short,
+    bounded grace period.
+    """
+    if getppid() != host_pid:
+        return True
+    deadline = monotonic() + _REPARENT_GRACE_SECONDS
+    while monotonic() < deadline:
+        sleep(_REPARENT_POLL_SECONDS)
+        if getppid() != host_pid:
+            return True
+    return False
 
 
 class FramingError(ValueError):
