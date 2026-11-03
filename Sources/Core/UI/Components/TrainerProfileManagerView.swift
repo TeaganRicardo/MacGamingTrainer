@@ -80,8 +80,7 @@ struct TrainerProfileManagerView: View {
                     Picker(labels.picker, selection: $selection.selectedName) {
                         ForEach(entries) { entry in Text(entry.title).tag(entry.name) }
                     }
-                    .trainerPicker(.form)
-                    .disabled(!canAct)
+                    .trainerPicker(.form, state: canAct ? .interactive : .unavailable)
                     HStack {
                         TrainerPrimaryActionButton(title: labels.load,
                             systemImage: TrainerSemanticIcon.Action.load, enabled: canUseSelection,
