@@ -3,16 +3,14 @@ import SwiftUI
 /// Small type-erased glyph used by shared rows. Modules may supply a custom
 /// vector shape without teaching Core about game-specific icon identities.
 struct TrainerGlyph: View {
-    let identifier: String
     private let content: AnyView
 
-    init<Content: View>(identifier: String, @ViewBuilder content: () -> Content) {
-        self.identifier = identifier
+    init<Content: View>(@ViewBuilder content: () -> Content) {
         self.content = AnyView(content())
     }
 
     static func system(_ name: String) -> TrainerGlyph {
-        TrainerGlyph(identifier: "system.\(name)") {
+        TrainerGlyph {
             Image(systemName: name)
         }
     }
