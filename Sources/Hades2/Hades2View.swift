@@ -553,7 +553,7 @@ struct Hades2TrainerView: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.expanding)
+                .trainerPicker(.expanding)
                 .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerSearchField(
@@ -722,7 +722,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPickerWidth(.compactValue)
+                    .trainerPicker(.compactValue)
                     .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
                     TrainerSecondaryActionButton(
@@ -739,7 +739,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPickerWidth(.compactValue)
+                    .trainerPicker(.compactValue)
                     .disabled(true)
 
                     TrainerSecondaryActionButton(
@@ -1263,7 +1263,7 @@ struct Hades2TrainerView: View {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }
-            .labelsHidden().trainerPickerWidth(.rowAction).disabled(!model.canEditDesired)
+            .labelsHidden().trainerPicker(.rowAction).disabled(!model.canEditDesired)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
@@ -1303,7 +1303,7 @@ struct Hades2TrainerView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.rowAction)
+            .trainerPicker(.rowAction)
             .disabled(!model.canEditDesired)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
@@ -1427,7 +1427,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.expanding)
+                        .trainerPicker(.expanding)
                         .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
                     }
 
@@ -1444,7 +1444,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.expanding)
+                        .trainerPicker(.expanding)
                         .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
@@ -1488,7 +1488,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.expanding)
+                        .trainerPicker(.expanding)
                         .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
                     }
 
@@ -1505,7 +1505,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPickerWidth(.expanding)
+                        .trainerPicker(.expanding)
                         .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
