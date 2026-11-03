@@ -29,7 +29,7 @@ assert 'text("hades2.traits.connectRequired")' not in effects
 manager = hades.split("private var currentRunTraitsPanel: some View {", 1)[1].split("private func currentRunTraitContextualControls", 1)[0]
 assert ".disabled(!model.connected)" not in manager
 assert 'Label(text("hades2.traits.manager")' in manager
-assert ".trainerPickerWidth(.expanding)" in manager
+assert ".trainerPicker(.expanding)" in manager
 assert "currentRunTraitCommonControls(managedCurrentRunTrait)" in manager
 assert "model.canMutateTraits" in hades
 for language, prefix in (("en", "Connect to the game"), ("zh-CN", "连接游戏")):
