@@ -77,6 +77,15 @@ private struct VisualHierarchyFixture: View {
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }
+                        TrainerLabeledControlRow(title: title("Unavailable option", "不可用选项"), icon: "list.bullet",
+                            tint: .secondary, emphasized: false) {
+                            Picker(title("Unavailable option", "不可用选项"), selection: .constant("none")) {
+                                Text(title("No available item", "没有可用项目")).tag("none")
+                            }
+                            .labelsHidden()
+                            .trainerPicker(.rowValue, state: .unavailable)
+                            .accessibilityIdentifier("hierarchy.picker.unavailable")
+                        }
                     }.trainerGroupedRows()
                 }
             }
@@ -312,7 +321,10 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 [control.label, control.valueText, control.help].compactMap { $0 }.contains { $0.contains("host.") }
             }, "rendered native hierarchy exposes an unresolved Host presentation key")
             guard let game = controls.first(where: { $0.identifier == "host.game." + descriptor.id }),
-                  let picker = controls.first(where: { $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton" }) else {
+                  let picker = controls.first(where: { $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton" }),
+                  let simultaneouslyUnavailablePicker = controls.first(where: {
+                      $0.identifier == "hierarchy.picker.unavailable" && $0.role == "AXPopUpButton"
+                  }) else {
                 fatalError("actual sidebar selection or native Picker is missing")
             }
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
@@ -404,6 +416,14 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 height: picker.frame.height
             )
             let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
+            let simultaneousUnavailableChrome = hierarchyBitmapExact(host, around: NSRect(
+                x: simultaneouslyUnavailablePicker.frame.maxX - min(28, simultaneouslyUnavailablePicker.frame.width),
+                y: simultaneouslyUnavailablePicker.frame.minY,
+                width: min(28, simultaneouslyUnavailablePicker.frame.width),
+                height: simultaneouslyUnavailablePicker.frame.height
+            ))
+            hierarchyCheck(simultaneousUnavailableChrome != interactivePickerChrome,
+                           "simultaneous interactive/unavailable Pickers shared one chrome presentation")
             state.pickerSelection = "second"
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
