@@ -26,6 +26,69 @@ assert "case .unavailable: Color(red:" in picker
 # The language Picker lives inside a command menu rather than the app's control
 # surfaces, so it intentionally remains native.
 exceptions = {Path("Sources/Core/Host/TrainerLocalization.swift")}
+
+
+def matching_delimiter_end(source: str, opening: int, left: str, right: str) -> int:
+    # Return the index just after a balanced Swift delimiter, ignoring strings.
+    depth = 0
+    quoted = False
+    escaped = False
+    for index in range(opening, len(source)):
+        char = source[index]
+        if quoted:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            continue
+        if char == '"':
+            quoted = True
+            continue
+        if char == left:
+            depth += 1
+        elif char == right:
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    raise AssertionError(f"unterminated {left}{right} delimiter")
+
+
+def picker_modifier_segment(source: str, picker_match: re.Match, owner_start: int) -> str:
+    # A Picker may contain closures inside its argument list (for example a
+    # Binding get/set pair). Skip the complete call and its trailing content
+    # closure before inspecting only the Picker's modifier chain.
+    call_end = matching_delimiter_end(source, picker_match.end() - 1, "(", ")")
+    cursor = call_end
+    while cursor < len(source) and source[cursor].isspace():
+        cursor += 1
+    if cursor < len(source) and source[cursor] == "{":
+        cursor = matching_delimiter_end(source, cursor, "{", "}")
+    return source[cursor:owner_start]
+
+
+# Guard the scanner itself: disabled menu entries are valid and must not be
+# confused with a raw disabled modifier on the Picker.
+_fixture = """Picker("Section", selection: $section) {
+    Text("Advanced").tag("advanced").disabled(true)
+}
+.labelsHidden()
+.trainerPicker(.rowValue, state: .interactive)"""
+_fixture_picker = re.search(r"(?<![A-Za-z])Picker\s*\(", _fixture)
+_fixture_owner = re.search(r"\.trainerPicker\(", _fixture)
+assert _fixture_picker and _fixture_owner
+assert ".disabled(" not in picker_modifier_segment(_fixture, _fixture_picker, _fixture_owner.start())
+
+_fixture_bad = """Picker("Section", selection: $section) { Text("A").tag("a") }
+.labelsHidden()
+.disabled(true)
+.trainerPicker(.rowValue, state: .unavailable)"""
+_fixture_picker = re.search(r"(?<![A-Za-z])Picker\s*\(", _fixture_bad)
+_fixture_owner = re.search(r"\.trainerPicker\(", _fixture_bad)
+assert _fixture_picker and _fixture_owner
+assert ".disabled(" in picker_modifier_segment(_fixture_bad, _fixture_picker, _fixture_owner.start())
+
 for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
     for swift_path in source_root.rglob("*.swift"):
         relative = swift_path.relative_to(ROOT)
@@ -48,8 +111,8 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
             assert len(owners) == 1, (
                 f"{relative}: Picker #{index + 1} does not have exactly one adjacent Core owner"
             )
-            pre_owner = source[picker_match.end():owners[0].start()]
-            assert ".disabled(" not in pre_owner, (
+            modifier_segment = picker_modifier_segment(source, picker_match, owners[0].start())
+            assert ".disabled(" not in modifier_segment, (
                 f"{relative}: Picker #{index + 1} applies native disabled state before the Core owner"
             )
         assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
