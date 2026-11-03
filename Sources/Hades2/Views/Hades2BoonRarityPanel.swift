@@ -27,7 +27,7 @@ struct Hades2BoonRarityPanel: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.compactValue)
+                .trainerPicker(.compactValue)
                 .disabled(!model.canEditDesired)
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
                 TrainerToggleControl(
