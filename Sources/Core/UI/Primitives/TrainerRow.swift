@@ -32,22 +32,30 @@ struct TrainerRow<Content: View>: View {
 struct TrainerIconLabel: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
-    let icon: String
+    let glyph: TrainerGlyph
     let tint: Color?
     let emphasized: Bool
 
     init(title: String, icon: String, tint: Color? = nil, emphasized: Bool = false) {
         self.title = title
-        self.icon = icon
+        self.glyph = .system(icon)
+        self.tint = tint
+        self.emphasized = emphasized
+    }
+
+    init(title: String, glyph: TrainerGlyph, tint: Color? = nil, emphasized: Bool = false) {
+        self.title = title
+        self.glyph = glyph
         self.tint = tint
         self.emphasized = emphasized
     }
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
+            glyph
                 .font(.title3)
                 .foregroundStyle(tint ?? theme.accent)
+                .frame(width: 20, height: 20)
                 .frame(width: 40, height: 40)
                 .background((tint ?? theme.accent).opacity(emphasized ? 0.12 : 0.045), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius, style: .continuous))
                 .accessibilityHidden(true)
@@ -66,7 +74,7 @@ enum TrainerLabeledControlLayout: Equatable {
 struct TrainerLabeledControlRow<Controls: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
-    let icon: String
+    let glyph: TrainerGlyph
     let tint: Color
     let emphasized: Bool
     let opacity: Double
@@ -79,7 +87,21 @@ struct TrainerLabeledControlRow<Controls: View>: View {
          layout: TrainerLabeledControlLayout = .natural,
          @ViewBuilder controls: () -> Controls) {
         self.title = title
-        self.icon = icon
+        self.glyph = .system(icon)
+        self.tint = tint
+        self.emphasized = emphasized
+        self.opacity = opacity
+        self.helpText = helpText
+        self.layout = layout
+        self.controls = controls()
+    }
+
+    init(title: String, glyph: TrainerGlyph, tint: Color, emphasized: Bool,
+         opacity: Double = 1, helpText: String = "",
+         layout: TrainerLabeledControlLayout = .natural,
+         @ViewBuilder controls: () -> Controls) {
+        self.title = title
+        self.glyph = glyph
         self.tint = tint
         self.emphasized = emphasized
         self.opacity = opacity
@@ -102,7 +124,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                     minimumIntermediateWidth: theme.shortcutBadgeMinimumWidth,
                     minimumActionWidth: theme.compactActionWidth
                 ) {
-                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                    TrainerIconLabel(title: title, glyph: glyph, tint: tint, emphasized: emphasized)
                         .frame(width: theme.pickerActionLabelWidth, alignment: .leading)
                         .help(helpText)
                     controls
@@ -110,7 +132,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(spacing: 16) {
-                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                    TrainerIconLabel(title: title, glyph: glyph, tint: tint, emphasized: emphasized)
                         .help(helpText)
                     Spacer(minLength: 8)
                     controls
