@@ -282,8 +282,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.form)
-            .disabled(model.busy)
+            .trainerPicker(.form, state: model.busy ? .unavailable : .interactive)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, theme.rowHorizontalPadding)
