@@ -264,9 +264,9 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
         if relative in picker_exceptions:
             assert "CommandMenu(" in source and ".trainerPickerWidth(" not in source
             continue
-        width_count = source.count(".trainerPickerWidth(")
-        assert picker_count == width_count, (
-            f"{relative} has {picker_count} Pickers but {width_count} semantic width roles"
+        owner_count = source.count(".trainerPicker(")
+        assert picker_count == owner_count, (
+            f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
 assert ".trainerPicker(.rowAction)" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
 assert ".trainerPicker(.rowAction)" in view
