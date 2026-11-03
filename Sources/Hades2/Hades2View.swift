@@ -1528,19 +1528,17 @@ struct Hades2TrainerView: View {
     }
 
     private var currentRunEffectsPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // This is a stable entry point even before the game attaches.
-            // Model capabilities already disable edits without a live owner.
-            currentRunTraitsPanel
-            Divider()
-            HStack {
-                TrainerIconLabel(
-                    title: text("hades2.spawn.purgingPool"),
-                    icon: Hades2WorkbenchIcon.purge,
-                    tint: model.canOpenSellTraits ? theme.accent : theme.inactive,
-                    emphasized: model.canOpenSellTraits
-                )
-                Spacer()
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
+            // Runtime trait management is a multi-control form. Keep it as a
+            // panel, while the Purging Pool is one functional row and must use
+            // the same Core geometry as every other single-action feature.
+            currentRunTraitsPanel.trainerPanel()
+            TrainerLabeledControlRow(
+                title: text("hades2.spawn.purgingPool"),
+                icon: Hades2WorkbenchIcon.purge,
+                tint: model.canOpenSellTraits ? theme.accent : theme.inactive,
+                emphasized: model.canOpenSellTraits
+            ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
                 TrainerSecondaryActionButton(
                     title: text("hades2.spawn.open"),
@@ -1549,7 +1547,8 @@ struct Hades2TrainerView: View {
                     widthRole: .compactRow
                 ) { _ = model.openSellTraits() }
             }
-        }.trainerPanel()
+            .trainerGroupedRows()
+        }
     }
 
     private func exactItemLabel(_ option: BoonOption) -> String {
