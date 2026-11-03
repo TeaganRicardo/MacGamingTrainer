@@ -251,8 +251,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.form)
-            .disabled(model.busy)
+            .trainerPicker(.form, state: model.busy ? .unavailable : .interactive)
 
             Button {
                 model.refreshFiles()
@@ -330,8 +329,7 @@ struct Hades2SaveEditorView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .trainerPicker(.rowValue)
-            .disabled(model.busy || model.profile.isEmpty)
+            .trainerPicker(.rowValue, state: model.busy || model.profile.isEmpty ? .unavailable : .interactive)
 
             if section == .advanced && !model.advancedPath.isEmpty {
                 Button {
@@ -543,8 +541,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.rowValue)
-            .disabled(model.busy)
+            .trainerPicker(.rowValue, state: model.busy ? .unavailable : .interactive)
         } else {
             TrainerTextField(
                 title: text("hades2.saveEditor.value"),
