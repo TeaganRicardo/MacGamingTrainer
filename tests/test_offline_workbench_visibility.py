@@ -46,6 +46,13 @@ assert 'Picker(text("hades2.traits.manager")' in manager
 assert ".disabled(!model.connected)" not in manager
 assert "currentRunTraitsPanel" in effects and "if model.connected {" not in effects
 assert "hades2.traits.connectRequired" not in hades2
+# The Hades II speed slider is a fixed feature even without runtime support.
+speed_panel = hades2.split("private var gameSpeedPanel: some View {", 1)[1].split("private var presentedContent:", 1)[0]
+assert 'TrainerDisclosure(isExpanded: model.featureSupport["gameSpeed"] == true)' not in speed_panel
+assert 'TrainerMappedSlider(' in speed_panel
+assert 'model.featureSupport["gameSpeed"] == true' in speed_panel
+assert "enabled: model.canEditDesired && pageVisible" in speed_panel
+
 
 # Missing room data must disable controls, not remove entire rows.
 room_body = rooms.split("struct HadesRoomsPanel: View {", 1)[1].split(".onChange(of: doors, initial: true)", 1)[0]

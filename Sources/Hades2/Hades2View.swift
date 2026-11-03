@@ -840,43 +840,43 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private var gameSpeedPanel: some View {
-        TrainerDisclosure(isExpanded: model.featureSupport["gameSpeed"] == true) {
-            TrainerLabeledControlRow(
-                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
-                tint: model.canEditDesired ? theme.accent : theme.inactive,
-                emphasized: model.canEditDesired
-            ) {
-                TrainerNumberField(
-                    text: gameSpeedInputBinding,
-                    placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
+        // This is a fixed workbench feature. Lack of a current runtime
+        // capability disables edits but must never remove the row.
+        TrainerLabeledControlRow(
+            title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
+            tint: model.canEditDesired ? theme.accent : theme.inactive,
+            emphasized: model.canEditDesired
+        ) {
+            TrainerNumberField(
+                text: gameSpeedInputBinding,
+                placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
+                accessibilityLabel: text("hades2.gameSpeed.a11y"),
+                width: 62,
+                enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
+                onEditingChanged: tracking(.gameSpeed),
+                onCommit: completing(.gameSpeed)
+            )
+            Text("×").foregroundStyle(.secondary)
+            TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
+            TrainerGamePageVisibilityGate { pageVisible in
+                TrainerMappedSlider(
+                    value: gameSpeedSliderValue,
+                    mapping: gameSpeedMapping,
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                    width: 62,
-                    enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
-                    onEditingChanged: tracking(.gameSpeed),
-                    onCommit: completing(.gameSpeed)
-                )
-                Text("×").foregroundStyle(.secondary)
-                TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
-                TrainerGamePageVisibilityGate { pageVisible in
-                    TrainerMappedSlider(
-                        value: gameSpeedSliderValue,
-                        mapping: gameSpeedMapping,
-                        accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                        accessibilityHint: text("hades2.gameSpeed.hint"),
-                        enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
-                        onPreviewValue: { preview in
-                            gameSpeedPreview = preview.map(speedNumber)
-                            if preview == nil && focusedField != .gameSpeed {
-                                gameSpeedInput = speedNumber(model.gameSpeed)
-                            }
+                    accessibilityHint: text("hades2.gameSpeed.hint"),
+                    enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
+                    onPreviewValue: { preview in
+                        gameSpeedPreview = preview.map(speedNumber)
+                        if preview == nil && focusedField != .gameSpeed {
+                            gameSpeedInput = speedNumber(model.gameSpeed)
                         }
-                    )
-                    .frame(width: 200)
-                }
-                TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
+                    }
+                )
+                .frame(width: 200)
             }
-            .trainerGroupedRows()
+            TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
         }
+        .trainerGroupedRows()
     }
 
     private var presentedContent: some View {
