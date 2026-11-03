@@ -9,6 +9,8 @@ VISUAL_HIERARCHY_JOURNEY = r'''
     @Published var counter = "3"
     @Published var focus: String?
     @Published var selected = true
+    @Published var pickerSelection = "first"
+    @Published var pickerAvailable = true
 }
 
 private struct VisualHierarchyFixture: View {
@@ -66,11 +68,12 @@ private struct VisualHierarchyFixture: View {
                             shortcutText: nil, action: {})
                         TrainerLabeledControlRow(title: title("Selected option", "指定选项"), icon: "list.bullet",
                             tint: TrainerTheme.standard.accent, emphasized: false) {
-                            Picker(title("Selected option", "指定选项"), selection: .constant("first")) {
+                            Picker(title("Selected option", "指定选项"), selection: $state.pickerSelection) {
                                 Text(title("A long localized option", "较长的本地化选项")).tag("first")
+                                Text(title("Second option", "第二个选项")).tag("second")
                             }
                             .labelsHidden()
-                            .trainerPickerWidth(.rowValue)
+                            .trainerPicker(.rowValue, state: state.pickerAvailable ? .interactive : .unavailable)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }
@@ -155,6 +158,22 @@ private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data
     view.cacheDisplay(in: localFrame, to: bitmap)
     guard let png = bitmap.representation(using: .png, properties: [:]) else {
         fatalError("native hierarchy bitmap encoding failed")
+    }
+    return png
+}
+
+private func hierarchyBitmapExact(_ view: NSView, around screenFrame: NSRect) -> Data {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowFrame = window.convertFromScreen(screenFrame)
+    let localFrame = view.convert(windowFrame, from: nil).intersection(view.bounds)
+    guard !localFrame.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
+        fatalError("native Picker chrome bitmap allocation failed")
+    }
+    view.cacheDisplay(in: localFrame, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        fatalError("native Picker chrome bitmap encoding failed")
     }
     return png
 }
@@ -378,6 +397,57 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             hierarchyCheck(picker.frame.width > 0 && picker.frame.height > 0 && bounds.contains(picker.frame)
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")
+            let pickerIndicatorFrame = NSRect(
+                x: picker.frame.maxX - min(28, picker.frame.width),
+                y: picker.frame.minY,
+                width: min(28, picker.frame.width),
+                height: picker.frame.height
+            )
+            let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
+            state.pickerSelection = "second"
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let selectedPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after selection change") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: selectedPicker.frame.maxX - min(28, selectedPicker.frame.width),
+                    y: selectedPicker.frame.minY,
+                    width: min(28, selectedPicker.frame.width),
+                    height: selectedPicker.frame.height
+                )) == interactivePickerChrome,
+                "Picker selection changed the interactive chrome presentation"
+            )
+            state.pickerAvailable = false
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let unavailablePicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared in unavailable state") }
+            let unavailablePickerChrome = hierarchyBitmapExact(host, around: NSRect(
+                x: unavailablePicker.frame.maxX - min(28, unavailablePicker.frame.width),
+                y: unavailablePicker.frame.minY,
+                width: min(28, unavailablePicker.frame.width),
+                height: unavailablePicker.frame.height
+            ))
+            hierarchyCheck(unavailablePickerChrome != interactivePickerChrome,
+                           "interactive and unavailable Picker chrome collapsed into one presentation")
+            state.pickerAvailable = true
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let restoredPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after restoring interaction") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: restoredPicker.frame.maxX - min(28, restoredPicker.frame.width),
+                    y: restoredPicker.frame.minY,
+                    width: min(28, restoredPicker.frame.width),
+                    height: restoredPicker.frame.height
+                )) == interactivePickerChrome,
+                "Picker did not restore the same interactive chrome after unavailable state"
+            )
             let fields = hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }
             for field in fields {
                 let frame = window.convertToScreen(field.convert(field.bounds, to: nil))
