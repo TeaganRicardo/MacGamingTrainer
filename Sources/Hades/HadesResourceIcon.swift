@@ -38,7 +38,7 @@ enum HadesResourceIcon {
         guard let kind = kind(for: resourceID) else {
             return .system(TrainerSemanticIcon.Concept.item)
         }
-        return TrainerGlyph(identifier: "hades.resource.\(resourceID)") {
+        return TrainerGlyph {
             HadesResourceGlyphShape(kind: kind)
                 .padding(1)
         }
