@@ -20,7 +20,7 @@ struct TrainerShortcutSettingsView: View {
     let onAssign: (String, HotkeyChord) -> TrainerShortcutAssignmentResult
 
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @Environment(\.trainerGamePageVisibility) private var pageVisibility
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @StateObject private var capture = TrainerShortcutCaptureController()
@@ -50,7 +50,7 @@ struct TrainerShortcutSettingsView: View {
         ) {
             if let resetTitle, let onReset {
                 Button(resetTitle) {
-                    guard lifetime.accepts(presentationID), isPresented, pageVisible else { return }
+                    guard lifetime.accepts(presentationID), isPresented, pageVisibility?.isVisible ?? true else { return }
                     capture.cancel()
                     onReset()
                 }
@@ -68,7 +68,7 @@ struct TrainerShortcutSettingsView: View {
                             Spacer()
                             if entry.isEditable {
                                 Button {
-                                    guard lifetime.accepts(presentationID), isPresented, pageVisible else { return }
+                                    guard lifetime.accepts(presentationID), isPresented, pageVisibility?.isVisible ?? true else { return }
                                     capture.begin(actionID: entry.id, onAssign: onAssign)
                                 } label: {
                                     shortcutLabel(
@@ -125,11 +125,13 @@ struct TrainerShortcutSettingsView: View {
             if visible { lifetime.appear() }
             else { lifetime.invalidate(); capture.cancel() }
         }
-        .onChange(of: pageVisible, initial: true) { _, visible in
-            if !visible {
-                lifetime.invalidate()
-                capture.cancel()
-                isPresented = false
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                if !visible {
+                    lifetime.invalidate()
+                    capture.cancel()
+                    isPresented = false
+                }
             }
         }
         .onChange(of: entries.map(\.id)) { _, ids in

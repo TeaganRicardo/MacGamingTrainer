@@ -9,6 +9,7 @@ from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
 from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
+from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 
@@ -121,6 +122,7 @@ struct Main {
         guard args.count == 3 || args.count == 4 else { fail("expected python + worker and optional journey") }
         if args.count == 4 && args[3] == "hierarchy" {
             exerciseVisualHierarchy(descriptor: Hades2GameModule.descriptor, presentation: Hades2GameModule.presentation)
+            exerciseRoomPickerAlignment()
             print("hades2_visual_hierarchy_ok")
             return
         }
@@ -466,7 +468,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         localized.mkdir()
         shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + ROOM_PICKER_ALIGNMENT_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(

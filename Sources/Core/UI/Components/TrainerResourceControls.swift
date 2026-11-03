@@ -90,7 +90,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.flexible)
+                .trainerPickerWidth(.expanding)
                 .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerNumberField(
@@ -172,7 +172,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             }
         }
         .labelsHidden()
-        .trainerPickerWidth(.flexible)
+        .trainerPickerWidth(inline ? .rowAction : .expanding)
         .disabled(!enabled || allItems.isEmpty)
     }
 
@@ -182,7 +182,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
         TrainerSecondaryActionButton(
             title: actionTitle,
             enabled: actionAvailable,
-            width: theme.compactActionWidth
+            widthRole: .compactRow
         ) {
             guard actionAvailable else { return }
             onAction(selection)
@@ -194,7 +194,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             if inline {
                 if let title, let icon {
                     TrainerLabeledControlRow(title: title, icon: icon, tint: state.indicatorColor,
-                                             emphasized: state.isOn) {
+                                             emphasized: state.isOn, layout: .pickerAction) {
                         optionPicker
                         actionControls
                     }

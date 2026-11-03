@@ -3,7 +3,7 @@ import SwiftUI
 /// Shared discovery presentation. Entries, names, icons and reveal/navigation
 /// semantics stay with the module; this view does not receive a backend session.
 struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
-    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @State private var pageVisible = true
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var text: String
@@ -117,9 +117,12 @@ struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
         .onChange(of: results.map(\.id)) { _, ids in
             presentation.resultsChanged(ids)
         }
-        .onChange(of: pageVisible) { _, visible in
-            presentation.pageVisibilityChanged(visible)
-            if !visible { searchFocused = false }
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                pageVisible = visible
+                presentation.pageVisibilityChanged(visible)
+                if !visible { searchFocused = false }
+            }
         }
         .onExitCommand(perform: dismissResults)
         .onDisappear {

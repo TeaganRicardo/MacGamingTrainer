@@ -31,10 +31,11 @@ private struct VisualHierarchyFixture: View {
                     detailToken: .init(key: "host.refreshStatusHelp"),
                     selected: state.selected, onSelect: { state.selected = true }) {
                     TrainerPrimaryActionButton(title: localization.localized("host.refreshStatus"),
-                        enabled: true, width: 160) {}
+                        enabled: true, widthRole: .connection) {}
                     TrainerSectionButton(title: title("Common functions", "常用功能"),
                         systemImage: "switch.2") {}
                 }
+                .background(HierarchyCardHeightProbe().allowsHitTesting(false).accessibilityHidden(true))
             }
         } content: {
             VStack(alignment: .leading, spacing: TrainerTheme.standard.pageSpacing) {
@@ -69,7 +70,7 @@ private struct VisualHierarchyFixture: View {
                                 Text(title("A long localized option", "较长的本地化选项")).tag("first")
                             }
                             .labelsHidden()
-                            .trainerPickerWidth(.standard)
+                            .trainerPickerWidth(.rowValue)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }
@@ -82,6 +83,18 @@ private struct VisualHierarchyFixture: View {
         .preferredColorScheme(.dark)
         .trainerTheme(.standard)
     }
+}
+
+// Native geometry of the actual sidebar card at each disclosure frame.
+private struct HierarchyCardHeightProbe: NSViewRepresentable {
+    final class Frame: NSView {}
+    func makeNSView(context: Context) -> Frame { Frame() }
+    func updateNSView(_ view: Frame, context: Context) {}
+}
+
+private func hierarchyCardHeightProbe(_ view: NSView) -> NSView? {
+    if view is HierarchyCardHeightProbe.Frame { return view }
+    return view.subviews.lazy.compactMap(hierarchyCardHeightProbe).first
 }
 
 // The width role owns the SwiftUI allocation. AppKit owns the native bezel's
@@ -101,8 +114,49 @@ private func hierarchyCheck(_ condition: @autoclosure () -> Bool, _ message: Str
     if !condition() { fatalError(message) }
 }
 
+private func hierarchyFocused(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilityFocused")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
+private func hierarchySelected(_ target: NativeAccessibilityControl) -> Bool {
+    let selector = NSSelectorFromString("isAccessibilitySelected")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Getter = @convention(c) (AnyObject, Selector) -> Bool
+    return unsafeBitCast(target.object.method(for: selector), to: Getter.self)(target.object, selector)
+}
+
+@discardableResult
+private func hierarchySetFocused(_ target: NativeAccessibilityControl, _ focused: Bool) -> Bool {
+    let selector = NSSelectorFromString("setAccessibilityFocused:")
+    guard target.object.responds(to: selector) else { return false }
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    unsafeBitCast(target.object.method(for: selector), to: Setter.self)(target.object, selector, focused)
+    return true
+}
+
 private func hierarchyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(hierarchyFields)
+}
+
+private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowFrame = window.convertFromScreen(screenFrame)
+    let localFrame = view.convert(windowFrame, from: nil)
+        .insetBy(dx: -8, dy: -8)
+        .intersection(view.bounds)
+    guard !localFrame.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
+        fatalError("native hierarchy bitmap allocation failed")
+    }
+    view.cacheDisplay(in: localFrame, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        fatalError("native hierarchy bitmap encoding failed")
+    }
+    return png
 }
 
 @MainActor
@@ -126,7 +180,16 @@ private func hierarchyWait(_ host: NSView, _ condition: () -> Bool) {
         if condition() { return }
         hierarchyPump(0.02)
     } while Date() < deadline
-    hierarchyCheck(condition(), "visual hierarchy did not mount its native controls")
+    if !condition() {
+        let fields = hierarchyFields(host)
+        let values = fields.map { field in
+            "\(field.stringValue){enabled=\(field.isEnabled),frame=\(field.frame)}"
+        }
+        fatalError("visual hierarchy did not mount its native controls" +
+            " active=\(NSApp.isActive) key=\(host.window?.isKeyWindow == true)" +
+            " hostBounds=\(host.bounds) windowBounds=\(host.window?.contentView?.bounds.debugDescription ?? "none")" +
+            " nativeFields=\(fields.count) values=\(values)")
+    }
 }
 
 @MainActor
@@ -205,10 +268,24 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = host
+            // The hosted runner's virtual screen can be only 1024pt wide.
+            // AppKit otherwise shrinks our 1077pt minimum-width fixture to
+            // fit that screen, clipping the final 3pt of a correctly sized
+            // control. Keep the product-width window even if partly offscreen;
+            // allow its height to clamp to the runner's available space.
+            window.minSize = NSSize(width: width, height: 400)
+            window.setContentSize(NSSize(width: width, height: 740))
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             hierarchyWait(host) {
+                // Hosted macOS may clamp a 740pt requested content height to
+                // its actual screen. Wait for mounted native fields in the
+                // real window instead of assuming NSWindow preserves 740pt.
                 NSApp.isActive && window.isKeyWindow
+                    && abs(host.bounds.width - width) < 1
+                    && host.bounds.height > 0
+                    && abs(host.bounds.width - window.contentView!.bounds.width) < 1
+                    && abs(host.bounds.height - window.contentView!.bounds.height) < 1
                     && hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }.count == 5
             }
             let controls = nativeAccessibilityControls(host)
@@ -222,11 +299,82 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
             hierarchyCheck(game.frame.height >= 30 && bounds.contains(game.frame),
                            "sidebar selection lost its hit target or clipped its label")
+            hierarchyCheck(hierarchySelected(game) == state.selected,
+                           "module header lost its selected AX state")
+            guard let cardProbe = hierarchyCardHeightProbe(host) else {
+                fatalError("module-card height probe not mounted")
+            }
+            hierarchyPump(0.08)
+            let expandedCardHeight = cardProbe.bounds.height
+            state.selected = false
+            var interpolatedCardHeights: [CGFloat] = []
+            let collapseDeadline = Date().addingTimeInterval(0.36)
+            while Date() < collapseDeadline {
+                hierarchyPump(0.016)
+                host.layoutSubtreeIfNeeded()
+                interpolatedCardHeights.append(cardProbe.bounds.height)
+            }
+            let collapsedCardHeight = cardProbe.bounds.height
+            hierarchyCheck(expandedCardHeight > collapsedCardHeight + 40,
+                           "module card did not collapse its real action stack")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                hierarchyCheck(interpolatedCardHeights.contains {
+                    $0 > collapsedCardHeight + 8 && $0 < expandedCardHeight - 8
+                }, "module-card disclosure snapped instead of interpolating its geometry")
+            }
+            // Point inside the collapsed card's left background inset: it is
+            // outside the title Button, but must select either game module.
+            let cardFrame = cardProbe.convert(cardProbe.bounds, to: nil)
+            let cardBackgroundPoint = NSPoint(x: cardFrame.minX + 4, y: cardFrame.midY)
+            for eventType in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let event = NSEvent.mouseEvent(
+                    with: eventType,
+                    location: cardBackgroundPoint,
+                    modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber,
+                    context: nil,
+                    eventNumber: 1,
+                    clickCount: 1,
+                    pressure: 1
+                ) else { fatalError("cannot construct native card pointer event") }
+                window.sendEvent(event)
+            }
+            hierarchyPump(0.10)
+            hierarchyCheck(state.selected,
+                           "collapsed module-card background rejected pointer selection")
+            hierarchyPump(0.40)
+            host.layoutSubtreeIfNeeded()
+            hierarchyCheck(abs(cardProbe.bounds.height - expandedCardHeight) < 3,
+                           "module-card disclosure failed to restore its original height")
+            print("sidebar_accordion_native_geometry game=\(descriptor.id) language=\(language.rawValue) width=\(width) expanded=\(expandedCardHeight) collapsed=\(collapsedCardHeight)")
+            hierarchyPump(0.08)
+            let headerFrame = game.frame
+            let unfocusedBitmap = hierarchyBitmap(host, around: headerFrame)
+            hierarchyCheck(hierarchySetFocused(game, true), "module header does not accept native AX focus")
+            hierarchyPump(0.08)
+            guard let focusedGame = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "host.game." + descriptor.id
+            }) else { fatalError("focused module header disappeared") }
+            hierarchyCheck(hierarchyFocused(focusedGame), "module header did not retain native AX focus")
+            hierarchyCheck(abs(focusedGame.frame.minX - headerFrame.minX) < 1
+                           && abs(focusedGame.frame.minY - headerFrame.minY) < 1
+                           && abs(focusedGame.frame.width - headerFrame.width) < 1
+                           && abs(focusedGame.frame.height - headerFrame.height) < 1,
+                           "module header focus changed its geometry")
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
+                           "module header focus changed rendered presentation")
+            hierarchyCheck(hierarchySetFocused(focusedGame, false), "module header rejected native AX focus removal")
+            hierarchyPump(0.08)
+            hierarchyCheck(hierarchyBitmap(host, around: headerFrame) == unfocusedBitmap,
+                           "module header focus removal changed rendered presentation")
             guard let pickerLayout = hierarchyPickerFrame(host) else { fatalError("missing Picker layout probe") }
             let pickerFrame = window.convertToScreen(pickerLayout.convert(pickerLayout.bounds, to: nil))
             print("hierarchy_picker_geometry game=\(descriptor.id) language=\(language.rawValue) window=\(width) allocation=\(pickerFrame) native=\(picker.frame)")
-            hierarchyCheck(abs(pickerFrame.width - theme.pickerStandardWidth) <= 1 && bounds.contains(pickerFrame),
-                           "Picker width allocation changed at a constrained window width")
+            hierarchyCheck(abs(pickerFrame.width - theme.pickerStandardWidth) <= 1,
+                           "Picker width allocation changed at a constrained window width: language=\(language.rawValue) window=\(width) expected=\(theme.pickerStandardWidth) actual=\(pickerFrame.width) frame=\(pickerFrame)")
+            hierarchyCheck(bounds.contains(pickerFrame),
+                           "Picker width allocation escaped the content window: language=\(language.rawValue) window=\(width) bounds=\(bounds) frame=\(pickerFrame)")
             hierarchyCheck(picker.frame.width > 0 && picker.frame.height > 0 && bounds.contains(picker.frame)
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")

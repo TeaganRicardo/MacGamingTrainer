@@ -691,8 +691,8 @@ func exerciseModuleDisclosure<Content: View>(
             disclosureCheck(commands().count == before, "reflow dispatched a runtime command")
 
             try observeAvailability(0)
-            disclosureWait(host, "conditional capability retired") { !busy() && conditional() == nil }
-            disclosureCheck(commands().count == before + 1, "conditional removal dispatched a mutation")
+            disclosureWait(host, "conditional capability disabled") { !busy() && conditional()?.enabled == false }
+            disclosureCheck(commands().count == before + 1, "capability revocation dispatched a mutation")
             try observeAvailability(1)
             disclosureWait(host, "conditional capability returned") { !busy() && conditional()?.enabled == true }
             disclosureCheck(commands().count == before + 2, "conditional return dispatched a mutation")

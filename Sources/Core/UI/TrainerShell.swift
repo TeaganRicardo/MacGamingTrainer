@@ -59,7 +59,7 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
 /// requests to this owner instead of storing a proxy from a disappearing page.
 struct TrainerWorkbenchViewport<Content: View, Feedback: View>: View {
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerGamePageVisible) private var pageVisible
+    @Environment(\.trainerGamePageVisibility) private var pageVisibility
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var sectionScroll = TrainerSectionScroll()
     @ObservedObject var navigation: TrainerSectionNavigation
@@ -86,12 +86,14 @@ struct TrainerWorkbenchViewport<Content: View, Feedback: View>: View {
             // Newly revealed targets register after their native layout exists.
             // Keep only the current request across that presentation update.
             await Task.yield()
-            guard !Task.isCancelled, pageVisible else { return }
+            guard !Task.isCancelled, pageVisibility?.isVisible ?? true else { return }
             sectionScroll.scroll(request, navigation: navigation)
         }
-        .onChange(of: pageVisible) { _, visible in
-            navigation.setVisible(visible)
-            if !visible { sectionScroll.cancel() }
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                navigation.setVisible(visible)
+                if !visible { sectionScroll.cancel() }
+            }
         }
         .onChange(of: reduceMotion, initial: true) { _, reduced in sectionScroll.setReduceMotion(reduced) }
         .onDisappear { sectionScroll.cancel() }

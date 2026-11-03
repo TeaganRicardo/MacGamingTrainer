@@ -251,7 +251,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.wide)
+            .trainerPickerWidth(.form)
             .disabled(model.busy)
 
             Button {
@@ -283,7 +283,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.wide)
+            .trainerPickerWidth(.form)
             .disabled(model.busy)
             Spacer(minLength: 0)
         }
@@ -330,7 +330,7 @@ struct Hades2SaveEditorView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .trainerPickerWidth(.standard)
+            .trainerPickerWidth(.rowValue)
             .disabled(model.busy || model.profile.isEmpty)
 
             if section == .advanced && !model.advancedPath.isEmpty {
@@ -543,7 +543,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.standard)
+            .trainerPickerWidth(.rowValue)
             .disabled(model.busy)
         } else {
             TrainerTextField(
@@ -682,7 +682,8 @@ struct Hades2SaveEditorView: View {
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
                     systemImage: TrainerSemanticIcon.Action.apply,
-                    enabled: !model.busy && model.hasWriteTarget
+                    enabled: !model.busy && model.hasWriteTarget,
+                    widthRole: .sheet
                 ) {
                     model.apply(baseline: baseline)
                 }

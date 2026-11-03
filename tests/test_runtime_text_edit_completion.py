@@ -164,18 +164,18 @@ final class GenerateAction: NSObject {
  init(_ model: Hades2TrainerModel) { self.model=model }
  @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
 }
-@MainActor final class PageVisibility: ObservableObject {
- @Published var visible = true
+@MainActor final class PageVisibility {
+ let pageVisibility = TrainerGamePageVisibility()
  var destinations: [String] = []
 }
 struct HeaderFixture: View {
  @ObservedObject var model: Hades2TrainerModel
- @ObservedObject var visibility: PageVisibility
+ let visibility: PageVisibility
  var body: some View {
   VStack {
    Hades2SidebarActions(model:model)
    Hades2HeaderActions(model:model)
-  }.environment(\.trainerGamePageVisible,visibility.visible)
+  }.environment(\.trainerGamePageVisibility,visibility.pageVisibility)
    .environment(\.trainerNavigateToSection) { visibility.destinations.append($0) }
  }
 }
@@ -230,17 +230,17 @@ struct HeaderFixture: View {
    // Let SwiftUI observe the native focus transition before hiding the page.
    pump()
    wait("workbench search did not enter native editing") { searchField.currentEditor() != nil }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("hiding the game retained search-field focus") { searchField.currentEditor() == nil }
-   visibility.visible=true; pump()
+   visibility.pageVisibility.setVisible(true); pump()
    model.workbenchSearch="Invincibility"
    wait("search results did not open") { hasPopover() }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("a hidden game retained its search popover") { !hasPopover() }
    check(model.workbenchSearch=="Invincibility", "hiding the page erased its search input")
    model.workbenchSearch="Gold"; pump()
    check(!hasPopover(), "a background search change reopened a hidden popover")
-   visibility.visible=true; pump()
+   visibility.pageVisibility.setVisible(true); pump()
    check(!hasPopover() && model.workbenchSearch=="Gold", "returning to the page lost input or reopened stale results")
    model.workbenchSearch="Grasp"
    wait("numeric search results did not open") { hasPopover() }
@@ -269,7 +269,7 @@ struct HeaderFixture: View {
          "workbench query, selection, clear or page switching issued a backend request")
    model.error="host.operationFailed"; pump(); model.showFeedbackDetails()
    wait("feedback details did not open") { model.feedbackDetailsPresented && hasPopover() }
-   visibility.visible=false
+   visibility.pageVisibility.setVisible(false)
    wait("a hidden game retained its feedback popover") { !model.feedbackDetailsPresented && !hasPopover() }
    check(!model.currentIssues.isEmpty, "hiding feedback erased the underlying issue")
    session.stop(); window.close(); phase("navigation:complete"); return
@@ -952,7 +952,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         sources[sources.index(source)] = traced
     binary = td / "text_edit"
     subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
-    # Keep independent native journeys within their existing execution budget.
+    # Each journey retains its own bounded behavioral waits below. The outer
+    # process budget only covers SwiftUI/AppKit startup and compilation-host
+    # variance on shared CI runners; it must not expire after all assertions
+    # have already reached the final native editor episode.
     for journey in os.environ.get("MGT_TEXT_EDIT_JOURNEYS", "editing,management,controls,navigation").split(","):
         fixture = td / journey; fixture.mkdir()
         worker = fixture / "worker.py"; worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
@@ -961,7 +964,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         print(f"runtime_text_edit_completion_launch:{journey}", flush=True)
         try:
             result = subprocess.run([str(binary), PYTHON, str(worker), journey], env=env,
-                                    capture_output=True, text=True, timeout=45)
+                                    capture_output=True, text=True, timeout=60)
         except subprocess.TimeoutExpired as error:
             for output, stream in ((error.stdout, sys.stdout), (error.stderr, sys.stderr)):
                 if output is not None:

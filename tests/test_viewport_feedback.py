@@ -150,8 +150,10 @@ struct EditorProbe: NSViewRepresentable {
 }
 
 @MainActor
-final class FeedbackPageVisibility: ObservableObject {
-    @Published var visible = true
+final class FeedbackPageVisibility {
+    let pageVisibility = TrainerGamePageVisibility()
+    var visible: Bool { pageVisibility.isVisible }
+    func setVisible(_ visible: Bool) { pageVisibility.setVisible(visible) }
 }
 
 @MainActor
@@ -182,7 +184,7 @@ final class FeedbackInteractionWindow: NSWindow {
 
 struct FeedbackInteractionPage: View {
     @ObservedObject var model: Hades2TrainerModel
-    @ObservedObject var visibility: FeedbackPageVisibility
+    let visibility: FeedbackPageVisibility
     let editor: NSTextField
 
     var body: some View {
@@ -196,7 +198,7 @@ struct FeedbackInteractionPage: View {
         } feedback: {
             Hades2GameModule.makeFeedback(model: model)
         }
-        .environment(\.trainerGamePageVisible, visibility.visible)
+        .environment(\.trainerGamePageVisibility, visibility.pageVisibility)
     }
 }
 
@@ -442,9 +444,9 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
     waitInput("dismissal after hover") { model.feedbackNotice == nil }
     // Retire pointer presentation before the separate keyboard episode, so
     // focus pausing cannot accidentally pass because hover remained active.
-    visibility.visible = false
+    visibility.setVisible(false)
     feedbackInputPump(0.1)
-    visibility.visible = true
+    visibility.setVisible(true)
     feedbackInputPump(0.1)
 
     let focusedNotice = next("hades2.receipt.opened")
@@ -473,7 +475,7 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
     let detailRequests = requestCount()
     let staleDetails = control("details")!
     let staleDismiss = control("dismiss")!
-    visibility.visible = false
+    visibility.setVisible(false)
     waitInput("hidden page retires both native feedback actions") {
         control("details") == nil && control("dismiss") == nil
     }
@@ -484,7 +486,7 @@ func exerciseFeedbackInput(model: Hades2TrainerModel, worker: URL) throws {
           "a hidden page's retained native callback opened details or dismissed its notice")
     check(requestCount() == detailRequests && !model.currentIssues.isEmpty,
           "hidden feedback callbacks changed backend traffic or retained failure state")
-    visibility.visible = true
+    visibility.setVisible(true)
     waitInput("returning page restores its own feedback") {
         model.feedbackNotice?.id == failure.id && control("details")?.enabled == true
     }

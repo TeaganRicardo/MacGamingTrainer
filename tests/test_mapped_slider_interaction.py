@@ -141,7 +141,13 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
         mouse(.leftMouseDown, x: start, in: window)
         let grabbed = thumbCenter(host)
         mouse(.leftMouseDragged, x: start - 37, in: window)
-        check(model.commits == 1 && abs(thumbCenter(host) - (grabbed - 37)) < 1.5,
+        let moved = thumbCenter(host)
+        if model.commits != 1 || abs(moved - (grabbed - 37)) >= 1.5 {
+            fputs("mapped_slider_drag_capture start=\(start) grabbed=\(grabbed) " +
+                  "observed=\(moved) target=\(grabbed - 37) " +
+                  "commits=\(model.commits) preview=\(String(describing: model.preview))\n", stderr)
+        }
+        check(model.commits == 1 && abs(moved - (grabbed - 37)) < 1.5,
               "thumb drag lost grab offset or lagged behind pointer")
         mouse(.leftMouseDragged, x: start - 14, in: window)
         check(model.commits == 1 && abs(thumbCenter(host) - (grabbed - 14)) < 1.5,

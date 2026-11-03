@@ -34,9 +34,12 @@ struct TrainerTheme {
     let shortcutCaptureWidth: CGFloat
     let connectionActionWidth: CGFloat
     let compactActionWidth: CGFloat
+    let shortcutBadgeMinimumWidth: CGFloat
     let pickerCompactWidth: CGFloat
     let pickerStandardWidth: CGFloat
     let pickerWideWidth: CGFloat
+    let pickerActionMaxWidth: CGFloat
+    let pickerActionLabelWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -77,9 +80,12 @@ struct TrainerTheme {
         shortcutCaptureWidth: 180,
         connectionActionWidth: 160,
         compactActionWidth: 88,
+        shortcutBadgeMinimumWidth: 52,
         pickerCompactWidth: 152,
         pickerStandardWidth: 216,
         pickerWideWidth: 288,
+        pickerActionMaxWidth: 420,
+        pickerActionLabelWidth: 200,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24
@@ -94,27 +100,53 @@ struct TrainerTheme {
     }
 }
 
-enum TrainerPickerWidth {
-    case compact
-    case standard
-    case wide
-    case flexible
+enum TrainerPickerWidthRole {
+    case compactValue
+    case rowValue
+    case rowAction
+    case form
+    case expanding
+}
+
+private struct TrainerNativeFlexiblePickerSizing: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            // macOS 26+ Pickers default to intrinsic button width. This
+            // opt-in makes the native bezel fill the measured row column.
+            content.buttonSizing(.flexible)
+        } else {
+            content
+        }
+    }
 }
 
 private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
-    let role: TrainerPickerWidth
+    let role: TrainerPickerWidthRole
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         Group {
             switch role {
-            case .compact:
+            case .compactValue:
                 content.frame(width: theme.pickerCompactWidth)
-            case .standard:
+            case .rowValue:
                 content.frame(width: theme.pickerStandardWidth)
-            case .wide:
-                content.frame(width: theme.pickerWideWidth)
-            case .flexible:
+            case .rowAction:
+                // Our custom row Layout proposes the exact remaining width.
+                // macOS 26+ requires flexible native button sizing so the
+                // popup bezel also fills that proposed width.
+                content
+                    .modifier(TrainerNativeFlexiblePickerSizing())
+                    .frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
+            case .form:
+                content.frame(
+                    minWidth: theme.pickerStandardWidth,
+                    idealWidth: theme.pickerWideWidth,
+                    maxWidth: theme.pickerWideWidth
+                )
+            case .expanding:
                 content.frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
             }
         }
@@ -124,6 +156,19 @@ private struct TrainerPickerWidthModifier: ViewModifier {
             transaction.animation = nil
             transaction.disablesAnimations = true
         }
+    }
+}
+
+// Inline feature rows share a compact action column. Standalone/sheet
+// actions retain their native content width unless the caller specifies one.
+private struct TrainerActionWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var trainerActionWidth: CGFloat? {
+        get { self[TrainerActionWidthKey.self] }
+        set { self[TrainerActionWidthKey.self] = newValue }
     }
 }
 
@@ -143,7 +188,7 @@ extension View {
         environment(\.trainerTheme, theme)
     }
 
-    func trainerPickerWidth(_ role: TrainerPickerWidth = .standard) -> some View {
+    func trainerPickerWidth(_ role: TrainerPickerWidthRole = .rowValue) -> some View {
         modifier(TrainerPickerWidthModifier(role: role))
     }
 

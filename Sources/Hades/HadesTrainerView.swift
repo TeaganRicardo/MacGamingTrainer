@@ -10,7 +10,6 @@ struct HadesTrainerView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerGamePageVisible) private var pageVisible
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
@@ -37,13 +36,6 @@ struct HadesTrainerView: View {
                     icon: "exclamationmark.triangle.fill", color: theme.warning
                 )
             }
-            if !model.heroReady {
-                TrainerMessageBanner(
-                    text: text("hades.waitingForHero"),
-                    icon: "person.crop.circle.badge.clock", color: theme.info
-                )
-            }
-
             runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
             commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
             boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
@@ -54,11 +46,13 @@ struct HadesTrainerView: View {
         .sheet(isPresented: $model.shortcutSettingsPresented) { HadesShortcutSettingsView(model: model) }
         .sheet(isPresented: $model.profilesPresented) { HadesProfileManagerView(model: model) }
         .sheet(isPresented: $model.diagnosticsPresented) { HadesDiagnosticsView(model: model) }
-        .onChange(of: pageVisible) { _, visible in
-            if !visible {
-                model.shortcutSettingsPresented = false
-                model.profilesPresented = false
-                model.diagnosticsPresented = false
+        .background {
+            TrainerGamePageVisibilityObserver { visible in
+                if !visible {
+                    model.shortcutSettingsPresented = false
+                    model.profilesPresented = false
+                    model.diagnosticsPresented = false
+                }
             }
         }
     }
@@ -174,20 +168,22 @@ struct HadesTrainerView: View {
                     }
                 )
                 Text("×").foregroundStyle(.secondary)
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
-                    accessibilityLabel: localization.localized("host.timeWarp.title"),
-                    accessibilityHint: localization.localized("host.timeWarp.hint"),
-                    enabled: model.canMutate && pageVisible,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview
-                        if preview == nil && !gameSpeedEditing {
-                            gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: localization.localized("host.timeWarp.title"),
+                        accessibilityHint: localization.localized("host.timeWarp.hint"),
+                        enabled: model.canMutate && pageVisible,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview
+                            if preview == nil && !gameSpeedEditing {
+                                gameSpeedInput = speedNumber(model.number(.gameSpeed))
+                            }
                         }
-                    }
-                )
-                .frame(width: 200)
+                    )
+                    .frame(width: 200)
+                }
             }
             if let actual = model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber {
                 let key = abs(actual - model.number(.gameSpeed)) < 0.000001
@@ -497,34 +493,35 @@ private struct HadesCatalogView: View {
             TrainerSearchField(text: $query, placeholder: text("hades.search"),
                                clearLabel: localization.localized("host.search.clear"))
                 .frame(maxWidth: 280)
-            if matches.isEmpty { TrainerEmptyState(text: text("hades.emptyCatalog")) }
-            else {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
-                        Picker(text("hades.exactSource"), selection: $source) {
-                            ForEach(sourceGroups) { group in
-                                Text(sourceTitle(group)).tag(group.id)
-                            }
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.exactSource"), selection: $source) {
+                        if sourceGroups.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(sourceGroups) { group in
+                            Text(sourceTitle(group)).tag(group.id)
                         }
-                        .labelsHidden()
-                        .trainerPickerWidth(.flexible)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
-                        Picker(text("hades.selectTrait"), selection: $selection) {
-                            ForEach(selectedEntries) { entry in
-                                Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
-                            }
+                    .labelsHidden()
+                    .trainerPickerWidth(.expanding)
+                    .disabled(sourceGroups.isEmpty)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.selectTrait"), selection: $selection) {
+                        if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(selectedEntries) { entry in
+                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
                         }
-                        .labelsHidden()
-                        .trainerPickerWidth(.flexible)
                     }
+                    .labelsHidden()
+                    .trainerPickerWidth(.expanding)
+                    .disabled(selectedEntries.isEmpty)
                 }
             }
-            if let selected {
-                TrainerListCard {
-                    VStack(alignment: .leading, spacing: 10) {
+            TrainerListCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let selected {
                         HStack {
                             Text(selected.name(language: localization.language.rawValue)).font(.headline)
                             Spacer()
@@ -539,28 +536,30 @@ private struct HadesCatalogView: View {
                         if selected.kind == "chaos" {
                             HadesChaosPairControls(model: model, blessing: selected, rarity: rarity)
                         }
-                        HStack(spacing: 12) {
-                            Picker(text("hades.rarity"), selection: $rarity) {
-                                ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
-                            }
-                            .trainerPickerWidth(.compact)
-                            if selected.supportsLevel {
-                                Text(text("hades.level"))
-                                TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
-                                    onCommit: { completion in
-                                        guard let amount = Int(completion.text), (1...100).contains(amount) else {
-                                            return completion.rejected(message: text("hades.error.invalidValue"))
-                                        }
-                                        return String(amount)
-                                    })
-                                    .id(selected.id)
-                            }
-                            Spacer()
-                            TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
-                                enabled: model.canMutate && selected.acquirable != false) {
-                                guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
-                                model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
-                            }
+                    }
+                    HStack(spacing: 12) {
+                        Picker(text("hades.rarity"), selection: $rarity) {
+                            if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }
+                            ForEach(selected?.rarities ?? [], id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
+                        }
+                        .trainerPickerWidth(.compactValue)
+                        .disabled(selected == nil || !model.canMutate)
+                        Text(text("hades.level"))
+                        TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
+                            onCommit: { completion in
+                                guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                    return completion.rejected(message: text("hades.error.invalidValue"))
+                                }
+                                return String(amount)
+                            })
+                            .id(selected?.id ?? "")
+                            .disabled(selected?.supportsLevel != true || !model.canMutate)
+                        Spacer()
+                        TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
+                            enabled: selected != nil && model.canMutate && selected?.acquirable != false) {
+                            guard let selected else { return }
+                            guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
+                            model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
                         }
                     }
                 }
@@ -609,20 +608,20 @@ private struct HadesCurrentTraitsPanel: View {
                                    clearLabel: localization.localized("host.search.clear"))
                     .frame(maxWidth: 240)
             }
-            if matches.isEmpty {
-                TrainerEmptyState(text: text("hades.emptyTraits"))
-            } else {
-                Picker(text("hades.currentTraits"), selection: $selection) {
-                    ForEach(matches) { trait in
-                        Text(model.traitName(trait, language: localization.language)
-                             + " · " + text("hades.rarity.\(trait.rarity)")).tag(trait.instanceId)
-                    }
+            Picker(text("hades.currentTraits"), selection: $selection) {
+                if matches.isEmpty {
+                    Text(text("hades.emptyTraits")).tag("")
                 }
-                .labelsHidden()
-                .trainerPickerWidth(.flexible)
-                if let selected {
-                    HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
+                ForEach(matches) { trait in
+                    Text(model.traitName(trait, language: localization.language)
+                         + " · " + text("hades.rarity.\(trait.rarity)")).tag(trait.instanceId)
                 }
+            }
+            .labelsHidden()
+            .trainerPickerWidth(.expanding)
+            .disabled(matches.isEmpty)
+            if let selected {
+                HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
             }
         }
         .trainerPanel()
@@ -662,7 +661,7 @@ private struct HadesCurrentTraitRow: View {
                         Picker(text("hades.rarity"), selection: $rarity) {
                             ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPickerWidth(.compact)
+                        .trainerPickerWidth(.compactValue)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,

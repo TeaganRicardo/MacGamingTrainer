@@ -18,14 +18,14 @@ struct HadesGatheringPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TrainerLabeledControlRow(title: text("hades.gainResource"), icon: TrainerSemanticIcon.Action.acquire, tint: theme.accent, emphasized: false) {
+            TrainerLabeledControlRow(title: text("hades.gainResource"), icon: TrainerSemanticIcon.Action.acquire, tint: theme.accent, emphasized: false, layout: .pickerAction) {
                 Picker(text("hades.resources"), selection: $resource) {
                     Text(text("hades.money")).tag("Money")
                     ForEach(model.resourceCatalog) { row in
                         Text(row.name(language: localization.language.rawValue)).tag(row.id)
                     }
                 }
-                .labelsHidden().trainerPickerWidth(.standard)
+                .labelsHidden().trainerPickerWidth(.rowAction)
                 TrainerNumberField(
                     text: $amount, accessibilityLabel: text("hades.gainAmount"), width: 72,
                     enabled: model.canMutate,
@@ -76,13 +76,13 @@ struct HadesRoomsPanel: View {
     var body: some View {
         TrainerSection(title: text(HadesWorkbenchSection.rooms.titleKey), icon: HadesWorkbenchSection.rooms.icon) {
             VStack(spacing: 0) {
-                TrainerLabeledControlRow(title: text("hades.spawnReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false) {
+                TrainerLabeledControlRow(title: text("hades.spawnReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
                     Picker(text("hades.reward"), selection: $reward) {
                         ForEach(model.worldRewards) { row in
                             Text(row.name(language: localization.language)).tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPickerWidth(.standard)
+                    .labelsHidden().trainerPickerWidth(.rowAction)
                     TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate && model.world != nil) {
                         action("spawn_reward", operation: "hades.spawnReward", params: ["reward": reward])
                     }
@@ -96,15 +96,16 @@ struct HadesRoomsPanel: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                 }
                 .help(text("hades.chaosGateHelp"))
-                TrainerDisclosure(isExpanded: !(model.world?.objects.isEmpty ?? true)) {
-                    TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false) {
-                        Picker(text("hades.chamberObject"), selection: $chamberObject) {
-                            ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
-                        }
-                        .labelsHidden().trainerPickerWidth(.standard)
-                        TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate) {
-                            action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
-                        }
+                TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false, layout: .pickerAction) {
+                    Picker(text("hades.chamberObject"), selection: $chamberObject) {
+                        ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
+                    }
+                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .disabled(model.world?.objects.isEmpty != false)
+                    TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                                                 enabled: model.canMutate && model.world?.objects.isEmpty == false) {
+                        guard model.world?.objects.contains(chamberObject) == true else { return }
+                        action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
                     }
                 }
             }
@@ -112,58 +113,59 @@ struct HadesRoomsPanel: View {
 
             if doors.isEmpty {
                 Text(text("hades.noReadyDoors")).font(.caption).foregroundStyle(.secondary)
-            } else {
-                VStack(spacing: 0) {
-                    TrainerLabeledControlRow(title: text("hades.exitDoor"), icon: TrainerSemanticIcon.Context.doorway, tint: theme.accent, emphasized: false) {
-                        Picker(text("hades.exitDoor"), selection: $doorID) {
-                            ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
-                                Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
-                            }
+            }
+            VStack(spacing: 0) {
+                TrainerLabeledControlRow(title: text("hades.exitDoor"), icon: TrainerSemanticIcon.Context.doorway, tint: theme.accent, emphasized: false, layout: .pickerAction) {
+                    Picker(text("hades.exitDoor"), selection: $doorID) {
+                        if doors.isEmpty { Text(text("hades.noReadyDoors")).tag("") }
+                        ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
+                            Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
                         }
-                        .labelsHidden().trainerPickerWidth(.wide)
                     }
-                    if let door {
-                        if door.canReward {
-                            TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false) {
-                                Picker(text("hades.reward"), selection: $doorReward) {
-                                    ForEach(model.worldRewards.filter(\.doorAllowed)) { row in
-                                        Text(row.name(language: localization.language)).tag(row.id)
-                                    }
-                                }
-                                .labelsHidden().trainerPickerWidth(.standard)
-                                TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
-                                    action("set_door_reward", operation: "hades.doorReward", params: ["doorId": door.id, "reward": doorReward])
-                                }
-                            }
+                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .disabled(doors.isEmpty)
+                }
+                TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
+                    Picker(text("hades.reward"), selection: $doorReward) {
+                        ForEach(model.worldRewards.filter(\.doorAllowed)) { row in
+                            Text(row.name(language: localization.language)).tag(row.id)
                         }
-                        if !door.routes.isEmpty {
-                            TrainerLabeledControlRow(title: text("hades.doorRoute"), icon: HadesWorkbenchIcon.route, tint: theme.accent, emphasized: false) {
-                                Picker(text("hades.doorRoute"), selection: $route) {
-                                    ForEach(door.routes, id: \.self) { item in
-                                        Text(text("hades.route.\(item)")).tag(item)
-                                    }
-                                }
-                                .labelsHidden().trainerPickerWidth(.standard)
-                                TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canMutate) {
-                                    action("set_door_route", operation: "hades.doorRoute", params: ["doorId": door.id, "route": route])
-                                }
-                            }
-                        }
-                        if door.pendingEncounter {
-                            Text(text("hades.thanatosPending")).font(.caption).foregroundStyle(.secondary).padding(10)
-                        }
-                        if door.canRestore {
-                            TrainerLabeledControlRow(title: text("hades.restoreDoor"), icon: TrainerSemanticIcon.Action.restore, tint: theme.accent, emphasized: false) {
-                                TrainerSecondaryActionButton(title: text("hades.restore"), systemImage: TrainerSemanticIcon.Action.restore, enabled: model.canMutate) {
-                                    action("restore_door", operation: "hades.restoreDoor", params: ["doorId": door.id])
-                                }
-                            }
-                        }
+                    }
+                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .disabled(door?.canReward != true)
+                    TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
+                                                 enabled: model.canMutate && door?.canReward == true) {
+                        guard let door, door.canReward else { return }
+                        action("set_door_reward", operation: "hades.doorReward", params: ["doorId": door.id, "reward": doorReward])
                     }
                 }
-                .trainerGroupedRows()
-                .help(text("hades.doorHelp"))
+                TrainerLabeledControlRow(title: text("hades.doorRoute"), icon: HadesWorkbenchIcon.route, tint: theme.accent, emphasized: false, layout: .pickerAction) {
+                    Picker(text("hades.doorRoute"), selection: $route) {
+                        ForEach(door?.routes ?? [], id: \.self) { item in
+                            Text(text("hades.route.\(item)")).tag(item)
+                        }
+                    }
+                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .disabled(door?.routes.isEmpty != false)
+                    TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
+                                                 enabled: model.canMutate && door?.routes.isEmpty == false) {
+                        guard let door, !door.routes.isEmpty else { return }
+                        action("set_door_route", operation: "hades.doorRoute", params: ["doorId": door.id, "route": route])
+                    }
+                }
+                if door?.pendingEncounter == true {
+                    Text(text("hades.thanatosPending")).font(.caption).foregroundStyle(.secondary).padding(10)
+                }
+                TrainerLabeledControlRow(title: text("hades.restoreDoor"), icon: TrainerSemanticIcon.Action.restore, tint: theme.accent, emphasized: false) {
+                    TrainerSecondaryActionButton(title: text("hades.restore"), systemImage: TrainerSemanticIcon.Action.restore,
+                                                 enabled: model.canMutate && door?.canRestore == true) {
+                        guard let door, door.canRestore else { return }
+                        action("restore_door", operation: "hades.restoreDoor", params: ["doorId": door.id])
+                    }
+                }
             }
+            .trainerGroupedRows()
+            .help(text("hades.doorHelp"))
         }
         .onChange(of: doors, initial: true) { _, values in
             if !values.contains(where: { $0.id == doorID }) { doorID = values.first?.id ?? "" }

@@ -75,6 +75,34 @@ import SwiftUI
     fatalError("real module navigation timed out: " + message)
 }
 
+@MainActor final class MainRunLoopGapSampler {
+    private var timer: Timer?
+    private var lastTick = ProcessInfo.processInfo.systemUptime
+    private(set) var gaps: [Double] = []
+
+    func start() {
+        timer?.invalidate()
+        gaps.removeAll(keepingCapacity: true)
+        lastTick = ProcessInfo.processInfo.systemUptime
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                self.gaps.append(now - self.lastTick)
+                self.lastTick = now
+            }
+        }
+        timer.tolerance = 0.001
+        self.timer = timer
+    }
+
+    func stop() -> [Double] {
+        timer?.invalidate()
+        timer = nil
+        return gaps
+    }
+}
+
 func journeyFields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(journeyFields)
 }
@@ -323,10 +351,38 @@ struct StartupAvailabilityModule: TrainerGameModule {
             }
             return result
         }
-        func selectGame(_ id: String) {
-            journeyCheck(control("host.game." + id).press(), "game card rejected native AX press")
+        // Resolve the persistent module-header AX buttons before timing.
+        // Enumerating the complete accessibility tree is fixture work and must
+        // not be counted as product switch latency or a main-run-loop stall.
+        let gameButtons = [
+            "hades": control("host.game.hades"),
+            "hades2": control("host.game.hades2")
+        ]
+        var measuredSwitches: [(game: String, press: Double, settle: Double)] = []
+        func selectGame(_ id: String, measure: Bool = false) {
+            guard let gameButton = gameButtons[id] else { fatalError("missing cached game card \(id)") }
+            let began = ProcessInfo.processInfo.systemUptime
+            journeyCheck(gameButton.press(), "game card rejected native AX press")
+            // The whole Host must never animate when changing games. Module
+            // accordion geometry belongs to Sidebar; only the retained
+            // workbench visibility receives a small, scoped opacity transition.
+            let nativeFade = window.contentView?.layer?.animation(forKey: "transition")
+            journeyCheck(nativeFade?.value(forKey: "mgtGameTransitionOwner") == nil,
+                         "module selection installed an obsolete Host-wide transition")
+            let pressed = ProcessInfo.processInfo.systemUptime
             journeyWait("selected game \(id)") { application.selectedGameID == id }
-            expectSections(id == "hades" ? HadesWorkbenchSection.visible.map(\.id) : Hades2WorkbenchSection.allCases.map(\.id))
+            // Give SwiftUI/AppKit one event-loop turn and force pending native
+            // layout before taking the settle timestamp. AX-tree enumeration is
+            // intentionally outside this interval.
+            journeyPump(0.001)
+            window.contentView?.layoutSubtreeIfNeeded()
+            NSApp.updateWindows()
+            let settled = ProcessInfo.processInfo.systemUptime
+            if measure {
+                measuredSwitches.append((id, pressed - began, settled - began))
+            } else {
+                expectSections(id == "hades" ? HadesWorkbenchSection.visible.map(\.id) : Hades2WorkbenchSection.allCases.map(\.id))
+            }
             journeyPump(0.03)
         }
         func navigate(_ id: String, _ navigation: TrainerSectionNavigation) {
@@ -350,6 +406,31 @@ struct StartupAvailabilityModule: TrainerGameModule {
         }
 
         expectSections(HadesWorkbenchSection.visible.map(\.id))
+        // Warm both retained real module trees before measuring the steady-state
+        // interaction the user reported. The settle boundary is the first point
+        // where the destination module's native section index is actually exposed.
+        for _ in 0..<2 {
+            selectGame("hades2")
+            selectGame("hades")
+        }
+        let mainLoopSampler = MainRunLoopGapSampler()
+        mainLoopSampler.start()
+        for _ in 0..<6 {
+            selectGame("hades2", measure: true)
+            selectGame("hades", measure: true)
+        }
+        journeyPump(0.05)
+        let mainLoopGaps = mainLoopSampler.stop().sorted()
+        // Validate the final visible module after timing, when the expensive AX
+        // inventory can no longer contaminate the performance sample.
+        expectSections(HadesWorkbenchSection.visible.map(\.id))
+        print("real_module_accordion_no_host_fade_ok")
+        let switchPresses = measuredSwitches.map(\.press).sorted()
+        let switchSettles = measuredSwitches.map(\.settle).sorted()
+        let p95Index = max(0, Int(ceil(Double(switchSettles.count) * 0.95)) - 1)
+        let gapP95Index = max(0, Int(ceil(Double(mainLoopGaps.count) * 0.95)) - 1)
+        let gapP95 = mainLoopGaps.isEmpty ? 0 : mainLoopGaps[gapP95Index]
+        print("real_module_switch_timing samples=\(measuredSwitches.count) press_max=\(switchPresses.last ?? 0) settle_p95=\(switchSettles[p95Index]) settle_max=\(switchSettles.last ?? 0) main_loop_samples=\(mainLoopGaps.count) main_loop_gap_p95=\(gapP95) main_loop_gap_max=\(mainLoopGaps.last ?? 0)")
         let firstSearch = searchField(), firstScroll = scroll()
         // Every shipped section ID must resolve to its own mounted native
         // target. No test-only target registry or fake module replaces it.

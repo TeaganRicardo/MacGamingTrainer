@@ -1,17 +1,6 @@
 import AppKit
 import SwiftUI
 
-private struct TrainerGamePageVisibilityKey: EnvironmentKey {
-    static let defaultValue = true
-}
-
-extension EnvironmentValues {
-    var trainerGamePageVisible: Bool {
-        get { self[TrainerGamePageVisibilityKey.self] }
-        set { self[TrainerGamePageVisibilityKey.self] = newValue }
-    }
-}
-
 struct TrainerGamePages: View {
     @ObservedObject var application: TrainerApplicationCoordinator
     @Environment(\.trainerTheme) private var theme
@@ -23,12 +12,11 @@ struct TrainerGamePages: View {
             TrainerSidebar {
                 ForEach(application.contexts) { context in
                     context.makeSidebarCard(selected: context.id == application.selectedGameID) {
+                        guard application.selectedGameID != context.id else { return }
                         application.selectedGameID = context.id
                     }
-                    .environment(\.trainerGamePageVisible, context.id == application.selectedGameID)
                 }
             }
-            .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)
             Rectangle()
                 .fill(theme.boundaryColor(for: contrast))
                 .frame(width: 1)
@@ -36,8 +24,8 @@ struct TrainerGamePages: View {
             ZStack(alignment: .topLeading) {
                 ForEach(application.contexts) { context in
                     context.content
-                        .environment(\.trainerGamePageVisible, context.id == application.selectedGameID)
                         .opacity(context.id == application.selectedGameID ? 1 : 0)
+                        .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion), value: application.selectedGameID)
                         .allowsHitTesting(context.id == application.selectedGameID)
                         .accessibilityHidden(context.id != application.selectedGameID)
                         .zIndex(context.id == application.selectedGameID ? 1 : 0)
@@ -56,8 +44,15 @@ struct TrainerGamePages: View {
 /// the sidebar selection, and never resign an independent tool window's editor.
 private struct TrainerGameSelectionFocus: NSViewRepresentable {
     let gameID: String
-    final class Observer: NSView { var gameID: String? }
-    func makeNSView(context: Context) -> Observer { Observer() }
+
+    final class Observer: NSView {
+        var gameID: String?
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    func makeNSView(context: Context) -> Observer {
+        Observer()
+    }
     func updateNSView(_ view: Observer, context: Context) {
         let previous = view.gameID
         view.gameID = gameID
