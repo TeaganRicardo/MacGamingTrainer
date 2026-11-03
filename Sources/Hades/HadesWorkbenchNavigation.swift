@@ -124,7 +124,7 @@ struct HadesWorkbenchEntry: Identifiable {
     var requiresExpandedMetrics: Bool { id.hasPrefix("numeric.") }
     var icon: String {
         if let shortcut { return shortcut.icon }
-        if resource != nil { return TrainerSemanticIcon.Concept.item }
+        if let resource { return HadesResourceIcon.systemName(for: resource.id) }
         if worldNames != nil {
             if id == "world.fishing" { return TrainerSemanticIcon.Context.fishing }
             if id == "world.chaosGate" { return TrainerSemanticIcon.Context.portal }
