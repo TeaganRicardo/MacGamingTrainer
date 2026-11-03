@@ -32,14 +32,26 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
         source = swift_path.read_text()
         if relative == Path("Sources/Core/UI/Primitives/TrainerPicker.swift"):
             continue
-        raw = len(re.findall(r"(?<![A-Za-z])Picker\\s*\\(", source))
-        if not raw:
+        picker_matches = list(re.finditer(r"(?<![A-Za-z])Picker\s*\(", source))
+        if not picker_matches:
             continue
         if relative in exceptions:
             assert ".trainerPicker(" not in source
             continue
-        owned = source.count(".trainerPicker(")
-        assert raw == owned, f"{relative}: {raw} Pickers but {owned} Core presentation owners"
+        owner_matches = list(re.finditer(r"\.trainerPicker\(", source))
+        assert len(picker_matches) == len(owner_matches), (
+            f"{relative}: {len(picker_matches)} Pickers but {len(owner_matches)} presentation owners"
+        )
+        for index, picker_match in enumerate(picker_matches):
+            next_picker = picker_matches[index + 1].start() if index + 1 < len(picker_matches) else len(source)
+            owners = [owner for owner in owner_matches if picker_match.end() < owner.start() < next_picker]
+            assert len(owners) == 1, (
+                f"{relative}: Picker #{index + 1} does not have exactly one adjacent Core owner"
+            )
+            pre_owner = source[picker_match.end():owners[0].start()]
+            assert ".disabled(" not in pre_owner, (
+                f"{relative}: Picker #{index + 1} applies native disabled state before the Core owner"
+            )
         assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
         assert not re.search(r"\.trainerPicker\([^\n]*\)\s*\.disabled\(", source), (
             f"{relative}: Picker availability bypasses the Core presentation state"
