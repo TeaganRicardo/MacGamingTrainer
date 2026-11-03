@@ -23,8 +23,8 @@ private struct TrainerPickerPresentationModifier: ViewModifier {
 
     private var fill: Color {
         switch effectiveState {
-        case .interactive: Color.white.opacity(0.96)
-        case .unavailable: Color.white.opacity(0.56)
+        case .interactive: Color(red: 0.965, green: 0.965, blue: 0.975)
+        case .unavailable: Color(red: 0.585, green: 0.595, blue: 0.615)
         }
     }
 
