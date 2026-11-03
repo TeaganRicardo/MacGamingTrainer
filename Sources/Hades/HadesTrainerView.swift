@@ -503,8 +503,7 @@ private struct HadesCatalogView: View {
                         }
                     }
                     .labelsHidden()
-                    .trainerPicker(.expanding)
-                    .disabled(sourceGroups.isEmpty)
+                    .trainerPicker(.expanding, state: sourceGroups.isEmpty ? .unavailable : .interactive)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
@@ -515,8 +514,7 @@ private struct HadesCatalogView: View {
                         }
                     }
                     .labelsHidden()
-                    .trainerPicker(.expanding)
-                    .disabled(selectedEntries.isEmpty)
+                    .trainerPicker(.expanding, state: selectedEntries.isEmpty ? .unavailable : .interactive)
                 }
             }
             TrainerListCard {
@@ -542,8 +540,7 @@ private struct HadesCatalogView: View {
                             if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }
                             ForEach(selected?.rarities ?? [], id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPicker(.compactValue)
-                        .disabled(selected == nil || !model.canMutate)
+                        .trainerPicker(.compactValue, state: selected != nil && model.canMutate ? .interactive : .unavailable)
                         Text(text("hades.level"))
                         TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
                             onCommit: { completion in
@@ -618,8 +615,7 @@ private struct HadesCurrentTraitsPanel: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.expanding)
-            .disabled(matches.isEmpty)
+            .trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)
             if let selected {
                 HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
             }
