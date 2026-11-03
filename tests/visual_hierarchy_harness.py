@@ -187,6 +187,15 @@ private func hierarchyBitmapExact(_ view: NSView, around screenFrame: NSRect) ->
     return png
 }
 
+private func hierarchyPickerBodySample(_ frame: NSRect) -> NSRect {
+    NSRect(
+        x: frame.minX + min(7, max(2, frame.width * 0.03)),
+        y: frame.midY - 2,
+        width: min(6, max(2, frame.width * 0.03)),
+        height: 4
+    )
+}
+
 @MainActor
 private func hierarchyPump(_ duration: TimeInterval) {
     let deadline = Date().addingTimeInterval(duration)
@@ -416,14 +425,20 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 height: picker.frame.height
             )
             let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
+            let interactivePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(picker.frame))
             let simultaneousUnavailableChrome = hierarchyBitmapExact(host, around: NSRect(
                 x: simultaneouslyUnavailablePicker.frame.maxX - min(28, simultaneouslyUnavailablePicker.frame.width),
                 y: simultaneouslyUnavailablePicker.frame.minY,
                 width: min(28, simultaneouslyUnavailablePicker.frame.width),
                 height: simultaneouslyUnavailablePicker.frame.height
             ))
+            let simultaneousUnavailableBody = hierarchyBitmapExact(
+                host, around: hierarchyPickerBodySample(simultaneouslyUnavailablePicker.frame)
+            )
             hierarchyCheck(simultaneousUnavailableChrome != interactivePickerChrome,
                            "simultaneous interactive/unavailable Pickers shared one chrome presentation")
+            hierarchyCheck(simultaneousUnavailableBody != interactivePickerBody,
+                           "simultaneous interactive/unavailable Pickers shared one body fill")
             state.pickerSelection = "second"
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
@@ -439,6 +454,11 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 )) == interactivePickerChrome,
                 "Picker selection changed the interactive chrome presentation"
             )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(selectedPicker.frame))
+                    == interactivePickerBody,
+                "Picker selection changed the interactive body fill"
+            )
             state.pickerAvailable = false
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
@@ -453,6 +473,11 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             ))
             hierarchyCheck(unavailablePickerChrome != interactivePickerChrome,
                            "interactive and unavailable Picker chrome collapsed into one presentation")
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
+                    != interactivePickerBody,
+                "interactive and unavailable Picker body fills collapsed into one presentation"
+            )
             state.pickerAvailable = true
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
@@ -467,6 +492,11 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                     height: restoredPicker.frame.height
                 )) == interactivePickerChrome,
                 "Picker did not restore the same interactive chrome after unavailable state"
+            )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(restoredPicker.frame))
+                    == interactivePickerBody,
+                "Picker did not restore the same interactive body fill after unavailable state"
             )
             let fields = hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }
             for field in fields {
