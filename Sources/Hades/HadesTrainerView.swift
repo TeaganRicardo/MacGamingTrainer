@@ -229,7 +229,7 @@ struct HadesTrainerView: View {
                     HadesValueRow(
                         model: model,
                         title: resource.name(language: localization.language.rawValue),
-                        icon: TrainerSemanticIcon.Concept.item, value: model.resources[resource.id] ?? 0
+                        glyph: HadesResourceIcon.glyph(for: resource.id), value: model.resources[resource.id] ?? 0
                     ) {
                         model.setResource(resource.id, value: $0, target: $1)
                     }
@@ -311,7 +311,7 @@ private struct HadesAmountMetricCard: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
-    let icon: String
+    let glyph: TrainerGlyph
     let value: Double
     let field: String
     @Environment(\.trainerTheme) private var theme
@@ -358,13 +358,13 @@ private struct HadesValueRow: View {
     @Environment(\.trainerTheme) private var theme
     @State private var draft: HadesNumberDraft
 
-    init(model: HadesTrainerModel, title: String, icon: String, value: Double,
+    init(model: HadesTrainerModel, title: String, glyph: TrainerGlyph, value: Double,
          onCommit: @escaping (Double, HadesHeroTarget?) -> Void) {
-        self.model = model; self.title = title; self.icon = icon; self.value = value; self.onCommit = onCommit
+        self.model = model; self.title = title; self.glyph = glyph; self.value = value; self.onCommit = onCommit
         _draft = State(initialValue: HadesNumberDraft(value: value))
     }
     var body: some View {
-        TrainerLabeledControlRow(title: title, icon: icon, tint: theme.accent, emphasized: model.heroReady) {
+        TrainerLabeledControlRow(title: title, glyph: glyph, tint: theme.accent, emphasized: model.heroReady) {
             TrainerNumberField(text: Binding(get: { draft.text }, set: { draft.update($0) }), accessibilityLabel: title,
                 enabled: model.canMutate, onEditingChanged: { active in
                     if active { draft.begin(target: model.target) } else { draft.end() }
