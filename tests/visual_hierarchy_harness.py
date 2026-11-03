@@ -203,6 +203,26 @@ private func hierarchyPickerBodySample(_ frame: NSRect) -> NSRect {
     )
 }
 
+private func hierarchyColorSample(_ view: NSView, at screenPoint: NSPoint) -> NSColor {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowPoint = window.convertPoint(fromScreen: screenPoint)
+    let localPoint = view.convert(windowPoint, from: nil)
+    let sampleRect = NSRect(x: localPoint.x - 1, y: localPoint.y - 1, width: 2, height: 2)
+        .intersection(view.bounds)
+    guard !sampleRect.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: sampleRect) else {
+        fatalError("native Picker color sample allocation failed")
+    }
+    view.cacheDisplay(in: sampleRect, to: bitmap)
+    let x = max(0, min(bitmap.pixelsWide - 1, bitmap.pixelsWide / 2))
+    let y = max(0, min(bitmap.pixelsHigh - 1, bitmap.pixelsHigh / 2))
+    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+        fatalError("native Picker color sample unavailable")
+    }
+    return color
+}
+
 @MainActor
 private func hierarchyPump(_ duration: TimeInterval) {
     let deadline = Date().addingTimeInterval(duration)
@@ -433,6 +453,17 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             )
             let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
             let interactivePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(picker.frame))
+            let accentSample = hierarchyColorSample(host, at: NSPoint(
+                x: pickerFrame.maxX - 25,
+                y: pickerFrame.midY
+            ))
+            let accentDelta = abs(accentSample.redComponent - 0.64)
+                + abs(accentSample.greenComponent - 0.51)
+                + abs(accentSample.blueComponent - 1.0)
+            hierarchyCheck(accentDelta < 0.30,
+                           "interactive Picker indicator is not the product purple accent: sample=\(accentSample)")
+            hierarchyCheck(accentSample.redComponent > 0.45,
+                           "interactive Picker indicator fell back to system-blue chrome: sample=\(accentSample)")
             let simultaneousUnavailableChrome = hierarchyBitmapExact(host, around: NSRect(
                 x: simultaneouslyUnavailablePicker.frame.maxX - min(28, simultaneouslyUnavailablePicker.frame.width),
                 y: simultaneouslyUnavailablePicker.frame.minY,
