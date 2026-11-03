@@ -110,36 +110,48 @@ private func exerciseRoomPickerAlignment() {
             // Compare the actual native Picker against the shared trailing
             // shortcut and action columns, not only the other four Pickers.
             // Previous tests accepted five equally misplaced popups.
-            let contentRight = window.convertToScreen(host.convert(host.bounds, to: nil)).maxX
-            let rightGap = contentRight - first.maxX
-            // ShortcutBadge has a minimum width, not a fixed width: the
-            // resolved keyboard glyphs may need a wider native text frame.
-            // Assert stable trailing anchoring without inventing its width.
-            let minimumGap = theme.rowHorizontalPadding + 16 + theme.shortcutBadgeMinimumWidth + 16 + theme.compactActionWidth
-            // Report native AX geometry before an assertion aborts the fixture.
-            // The Swift process may lose buffered stdout during fatalError.
+            // Use native AX frames in the SAME coordinate system to measure
+            // the actual Picker -> shortcut -> action lanes. On a hosted
+            // desktop the window may be larger than the visible display:
+            // converting NSHostingView.bounds through NSWindow can produce an
+            // edge offset by 13pt even when these three controls are aligned.
+            // The window's converted outer edge cannot prove row placement.
             let nativeNodes = nativeAccessibilityControls(host)
             let actionTitles = language == .en ? ["Apply", "Generate"] : ["应用", "生成"]
-            let actions = nativeNodes.filter { $0.role == "AXButton" && actionTitles.contains($0.label ?? "") }
+            let actions = nativeNodes
+                .filter { $0.role == "AXButton" && actionTitles.contains($0.label ?? "") }
+                .sorted { $0.frame.minY < $1.frame.minY }
+            hierarchyCheck(actions.count == pickers.count,
+                           "native room actions are missing or duplicated")
+            let firstAction = actions[0].frame
+            let rightGap = firstAction.minX - first.maxX
+            // Badge width is the shared Core minimum, with a normal 16pt gap
+            // before and after. Longer resolved shortcuts may grow the lane.
+            let minimumGap = 16 + theme.shortcutBadgeMinimumWidth + 16
             let badges = nativeNodes.filter {
                 $0.role == "AXStaticText" && ($0.text ?? "").contains("⌃⌥")
             }
+            let convertedHostRight = window.convertToScreen(host.convert(host.bounds, to: nil)).maxX
             let diagnostic = "native_room_picker_geometry language=\(language.rawValue) width=\(width) " +
                 "gap=\(rightGap) minimum=\(minimumGap) picker=\(first) " +
+                "actionRight=\(firstAction.maxX) convertedHostRight=\(convertedHostRight) " +
                 "actions=\(actions.map(\.frame)) badges=\(badges.map(\.frame))\n"
             FileHandle.standardError.write(Data(diagnostic.utf8))
             hierarchyCheck(rightGap >= minimumGap - 2 && rightGap <= minimumGap + 56,
-                           "room popup is too far from trailing actions: language=\(language.rawValue) window=\(width) gap=\(rightGap) minimum=\(minimumGap)")
+                           "native room popup/action columns overlap or drift: language=\(language.rawValue) window=\(width) gap=\(rightGap) minimum=\(minimumGap)")
             if let previousGap {
                 hierarchyCheck(abs(rightGap - previousGap) < 2,
-                               "room popup column drifted with available width: language=\(language.rawValue) old=\(previousGap) new=\(rightGap)")
+                               "native room popup/action columns drifted with window width: language=\(language.rawValue) old=\(previousGap) new=\(rightGap)")
             }
             previousGap = rightGap
-            hierarchyCheck(actions.count == 5 && actions.allSatisfy { abs(contentRight - $0.frame.maxX - theme.rowHorizontalPadding) <= 2 },
-                           "room action buttons are not anchored to the trailing row inset")
+            hierarchyCheck(actions.allSatisfy { abs($0.frame.maxX - firstAction.maxX) <= 2 },
+                           "room action buttons disagree on the trailing column")
 
             for (index, control) in pickers.enumerated() {
                 let frame = control.frame
+                let alignedGap = actions[index].frame.minX - frame.maxX
+                hierarchyCheck(abs(alignedGap - rightGap) <= 2,
+                               "room popup/action column #\(index) drifted: language=\(language.rawValue) window=\(width) gap=\(alignedGap) expected=\(rightGap)")
                 hierarchyCheck(frame.width > 0 && frame.height > 0,
                                "room popup #\(index) collapsed")
                 hierarchyCheck(abs(frame.minX - first.minX) <= 1 && abs(frame.width - first.width) <= 1,
