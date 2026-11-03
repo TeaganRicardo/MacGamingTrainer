@@ -35,5 +35,8 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
         owned = source.count(".trainerPicker(")
         assert raw == owned, f"{relative}: {raw} Pickers but {owned} Core presentation owners"
         assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
+        assert not re.search(r"\.trainerPicker\([^\n]*\)\s*\.disabled\(", source), (
+            f"{relative}: Picker availability bypasses the Core presentation state"
+        )
 
 print("picker_presentation_contract_ok")
