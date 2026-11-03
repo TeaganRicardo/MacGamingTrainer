@@ -18,6 +18,9 @@ assert "TrainerPickerIndicator" in picker
 assert "theme.accent" in picker
 assert "NSColor.controlAccentColor" not in picker
 assert "Color.accentColor" not in picker
+assert "Color.white.opacity" not in picker
+assert "case .interactive: Color(red:" in picker
+assert "case .unavailable: Color(red:" in picker
 
 # Every production visual Picker passes through the shared presentation owner.
 # The language Picker lives inside a command menu rather than the app's control
