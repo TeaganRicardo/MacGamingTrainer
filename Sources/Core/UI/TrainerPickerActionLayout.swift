@@ -7,11 +7,22 @@ struct TrainerPickerActionLayout: Layout {
     let labelWidth: CGFloat
     let minimumPickerWidth: CGFloat
     let maximumPickerWidth: CGFloat
+    let minimumIntermediateWidth: CGFloat
     let spacing: CGFloat = 16
     let minimumLabelGap: CGFloat = 8
 
     private func naturalSizes(of subviews: Subviews) -> [CGSize] {
-        subviews.map { $0.sizeThatFits(.unspecified) }
+        var sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        // A native shortcut label may report its unpadded text width (39pt)
+        // even though the shared badge owns a 52pt minimum. Explicitly reserve
+        // that lane when there is a following action. A genuinely empty slot
+        // must continue to occupy zero space, and numeric editors keep their
+        // own larger measured width.
+        let visibleTrailing = sizes.indices.filter { $0 >= 2 && sizes[$0].width > 0.5 }
+        for index in visibleTrailing.dropLast() {
+            sizes[index].width = max(sizes[index].width, minimumIntermediateWidth)
+        }
+        return sizes
     }
 
     private func trailingIndices(in sizes: [CGSize]) -> [Int] {

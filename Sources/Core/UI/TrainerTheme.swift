@@ -34,6 +34,7 @@ struct TrainerTheme {
     let shortcutCaptureWidth: CGFloat
     let connectionActionWidth: CGFloat
     let compactActionWidth: CGFloat
+    let shortcutBadgeMinimumWidth: CGFloat
     let pickerCompactWidth: CGFloat
     let pickerStandardWidth: CGFloat
     let pickerWideWidth: CGFloat
@@ -79,6 +80,7 @@ struct TrainerTheme {
         shortcutCaptureWidth: 180,
         connectionActionWidth: 160,
         compactActionWidth: 88,
+        shortcutBadgeMinimumWidth: 52,
         pickerCompactWidth: 152,
         pickerStandardWidth: 216,
         pickerWideWidth: 288,

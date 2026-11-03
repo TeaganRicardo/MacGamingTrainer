@@ -26,8 +26,9 @@ management_view = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 
 # A shortcut has one width owner. Direct badges and optional slots render the
 # same control, rather than giving one presentation path a different minimum.
-assert ".frame(minWidth: 52, alignment: .center)" in badge
-assert badge.index(".frame(minWidth: 52, alignment: .center)") < badge.index(".background(theme.subtleFill")
+assert "shortcutBadgeMinimumWidth: 52" in theme
+assert ".frame(minWidth: theme.shortcutBadgeMinimumWidth, alignment: .center)" in badge
+assert badge.index(".frame(minWidth: theme.shortcutBadgeMinimumWidth, alignment: .center)") < badge.index(".background(theme.subtleFill")
 slot = badge[badge.index("struct TrainerShortcutBadgeSlot"): ]
 assert ".frame(minWidth: 52" not in slot
 

@@ -115,7 +115,8 @@ private func exerciseRoomPickerAlignment() {
             // ShortcutBadge has a minimum width, not a fixed width: the
             // resolved keyboard glyphs may need a wider native text frame.
             // Assert stable trailing anchoring without inventing its width.
-            let minimumGap = theme.rowHorizontalPadding + 16 + 52 + 16 + theme.compactActionWidth
+            let minimumGap = theme.rowHorizontalPadding + 16 + theme.shortcutBadgeMinimumWidth + 16 + theme.compactActionWidth
+            print("native_room_picker_gap language=\(language.rawValue) width=\(width) gap=\(rightGap) min=\(minimumGap) picker=\(first)")
             hierarchyCheck(rightGap >= minimumGap - 2 && rightGap <= minimumGap + 56,
                            "room popup is too far from trailing actions: language=\(language.rawValue) window=\(width) gap=\(rightGap) minimum=\(minimumGap)")
             if let previousGap {
