@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Product-level presentation states for every workbench popup selector.
+/// Product-level presentation states for every visual popup selector.
 /// Runtime/data reasons may change interaction, but they collapse into exactly
 /// these two visual classes so AppKit does not become a presentation owner.
 enum TrainerPickerPresentationState: Equatable {
@@ -124,8 +124,7 @@ private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
         }
 
         private func applyPresentation() {
-            guard let root = window?.contentView,
-                  let button = nearestPopUpButton(in: root) else { return }
+            guard let button = nearestPopUpButton() else { return }
             button.isBordered = false
             button.focusRingType = .none
             button.bezelColor = nil
@@ -134,27 +133,36 @@ private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
                 : NSColor(calibratedWhite: 0.30, alpha: 0.72)
         }
 
-        private func nearestPopUpButton(in root: NSView) -> NSPopUpButton? {
-            let probeFrame = convert(bounds, to: root)
-            var best: (button: NSPopUpButton, overlap: CGFloat, distance: CGFloat)?
-            for button in Self.popUpButtons(in: root) {
-                let frame = button.convert(button.bounds, to: root)
-                let intersection = probeFrame.intersection(frame)
-                let overlap = intersection.isNull ? 0 : intersection.width * intersection.height
-                let dx = frame.midX - probeFrame.midX
-                let dy = frame.midY - probeFrame.midY
-                let distance = dx * dx + dy * dy
-                if let current = best {
-                    if overlap > current.overlap
-                        || (overlap == current.overlap && distance < current.distance) {
+        /// Search the smallest shared native subtree first. A page can contain
+        /// many Pickers; walking the whole window from every bridge would both
+        /// widen the accidental-match surface and turn ordinary layout into a
+        /// page-wide scan.
+        private func nearestPopUpButton() -> NSPopUpButton? {
+            var scope = superview
+            while let currentScope = scope {
+                let bridgeFrame = convert(bounds, to: currentScope)
+                var best: (button: NSPopUpButton, overlap: CGFloat, distance: CGFloat)?
+                for button in Self.popUpButtons(in: currentScope) {
+                    let frame = button.convert(button.bounds, to: currentScope)
+                    let intersection = bridgeFrame.intersection(frame)
+                    let overlap = intersection.isNull ? 0 : intersection.width * intersection.height
+                    guard overlap > 0 else { continue }
+                    let dx = frame.midX - bridgeFrame.midX
+                    let dy = frame.midY - bridgeFrame.midY
+                    let distance = dx * dx + dy * dy
+                    if let candidate = best {
+                        if overlap > candidate.overlap
+                            || (overlap == candidate.overlap && distance < candidate.distance) {
+                            best = (button, overlap, distance)
+                        }
+                    } else {
                         best = (button, overlap, distance)
                     }
-                } else {
-                    best = (button, overlap, distance)
                 }
+                if let best { return best.button }
+                scope = currentScope.superview
             }
-            guard let best, best.overlap > 0 else { return nil }
-            return best.button
+            return nil
         }
 
         private static func popUpButtons(in view: NSView) -> [NSPopUpButton] {
