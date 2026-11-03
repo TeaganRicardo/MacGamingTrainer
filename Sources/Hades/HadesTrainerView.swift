@@ -311,7 +311,7 @@ private struct HadesAmountMetricCard: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
-    let glyph: TrainerGlyph
+    let icon: String
     let value: Double
     let field: String
     @Environment(\.trainerTheme) private var theme
@@ -352,7 +352,7 @@ private struct HadesValueRow: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
-    let icon: String
+    let glyph: TrainerGlyph
     let value: Double
     let onCommit: (Double, HadesHeroTarget?) -> Void
     @Environment(\.trainerTheme) private var theme
