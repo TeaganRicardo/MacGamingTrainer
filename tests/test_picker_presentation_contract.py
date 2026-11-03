@@ -16,20 +16,24 @@ assert "button.focusRingType = .none" in picker
 assert "button.contentTintColor" in picker
 assert "TrainerPickerIndicator" in picker
 
-# Workbench surfaces must all pass through the shared presentation owner.
-workbench_files = (
-    "Sources/Core/UI/Components/TrainerResourceControls.swift",
-    "Sources/Hades/HadesBoonLifecycle.swift",
-    "Sources/Hades/HadesRoomsPanel.swift",
-    "Sources/Hades/HadesTrainerView.swift",
-    "Sources/Hades2/Hades2View.swift",
-    "Sources/Hades2/Views/Hades2BoonRarityPanel.swift",
-)
-for relative in workbench_files:
-    source = (ROOT / relative).read_text()
-    raw = len(re.findall(r"(?<![A-Za-z])Picker\\s*\\(", source))
-    owned = source.count(".trainerPicker(")
-    assert raw == owned, f"{relative}: {raw} Pickers but {owned} Core presentation owners"
-    assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
+# Every production visual Picker passes through the shared presentation owner.
+# The language Picker lives inside a command menu rather than the app's control
+# surfaces, so it intentionally remains native.
+exceptions = {Path("Sources/Core/Host/TrainerLocalization.swift")}
+for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+    for swift_path in source_root.rglob("*.swift"):
+        relative = swift_path.relative_to(ROOT)
+        source = swift_path.read_text()
+        if relative == Path("Sources/Core/UI/Primitives/TrainerPicker.swift"):
+            continue
+        raw = len(re.findall(r"(?<![A-Za-z])Picker\\s*\\(", source))
+        if not raw:
+            continue
+        if relative in exceptions:
+            assert ".trainerPicker(" not in source
+            continue
+        owned = source.count(".trainerPicker(")
+        assert raw == owned, f"{relative}: {raw} Pickers but {owned} Core presentation owners"
+        assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
 
 print("picker_presentation_contract_ok")
