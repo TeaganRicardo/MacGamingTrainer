@@ -1,18 +1,28 @@
-"""Issue #653: shipped Hades I resources have domain glyph identities."""
+"""Issue #653: shipped Hades I resources have stable domain glyph identities."""
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 icons = (ROOT / "Sources/Hades/HadesResourceIcon.swift").read_text()
-for resource_id in (
-    "MetaPoints", "Gems", "LockKeys", "GiftPoints",
-    "SuperGems", "SuperGiftPoints", "SuperLockKeys",
-):
-    assert f'case "{resource_id}"' in icons, resource_id
+expected_kinds = {
+    "MetaPoints": "darkness",
+    "Gems": "gemstones",
+    "LockKeys": "chthonicKey",
+    "GiftPoints": "nectar",
+    "SuperGems": "diamond",
+    "SuperGiftPoints": "ambrosia",
+    "SuperLockKeys": "titanBlood",
+}
+for resource_id, kind in expected_kinds.items():
+    assert f'case "{resource_id}": .{kind}' in icons, (resource_id, kind)
+
 assert "HadesResourceGlyphShape" in icons
-assert "TrainerGlyph {" in icons
+assert 'TrainerGlyph(identifier: "hades.resource.\\(resourceID)")' in icons
 assert "TrainerSemanticIcon.Concept.item" in icons  # unknown/future fallback only
+for kind in expected_kinds.values():
+    assert f"case .{kind}:" in icons, kind
+assert len(set(expected_kinds.values())) == len(expected_kinds)
 
 view = (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 resources = view.split("private var resourcesSection:", 1)[1].split("private var managementSection:", 1)[0]
@@ -29,4 +39,4 @@ row = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "let glyph: TrainerGlyph" in row
 assert "init(title: String, glyph: TrainerGlyph" in row
 
-print("hades_resource_glyph_contract_ok")
+print("hades_resource_glyph_identity_ok")
