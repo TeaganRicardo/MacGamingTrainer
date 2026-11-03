@@ -29,7 +29,7 @@ private struct RoomPickerAlignmentFixture: View {
                 Text(title("Original", "原生")).tag("original")
             }
             .labelsHidden()
-            .trainerPickerWidth(.rowAction)
+            .trainerPicker(.rowAction)
             TrainerShortcutBadgeSlot(text: key)
             TrainerSecondaryActionButton(title: title("Apply", "应用"), enabled: true) {}
         }
