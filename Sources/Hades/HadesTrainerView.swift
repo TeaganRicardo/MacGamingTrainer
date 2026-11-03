@@ -605,20 +605,20 @@ private struct HadesCurrentTraitsPanel: View {
                                    clearLabel: localization.localized("host.search.clear"))
                     .frame(maxWidth: 240)
             }
-            if matches.isEmpty {
-                TrainerEmptyState(text: text("hades.emptyTraits"))
-            } else {
-                Picker(text("hades.currentTraits"), selection: $selection) {
-                    ForEach(matches) { trait in
-                        Text(model.traitName(trait, language: localization.language)
-                             + " · " + text("hades.rarity.\(trait.rarity)")).tag(trait.instanceId)
-                    }
+            Picker(text("hades.currentTraits"), selection: $selection) {
+                if matches.isEmpty {
+                    Text(text("hades.emptyTraits")).tag("")
                 }
-                .labelsHidden()
-                .trainerPickerWidth(.expanding)
-                if let selected {
-                    HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
+                ForEach(matches) { trait in
+                    Text(model.traitName(trait, language: localization.language)
+                         + " · " + text("hades.rarity.\(trait.rarity)")).tag(trait.instanceId)
                 }
+            }
+            .labelsHidden()
+            .trainerPickerWidth(.expanding)
+            .disabled(matches.isEmpty)
+            if let selected {
+                HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
             }
         }
         .trainerPanel()

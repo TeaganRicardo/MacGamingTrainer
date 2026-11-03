@@ -562,7 +562,6 @@ struct Hades2TrainerView: View {
                     clearLabel: localization.localized("host.search.clear")
                 )
                 .frame(width: TraitManagerLayout.searchWidth)
-                .disabled(!model.connected)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1533,11 +1532,6 @@ struct Hades2TrainerView: View {
             // This is a stable entry point even before the game attaches.
             // Model capabilities already disable edits without a live owner.
             currentRunTraitsPanel
-            if !model.connected {
-                Text(text("hades2.traits.connectRequired"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Divider()
             HStack {
                 TrainerIconLabel(
