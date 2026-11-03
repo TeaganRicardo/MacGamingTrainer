@@ -10,7 +10,7 @@ assert "enum TrainerPickerPresentationState" in picker
 assert "case interactive" in picker and "case unavailable" in picker
 assert "@Environment(\\.isEnabled)" in picker
 assert "func trainerPicker(" in picker
-assert "TrainerNativePickerPresentationProbe" in picker
+assert "TrainerNativePickerPresentationBridge" in picker
 assert "button.isBordered = false" in picker
 assert "button.focusRingType = .none" in picker
 assert "button.contentTintColor" in picker
