@@ -11,6 +11,8 @@ VISUAL_HIERARCHY_JOURNEY = r'''
     @Published var selected = true
     @Published var pickerSelection = "first"
     @Published var pickerAvailable = true
+    @Published var pickerCatalogLoaded = true
+    @Published var pickerGeneration = 0
 }
 
 private struct VisualHierarchyFixture: View {
@@ -69,11 +71,16 @@ private struct VisualHierarchyFixture: View {
                         TrainerLabeledControlRow(title: title("Selected option", "指定选项"), icon: "list.bullet",
                             tint: TrainerTheme.standard.accent, emphasized: false) {
                             Picker(title("Selected option", "指定选项"), selection: $state.pickerSelection) {
-                                Text(title("A long localized option", "较长的本地化选项")).tag("first")
-                                Text(title("Second option", "第二个选项")).tag("second")
+                                if state.pickerCatalogLoaded {
+                                    Text(title("A long localized option", "较长的本地化选项")).tag("first")
+                                    Text(title("Second option", "第二个选项")).tag("second")
+                                } else {
+                                    Text(title("No available item", "没有可用项目")).tag("first")
+                                }
                             }
                             .labelsHidden()
                             .trainerPicker(.rowValue, state: state.pickerAvailable ? .interactive : .unavailable)
+                            .id(state.pickerGeneration)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
                         }
@@ -459,6 +466,11 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                     == interactivePickerBody,
                 "Picker selection changed the interactive body fill"
             )
+            // Exercise the original offline failure shape: runtime data disappears
+            // while the same permanent control becomes unavailable. Menu content
+            // and native enabled state change together, but presentation must still
+            // collapse to the single unavailable class.
+            state.pickerCatalogLoaded = false
             state.pickerAvailable = false
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
@@ -471,13 +483,16 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 width: min(28, unavailablePicker.frame.width),
                 height: unavailablePicker.frame.height
             ))
+            let unavailablePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
             hierarchyCheck(unavailablePickerChrome != interactivePickerChrome,
                            "interactive and unavailable Picker chrome collapsed into one presentation")
-            hierarchyCheck(
-                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
-                    != interactivePickerBody,
-                "interactive and unavailable Picker body fills collapsed into one presentation"
-            )
+            hierarchyCheck(unavailablePickerBody != interactivePickerBody,
+                           "interactive and unavailable Picker body fills collapsed into one presentation")
+            hierarchyCheck(unavailablePickerChrome == simultaneousUnavailableChrome,
+                           "unavailable Pickers diverged by runtime/catalog reason")
+            hierarchyCheck(unavailablePickerBody == simultaneousUnavailableBody,
+                           "unavailable Picker body fill diverged by runtime/catalog reason")
+            state.pickerCatalogLoaded = true
             state.pickerAvailable = true
             hierarchyPump(0.10)
             host.layoutSubtreeIfNeeded()
@@ -497,6 +512,29 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 hierarchyBitmapExact(host, around: hierarchyPickerBodySample(restoredPicker.frame))
                     == interactivePickerBody,
                 "Picker did not restore the same interactive body fill after unavailable state"
+            )
+            // Force SwiftUI/AppKit to discard and recreate the popup. The bug
+            // report included system-blue/native chrome returning after state
+            // changes; reconstruction must not escape the Core presentation owner.
+            state.pickerGeneration += 1
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let rebuiltPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after native reconstruction") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: rebuiltPicker.frame.maxX - min(28, rebuiltPicker.frame.width),
+                    y: rebuiltPicker.frame.minY,
+                    width: min(28, rebuiltPicker.frame.width),
+                    height: rebuiltPicker.frame.height
+                )) == interactivePickerChrome,
+                "reconstructed Picker escaped the interactive chrome presentation"
+            )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(rebuiltPicker.frame))
+                    == interactivePickerBody,
+                "reconstructed Picker escaped the interactive body fill"
             )
             let fields = hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }
             for field in fields {
