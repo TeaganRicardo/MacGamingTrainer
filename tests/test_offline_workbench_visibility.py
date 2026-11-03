@@ -25,15 +25,15 @@ for label, view in (("Hades", hades), ("Hades rooms", rooms), ("Hades II", hades
 traits = hades.split("private struct HadesCurrentTraitsPanel:", 1)[1].split("private struct HadesCurrentTraitRow:", 1)[0]
 assert 'Picker(text("hades.currentTraits")' in traits
 assert 'Text(text("hades.emptyTraits")).tag("")' in traits
-assert ".disabled(matches.isEmpty)" in traits
+assert ".trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)" in traits
 # Exact boon acquisition is a fixed feature whose source/items can be empty.
 # Preserve its selectors and action until runtime data arrives.
 catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private struct HadesCurrentTraitsPanel:", 1)[0]
 assert 'Picker(text("hades.exactSource")' in catalog
 assert 'Picker(text("hades.selectTrait")' in catalog
 assert 'TrainerPrimaryActionButton(title: text("hades.acquire")' in catalog
-assert ".disabled(sourceGroups.isEmpty)" in catalog
-assert ".disabled(selectedEntries.isEmpty)" in catalog
+assert ".trainerPicker(.expanding, state: sourceGroups.isEmpty ? .unavailable : .interactive)" in catalog
+assert ".trainerPicker(.expanding, state: selectedEntries.isEmpty ? .unavailable : .interactive)" in catalog
 assert "selected != nil && model.canMutate" in catalog
 assert 'if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }' in catalog
 assert "if matches.isEmpty { TrainerEmptyState" not in catalog
@@ -64,7 +64,7 @@ assert "if let door {" not in room_body
 assert "if door.canReward {" not in room_body
 assert "if door.canRestore {" not in room_body
 assert "if !door.routes.isEmpty {" not in room_body
-assert ".disabled(doors.isEmpty)" in room_body
+assert ".trainerPicker(.rowAction, state: doors.isEmpty ? .unavailable : .interactive)" in room_body
 assert "door?.canReward == true" in room_body
 assert "door?.canRestore == true" in room_body
 assert "door?.routes.isEmpty != false" in room_body
