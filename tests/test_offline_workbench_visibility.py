@@ -26,6 +26,17 @@ traits = hades.split("private struct HadesCurrentTraitsPanel:", 1)[1].split("pri
 assert 'Picker(text("hades.currentTraits")' in traits
 assert 'Text(text("hades.emptyTraits")).tag("")' in traits
 assert ".disabled(matches.isEmpty)" in traits
+# Exact boon acquisition is a fixed feature whose source/items can be empty.
+# Preserve its selectors and action until runtime data arrives.
+catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private struct HadesCurrentTraitsPanel:", 1)[0]
+assert 'Picker(text("hades.exactSource")' in catalog
+assert 'Picker(text("hades.selectTrait")' in catalog
+assert 'TrainerPrimaryActionButton(title: text("hades.acquire")' in catalog
+assert ".disabled(sourceGroups.isEmpty)" in catalog
+assert ".disabled(selectedEntries.isEmpty)" in catalog
+assert "selected != nil && model.canMutate" in catalog
+assert "if matches.isEmpty { TrainerEmptyState" not in catalog
+
 assert not re.search(r"if\s+matches\.isEmpty\s*\{[\s\S]*?\}\s*else\s*\{\s*Picker\(", traits)
 
 manager = hades2.split("private var currentRunTraitsPanel:", 1)[1].split("private func currentRunTraitContextualControls", 1)[0]

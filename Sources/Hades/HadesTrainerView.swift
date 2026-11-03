@@ -493,34 +493,35 @@ private struct HadesCatalogView: View {
             TrainerSearchField(text: $query, placeholder: text("hades.search"),
                                clearLabel: localization.localized("host.search.clear"))
                 .frame(maxWidth: 280)
-            if matches.isEmpty { TrainerEmptyState(text: text("hades.emptyCatalog")) }
-            else {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
-                        Picker(text("hades.exactSource"), selection: $source) {
-                            ForEach(sourceGroups) { group in
-                                Text(sourceTitle(group)).tag(group.id)
-                            }
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.exactSource"), selection: $source) {
+                        if sourceGroups.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(sourceGroups) { group in
+                            Text(sourceTitle(group)).tag(group.id)
                         }
-                        .labelsHidden()
-                        .trainerPickerWidth(.expanding)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
-                        Picker(text("hades.selectTrait"), selection: $selection) {
-                            ForEach(selectedEntries) { entry in
-                                Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
-                            }
+                    .labelsHidden()
+                    .trainerPickerWidth(.expanding)
+                    .disabled(sourceGroups.isEmpty)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.selectTrait"), selection: $selection) {
+                        if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(selectedEntries) { entry in
+                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
                         }
-                        .labelsHidden()
-                        .trainerPickerWidth(.expanding)
                     }
+                    .labelsHidden()
+                    .trainerPickerWidth(.expanding)
+                    .disabled(selectedEntries.isEmpty)
                 }
             }
-            if let selected {
-                TrainerListCard {
-                    VStack(alignment: .leading, spacing: 10) {
+            TrainerListCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let selected {
                         HStack {
                             Text(selected.name(language: localization.language.rawValue)).font(.headline)
                             Spacer()
@@ -535,28 +536,30 @@ private struct HadesCatalogView: View {
                         if selected.kind == "chaos" {
                             HadesChaosPairControls(model: model, blessing: selected, rarity: rarity)
                         }
-                        HStack(spacing: 12) {
-                            Picker(text("hades.rarity"), selection: $rarity) {
-                                ForEach(selected.rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
-                            }
-                            .trainerPickerWidth(.compactValue)
-                            if selected.supportsLevel {
-                                Text(text("hades.level"))
-                                TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
-                                    onCommit: { completion in
-                                        guard let amount = Int(completion.text), (1...100).contains(amount) else {
-                                            return completion.rejected(message: text("hades.error.invalidValue"))
-                                        }
-                                        return String(amount)
-                                    })
-                                    .id(selected.id)
-                            }
-                            Spacer()
-                            TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
-                                enabled: model.canMutate && selected.acquirable != false) {
-                                guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
-                                model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
-                            }
+                    }
+                    HStack(spacing: 12) {
+                        Picker(text("hades.rarity"), selection: $rarity) {
+                            if selected == nil { Text(text("hades.emptyCatalog")).tag("") }
+                            ForEach(selected?.rarities ?? [], id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
+                        }
+                        .trainerPickerWidth(.compactValue)
+                        .disabled(selected == nil || !model.canMutate)
+                        Text(text("hades.level"))
+                        TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
+                            onCommit: { completion in
+                                guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                    return completion.rejected(message: text("hades.error.invalidValue"))
+                                }
+                                return String(amount)
+                            })
+                            .id(selected?.id ?? "")
+                            .disabled(selected?.supportsLevel != true || !model.canMutate)
+                        Spacer()
+                        TrainerPrimaryActionButton(title: text("hades.acquire"), systemImage: TrainerSemanticIcon.Action.acquire,
+                            enabled: selected != nil && model.canMutate && selected?.acquirable != false) {
+                            guard let selected else { return }
+                            guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
+                            model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
                         }
                     }
                 }
