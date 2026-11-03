@@ -386,6 +386,7 @@
     "hades2.traits.instances": "{0} 个同名实例",
     "hades2.traits.level": "等级 {0}",
     "hades2.traits.manager": "祝福管理",
+    "hades2.traits.connectRequired": "连接游戏后可管理当前局的祝福。",
     "hades2.traits.levelLabel": "等级",
     "hades2.traits.targetLevel": "目标等级",
     "hades2.traits.targetRarity": "稀有度",

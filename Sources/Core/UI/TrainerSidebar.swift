@@ -112,6 +112,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                     statusIndicator
                 }
                 .frame(minHeight: 30)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -156,6 +157,18 @@ struct TrainerSidebarCard<Actions: View>: View {
         }
         .padding(14)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
+        // A collapsed module has one card-sized mouse target, including its
+        // insets. The real header Button retains keyboard/AX activation. Only
+        // inactive cards receive this overlay: expanded cards keep their
+        // interior action controls independently clickable.
+        .overlay {
+            if !selected {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onSelect)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 

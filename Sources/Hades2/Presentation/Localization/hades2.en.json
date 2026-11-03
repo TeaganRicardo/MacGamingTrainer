@@ -386,6 +386,7 @@
     "hades2.traits.instances": "{0} matching instances",
     "hades2.traits.level": "Lv. {0}",
     "hades2.traits.manager": "Boon Management",
+    "hades2.traits.connectRequired": "Connect to the game to manage current-run boons.",
     "hades2.traits.levelLabel": "Level",
     "hades2.traits.targetLevel": "Target Level",
     "hades2.traits.targetRarity": "Rarity",

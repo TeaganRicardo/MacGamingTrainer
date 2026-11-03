@@ -322,7 +322,27 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                     $0 > collapsedCardHeight + 8 && $0 < expandedCardHeight - 8
                 }, "module-card disclosure snapped instead of interpolating its geometry")
             }
-            state.selected = true
+            // Point inside the collapsed card's left background inset: it is
+            // outside the title Button, but must select either game module.
+            let cardFrame = cardProbe.convert(cardProbe.bounds, to: nil)
+            let cardBackgroundPoint = NSPoint(x: cardFrame.minX + 4, y: cardFrame.midY)
+            for eventType in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let event = NSEvent.mouseEvent(
+                    with: eventType,
+                    location: cardBackgroundPoint,
+                    modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber,
+                    context: nil,
+                    eventNumber: 1,
+                    clickCount: 1,
+                    pressure: 1
+                ) else { fatalError("cannot construct native card pointer event") }
+                window.sendEvent(event)
+            }
+            hierarchyPump(0.10)
+            hierarchyCheck(state.selected,
+                           "collapsed module-card background rejected pointer selection")
             hierarchyPump(0.40)
             host.layoutSubtreeIfNeeded()
             hierarchyCheck(abs(cardProbe.bounds.height - expandedCardHeight) < 3,

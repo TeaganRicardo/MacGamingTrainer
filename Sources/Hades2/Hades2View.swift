@@ -562,6 +562,7 @@ struct Hades2TrainerView: View {
                     clearLabel: localization.localized("host.search.clear")
                 )
                 .frame(width: TraitManagerLayout.searchWidth)
+                .disabled(!model.connected)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1529,6 +1530,15 @@ struct Hades2TrainerView: View {
 
     private var currentRunEffectsPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // This is a stable entry point even before the game attaches.
+            // Model capabilities already disable edits without a live owner.
+            currentRunTraitsPanel
+            if !model.connected {
+                Text(text("hades2.traits.connectRequired"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Divider()
             HStack {
                 TrainerIconLabel(
                     title: text("hades2.spawn.purgingPool"),
@@ -1544,10 +1554,6 @@ struct Hades2TrainerView: View {
                     enabled: model.canOpenSellTraits,
                     widthRole: .compactRow
                 ) { _ = model.openSellTraits() }
-            }
-            if model.connected {
-                Divider()
-                currentRunTraitsPanel
             }
         }.trainerPanel()
     }
