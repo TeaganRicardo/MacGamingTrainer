@@ -144,8 +144,12 @@ private struct TrainerNativePickerPresentationProbe: NSViewRepresentable {
                 let dx = frame.midX - probeFrame.midX
                 let dy = frame.midY - probeFrame.midY
                 let distance = dx * dx + dy * dy
-                if overlap > (best?.overlap ?? -1)
-                    || (overlap == best?.overlap && distance < (best?.distance ?? .greatestFiniteMagnitude)) {
+                if let current = best {
+                    if overlap > current.overlap
+                        || (overlap == current.overlap && distance < current.distance) {
+                        best = (button, overlap, distance)
+                    }
+                } else {
                     best = (button, overlap, distance)
                 }
             }
