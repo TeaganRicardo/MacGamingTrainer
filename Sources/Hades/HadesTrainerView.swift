@@ -503,7 +503,7 @@ private struct HadesCatalogView: View {
                         }
                     }
                     .labelsHidden()
-                    .trainerPickerWidth(.expanding)
+                    .trainerPicker(.expanding)
                     .disabled(sourceGroups.isEmpty)
                 }
                 VStack(alignment: .leading, spacing: 4) {
@@ -515,7 +515,7 @@ private struct HadesCatalogView: View {
                         }
                     }
                     .labelsHidden()
-                    .trainerPickerWidth(.expanding)
+                    .trainerPicker(.expanding)
                     .disabled(selectedEntries.isEmpty)
                 }
             }
@@ -542,7 +542,7 @@ private struct HadesCatalogView: View {
                             if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }
                             ForEach(selected?.rarities ?? [], id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPickerWidth(.compactValue)
+                        .trainerPicker(.compactValue)
                         .disabled(selected == nil || !model.canMutate)
                         Text(text("hades.level"))
                         TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
@@ -618,7 +618,7 @@ private struct HadesCurrentTraitsPanel: View {
                 }
             }
             .labelsHidden()
-            .trainerPickerWidth(.expanding)
+            .trainerPicker(.expanding)
             .disabled(matches.isEmpty)
             if let selected {
                 HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
@@ -661,7 +661,7 @@ private struct HadesCurrentTraitRow: View {
                         Picker(text("hades.rarity"), selection: $rarity) {
                             ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
                         }
-                        .trainerPickerWidth(.compactValue)
+                        .trainerPicker(.compactValue)
                         if entry?.supportsLevel != false {
                             Text(text("hades.level"))
                             TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
