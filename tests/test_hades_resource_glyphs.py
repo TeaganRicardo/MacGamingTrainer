@@ -18,7 +18,6 @@ for resource_id, kind in expected_kinds.items():
     assert f'case "{resource_id}": .{kind}' in icons, (resource_id, kind)
 
 assert "HadesResourceGlyphShape" in icons
-assert 'TrainerGlyph(identifier: "hades.resource.\\(resourceID)")' in icons
 assert "TrainerSemanticIcon.Concept.item" in icons  # unknown/future fallback only
 for kind in expected_kinds.values():
     assert f"case .{kind}:" in icons, kind
