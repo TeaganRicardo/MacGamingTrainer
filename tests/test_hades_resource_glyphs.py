@@ -21,7 +21,9 @@ assert "icon: TrainerSemanticIcon.Concept.item" not in resources
 
 navigation = (ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift").read_text()
 assert "HadesResourceIcon.systemName(for: resource.id)" in navigation
+assert "HadesWorkbenchIcon.worldObject(for: id)" in navigation
 assert "if resource != nil { return TrainerSemanticIcon.Concept.item }" not in navigation
+assert "return section.icon" not in navigation.split("if worldNames != nil", 1)[1].split("if let feature", 1)[0]
 
 row = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "let glyph: TrainerGlyph" in row
