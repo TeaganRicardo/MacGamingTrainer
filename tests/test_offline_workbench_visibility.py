@@ -67,7 +67,7 @@ assert "if !door.routes.isEmpty {" not in room_body
 assert ".trainerPicker(.rowAction, state: doors.isEmpty ? .unavailable : .interactive)" in room_body
 assert "door?.canReward == true" in room_body
 assert "door?.canRestore == true" in room_body
-assert "door?.routes.isEmpty != false" in room_body
+assert "door?.routes.isEmpty == false" in room_body
 assert "model.canMutate" in room_body
 
 for lang in ("en", "zh-CN"):
