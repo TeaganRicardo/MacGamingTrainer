@@ -1,29 +1,34 @@
 import Foundation
 
-/// Allocation policy for the shared trailing picker/action row.
-/// `groupWidth` includes the existing picker, all trailing controls, and their
-/// internal spacing; subtracting the measured picker width leaves the actual
-/// trailing footprint, including localized shortcut and button widths.
+/// Computes the picker lane from individually measured trailing controls.
+/// A nested HStack's total reported size can omit or compress native controls
+/// when a flexible Picker changes size; that total is never used as input.
 enum TrainerPickerActionSizing {
     static func width(
         rowWidth: CGFloat,
         labelWidth: CGFloat,
-        groupWidth: CGFloat,
-        pickerWidth: CGFloat,
+        trailingWidths: [CGFloat],
         minimumWidth: CGFloat,
         maximumWidth: CGFloat,
-        outerSpacing: CGFloat = 16,
+        spacing: CGFloat = 16,
         minimumLabelGap: CGFloat = 8
     ) -> CGFloat {
         let minimum = max(0, minimumWidth)
         guard rowWidth.isFinite, labelWidth.isFinite,
-              groupWidth.isFinite, pickerWidth.isFinite,
-              rowWidth > 0, groupWidth > 0, pickerWidth > 0,
-              maximumWidth.isFinite, maximumWidth >= minimum else {
+              spacing.isFinite, minimumLabelGap.isFinite,
+              maximumWidth.isFinite, maximumWidth >= minimum,
+              rowWidth > 0, labelWidth >= 0,
+              spacing >= 0, minimumLabelGap >= 0,
+              trailingWidths.allSatisfy({ $0.isFinite && $0 >= 0 }) else {
             return minimum
         }
-        let trailingFootprint = max(0, groupWidth - pickerWidth)
-        let available = rowWidth - labelWidth - outerSpacing - minimumLabelGap - trailingFootprint
+
+        let visibleTrailing = trailingWidths.filter { $0 > 0 }
+        let totalTrailing = visibleTrailing.reduce(CGFloat.zero, +)
+        // Label -> Picker and Picker -> each trailing control each have one
+        // inter-control spacing. A zero-width absent shortcut adds no gap.
+        let gaps = CGFloat(visibleTrailing.count + 1) * spacing
+        let available = rowWidth - labelWidth - minimumLabelGap - totalTrailing - gaps
         return max(minimum, min(maximumWidth, available))
     }
 }

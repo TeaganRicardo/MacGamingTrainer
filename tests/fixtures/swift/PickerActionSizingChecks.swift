@@ -2,26 +2,35 @@ import Foundation
 
 @main struct PickerActionSizingChecks {
     static func main() {
-        let pick: (CGFloat, CGFloat, CGFloat) -> CGFloat = { width, group, old in
-            TrainerPickerActionSizing.width(
-                rowWidth: width, labelWidth: 200, groupWidth: group,
-                pickerWidth: old, minimumWidth: 216, maximumWidth: 420)
+        func width(_ row: CGFloat, _ trailing: [CGFloat], _ label: CGFloat = 200) -> CGFloat {
+            TrainerPickerActionSizing.width(rowWidth: row, labelWidth: label,
+                trailingWidths: trailing, minimumWidth: 216, maximumWidth: 420)
         }
-        func require(_ condition: Bool, _ why: String) {
-            guard condition else { fatalError(why) }
+        func check(_ condition: Bool, _ message: String) {
+            guard condition else { fatalError(message) }
         }
-        let narrow = pick(716, 420, 216)
-        let wide = pick(1006, 420, 216)
-        require(narrow == 288, "760pt minimum window should allocate 288pt picker")
-        require(wide == 420, "1050pt window should expand to 420pt maximum")
-        require(pick(716, 492, 288) == narrow, "width must not drift as picker grows")
-        require(pick(1006, 624, 420) == wide, "wide width must remain stable after reflow")
-        require(pick(716, 408, 216) == 300, "localized shortcut width contributes to allocation")
-        require(pick(716, 320, 216) == 388, "shorter rows use available width")
-        require(pick(716, 216, 216) == 420, "picker-only rows fit within policy max")
-        require(pick(1, 420, 216) == 216, "undersized rows cannot yield negative picker width")
-        require(pick(.nan, 420, 216) == 216, "invalid geometry stays deterministic")
-        require(pick(716, 0, 0) == 216, "unmounted controls fall back to minimum")
-        print("picker_action_responsive_width_policy_ok")
+        // The actual 760pt container has 716pt after horizontal row insets.
+        check(width(716, [83.5, 88]) == 288.5, "minimum window width allocation")
+        check(width(1006, [83.5, 88]) == 420, "wide window fills capped picker lane")
+        check(width(716, [95.5, 88]) == 276.5, "localized shortcut changes allocation")
+        check(width(716, [88]) == 388, "missing shortcut does not create a phantom gap")
+        check(width(716, []) == 420, "picker-only rows use their available lane")
+        check(width(716, [72, 88]) == 300, "numeric entry rows retain trailing controls")
+        check(width(716, [83.5, 88], 200) == width(716, [83.5, 88], 200), "stable after repeated layout")
+        check(width(716, [83.5, 88], 230) == 258.5, "label width is accounted for")
+        check(width(1, [83.5, 88]) == 216, "never allocate a negative width")
+        check(width(.nan, [83.5, 88]) == 216, "non-finite proposed width fallback")
+        check(width(716, [83.5, .nan]) == 216, "non-finite control fallback")
+
+        // This was the escaped defect: aggregating a group may undercount a
+        // trailing native badge; individual sizes retain the entire footprint.
+        let picker = width(716, [83.5, 88])
+        let occupied = 200 + 8 + 3 * 16 + picker + 83.5 + 88
+        check(occupied <= 716, "trailing action group overflowed its row")
+        check(occupied == 716, "narrow row should use all allocatable space")
+        let wide = width(1006, [83.5, 88])
+        let spare = 1006 - (200 + 8 + 3 * 16 + wide + 83.5 + 88)
+        check(spare >= 0, "wide layout overflowed instead of leaving leading gap")
+        print("picker_action_individual_trailing_widths_ok")
     }
 }

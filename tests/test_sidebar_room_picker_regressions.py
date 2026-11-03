@@ -75,12 +75,13 @@ assert "TrainerGamePageTransition" not in pages
 # between the label and the picker, never after the button group.
 row = source("Sources/Core/UI/Primitives/TrainerRow.swift")
 labeled = region(row, "struct TrainerLabeledControlRow")
-assert "Spacer(minLength: 8)" in labeled
-assert labeled.index("Spacer(minLength: 8)") < labeled.index("controls.environment(\\.trainerPickerActionWidth, allocatedPickerWidth)")
-assert "TrainerPickerActionSizing.width(" in labeled
+assert "TrainerPickerActionLayout(" in labeled
+assert "minimumPickerWidth: theme.pickerStandardWidth" in labeled
+assert "maximumPickerWidth: theme.pickerActionMaxWidth" in labeled
 assert "if layout == .pickerAction" in labeled
+assert "Spacer(minLength: 8)" in labeled
+assert "TrainerPickerRowAvailableWidthKey" not in row
 assert ".frame(maxWidth: .infinity, alignment: .leading)" in labeled
-assert "Spacer(minLength: 0)" not in labeled
 
 
 # Both sidebar navigation sets start with the first visible Values section

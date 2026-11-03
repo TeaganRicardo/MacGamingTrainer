@@ -63,45 +63,8 @@ enum TrainerLabeledControlLayout: Equatable {
     case pickerAction
 }
 
-private struct TrainerPickerRowAvailableWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-private struct TrainerPickerRowControlWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
 struct TrainerLabeledControlRow<Controls: View>: View {
     @Environment(\.trainerTheme) private var theme
-    @State private var availableWidth: CGFloat = 0
-    @State private var controlsWidth: CGFloat = 0
-    @State private var pickerWidth: CGFloat = 0
-
-    private var allocatedPickerWidth: CGFloat? {
-        guard layout == .pickerAction,
-              availableWidth > 0, controlsWidth > 0, pickerWidth > 0 else { return nil }
-        return TrainerPickerActionSizing.width(
-            rowWidth: availableWidth,
-            labelWidth: theme.pickerActionLabelWidth,
-            groupWidth: controlsWidth,
-            pickerWidth: pickerWidth,
-            minimumWidth: theme.pickerStandardWidth,
-            maximumWidth: theme.pickerActionMaxWidth
-        )
-    }
-
-    private func updateMeasurement(_ current: inout CGFloat, to next: CGFloat) {
-        guard next.isFinite, next > 0, abs(current - next) > 0.5 else { return }
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { current = next }
-    }
     let title: String
     let icon: String
     let tint: Color
@@ -127,43 +90,30 @@ struct TrainerLabeledControlRow<Controls: View>: View {
 
     var body: some View {
         TrainerRow(opacity: opacity) {
-            HStack(spacing: 16) {
-                TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
-                    .frame(width: layout == .pickerAction ? theme.pickerActionLabelWidth : nil,
-                           alignment: .leading)
-                    .help(helpText)
-                // Only the label-to-picker gap grows. Picker, shortcut and
-                // action form one trailing group with native measured widths.
-                Spacer(minLength: 8)
-                if layout == .pickerAction {
-                    HStack(spacing: 16) {
-                        controls.environment(\.trainerPickerActionWidth, allocatedPickerWidth)
-                    }
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear.preference(key: TrainerPickerRowControlWidthKey.self,
-                                                   value: geometry.size.width)
-                        }
-                    }
-                } else {
+            if layout == .pickerAction {
+                // SwiftUI's nested HStack can under-report the native size of
+                // shortcut badges while a flexible Picker changes its width.
+                // An explicit Layout measures each trailing control once,
+                // distributes the remaining lane and docks the action edge.
+                TrainerPickerActionLayout(
+                    labelWidth: theme.pickerActionLabelWidth,
+                    minimumPickerWidth: theme.pickerStandardWidth,
+                    maximumPickerWidth: theme.pickerActionMaxWidth
+                ) {
+                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                        .frame(width: theme.pickerActionLabelWidth, alignment: .leading)
+                        .help(helpText)
                     controls
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(key: TrainerPickerRowAvailableWidthKey.self,
-                                           value: geometry.size.width)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 16) {
+                    TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
+                        .help(helpText)
+                    Spacer(minLength: 8)
+                    controls
                 }
-            }
-            .onPreferenceChange(TrainerPickerRowAvailableWidthKey.self) { width in
-                updateMeasurement(&availableWidth, to: width)
-            }
-            .onPreferenceChange(TrainerPickerRowControlWidthKey.self) { width in
-                updateMeasurement(&controlsWidth, to: width)
-            }
-            .onPreferenceChange(TrainerPickerAllocatedWidthKey.self) { width in
-                updateMeasurement(&pickerWidth, to: width)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

@@ -106,26 +106,6 @@ enum TrainerPickerWidthRole {
     case expanding
 }
 
-// The row allocates an explicit width to the native picker, independent of
-// the localized label and trailing shortcut/action columns.
-struct TrainerPickerAllocatedWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-private struct TrainerPickerActionWidthKey: EnvironmentKey {
-    static let defaultValue: CGFloat? = nil
-}
-
-extension EnvironmentValues {
-    var trainerPickerActionWidth: CGFloat? {
-        get { self[TrainerPickerActionWidthKey.self] }
-        set { self[TrainerPickerActionWidthKey.self] = newValue }
-    }
-}
-
 private struct TrainerNativeFlexiblePickerSizing: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -141,7 +121,6 @@ private struct TrainerNativeFlexiblePickerSizing: ViewModifier {
 
 private struct TrainerPickerWidthModifier: ViewModifier {
     @Environment(\.trainerTheme) private var theme
-    @Environment(\.trainerPickerActionWidth) private var rowActionWidth
     let role: TrainerPickerWidthRole
 
     @ViewBuilder
@@ -153,15 +132,12 @@ private struct TrainerPickerWidthModifier: ViewModifier {
             case .rowValue:
                 content.frame(width: theme.pickerStandardWidth)
             case .rowAction:
+                // Our custom row Layout proposes the exact remaining width.
+                // macOS 26+ requires flexible native button sizing so the
+                // popup bezel also fills that proposed width.
                 content
                     .modifier(TrainerNativeFlexiblePickerSizing())
-                    .frame(width: rowActionWidth ?? theme.pickerStandardWidth)
-                    .background {
-                        GeometryReader { geometry in
-                            Color.clear.preference(key: TrainerPickerAllocatedWidthKey.self,
-                                                   value: geometry.size.width)
-                        }
-                    }
+                    .frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
             case .form:
                 content.frame(
                     minWidth: theme.pickerStandardWidth,
