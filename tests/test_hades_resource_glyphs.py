@@ -11,7 +11,7 @@ for resource_id in (
 ):
     assert f'case "{resource_id}"' in icons, resource_id
 assert "HadesResourceGlyphShape" in icons
-assert "TrainerGlyph(identifier:" in icons
+assert "TrainerGlyph {" in icons
 assert "TrainerSemanticIcon.Concept.item" in icons  # unknown/future fallback only
 
 view = (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
