@@ -25,7 +25,7 @@ struct HadesGatheringPanel: View {
                         Text(row.name(language: localization.language.rawValue)).tag(row.id)
                     }
                 }
-                .labelsHidden().trainerPickerWidth(.rowAction)
+                .labelsHidden().trainerPicker(.rowAction)
                 TrainerNumberField(
                     text: $amount, accessibilityLabel: text("hades.gainAmount"), width: 72,
                     enabled: model.canMutate,
@@ -82,7 +82,7 @@ struct HadesRoomsPanel: View {
                             Text(row.name(language: localization.language)).tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .labelsHidden().trainerPicker(.rowAction)
                     TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate && model.world != nil) {
                         action("spawn_reward", operation: "hades.spawnReward", params: ["reward": reward])
                     }
@@ -100,7 +100,7 @@ struct HadesRoomsPanel: View {
                     Picker(text("hades.chamberObject"), selection: $chamberObject) {
                         ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
                     }
-                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .labelsHidden().trainerPicker(.rowAction)
                     .disabled(model.world?.objects.isEmpty != false)
                     TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
                                                  enabled: model.canMutate && model.world?.objects.isEmpty == false) {
@@ -122,7 +122,7 @@ struct HadesRoomsPanel: View {
                             Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .labelsHidden().trainerPicker(.rowAction)
                     .disabled(doors.isEmpty)
                 }
                 TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
@@ -131,7 +131,7 @@ struct HadesRoomsPanel: View {
                             Text(row.name(language: localization.language)).tag(row.id)
                         }
                     }
-                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .labelsHidden().trainerPicker(.rowAction)
                     .disabled(door?.canReward != true)
                     TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
                                                  enabled: model.canMutate && door?.canReward == true) {
@@ -145,7 +145,7 @@ struct HadesRoomsPanel: View {
                             Text(text("hades.route.\(item)")).tag(item)
                         }
                     }
-                    .labelsHidden().trainerPickerWidth(.rowAction)
+                    .labelsHidden().trainerPicker(.rowAction)
                     .disabled(door?.routes.isEmpty != false)
                     TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
                                                  enabled: model.canMutate && door?.routes.isEmpty == false) {
