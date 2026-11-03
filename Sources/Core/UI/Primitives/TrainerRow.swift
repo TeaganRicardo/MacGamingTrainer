@@ -99,7 +99,8 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                     labelWidth: theme.pickerActionLabelWidth,
                     minimumPickerWidth: theme.pickerStandardWidth,
                     maximumPickerWidth: theme.pickerActionMaxWidth,
-                    minimumIntermediateWidth: theme.shortcutBadgeMinimumWidth
+                    minimumIntermediateWidth: theme.shortcutBadgeMinimumWidth,
+                    minimumActionWidth: theme.compactActionWidth
                 ) {
                     TrainerIconLabel(title: title, icon: icon, tint: tint, emphasized: emphasized)
                         .frame(width: theme.pickerActionLabelWidth, alignment: .leading)

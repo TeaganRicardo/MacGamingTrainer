@@ -4,7 +4,8 @@ import SwiftUI
 @main struct LayoutGeometryChecks {
     static func main() {
         let layout = TrainerPickerActionLayout(labelWidth: 200, minimumPickerWidth: 216,
-                                               maximumPickerWidth: 420, minimumIntermediateWidth: 52)
+                                               maximumPickerWidth: 420, minimumIntermediateWidth: 52,
+                                               minimumActionWidth: 88)
         func verify(_ width: CGFloat, _ natural: [CGFloat], expectedPicker: CGFloat,
                     expectedGap: CGFloat, expectedIntermediate: CGFloat? = nil) {
             let recorders = natural.map { _ in GeometryRecorder() }
@@ -46,6 +47,13 @@ import SwiftUI
         verify(1006, [200, 216, 39, 88], expectedPicker: 420, expectedGap: 172,
                expectedIntermediate: 52)
         // A truly absent badge must not create a phantom slot or spacing.
+        // Another 13pt escape occurs when the native action reports its
+        // intrinsic 75pt label instead of the shared 88pt action column.
+        verify(716, [200, 216, 52, 75], expectedPicker: 320, expectedGap: 172)
+        verify(1006, [200, 216, 52, 75], expectedPicker: 420, expectedGap: 172)
+        verify(716, [200, 216, 39, 75], expectedPicker: 320, expectedGap: 172)
+        verify(1006, [200, 216, 39, 75], expectedPicker: 420, expectedGap: 172)
+        verify(716, [200, 216, 0, 75], expectedPicker: 388, expectedGap: 104)
         verify(716, [200, 216, 0, 88], expectedPicker: 388, expectedGap: 104)
         verify(716, [200, 216, 72, 88], expectedPicker: 300, expectedGap: 192,
                expectedIntermediate: 72)

@@ -32,6 +32,8 @@ assert 'naturalSizes(of: subviews)' in layout
 assert 'minimumIntermediateWidth' in layout
 assert 'sizes[index].width = max(sizes[index].width, minimumIntermediateWidth)' in layout
 assert 'minimumIntermediateWidth: theme.shortcutBadgeMinimumWidth' in row
+assert 'minimumActionWidth: theme.compactActionWidth' in row
+assert 'sizes[actionIndex].width = max(sizes[actionIndex].width, minimumActionWidth)' in layout
 assert 'subviews[index].place(' in layout
 assert 'TrainerPickerActionSizing.width(' in layout
 assert 'groupWidth' not in helper

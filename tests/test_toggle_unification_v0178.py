@@ -51,7 +51,8 @@ assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') >= 2
 assert 'Text(shortcutText)' not in features
 badge = (CORE_UI / 'Primitives/TrainerBadge.swift').read_text()
 assert 'struct TrainerShortcutBadgeSlot' in badge
-assert '.frame(minWidth: 52, alignment: .center)' in badge
+assert 'shortcutBadgeMinimumWidth: 52' in theme
+assert '.frame(minWidth: theme.shortcutBadgeMinimumWidth, alignment: .center)' in badge
 assert 'TrainerShortcutBadge(text: text)' in badge
 assert 'Color.clear' not in badge
 

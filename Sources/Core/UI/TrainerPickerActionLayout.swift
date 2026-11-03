@@ -8,6 +8,7 @@ struct TrainerPickerActionLayout: Layout {
     let minimumPickerWidth: CGFloat
     let maximumPickerWidth: CGFloat
     let minimumIntermediateWidth: CGFloat
+    let minimumActionWidth: CGFloat
     let spacing: CGFloat = 16
     let minimumLabelGap: CGFloat = 8
 
@@ -21,6 +22,12 @@ struct TrainerPickerActionLayout: Layout {
         let visibleTrailing = sizes.indices.filter { $0 >= 2 && sizes[$0].width > 0.5 }
         for index in visibleTrailing.dropLast() {
             sizes[index].width = max(sizes[index].width, minimumIntermediateWidth)
+        }
+        // SwiftUI can similarly return the button label's intrinsic width
+        // (75pt) for an action which owns a fixed 88pt Core column. Reserve
+        // the semantic action width before allocating the Picker lane.
+        if let actionIndex = visibleTrailing.last {
+            sizes[actionIndex].width = max(sizes[actionIndex].width, minimumActionWidth)
         }
         return sizes
     }

@@ -116,7 +116,18 @@ private func exerciseRoomPickerAlignment() {
             // resolved keyboard glyphs may need a wider native text frame.
             // Assert stable trailing anchoring without inventing its width.
             let minimumGap = theme.rowHorizontalPadding + 16 + theme.shortcutBadgeMinimumWidth + 16 + theme.compactActionWidth
-            print("native_room_picker_gap language=\(language.rawValue) width=\(width) gap=\(rightGap) min=\(minimumGap) picker=\(first)")
+            // Report native AX geometry before an assertion aborts the fixture.
+            // The Swift process may lose buffered stdout during fatalError.
+            let nativeNodes = nativeAccessibilityControls(host)
+            let actionTitles = language == .en ? ["Apply", "Generate"] : ["应用", "生成"]
+            let actions = nativeNodes.filter { $0.role == "AXButton" && actionTitles.contains($0.label ?? "") }
+            let badges = nativeNodes.filter {
+                $0.role == "AXStaticText" && ($0.text ?? "").contains("⌃⌥")
+            }
+            let diagnostic = "native_room_picker_geometry language=\(language.rawValue) width=\(width) " +
+                "gap=\(rightGap) minimum=\(minimumGap) picker=\(first) " +
+                "actions=\(actions.map(\.frame)) badges=\(badges.map(\.frame))\n"
+            FileHandle.standardError.write(Data(diagnostic.utf8))
             hierarchyCheck(rightGap >= minimumGap - 2 && rightGap <= minimumGap + 56,
                            "room popup is too far from trailing actions: language=\(language.rawValue) window=\(width) gap=\(rightGap) minimum=\(minimumGap)")
             if let previousGap {
@@ -124,9 +135,6 @@ private func exerciseRoomPickerAlignment() {
                                "room popup column drifted with available width: language=\(language.rawValue) old=\(previousGap) new=\(rightGap)")
             }
             previousGap = rightGap
-            let actionTitles = language == .en ? ["Apply", "Generate"] : ["应用", "生成"]
-            let actions = nativeAccessibilityControls(host)
-                .filter { $0.role == "AXButton" && actionTitles.contains($0.label ?? "") }
             hierarchyCheck(actions.count == 5 && actions.allSatisfy { abs(contentRight - $0.frame.maxX - theme.rowHorizontalPadding) <= 2 },
                            "room action buttons are not anchored to the trailing row inset")
 
