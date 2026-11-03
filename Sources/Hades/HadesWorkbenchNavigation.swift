@@ -76,6 +76,17 @@ enum HadesWorkbenchIcon {
     static let chamberObject = "shippingbox"
     static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
 
+    static func worldObject(for id: String) -> String {
+        switch id.replacingOccurrences(of: "world.", with: "") {
+        case "trove": return "shippingbox.fill"
+        case "well": return "drop.circle.fill"
+        case "purge": return "arrow.left.arrow.right.circle"
+        case "fishing": return TrainerSemanticIcon.Context.fishing
+        case "chaos", "chaosGate": return TrainerSemanticIcon.Context.portal
+        default: return chamberObject
+        }
+    }
+
     static func icon(for titleKey: String) -> String? {
         switch titleKey {
         case "hades.health", "hades.maxHealth": return TrainerSemanticIcon.Concept.vitality
@@ -125,11 +136,7 @@ struct HadesWorkbenchEntry: Identifiable {
     var icon: String {
         if let shortcut { return shortcut.icon }
         if let resource { return HadesResourceIcon.systemName(for: resource.id) }
-        if worldNames != nil {
-            if id == "world.fishing" { return TrainerSemanticIcon.Context.fishing }
-            if id == "world.chaosGate" { return TrainerSemanticIcon.Context.portal }
-            return section.icon
-        }
+        if worldNames != nil { return HadesWorkbenchIcon.worldObject(for: id) }
         if let feature = HadesFeature.allCases.first(where: { $0.key == titleKey }) {
             return feature.icon
         }
