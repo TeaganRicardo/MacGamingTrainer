@@ -90,7 +90,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     }
                 }
                 .labelsHidden()
-                .trainerPickerWidth(.expanding)
+                .trainerPicker(.expanding)
                 .disabled(!enabled || sections.allSatisfy({ $0.items.isEmpty }))
 
                 TrainerNumberField(
@@ -172,7 +172,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
             }
         }
         .labelsHidden()
-        .trainerPickerWidth(inline ? .rowAction : .expanding)
+        .trainerPicker(inline ? .rowAction : .expanding)
         .disabled(!enabled || allItems.isEmpty)
     }
 
