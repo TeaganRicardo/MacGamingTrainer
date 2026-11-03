@@ -80,7 +80,7 @@ struct TrainerProfileManagerView: View {
                     Picker(labels.picker, selection: $selection.selectedName) {
                         ForEach(entries) { entry in Text(entry.title).tag(entry.name) }
                     }
-                    .trainerPickerWidth(.form)
+                    .trainerPicker(.form)
                     .disabled(!canAct)
                     HStack {
                         TrainerPrimaryActionButton(title: labels.load,
