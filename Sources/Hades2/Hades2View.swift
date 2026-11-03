@@ -553,8 +553,7 @@ struct Hades2TrainerView: View {
                     }
                 }
                 .labelsHidden()
-                .trainerPicker(.expanding)
-                .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
+                .trainerPicker(.expanding, state: currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }) ? .unavailable : .interactive)
 
                 TrainerSearchField(
                     text: $traitSearch,
@@ -722,8 +721,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPicker(.compactValue)
-                    .disabled(!model.canMutateTraits || !trait.canSetRarity)
+                    .trainerPicker(.compactValue, state: model.canMutateTraits && trait.canSetRarity ? .interactive : .unavailable)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
@@ -739,8 +737,7 @@ struct Hades2TrainerView: View {
                     }
                     .labelsHidden()
                     .lineLimit(1)
-                    .trainerPicker(.compactValue)
-                    .disabled(true)
+                    .trainerPicker(.compactValue, state: .unavailable)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
@@ -1263,7 +1260,7 @@ struct Hades2TrainerView: View {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }
-            .labelsHidden().trainerPicker(.rowAction).disabled(!model.canEditDesired)
+            .labelsHidden().trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
@@ -1303,8 +1300,7 @@ struct Hades2TrainerView: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.rowAction)
-            .disabled(!model.canEditDesired)
+            .trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
@@ -1427,8 +1423,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPicker(.expanding)
-                        .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
+                        .trainerPicker(.expanding, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1444,8 +1439,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPicker(.expanding)
-                        .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
+                        .trainerPicker(.expanding, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
                     }
 
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
@@ -1488,8 +1482,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPicker(.expanding)
-                        .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
+                        .trainerPicker(.expanding, state: model.canAcquireExactReward && !exactBoonSourceGroups.isEmpty ? .interactive : .unavailable)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1505,8 +1498,7 @@ struct Hades2TrainerView: View {
                             }
                         }
                         .labelsHidden()
-                        .trainerPicker(.expanding)
-                        .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
+                        .trainerPicker(.expanding, state: model.canAcquireExactReward && !selectedExactItems.isEmpty ? .interactive : .unavailable)
                     }
 
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
