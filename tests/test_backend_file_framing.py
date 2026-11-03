@@ -11,7 +11,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
-from core.framing import JsonLineFileSession
+from core.framing import JsonLineFileSession, _host_process_departed
 
 WORKER = r'''
 import sys
@@ -37,6 +37,39 @@ def make_session(directory):
     directory.mkdir(mode=0o700)
     (directory / 'session.json').write_text(json.dumps({'version': 1, 'inlineBytes': 65536, 'hostPID': os.getpid()}))
     return JsonLineFileSession(directory)
+
+
+# EOF can arrive while Linux still reports the exiting Host as the worker's
+# parent. Confirm that transient state before deciding cleanup ownership, while
+# an actually live Host remains the cleanup owner.
+def parent_departure_probe(sequence):
+    parents = iter(sequence)
+    current = [sequence[-1]]
+    clock = [0.0]
+
+    def getppid():
+        try:
+            current[0] = next(parents)
+        except StopIteration:
+            pass
+        return current[0]
+
+    def monotonic():
+        return clock[0]
+
+    def sleep(interval):
+        clock[0] += interval
+
+    return getppid, monotonic, sleep, clock
+
+
+getppid, monotonic, sleep, clock = parent_departure_probe([4242, 4242, 1])
+assert _host_process_departed(4242, getppid=getppid, monotonic=monotonic, sleep=sleep)
+assert clock[0] < 0.05
+
+getppid, monotonic, sleep, clock = parent_departure_probe([4242])
+assert not _host_process_departed(4242, getppid=getppid, monotonic=monotonic, sleep=sleep)
+assert clock[0] >= 0.05
 
 
 with tempfile.TemporaryDirectory(prefix='mgt-file-framing-') as temporary:
