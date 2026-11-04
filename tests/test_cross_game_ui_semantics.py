@@ -342,6 +342,13 @@ assert 'title: text("hades.setRarity")' in hades_view
 assert 'TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))' in hades_view
 assert 'TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))' in hades_view
 hades_lifecycle = (ROOT / "Sources/Hades/HadesBoonLifecycle.swift").read_text()
+hades_current_panel = hades_view.split("private struct HadesCurrentTraitsPanel:", 1)[1].split(
+    "private struct HadesCurrentTraitRow:", 1
+)[0]
+assert "TrainerPickerSection<HadesCurrentTrait>" in hades_current_panel
+assert "Section(header: Text(section.title))" in hades_current_panel
+assert "sourceLabel(trait, language:" in hades_current_panel
+assert "searchable.append(sourceLabel(trait, language: language))" in hades_current_panel
 hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[1].split(
     "private struct HadesShortcutSettingsView:", 1
 )[0]
