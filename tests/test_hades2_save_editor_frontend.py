@@ -641,10 +641,17 @@ func pump(_ seconds: TimeInterval) {
     }
 }
 
-func pumpUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) {
+func pumpUntil(
+    timeout: TimeInterval = 2.0,
+    line: UInt = #line,
+    _ condition: () -> Bool
+) {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition() && Date() < deadline {
         RunLoop.current.run(until: min(deadline, Date().addingTimeInterval(0.02)))
+    }
+    if !condition() {
+        fail("pumpUntil timed out at harness line \(line)")
     }
 }
 
