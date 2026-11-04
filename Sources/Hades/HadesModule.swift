@@ -54,8 +54,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
     var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
-    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible }
-    var canMutate: Bool { backendAvailable && backendStatus.protocolCompatible && connected && heroReady }
+    private var requiresExplicitReconnect: Bool {
+        ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
+            .contains(backendStatus.errorCode)
+    }
+    var canEditIntent: Bool {
+        backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect
+    }
+    var canMutate: Bool { canEditIntent && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
         TrainerTextToken(key: connected ? (heroReady ? "hades.ready" : "hades.waitingForHero") : "hades.connectionHelp")
