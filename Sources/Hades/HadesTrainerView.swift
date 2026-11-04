@@ -655,7 +655,7 @@ private struct HadesCurrentTraitsPanel: View {
 
     private func sourceLabel(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
         guard let entry = catalogEntry(trait) else {
-            return text("hades.kind.special")
+            return HadesPresentation.text("hades.kind.special", language: language)
         }
         let source = entry.source(language: language.rawValue)
         if !source.isEmpty { return source }
