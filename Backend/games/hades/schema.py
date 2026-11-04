@@ -26,6 +26,7 @@ DEFAULT_PREFERENCES = {
     'gameSpeed': 1.0,
     'moneyLock': None,
     'rerollsLock': None,
+    'healthLock': None,
 }
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
@@ -36,7 +37,7 @@ ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'ad
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
     'set_feature', 'set_boon_rarity', 'set_invincibility', 'configure',
-    'configure_locks', 'lock_resource', 'lock_rerolls', 'disable_all',
+    'configure_locks', 'lock_resource', 'lock_rerolls', 'lock_vital', 'disable_all',
 }
 
 
@@ -84,6 +85,16 @@ def preference_value(name, value):
         if value is None:
             return None
         return number(value, 0, 1_000_000_000, integer=True)
+    if name == 'healthLock':
+        if value is None:
+            return None
+        if not isinstance(value, dict) or set(value) != {'current', 'maximum'}:
+            raise invalid_value()
+        current = number(value.get('current'), 1, 1_000_000_000, integer=True)
+        maximum = number(value.get('maximum'), 1, 1_000_000_000, integer=True)
+        if current > maximum:
+            raise invalid_value()
+        return {'current': current, 'maximum': maximum}
     return feature_value(name, value)
 
 
@@ -105,14 +116,16 @@ def migrate_preference_document(values):
     original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
                 'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
                 'attackSpeedMultiplier', 'dashBonus'}
-    current_before_locks = set(DEFAULT_PREFERENCES) - {'moneyLock', 'rerollsLock'}
-    previous_before_rarity_target = current_before_locks - {'boonRarityTarget'}
+    current_before_health_lock = set(DEFAULT_PREFERENCES) - {'healthLock'}
+    current_before_counter_locks = current_before_health_lock - {'moneyLock', 'rerollsLock'}
+    previous_before_rarity_target = current_before_counter_locks - {'boonRarityTarget'}
     shipped = (
         original,
         original | {'boonRarityEnabled'},
         original | {'boonRarityEnabled', 'gameSpeed'},
         previous_before_rarity_target,
-        current_before_locks,
+        current_before_counter_locks,
+        current_before_health_lock,
     )
     if set(values) in shipped:
         values = {**DEFAULT_PREFERENCES, **values}
