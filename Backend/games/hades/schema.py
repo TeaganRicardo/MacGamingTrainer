@@ -12,6 +12,7 @@ DEFAULT_FEATURES = {
     'infiniteAmmo': False,
     'forceRerolls': False,
     'boonRarityEnabled': False,
+    'boonRarityTarget': 'Heroic',
     'damageMultiplier': 1,
     'incomingDamageMultiplier': 1,
     'moveSpeedMultiplier': 1,
@@ -48,6 +49,10 @@ def feature_value(name, value):
         raise invalid_value()
     if type(DEFAULT_FEATURES[name]) is bool:
         if type(value) is not bool:
+            raise invalid_value()
+        return value
+    if name == 'boonRarityTarget':
+        if value not in ('Common', 'Rare', 'Epic', 'Heroic'):
             raise invalid_value()
         return value
     if name == 'dashBonus':
