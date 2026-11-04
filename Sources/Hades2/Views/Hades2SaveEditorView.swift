@@ -50,9 +50,35 @@ struct Hades2SaveEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            windowHeader
+            TrainerSaveEditorWindowHeader(
+                title: text("hades2.saveEditor.title"),
+                subtitle: model.profile.isEmpty ? nil : model.profile,
+                busy: model.busy,
+                refreshTitle: text("hades2.saveEditor.source.read"),
+                refreshEnabled: !model.busy && !model.profile.isEmpty
+                    && model.sourceFiles.contains(where: { $0.id == loadedSourceID }),
+                doneTitle: localization.localized("host.done"),
+                doneEnabled: !model.busy,
+                onRefresh: requestCurrentSourceRead,
+                onDone: {
+                    if let closeWindow { closeWindow() } else { dismiss() }
+                }
+            )
             Divider()
-            documentSelection
+            TrainerSaveEditorDocumentBar(
+                sourceLabel: text("hades2.saveEditor.source.label"),
+                sourcePlaceholder: text("hades2.saveEditor.source.choose"),
+                sourceSelection: $model.selectedSourceID,
+                sources: sourceOptions,
+                sourceEnabled: !model.busy,
+                sourceRefreshTitle: text("hades2.saveEditor.source.refreshFiles"),
+                onRefreshSources: model.refreshFiles,
+                targetLabel: text("hades2.saveEditor.target.label"),
+                targetPlaceholder: text("hades2.saveEditor.target.choose"),
+                targetSelection: Binding(get: { model.selectedTargetID }, set: model.selectTarget),
+                targets: targetOptions,
+                targetEnabled: !model.busy
+            )
             Divider()
             ForEach(model.operationFailures.keys.sorted(by: { $0.rawValue < $1.rawValue }), id: \.rawValue) { command in
                 if let failure = model.operationFailures[command] {
@@ -66,7 +92,18 @@ struct Hades2SaveEditorView: View {
                     .transition(.opacity)
                 }
             }
-            workbenchToolbar
+            TrainerSaveEditorWorkbenchBar(
+                search: $model.search,
+                searchPlaceholder: text("hades2.saveEditor.workbench.search"),
+                clearLabel: localization.localized("host.search.clear"),
+                searchEnabled: !model.busy && !model.profile.isEmpty,
+                loading: model.querying,
+                onSubmit: model.submitSearch
+            ) {
+                saveScopePicker
+            } trailing: {
+                saveScopeTrailing
+            }
             if let queryFailure = model.queryFailure {
                 TrainerInlineNotice(color: theme.warning) {
                     Text(localization.string(queryFailure))
@@ -78,28 +115,18 @@ struct Hades2SaveEditorView: View {
                 .transition(.opacity)
             }
             Divider()
-            VStack(spacing: 0) {
+            TrainerSaveEditorWorkspace(
+                identity: model.baselineGeneration.map(AnyHashable.init),
+                hasReview: hasReview,
+                busy: model.busy,
+                showsPaging: model.total > Hades2SaveEditorModel.pageSize
+            ) {
                 inlineResults
-                    .id(model.baselineGeneration)
-                    .frame(minHeight: 300, idealHeight: hasReview ? 445 : 610, maxHeight: .infinity)
-                if model.total > Hades2SaveEditorModel.pageSize {
-                    Divider()
-                    pagingControls
-                        .padding(.horizontal, theme.rowHorizontalPadding)
-                        .padding(.vertical, theme.inlineRowVerticalPadding)
-                }
-                VStack(spacing: 0) {
-                    if hasReview {
-                        Divider()
-                        reviewDrawer.frame(height: 240).transition(.opacity)
-                    }
-                }
-                .frame(height: hasReview ? 241 : 0, alignment: .top)
-                .clipped()
-                .allowsHitTesting(hasReview && !model.busy)
-                .accessibilityHidden(!hasReview)
+            } paging: {
+                pagingControls
+            } review: {
+                reviewDrawer
             }
-            .animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: hasReview)
             if !model.retiredDrafts.isEmpty {
                 Divider()
                 DisclosureGroup(text("hades2.saveEditor.retiredDrafts")) {
@@ -121,12 +148,9 @@ struct Hades2SaveEditorView: View {
             }
             .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.lastApplyReceipt)
         }
-        .frame(width: 980)
-        .frame(minHeight: 700, idealHeight: 850, maxHeight: .infinity)
-        .trainerSurface(.canvas)
+        .trainerSaveEditorWindow()
         .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.operationFailures)
         .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.queryFailure)
-        .trainerDismissTextEditingOnClickAway()
         .sheet(item: $advancedEditingEntry) { entry in
             Hades2SaveAdvancedValueView(model: model, entry: entry)
         }
@@ -160,15 +184,10 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
             guard !identifier.isEmpty, identifier != loadedSourceID else { return }
-            // The initial inventory owns automatic default opening. An idle
-            // source change with no workspace is the user's first manual open.
-            // Ignore default selection changes while that opening is in flight.
             if model.busy {
                 if model.workspaceID != nil { model.selectedSourceID = loadedSourceID }
                 return
             }
-            // Clicking away can finish a text edit and start staging before
-            // the picker receives the same click. Never re-read that draft.
             guard model.sourceFiles.contains(where: { $0.id == identifier }) else {
                 model.selectedSourceID = loadedSourceID
                 return
@@ -198,149 +217,74 @@ struct Hades2SaveEditorView: View {
             userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }
 
-    private var windowHeader: some View {
-        HStack(spacing: theme.sectionSpacing) {
-            Image(systemName: "externaldrive.badge.gearshape")
-                .font(.title3)
-                .foregroundStyle(theme.accent)
-            Text(text("hades2.saveEditor.title"))
-                .font(.title3.weight(.semibold))
-            if !model.profile.isEmpty {
-                Text(model.profile)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else if model.busy {
-                ProgressView().controlSize(.small)
-            }
-            Spacer()
-            Button {
-                guard !model.busy else { return }
-                model.selectedSourceID = loadedSourceID
-                if model.pendingCount > 0 { confirmingSource = true }
-                else { model.openSelection() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .disabled(model.busy || model.profile.isEmpty ||
-                !model.sourceFiles.contains(where: { $0.id == loadedSourceID }))
-            .help(text("hades2.saveEditor.source.read"))
-            .accessibilityLabel(text("hades2.saveEditor.source.read"))
-
-            Button(localization.localized("host.done")) {
-                if let closeWindow { closeWindow() } else { dismiss() }
-            }
-            .disabled(model.busy)
+    private var sourceOptions: [TrainerSaveEditorDocumentOption] {
+        var options = model.sourceFiles.map {
+            TrainerSaveEditorDocumentOption(id: $0.id, title: $0.relativePath)
         }
-        .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, 15)
+        if !loadedSourceID.isEmpty && !model.sourceFiles.contains(where: { $0.id == loadedSourceID }) {
+            options.append(.init(id: loadedSourceID, title: model.sourceRelativePath))
+        }
+        return options
     }
 
-    private var documentSelection: some View {
-        HStack(spacing: theme.sectionSpacing) {
-            Text(text("hades2.saveEditor.source.label"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker(text("hades2.saveEditor.source.label"), selection: $model.selectedSourceID) {
-                Text(text("hades2.saveEditor.source.choose")).tag("")
-                ForEach(model.sourceFiles) { file in
-                    Text(file.relativePath).tag(file.id)
-                }
-                if !loadedSourceID.isEmpty &&
-                    !model.sourceFiles.contains(where: { $0.id == loadedSourceID }) {
-                    Text(model.sourceRelativePath).tag(loadedSourceID)
-                }
-            }
-            .labelsHidden()
-            .trainerPicker(.form, state: model.busy ? .unavailable : .interactive)
+    private var targetOptions: [TrainerSaveEditorDocumentOption] {
+        var options = model.writeTargets.map {
+            TrainerSaveEditorDocumentOption(id: $0.id, title: $0.relativePath)
+        }
+        if !model.selectedTargetID.isEmpty
+            && !model.writeTargets.contains(where: { $0.id == model.selectedTargetID }) {
+            options.append(.init(id: model.selectedTargetID, title: selectedTargetLabel))
+        }
+        return options
+    }
 
+    private func requestCurrentSourceRead() {
+        guard !model.busy else { return }
+        model.selectedSourceID = loadedSourceID
+        if model.pendingCount > 0 { confirmingSource = true }
+        else { model.openSelection() }
+    }
+
+    private var saveScopePicker: some View {
+        Picker(
+            text("hades2.saveEditor.workbench.section.all"),
+            selection: Binding(
+                get: { section },
+                set: { item in
+                    guard section != item else { return }
+                    section = item
+                    if item == .advanced {
+                        model.selectDomain(.advanced)
+                    } else {
+                        model.selectScope(item.rawValue)
+                    }
+                }
+            )
+        ) {
+            ForEach(Hades2SaveWorkbenchSection.allCases) { item in
+                Text(text(item.titleKey))
+                    .tag(item)
+                    .disabled(!model.availableDomains.contains(
+                        item == .advanced ? .advanced : .entities
+                    ))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .trainerPicker(.rowValue,
+            state: model.busy || model.profile.isEmpty ? .unavailable : .interactive)
+    }
+
+    @ViewBuilder
+    private var saveScopeTrailing: some View {
+        if section == .advanced && !model.advancedPath.isEmpty {
             Button {
-                model.refreshFiles()
+                model.leaveAdvanced()
             } label: {
-                Image(systemName: TrainerSemanticIcon.Concept.refresh)
+                Label(text("hades2.saveEditor.up"), systemImage: "chevron.left")
             }
             .buttonStyle(.borderless)
-            .disabled(model.busy)
-            .help(text("hades2.saveEditor.source.refreshFiles"))
-            .accessibilityLabel(text("hades2.saveEditor.source.refreshFiles"))
-
-            Divider().frame(height: 20)
-
-            Text(text("hades2.saveEditor.target.label"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker(
-                text("hades2.saveEditor.target.label"),
-                selection: Binding(get: { model.selectedTargetID }, set: model.selectTarget)
-            ) {
-                Text(text("hades2.saveEditor.target.choose")).tag("")
-                ForEach(model.writeTargets) { file in
-                    Text(file.relativePath).tag(file.id)
-                }
-                if !model.selectedTargetID.isEmpty &&
-                    !model.writeTargets.contains(where: { $0.id == model.selectedTargetID }) {
-                    Text(selectedTargetLabel).tag(model.selectedTargetID)
-                }
-            }
-            .labelsHidden()
-            .trainerPicker(.form, state: model.busy ? .unavailable : .interactive)
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, theme.inlineRowVerticalPadding)
-    }
-
-    private var workbenchToolbar: some View {
-        HStack(spacing: theme.sectionSpacing) {
-            TrainerSearchField(
-                text: $model.search,
-                placeholder: text("hades2.saveEditor.workbench.search"),
-                clearLabel: localization.localized("host.search.clear"),
-                onSubmit: { model.submitSearch() }
-            )
-            .disabled(model.busy || model.profile.isEmpty)
-
-            if model.querying {
-                ProgressView().controlSize(.small)
-            }
-
-            Picker(
-                text("hades2.saveEditor.workbench.section.all"),
-                selection: Binding(
-                    get: { section },
-                    set: { item in
-                        guard section != item else { return }
-                        section = item
-                        if item == .advanced {
-                            model.selectDomain(.advanced)
-                        } else {
-                            model.selectScope(item.rawValue)
-                        }
-                    }
-                )
-            ) {
-                ForEach(Hades2SaveWorkbenchSection.allCases) { item in
-                    Text(text(item.titleKey))
-                        .tag(item)
-                        .disabled(!model.availableDomains.contains(
-                            item == .advanced ? .advanced : .entities
-                        ))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .trainerPicker(.rowValue, state: model.busy || model.profile.isEmpty ? .unavailable : .interactive)
-
-            if section == .advanced && !model.advancedPath.isEmpty {
-                Button {
-                    model.leaveAdvanced()
-                } label: {
-                    Label(text("hades2.saveEditor.up"), systemImage: "chevron.left")
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-        .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, theme.sectionSpacing)
     }
 
     private var inlineResults: some View {
