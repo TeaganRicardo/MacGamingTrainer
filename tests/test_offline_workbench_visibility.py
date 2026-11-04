@@ -41,7 +41,9 @@ assert "model.boonRarityTarget" in boon_policy
 traits = hades.split("private struct HadesCurrentTraitsPanel:", 1)[1].split("private struct HadesCurrentTraitRow:", 1)[0]
 assert 'Picker(text("hades.currentTraits")' in traits
 assert 'Text(text("hades.emptyTraits")).tag("")' in traits
-assert ".trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)" in traits
+assert ".trainerPicker(.expanding, state: pickerSections.allSatisfy({ $0.items.isEmpty }) ? .unavailable : .interactive)" in traits
+assert "HadesCurrentTraitPlaceholderRow()" in traits
+assert ".trainerPicker(.compactValue, state: .unavailable)" in traits
 # Exact boon acquisition is a fixed feature whose source/items can be empty.
 # Preserve its selectors and action until runtime data arrives.
 catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private struct HadesCurrentTraitsPanel:", 1)[0]
