@@ -46,6 +46,8 @@ class Runtime:
         self.events.append((name, params))
         if name == 'set_feature':
             self.state['features'][params['feature']] = params['value']
+        if name == 'set_boon_rarity':
+            self.state['boonRarityTarget'] = params['target']
         if name == 'disable_all':
             self.state['features'] = dict(DEFAULT_FEATURES)
         return self.status()
@@ -98,11 +100,11 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
 
     # Durable desired state is editable while detached. No runtime command is
     # issued until connect, where the complete preference document is replayed.
-    detached = adapter.dispatch('set_feature', {'feature': 'boonRarityTarget', 'value': 'Rare'}, 'rarity-target-offline')
+    detached = adapter.dispatch('set_boon_rarity', {'target': 'Rare'}, 'rarity-target-offline')
     adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on-offline')
     adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 1.5}, 'speed-offline')
     assert runtime.events == []
-    assert detached['features']['boonRarityTarget'] == 'Rare'
+    assert detached['boonRarityTarget'] == 'Rare'
     assert store.load()['boonRarityTarget'] == 'Rare'
     assert store.load()['boonRarityEnabled'] is True
     assert store.load()['gameSpeed'] == 1.5
@@ -110,8 +112,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     adapter.dispatch('connect', {}, 'connect')
     connect_features = next(event for event in runtime.events if event[0] == 'connect')[1]
     assert connect_features['boonRarityEnabled'] is True
-    assert connect_features['boonRarityTarget'] == 'Rare'
+    assert 'boonRarityTarget' not in connect_features
     assert 'gameSpeed' not in connect_features
+    assert ('set_boon_rarity', {'target': 'Rare'}) in runtime.events
     assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
     for bad in (1, 'true', None):
@@ -123,7 +126,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
             raise AssertionError('invalid rarity toggle reached runtime')
     for bad in ('Legendary', 'Duo', 1, None):
         try:
-            adapter.dispatch('set_feature', {'feature': 'boonRarityTarget', 'value': bad}, 'rarity-target-invalid')
+            adapter.dispatch('set_boon_rarity', {'target': bad}, 'rarity-target-invalid')
         except AdapterError as error:
             assert error.code == 'invalid_value'
         else:
