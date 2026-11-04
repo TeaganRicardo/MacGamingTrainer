@@ -242,8 +242,8 @@ assert "field: \"godGauge\"" in run_data
 assert "locked: model.healthLocked" in hades2_view
 assert "locked: model.moneyLocked" in hades2_view
 assert "locked: model.rerollsLocked" in hades2_view
-metric_grid = (ROOT / "Sources/Core/UI/Components/TrainerMetricGrid.swift").read_text()
-assert "TrainerLockButton(" in metric_grid
+stat_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatControls.swift").read_text()
+assert "TrainerLockButton(" in stat_controls
 
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
