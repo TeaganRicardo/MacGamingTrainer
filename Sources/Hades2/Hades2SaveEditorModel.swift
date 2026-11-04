@@ -1032,8 +1032,11 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     private func reconcileEdits(_ entryIDs: Set<String>?, preservingTypedDrafts: Bool = false) {
         if let entryIDs {
-            if !preservingTypedDrafts {
-                for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID); textDrafts.removeValue(forKey: entryID) }
+            for entryID in entryIDs {
+                textDrafts.removeValue(forKey: entryID)
+                if !preservingTypedDrafts {
+                    typedDrafts.removeValue(forKey: entryID)
+                }
             }
         } else {
             textDrafts = [:]
