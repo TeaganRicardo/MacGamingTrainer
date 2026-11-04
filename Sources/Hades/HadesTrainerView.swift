@@ -168,6 +168,7 @@ struct HadesTrainerView: View {
                     }
                 )
                 Text("×").foregroundStyle(.secondary)
+                TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
                 TrainerGamePageVisibilityGate { pageVisible in
                     TrainerMappedSlider(
                         value: gameSpeedSliderValue,
@@ -184,6 +185,7 @@ struct HadesTrainerView: View {
                     )
                     .frame(width: 200)
                 }
+                TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
             }
             if let actual = model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber {
                 let key = abs(actual - model.number(.gameSpeed)) < 0.000001
