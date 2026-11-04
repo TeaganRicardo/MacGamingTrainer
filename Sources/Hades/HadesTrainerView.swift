@@ -696,7 +696,7 @@ private struct HadesCurrentTraitsPanel: View {
                     placeholder: text("hades.search"),
                     clearLabel: localization.localized("host.search.clear")
                 )
-                .frame(width: 240)
+                .frame(width: 260)
             }
 
             if let selected {
@@ -722,6 +722,7 @@ private struct HadesCurrentTraitRow: View {
     @ObservedObject var model: HadesTrainerModel
     let trait: HadesCurrentTrait
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
     @State private var rarity: String
     @State private var level: String
     @State private var owner: HadesHeroTarget?
@@ -748,51 +749,65 @@ private struct HadesCurrentTraitRow: View {
         model.canMutate && trait.canEdit && rarities.contains(rarity) && rarity != trait.rarity
     }
 
+    private var levelControlsWidth: CGFloat {
+        42 + 58 + theme.compactActionWidth + 2 * 6
+    }
+
+    private var rarityControlsWidth: CGFloat {
+        48 + theme.pickerCompactWidth + theme.compactActionWidth + 2 * 6
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                if trait.canEdit {
-                    if entry?.supportsLevel != false {
-                        Text(text("hades.level"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TrainerNumberField(
-                            text: $level,
-                            accessibilityLabel: text("hades.level"),
-                            width: 58,
-                            enabled: model.canMutate,
-                            onEditingChanged: { active in if active { owner = model.target } },
-                            onCommit: { completion in
-                                guard let amount = Int(completion.text), (1...100).contains(amount) else {
-                                    return completion.rejected(message: text("hades.error.invalidValue"))
-                                }
-                                return String(amount)
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Text(text("hades.level"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(width: 42, alignment: .trailing)
+                    TrainerNumberField(
+                        text: $level,
+                        accessibilityLabel: text("hades.level"),
+                        width: 58,
+                        enabled: model.canMutate && trait.canEdit && entry?.supportsLevel != false,
+                        onEditingChanged: { active in if active { owner = model.target } },
+                        onCommit: { completion in
+                            guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                return completion.rejected(message: text("hades.error.invalidValue"))
                             }
-                        )
-                        TrainerSecondaryActionButton(
-                            title: text("hades.setLevel"),
-                            systemImage: TrainerSemanticIcon.Action.apply,
-                            enabled: canApplyLevel,
-                            widthRole: .compactRow
-                        ) {
-                            guard let amount = Int(level), (1...100).contains(amount) else {
-                                model.rejectInvalidValue()
-                                return
-                            }
-                            model.updateTrait(trait, rarity: trait.rarity, level: amount, target: owner)
+                            return String(amount)
                         }
+                    )
+                    TrainerSecondaryActionButton(
+                        title: text("hades.setLevel"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
+                        enabled: canApplyLevel,
+                        widthRole: .compactRow
+                    ) {
+                        guard let amount = Int(level), (1...100).contains(amount) else {
+                            model.rejectInvalidValue()
+                            return
+                        }
+                        model.updateTrait(trait, rarity: trait.rarity, level: amount, target: owner)
                     }
+                }
+                .frame(width: levelControlsWidth, alignment: .trailing)
 
+                HStack(spacing: 6) {
                     Text(text("hades.rarity"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(width: 48, alignment: .trailing)
                     Picker(text("hades.rarity"), selection: $rarity) {
                         ForEach(rarities, id: \.self) {
                             Text(text("hades.rarity.\($0)")).tag($0)
                         }
                     }
                     .labelsHidden()
-                    .trainerPicker(.compactValue, state: model.canMutate ? .interactive : .unavailable)
+                    .trainerPicker(.compactValue,
+                        state: model.canMutate && trait.canEdit ? .interactive : .unavailable)
 
                     TrainerSecondaryActionButton(
                         title: text("hades.setRarity"),
@@ -803,24 +818,22 @@ private struct HadesCurrentTraitRow: View {
                         model.updateTrait(trait, rarity: rarity, level: trait.level, target: owner)
                     }
                 }
+                .frame(width: rarityControlsWidth, alignment: .trailing)
 
-                Spacer(minLength: 0)
-
-                if trait.canRemove {
-                    Button(role: .destructive) {
-                        model.removeTrait(trait)
-                    } label: {
-                        Label(
-                            text(trait.canExpire == true && trait.blessing != nil
-                                ? "hades.cancelCurse" : "hades.remove"),
-                            systemImage: TrainerSemanticIcon.Action.remove
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(width: 132)
-                    .disabled(!model.canMutate)
+                Button(role: .destructive) {
+                    model.removeTrait(trait)
+                } label: {
+                    Label(
+                        text(trait.canExpire == true && trait.blessing != nil
+                            ? "hades.cancelCurse" : "hades.remove"),
+                        systemImage: TrainerSemanticIcon.Action.remove
+                    )
                 }
+                .buttonStyle(.bordered)
+                .frame(width: 132)
+                .disabled(!model.canMutate || !trait.canRemove)
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
 
             if !trait.canEdit && !trait.limitation.isEmpty {
                 Text(text("hades.limitation.\(trait.limitation)"))
