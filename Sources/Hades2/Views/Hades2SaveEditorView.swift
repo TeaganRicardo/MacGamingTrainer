@@ -219,7 +219,7 @@ struct Hades2SaveEditorView: View {
             sources: sourceOptions,
             sourceEnabled: !model.busy,
             sourceRefreshTitle: text("hades2.saveEditor.source.refreshFiles"),
-            onRefreshSources: model.refreshFiles,
+            onRefreshSources: { model.refreshFiles() },
             targetLabel: text("hades2.saveEditor.target.label"),
             targetPlaceholder: text("hades2.saveEditor.target.choose"),
             targetSelection: targetSelection,
