@@ -112,6 +112,9 @@ struct HadesCurrentTrait: Decodable, Identifiable, Equatable {
     var blessing: String? = nil
     var curse: String? = nil
     var id: String { instanceId }
+    var hasContextualControls: Bool {
+        remainingUses != nil || canRefresh == true || canExpire == true
+    }
 }
 
 struct HadesWorldReward: Decodable, Identifiable {
