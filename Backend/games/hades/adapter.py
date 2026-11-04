@@ -161,20 +161,23 @@ class HadesAdapter(GameAdapter):
         if command == 'set_feature':
             name = params.get('feature')
             value = preference_value(name, params.get('value'))
-            if not self.connected:
-                raise AdapterError('not_connected', 'hades.error.notConnected')
             candidate = {**self.features, name: value}
             self.preferences.save(candidate)
             self.features = candidate
             if name == 'gameSpeed':
+                if not self.connected:
+                    self._game_speed_actual = None
+                    self._game_speed_error = None
+                    return self._observe({**self._offline(), 'features': self.features})
                 try:
                     self._game_speed_actual = self.runtime.set_game_speed(value)
                     self._game_speed_error = None
                 except AdapterError as error:
                     self._record_game_speed_error(error)
                     raise
-                state = self.runtime.status() if self.connected else {**self._offline(), 'features': self.features}
-                return self._observe(state)
+                return self._observe(self.runtime.status())
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
             return self._observe(self.runtime.command(command, {'feature': name, 'value': value}))
         if command == 'disable_all':
             persistence_error = None
