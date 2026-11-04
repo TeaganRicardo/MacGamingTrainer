@@ -939,6 +939,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("Hades I selected-catalog native inputs missing")
         }
         let beforeSelection=commands().count
+        _ = oldLevel.scrollToVisible(oldLevel.bounds)
+        host.layoutSubtreeIfNeeded()
+        nativePickerPump()
         let levelEditor=nativeEditor(oldLevel, "catalog level")
         levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
         // Native menu input can also begin through accessibility. Replacing
