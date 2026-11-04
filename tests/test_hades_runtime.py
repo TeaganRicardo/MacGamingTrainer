@@ -394,6 +394,7 @@ assert(runtime.json({ quote = '"\\\n', truth = true }):find('\\u000a', 1, true))
 -- Health uses the Hades II fixed-pair contract while preserving native damage
 -- and healing callbacks. The pair owns presentation/settlement, not history.
 local unit = CurrentRun.Hero
+runtime.configure({})
 runtime.lock_vital("health", true)
 local healthState = runtime.status()
 assert(healthState.healthLocked and healthState.healthLock.current == 30 and healthState.healthLock.max == 100)
