@@ -59,6 +59,15 @@ local function enforceHealthLock(unit)
   unit.MaxHealth = lock.max
   unit.Health = math.min(lock.current, lock.max)
 end
+local function releaseHealthLock(unit)
+  runtime.healthLock = nil
+  if not unit then return end
+  assert(type(ValidateMaxHealth) == "function" and type(UpdateHealthUI) == "function",
+    "hades.error.unsupportedRuntime")
+  ValidateMaxHealth(true)
+  unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
+  UpdateHealthUI()
+end
 local function instanceId(trait)
   if not runtime.instanceIds[trait] then
     runtime.nextInstanceId = runtime.nextInstanceId + 1
@@ -849,9 +858,14 @@ function runtime.configure_locks(health, money, rerolls)
     assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
   end
   installHooks()
-  runtime.healthLock = health and { current = health.current, max = health.max } or nil
-  runtime.moneyLock, runtime.rerollsLock = money, rerolls
   local unit = hero()
+  local releasingHealth = health == nil and healthLockValid(runtime.healthLock)
+  if releasingHealth then
+    releaseHealthLock(unit)
+  else
+    runtime.healthLock = health and { current = health.current, max = health.max } or nil
+  end
+  runtime.moneyLock, runtime.rerollsLock = money, rerolls
   if unit then mount(unit, false) end
   return runtime.status()
 end
@@ -865,12 +879,9 @@ function runtime.lock_vital(name, locked)
     enforceHealthLock(unit)
     UpdateHealthUI()
   else
-    runtime.healthLock = nil
     -- Restore the game's trait/mirror-owned maximum without retroactively
     -- healing damage that was suppressed while the lock was active.
-    ValidateMaxHealth(true)
-    unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
-    UpdateHealthUI()
+    releaseHealthLock(unit)
   end
   return runtime.status()
 end
@@ -908,10 +919,11 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
-  runtime.healthLock = nil
+  local unit = hero()
+  if healthLockValid(runtime.healthLock) then releaseHealthLock(unit)
+  else runtime.healthLock = nil end
   runtime.moneyLock, runtime.rerollsLock = nil, nil
   restoreRerollDoors()
-  local unit = hero()
   if unit then mount(unit, false) end
   return runtime.status()
 end
