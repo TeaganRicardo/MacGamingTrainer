@@ -1509,8 +1509,8 @@ assert(lockedHealth.healthLock.current == 16 and lockedHealth.healthLock.max == 
   and unit.Health == 16 and unit.MaxHealth == 1000,
   "absolute health edits did not advance the active fixed pair")
 runtime.lock_vital("health", false)
-assert(not runtime.status().healthLocked and unit.MaxHealth >= 1000 and unit.Health == 16,
-  "unlock did not return maximum-health authority to the native owner")
+assert(not runtime.status().healthLocked and unit.MaxHealth == 1019 and unit.Health == 16,
+  "fixed max-health editing rewrote the native Heart/Mirror/trait owner underneath the lock")
 unit.metaHealth = 3
 runtime.set_value("maxHealth", 1017)
 assert(unit.MaxHealth == 1017 and unit.Health == 16,
