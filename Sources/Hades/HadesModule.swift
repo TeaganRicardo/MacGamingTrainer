@@ -396,7 +396,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0; godGauge = 0; maxGodGauge = 0
-        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []; world = nil
+        target = nil
+        if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
+            features[HadesFeature.gameSpeed.rawValue] = .gameSpeed(
+                desired: desired, actual: nil, active: nil,
+                errorPresentation: nil, errorArguments: []
+            )
+        }
+        activeFeatures = [:]; resources = [:]; traits = []; world = nil
     }
 }
 
