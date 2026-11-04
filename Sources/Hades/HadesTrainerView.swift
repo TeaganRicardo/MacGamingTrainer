@@ -649,15 +649,55 @@ private struct HadesCurrentTraitsPanel: View {
         HadesPresentation.text(key, language: localization.language)
     }
 
+    private func catalogEntry(_ trait: HadesCurrentTrait) -> HadesCatalogEntry? {
+        model.catalog.first { $0.id == trait.name }
+    }
+
+    private func sourceLabel(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
+        guard let entry = catalogEntry(trait) else {
+            return text("hades.kind.special")
+        }
+        let source = entry.source(language: language.rawValue)
+        if !source.isEmpty { return source }
+        return HadesPresentation.text("hades.kind.\(entry.kind)", language: language)
+    }
+
     private var matches: [HadesCurrentTrait] {
         let words = search.lowercased().split(whereSeparator: \.isWhitespace)
-        guard !words.isEmpty else { return model.traits }
-        return model.traits.filter { trait in
-            let names = TrainerPresentationLanguage.allCases.map {
-                model.traitName(trait, language: $0)
+        let rows = words.isEmpty ? model.traits : model.traits.filter { trait in
+            var searchable = [trait.name]
+            for language in TrainerPresentationLanguage.allCases {
+                searchable.append(model.traitName(trait, language: language))
+                searchable.append(sourceLabel(trait, language: language))
             }
-            let searchable = (names + [trait.name]).joined(separator: " ").lowercased()
-            return words.allSatisfy { searchable.contains($0) }
+            let haystack = searchable.joined(separator: " ").lowercased()
+            return words.allSatisfy { haystack.contains($0) }
+        }
+        return rows.sorted {
+            let leftSource = sourceLabel($0, language: localization.language)
+            let rightSource = sourceLabel($1, language: localization.language)
+            if leftSource != rightSource {
+                return leftSource.localizedStandardCompare(rightSource) == .orderedAscending
+            }
+            return model.traitName($0, language: localization.language)
+                .localizedStandardCompare(model.traitName($1, language: localization.language))
+                == .orderedAscending
+        }
+    }
+
+    private var pickerSections: [TrainerPickerSection<HadesCurrentTrait>] {
+        var titles: [String] = []
+        var buckets: [String: [HadesCurrentTrait]] = [:]
+        for trait in matches {
+            let title = sourceLabel(trait, language: localization.language)
+            if buckets[title] == nil {
+                titles.append(title)
+                buckets[title] = []
+            }
+            buckets[title, default: []].append(trait)
+        }
+        return titles.enumerated().map { index, title in
+            TrainerPickerSection(id: index, title: title, items: buckets[title] ?? [])
         }
     }
 
@@ -681,15 +721,19 @@ private struct HadesCurrentTraitsPanel: View {
                     .fixedSize()
 
                 Picker(text("hades.currentTraits"), selection: $selection) {
-                    if matches.isEmpty {
+                    if pickerSections.allSatisfy({ $0.items.isEmpty }) {
                         Text(text("hades.emptyTraits")).tag("")
                     }
-                    ForEach(matches) { trait in
-                        Text(pickerLabel(trait)).tag(trait.instanceId)
+                    ForEach(pickerSections) { section in
+                        Section(header: Text(section.title)) {
+                            ForEach(section.items) { trait in
+                                Text(pickerLabel(trait)).tag(trait.instanceId)
+                            }
+                        }
                     }
                 }
                 .labelsHidden()
-                .trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)
+                .trainerPicker(.expanding, state: pickerSections.allSatisfy({ $0.items.isEmpty }) ? .unavailable : .interactive)
 
                 TrainerSearchField(
                     text: $search,
