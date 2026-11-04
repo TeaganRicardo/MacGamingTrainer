@@ -12,6 +12,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var maxHealth = 0.0
     @Published private(set) var money = 0.0
     @Published private(set) var rerolls = 0.0
+    @Published private(set) var healthLocked = false
     @Published private(set) var moneyLocked = false
     @Published private(set) var rerollsLocked = false
     @Published private(set) var godGauge = 0.0
@@ -141,6 +142,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
         sendToHero("set_resource", params: ["resource": resource, "value": value], target: target, operation: "hades.resources")
+    }
+    func lockHealth(_ locked: Bool) {
+        sendToHero(
+            "lock_vital",
+            params: ["vital": "health", "locked": locked],
+            target: target,
+            operation: "hades.values"
+        )
     }
     func lockMoney(_ locked: Bool) {
         guard !(locked && isEnabled(.moneyNoDecrease)) else { return }
@@ -419,6 +428,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             maxHealth = state.maxHealth ?? 0
             money = state.money ?? 0
             rerolls = state.rerolls ?? 0
+            healthLocked = state.healthLocked ?? false
             moneyLocked = state.moneyLocked ?? false
             rerollsLocked = state.rerollsLocked ?? false
             godGauge = state.godGauge ?? 0
@@ -438,7 +448,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0
-        moneyLocked = false; rerollsLocked = false
+        healthLocked = false; moneyLocked = false; rerollsLocked = false
         godGauge = 0; maxGodGauge = 0
         target = nil
         if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
