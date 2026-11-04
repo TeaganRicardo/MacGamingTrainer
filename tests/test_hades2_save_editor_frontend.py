@@ -836,7 +836,7 @@ struct Main {
                 Hades2SaveEditorView(model: model)
             }
         }
-        pumpUntil {
+        pumpUntil(timeout: 4.0) {
             model.profile == "Profile1" && model.items.count == 1
         }
 
