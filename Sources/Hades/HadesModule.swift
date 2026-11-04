@@ -274,9 +274,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func installShortcuts() {
         hotkeys.register(HadesWorkbenchCatalog.orderedShortcutActions.map { HotkeyBinding(actionID: $0.rawValue, chord: shortcuts.chord($0)) })
     }
+    private func canPerformShortcut(_ action: HadesShortcutAction) -> Bool {
+        switch action {
+        case .disableAll:
+            return hostActionsEnabled
+        case .generateFishing:
+            return canMutate && world?.canFish == true
+        case .generateChaosGate:
+            return canMutate && world?.canChaos == true
+        default:
+            return canEditIntent
+        }
+    }
+
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              (action == .disableAll ? hostActionsEnabled : canEditIntent) else {
+              canPerformShortcut(action) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .generateFishing { generateFishing() }
