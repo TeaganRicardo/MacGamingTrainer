@@ -154,6 +154,8 @@ enum HadesPresentation {
             "hades.infiniteAmmoHelp": .init(zhCN: "使用后补满原生弹药，保留嵌入、装填、掉落和拾取的原生流程。", en: "Refills native ammo after use while preserving stored Casts, loading, drops and pickups."),
             "hades.forceRerolls": .init(zhCN: "强制重骰", en: "Force Enable Rerolls"),
             "hades.forceRerollsHelp": .init(zhCN: "新建祝福、商店、出售面板与出口可使用对应重掷；保留禁止重掷、费用和出口资格，不改变黑夜之镜选择。", en: "Enables rerolls on newly built boon, shop, purge menus and exits. Preserves blocked offers, costs and door eligibility without changing Mirror selections."),
+            "hades.shortcut.decreaseGameSpeed": .init(zhCN: "降低游戏速度", en: "Decrease Game Speed"),
+            "hades.shortcut.increaseGameSpeed": .init(zhCN: "提高游戏速度", en: "Increase Game Speed"),
             "hades.incomingDamageMultiplier": .init(zhCN: "受到伤害倍率", en: "Incoming Damage Multiplier"),
             "hades.chaosPair": .init(zhCN: "获取混沌诅咒与祝福", en: "Acquire Chaos Curse and Blessing"),
             "hades.chaosCurse": .init(zhCN: "混沌诅咒", en: "Chaos Curse"),
