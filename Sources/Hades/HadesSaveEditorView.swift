@@ -493,13 +493,8 @@ struct HadesSaveEditorView: View {
         let baseline = model.review.baselineGeneration
         return VStack(alignment: .leading, spacing: 9) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(text("hades.saveEditor.changes"))
-                        .font(.headline)
-                    Text("\(model.review.count) · \(model.review.effectCount)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text(text("hades.saveEditor.changes") + " (\(model.review.count))")
+                    .font(.headline)
                 Spacer()
                 Button(text("hades.saveEditor.discard")) {
                     model.cancel(baseline: baseline)
