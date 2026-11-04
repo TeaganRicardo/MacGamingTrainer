@@ -264,13 +264,13 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
         if relative in picker_exceptions:
             assert "CommandMenu(" in source and ".trainerPickerWidth(" not in source
             continue
-        width_count = source.count(".trainerPickerWidth(")
-        assert picker_count == width_count, (
-            f"{relative} has {picker_count} Pickers but {width_count} semantic width roles"
+        owner_count = source.count(".trainerPicker(")
+        assert picker_count == owner_count, (
+            f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
-assert ".trainerPickerWidth(.rowAction)" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
-assert ".trainerPickerWidth(.rowAction)" in view
-assert ".trainerPickerWidth(inline ? .rowAction : .expanding)" in resource_controls
+assert ".trainerPicker(.rowAction" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+assert ".trainerPicker(.rowAction" in view
+assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in resource_controls
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
 assert "enum TrainerLabeledControlLayout" in row_primitive
@@ -314,7 +314,7 @@ control_row = resource_editor[control_row_start:control_row_end]
 assert "Picker(title" in control_row
 assert "TrainerNumberField(" in control_row
 assert "TrainerLockButton(" in control_row
-assert ".trainerPickerWidth(.expanding)" in control_row
+assert ".trainerPicker(.expanding, state:" in control_row
 
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert "inline: true" in view

@@ -5,10 +5,33 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import time
 import uuid
 
 SESSION_ENVIRONMENT = 'MGT_JSONL_SESSION_V1'
 _PAYLOAD_NAME = re.compile(r'^payload-[0-9a-f]{32}\.json$')
+_REPARENT_GRACE_SECONDS = 0.05
+_REPARENT_POLL_SECONDS = 0.001
+
+
+def _host_process_departed(host_pid, *, getppid=os.getppid,
+                           monotonic=time.monotonic, sleep=time.sleep):
+    """Confirm Host death across the EOF -> reparent ordering window.
+
+    On Linux, exiting a parent can close its pipe descriptors before the
+    child's parent identity is updated. A worker may therefore observe stdin
+    EOF while getppid() still returns the exiting Host PID. Keep the ordinary
+    Host-owned cleanup path when that PID remains the parent after a short,
+    bounded grace period.
+    """
+    if getppid() != host_pid:
+        return True
+    deadline = monotonic() + _REPARENT_GRACE_SECONDS
+    while monotonic() < deadline:
+        sleep(_REPARENT_POLL_SECONDS)
+        if getppid() != host_pid:
+            return True
+    return False
 
 
 class FramingError(ValueError):
@@ -49,8 +72,12 @@ class JsonLineFileSession:
         if self.descriptor is not None:
             os.close(self.descriptor)
             self.descriptor = None
-        if remove_if_orphaned and self.host_pid is not None and os.getppid() != self.host_pid:
-            shutil.rmtree(self.directory)
+        if (remove_if_orphaned and self.host_pid is not None
+                and _host_process_departed(self.host_pid)):
+            try:
+                shutil.rmtree(self.directory)
+            except FileNotFoundError:
+                pass
 
     def _open(self, name):
         descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.descriptor)

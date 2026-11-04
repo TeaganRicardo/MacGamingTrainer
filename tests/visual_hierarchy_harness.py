@@ -9,6 +9,10 @@ VISUAL_HIERARCHY_JOURNEY = r'''
     @Published var counter = "3"
     @Published var focus: String?
     @Published var selected = true
+    @Published var pickerSelection = "first"
+    @Published var pickerAvailable = true
+    @Published var pickerCatalogLoaded = true
+    @Published var pickerGeneration = 0
 }
 
 private struct VisualHierarchyFixture: View {
@@ -66,13 +70,28 @@ private struct VisualHierarchyFixture: View {
                             shortcutText: nil, action: {})
                         TrainerLabeledControlRow(title: title("Selected option", "指定选项"), icon: "list.bullet",
                             tint: TrainerTheme.standard.accent, emphasized: false) {
-                            Picker(title("Selected option", "指定选项"), selection: .constant("first")) {
-                                Text(title("A long localized option", "较长的本地化选项")).tag("first")
+                            Picker(title("Selected option", "指定选项"), selection: $state.pickerSelection) {
+                                if state.pickerCatalogLoaded {
+                                    Text(title("A long localized option", "较长的本地化选项")).tag("first")
+                                    Text(title("Second option", "第二个选项")).tag("second")
+                                } else {
+                                    Text(title("No available item", "没有可用项目")).tag("first")
+                                }
                             }
                             .labelsHidden()
-                            .trainerPickerWidth(.rowValue)
+                            .trainerPicker(.rowValue, state: state.pickerAvailable ? .interactive : .unavailable)
+                            .id(state.pickerGeneration)
                             .background(HierarchyPickerLayoutProbe().allowsHitTesting(false).accessibilityHidden(true))
                             .accessibilityIdentifier("hierarchy.picker")
+                        }
+                        TrainerLabeledControlRow(title: title("Unavailable option", "不可用选项"), icon: "list.bullet",
+                            tint: .secondary, emphasized: false) {
+                            Picker(title("Unavailable option", "不可用选项"), selection: .constant("none")) {
+                                Text(title("No available item", "没有可用项目")).tag("none")
+                            }
+                            .labelsHidden()
+                            .trainerPicker(.rowValue, state: .unavailable)
+                            .accessibilityIdentifier("hierarchy.picker.unavailable")
                         }
                     }.trainerGroupedRows()
                 }
@@ -157,6 +176,51 @@ private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data
         fatalError("native hierarchy bitmap encoding failed")
     }
     return png
+}
+
+private func hierarchyBitmapExact(_ view: NSView, around screenFrame: NSRect) -> Data {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowFrame = window.convertFromScreen(screenFrame)
+    let localFrame = view.convert(windowFrame, from: nil).intersection(view.bounds)
+    guard !localFrame.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
+        fatalError("native Picker chrome bitmap allocation failed")
+    }
+    view.cacheDisplay(in: localFrame, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        fatalError("native Picker chrome bitmap encoding failed")
+    }
+    return png
+}
+
+private func hierarchyPickerBodySample(_ frame: NSRect) -> NSRect {
+    NSRect(
+        x: frame.minX + min(7, max(2, frame.width * 0.03)),
+        y: frame.midY - 2,
+        width: min(6, max(2, frame.width * 0.03)),
+        height: 4
+    )
+}
+
+private func hierarchyColorSample(_ view: NSView, at screenPoint: NSPoint) -> NSColor {
+    view.layoutSubtreeIfNeeded()
+    guard let window = view.window else { fatalError("native hierarchy window is missing") }
+    let windowPoint = window.convertPoint(fromScreen: screenPoint)
+    let localPoint = view.convert(windowPoint, from: nil)
+    let sampleRect = NSRect(x: localPoint.x - 1, y: localPoint.y - 1, width: 2, height: 2)
+        .intersection(view.bounds)
+    guard !sampleRect.isEmpty,
+          let bitmap = view.bitmapImageRepForCachingDisplay(in: sampleRect) else {
+        fatalError("native Picker color sample allocation failed")
+    }
+    view.cacheDisplay(in: sampleRect, to: bitmap)
+    let x = max(0, min(bitmap.pixelsWide - 1, bitmap.pixelsWide / 2))
+    let y = max(0, min(bitmap.pixelsHigh - 1, bitmap.pixelsHigh / 2))
+    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+        fatalError("native Picker color sample unavailable")
+    }
+    return color
 }
 
 @MainActor
@@ -293,7 +357,10 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 [control.label, control.valueText, control.help].compactMap { $0 }.contains { $0.contains("host.") }
             }, "rendered native hierarchy exposes an unresolved Host presentation key")
             guard let game = controls.first(where: { $0.identifier == "host.game." + descriptor.id }),
-                  let picker = controls.first(where: { $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton" }) else {
+                  let picker = controls.first(where: { $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton" }),
+                  let simultaneouslyUnavailablePicker = controls.first(where: {
+                      $0.identifier == "hierarchy.picker.unavailable" && $0.role == "AXPopUpButton"
+                  }) else {
                 fatalError("actual sidebar selection or native Picker is missing")
             }
             let bounds = window.convertToScreen(host.convert(host.bounds, to: nil)).insetBy(dx: -1, dy: -1)
@@ -378,6 +445,128 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             hierarchyCheck(picker.frame.width > 0 && picker.frame.height > 0 && bounds.contains(picker.frame)
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")
+            let pickerIndicatorFrame = NSRect(
+                x: picker.frame.maxX - min(28, picker.frame.width),
+                y: picker.frame.minY,
+                width: min(28, picker.frame.width),
+                height: picker.frame.height
+            )
+            let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
+            let interactivePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(picker.frame))
+            let accentSample = hierarchyColorSample(host, at: NSPoint(
+                x: pickerFrame.maxX - 25,
+                y: pickerFrame.midY
+            ))
+            let accentDelta = abs(accentSample.redComponent - 0.64)
+                + abs(accentSample.greenComponent - 0.51)
+                + abs(accentSample.blueComponent - 1.0)
+            hierarchyCheck(accentDelta < 0.30,
+                           "interactive Picker indicator is not the product purple accent: sample=\(accentSample)")
+            hierarchyCheck(accentSample.redComponent > 0.45,
+                           "interactive Picker indicator fell back to system-blue chrome: sample=\(accentSample)")
+            let simultaneousUnavailableChrome = hierarchyBitmapExact(host, around: NSRect(
+                x: simultaneouslyUnavailablePicker.frame.maxX - min(28, simultaneouslyUnavailablePicker.frame.width),
+                y: simultaneouslyUnavailablePicker.frame.minY,
+                width: min(28, simultaneouslyUnavailablePicker.frame.width),
+                height: simultaneouslyUnavailablePicker.frame.height
+            ))
+            let simultaneousUnavailableBody = hierarchyBitmapExact(
+                host, around: hierarchyPickerBodySample(simultaneouslyUnavailablePicker.frame)
+            )
+            hierarchyCheck(simultaneousUnavailableChrome != interactivePickerChrome,
+                           "simultaneous interactive/unavailable Pickers shared one chrome presentation")
+            hierarchyCheck(simultaneousUnavailableBody != interactivePickerBody,
+                           "simultaneous interactive/unavailable Pickers shared one body fill")
+            state.pickerSelection = "second"
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let selectedPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after selection change") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: selectedPicker.frame.maxX - min(28, selectedPicker.frame.width),
+                    y: selectedPicker.frame.minY,
+                    width: min(28, selectedPicker.frame.width),
+                    height: selectedPicker.frame.height
+                )) == interactivePickerChrome,
+                "Picker selection changed the interactive chrome presentation"
+            )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(selectedPicker.frame))
+                    == interactivePickerBody,
+                "Picker selection changed the interactive body fill"
+            )
+            // Exercise the original offline failure shape: runtime data disappears
+            // while the same permanent control becomes unavailable. Menu content
+            // and native enabled state change together, but presentation must still
+            // collapse to the single unavailable class.
+            state.pickerCatalogLoaded = false
+            state.pickerAvailable = false
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let unavailablePicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared in unavailable state") }
+            let unavailablePickerChrome = hierarchyBitmapExact(host, around: NSRect(
+                x: unavailablePicker.frame.maxX - min(28, unavailablePicker.frame.width),
+                y: unavailablePicker.frame.minY,
+                width: min(28, unavailablePicker.frame.width),
+                height: unavailablePicker.frame.height
+            ))
+            let unavailablePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
+            hierarchyCheck(unavailablePickerChrome != interactivePickerChrome,
+                           "interactive and unavailable Picker chrome collapsed into one presentation")
+            hierarchyCheck(unavailablePickerBody != interactivePickerBody,
+                           "interactive and unavailable Picker body fills collapsed into one presentation")
+            hierarchyCheck(unavailablePickerChrome == simultaneousUnavailableChrome,
+                           "unavailable Pickers diverged by runtime/catalog reason")
+            hierarchyCheck(unavailablePickerBody == simultaneousUnavailableBody,
+                           "unavailable Picker body fill diverged by runtime/catalog reason")
+            state.pickerCatalogLoaded = true
+            state.pickerAvailable = true
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let restoredPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after restoring interaction") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: restoredPicker.frame.maxX - min(28, restoredPicker.frame.width),
+                    y: restoredPicker.frame.minY,
+                    width: min(28, restoredPicker.frame.width),
+                    height: restoredPicker.frame.height
+                )) == interactivePickerChrome,
+                "Picker did not restore the same interactive chrome after unavailable state"
+            )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(restoredPicker.frame))
+                    == interactivePickerBody,
+                "Picker did not restore the same interactive body fill after unavailable state"
+            )
+            // Force SwiftUI/AppKit to discard and recreate the popup. The bug
+            // report included system-blue/native chrome returning after state
+            // changes; reconstruction must not escape the Core presentation owner.
+            state.pickerGeneration += 1
+            hierarchyPump(0.10)
+            host.layoutSubtreeIfNeeded()
+            guard let rebuiltPicker = nativeAccessibilityControls(host).first(where: {
+                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
+            }) else { fatalError("Picker disappeared after native reconstruction") }
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: NSRect(
+                    x: rebuiltPicker.frame.maxX - min(28, rebuiltPicker.frame.width),
+                    y: rebuiltPicker.frame.minY,
+                    width: min(28, rebuiltPicker.frame.width),
+                    height: rebuiltPicker.frame.height
+                )) == interactivePickerChrome,
+                "reconstructed Picker escaped the interactive chrome presentation"
+            )
+            hierarchyCheck(
+                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(rebuiltPicker.frame))
+                    == interactivePickerBody,
+                "reconstructed Picker escaped the interactive body fill"
+            )
             let fields = hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }
             for field in fields {
                 let frame = window.convertToScreen(field.convert(field.bounds, to: nil))
