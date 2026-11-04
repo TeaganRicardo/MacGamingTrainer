@@ -16,6 +16,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var maxGodGauge = 0.0
     @Published private(set) var features: [String: HadesFeatureValue] = [:]
     @Published private(set) var activeFeatures: [String: Bool] = [:]
+    @Published private(set) var boonRarityTarget = "Heroic"
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
     @Published private(set) var world: HadesWorldObservation?
@@ -108,10 +109,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
     func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
-    var boonRarityTarget: String { features["boonRarityTarget"]?.string ?? "Heroic" }
     func setBoonRarityTarget(_ target: String) {
         guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
-        send("set_feature", params: ["feature": "boonRarityTarget", "value": target], operation: "hades.boonRarityEnabled")
+        send("set_boon_rarity", params: ["target": target], operation: "hades.boonRarityEnabled")
     }
     func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
@@ -398,6 +398,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             target = state.target
             features = state.features ?? [:]
             activeFeatures = state.activeFeatures ?? [:]
+            boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
             resources = state.resources ?? [:]
             traits = state.traits ?? []
             world = state.world
