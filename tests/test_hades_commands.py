@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
     historical = {name: value for name, value in DEFAULT_FEATURES.items()
-                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier'}}
+                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier', 'boonRarityTarget'}}
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
@@ -75,12 +75,24 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
     assert offline['catalog'] and 'connected' not in offline and runtime.events == []
-    adapter.dispatch('connect', {}, 'connect')
-    assert next(event for event in runtime.events if event[0] == 'connect')[1]['boonRarityEnabled'] is False
-    assert 'gameSpeed' not in next(event for event in runtime.events if event[0] == 'connect')[1]
-    adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on')
+
+    # Durable desired state is editable while detached. No runtime command is
+    # issued until connect, where the complete preference document is replayed.
+    detached = adapter.dispatch('set_feature', {'feature': 'boonRarityTarget', 'value': 'Rare'}, 'rarity-target-offline')
+    adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on-offline')
+    adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 1.5}, 'speed-offline')
+    assert runtime.events == []
+    assert detached['features']['boonRarityTarget'] == 'Rare'
+    assert store.load()['boonRarityTarget'] == 'Rare'
     assert store.load()['boonRarityEnabled'] is True
-    assert runtime.events[-1] == ('set_feature', {'feature': 'boonRarityEnabled', 'value': True})
+    assert store.load()['gameSpeed'] == 1.5
+
+    adapter.dispatch('connect', {}, 'connect')
+    connect_features = next(event for event in runtime.events if event[0] == 'connect')[1]
+    assert connect_features['boonRarityEnabled'] is True
+    assert connect_features['boonRarityTarget'] == 'Rare'
+    assert 'gameSpeed' not in connect_features
+    assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
     for bad in (1, 'true', None):
         try:
@@ -89,6 +101,13 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
             assert error.code == 'invalid_value'
         else:
             raise AssertionError('invalid rarity toggle reached runtime')
+    for bad in ('Legendary', 'Duo', 1, None):
+        try:
+            adapter.dispatch('set_feature', {'feature': 'boonRarityTarget', 'value': bad}, 'rarity-target-invalid')
+        except AdapterError as error:
+            assert error.code == 'invalid_value'
+        else:
+            raise AssertionError('invalid rarity target reached runtime')
     assert len(runtime.events) == calls and store.load()['boonRarityEnabled'] is True
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
