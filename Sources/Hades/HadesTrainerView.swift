@@ -324,7 +324,12 @@ private struct HadesVitalMetricCard: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
-            Color.clear.frame(width: 26, height: 24)
+            TrainerLockButton(
+                title: title,
+                locked: model.healthLocked,
+                enabled: model.canMutate,
+                action: { model.lockHealth(!model.healthLocked) }
+            )
         } content: {
             HStack(spacing: 2) {
                 TrainerNumberField(
