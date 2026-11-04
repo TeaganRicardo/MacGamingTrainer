@@ -146,6 +146,7 @@ enum HadesPresentation {
             "hades.error.diagnosticsExport": .init(zhCN: "无法导出诊断；请检查日志和目标文件的访问权限。", en: "Unable to export diagnostics. Check access to the logs and destination file."),
             "hades.error.logOpen": .init(zhCN: "无法打开日志目录；请检查访问权限。", en: "Unable to open the log directory. Check access permissions."),
             "hades.disableAllPending": .init(zhCN: "设置已重置；重新连接或重启游戏以清除游戏内效果。", en: "Settings reset. Reconnect or restart the game to clear in-game effects."),
+            "hades.phase.detached": .init(zhCN: "已保留开启状态；重新连接后自动恢复。", en: "The enabled setting is retained and will resume automatically after reconnecting."),
             "hades.moneyNoDecrease": .init(zhCN: "无限金币", en: "Infinite Gold"),
             "hades.rerollsNoDecrease": .init(zhCN: "无限重骰", en: "Infinite Rerolls"),
             "hades.fullHealth": .init(zhCN: "无限生命", en: "Infinite Life"),
