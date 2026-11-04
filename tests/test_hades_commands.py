@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
     historical = {name: value for name, value in DEFAULT_FEATURES.items()
-                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier', 'boonRarityTarget'}}
+                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier'}}
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'updatedAt': '2026-11-04T00:00:00+00:00', 'features': previous_current,
     }))
     loaded_profile = adapter.dispatch('load_profile', {'name': profile_name}, 'load-previous-profile')
-    assert loaded_profile['features']['boonRarityTarget'] == 'Heroic'
+    assert loaded_profile['boonRarityTarget'] == 'Heroic'
     assert store.load()['boonRarityTarget'] == 'Heroic'
     assert runtime.events == []
 
