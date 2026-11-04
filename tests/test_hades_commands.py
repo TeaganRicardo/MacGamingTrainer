@@ -231,6 +231,13 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load()['healthLock'] == {'current': 40, 'max': 100}
     adapter.dispatch('set_value', {'field': 'maxHealth', 'value': 80, 'target': owner}, 'edit-locked-max-health')
     assert store.load()['healthLock'] == {'current': 40, 'max': 80}
+    adapter.dispatch('disconnect', {}, 'detach-health-lock')
+    before_reconnect = len(runtime.events)
+    reconnected = adapter.dispatch('connect', {}, 'reconnect-health-lock')
+    assert reconnected['healthLocked'] is True
+    assert ('configure_locks', {
+        'health': {'current': 40, 'max': 80}, 'money': None, 'rerolls': None
+    }) in runtime.events[before_reconnect:], 'durable health lock did not replay on reconnect'
     adapter.dispatch(
         'lock_vital', {'vital': 'health', 'locked': False, 'target': owner}, 'unlock-health'
     )
