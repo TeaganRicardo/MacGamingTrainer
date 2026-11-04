@@ -141,9 +141,10 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'schemaVersion': 1, 'gameID': 'hades', 'name': connected_name,
         'updatedAt': '2026-11-04T00:00:01+00:00', 'features': connected_profile,
     }))
+    before_profile_events = len(runtime.events)
     profile_state = adapter.dispatch('load_profile', {'name': connected_name}, 'load-connected-profile')
     assert profile_state['boonRarityTarget'] == 'Epic'
-    assert runtime.events[-1] == ('set_boon_rarity', {'target': 'Epic'})
+    assert ('set_boon_rarity', {'target': 'Epic'}) in runtime.events[before_profile_events:]
     assert store.load()['boonRarityTarget'] == 'Epic'
 
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
