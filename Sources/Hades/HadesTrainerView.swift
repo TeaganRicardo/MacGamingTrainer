@@ -784,7 +784,8 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                     text: .constant(""),
                     accessibilityLabel: text("hades.level"),
                     width: 58,
-                    enabled: false
+                    enabled: false,
+                    onCommit: { $0.text }
                 )
                 TrainerSecondaryActionButton(
                     title: text("hades.setLevel"),
