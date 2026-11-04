@@ -65,20 +65,7 @@ struct Hades2SaveEditorView: View {
                 }
             )
             Divider()
-            TrainerSaveEditorDocumentBar(
-                sourceLabel: text("hades2.saveEditor.source.label"),
-                sourcePlaceholder: text("hades2.saveEditor.source.choose"),
-                sourceSelection: $model.selectedSourceID,
-                sources: sourceOptions,
-                sourceEnabled: !model.busy,
-                sourceRefreshTitle: text("hades2.saveEditor.source.refreshFiles"),
-                onRefreshSources: model.refreshFiles,
-                targetLabel: text("hades2.saveEditor.target.label"),
-                targetPlaceholder: text("hades2.saveEditor.target.choose"),
-                targetSelection: Binding(get: { model.selectedTargetID }, set: model.selectTarget),
-                targets: targetOptions,
-                targetEnabled: !model.busy
-            )
+            documentBar
             Divider()
             ForEach(model.operationFailures.keys.sorted(by: { $0.rawValue < $1.rawValue }), id: \.rawValue) { command in
                 if let failure = model.operationFailures[command] {
@@ -215,6 +202,30 @@ struct Hades2SaveEditorView: View {
     private func announce(_ message: String) {
         NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested,
             userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+    }
+
+    private var targetSelection: Binding<String> {
+        Binding<String>(
+            get: { model.selectedTargetID },
+            set: { identifier in model.selectTarget(identifier) }
+        )
+    }
+
+    private var documentBar: some View {
+        TrainerSaveEditorDocumentBar(
+            sourceLabel: text("hades2.saveEditor.source.label"),
+            sourcePlaceholder: text("hades2.saveEditor.source.choose"),
+            sourceSelection: $model.selectedSourceID,
+            sources: sourceOptions,
+            sourceEnabled: !model.busy,
+            sourceRefreshTitle: text("hades2.saveEditor.source.refreshFiles"),
+            onRefreshSources: model.refreshFiles,
+            targetLabel: text("hades2.saveEditor.target.label"),
+            targetPlaceholder: text("hades2.saveEditor.target.choose"),
+            targetSelection: targetSelection,
+            targets: targetOptions,
+            targetEnabled: !model.busy
+        )
     }
 
     private var sourceOptions: [TrainerSaveEditorDocumentOption] {
