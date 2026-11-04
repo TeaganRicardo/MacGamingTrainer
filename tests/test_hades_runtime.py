@@ -1342,6 +1342,12 @@ function UpdateHealthUI()
   assert(CurrentRun.Hero.MaxHealth >= 1 and CurrentRun.Hero.Health >= 0, "native health UI observed a negative vital")
   updates.health = CurrentRun.Hero.Health
 end
+function Damage(unit, args)
+  local floor = args.MinHealth or 0
+  unit.Health = math.max(floor, unit.Health - (args.DamageAmount or 0))
+  UpdateHealthUI()
+  return "damaged"
+end
 function ExtractValues() end
 function EquipSpecialWeapons() end
 function AddWallSlamWeapons() end
@@ -1485,6 +1491,44 @@ ValidateMaxHealth(true)
 assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 17,
   "native recomputation of the saved run required Trainer state")
 CurrentRun = liveRun
+
+-- Fixed Health uses the runtime current/max projection without overwriting the
+-- native run contribution. Native damage/heal are held at the lock target,
+-- Hearts still persist underneath the projection, Save strips the projected
+-- maximum, and unlock/Disable All reveal the native recomputation.
+runtime.lock_vital("health", true)
+local healthLock = runtime.status().healthLock
+assert(runtime.status().healthLocked and healthLock.current == 17 and healthLock.maximum == 1017)
+Damage(unit, { DamageAmount = 9, MinHealth = 1 })
+assert(unit.Health == 17 and unit.MaxHealth == 1017, "fixed Health allowed native damage to move the target")
+Heal(unit, { HealAmount = 20, Silent = true })
+assert(unit.Health == 17 and unit.MaxHealth == 1017, "fixed Health allowed native healing to move the target")
+local beforeLockedHeartTraits = #unit.Traits
+nativeHeart(25)
+assert(#unit.Traits == beforeLockedHeartTraits + 1, "fixed Health swallowed a native Heart contribution")
+assert(unit.Health == 17 and unit.MaxHealth == 1017, "native Heart escaped the fixed Health projection")
+Save()
+assert(savedState.run.Hero.MaxHealth == 1027,
+  "Save serialized the fixed MaxHealth projection instead of the native run contribution")
+assert(unit.Health == 17 and unit.MaxHealth == 1017,
+  "Save did not restore the live fixed Health projection")
+runtime.lock_vital("health", false)
+assert(not runtime.status().healthLocked and unit.MaxHealth == 1027 and unit.Health == 17,
+  "unlock did not reveal the retained native MaxHealth contribution")
+
+runtime.lock_vital("health", true)
+runtime.set_value("health", 12)
+runtime.set_value("maxHealth", 900)
+healthLock = runtime.status().healthLock
+assert(healthLock.current == 12 and healthLock.maximum == 900
+  and unit.Health == 12 and unit.MaxHealth == 900,
+  "absolute Health edit did not advance the active fixed lock")
+nativeHeart(25)
+assert(unit.Health == 12 and unit.MaxHealth == 900,
+  "later native Heart escaped the edited fixed Health target")
+runtime.disable_all()
+assert(not runtime.status().healthLocked and unit.MaxHealth == 910 and unit.Health == 12,
+  "Disable All did not release fixed Health into the latest native recomputation")
 
 -- An engine landing writes an absolute 540 after yielding. Trainer ownership
 -- begins before that native lifetime and resumes after its final write.
