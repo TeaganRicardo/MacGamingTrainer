@@ -31,6 +31,7 @@ extension HadesShortcutAction {
         case .fullGodGauge: HadesWorkbenchIcon.godGauge
         case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
         case .forceRerolls: TrainerSemanticIcon.Concept.refresh
+        case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .generateFishing: TrainerSemanticIcon.Context.fishing
         case .generateChaosGate: TrainerSemanticIcon.Context.portal
@@ -155,6 +156,8 @@ enum HadesWorkbenchCatalog {
         .fullGodGauge,
         .infiniteAmmo,
         .forceRerolls,
+        .decreaseGameSpeed,
+        .increaseGameSpeed,
         .boonRarityEnabled,
         .generateFishing,
         .generateChaosGate,
