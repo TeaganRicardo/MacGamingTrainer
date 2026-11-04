@@ -102,9 +102,10 @@ class HadesAdapter(GameAdapter):
                 runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
-                    state = self.runtime.command(
-                        'set_boon_rarity', {'target': features['boonRarityTarget']}
-                    )
+                    if features['boonRarityTarget'] != 'Heroic':
+                        state = self.runtime.command(
+                            'set_boon_rarity', {'target': features['boonRarityTarget']}
+                        )
                 except AdapterError as error:
                     if error.code in ('outcome_unknown', 'restart_required') or not self.runtime.connected:
                         self.connected = False
@@ -138,7 +139,7 @@ class HadesAdapter(GameAdapter):
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
-            if self.connected:
+            if self.connected and self.features['boonRarityTarget'] != 'Heroic':
                 state = self.runtime.command(
                     'set_boon_rarity', {'target': self.features['boonRarityTarget']}
                 )
