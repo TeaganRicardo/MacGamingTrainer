@@ -44,12 +44,13 @@ assert ".trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .inte
 catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private struct HadesCurrentTraitsPanel:", 1)[0]
 assert 'Picker(text("hades.exactSource")' in catalog
 assert 'Picker(text("hades.selectTrait")' in catalog
-assert 'TrainerPrimaryActionButton(title: text("hades.acquire")' in catalog
-assert ".trainerPicker(.expanding, state: sourceGroups.isEmpty ? .unavailable : .interactive)" in catalog
-assert ".trainerPicker(.expanding, state: selectedEntries.isEmpty ? .unavailable : .interactive)" in catalog
+assert 'TrainerSecondaryActionButton(' in catalog and 'title: text("hades.acquire")' in catalog
+assert ".trainerPicker(.expanding, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)" in catalog
+assert ".trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)" in catalog
 assert "selected != nil && model.canMutate" in catalog
 assert 'if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }' in catalog
 assert "if matches.isEmpty { TrainerEmptyState" not in catalog
+assert "HadesChaosPairControls(model: model)" in catalog
 
 assert not re.search(r"if\s+matches\.isEmpty\s*\{[\s\S]*?\}\s*else\s*\{\s*Picker\(", traits)
 
