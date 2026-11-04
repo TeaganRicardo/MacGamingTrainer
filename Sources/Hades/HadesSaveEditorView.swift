@@ -250,42 +250,55 @@ struct HadesSaveEditorView: View {
         return found
     }
     private var results: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: theme.controlPadding) {
-                if model.rows.isEmpty && !model.queryLoading {
-                    TrainerEmptyState(text: text("hades.saveEditor.empty"))
-                        .transition(.opacity)
-                }
-                ForEach(owners, id: \.self) { ownerID in
-                    TrainerListCard {
-                        VStack(alignment: .leading, spacing: 0) {
-                            let owned = model.rows.filter { $0.ownerId == ownerID }
-                            if let owner = owned.first?.owner, !owner.isEmpty {
-                                Text(owner).font(.headline).padding(theme.controlPadding).accessibilityAddTraits(.isHeader)
-                            }
-                            ForEach(Array(owned.enumerated()), id: \.element.id) { index, row in
-                                if index == 0 || owned[index - 1].groupId != row.groupId {
-                                    if !row.group.isEmpty {
-                                        Text(row.group).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                            .padding(.horizontal, theme.controlPadding).padding(.top, theme.controlPadding)
+        Group {
+            if resultPhase == .source {
+                TrainerEmptyState(text: text("hades.saveEditor.selectSource"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            } else if resultPhase == .loading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            } else if resultPhase == .empty {
+                TrainerEmptyState(text: text("hades.saveEditor.empty"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: theme.controlPadding) {
+                        ForEach(owners, id: \.self) { ownerID in
+                            TrainerListCard {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    let owned = model.rows.filter { $0.ownerId == ownerID }
+                                    if let owner = owned.first?.owner, !owner.isEmpty {
+                                        Text(owner).font(.headline).padding(theme.controlPadding)
                                             .accessibilityAddTraits(.isHeader)
                                     }
+                                    ForEach(Array(owned.enumerated()), id: \.element.id) { index, row in
+                                        if index == 0 || owned[index - 1].groupId != row.groupId {
+                                            if !row.group.isEmpty {
+                                                Text(row.group)
+                                                    .font(.caption.weight(.semibold))
+                                                    .foregroundStyle(.secondary)
+                                                    .padding(.horizontal, theme.controlPadding)
+                                                    .padding(.top, theme.controlPadding)
+                                                    .accessibilityAddTraits(.isHeader)
+                                            }
+                                        }
+                                        HadesSaveEditorField(model: model, row: row, workspace: model.workspaceID)
+                                        if index < owned.count - 1 { Divider() }
+                                    }
                                 }
-                                HadesSaveEditorField(model: model, row: row, workspace: model.workspaceID)
-                                if index < owned.count - 1 { Divider() }
                             }
                         }
                     }
+                    .padding(theme.rowHorizontalPadding)
                 }
-            }.padding(theme.rowHorizontalPadding)
-        }
-        .overlay {
-            if model.rows.isEmpty && model.queryLoading {
-                ProgressView().controlSize(.small).allowsHitTesting(false).transition(.opacity)
             }
         }
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: model.rows.isEmpty && model.queryLoading)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: resultPhase)
     }
+
     private var paging: some View {
         HStack {
             Button(text("hades.saveEditor.previous"), action: model.previousPage)
