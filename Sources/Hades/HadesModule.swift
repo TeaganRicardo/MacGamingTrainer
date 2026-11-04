@@ -53,7 +53,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
     var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
-    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible && connected }
+    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible }
     var canMutate: Bool { backendAvailable && backendStatus.protocolCompatible && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
@@ -108,6 +108,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
     func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
+    var boonRarityTarget: String { features["boonRarityTarget"]?.string ?? "Heroic" }
+    func setBoonRarityTarget(_ target: String) {
+        guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
+        send("set_feature", params: ["feature": "boonRarityTarget", "value": target], operation: "hades.boonRarityEnabled")
+    }
     func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
         guard canEditIntent else { return }
