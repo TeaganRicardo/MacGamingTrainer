@@ -141,8 +141,8 @@ struct HadesTrainerView: View {
             TrainerLabeledControlRow(
                 title: localization.localized("host.timeWarp.title"),
                 icon: TrainerSemanticIcon.Concept.timeScale,
-                tint: model.canMutate ? theme.accent : theme.inactive,
-                emphasized: model.canMutate,
+                tint: model.canEditIntent ? theme.accent : theme.inactive,
+                emphasized: model.canEditIntent,
                 helpText: localization.localized("host.timeWarp.hint")
             ) {
                 TrainerNumberField(
@@ -150,7 +150,7 @@ struct HadesTrainerView: View {
                     placeholder: "1.0",
                     accessibilityLabel: localization.localized("host.timeWarp.title"),
                     width: 62,
-                    enabled: model.canMutate,
+                    enabled: model.canEditIntent,
                     onEditingChanged: { active in
                         gameSpeedEditing = active
                         if !active { gameSpeedPreview = nil }
@@ -174,7 +174,7 @@ struct HadesTrainerView: View {
                         mapping: gameSpeedMapping,
                         accessibilityLabel: localization.localized("host.timeWarp.title"),
                         accessibilityHint: localization.localized("host.timeWarp.hint"),
-                        enabled: model.canMutate && pageVisible,
+                        enabled: model.canEditIntent && pageVisible,
                         onPreviewValue: { preview in
                             gameSpeedPreview = preview
                             if preview == nil && !gameSpeedEditing {
@@ -204,18 +204,42 @@ struct HadesTrainerView: View {
         .trainerGroupedRows()
     }
 
+    private var boonRarityPanel: some View {
+        let controlState = state(.boonRarityEnabled)
+        return TrainerLabeledControlRow(
+            title: text(HadesFeature.boonRarityEnabled.key),
+            icon: HadesFeature.boonRarityEnabled.icon,
+            tint: controlState.indicatorColor,
+            emphasized: controlState.isOn,
+            opacity: controlState.opacity
+        ) {
+            Picker(text("hades.minimumRarity"), selection: Binding(
+                get: { model.boonRarityTarget },
+                set: model.setBoonRarityTarget
+            )) {
+                ForEach(["Common", "Rare", "Epic", "Heroic"], id: \.self) { rarity in
+                    Text(text("hades.rarity.\(rarity)")).tag(rarity)
+                }
+            }
+            .labelsHidden()
+            .trainerPicker(.compactValue, state: model.canEditIntent ? .interactive : .unavailable)
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
+            TrainerToggleControl(
+                title: text(HadesFeature.boonRarityEnabled.key),
+                isOn: model.isEnabled(.boonRarityEnabled),
+                enabled: controlState.isInteractive,
+                helpText: controlState.helpText,
+                tint: controlState.indicatorColor,
+                onChange: { model.setFeature(.boonRarityEnabled, value: $0) }
+            )
+        }
+        .trainerGroupedRows()
+    }
+
     private var boonsSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.boons.titleKey),
                        icon: HadesWorkbenchSection.boons.icon) {
-            TrainerFeatureToggleRow(
-                title: text(HadesFeature.boonRarityEnabled.key),
-                icon: HadesFeature.boonRarityEnabled.icon,
-                state: state(.boonRarityEnabled),
-                shortcutText: model.shortcutText(.boonRarityEnabled)
-            ) {
-                model.setFeature(.boonRarityEnabled, value: !model.isEnabled(.boonRarityEnabled))
-            }
-            .trainerGroupedRows()
+            boonRarityPanel
             HadesCurrentTraitsPanel(model: model)
             HadesCatalogView(model: model)
         }
@@ -578,10 +602,12 @@ private struct HadesCurrentTraitsPanel: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var search = ""
     @State private var selection = ""
+    @State private var selectedTraitName = ""
 
     private func text(_ key: String) -> String {
         HadesPresentation.text(key, language: localization.language)
     }
+
     private var matches: [HadesCurrentTrait] {
         let words = search.lowercased().split(whereSeparator: \.isWhitespace)
         guard !words.isEmpty else { return model.traits }
@@ -593,36 +619,60 @@ private struct HadesCurrentTraitsPanel: View {
             return words.allSatisfy { searchable.contains($0) }
         }
     }
-    private var selected: HadesCurrentTrait? { matches.first { $0.instanceId == selection } }
+
+    private var selected: HadesCurrentTrait? {
+        matches.first { $0.instanceId == selection }
+    }
+
+    private func pickerLabel(_ trait: HadesCurrentTrait) -> String {
+        [
+            model.traitName(trait, language: localization.language),
+            text("hades.level") + " " + String(trait.level),
+            text("hades.rarity.\(trait.rarity)"),
+        ].joined(separator: " · ")
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
                 Label(text("hades.currentTraits"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
-                Spacer()
-                TrainerSearchField(text: $search, placeholder: text("hades.search"),
-                                   clearLabel: localization.localized("host.search.clear"))
-                    .frame(maxWidth: 240)
-            }
-            Picker(text("hades.currentTraits"), selection: $selection) {
-                if matches.isEmpty {
-                    Text(text("hades.emptyTraits")).tag("")
+                    .fixedSize()
+
+                Picker(text("hades.currentTraits"), selection: $selection) {
+                    if matches.isEmpty {
+                        Text(text("hades.emptyTraits")).tag("")
+                    }
+                    ForEach(matches) { trait in
+                        Text(pickerLabel(trait)).tag(trait.instanceId)
+                    }
                 }
-                ForEach(matches) { trait in
-                    Text(model.traitName(trait, language: localization.language)
-                         + " · " + text("hades.rarity.\(trait.rarity)")).tag(trait.instanceId)
-                }
+                .labelsHidden()
+                .trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)
+
+                TrainerSearchField(
+                    text: $search,
+                    placeholder: text("hades.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(width: 240)
             }
-            .labelsHidden()
-            .trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)
+
             if let selected {
-                HadesCurrentTraitRow(model: model, trait: selected).id(selected.instanceId)
+                HadesCurrentTraitRow(model: model, trait: selected)
+                    .id(selected.instanceId)
             }
         }
         .trainerPanel()
         .onChange(of: matches.map(\.instanceId), initial: true) { _, ids in
-            if !ids.contains(selection) { selection = ids.first ?? "" }
+            guard !ids.contains(selection) else { return }
+            let replacement = matches.first { $0.name == selectedTraitName } ?? matches.first
+            selection = replacement?.instanceId ?? ""
+        }
+        .onChange(of: selection, initial: true) { _, identifier in
+            if let trait = matches.first(where: { $0.instanceId == identifier }) {
+                selectedTraitName = trait.name
+            }
         }
     }
 }
@@ -634,57 +684,107 @@ private struct HadesCurrentTraitRow: View {
     @State private var rarity: String
     @State private var level: String
     @State private var owner: HadesHeroTarget?
+
     private var entry: HadesCatalogEntry? { model.catalog.first { $0.id == trait.name } }
     private var rarities: [String] { entry?.rarities ?? [trait.rarity] }
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+
     init(model: HadesTrainerModel, trait: HadesCurrentTrait) {
-        self.model = model; self.trait = trait
-        _rarity = State(initialValue: trait.rarity); _level = State(initialValue: String(trait.level))
+        self.model = model
+        self.trait = trait
+        _rarity = State(initialValue: trait.rarity)
+        _level = State(initialValue: String(trait.level))
         _owner = State(initialValue: model.target)
     }
+
+    private var canApplyLevel: Bool {
+        guard model.canMutate, trait.canEdit, entry?.supportsLevel != false,
+              let amount = Int(level), (1...100).contains(amount) else { return false }
+        return amount != trait.level
+    }
+
+    private var canApplyRarity: Bool {
+        model.canMutate && trait.canEdit && rarities.contains(rarity) && rarity != trait.rarity
+    }
+
     var body: some View {
-        TrainerListCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(model.traitName(trait, language: localization.language)).font(.headline)
-                    Spacer()
-                    if !trait.canEdit {
-                        Text(text("hades.rarity.\(trait.rarity)")).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            if trait.canEdit {
+                HStack(spacing: 10) {
+                    if entry?.supportsLevel != false {
+                        Text(text("hades.level"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TrainerNumberField(
+                            text: $level,
+                            accessibilityLabel: text("hades.level"),
+                            width: 58,
+                            enabled: model.canMutate,
+                            onEditingChanged: { active in if active { owner = model.target } },
+                            onCommit: { completion in
+                                guard let amount = Int(completion.text), (1...100).contains(amount) else {
+                                    return completion.rejected(message: text("hades.error.invalidValue"))
+                                }
+                                return String(amount)
+                            }
+                        )
+                        TrainerSecondaryActionButton(
+                            title: text("hades.setLevel"),
+                            systemImage: TrainerSemanticIcon.Action.apply,
+                            enabled: canApplyLevel,
+                            widthRole: .compactRow
+                        ) {
+                            guard let amount = Int(level), (1...100).contains(amount) else {
+                                model.rejectInvalidValue()
+                                return
+                            }
+                            model.updateTrait(trait, rarity: trait.rarity, level: amount, target: owner)
+                        }
                     }
-                }
-                if trait.canEdit {
-                    HStack {
-                        Picker(text("hades.rarity"), selection: $rarity) {
-                            ForEach(rarities, id: \.self) { Text(text("hades.rarity.\($0)")).tag($0) }
-                        }
-                        .trainerPicker(.compactValue)
-                        if entry?.supportsLevel != false {
-                            Text(text("hades.level"))
-                            TrainerNumberField(text: $level, accessibilityLabel: text("hades.level"), width: 60,
-                                onCommit: { completion in
-                                    guard let amount = Int(completion.text), (1...100).contains(amount) else {
-                                        return completion.rejected(message: text("hades.error.invalidValue"))
-                                    }
-                                    return String(amount)
-                                })
-                        }
-                        Spacer()
-                        TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
-                            enabled: model.canMutate && (rarity != trait.rarity || level != String(trait.level))) {
-                            guard let amount = Int(level), (1...100).contains(amount) else { model.rejectInvalidValue(); return }
-                            model.updateTrait(trait, rarity: rarity, level: amount, target: owner)
+
+                    Text(text("hades.rarity"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker(text("hades.rarity"), selection: $rarity) {
+                        ForEach(rarities, id: \.self) {
+                            Text(text("hades.rarity.\($0)")).tag($0)
                         }
                     }
-                } else if !trait.limitation.isEmpty {
-                    Text(text("hades.limitation.\(trait.limitation)")).font(.caption).foregroundStyle(.secondary)
+                    .labelsHidden()
+                    .trainerPicker(.compactValue, state: model.canMutate ? .interactive : .unavailable)
+
+                    TrainerSecondaryActionButton(
+                        title: text("hades.setRarity"),
+                        systemImage: TrainerSemanticIcon.Action.apply,
+                        enabled: canApplyRarity,
+                        widthRole: .compactRow
+                    ) {
+                        model.updateTrait(trait, rarity: rarity, level: trait.level, target: owner)
+                    }
+
+                    if trait.canRemove {
+                        Button(role: .destructive) {
+                            model.removeTrait(trait)
+                        } label: {
+                            Text(text("hades.remove"))
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!model.canMutate)
+                    }
+                    Spacer(minLength: 0)
                 }
-                HadesEffectLifecycleControls(model: model, trait: trait)
+            } else if !trait.limitation.isEmpty {
+                Text(text("hades.limitation.\(trait.limitation)"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+
+            HadesEffectLifecycleControls(model: model, trait: trait)
         }
         .onChange(of: trait) { old, updated in
-            if rarity == old.rarity && level == String(old.level) {
-                rarity = updated.rarity; level = String(updated.level); owner = model.target
-            }
+            if rarity == old.rarity { rarity = updated.rarity }
+            if level == String(old.level) { level = String(updated.level) }
+            owner = model.target
         }
         .onChange(of: model.target) { _, target in
             if rarity == trait.rarity && level == String(trait.level) { owner = target }
