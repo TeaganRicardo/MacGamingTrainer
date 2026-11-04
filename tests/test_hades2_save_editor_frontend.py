@@ -1886,7 +1886,8 @@ struct Main {
 
         manualModel.selectedSourceID = "main/Profile2_Archive.sav"
         pumpUntil {
-            manualModel.workspaceID != nil && !manualModel.busy && manualModel.items.count == 1
+            manualModel.workspaceID != nil && !manualModel.busy && !manualModel.querying
+                && manualModel.total == 2 && manualModel.items.count == 2
         }
         guard let manualWorkspace = manualModel.workspaceID,
               manualModel.sourceRelativePath == "Profile2_Archive.sav",
@@ -1930,7 +1931,10 @@ struct Main {
         let backupModel = Hades2SaveEditorModel(session: session, snapshotID: "verified-backup")
         let beforeBackup = commands(at: commandLog).count
         backupModel.open(language: .en)
-        pumpUntil { !backupModel.busy && backupModel.items.count == 1 }
+        pumpUntil {
+            !backupModel.busy && !backupModel.querying
+                && backupModel.total == 2 && backupModel.items.count == 2
+        }
         guard let backupWorkspace = backupModel.workspaceID else { fail("backup workbench did not open") }
         if backupModel.sourceRootID != "main" || backupModel.sourceRelativePath != "Profile2_Temp.sav"
             || backupModel.sourceSHA256 != String(repeating: "a", count: 64)
