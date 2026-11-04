@@ -133,6 +133,19 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         else:
             raise AssertionError('invalid rarity target reached runtime')
     assert len(runtime.events) == calls and store.load()['boonRarityEnabled'] is True
+
+    connected_profile = dict(store.load())
+    connected_profile['boonRarityTarget'] = 'Epic'
+    connected_name = 'Connected Epic'
+    adapter.profiles.path(connected_name).write_text(json.dumps({
+        'schemaVersion': 1, 'gameID': 'hades', 'name': connected_name,
+        'updatedAt': '2026-11-04T00:00:01+00:00', 'features': connected_profile,
+    }))
+    profile_state = adapter.dispatch('load_profile', {'name': connected_name}, 'load-connected-profile')
+    assert profile_state['boonRarityTarget'] == 'Epic'
+    assert runtime.events[-1] == ('set_boon_rarity', {'target': 'Epic'})
+    assert store.load()['boonRarityTarget'] == 'Epic'
+
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
     state = adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 2.5}, 'speed-up')
