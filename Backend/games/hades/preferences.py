@@ -27,8 +27,10 @@ class HadesPreferenceStore:
             original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
                         'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
                         'attackSpeedMultiplier', 'dashBonus'}
+            previous_current = set(DEFAULT_PREFERENCES) - {'boonRarityTarget'}
             shipped = (original, original | {'boonRarityEnabled'},
-                       original | {'boonRarityEnabled', 'gameSpeed'})
+                       original | {'boonRarityEnabled', 'gameSpeed'},
+                       previous_current)
             if set(features) in shipped:
                 features = {**DEFAULT_PREFERENCES, **features}
         try:
