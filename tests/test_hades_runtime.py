@@ -403,6 +403,7 @@ runtime.set_boon_rarity("Heroic")
 local x2, empty, heroic = SetTraitsOnLoot(olympian, { ExclusionNames = { "OtherTrait" } })
 assert(x2 == "native" and empty == nil and heroic == "Heroic",
   "native Epic-capable boon was not upgraded to Heroic")
+assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
 runtime.set_boon_rarity("Common")
 local _, _, commonTarget = SetTraitsOnLoot(olympian)
 assert(commonTarget == "Common", "Common minimum should preserve natural rarity")
@@ -410,7 +411,6 @@ runtime.set_boon_rarity("Heroic")
 
 assert(olympian.RarityChances == original and original.Heroic == 0,
   "rarity override leaked to the native loot's persisted chances")
-assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
 local rerolled = { Name = "ZeusUpgrade",
   RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
   allowed = { Epic = true, Rare = true } }
