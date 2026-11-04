@@ -107,6 +107,32 @@ for hades_key, hades2_key in shared_labels.items():
             f"Hades II {hades2_key}={expected!r}"
         )
 
+# Equivalent Save Editor documents share the Hades II workbench shell. Each
+# module keeps its own schema/taxonomy and edit semantics behind that shell.
+hades_save = (ROOT / "Sources/Hades/HadesSaveEditorView.swift").read_text()
+hades2_save = (ROOT / "Sources/Hades2/Views/Hades2SaveEditorView.swift").read_text()
+for owner in (
+    "windowHeader", "documentSelection", "workbenchToolbar", "inlineResults",
+    "pagingControls", "reviewDrawer", "applyReceipt",
+):
+    assert f"private var {owner}" in hades_save or f"private func {owner}" in hades_save, (
+        f"Hades Save Editor missing Hades II shell owner: {owner}"
+    )
+    assert f"private var {owner}" in hades2_save or f"private func {owner}" in hades2_save, (
+        f"Hades II Save Editor shell owner disappeared: {owner}"
+    )
+assert "private enum ResultPhase: Equatable" in hades_save
+assert ".onChange(of: model.selectedSourceID)" in hades_save
+assert "reviewDrawer.frame(height: 240)" in hades_save
+assert ".trainerSurface(.panel)" in hades_save
+
+hades_workbench = hades_save.split("private var workbenchToolbar:", 1)[1].split(
+    "private var owners:", 1
+)[0]
+assert hades_workbench.index("TrainerSearchField(") < hades_workbench.index("Picker("), (
+    "Hades Save Editor reverted to domain-first navigation instead of Hades II search-first workbench"
+)
+
 hades2_presentation = (ROOT / "Sources/Hades2/Presentation/Hades2Presentation.swift").read_text()
 # Run the unmodified Swift source in a temporary repository whose manifest
 # points elsewhere. Source fallback must follow the manifest's reference owner.
