@@ -315,6 +315,14 @@ assert 'title: text("hades.setLevel")' in hades_view
 assert 'title: text("hades.setRarity")' in hades_view
 assert 'TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))' in hades_view
 assert 'TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))' in hades_view
+hades_lifecycle = (ROOT / "Sources/Hades/HadesBoonLifecycle.swift").read_text()
+hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[1].split(
+    "private struct HadesShortcutSettingsView:", 1
+)[0]
+hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:", 1)[1]
+assert hades_current_row.count("model.removeTrait(trait)") == 1
+assert "model.removeTrait(trait)" not in hades_contextual
+assert ".frame(width: 132)" in hades_current_row
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
