@@ -271,6 +271,32 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         def save(self, features):
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
 
+    # Health pair rollback uses the same durable-owner contract as scalar locks.
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': True, 'target': owner}, 'lock-health-before-edit-failure'
+    )
+    previous_health_lock = dict(store.load()['healthLock'])
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'set_value', {'field': 'health', 'value': previous_health_lock['current'] - 1, 'target': owner},
+            'locked-health-edit-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed health-lock edit persistence was presented as success')
+    assert runtime.state['healthLock'] == previous_health_lock
+    assert runtime.state['health'] == previous_health_lock['current']
+    assert runtime.state['maxHealth'] == previous_health_lock['max'], (
+        'failed health-lock edit did not restore the previous native pair'
+    )
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': False, 'target': owner}, 'unlock-health-after-rollback'
+    )
+
     adapter.preferences = RejectingLockPreferences()
     before_lock_failure = dict(runtime.state)
     try:
