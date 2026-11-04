@@ -281,6 +281,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         if action == .generateFishing { generateFishing() }
         else if action == .generateChaosGate { generateChaosGate() }
+        else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
+            let delta = action == .decreaseGameSpeed ? -0.1 : 0.1
+            let current = number(.gameSpeed)
+            let next = min(10.0, max(0.0, (current + delta) * 10.0).rounded() / 10.0)
+            guard abs(next - current) >= 0.0001 else {
+                TrainerHotkeyFeedbackPlayer.play(.rejected)
+                return
+            }
+            setFeature(.gameSpeed, value: next)
+        }
         else if action == .disableAll { disableAll() }
         else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
     }
