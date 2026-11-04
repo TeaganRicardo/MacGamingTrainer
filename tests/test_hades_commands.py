@@ -19,7 +19,10 @@ class Runtime:
         self.state = {'connected': True, 'pid': 42, 'heroReady': True,
                       'heroId': 'generation:run:hero', 'target': {'heroId': 'generation:run:hero'},
                       'features': dict(DEFAULT_FEATURES), 'health': 50, 'maxHealth': 100,
-                      'money': 25, 'resources': {}, 'traits': [], 'invincible': False}
+                      'money': 25, 'rerolls': 3,
+                      'moneyLocked': False, 'moneyLock': None,
+                      'rerollsLocked': False, 'rerollsLock': None,
+                      'resources': {}, 'traits': [], 'invincible': False}
 
     def connect(self, pid, executable, features=None):
         self.events.append(('connect', features))
@@ -46,10 +49,42 @@ class Runtime:
         self.events.append((name, params))
         if name == 'set_feature':
             self.state['features'][params['feature']] = params['value']
+            if params['feature'] == 'moneyNoDecrease' and params['value']:
+                self.state['moneyLocked'] = False
+                self.state['moneyLock'] = None
+            if params['feature'] == 'rerollsNoDecrease' and params['value']:
+                self.state['rerollsLocked'] = False
+                self.state['rerollsLock'] = None
+        if name == 'configure_locks':
+            self.state['moneyLock'] = params.get('money')
+            self.state['moneyLocked'] = params.get('money') is not None
+            self.state['rerollsLock'] = params.get('rerolls')
+            self.state['rerollsLocked'] = params.get('rerolls') is not None
+            if self.state['moneyLocked']:
+                self.state['money'] = self.state['moneyLock']
+            if self.state['rerollsLocked']:
+                self.state['rerolls'] = self.state['rerollsLock']
+        if name == 'lock_resource':
+            assert params['resource'] == 'Money'
+            self.state['moneyLocked'] = params['locked']
+            self.state['moneyLock'] = self.state['money'] if params['locked'] else None
+        if name == 'lock_rerolls':
+            self.state['rerollsLocked'] = params['locked']
+            self.state['rerollsLock'] = self.state['rerolls'] if params['locked'] else None
+        if name == 'set_value':
+            self.state[params['field']] = params['value']
+            if params['field'] == 'money' and self.state['moneyLocked']:
+                self.state['moneyLock'] = params['value']
+            if params['field'] == 'rerolls' and self.state['rerollsLocked']:
+                self.state['rerollsLock'] = params['value']
         if name == 'set_boon_rarity':
             self.state['boonRarityTarget'] = params['target']
         if name == 'disable_all':
             self.state['features'] = dict(DEFAULT_FEATURES)
+            self.state['moneyLocked'] = False
+            self.state['moneyLock'] = None
+            self.state['rerollsLocked'] = False
+            self.state['rerollsLock'] = None
         return self.status()
 
     def disconnect(self):
@@ -75,13 +110,25 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **legacy}, 'original preferences did not migrate'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
     assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
-    previous_current = {name: value for name, value in DEFAULT_PREFERENCES.items()
-                        if name != 'boonRarityTarget'}
+    previous_before_rarity_target = {
+        name: value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'boonRarityTarget', 'moneyLock', 'rerollsLock'}
+    }
+    previous_before_rarity_target['boonRarityEnabled'] = True
+    previous_before_rarity_target['gameSpeed'] = 2.0
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_before_rarity_target}))
+    assert store.load() == {**DEFAULT_PREFERENCES, **previous_before_rarity_target}, (
+        'older schema-1 preferences did not acquire the neutral rarity/lock targets'
+    )
+    previous_current = {
+        name: value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'moneyLock', 'rerollsLock'}
+    }
     previous_current['boonRarityEnabled'] = True
-    previous_current['gameSpeed'] = 2.0
+    previous_current['boonRarityTarget'] = 'Rare'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_current}))
     assert store.load() == {**DEFAULT_PREFERENCES, **previous_current}, (
-        'immediately previous schema-1 preferences did not acquire the new neutral rarity target'
+        'immediately previous schema-1 preferences did not acquire neutral fixed locks'
     )
 
     adapter.profiles.root.mkdir(parents=True, exist_ok=True)
@@ -91,8 +138,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'updatedAt': '2026-11-04T00:00:00+00:00', 'features': previous_current,
     }))
     loaded_profile = adapter.dispatch('load_profile', {'name': profile_name}, 'load-previous-profile')
-    assert loaded_profile['boonRarityTarget'] == 'Heroic'
-    assert store.load()['boonRarityTarget'] == 'Heroic'
+    assert loaded_profile['boonRarityTarget'] == 'Rare'
+    assert loaded_profile['moneyLock'] is None and loaded_profile['rerollsLock'] is None
+    assert store.load()['moneyLock'] is None and store.load()['rerollsLock'] is None
     assert runtime.events == []
 
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
@@ -115,6 +163,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert connect_features['boonRarityEnabled'] is True
     assert 'boonRarityTarget' not in connect_features
     assert 'gameSpeed' not in connect_features
+    assert ('configure_locks', {'money': None, 'rerolls': None}) in runtime.events
     assert ('set_boon_rarity', {'target': 'Rare'}) in runtime.events
     assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
@@ -146,6 +195,30 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert profile_state['boonRarityTarget'] == 'Epic'
     assert ('set_boon_rarity', {'target': 'Epic'}) in runtime.events[before_profile_events:]
     assert store.load()['boonRarityTarget'] == 'Epic'
+
+    owner = {'heroId': 'generation:run:hero'}
+    locked_money = adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money'
+    )
+    assert locked_money['moneyLocked'] is True and locked_money['moneyLock'] == 25
+    assert store.load()['moneyLock'] == 25
+    adapter.dispatch('set_value', {'field': 'money', 'value': 44, 'target': owner}, 'edit-locked-money')
+    assert store.load()['moneyLock'] == 44 and runtime.state['moneyLock'] == 44
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-money'
+    )
+    assert store.load()['moneyLock'] is None
+
+    locked_rerolls = adapter.dispatch(
+        'lock_rerolls', {'locked': True, 'target': owner}, 'lock-rerolls'
+    )
+    assert locked_rerolls['rerollsLocked'] is True and locked_rerolls['rerollsLock'] == 3
+    assert store.load()['rerollsLock'] == 3
+    adapter.dispatch('set_value', {'field': 'rerolls', 'value': 7, 'target': owner}, 'edit-locked-rerolls')
+    assert store.load()['rerollsLock'] == 7 and runtime.state['rerollsLock'] == 7
+    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': True}, 'infinite-rerolls')
+    assert store.load()['rerollsLock'] is None and runtime.state['rerollsLocked'] is False
+    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': False}, 'normal-rerolls')
 
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
