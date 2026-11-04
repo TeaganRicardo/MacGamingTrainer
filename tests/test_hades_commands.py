@@ -105,6 +105,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 1.5}, 'speed-offline')
     assert runtime.events == []
     assert detached['boonRarityTarget'] == 'Rare'
+    assert 'boonRarityTarget' not in detached['features']
     assert store.load()['boonRarityTarget'] == 'Rare'
     assert store.load()['boonRarityEnabled'] is True
     assert store.load()['gameSpeed'] == 1.5
