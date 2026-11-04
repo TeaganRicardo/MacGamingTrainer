@@ -892,6 +892,22 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("active save_editor inventory/open/query replies: pinned workspace, initial rows, editor idle") { editor.workspaceID != nil && !editor.busy && !editor.queryLoading && !editor.rows.isEmpty }
         check(editor.source?.kind == "currentFile" && editor.source?.relativePath == "Profile1.sav",
             "active editor did not pin the explicitly read file")
+        guard let profile1 = editor.sources.first(where: { $0.relativePath == "Profile1.sav" }),
+              let profile2 = editor.sources.first(where: { $0.relativePath == "Profile2.sav" }) else {
+            fatalError("Save Editor source fixtures missing")
+        }
+        let firstWorkspace = editor.workspaceID
+        editor.selectedSourceID = profile2.id
+        pump()
+        wait("source picker automatically reads Profile2") {
+            !editor.busy && !editor.queryLoading && editor.source?.relativePath == "Profile2.sav"
+                && editor.workspaceID != firstWorkspace
+        }
+        editor.selectedSourceID = profile1.id
+        pump()
+        wait("source picker automatically reads Profile1") {
+            !editor.busy && !editor.queryLoading && editor.source?.relativePath == "Profile1.sav"
+        }
         let pinnedWorkspace = editor.workspaceID
         let pinnedSHA = editor.sourceSHA256
         let reopenedWindow = tools.open(id:"hades-save-editor",title:"Hades Save Editor",localization:localization,theme:.standard) {
