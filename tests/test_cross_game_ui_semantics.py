@@ -236,8 +236,14 @@ assert "locked: model.moneyLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.moneyNoDecrease)" in run_data
 assert "locked: model.rerollsLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.rerollsNoDecrease)" in run_data
+assert "model.healthLocked" in hades_view
+assert "model.lockHealth(!model.healthLocked)" in hades_view
 assert "field: \"godGauge\"" in run_data
-assert "TrainerLockButton(" in hades2_view
+assert "locked: model.healthLocked" in hades2_view
+assert "locked: model.moneyLocked" in hades2_view
+assert "locked: model.rerollsLocked" in hades2_view
+metric_grid = (ROOT / "Sources/Core/UI/Components/TrainerMetricGrid.swift").read_text()
+assert "TrainerLockButton(" in metric_grid
 
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
