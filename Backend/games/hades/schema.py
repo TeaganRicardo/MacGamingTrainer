@@ -76,3 +76,19 @@ def preference_document(values):
     if not isinstance(values, dict) or set(values) != set(DEFAULT_PREFERENCES):
         raise invalid_value()
     return {name: preference_value(name, value) for name, value in values.items()}
+
+
+def migrate_preference_document(values):
+    """Accept only exact shipped schema-1 feature sets, filling new neutral defaults."""
+    if not isinstance(values, dict):
+        raise invalid_value()
+    original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
+                'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
+                'attackSpeedMultiplier', 'dashBonus'}
+    previous_current = set(DEFAULT_PREFERENCES) - {'boonRarityTarget'}
+    shipped = (original, original | {'boonRarityEnabled'},
+               original | {'boonRarityEnabled', 'gameSpeed'},
+               previous_current)
+    if set(values) in shipped:
+        values = {**DEFAULT_PREFERENCES, **values}
+    return preference_document(values)
