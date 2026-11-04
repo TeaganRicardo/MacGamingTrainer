@@ -797,9 +797,17 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(field.stringValue=="31","unfocused native value did not refresh")
         // Drive the actual field editor, then the actual native rarity popup.
         // These are input/selection checks on a synthetic worker, not gameplay.
+        func nativeEditor(_ field: NSTextField, _ failure: String) -> NSTextView {
+            check(window.makeFirstResponder(field), failure + " refused focus")
+            field.selectText(nil)
+            pump(0.02)
+            guard let editor = field.currentEditor() as? NSTextView else {
+                fatalError(failure + " did not establish its AppKit field editor")
+            }
+            return editor
+        }
         func enterNative(_ value: String) -> NSTextView {
-            check(window.makeFirstResponder(field), "Hades I numeric field refused focus")
-            let editor=field.currentEditor() as! NSTextView
+            let editor=nativeEditor(field, "Hades I numeric field")
             editor.selectAll(nil); editor.insertText(value,replacementRange:editor.selectedRange())
             return editor
         }
@@ -905,8 +913,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("Hades I selected-catalog native inputs missing")
         }
         let beforeSelection=commands().count
-        check(window.makeFirstResponder(oldLevel), "catalog level refused focus")
-        let levelEditor=oldLevel.currentEditor() as! NSTextView
+        let levelEditor=nativeEditor(oldLevel, "catalog level")
         levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
         // Native menu input can also begin through accessibility. Replacing
         // selection while its field still edits must retire the old identity.
