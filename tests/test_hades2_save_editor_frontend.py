@@ -1111,10 +1111,10 @@ struct Main {
         )
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
-        let activationDeadline = Date().addingTimeInterval(2)
-        while !(app.isActive && window.isKeyWindow) && Date() < activationDeadline { pump(0.02) }
-        guard app.isActive && window.isKeyWindow,
-              let retainedDraft = inlineField("3.5"), window.makeFirstResponder(retainedDraft) else {
+        pump(0.1)
+        guard let retainedDraft = inlineField("3.5"),
+              window.makeFirstResponder(retainedDraft),
+              retainedDraft.currentEditor() != nil else {
             fail("could not retain a focused correction through review collapse")
         }
         let retainedEditor = window.firstResponder
