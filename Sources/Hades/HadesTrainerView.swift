@@ -599,6 +599,7 @@ private struct HadesCatalogView: View {
                     TrainerNumberField(
                         text: $level,
                         accessibilityLabel: text("hades.level"),
+                        accessibilityIdentifier: "hades.catalog.level",
                         width: 60,
                         enabled: selected?.supportsLevel == true && model.canMutate,
                         onCommit: { completion in
@@ -609,7 +610,6 @@ private struct HadesCatalogView: View {
                         }
                     )
                     .id(selected?.id ?? "")
-                    .accessibilityIdentifier("hades.catalog.level")
                 }
 
                 Spacer()
@@ -907,6 +907,7 @@ private struct HadesCurrentTraitRow: View {
                     TrainerNumberField(
                         text: $level,
                         accessibilityLabel: text("hades.level"),
+                        accessibilityIdentifier: "hades.currentTrait.level",
                         width: 58,
                         enabled: model.canMutate && trait.canEdit && entry?.supportsLevel != false,
                         onEditingChanged: { active in if active { owner = model.target } },
@@ -917,7 +918,6 @@ private struct HadesCurrentTraitRow: View {
                             return String(amount)
                         }
                     )
-                    .accessibilityIdentifier("hades.currentTrait.level")
                     TrainerSecondaryActionButton(
                         title: text("hades.setLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
