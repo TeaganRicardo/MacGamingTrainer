@@ -34,8 +34,10 @@ WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
 ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
-MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_boon_rarity', 'set_invincibility',
-                                       'configure', 'disable_all'}
+MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
+    'set_feature', 'set_boon_rarity', 'set_invincibility', 'configure',
+    'configure_locks', 'lock_resource', 'lock_rerolls', 'disable_all',
+}
 
 
 def invalid_value():
