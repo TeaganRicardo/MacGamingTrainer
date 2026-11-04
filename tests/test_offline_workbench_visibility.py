@@ -17,9 +17,22 @@ def source(path):
 hades = source("Sources/Hades/HadesTrainerView.swift")
 rooms = source("Sources/Hades/HadesRoomsPanel.swift")
 hades2 = source("Sources/Hades2/Hades2View.swift")
+hades_model = source("Sources/Hades/HadesModule.swift")
+hades_adapter = source("Backend/games/hades/adapter.py")
 
 for label, view in (("Hades", hades), ("Hades rooms", rooms), ("Hades II", hades2)):
     assert not re.search(r"\bif\s*!?\s*model\.connected\s*\{", view), label
+
+# Durable Hades I desired state follows the Hades II detached-edit contract.
+assert "var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible }" in hades_model
+set_feature = hades_adapter.split("if command == 'set_feature':", 1)[1].split("if command == 'disable_all':", 1)[0]
+assert "raise AdapterError('not_connected'" not in set_feature
+hades_speed = hades.split("private var gameSpeedPanel: some View {", 1)[1].split("private var boonRarityPanel:", 1)[0]
+assert "enabled: model.canEditIntent" in hades_speed
+assert "enabled: model.canEditIntent && pageVisible" in hades_speed
+boon_policy = hades.split("private var boonRarityPanel: some View {", 1)[1].split("private var boonsSection:", 1)[0]
+assert 'ForEach(["Common", "Rare", "Epic", "Heroic"]' in boon_policy
+assert "model.boonRarityTarget" in boon_policy
 
 # Both modules keep current-run management selectors visible without live data.
 traits = hades.split("private struct HadesCurrentTraitsPanel:", 1)[1].split("private struct HadesCurrentTraitRow:", 1)[0]
