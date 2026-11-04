@@ -1361,6 +1361,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let editorRequests=commands().filter { ($0["command"] as? String)?.hasPrefix("save_editor_") == true }
         check(editorRequests.allSatisfy { $0["fixtureGame"] as? String == "hades" },"Save Editor crossed its game context")
         backup.close();check(backup.workspaceID == nil,"closing a backup retained its workspace identity")
+
+        // Hades I follows the Hades II document-selection contract: choosing
+        // another source in the mounted Picker opens that document directly.
+        // The model property alone is intentionally insufficient; the mounted
+        // Save Editor shell owns the user interaction and confirmation policy.
+        let sourceSwapWorkspace = editor.workspaceID
+        guard let profile2 = editor.sources.first(where: { $0.relativePath == "Profile2.sav" }) else {
+            fatalError("second Hades save source missing from editor inventory")
+        }
+        editor.selectedSourceID = profile2.id
+        wait("source Picker opens Profile2 directly") {
+            editor.workspaceID != sourceSwapWorkspace && editor.source?.relativePath == "Profile2.sav"
+                && !editor.busy && !editor.queryLoading && !editor.rows.isEmpty
+        }
+        check(editor.review.count == 0,
+              "source Picker carried staged changes into the replacement document")
+
         editorWindow.performClose(nil);pump()
         check(editor.workspaceID == nil,"Host close did not release the active editor")
         wait("active save_editor_close received by worker for the originally pinned workspace") {
