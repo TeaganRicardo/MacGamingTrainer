@@ -1519,7 +1519,7 @@ assert(unit.MaxHealth == 1017 and unit.Health == 16,
 runtime.set_feature("invincibility", true)
 runtime.set_feature("damageMultiplier", 3)
 runtime.disable_all()
-assert(unit.MaxHealth == 1017 and unit.Health == 17, "Disable All reverted a committed numeric edit")
+assert(unit.MaxHealth == 1017 and unit.Health == 16, "Disable All reverted a committed numeric edit")
 Save()
 for _, trait in pairs(savedState.run.Hero.Traits) do
   assert(TraitData[trait.Name], "numeric persistence requires a Trainer-only trait definition")
@@ -1529,7 +1529,7 @@ local liveRun = CurrentRun
 CurrentRun = copy(savedState.run)
 CurrentRun.Hero.MaxHealth = 1
 ValidateMaxHealth(true)
-assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 17,
+assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 16,
   "native recomputation of the saved run required Trainer state")
 CurrentRun = liveRun
 
