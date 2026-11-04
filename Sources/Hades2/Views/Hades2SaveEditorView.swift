@@ -23,7 +23,6 @@ struct Hades2SaveEditorView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     @State private var section: Hades2SaveWorkbenchSection = .all
-    @State private var drafts: [String: String] = [:]
     @State private var confirmingSource = false
     @State private var advancedEditingEntry: Hades2SaveEditorEntry?
 
@@ -182,18 +181,7 @@ struct Hades2SaveEditorView: View {
             if model.pendingCount > 0 { confirmingSource = true }
             else { model.openSelection() }
         }
-        .onChange(of: model.editRevision) { _, _ in
-            if let entryIDs = model.reconciledEntryIDs {
-                for entryID in entryIDs {
-                    drafts.removeValue(forKey: entryID)
-                }
-            } else {
-                drafts.removeAll()
-            }
-        }
-        .onChange(of: model.baselineGeneration) { previous, _ in
-            if previous != nil { drafts = drafts.filter { model.continuousDraftEntryIDs.contains($0.key) } }
-            else { drafts.removeAll() }
+        .onChange(of: model.baselineGeneration) { _, _ in
             advancedEditingEntry = nil
             section = .all
         }
@@ -838,9 +826,8 @@ struct Hades2SaveEditorView: View {
     private func draftBinding(for entry: Hades2SaveEditorEntry) -> Binding<String> {
         let workspaceID = model.workspaceID
         return Binding(
-            get: { drafts[entry.id] ?? valueText(stagedValue(for: entry)) },
+            get: { model.textDrafts[entry.id] ?? valueText(stagedValue(for: entry)) },
             set: { if model.workspaceID == workspaceID && entry.baselineGeneration == model.baselineGeneration {
-                drafts[entry.id] = $0
                 model.retainTextDraft($0, for: entry)
             } }
         )
