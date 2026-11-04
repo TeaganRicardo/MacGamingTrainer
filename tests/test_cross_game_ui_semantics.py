@@ -125,6 +125,9 @@ for owner in (
     )
 assert "private enum ResultPhase: Equatable" in hades_save
 assert ".onChange(of: model.selectedSourceID)" in hades_save
+assert "if model.review.count > 0" in hades_save
+assert "confirmingSource = true" in hades_save
+assert "model.selectedSourceID = loadedSourceID" in hades_save
 assert "reviewDrawer.frame(height: 240)" in hades_save
 assert ".trainerSurface(.panel)" in hades_save
 
