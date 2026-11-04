@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 7 then error("hades.error.restartRequired") end
+  if existing.revision ~= 8 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 7,
+  version = 1, revision = 8,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -48,6 +48,16 @@ local function requireHero()
 end
 local function sameOwner(run, unit)
   return CurrentRun == run and hero() == unit
+end
+local function healthLockValid(lock)
+  return type(lock) == "table" and finite(lock.current) and finite(lock.max)
+    and lock.current >= 1 and lock.max >= 1 and lock.current <= lock.max
+end
+local function enforceHealthLock(unit)
+  local lock = runtime.healthLock
+  if not unit or not healthLockValid(lock) then return end
+  unit.MaxHealth = lock.max
+  unit.Health = math.min(lock.current, lock.max)
 end
 local function instanceId(trait)
   if not runtime.instanceIds[trait] then
@@ -200,6 +210,10 @@ local function mount(unit, rebuilt)
   mountIncomingDamage(unit)
   refillAmmo(unit)
   if desired.fullHealth and not unit.IsDead then unit.Health = unit.MaxHealth; UpdateHealthUI() end
+  if healthLockValid(runtime.healthLock) and not unit.IsDead then
+    enforceHealthLock(unit)
+    UpdateHealthUI()
+  end
   local damage = damageModifier(unit)
   if desired.damageMultiplier == 1 then
     if damage then removeDamageModifier(unit) end
@@ -507,16 +521,48 @@ local function installHooks()
   end
   hook("Damage", function(original)
     return function(victim, args, ...)
-      local unit = hero()
-      if runtime.features.fullHealth and unit and victim == unit and not unit.IsDead then
-        -- Combat.lua clamps to MinHealth before checking Death Defiance/death.
-        -- Only this hero's damage call receives the temporary life floor.
+      local run, unit = CurrentRun, hero()
+      if unit and victim == unit and not unit.IsDead
+          and (healthLockValid(runtime.healthLock) or runtime.features.fullHealth) then
+        -- Preserve native damage bookkeeping while preventing the locked/full
+        -- health owner from crossing its requested floor.
         local parameters = {}
         for key, value in pairs(args) do parameters[key] = value end
-        parameters.MinHealth = unit.MaxHealth
-        return original(victim, parameters, ...)
+        parameters.MinHealth = healthLockValid(runtime.healthLock)
+          and runtime.healthLock.current or unit.MaxHealth
+        local result = table.pack(original(victim, parameters, ...))
+        if sameOwner(run, unit) and healthLockValid(runtime.healthLock) then
+          enforceHealthLock(unit)
+        end
+        return table.unpack(result, 1, result.n)
       end
       return original(victim, args, ...)
+    end
+  end)
+  hook("Heal", function(original)
+    return function(unit, args, ...)
+      local run, owner = CurrentRun, hero()
+      local result = table.pack(original(unit, args, ...))
+      if owner and unit == owner and sameOwner(run, owner) and healthLockValid(runtime.healthLock) then
+        enforceHealthLock(owner)
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("ValidateMaxHealth", function(original)
+    return function(blockHealing, ...)
+      local run, unit = CurrentRun, hero()
+      local locked = unit and healthLockValid(runtime.healthLock)
+      local result = table.pack(original(locked and true or blockHealing, ...))
+      if locked and sameOwner(run, unit) then enforceHealthLock(unit) end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("UpdateHealthUI", function(original)
+    return function(...)
+      local unit = hero()
+      if unit and healthLockValid(runtime.healthLock) then enforceHealthLock(unit) end
+      return original(...)
     end
   end)
   for _, name in ipairs({ "UpdateAmmoUI", "UpdateGunUI" }) do
@@ -739,6 +785,7 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
+    healthLocked = healthLockValid(runtime.healthLock), healthLock = runtime.healthLock,
     moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
     rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
     features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
@@ -787,7 +834,10 @@ function runtime.set_boon_rarity(target)
   runtime.boonRarityTarget = target
   return runtime.status()
 end
-function runtime.configure_locks(money, rerolls)
+function runtime.configure_locks(health, money, rerolls)
+  if health ~= nil then
+    assert(healthLockValid(health), "hades.error.invalidValue")
+  end
   if money ~= nil then
     assert(finite(money) and money == math.floor(money) and money >= 0 and money <= 1000000000,
       "hades.error.invalidValue")
@@ -799,9 +849,29 @@ function runtime.configure_locks(money, rerolls)
     assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
   end
   installHooks()
+  runtime.healthLock = health and { current = health.current, max = health.max } or nil
   runtime.moneyLock, runtime.rerollsLock = money, rerolls
   local unit = hero()
   if unit then mount(unit, false) end
+  return runtime.status()
+end
+function runtime.lock_vital(name, locked)
+  local unit = requireHero()
+  assert(name == "health" and type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(finite(unit.Health) and finite(unit.MaxHealth) and unit.Health >= 1
+      and unit.MaxHealth >= 1 and unit.Health <= unit.MaxHealth, "hades.error.invalidValue")
+    runtime.healthLock = { current = unit.Health, max = unit.MaxHealth }
+    enforceHealthLock(unit)
+    UpdateHealthUI()
+  else
+    runtime.healthLock = nil
+    -- Restore the game's trait/mirror-owned maximum without retroactively
+    -- healing damage that was suppressed while the lock was active.
+    ValidateMaxHealth(true)
+    unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
+    UpdateHealthUI()
+  end
   return runtime.status()
 end
 function runtime.lock_resource(name, locked)
@@ -838,6 +908,7 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  runtime.healthLock = nil
   runtime.moneyLock, runtime.rerollsLock = nil, nil
   restoreRerollDoors()
   local unit = hero()
@@ -850,11 +921,13 @@ function runtime.set_value(field, value)
   if field == "health" then
     assert(value >= 1 and value <= unit.MaxHealth, "hades.error.invalidValue")
     unit.Health = value
+    if healthLockValid(runtime.healthLock) then runtime.healthLock.current = value end
     UpdateHealthUI()
   elseif field == "maxHealth" then
     assert(value >= 1, "hades.error.invalidValue")
     local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
     assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
+    local activeLock = healthLockValid(runtime.healthLock) and runtime.healthLock or nil
     local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
     if change ~= 0 then
       local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
@@ -862,11 +935,22 @@ function runtime.set_value(field, value)
       -- ApplyUnitPropertyChange clamps health before its multiplier-aware
       -- validation. Keep that intermediate maximum positive on large decreases.
       unit.MaxHealth = math.max(unit.MaxHealth, value - change)
-      AddTraitToHero({ TraitData = trait })
+      if activeLock then runtime.healthLock = nil end
+      local result = table.pack(pcall(AddTraitToHero, { TraitData = trait }))
+      if activeLock then runtime.healthLock = activeLock end
+      if not result[1] then error(result[2], 0) end
     else
-      ValidateMaxHealth(true)
+      if activeLock then runtime.healthLock = nil end
+      local result = table.pack(pcall(ValidateMaxHealth, true))
+      if activeLock then runtime.healthLock = activeLock end
+      if not result[1] then error(result[2], 0) end
     end
-    unit.Health = math.max(0, math.min(unit.Health, unit.MaxHealth))
+    unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
+    if activeLock then
+      activeLock.max = value
+      activeLock.current = math.min(activeLock.current, value)
+      enforceHealthLock(unit)
+    end
     UpdateHealthUI()
   elseif field == "godGauge" then
     assert(not unit.SuperActive and finite(unit.SuperMeterLimit) and value <= unit.SuperMeterLimit,
