@@ -670,6 +670,21 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("game speed increase shortcut reply") {
             !model.busy && abs(model.number(.gameSpeed) - min(10.0, speedBefore + 0.1)) < 0.0001
         }
+        let retainedSpeed = model.number(.gameSpeed)
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(
+            isRunning: false, launchGeneration: 1, processIdentifier: nil
+        ))
+        check(!model.connected && !model.heroReady && model.boonRarityTarget == "Epic"
+              && abs(model.number(.gameSpeed) - retainedSpeed) < 0.0001
+              && model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber == nil,
+              "target loss erased desired feature state or retained stale speed observation")
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(
+            isRunning: true, launchGeneration: 2, processIdentifier: 42
+        ))
+        model.refreshFromHost()
+        wait("status after target replacement restores runtime observation") {
+            model.connected && !model.busy && model.boonRarityTarget == "Epic"
+        }
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
