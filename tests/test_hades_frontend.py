@@ -178,6 +178,11 @@ for raw in sys.stdin:
         if command=='set_boon_rarity':
             state['boonRarityTarget']=params['target']
             (folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_vital':
+            assert params.get('vital')=='health'
+            state['healthLocked']=bool(params['locked'])
+            state['healthLock']={'current':state['health'],'max':state['maxHealth']} if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
         if command=='lock_resource':
             assert params.get('resource')=='Money'
             state['moneyLocked']=bool(params['locked'])
@@ -189,6 +194,9 @@ for raw in sys.stdin:
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_value':
             state[params['field']]=params['value']
+            if params['field'] in ('health','maxHealth') and state.get('healthLocked'):
+                state['health']=min(state['health'],state['maxHealth'])
+                state['healthLock']={'current':state['health'],'max':state['maxHealth']}
             if params['field']=='money' and state.get('moneyLocked'):state['moneyLock']=params['value']
             if params['field']=='rerolls' and state.get('rerollsLocked'):state['rerollsLock']=params['value']
             (folder/'state.json').write_text(json.dumps(state))
@@ -706,6 +714,24 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("status after target replacement restores runtime observation") {
             model.connected && !model.busy && model.boonRarityTarget == "Epic"
         }
+
+        let beforeHealthLocks = commands().filter { $0["command"] as? String == "lock_vital" }.count
+        model.lockHealth(true)
+        wait("fixed health lock reply") {
+            !model.busy && model.healthLocked
+                && commands().filter { $0["command"] as? String == "lock_vital" }.count == beforeHealthLocks + 1
+        }
+        let healthLockArgs = commands().last { $0["command"] as? String == "lock_vital" }?["params"] as? [String:Any]
+        check(healthLockArgs?["vital"] as? String == "health"
+              && healthLockArgs?["locked"] as? Bool == true
+              && (healthLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed health lock lost its current hero owner")
+        model.setValue("health", value: 42, target: model.target)
+        wait("fixed health current edit reply") { !model.busy && model.health == 42 && model.healthLocked }
+        model.setValue("maxHealth", value: 90, target: model.target)
+        wait("fixed health maximum edit reply") { !model.busy && model.maxHealth == 90 && model.healthLocked }
+        model.lockHealth(false)
+        wait("fixed health unlock reply") { !model.busy && !model.healthLocked }
 
         let beforeMoneyLocks = commands().filter { $0["command"] as? String == "lock_resource" }.count
         model.lockMoney(true)
@@ -1591,6 +1617,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion']))
     initial_state = {'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
+        'healthLocked': False, 'healthLock': None,
         'moneyLocked': False, 'moneyLock': None, 'rerollsLocked': False, 'rerollsLock': None,
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
         'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
