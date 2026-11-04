@@ -329,8 +329,17 @@ hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[
 hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:", 1)[1]
 assert hades_current_row.count("model.removeTrait(trait)") == 1
 assert "model.removeTrait(trait)" not in hades_contextual
-assert ".frame(width: 132)" in hades_current_row
-assert ".frame(width: 260)" in hades_view
+trait_layout = (ROOT / "Sources/Core/UI/Components/TrainerTraitManagerLayout.swift").read_text()
+for token in ("rowSpacing", "removeControlWidth", "searchWidth", "levelControlsWidth",
+              "rarityControlsWidth", "commonControlsWidth"):
+    assert token in trait_layout
+assert "private enum TraitManagerLayout" not in hades2_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades2_view
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades_current_row
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades2_view
+assert "HadesCurrentTraitPlaceholderRow()" in hades_current_panel
+assert ".trainerPicker(.compactValue, state: .unavailable)" in hades_current_panel
 assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
 assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
 assert "theme.compactActionWidth" in hades_current_row
