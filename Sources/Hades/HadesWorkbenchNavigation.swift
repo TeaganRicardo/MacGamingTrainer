@@ -96,8 +96,8 @@ enum HadesWorkbenchIcon {
         case "host.timeWarp.title": return TrainerSemanticIcon.Concept.timeScale
         case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
         case "hades.catalog", "hades.exactSource": return catalog
-        case "hades.rarity": return TrainerSemanticIcon.Concept.quality
-        case "hades.level": return level
+        case "hades.rarity", "hades.minimumRarity", "hades.setRarity": return TrainerSemanticIcon.Concept.quality
+        case "hades.level", "hades.setLevel": return level
         case "hades.apply": return TrainerSemanticIcon.Action.apply
         case "hades.remove", "hades.cancelCurse": return TrainerSemanticIcon.Action.remove
         case "hades.chaosPair": return TrainerSemanticIcon.Context.portal
@@ -189,8 +189,8 @@ enum HadesWorkbenchCatalog {
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
             (.common, ["host.timeWarp.title"]),
-            (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
-                      "hades.level", "hades.apply", "hades.remove", "hades.chaosPair",
+            (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity", "hades.minimumRarity",
+                      "hades.level", "hades.setLevel", "hades.setRarity", "hades.apply", "hades.remove", "hades.chaosPair",
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
             (.rooms, ["hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
