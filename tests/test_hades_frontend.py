@@ -164,8 +164,11 @@ for raw in sys.stdin:
         if state.get('diagnosticsMode')=='empty':checks=[]
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
-        if command=='set_feature' and params.get('feature')=='gameSpeed':
-            state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
+        if command=='set_feature':
+            if params.get('feature')=='gameSpeed':
+                state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
+            else:
+                state['features'][params['feature']]=params['value']
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
@@ -573,7 +576,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 refreshTitle: localization.localized("host.refresh"),
                 exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
                 checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
-                nonpassingStatus: "host.diagnostics.warning", busy: { model.busy }, count: { model.diagnostics.count },
+                nonpassingStatus: "host.diagnostics.failed", busy: { model.busy }, count: { model.diagnostics.count },
                 dismissed: { !model.diagnosticsPresented }, commands: commands, setMode: setDiagnosticsMode)
             stopBackend()
             model.profilesPresented = false; model.diagnosticsPresented = false
@@ -592,7 +595,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
+            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
+             .boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
@@ -646,6 +650,26 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(rarityArgs?["feature"] as? String == "boonRarityEnabled"
               && rarityArgs?["value"] as? Bool == true,
               "boon rarity shortcut lost the boolean feature semantics")
+        let targetMutations = commands().filter {
+            ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+        }.count
+        model.setBoonRarityTarget("Epic")
+        wait("boon rarity target reply: Epic desired state observed") {
+            !model.busy && model.boonRarityTarget == "Epic"
+                && commands().filter {
+                    ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+                }.count == targetMutations + 1
+        }
+        let targetArgs = commands().last {
+            ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+        }?["params"] as? [String:Any]
+        check(targetArgs?["value"] as? String == "Epic",
+              "boon rarity target lost the selectable minimum-rarity semantics")
+        let speedBefore = model.number(.gameSpeed)
+        model.performShortcut(HadesShortcutAction.increaseGameSpeed.rawValue)
+        wait("game speed increase shortcut reply") {
+            !model.busy && abs(model.number(.gameSpeed) - min(10.0, speedBefore + 0.1)) < 0.0001
+        }
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
