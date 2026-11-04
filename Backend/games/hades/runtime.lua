@@ -8,7 +8,7 @@ local trainerFlag = "MacGamingTrainer.Hades"
 local defaults = {
   invincibility = false, moneyNoDecrease = false, rerollsNoDecrease = false,
   fullGodGauge = false, fullHealth = false, infiniteAmmo = false, forceRerolls = false,
-  boonRarityEnabled = false, boonRarityTarget = "Heroic", damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
+  boonRarityEnabled = false, damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
   attackSpeedMultiplier = 1, dashBonus = 0,
 }
 local resourceNames = {
@@ -27,6 +27,7 @@ local runtime = {
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
   rerollDoors = setmetatable({}, { __mode = "k" }),
+  boonRarityTarget = "Heroic",
 }
 runtime.generationId = tostring(runtime)
 for name, value in pairs(defaults) do runtime.features[name] = value end
@@ -561,7 +562,7 @@ local function installHooks()
   end)
   hook("SetTraitsOnLoot", function(original)
     return function(loot, ...)
-      if runtime.features.boonRarityEnabled and runtime.features.boonRarityTarget ~= "Common"
+      if runtime.features.boonRarityEnabled and runtime.boonRarityTarget ~= "Common"
           and type(loot) == "table" and rarityLootNames[loot.Name] and not loot.ForceCommon
           and type(loot.RarityChances) == "table" then
         -- Native TraitScripts.lua selects the highest legal rarity whose chance
@@ -571,10 +572,10 @@ local function installHooks()
         local boosted = {}
         for key, value in pairs(odds) do boosted[key] = value end
         boosted.Rare = 1
-        if runtime.features.boonRarityTarget == "Epic" or runtime.features.boonRarityTarget == "Heroic" then
+        if runtime.boonRarityTarget == "Epic" or runtime.boonRarityTarget == "Heroic" then
           boosted.Epic = 1
         end
-        if runtime.features.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
+        if runtime.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
         loot.RarityChances = boosted
         -- The native selection path is synchronous; restore the exact native
         -- odds on both success and a rejected/failed native offer generation.
@@ -715,7 +716,8 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
-    features = features, activeFeatures = activeFeatures, resources = resources, traits = traits, world = world.observation(),
+    features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
+    resources = resources, traits = traits, world = world.observation(),
   }
 end
 local function validateFeature(name, value)
@@ -723,9 +725,6 @@ local function validateFeature(name, value)
   local default = defaults[name]
   if type(default) == "boolean" then
     assert(type(value) == "boolean", "hades.error.invalidValue")
-  elseif name == "boonRarityTarget" then
-    assert(value == "Common" or value == "Rare" or value == "Epic" or value == "Heroic",
-      "hades.error.invalidValue")
   elseif name == "dashBonus" then
     assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 20, "hades.error.invalidValue")
   else
@@ -751,6 +750,13 @@ function runtime.set_feature(name, value)
   if unit then mount(unit, false) end
   return runtime.status()
 end
+function runtime.set_boon_rarity(target)
+  assert(target == "Common" or target == "Rare" or target == "Epic" or target == "Heroic",
+    "hades.error.invalidValue")
+  installHooks()
+  runtime.boonRarityTarget = target
+  return runtime.status()
+end
 function runtime.set_invincibility(enabled)
   requireHero()
   return runtime.set_feature("invincibility", enabled)
@@ -758,6 +764,7 @@ end
 function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
+  runtime.boonRarityTarget = "Heroic"
   restoreRerollDoors()
   local unit = hero()
   if unit then mount(unit, false) end
