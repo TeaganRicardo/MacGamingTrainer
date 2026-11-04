@@ -228,13 +228,18 @@ class HadesAdapter(GameAdapter):
             previous = dict(self.features)
             state = self.runtime.command(command, runtime_params)
             candidate = dict(self.features)
-            if state.get(flag_key) is True:
-                candidate[key] = number(state.get(state_key), 0, 1_000_000_000, integer=True)
-            elif state.get(flag_key) is False:
-                candidate[key] = None
-            else:
+            try:
+                if state.get(flag_key) is True:
+                    candidate[key] = number(state.get(state_key), 0, 1_000_000_000, integer=True)
+                elif state.get(flag_key) is False:
+                    candidate[key] = None
+                else:
+                    raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+            except AdapterError as error:
                 self._rollback_runtime_locks(previous)
-                raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                if error.code == 'invalid_value':
+                    raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol') from error
+                raise
             try:
                 self.preferences.save(candidate)
             except AdapterError:
@@ -296,7 +301,15 @@ class HadesAdapter(GameAdapter):
                         self._rollback_runtime_locks(previous)
                         raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
                     candidate = dict(self.features)
-                    candidate[key] = number(state.get(state_key), 0, 1_000_000_000, integer=True)
+                    try:
+                        candidate[key] = number(
+                            state.get(state_key), 0, 1_000_000_000, integer=True
+                        )
+                    except AdapterError as error:
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError(
+                            'debugger_protocol', 'hades.error.debuggerProtocol'
+                        ) from error
                     try:
                         self.preferences.save(candidate)
                     except AdapterError:
