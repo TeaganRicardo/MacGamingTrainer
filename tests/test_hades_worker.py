@@ -13,15 +13,47 @@ lua = require_lua52('Hades worker captured target dispatch')
 fixture = r'''
 local mutations = 0
 local runtime = {version=1,revision=7,bootstrapId='fixture', generationId='fixture'}
-function runtime.status() return {heroId='fixture:run:hero',heroReady=true,health=50} end
+runtime.money, runtime.rerolls = 25, 3
+function runtime.status()
+  return {
+    heroId='fixture:run:hero',heroReady=true,health=50,money=runtime.money,rerolls=runtime.rerolls,
+    moneyLocked=runtime.moneyLock~=nil,moneyLock=runtime.moneyLock,
+    rerollsLocked=runtime.rerollsLock~=nil,rerollsLock=runtime.rerollsLock,
+  }
+end
 function runtime.configure(values) return runtime.status() end
+function runtime.configure_locks(money,rerolls)
+  runtime.moneyLock,runtime.rerollsLock=money,rerolls
+  if money~=nil then runtime.money=money end
+  if rerolls~=nil then runtime.rerolls=rerolls end
+  mutations=mutations+1
+  return runtime.status()
+end
+function runtime.lock_resource(name,locked)
+  assert(name=='Money' and type(locked)=='boolean')
+  runtime.moneyLock=locked and runtime.money or nil
+  mutations=mutations+1
+  return runtime.status()
+end
+function runtime.lock_rerolls(locked)
+  assert(type(locked)=='boolean')
+  runtime.rerollsLock=locked and runtime.rerolls or nil
+  mutations=mutations+1
+  return runtime.status()
+end
 function runtime.set_value(field,value)
   assert(field=='money' and value==500)
+  runtime.money=value
+  if runtime.moneyLock~=nil then runtime.moneyLock=value end
   mutations=mutations+1
-  return {heroId='fixture:run:hero',heroReady=true,money=value}
+  return runtime.status()
 end
+local function nullable(value) return value==nil and 'null' or tostring(value) end
 function runtime.json(value)
-  return '{"heroId":"'..value.heroId..'","heroReady":true,"money":'..tostring(value.money or 0)..'}'
+  return '{"heroId":"'..value.heroId..'","heroReady":true,"money":'..tostring(value.money or 0)
+    ..',"rerolls":'..tostring(value.rerolls or 0)
+    ..',"moneyLocked":'..tostring(value.moneyLocked==true)..',"moneyLock":'..nullable(value.moneyLock)
+    ..',"rerollsLocked":'..tostring(value.rerollsLocked==true)..',"rerollsLock":'..nullable(value.rerollsLock)..'}'
 end
 _G.MacGamingTrainerHades=runtime
 '''
@@ -49,13 +81,24 @@ status = worker.dispatch('status', {})
 assert status['connected'] and status['target'] == {'heroId': 'fixture:run:hero'}
 edited = worker.dispatch('set_value', {'field': 'money', 'value': 500, 'target': status['target']})
 assert edited['money'] == 500
+configured = worker.dispatch('configure_locks', {'money': 40, 'rerolls': 6})
+assert configured['moneyLocked'] and configured['moneyLock'] == 40
+assert configured['rerollsLocked'] and configured['rerollsLock'] == 6
+money_locked = worker.dispatch(
+    'lock_resource', {'resource': 'Money', 'locked': True, 'target': status['target']}
+)
+assert money_locked['moneyLocked'] and money_locked['moneyLock'] == 25
+rerolls_locked = worker.dispatch(
+    'lock_rerolls', {'locked': True, 'target': status['target']}
+)
+assert rerolls_locked['rerollsLocked'] and rerolls_locked['rerollsLock'] == 3
 for target in ({'heroId': 'old:run:hero'}, None):
     try:
-        worker.dispatch('set_value', {'field': 'money', 'value': 500, 'target': target})
+        worker.dispatch('lock_resource', {'resource': 'Money', 'locked': True, 'target': target})
     except AdapterError as error:
         assert error.code == 'stale_target'
     else:
-        raise AssertionError('an obsolete or absent hero identity reached the mutation')
+        raise AssertionError('an obsolete or absent hero identity reached the fixed lock mutation')
 
 native_fixture = '''
 SaveIgnores = {}
