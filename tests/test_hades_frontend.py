@@ -170,6 +170,9 @@ for raw in sys.stdin:
             else:
                 state['features'][params['feature']]=params['value']
             (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_boon_rarity':
+            state['boonRarityTarget']=params['target']
+            (folder/'state.json').write_text(json.dumps(state))
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
@@ -651,19 +654,19 @@ func pump(_ seconds: TimeInterval = 0.1) {
               && rarityArgs?["value"] as? Bool == true,
               "boon rarity shortcut lost the boolean feature semantics")
         let targetMutations = commands().filter {
-            ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+            $0["command"] as? String == "set_boon_rarity"
         }.count
         model.setBoonRarityTarget("Epic")
         wait("boon rarity target reply: Epic desired state observed") {
             !model.busy && model.boonRarityTarget == "Epic"
                 && commands().filter {
-                    ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+                    $0["command"] as? String == "set_boon_rarity"
                 }.count == targetMutations + 1
         }
         let targetArgs = commands().last {
-            ($0["params"] as? [String:Any])?["feature"] as? String == "boonRarityTarget"
+            $0["command"] as? String == "set_boon_rarity"
         }?["params"] as? [String:Any]
-        check(targetArgs?["value"] as? String == "Epic",
+        check(targetArgs?["target"] as? String == "Epic",
               "boon rarity target lost the selectable minimum-rarity semantics")
         let speedBefore = model.number(.gameSpeed)
         model.performShortcut(HadesShortcutAction.increaseGameSpeed.rawValue)
