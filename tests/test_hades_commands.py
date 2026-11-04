@@ -27,6 +27,7 @@ class Runtime:
 
     def connect(self, pid, executable, features=None):
         self.events.append(('connect', features))
+        self.state['connected'] = True
         self.state['features'] = dict(features)
         return self.status()
 
