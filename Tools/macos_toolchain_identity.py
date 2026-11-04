@@ -7,8 +7,10 @@ import subprocess
 from typing import Mapping, Sequence
 
 
-SUPPORTED_RUNNER_LABEL = "macos-26"
-SUPPORTED_RUNNER_ARCH = "ARM64"
+SUPPORTED_RUNNER_PROFILES = {
+    "macos-26": "ARM64",
+    "macos-26-intel": "X64",
+}
 SUPPORTED_DEVELOPER_DIR = "/Applications/Xcode_26.6.app/Contents/Developer"
 SUPPORTED_XCODE_VERSION = "26.6"
 SUPPORTED_XCODE_BUILD = "17F113"
@@ -57,15 +59,18 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
     image_version = require_env(env, "ImageVersion")
     requested_developer_dir = require_env(env, "DEVELOPER_DIR")
 
-    if runner_label != SUPPORTED_RUNNER_LABEL:
+    expected_runner_arch = SUPPORTED_RUNNER_PROFILES.get(runner_label)
+    if expected_runner_arch is None:
+        supported_labels = ", ".join(sorted(SUPPORTED_RUNNER_PROFILES))
         raise RuntimeError(
-            f"unsupported macOS runner label {runner_label!r}; expected {SUPPORTED_RUNNER_LABEL!r}"
+            f"unsupported macOS runner label {runner_label!r}; expected one of {supported_labels}"
         )
     if runner_os != "macOS":
         raise RuntimeError(f"macOS toolchain verification requires RUNNER_OS=macOS, got {runner_os!r}")
-    if runner_arch != SUPPORTED_RUNNER_ARCH:
+    if runner_arch != expected_runner_arch:
         raise RuntimeError(
-            f"unsupported macOS runner architecture {runner_arch!r}; expected {SUPPORTED_RUNNER_ARCH!r}"
+            "unsupported macOS runner architecture "
+            f"{runner_arch!r} for {runner_label!r}; expected {expected_runner_arch!r}"
         )
     if requested_developer_dir != SUPPORTED_DEVELOPER_DIR:
         raise RuntimeError(
@@ -142,10 +147,12 @@ def verify_recorded_macos_toolchain(toolchain: object) -> None:
     if not isinstance(host, dict) or not isinstance(developer, dict):
         raise RuntimeError("provenance macOS toolchain is missing host/developer identity")
 
+    recorded_runner_label = host.get("runnerLabel")
+    if not isinstance(recorded_runner_label, str) or recorded_runner_label not in SUPPORTED_RUNNER_PROFILES:
+        raise RuntimeError("provenance host runnerLabel differs from supported identity")
     expected_host = {
-        "runnerLabel": SUPPORTED_RUNNER_LABEL,
         "runnerOS": "macOS",
-        "runnerArch": SUPPORTED_RUNNER_ARCH,
+        "runnerArch": SUPPORTED_RUNNER_PROFILES[recorded_runner_label],
         "imageMutable": True,
     }
     for field, expected in expected_host.items():
