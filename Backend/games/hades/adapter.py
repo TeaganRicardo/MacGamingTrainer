@@ -376,8 +376,9 @@ class HadesAdapter(GameAdapter):
 
     def _observe(self, state):
         self.connected = state['connected']
-        features = state.get('features')
-        features = dict(features) if isinstance(features, dict) else {}
+        observed = state.get('features')
+        features = ({name: value for name, value in observed.items() if name in DEFAULT_FEATURES}
+                    if isinstance(observed, dict) else {})
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
         state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
