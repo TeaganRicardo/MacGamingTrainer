@@ -950,7 +950,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         // Native menu input can also begin through accessibility. Replacing
         // selection while its field still edits must retire the old identity.
         selectNativePicker(choices,in:window,moving:1,opening:.accessibility);pump()
-        let newLevel=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en) }
+        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.catalog.level" }
         let catalogOwnerPassed=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText==secondaryName
               && oldLevel.currentEditor()==nil && newLevel?.stringValue=="1" && commands().count==beforeSelection
         if !catalogOwnerPassed {
