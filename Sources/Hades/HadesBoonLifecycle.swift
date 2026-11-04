@@ -140,13 +140,6 @@ struct HadesEffectLifecycleControls: View {
                         enabled: model.canMutate && trait.canRemove
                     ) { model.expireTrait(trait) }
                 }
-                if trait.canRemove {
-                    TrainerSecondaryActionButton(
-                        title: text(trait.canExpire == true && trait.blessing != nil ? "hades.cancelCurse" : "hades.remove"),
-                        systemImage: TrainerSemanticIcon.Action.remove,
-                        enabled: model.canMutate
-                    ) { model.removeTrait(trait) }
-                }
                 Spacer()
             }
         }
