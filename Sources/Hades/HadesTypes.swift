@@ -211,9 +211,18 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
+    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
+    case decreaseGameSpeed, increaseGameSpeed
+    case boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
-    var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
+    var key: String {
+        switch self {
+        case .disableAll: "host.disableAll"
+        case .decreaseGameSpeed: "hades.shortcut.decreaseGameSpeed"
+        case .increaseGameSpeed: "hades.shortcut.increaseGameSpeed"
+        default: "hades.\(rawValue)"
+        }
+    }
     var defaultChord: HotkeyChord { HadesShortcutStore.defaultLayout()[self]! }
 }
 
