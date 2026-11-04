@@ -655,7 +655,7 @@ private struct HadesCurrentTraitsPanel: View {
 
     private func sourceLabel(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
         guard let entry = catalogEntry(trait) else {
-            return text("hades.kind.special")
+            return HadesPresentation.text("hades.kind.special", language: language)
         }
         let source = entry.source(language: language.rawValue)
         if !source.isEmpty { return source }
@@ -715,7 +715,7 @@ private struct HadesCurrentTraitsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
                 Label(text("hades.currentTraits"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                     .fixedSize()
@@ -740,12 +740,14 @@ private struct HadesCurrentTraitsPanel: View {
                     placeholder: text("hades.search"),
                     clearLabel: localization.localized("host.search.clear")
                 )
-                .frame(width: 260)
+                .frame(width: TrainerTraitManagerLayout.searchWidth)
             }
 
             if let selected {
                 HadesCurrentTraitRow(model: model, trait: selected)
                     .id(selected.instanceId)
+            } else {
+                HadesCurrentTraitPlaceholderRow()
             }
         }
         .trainerPanel()
@@ -759,6 +761,89 @@ private struct HadesCurrentTraitsPanel: View {
                 selectedTraitName = trait.name
             }
         }
+    }
+}
+
+private struct HadesCurrentTraitPlaceholderRow: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
+
+    private func text(_ key: String) -> String {
+        HadesPresentation.text(key, language: localization.language)
+    }
+
+    var body: some View {
+        HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+            HStack(spacing: 6) {
+                Text(text("hades.level"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 42, alignment: .trailing)
+                TrainerNumberField(
+                    text: .constant(""),
+                    accessibilityLabel: text("hades.level"),
+                    width: 58,
+                    enabled: false
+                )
+                TrainerSecondaryActionButton(
+                    title: text("hades.setLevel"),
+                    systemImage: TrainerSemanticIcon.Action.apply,
+                    enabled: false,
+                    widthRole: .compactRow,
+                    action: {}
+                )
+            }
+            .frame(
+                width: TrainerTraitManagerLayout.levelControlsWidth(
+                    compactActionWidth: theme.compactActionWidth
+                ),
+                alignment: .trailing
+            )
+
+            HStack(spacing: 6) {
+                Text(text("hades.rarity"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(width: 48, alignment: .trailing)
+                Picker(text("hades.rarity"), selection: .constant("")) {
+                    Text("—").tag("")
+                }
+                .labelsHidden()
+                .trainerPicker(.compactValue, state: .unavailable)
+                TrainerSecondaryActionButton(
+                    title: text("hades.setRarity"),
+                    systemImage: TrainerSemanticIcon.Action.apply,
+                    enabled: false,
+                    widthRole: .compactRow,
+                    action: {}
+                )
+            }
+            .frame(
+                width: TrainerTraitManagerLayout.rarityControlsWidth(
+                    compactActionWidth: theme.compactActionWidth,
+                    pickerWidth: theme.pickerCompactWidth
+                ),
+                alignment: .trailing
+            )
+
+            Button(role: .destructive) {
+            } label: {
+                Label(text("hades.remove"), systemImage: TrainerSemanticIcon.Action.remove)
+            }
+            .buttonStyle(.bordered)
+            .frame(width: TrainerTraitManagerLayout.removeControlWidth)
+            .disabled(true)
+        }
+        .frame(
+            width: TrainerTraitManagerLayout.commonControlsWidth(
+                compactActionWidth: theme.compactActionWidth,
+                pickerWidth: theme.pickerCompactWidth
+            ),
+            alignment: .trailing
+        )
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -793,17 +878,24 @@ private struct HadesCurrentTraitRow: View {
         model.canMutate && trait.canEdit && rarities.contains(rarity) && rarity != trait.rarity
     }
 
-    private var levelControlsWidth: CGFloat {
-        42 + 58 + theme.compactActionWidth + 2 * 6
-    }
-
-    private var rarityControlsWidth: CGFloat {
-        48 + theme.pickerCompactWidth + theme.compactActionWidth + 2 * 6
+    private var removalLabel: String {
+        if trait.canExpire == true && trait.blessing != nil {
+            return text("hades.cancelCurse")
+        }
+        if entry?.kind == "temporary" {
+            return text("hades.cancelTemporaryEffect")
+        }
+        if trait.level > 1 {
+            let prefix = text("hades.removeAllMatching")
+            let name = model.traitName(trait, language: localization.language)
+            return localization.language == .zhCN ? prefix + name : prefix + " " + name
+        }
+        return text("hades.remove")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
                 HStack(spacing: 6) {
                     Text(text("hades.level"))
                         .font(.caption)
@@ -836,7 +928,12 @@ private struct HadesCurrentTraitRow: View {
                         model.updateTrait(trait, rarity: trait.rarity, level: amount, target: owner)
                     }
                 }
-                .frame(width: levelControlsWidth, alignment: .trailing)
+                .frame(
+                    width: TrainerTraitManagerLayout.levelControlsWidth(
+                        compactActionWidth: theme.compactActionWidth
+                    ),
+                    alignment: .trailing
+                )
 
                 HStack(spacing: 6) {
                     Text(text("hades.rarity"))
@@ -862,21 +959,37 @@ private struct HadesCurrentTraitRow: View {
                         model.updateTrait(trait, rarity: rarity, level: trait.level, target: owner)
                     }
                 }
-                .frame(width: rarityControlsWidth, alignment: .trailing)
+                .frame(
+                    width: TrainerTraitManagerLayout.rarityControlsWidth(
+                        compactActionWidth: theme.compactActionWidth,
+                        pickerWidth: theme.pickerCompactWidth
+                    ),
+                    alignment: .trailing
+                )
 
                 Button(role: .destructive) {
                     model.removeTrait(trait)
                 } label: {
-                    Label(
-                        text(trait.canExpire == true && trait.blessing != nil
-                            ? "hades.cancelCurse" : "hades.remove"),
-                        systemImage: TrainerSemanticIcon.Action.remove
-                    )
+                    Label {
+                        Text(removalLabel)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                    } icon: {
+                        Image(systemName: TrainerSemanticIcon.Action.remove)
+                    }
                 }
                 .buttonStyle(.bordered)
-                .frame(width: 132)
+                .frame(width: TrainerTraitManagerLayout.removeControlWidth)
                 .disabled(!model.canMutate || !trait.canRemove)
             }
+            .frame(
+                width: TrainerTraitManagerLayout.commonControlsWidth(
+                    compactActionWidth: theme.compactActionWidth,
+                    pickerWidth: theme.pickerCompactWidth
+                ),
+                alignment: .trailing
+            )
             .frame(maxWidth: .infinity, alignment: .trailing)
 
             if !trait.canEdit && !trait.limitation.isEmpty {
