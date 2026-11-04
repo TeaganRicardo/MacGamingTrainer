@@ -323,6 +323,12 @@ hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:",
 assert hades_current_row.count("model.removeTrait(trait)") == 1
 assert "model.removeTrait(trait)" not in hades_contextual
 assert ".frame(width: 132)" in hades_current_row
+assert ".frame(width: 260)" in hades_view
+assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
+assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
+assert "theme.compactActionWidth" in hades_current_row
+assert "theme.pickerCompactWidth" in hades_current_row
+assert 'title: text("hades.apply")' in hades_contextual
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
