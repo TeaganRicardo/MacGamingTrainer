@@ -750,8 +750,8 @@ private struct HadesCurrentTraitRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if trait.canEdit {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                if trait.canEdit {
                     if entry?.supportsLevel != false {
                         Text(text("hades.level"))
                             .font(.caption)
@@ -802,19 +802,27 @@ private struct HadesCurrentTraitRow: View {
                     ) {
                         model.updateTrait(trait, rarity: rarity, level: trait.level, target: owner)
                     }
-
-                    if trait.canRemove {
-                        Button(role: .destructive) {
-                            model.removeTrait(trait)
-                        } label: {
-                            Text(text("hades.remove"))
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!model.canMutate)
-                    }
-                    Spacer(minLength: 0)
                 }
-            } else if !trait.limitation.isEmpty {
+
+                Spacer(minLength: 0)
+
+                if trait.canRemove {
+                    Button(role: .destructive) {
+                        model.removeTrait(trait)
+                    } label: {
+                        Label(
+                            text(trait.canExpire == true && trait.blessing != nil
+                                ? "hades.cancelCurse" : "hades.remove"),
+                            systemImage: TrainerSemanticIcon.Action.remove
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(width: 132)
+                    .disabled(!model.canMutate)
+                }
+            }
+
+            if !trait.canEdit && !trait.limitation.isEmpty {
                 Text(text("hades.limitation.\(trait.limitation)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
