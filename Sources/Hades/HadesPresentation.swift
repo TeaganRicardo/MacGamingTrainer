@@ -167,7 +167,7 @@ enum HadesPresentation {
             "hades.expireEffect": .init(zhCN: "立即到期", en: "Expire Now"),
             "hades.refreshEffect": .init(zhCN: "立即完成冷却", en: "Finish Cooldown"),
             "hades.cancelCurse": .init(zhCN: "取消配对", en: "Cancel Pair"),
-            "hades.cancelTemporaryEffect": .init(zhCN: "取消临时效果", en: "Cancel Temporary Effect"),
+            "hades.cancelTemporaryEffect": .init(zhCN: "取消临时效果", en: "Cancel Effect"),
             "hades.removeAllMatching": .init(zhCN: "移除全部同名的", en: "Remove All Matching"),
             "hades.kind.temporary": .init(zhCN: "临时效果", en: "Temporary Effects"),
             "hades.kind.special": .init(zhCN: "NPC 特殊效果", en: "NPC Effects"),
