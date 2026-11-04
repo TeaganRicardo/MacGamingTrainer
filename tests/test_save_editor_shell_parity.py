@@ -37,9 +37,9 @@ for phrase in (
     assert phrase in core, phrase
 
 for source in (hades, hades2):
+    assert ".trainerSaveEditorWindow()" in source
     assert ".frame(width: 980)" not in source
     assert ".trainerSurface(.canvas)" not in source
-    assert ".trainerDismissTextEditingOnClickAway()" not in source
 
 # Hades I follows Hades II source-selection semantics: changing source selects
 # a document directly, with pending changes routed through confirmation.
