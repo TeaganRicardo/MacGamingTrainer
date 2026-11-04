@@ -199,6 +199,13 @@ function Heal(unit, args)
   assert(args.Silent and args.HealAmount >= 0)
   unit.Health = math.min(unit.MaxHealth, unit.Health + args.HealAmount)
 end
+local damageCalls = 0
+function Damage(unit, args)
+  damageCalls = damageCalls + 1
+  local floor = args.MinHealth or 0
+  unit.Health = math.max(floor, unit.Health - (args.DamageAmount or 0))
+  return "damaged", floor
+end
 function GetProcessedTraitData(args)
   local result = copy(TraitData[args.TraitName])
   -- Native ProcessTraitData only gives the first level an explicit rarity.
@@ -367,10 +374,10 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 6 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 8 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 }, { revision = 6 }, { revision = 7 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -382,6 +389,23 @@ assert(runtime.status().heroId:find("fixture-generation:", 1, true) == 1)
 assert(baseline.heroReady and baseline.resources.MetaPoints == 17 and baseline.features.damageMultiplier == 1)
 assert(runtime.json(baseline):find('"traits":[]', 1, true))
 assert(runtime.json({ quote = '"\\\n', truth = true }):find('\\u000a', 1, true))
+
+-- Health uses the Hades II fixed-pair contract while preserving native damage
+-- and healing callbacks. The pair owns presentation/settlement, not history.
+local unit = CurrentRun.Hero
+runtime.lock_vital("health", true)
+local healthState = runtime.status()
+assert(healthState.healthLocked and healthState.healthLock.current == 30 and healthState.healthLock.max == 100)
+local damageResult, damageFloor = Damage(unit, { DamageAmount = 12, MinHealth = 1 })
+assert(damageResult == "damaged" and damageFloor == 30 and unit.Health == 30 and damageCalls == 1,
+  "fixed health lock bypassed native damage or lost its current target")
+Heal(unit, { HealAmount = 20, Silent = true })
+assert(unit.Health == 30, "fixed health lock accepted a native heal")
+runtime.set_value("health", 24)
+assert(runtime.status().healthLock.current == 24 and unit.Health == 24,
+  "absolute current-health edit did not advance the active lock")
+runtime.disable_all()
+assert(not runtime.status().healthLocked, "Disable All did not release the health lock")
 
 -- Rarity changes only future legal Olympian/Hermes offers, including rerolls.
 local olympian = { Name = "ZeusUpgrade", RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
@@ -1469,6 +1493,27 @@ assert(unit.MaxHealth == 1011 and unit.Health == 11, "native multiplier semantic
 unit.metaHealth = 3
 ValidateMaxHealth()
 assert(unit.MaxHealth == 1017 and unit.Health == 17, "native mirror recomputation lost the run contribution")
+
+runtime.lock_vital("health", true)
+assert(runtime.status().healthLock.current == 17 and runtime.status().healthLock.max == 1017)
+unit.metaHealth = 4
+ValidateMaxHealth()
+assert(unit.MaxHealth == 1017 and unit.Health == 17,
+  "native maximum-health recomputation escaped the fixed pair")
+runtime.set_value("health", 16)
+runtime.set_value("maxHealth", 1000)
+local lockedHealth = runtime.status()
+assert(lockedHealth.healthLock.current == 16 and lockedHealth.healthLock.max == 1000
+  and unit.Health == 16 and unit.MaxHealth == 1000,
+  "absolute health edits did not advance the active fixed pair")
+runtime.lock_vital("health", false)
+assert(not runtime.status().healthLocked and unit.MaxHealth >= 1000 and unit.Health == 16,
+  "unlock did not return maximum-health authority to the native owner")
+unit.metaHealth = 3
+runtime.set_value("maxHealth", 1017)
+assert(unit.MaxHealth == 1017 and unit.Health == 16,
+  "post-unlock absolute maximum edit could not restore the native baseline")
+
 runtime.set_feature("invincibility", true)
 runtime.set_feature("damageMultiplier", 3)
 runtime.disable_all()
