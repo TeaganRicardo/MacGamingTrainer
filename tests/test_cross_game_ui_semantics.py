@@ -87,6 +87,8 @@ shared_labels = {
     "hades.chaosPair": "hades2.spawn.chaosPair",
     "hades.chaosBlessing": "hades2.spawn.chaosBlessing",
     "hades.chaosCurse": "hades2.spawn.chaosCurse",
+    "hades.cancelCurse": "hades2.traits.chaos.cancelPair",
+    "hades.cancelTemporaryEffect": "hades2.traits.temporary.cancel",
     "hades.acquire": "hades2.spawn.acquire",
     "hades.minimumRarity": "hades2.rarity.minimum",
     "hades.setLevel": "hades2.traits.applyLevel",
@@ -355,12 +357,26 @@ hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[
 hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:", 1)[1]
 assert hades_current_row.count("model.removeTrait(trait)") == 1
 assert "model.removeTrait(trait)" not in hades_contextual
-assert ".frame(width: 132)" in hades_current_row
-assert ".frame(width: 260)" in hades_view
+trait_layout = (ROOT / "Sources/Core/UI/Components/TrainerTraitManagerLayout.swift").read_text()
+for token in ("rowSpacing", "removeControlWidth", "searchWidth", "levelControlsWidth",
+              "rarityControlsWidth", "commonControlsWidth"):
+    assert token in trait_layout
+assert "private enum TraitManagerLayout" not in hades2_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades2_view
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades_current_row
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades2_view
+assert "HadesCurrentTraitPlaceholderRow()" in hades_current_panel
+assert ".trainerPicker(.compactValue, state: .unavailable)" in hades_current_panel
 assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
 assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
 assert "theme.compactActionWidth" in hades_current_row
 assert "theme.pickerCompactWidth" in hades_current_row
+assert 'entry?.kind == "temporary"' in hades_current_row
+assert "trait.level > 1" in hades_current_row
+assert 'return text("hades.cancelCurse")' in hades_current_row
+assert 'return text("hades.cancelTemporaryEffect")' in hades_current_row
+assert 'text("hades.removeAllMatching")' in hades_current_row
 assert 'title: text("hades.apply")' in hades_contextual
 hades_types = (ROOT / "Sources/Hades/HadesTypes.swift").read_text()
 assert "var hasContextualControls: Bool" in hades_types
