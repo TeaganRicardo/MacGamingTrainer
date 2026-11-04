@@ -80,6 +80,12 @@ shared_labels = {
     "hades.infiniteAmmo": "hades2.feature.infiniteAmmo",
     "hades.forceRerolls": "hades2.feature.forceEnableRerolls",
     "hades.boonRarityEnabled": "hades2.feature.boonRarity",
+    "hades.currentTraits": "hades2.traits.manager",
+    "hades.minimumRarity": "hades2.rarity.minimum",
+    "hades.setLevel": "hades2.traits.applyLevel",
+    "hades.setRarity": "hades2.traits.applyRarity",
+    "hades.shortcut.decreaseGameSpeed": "hades2.shortcut.decreaseGameSpeed",
+    "hades.shortcut.increaseGameSpeed": "hades2.shortcut.increaseGameSpeed",
     "hades.damageMultiplier": "hades2.feature.damageMultiplier",
     "hades.moveSpeedMultiplier": "hades2.stat.moveSpeed",
     "hades.attackSpeedMultiplier": "hades2.stat.attackSpeed",
@@ -259,7 +265,8 @@ for semantic in ("grasp", "spellCharge", "sprintSpeed", "occurrence", "specialRe
 hades_icon_map = hades_nav[hades_nav.index("static func icon(for titleKey: String)") : hades_nav.index("struct HadesWorkbenchEntry")]
 for key in (
     "hades.health", "hades.maxHealth", "hades.money", "hades.rerolls", "hades.godGauge",
-    "hades.currentTraits", "hades.catalog", "hades.rarity", "hades.level", "hades.apply",
+    "hades.currentTraits", "hades.catalog", "hades.rarity", "hades.minimumRarity", "hades.level",
+    "hades.setLevel", "hades.setRarity", "hades.apply",
     "hades.remove", "hades.chaosPair", "hades.remainingUses", "hades.activateBlessing",
     "hades.expireEffect", "hades.refreshEffect", "hades.resources", "hades.gainResource",
     "hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
@@ -295,6 +302,12 @@ hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(
 assert "icon: { $0.icon }" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert 'ForEach(["Common", "Rare", "Epic", "Heroic"]' in hades_view
+assert 'model.boonRarityTarget' in hades_view
+assert 'title: text("hades.setLevel")' in hades_view
+assert 'title: text("hades.setRarity")' in hades_view
+assert 'TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))' in hades_view
+assert 'TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))' in hades_view
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
