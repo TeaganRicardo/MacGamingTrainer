@@ -121,7 +121,7 @@ assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
 assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
 assert 'needs_full_build: ${{ steps.scope.outputs.needs_full_build }}' in build2
 assert 'needs: scope' in build2
-assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
+assert "needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in build2
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
@@ -137,7 +137,7 @@ module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
-assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
+assert "matrix.game == 'reference_fixture') && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in module_matrix
 assert "MGT_RUN_MODULE_BUILD:" in module_matrix
 assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
