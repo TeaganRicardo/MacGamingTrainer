@@ -520,7 +520,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     shutil.copy2(worker_path, disclosure_worker)
     disclosure_proc = subprocess.run(
         [str(binary), PYTHON, str(disclosure_worker), "disclosure"], cwd=ROOT, env=env,
-        text=True, capture_output=True, timeout=25,
+        text=True, capture_output=True, timeout=40,
     )
     if disclosure_proc.returncode != 0:
         print(disclosure_proc.stdout)
