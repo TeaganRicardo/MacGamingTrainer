@@ -73,6 +73,14 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **legacy}, 'original preferences did not migrate'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
     assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
+    previous_current = {name: value for name, value in DEFAULT_PREFERENCES.items()
+                        if name != 'boonRarityTarget'}
+    previous_current['boonRarityEnabled'] = True
+    previous_current['gameSpeed'] = 2.0
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_current}))
+    assert store.load() == {**DEFAULT_PREFERENCES, **previous_current}, (
+        'immediately previous schema-1 preferences did not acquire the new neutral rarity target'
+    )
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
     assert offline['catalog'] and 'connected' not in offline and runtime.events == []
 
