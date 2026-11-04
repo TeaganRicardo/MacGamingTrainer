@@ -11,6 +11,9 @@ assert "case interactive" in picker and "case unavailable" in picker
 assert "@Environment(\\.isEnabled)" in picker
 assert "func trainerPicker(" in picker
 assert "TrainerNativePickerPresentationBridge" in picker
+assert "override func layout()" not in picker
+assert "private weak var cachedButton: NSPopUpButton?" in picker
+assert "scheduleLookup(passes:" in picker
 assert "button.isBordered = false" in picker
 assert "button.focusRingType = .none" in picker
 assert "button.contentTintColor" in picker
