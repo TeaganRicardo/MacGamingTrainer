@@ -105,7 +105,7 @@ assert configured['rerollsLocked'] and configured['rerollsLock'] == 6
 health_locked = worker.dispatch(
     'lock_vital', {'vital': 'health', 'locked': True, 'target': status['target']}
 )
-assert health_locked['healthLocked'] and health_locked['healthLock'] == {'current': 45, 'max': 90}
+assert health_locked['healthLocked'] and health_locked['healthLock'] == {'current': 50, 'max': 100}
 money_locked = worker.dispatch(
     'lock_resource', {'resource': 'Money', 'locked': True, 'target': status['target']}
 )
