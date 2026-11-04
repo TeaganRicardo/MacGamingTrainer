@@ -863,7 +863,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
         guard let choices=nativeAccessibilityControls(host).first(where:{
                   $0.role=="AXPopUpButton" && $0.label==traitLabel && $0.valueText==primaryName
               }),
-              let oldLevel=fields(in:host).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en)}) else {
+              let oldLevel=fields(in:host).first(where:{
+                  $0.accessibilityIdentifier()=="hades.catalog.level"
+              }) else {
             fatalError("Hades I selected-catalog native inputs missing")
         }
         let beforeSelection=commands().count
