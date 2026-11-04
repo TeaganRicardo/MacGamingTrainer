@@ -1483,8 +1483,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(commands().count == feedbackRequests && model.connected == connected,
                   "Hades feedback presentation replayed a command or changed connection truth")
             let afterDisable=commands().count
+            let errorBeforeOneShot=model.localError
             model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
-            check(commands().count==afterDisable,"a hero-owned shortcut ran without a hero")
+            model.performShortcut(HadesShortcutAction.generateChaosGate.rawValue);pump()
+            check(commands().count==afterDisable && model.localError==errorBeforeOneShot,
+                  "a one-shot shortcut escaped live-owner gating")
         }
         feedbackWindow.contentView = nil; feedbackWindow.close()
         try setConnection(true,heroReady:true)
