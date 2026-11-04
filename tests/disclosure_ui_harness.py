@@ -435,7 +435,14 @@ func exerciseDisclosureNativeRetirementBoundaries() {
         precondition(current.currentEditor() == nil && current.stringValue == expected
                      && completions.count == beforeCompletions,
                      "native retirement revived an obsolete draft or completed an edit; boundary=\(boundary)")
-        disclosureLifetimePump(0.03)
+        let retirementDeadline = Date().addingTimeInterval(1)
+        while Date() < retirementDeadline {
+            let settled = source == expected && completions.count == beforeCompletions
+                && editing.filter { $0 == "original:true" }.count == beforeBegins
+                && editing.filter { $0 == "original:false" }.count == beforeEnds + 1
+            if settled { break }
+            disclosureLifetimePump(0.01)
+        }
         precondition(source == expected && completions.count == beforeCompletions
                      && editing.filter { $0 == "original:true" }.count == beforeBegins
                      && editing.filter { $0 == "original:false" }.count == beforeEnds + 1,
