@@ -878,6 +878,21 @@ private struct HadesCurrentTraitRow: View {
         model.canMutate && trait.canEdit && rarities.contains(rarity) && rarity != trait.rarity
     }
 
+    private var removalLabel: String {
+        if trait.canExpire == true && trait.blessing != nil {
+            return text("hades.cancelCurse")
+        }
+        if entry?.kind == "temporary" {
+            return text("hades.cancelTemporaryEffect")
+        }
+        if trait.level > 1 {
+            let prefix = text("hades.removeAllMatching")
+            let name = model.traitName(trait, language: localization.language)
+            return localization.language == .zhCN ? prefix + name : prefix + " " + name
+        }
+        return text("hades.remove")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
@@ -955,11 +970,14 @@ private struct HadesCurrentTraitRow: View {
                 Button(role: .destructive) {
                     model.removeTrait(trait)
                 } label: {
-                    Label(
-                        text(trait.canExpire == true && trait.blessing != nil
-                            ? "hades.cancelCurse" : "hades.remove"),
-                        systemImage: TrainerSemanticIcon.Action.remove
-                    )
+                    Label {
+                        Text(removalLabel)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                    } icon: {
+                        Image(systemName: TrainerSemanticIcon.Action.remove)
+                    }
                 }
                 .buttonStyle(.bordered)
                 .frame(width: TrainerTraitManagerLayout.removeControlWidth)
