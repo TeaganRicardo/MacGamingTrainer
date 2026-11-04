@@ -20,6 +20,7 @@ class Runtime:
                       'heroId': 'generation:run:hero', 'target': {'heroId': 'generation:run:hero'},
                       'features': dict(DEFAULT_FEATURES), 'health': 50, 'maxHealth': 100,
                       'money': 25, 'rerolls': 3,
+                      'healthLocked': False, 'healthLock': None,
                       'moneyLocked': False, 'moneyLock': None,
                       'rerollsLocked': False, 'rerollsLock': None,
                       'resources': {}, 'traits': [], 'invincible': False}
@@ -56,6 +57,11 @@ class Runtime:
                 self.state['rerollsLocked'] = False
                 self.state['rerollsLock'] = None
         if name == 'configure_locks':
+            self.state['healthLock'] = params.get('health')
+            self.state['healthLocked'] = params.get('health') is not None
+            if self.state['healthLocked']:
+                self.state['health'] = self.state['healthLock']['current']
+                self.state['maxHealth'] = self.state['healthLock']['max']
             self.state['moneyLock'] = params.get('money')
             self.state['moneyLocked'] = params.get('money') is not None
             self.state['rerollsLock'] = params.get('rerolls')
@@ -64,6 +70,13 @@ class Runtime:
                 self.state['money'] = self.state['moneyLock']
             if self.state['rerollsLocked']:
                 self.state['rerolls'] = self.state['rerollsLock']
+        if name == 'lock_vital':
+            assert params['vital'] == 'health'
+            self.state['healthLocked'] = params['locked']
+            self.state['healthLock'] = (
+                {'current': self.state['health'], 'max': self.state['maxHealth']}
+                if params['locked'] else None
+            )
         if name == 'lock_resource':
             assert params['resource'] == 'Money'
             self.state['moneyLocked'] = params['locked']
@@ -73,6 +86,12 @@ class Runtime:
             self.state['rerollsLock'] = self.state['rerolls'] if params['locked'] else None
         if name == 'set_value':
             self.state[params['field']] = params['value']
+            if params['field'] in ('health', 'maxHealth') and self.state['healthLocked']:
+                self.state['healthLock'] = {
+                    'current': min(self.state['health'], self.state['maxHealth']),
+                    'max': self.state['maxHealth'],
+                }
+                self.state['health'] = self.state['healthLock']['current']
             if params['field'] == 'money' and self.state['moneyLocked']:
                 self.state['moneyLock'] = params['value']
             if params['field'] == 'rerolls' and self.state['rerollsLocked']:
@@ -81,6 +100,8 @@ class Runtime:
             self.state['boonRarityTarget'] = params['target']
         if name == 'disable_all':
             self.state['features'] = dict(DEFAULT_FEATURES)
+            self.state['healthLocked'] = False
+            self.state['healthLock'] = None
             self.state['moneyLocked'] = False
             self.state['moneyLock'] = None
             self.state['rerollsLocked'] = False
@@ -112,7 +133,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
     previous_before_rarity_target = {
         name: value for name, value in DEFAULT_PREFERENCES.items()
-        if name not in {'boonRarityTarget', 'moneyLock', 'rerollsLock'}
+        if name not in {'boonRarityTarget', 'healthLock', 'moneyLock', 'rerollsLock'}
     }
     previous_before_rarity_target['boonRarityEnabled'] = True
     previous_before_rarity_target['gameSpeed'] = 2.0
@@ -122,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     )
     previous_current = {
         name: value for name, value in DEFAULT_PREFERENCES.items()
-        if name not in {'moneyLock', 'rerollsLock'}
+        if name not in {'healthLock', 'moneyLock', 'rerollsLock'}
     }
     previous_current['boonRarityEnabled'] = True
     previous_current['boonRarityTarget'] = 'Rare'
@@ -139,7 +160,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     }))
     loaded_profile = adapter.dispatch('load_profile', {'name': profile_name}, 'load-previous-profile')
     assert loaded_profile['boonRarityTarget'] == 'Rare'
+    assert loaded_profile['healthLock'] is None
     assert loaded_profile['moneyLock'] is None and loaded_profile['rerollsLock'] is None
+    assert store.load()['healthLock'] is None
     assert store.load()['moneyLock'] is None and store.load()['rerollsLock'] is None
     assert runtime.events == []
 
@@ -163,7 +186,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert connect_features['boonRarityEnabled'] is True
     assert 'boonRarityTarget' not in connect_features
     assert 'gameSpeed' not in connect_features
-    assert ('configure_locks', {'money': None, 'rerolls': None}) in runtime.events
+    assert not any(event[0] == 'configure_locks' for event in runtime.events), (
+        'neutral locks added a redundant native status round-trip'
+    )
     assert ('set_boon_rarity', {'target': 'Rare'}) in runtime.events
     assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
@@ -197,6 +222,20 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load()['boonRarityTarget'] == 'Epic'
 
     owner = {'heroId': 'generation:run:hero'}
+    locked_health = adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': True, 'target': owner}, 'lock-health'
+    )
+    assert locked_health['healthLocked'] is True
+    assert store.load()['healthLock'] == {'current': 50, 'max': 100}
+    adapter.dispatch('set_value', {'field': 'health', 'value': 40, 'target': owner}, 'edit-locked-health')
+    assert store.load()['healthLock'] == {'current': 40, 'max': 100}
+    adapter.dispatch('set_value', {'field': 'maxHealth', 'value': 80, 'target': owner}, 'edit-locked-max-health')
+    assert store.load()['healthLock'] == {'current': 40, 'max': 80}
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': False, 'target': owner}, 'unlock-health'
+    )
+    assert store.load()['healthLock'] is None
+
     locked_money = adapter.dispatch(
         'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money'
     )
