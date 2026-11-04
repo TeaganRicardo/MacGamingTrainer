@@ -28,7 +28,7 @@ enum HadesFeature: String, CaseIterable, Identifiable {
 }
 
 enum HadesFeatureValue: Decodable, Equatable {
-    case boolean(Bool), number(Double), string(String)
+    case boolean(Bool), number(Double)
     case gameSpeed(desired: Double, actual: Double?, active: Bool?,
                    errorPresentation: String?, errorArguments: [String])
 
@@ -49,7 +49,6 @@ enum HadesFeatureValue: Decodable, Equatable {
         }
         let value = try decoder.singleValueContainer()
         if let boolean = try? value.decode(Bool.self) { self = .boolean(boolean) }
-        else if let string = try? value.decode(String.self) { self = .string(string) }
         else { self = .number(try value.decode(Double.self)) }
     }
 
@@ -57,7 +56,7 @@ enum HadesFeatureValue: Decodable, Equatable {
         switch self {
         case let .boolean(value): return value
         case let .gameSpeed(_, _, active, _, _): return active ?? false
-        case .number(_), .string(_): return false
+        case .number(_): return false
         }
     }
 
@@ -65,13 +64,8 @@ enum HadesFeatureValue: Decodable, Equatable {
         switch self {
         case let .number(value): return value
         case let .gameSpeed(desired, _, _, _, _): return desired
-        case .boolean(_), .string(_): return nil
+        case .boolean(_): return nil
         }
-    }
-
-    var string: String? {
-        if case let .string(value) = self { return value }
-        return nil
     }
 
     var actualNumber: Double? {
@@ -159,6 +153,7 @@ struct HadesObservation: Decodable {
     let target: HadesHeroTarget?
     let features: [String: HadesFeatureValue]?
     let activeFeatures: [String: Bool]?
+    let boonRarityTarget: String?
     let resources: [String: Double]?
     let traits: [HadesCurrentTrait]?
     let world: HadesWorldObservation?
