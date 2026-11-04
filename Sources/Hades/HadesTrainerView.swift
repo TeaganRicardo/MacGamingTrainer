@@ -19,12 +19,16 @@ struct HadesTrainerView: View {
 
     private func state(_ feature: HadesFeature) -> TrainerFeatureControlState {
         let enabled = model.isEnabled(feature)
+        let active = model.isActive(feature)
+        let detached = enabled && !model.connected
         return TrainerFeatureControlState(
-            isOn: enabled, isInteractive: model.canEditIntent, canEditValue: model.canEditIntent,
-            opacity: model.heroReady ? 1 : 0.6,
-            indicatorColor: model.isActive(feature) ? theme.accent : theme.inactive,
-            helpText: text(feature.helpKey),
-            isWarning: enabled && !model.isActive(feature)
+            isOn: enabled,
+            isInteractive: model.canEditIntent,
+            canEditValue: model.canEditIntent,
+            opacity: 1,
+            indicatorColor: detached ? theme.warning : (active ? theme.accent : theme.inactive),
+            helpText: detached ? text("hades.phase.detached") : text(feature.helpKey),
+            isWarning: enabled && !active
         )
     }
 
