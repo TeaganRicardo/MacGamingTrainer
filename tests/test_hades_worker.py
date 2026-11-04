@@ -12,20 +12,30 @@ from lua_runtime_support import require_lua52
 lua = require_lua52('Hades worker captured target dispatch')
 fixture = r'''
 local mutations = 0
-local runtime = {version=1,revision=7,bootstrapId='fixture', generationId='fixture'}
-runtime.money, runtime.rerolls = 25, 3
+local runtime = {version=1,revision=8,bootstrapId='fixture', generationId='fixture'}
+runtime.health, runtime.maxHealth, runtime.money, runtime.rerolls = 50, 100, 25, 3
 function runtime.status()
   return {
-    heroId='fixture:run:hero',heroReady=true,health=50,money=runtime.money,rerolls=runtime.rerolls,
+    heroId='fixture:run:hero',heroReady=true,health=runtime.health,maxHealth=runtime.maxHealth,
+    money=runtime.money,rerolls=runtime.rerolls,
+    healthLocked=runtime.healthLock~=nil,healthLock=runtime.healthLock,
     moneyLocked=runtime.moneyLock~=nil,moneyLock=runtime.moneyLock,
     rerollsLocked=runtime.rerollsLock~=nil,rerollsLock=runtime.rerollsLock,
   }
 end
 function runtime.configure(values) return runtime.status() end
-function runtime.configure_locks(money,rerolls)
+function runtime.configure_locks(health,money,rerolls)
+  runtime.healthLock=health
   runtime.moneyLock,runtime.rerollsLock=money,rerolls
+  if health~=nil then runtime.health,runtime.maxHealth=health.current,health.max end
   if money~=nil then runtime.money=money end
   if rerolls~=nil then runtime.rerolls=rerolls end
+  mutations=mutations+1
+  return runtime.status()
+end
+function runtime.lock_vital(name,locked)
+  assert(name=='health' and type(locked)=='boolean')
+  runtime.healthLock=locked and {current=runtime.health,max=runtime.maxHealth} or nil
   mutations=mutations+1
   return runtime.status()
 end
@@ -50,7 +60,12 @@ function runtime.set_value(field,value)
 end
 local function nullable(value) return value==nil and 'null' or tostring(value) end
 function runtime.json(value)
-  return '{"heroId":"'..value.heroId..'","heroReady":true,"money":'..tostring(value.money or 0)
+  local healthLock=value.healthLock
+  local healthLockJSON=healthLock==nil and 'null' or ('{"current":'..tostring(healthLock.current)..',"max":'..tostring(healthLock.max)..'}')
+  return '{"heroId":"'..value.heroId..'","heroReady":true,"health":'..tostring(value.health or 0)
+    ..',"maxHealth":'..tostring(value.maxHealth or 0)
+    ..',"healthLocked":'..tostring(value.healthLocked==true)..',"healthLock":'..healthLockJSON
+    ..',"money":'..tostring(value.money or 0)
     ..',"rerolls":'..tostring(value.rerolls or 0)
     ..',"moneyLocked":'..tostring(value.moneyLocked==true)..',"moneyLock":'..nullable(value.moneyLock)
     ..',"rerollsLocked":'..tostring(value.rerollsLocked==true)..',"rerollsLock":'..nullable(value.rerollsLock)..'}'
@@ -81,9 +96,16 @@ status = worker.dispatch('status', {})
 assert status['connected'] and status['target'] == {'heroId': 'fixture:run:hero'}
 edited = worker.dispatch('set_value', {'field': 'money', 'value': 500, 'target': status['target']})
 assert edited['money'] == 500
-configured = worker.dispatch('configure_locks', {'money': 40, 'rerolls': 6})
+configured = worker.dispatch('configure_locks', {
+    'health': {'current': 45, 'max': 90}, 'money': 40, 'rerolls': 6
+})
+assert configured['healthLocked'] and configured['healthLock'] == {'current': 45, 'max': 90}
 assert configured['moneyLocked'] and configured['moneyLock'] == 40
 assert configured['rerollsLocked'] and configured['rerollsLock'] == 6
+health_locked = worker.dispatch(
+    'lock_vital', {'vital': 'health', 'locked': True, 'target': status['target']}
+)
+assert health_locked['healthLocked'] and health_locked['healthLock'] == {'current': 50, 'max': 100}
 money_locked = worker.dispatch(
     'lock_resource', {'resource': 'Money', 'locked': True, 'target': status['target']}
 )
@@ -93,6 +115,12 @@ rerolls_locked = worker.dispatch(
 )
 assert rerolls_locked['rerollsLocked'] and rerolls_locked['rerollsLock'] == 3
 for target in ({'heroId': 'old:run:hero'}, None):
+    try:
+        worker.dispatch('lock_vital', {'vital': 'health', 'locked': True, 'target': target})
+    except AdapterError as error:
+        assert error.code == 'stale_target'
+    else:
+        raise AssertionError('an obsolete or absent hero identity reached the health lock mutation')
     try:
         worker.dispatch('lock_resource', {'resource': 'Money', 'locked': True, 'target': target})
     except AdapterError as error:
