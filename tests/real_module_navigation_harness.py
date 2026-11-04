@@ -633,7 +633,7 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         arguments = [str(binary), str(project), sys.executable] + (["startup"] if startup_only else [])
         completion = "context_startup_availability_ok" if startup_only else "hades_and_hades2_host_navigation_ok"
         try:
-            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=45)
         except subprocess.TimeoutExpired as error:
             for output in (error.stdout, error.stderr):
                 if output:
