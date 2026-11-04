@@ -166,6 +166,7 @@ struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
 
 struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.trainerTheme) private var theme
 
     let identity: AnyHashable?
     let hasReview: Bool
@@ -202,6 +203,8 @@ struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: Vi
             if showsPaging {
                 Divider()
                 paging
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.vertical, theme.inlineRowVerticalPadding)
             }
 
             VStack(spacing: 0) {
