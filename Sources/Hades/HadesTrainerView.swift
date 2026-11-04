@@ -609,6 +609,7 @@ private struct HadesCatalogView: View {
                         }
                     )
                     .id(selected?.id ?? "")
+                    .accessibilityIdentifier("hades.catalog.level")
                 }
 
                 Spacer()
@@ -916,6 +917,7 @@ private struct HadesCurrentTraitRow: View {
                             return String(amount)
                         }
                     )
+                    .accessibilityIdentifier("hades.currentTrait.level")
                     TrainerSecondaryActionButton(
                         title: text("hades.setLevel"),
                         systemImage: TrainerSemanticIcon.Action.apply,
