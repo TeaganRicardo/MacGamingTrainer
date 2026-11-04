@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 6 then error("hades.error.restartRequired") end
+  if existing.revision ~= 7 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 6,
+  version = 1, revision = 7,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -225,6 +225,14 @@ local function mount(unit, rebuilt)
     nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
       ChangeValue = desired.dashBonus - mounted.dash, ChangeType = "Add" })
     mounted.dash = desired.dashBonus
+  end
+  if finite(runtime.moneyLock) and finite(CurrentRun.Money) then
+    CurrentRun.Money = runtime.moneyLock
+    if type(UpdateMoneyUI) == "function" then UpdateMoneyUI(runtime.moneyLock) end
+  end
+  if finite(runtime.rerollsLock) and finite(CurrentRun.NumRerolls) then
+    CurrentRun.NumRerolls = runtime.rerollsLock
+    if type(UpdateRerollUI) == "function" then UpdateRerollUI(runtime.rerollsLock) end
   end
   fillGauge(unit)
 end
@@ -587,6 +595,16 @@ local function installHooks()
       return original(loot, ...)
     end
   end)
+  hook("UpdateMoneyUI", function(original)
+    return function(value, ...)
+      local run, unit = CurrentRun, hero()
+      if unit and finite(runtime.moneyLock) and finite(run and run.Money) then
+        run.Money = runtime.moneyLock
+        value = runtime.moneyLock
+      end
+      return original(value, ...)
+    end
+  end)
   hook("SpendMoney", function(original)
     return function(amount, ...)
       local run, unit = CurrentRun, hero()
@@ -630,6 +648,11 @@ local function installHooks()
         lease.run.NumRerolls = lease.run.NumRerolls + lease.cost
         value = lease.run.NumRerolls
         lease.restored = true
+      end
+      local unit = hero()
+      if unit and finite(runtime.rerollsLock) and type(CurrentRun) == "table" then
+        CurrentRun.NumRerolls = runtime.rerollsLock
+        value = runtime.rerollsLock
       end
       return original(value, ...)
     end
@@ -716,6 +739,8 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
+    moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
+    rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
     features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
     resources = resources, traits = traits, world = world.observation(),
   }
@@ -737,6 +762,8 @@ function runtime.configure(features)
   installHooks()
   for name, value in pairs(features) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  if runtime.features.moneyNoDecrease then runtime.moneyLock = nil end
+  if runtime.features.rerollsNoDecrease then runtime.rerollsLock = nil end
   if not runtime.features.forceRerolls then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
@@ -746,6 +773,8 @@ function runtime.set_feature(name, value)
   validateFeature(name, value)
   installHooks()
   runtime.features[name] = value
+  if name == "moneyNoDecrease" and value then runtime.moneyLock = nil end
+  if name == "rerollsNoDecrease" and value then runtime.rerollsLock = nil end
   if name == "forceRerolls" and not value then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
@@ -758,6 +787,49 @@ function runtime.set_boon_rarity(target)
   runtime.boonRarityTarget = target
   return runtime.status()
 end
+function runtime.configure_locks(money, rerolls)
+  if money ~= nil then
+    assert(finite(money) and money == math.floor(money) and money >= 0 and money <= 1000000000,
+      "hades.error.invalidValue")
+    assert(not runtime.features.moneyNoDecrease, "hades.error.invalidValue")
+  end
+  if rerolls ~= nil then
+    assert(finite(rerolls) and rerolls == math.floor(rerolls) and rerolls >= 0 and rerolls <= 1000000000,
+      "hades.error.invalidValue")
+    assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
+  end
+  installHooks()
+  runtime.moneyLock, runtime.rerollsLock = money, rerolls
+  local unit = hero()
+  if unit then mount(unit, false) end
+  return runtime.status()
+end
+function runtime.lock_resource(name, locked)
+  local unit = requireHero()
+  assert(name == "Money" and type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(not runtime.features.moneyNoDecrease and finite(CurrentRun.Money),
+      "hades.error.invalidValue")
+    runtime.moneyLock = CurrentRun.Money
+  else
+    runtime.moneyLock = nil
+  end
+  mount(unit, false)
+  return runtime.status()
+end
+function runtime.lock_rerolls(locked)
+  local unit = requireHero()
+  assert(type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(not runtime.features.rerollsNoDecrease and finite(CurrentRun.NumRerolls),
+      "hades.error.invalidValue")
+    runtime.rerollsLock = CurrentRun.NumRerolls
+  else
+    runtime.rerollsLock = nil
+  end
+  mount(unit, false)
+  return runtime.status()
+end
 function runtime.set_invincibility(enabled)
   requireHero()
   return runtime.set_feature("invincibility", enabled)
@@ -766,6 +838,7 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  runtime.moneyLock, runtime.rerollsLock = nil, nil
   restoreRerollDoors()
   local unit = hero()
   if unit then mount(unit, false) end
@@ -802,9 +875,11 @@ function runtime.set_value(field, value)
     UpdateSuperMeterUI()
   elseif field == "money" then
     CurrentRun.Money = value
+    if runtime.moneyLock ~= nil then runtime.moneyLock = value end
     UpdateMoneyUI(value)
   elseif field == "rerolls" then
     CurrentRun.NumRerolls = value
+    if runtime.rerollsLock ~= nil then runtime.rerollsLock = value end
     UpdateRerollUI(value)
   else error("hades.error.invalidValue") end
   return runtime.status()
