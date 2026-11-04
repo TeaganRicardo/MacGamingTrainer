@@ -841,7 +841,9 @@ private struct HadesCurrentTraitRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            HadesEffectLifecycleControls(model: model, trait: trait)
+            if trait.hasContextualControls {
+                HadesEffectLifecycleControls(model: model, trait: trait)
+            }
         }
         .onChange(of: trait) { old, updated in
             if rarity == old.rarity { rarity = updated.rarity }
