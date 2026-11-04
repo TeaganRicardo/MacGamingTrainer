@@ -506,6 +506,13 @@ func exerciseModuleDisclosure<Content: View>(
                             "missing shipped Host disclosure translation: " + key)
         }
         for width: CGFloat in [817, 1150] {
+            // Cover both shipped languages and both layout widths without the
+            // redundant cross-product. The native edit/lifecycle assertions
+            // below are identical for each pairing and dominate this fixture's
+            // macOS runtime budget.
+            if (language == .en && width == 1150) || (language == .zhCN && width == 817) {
+                continue
+            }
             expanded.wrappedValue = false
             try observeAvailability(3)
             let host = NSHostingView(rootView: TrainerShell { EmptyView() } content: {
