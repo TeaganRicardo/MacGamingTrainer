@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 5 then error("hades.error.restartRequired") end
+  if existing.revision ~= 6 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -8,7 +8,7 @@ local trainerFlag = "MacGamingTrainer.Hades"
 local defaults = {
   invincibility = false, moneyNoDecrease = false, rerollsNoDecrease = false,
   fullGodGauge = false, fullHealth = false, infiniteAmmo = false, forceRerolls = false,
-  boonRarityEnabled = false, damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
+  boonRarityEnabled = false, boonRarityTarget = "Heroic", damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
   attackSpeedMultiplier = 1, dashBonus = 0,
 }
 local resourceNames = {
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 5,
+  version = 1, revision = 6,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -561,17 +561,20 @@ local function installHooks()
   end)
   hook("SetTraitsOnLoot", function(original)
     return function(loot, ...)
-      if runtime.features.boonRarityEnabled and type(loot) == "table"
-          and rarityLootNames[loot.Name] and not loot.ForceCommon
+      if runtime.features.boonRarityEnabled and runtime.features.boonRarityTarget ~= "Common"
+          and type(loot) == "table" and rarityLootNames[loot.Name] and not loot.ForceCommon
           and type(loot.RarityChances) == "table" then
-        -- Native TraitScripts.lua selects a Legendary only when eligible; the
-        -- Heroic roll uses the Epic-capable trait pool. Keep the Legendary
-        -- chance and source/slot legality, while preferring Heroic (or Rare
-        -- for a Rare-only trait). Original odds are never changed in-place.
+        -- Native TraitScripts.lua selects the highest legal rarity whose chance
+        -- succeeds. Raise only tiers at or below the configured minimum, leaving
+        -- higher native odds (especially Legendary) untouched.
         local odds = loot.RarityChances
         local boosted = {}
         for key, value in pairs(odds) do boosted[key] = value end
-        boosted.Heroic, boosted.Epic, boosted.Rare = 1, 1, 1
+        boosted.Rare = 1
+        if runtime.features.boonRarityTarget == "Epic" or runtime.features.boonRarityTarget == "Heroic" then
+          boosted.Epic = 1
+        end
+        if runtime.features.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
         loot.RarityChances = boosted
         -- The native selection path is synchronous; restore the exact native
         -- odds on both success and a rejected/failed native offer generation.
@@ -720,6 +723,9 @@ local function validateFeature(name, value)
   local default = defaults[name]
   if type(default) == "boolean" then
     assert(type(value) == "boolean", "hades.error.invalidValue")
+  elseif name == "boonRarityTarget" then
+    assert(value == "Common" or value == "Rare" or value == "Epic" or value == "Heroic",
+      "hades.error.invalidValue")
   elseif name == "dashBonus" then
     assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 20, "hades.error.invalidValue")
   else
