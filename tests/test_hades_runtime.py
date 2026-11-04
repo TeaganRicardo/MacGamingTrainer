@@ -455,7 +455,11 @@ runtime.set_feature("boonRarityEnabled", false)
 SetTraitsOnLoot(olympian)
 assert(olympian.UpgradeOptions[1].Rarity == "Common", "turning rarity off did not restore natural rolls")
 runtime.set_feature("boonRarityEnabled", true)
+runtime.lock_resource("Money", true)
+runtime.lock_rerolls(true)
 runtime.disable_all()
+assert(not runtime.status().moneyLocked and not runtime.status().rerollsLocked,
+  "Disable All did not release fixed value locks")
 assert(runtime.status().features.boonRarityEnabled == false, "Disable All did not reset rarity policy")
 assert(runtime.status().boonRarityTarget == "Heroic", "Disable All did not reset rarity target")
 SetTraitsOnLoot(olympian)
@@ -512,6 +516,24 @@ assert(CurrentRun.Money == 123 and CurrentRun.MoneySpent == 60)
 SpendMoney(0, "nothing")
 assert(CurrentRun.Money == 123)
 
+runtime.set_feature("moneyNoDecrease", false)
+CurrentRun.Money = 80
+UpdateMoneyUI(CurrentRun.Money)
+runtime.lock_resource("Money", true)
+assert(runtime.status().moneyLocked and runtime.status().moneyLock == 80)
+CurrentRun.Money = CurrentRun.Money + 25
+UpdateMoneyUI(CurrentRun.Money)
+assert(CurrentRun.Money == 80 and updates.money == 80, "fixed gold lock did not reject a native gain")
+SpendMoney(15, "locked-shop")
+assert(CurrentRun.Money == 80 and CurrentRun.MoneySpent == 75, "fixed gold lock erased native spend history")
+runtime.set_value("money", 91)
+assert(CurrentRun.Money == 91 and runtime.status().moneyLock == 91,
+  "absolute gold edit did not advance the active fixed lock")
+runtime.set_feature("moneyNoDecrease", true)
+assert(not runtime.status().moneyLocked, "Infinite Gold did not release the conflicting fixed lock")
+expectError("invalidValue", function() runtime.lock_resource("Money", true) end)
+runtime.set_feature("moneyNoDecrease", false)
+
 runtime.set_feature("rerollsNoDecrease", true)
 AttemptBoonLootReroll()
 assert(CurrentRun.NumRerolls == 3 and rerollsSeenInMenu[1] == 3)
@@ -525,6 +547,24 @@ assert(ok and result == "panel" and absent == nil and number == 5)
 assert(CurrentRun.NumRerolls == 5, "native gains were swallowed")
 assert(AttemptReroll(CurrentRun, { CanBeRerolled = true }) == "door" and CurrentRun.NumRerolls == 5)
 assert(AttemptReroll(CurrentRun, nil) == nil and CurrentRun.NumRerolls == 5)
+
+runtime.set_feature("rerollsNoDecrease", false)
+CurrentRun.NumRerolls = 6
+UpdateRerollUI(CurrentRun.NumRerolls)
+runtime.lock_rerolls(true)
+assert(runtime.status().rerollsLocked and runtime.status().rerollsLock == 6)
+AttemptBoonLootReroll()
+assert(CurrentRun.NumRerolls == 6 and updates.rerolls == 6, "fixed reroll lock did not reject native spend")
+CurrentRun.NumRerolls = CurrentRun.NumRerolls + 3
+UpdateRerollUI(CurrentRun.NumRerolls)
+assert(CurrentRun.NumRerolls == 6 and updates.rerolls == 6, "fixed reroll lock did not reject native gain")
+runtime.set_value("rerolls", 8)
+assert(CurrentRun.NumRerolls == 8 and runtime.status().rerollsLock == 8,
+  "absolute reroll edit did not advance the active fixed lock")
+runtime.set_feature("rerollsNoDecrease", true)
+assert(not runtime.status().rerollsLocked, "Infinite Rerolls did not release the conflicting fixed lock")
+expectError("invalidValue", function() runtime.lock_rerolls(true) end)
+runtime.set_feature("rerollsNoDecrease", false)
 
 unit.hasCall, unit.SuperMeter = true, 10
 local existingDrain = coroutine.create(PostEncounterDrainSuper)
