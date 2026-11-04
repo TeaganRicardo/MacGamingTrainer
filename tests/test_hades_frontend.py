@@ -165,15 +165,33 @@ for raw in sys.stdin:
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
         if command=='set_feature':
-            if params.get('feature')=='gameSpeed':
+            feature=params.get('feature')
+            if feature=='gameSpeed':
                 state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
             else:
-                state['features'][params['feature']]=params['value']
+                state['features'][feature]=params['value']
+                if feature=='moneyNoDecrease' and params['value']:
+                    state['moneyLocked']=False;state['moneyLock']=None
+                if feature=='rerollsNoDecrease' and params['value']:
+                    state['rerollsLocked']=False;state['rerollsLock']=None
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_boon_rarity':
             state['boonRarityTarget']=params['target']
             (folder/'state.json').write_text(json.dumps(state))
-        if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_resource':
+            assert params.get('resource')=='Money'
+            state['moneyLocked']=bool(params['locked'])
+            state['moneyLock']=state['money'] if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_rerolls':
+            state['rerollsLocked']=bool(params['locked'])
+            state['rerollsLock']=state['rerolls'] if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_value':
+            state[params['field']]=params['value']
+            if params['field']=='money' and state.get('moneyLocked'):state['moneyLock']=params['value']
+            if params['field']=='rerolls' and state.get('rerollsLocked'):state['rerollsLock']=params['value']
+            (folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
                 if trait['instanceId']==params['instanceId']:trait['remainingUses']=params['uses']
@@ -688,6 +706,34 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("status after target replacement restores runtime observation") {
             model.connected && !model.busy && model.boonRarityTarget == "Epic"
         }
+
+        let beforeMoneyLocks = commands().filter { $0["command"] as? String == "lock_resource" }.count
+        model.lockMoney(true)
+        wait("fixed gold lock reply") {
+            !model.busy && model.moneyLocked
+                && commands().filter { $0["command"] as? String == "lock_resource" }.count == beforeMoneyLocks + 1
+        }
+        let moneyLockArgs = commands().last { $0["command"] as? String == "lock_resource" }?["params"] as? [String:Any]
+        check(moneyLockArgs?["resource"] as? String == "Money"
+              && moneyLockArgs?["locked"] as? Bool == true
+              && (moneyLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed gold lock lost its current hero owner")
+        model.lockMoney(false)
+        wait("fixed gold unlock reply") { !model.busy && !model.moneyLocked }
+
+        let beforeRerollLocks = commands().filter { $0["command"] as? String == "lock_rerolls" }.count
+        model.lockRerolls(true)
+        wait("fixed reroll lock reply") {
+            !model.busy && model.rerollsLocked
+                && commands().filter { $0["command"] as? String == "lock_rerolls" }.count == beforeRerollLocks + 1
+        }
+        let rerollLockArgs = commands().last { $0["command"] as? String == "lock_rerolls" }?["params"] as? [String:Any]
+        check(rerollLockArgs?["locked"] as? Bool == true
+              && (rerollLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed reroll lock lost its current hero owner")
+        model.lockRerolls(false)
+        wait("fixed reroll unlock reply") { !model.busy && !model.rerollsLocked }
+
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
@@ -1538,6 +1584,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion']))
     initial_state = {'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
+        'moneyLocked': False, 'moneyLock': None, 'rerollsLocked': False, 'rerollsLock': None,
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
         'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
