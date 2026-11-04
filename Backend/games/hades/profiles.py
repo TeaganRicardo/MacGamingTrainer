@@ -6,7 +6,7 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.persistence import atomic_write_text
-from .schema import preference_document
+from .schema import migrate_preference_document, preference_document
 
 
 class HadesProfileStore:
@@ -33,7 +33,7 @@ class HadesProfileStore:
                     or self.path(value['name']) != path or self.name(value['name']) != value['name']
                     or not isinstance(value['updatedAt'], str) or not value['updatedAt']):
                 raise ValueError('Invalid Hades profile envelope')
-            value['features'] = preference_document(value['features'])
+            value['features'] = migrate_preference_document(value['features'])
             return value
         except (OSError, ValueError, AdapterError) as error:
             raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
