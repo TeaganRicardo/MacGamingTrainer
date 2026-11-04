@@ -506,7 +506,7 @@ struct Hades2SaveEditorView: View {
                     return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
                 }
             )
-            .id(identity ?? entry.id)
+            .id(identity ?? (entry.id + ":" + entry.baselineGeneration))
             .disabled(!model.canEditText(entry))
             .frame(width: 175)
         }
