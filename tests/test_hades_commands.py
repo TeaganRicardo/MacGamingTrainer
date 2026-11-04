@@ -280,7 +280,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     adapter.preferences = RejectingLockPreferences()
     try:
         adapter.dispatch(
-            'set_value', {'field': 'health', 'value': previous_health_lock['current'] - 1, 'target': owner},
+            'set_value', {'field': 'maxHealth', 'value': previous_health_lock['max'] - 5, 'target': owner},
             'locked-health-edit-disk-failure'
         )
     except AdapterError as error:
@@ -290,7 +290,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert runtime.state['healthLock'] == previous_health_lock
     assert runtime.state['health'] == previous_health_lock['current']
     assert runtime.state['maxHealth'] == previous_health_lock['max'], (
-        'failed health-lock edit did not restore the previous native pair'
+        'failed max-health lock edit did not restore the previous native pair'
     )
     adapter.preferences = store
     adapter.dispatch(
