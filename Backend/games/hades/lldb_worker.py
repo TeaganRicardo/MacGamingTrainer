@@ -67,13 +67,16 @@ class HadesLLDBWorker:
         elif method == 'status':
             if self.transport.alive():
                 return self._invoke()
-        elif method in ('set_feature', 'set_boon_rarity', 'set_invincibility', 'configure', 'disable_all') or method in ONE_SHOT_COMMANDS:
+        elif method in (
+            'set_feature', 'set_boon_rarity', 'set_invincibility', 'configure',
+            'configure_locks', 'lock_resource', 'lock_rerolls', 'disable_all'
+        ) or method in ONE_SHOT_COMMANDS:
             if not self.transport.alive():
                 raise AdapterError('not_connected', 'hades.error.notConnected')
             if method == 'set_invincibility':
                 method, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
             target = None
-            if method in ONE_SHOT_COMMANDS:
+            if method in ONE_SHOT_COMMANDS or method in ('lock_resource', 'lock_rerolls'):
                 target = params.get('target')
                 if not isinstance(target, dict) or not isinstance(target.get('heroId'), str) or not target['heroId']:
                     raise AdapterError('stale_target', 'hades.error.staleTarget')
@@ -91,6 +94,12 @@ class HadesLLDBWorker:
                 result = self._invoke(method, (values,))
                 self.features = values
                 return result
+            if method == 'configure_locks':
+                return self._invoke(method, (params.get('money'), params.get('rerolls')))
+            if method == 'lock_resource':
+                return self._invoke(method, (params.get('resource'), params.get('locked')), target=target)
+            if method == 'lock_rerolls':
+                return self._invoke(method, (params.get('locked'),), target=target)
             if method in WORLD_COMMANDS:
                 values = world_mutation_params(method, params)
                 return self._invoke(method, (values,), target=target)
