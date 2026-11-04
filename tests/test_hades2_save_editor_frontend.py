@@ -1655,12 +1655,16 @@ struct Main {
             fail("Workbench navigation resolves the wrong entity browse scope")
         }
         model.selectDomain(.quests)
-        pump(0.20)
+        pumpUntil {
+            !model.querying && model.items.map(\.id) == ["quest:QuestHelpDora"]
+        }
         if model.items.map(\.id) != ["quest:QuestHelpDora"] {
             fail("Quest navigation included unrelated progression data")
         }
         model.selectDomain(.arcana)
-        pump(0.20)
+        pumpUntil {
+            !model.querying && model.items.map(\.id) == ["card:ChanneledCast:Level"]
+        }
         if model.items.map(\.id) != ["card:ChanneledCast:Level"] {
             fail("Growth navigation included unrelated quest progress")
         }
