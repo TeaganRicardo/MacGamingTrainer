@@ -736,6 +736,7 @@ function runtime.configure(features)
   for name, value in pairs(features) do validateFeature(name, value) end
   installHooks()
   for name, value in pairs(features) do runtime.features[name] = value end
+  runtime.boonRarityTarget = "Heroic"
   if not runtime.features.forceRerolls then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
