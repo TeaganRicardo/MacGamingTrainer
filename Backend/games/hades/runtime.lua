@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 7 then error("hades.error.restartRequired") end
+  if existing.revision ~= 8 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 7,
+  version = 1, revision = 8,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -173,6 +173,27 @@ local function applyAttack(unit, factor)
   assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.unsupportedRuntime")
   ApplyUnitPropertyChanges(unit, attackChanges(factor), false)
 end
+local function validHealthLock(value)
+  return type(value) == "table"
+    and finite(value.current) and value.current == math.floor(value.current)
+    and finite(value.maximum) and value.maximum == math.floor(value.maximum)
+    and value.current >= 1 and value.maximum >= 1
+    and value.current <= value.maximum and value.maximum <= 1000000000
+end
+local function enforceHealthLock(unit)
+  local lock = runtime.healthLock
+  if runtime.healthLockSuspended or not lock or not unit or unit.IsDead then return end
+  unit.MaxHealth = lock.maximum
+  unit.Health = math.max(1, math.min(lock.current, lock.maximum))
+end
+local function releaseHealthProjection(unit)
+  if not unit or unit.IsDead then return end
+  if type(ValidateMaxHealth) == "function" then ValidateMaxHealth(true) end
+  if finite(unit.MaxHealth) then
+    unit.Health = math.max(1, math.min(unit.Health or 1, unit.MaxHealth))
+  end
+  if type(UpdateHealthUI) == "function" then UpdateHealthUI() end
+end
 local function fillGauge(unit)
   if runtime.features.fullGodGauge and not runtime.fillingGauge and not unit.IsDead and not unit.SuperActive
       and type(IsSuperValid) == "function" and IsSuperValid()
@@ -226,6 +247,7 @@ local function mount(unit, rebuilt)
       ChangeValue = desired.dashBonus - mounted.dash, ChangeType = "Add" })
     mounted.dash = desired.dashBonus
   end
+  enforceHealthLock(unit)
   if finite(runtime.moneyLock) and finite(CurrentRun.Money) then
     CurrentRun.Money = runtime.moneyLock
     if type(UpdateMoneyUI) == "function" then UpdateMoneyUI(runtime.moneyLock) end
@@ -379,9 +401,31 @@ local function installHooks()
         end
       end
       for _, run in pairs(type(GameState) == "table" and GameState.RunHistory or {}) do strip(run) end
-      -- Main.lua Save is synchronous; restore projections even when luabins.save raises.
+      -- Main.lua Save is synchronous. A fixed MaxHealth value is a runtime
+      -- projection just like Trainer modifiers: serialize the native contribution
+      -- result, then restore the live lock even when luabins.save raises.
+      local projectedHealth
+      local liveUnit = hero()
+      if liveUnit and runtime.healthLock and not runtime.healthLockSuspended then
+        projectedHealth = {
+          run = CurrentRun, unit = liveUnit,
+          current = liveUnit.Health, maximum = liveUnit.MaxHealth,
+        }
+        runtime.healthLockSuspended = true
+        if type(ValidateMaxHealth) == "function" then ValidateMaxHealth(true) end
+        if finite(liveUnit.MaxHealth) then
+          liveUnit.Health = math.max(1, math.min(projectedHealth.current, liveUnit.MaxHealth))
+        end
+      end
       local result = table.pack(pcall(original, ...))
       for _, field in ipairs(removed) do field.owner[field.key] = field.value end
+      if projectedHealth and sameOwner(projectedHealth.run, projectedHealth.unit) then
+        projectedHealth.unit.MaxHealth = projectedHealth.maximum
+        projectedHealth.unit.Health = projectedHealth.current
+      end
+      runtime.healthLockSuspended = false
+      if projectedHealth and sameOwner(projectedHealth.run, projectedHealth.unit)
+          and type(UpdateHealthUI) == "function" then UpdateHealthUI() end
       if not result[1] then error(result[2], 0) end
       return table.unpack(result, 2, result.n)
     end
@@ -505,16 +549,55 @@ local function installHooks()
       end
     end)
   end
+  hook("UpdateHealthUI", function(original)
+    return function(...)
+      local unit = hero()
+      if unit then enforceHealthLock(unit) end
+      return original(...)
+    end
+  end)
+  hook("ValidateMaxHealth", function(original)
+    return function(...)
+      local result = table.pack(original(...))
+      local unit = hero()
+      if unit and runtime.healthLock and not runtime.healthLockSuspended then
+        enforceHealthLock(unit)
+        UpdateHealthUI()
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("Heal", function(original)
+    return function(target, args, ...)
+      local run, unit = CurrentRun, hero()
+      local result = table.pack(original(target, args, ...))
+      if unit and target == unit and sameOwner(run, unit)
+          and runtime.healthLock and not runtime.healthLockSuspended then
+        enforceHealthLock(unit)
+        UpdateHealthUI()
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
   hook("Damage", function(original)
     return function(victim, args, ...)
       local unit = hero()
-      if runtime.features.fullHealth and unit and victim == unit and not unit.IsDead then
+      if unit and victim == unit and not unit.IsDead
+          and ((runtime.healthLock and not runtime.healthLockSuspended)
+            or runtime.features.fullHealth) then
         -- Combat.lua clamps to MinHealth before checking Death Defiance/death.
-        -- Only this hero's damage call receives the temporary life floor.
+        -- Fixed Health uses its current target; Full Health uses the maximum.
         local parameters = {}
         for key, value in pairs(args) do parameters[key] = value end
-        parameters.MinHealth = unit.MaxHealth
-        return original(victim, parameters, ...)
+        local floor = runtime.healthLock and not runtime.healthLockSuspended
+          and runtime.healthLock.current or unit.MaxHealth
+        parameters.MinHealth = math.max(parameters.MinHealth or 0, floor)
+        local result = table.pack(original(victim, parameters, ...))
+        if runtime.healthLock and not runtime.healthLockSuspended then
+          enforceHealthLock(unit)
+          UpdateHealthUI()
+        end
+        return table.unpack(result, 1, result.n)
       end
       return original(victim, args, ...)
     end
@@ -739,6 +822,7 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
+    healthLocked = runtime.healthLock ~= nil, healthLock = runtime.healthLock,
     moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
     rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
     features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
@@ -787,7 +871,7 @@ function runtime.set_boon_rarity(target)
   runtime.boonRarityTarget = target
   return runtime.status()
 end
-function runtime.configure_locks(money, rerolls)
+function runtime.configure_locks(money, rerolls, health)
   if money ~= nil then
     assert(finite(money) and money == math.floor(money) and money >= 0 and money <= 1000000000,
       "hades.error.invalidValue")
@@ -798,9 +882,13 @@ function runtime.configure_locks(money, rerolls)
       "hades.error.invalidValue")
     assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
   end
+  assert(health == nil or validHealthLock(health), "hades.error.invalidValue")
   installHooks()
-  runtime.moneyLock, runtime.rerollsLock = money, rerolls
   local unit = hero()
+  local releasingHealth = runtime.healthLock ~= nil and health == nil
+  runtime.moneyLock, runtime.rerollsLock = money, rerolls
+  runtime.healthLock = health and { current = health.current, maximum = health.maximum } or nil
+  if releasingHealth and unit then releaseHealthProjection(unit) end
   if unit then mount(unit, false) end
   return runtime.status()
 end
@@ -830,6 +918,23 @@ function runtime.lock_rerolls(locked)
   mount(unit, false)
   return runtime.status()
 end
+function runtime.lock_vital(name, locked)
+  local unit = requireHero()
+  assert(name == "health" and type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(finite(unit.Health) and finite(unit.MaxHealth)
+      and unit.Health >= 1 and unit.MaxHealth >= 1 and unit.Health <= unit.MaxHealth,
+      "hades.error.unsupportedRuntime")
+    runtime.healthLock = { current = unit.Health, maximum = unit.MaxHealth }
+    enforceHealthLock(unit)
+    UpdateHealthUI()
+  else
+    local releasing = runtime.healthLock ~= nil
+    runtime.healthLock = nil
+    if releasing then releaseHealthProjection(unit) end
+  end
+  return runtime.status()
+end
 function runtime.set_invincibility(enabled)
   requireHero()
   return runtime.set_feature("invincibility", enabled)
@@ -838,36 +943,57 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  local hadHealthLock = runtime.healthLock ~= nil
+  runtime.healthLock = nil
   runtime.moneyLock, runtime.rerollsLock = nil, nil
   restoreRerollDoors()
   local unit = hero()
+  if unit and hadHealthLock then releaseHealthProjection(unit) end
   if unit then mount(unit, false) end
   return runtime.status()
+end
+local function setMaximumHealth(unit, value)
+  assert(value >= 1, "hades.error.invalidValue")
+  local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
+  assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
+  local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
+  if change ~= 0 then
+    local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
+    trait.PropertyChanges[1].ChangeValue = change
+    -- ApplyUnitPropertyChange clamps health before its multiplier-aware
+    -- validation. Keep that intermediate maximum positive on large decreases.
+    unit.MaxHealth = math.max(unit.MaxHealth, value - change)
+    AddTraitToHero({ TraitData = trait })
+  else
+    ValidateMaxHealth(true)
+  end
+  unit.Health = math.max(0, math.min(unit.Health, unit.MaxHealth))
+  UpdateHealthUI()
 end
 function runtime.set_value(field, value)
   local unit = requireHero()
   assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 1000000000, "hades.error.invalidValue")
   if field == "health" then
     assert(value >= 1 and value <= unit.MaxHealth, "hades.error.invalidValue")
+    if runtime.healthLock ~= nil then runtime.healthLock.current = value end
     unit.Health = value
     UpdateHealthUI()
   elseif field == "maxHealth" then
-    assert(value >= 1, "hades.error.invalidValue")
-    local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
-    assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
-    local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
-    if change ~= 0 then
-      local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
-      trait.PropertyChanges[1].ChangeValue = change
-      -- ApplyUnitPropertyChange clamps health before its multiplier-aware
-      -- validation. Keep that intermediate maximum positive on large decreases.
-      unit.MaxHealth = math.max(unit.MaxHealth, value - change)
-      AddTraitToHero({ TraitData = trait })
-    else
-      ValidateMaxHealth(true)
+    local locked = runtime.healthLock ~= nil
+    if locked then runtime.healthLockSuspended = true end
+    local ok, message = pcall(setMaximumHealth, unit, value)
+    if not ok then
+      runtime.healthLockSuspended = false
+      error(message, 0)
     end
-    unit.Health = math.max(0, math.min(unit.Health, unit.MaxHealth))
-    UpdateHealthUI()
+    if locked then
+      runtime.healthLock.maximum = unit.MaxHealth
+      runtime.healthLock.current = math.max(1, math.min(runtime.healthLock.current, unit.MaxHealth))
+      unit.Health = runtime.healthLock.current
+      runtime.healthLockSuspended = false
+      enforceHealthLock(unit)
+      UpdateHealthUI()
+    end
   elseif field == "godGauge" then
     assert(not unit.SuperActive and finite(unit.SuperMeterLimit) and value <= unit.SuperMeterLimit,
       "hades.error.invalidValue")
