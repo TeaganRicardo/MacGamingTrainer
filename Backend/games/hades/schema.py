@@ -24,6 +24,7 @@ DEFAULT_PREFERENCES = {
     **DEFAULT_FEATURES,
     'boonRarityTarget': 'Heroic',
     'gameSpeed': 1.0,
+    'healthLock': None,
     'moneyLock': None,
     'rerollsLock': None,
 }
@@ -80,6 +81,16 @@ def preference_value(name, value):
         return boon_rarity_target(value)
     if name == 'gameSpeed':
         return number(value, 0, 10)
+    if name == 'healthLock':
+        if value is None:
+            return None
+        if not isinstance(value, dict) or set(value) != {'current', 'max'}:
+            raise invalid_value()
+        current = number(value.get('current'), 1, 1_000_000_000, integer=True)
+        maximum = number(value.get('max'), 1, 1_000_000_000, integer=True)
+        if current > maximum:
+            raise invalid_value()
+        return {'current': current, 'max': maximum}
     if name in ('moneyLock', 'rerollsLock'):
         if value is None:
             return None
@@ -105,7 +116,7 @@ def migrate_preference_document(values):
     original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
                 'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
                 'attackSpeedMultiplier', 'dashBonus'}
-    current_before_locks = set(DEFAULT_PREFERENCES) - {'moneyLock', 'rerollsLock'}
+    current_before_locks = set(DEFAULT_PREFERENCES) - {'healthLock', 'moneyLock', 'rerollsLock'}
     previous_before_rarity_target = current_before_locks - {'boonRarityTarget'}
     shipped = (
         original,
