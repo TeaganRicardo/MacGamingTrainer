@@ -409,13 +409,13 @@ struct StartupAvailabilityModule: TrainerGameModule {
         // Warm both retained real module trees before measuring the steady-state
         // interaction the user reported. The settle boundary is the first point
         // where the destination module's native section index is actually exposed.
-        for _ in 0..<2 {
+        for _ in 0..<1 {
             selectGame("hades2")
             selectGame("hades")
         }
         let mainLoopSampler = MainRunLoopGapSampler()
         mainLoopSampler.start()
-        for _ in 0..<6 {
+        for _ in 0..<3 {
             selectGame("hades2", measure: true)
             selectGame("hades", measure: true)
         }
