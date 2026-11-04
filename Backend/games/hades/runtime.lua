@@ -937,31 +937,29 @@ function runtime.set_value(field, value)
     UpdateHealthUI()
   elseif field == "maxHealth" then
     assert(value >= 1, "hades.error.invalidValue")
-    local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
-    assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
     local activeLock = healthLockValid(runtime.healthLock) and runtime.healthLock or nil
-    local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
-    if change ~= 0 then
-      local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
-      trait.PropertyChanges[1].ChangeValue = change
-      -- ApplyUnitPropertyChange clamps health before its multiplier-aware
-      -- validation. Keep that intermediate maximum positive on large decreases.
-      unit.MaxHealth = math.max(unit.MaxHealth, value - change)
-      if activeLock then runtime.healthLock = nil end
-      local result = table.pack(pcall(AddTraitToHero, { TraitData = trait }))
-      if activeLock then runtime.healthLock = activeLock end
-      if not result[1] then error(result[2], 0) end
-    else
-      if activeLock then runtime.healthLock = nil end
-      local result = table.pack(pcall(ValidateMaxHealth, true))
-      if activeLock then runtime.healthLock = activeLock end
-      if not result[1] then error(result[2], 0) end
-    end
-    unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
     if activeLock then
+      -- A fixed vital lock owns only its visible current/max pair. Do not
+      -- rewrite the native run contribution underneath it: Hearts, Mirror,
+      -- curses and trait multipliers keep evolving there and resume on unlock.
       activeLock.max = value
       activeLock.current = math.min(activeLock.current, value)
       enforceHealthLock(unit)
+    else
+      local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
+      assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
+      local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
+      if change ~= 0 then
+        local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
+        trait.PropertyChanges[1].ChangeValue = change
+        -- ApplyUnitPropertyChange clamps health before its multiplier-aware
+        -- validation. Keep that intermediate maximum positive on large decreases.
+        unit.MaxHealth = math.max(unit.MaxHealth, value - change)
+        AddTraitToHero({ TraitData = trait })
+      else
+        ValidateMaxHealth(true)
+      end
+      unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
     end
     UpdateHealthUI()
   elseif field == "godGauge" then
