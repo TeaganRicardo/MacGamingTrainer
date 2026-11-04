@@ -199,6 +199,7 @@ function Heal(unit, args)
   assert(args.Silent and args.HealAmount >= 0)
   unit.Health = math.min(unit.MaxHealth, unit.Health + args.HealAmount)
 end
+function ValidateMaxHealth() end
 local damageCalls = 0
 function Damage(unit, args)
   damageCalls = damageCalls + 1
