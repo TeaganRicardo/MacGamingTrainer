@@ -837,7 +837,8 @@ struct Main {
             }
         }
         pumpUntil(timeout: 4.0) {
-            model.profile == "Profile1" && model.items.count == 1
+            model.profile == "Profile1" && !model.querying
+                && model.total == 2 && model.items.count == 2
         }
 
         if model.profile != "Profile1" {
