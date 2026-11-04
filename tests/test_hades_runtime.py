@@ -10,6 +10,16 @@ from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades runtime feature journeys')
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
+
+def run_lua(script):
+    """Run the resident source through stdin so test size never depends on ARG_MAX."""
+    return subprocess.run(
+        [lua, '-'],
+        input='local SOURCE=' + json.dumps(source) + '\n' + script,
+        text=True,
+        capture_output=True,
+    )
+
 harness = r'''
 local function copy(value)
   if type(value) ~= "table" then return value end
@@ -813,7 +823,7 @@ assert(not runtime.status().features.invincibility)
 print(runtime.json(runtime.status()))
 print("hades_runtime_journeys_ok")
 '''
-proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + harness], text=True, capture_output=True)
+proc = run_lua(harness)
 assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
 lines = proc.stdout.splitlines()
 state = json.loads(lines[-2])
@@ -1680,7 +1690,7 @@ print("hades_runtime_native_max_health_and_movement_ok")
 
 '''
 native_harness = harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0] + native_setup + native_owners + native_cases
-proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + native_harness], text=True, capture_output=True)
+proc = run_lua(native_harness)
 assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
 assert proc.stdout.strip() == 'hades_runtime_native_max_health_and_movement_ok', proc.stdout
 print(proc.stdout.strip())
@@ -2250,6 +2260,6 @@ near(unit.properties.Speed, 594)
 for name, case in scheduler_cases.items():
     script = (harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0]
               + native_setup + native_owners + native_scheduler + case)
-    proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + script], text=True, capture_output=True)
+    proc = run_lua(script)
     assert proc.returncode == 0, name + ': ' + proc.stdout + '\n' + proc.stderr
 print('hades_runtime_native_scheduler_adoption_ok')
