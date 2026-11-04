@@ -96,47 +96,80 @@ private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
 
     final class BridgeView: NSView {
         var state: TrainerPickerPresentationState = .interactive
-        private var scheduled = false
+        private weak var cachedButton: NSPopUpButton?
+        private var lookupScheduled = false
+        private var remainingLookupPasses = 0
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            cachedButton = nil
+            scheduleLookup(passes: 3)
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            scheduleApply()
-        }
-
-        override func layout() {
-            super.layout()
-            scheduleApply()
+            cachedButton = nil
+            scheduleLookup(passes: 3)
         }
 
         func update(state: TrainerPickerPresentationState) {
             self.state = state
-            scheduleApply()
-        }
-
-        private func scheduleApply() {
-            guard !scheduled else { return }
-            scheduled = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.scheduled = false
-                self.applyPresentation()
+            if let button = cachedButton, button.window != nil {
+                applyPresentation(to: button)
+            } else {
+                cachedButton = nil
+                scheduleLookup(passes: 2)
             }
         }
 
-        private func applyPresentation() {
-            guard let button = nearestPopUpButton() else { return }
-            button.isBordered = false
-            button.focusRingType = .none
-            button.bezelColor = nil
-            button.contentTintColor = state == .interactive
-                ? NSColor(calibratedWhite: 0.10, alpha: 0.92)
-                : NSColor(calibratedWhite: 0.30, alpha: 0.72)
+        private func scheduleLookup(passes: Int) {
+            remainingLookupPasses = max(remainingLookupPasses, passes)
+            guard !lookupScheduled, window != nil else { return }
+            lookupScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                self?.runLookupPass()
+            }
         }
 
-        /// Search the smallest shared native subtree first. A page can contain
-        /// many Pickers; walking the whole window from every bridge would both
-        /// widen the accidental-match surface and turn ordinary layout into a
-        /// page-wide scan.
+        private func runLookupPass() {
+            lookupScheduled = false
+            guard window != nil else { return }
+
+            if let button = cachedButton, button.window != nil {
+                applyPresentation(to: button)
+                remainingLookupPasses = 0
+                return
+            }
+
+            if let button = nearestPopUpButton() {
+                cachedButton = button
+                applyPresentation(to: button)
+                remainingLookupPasses = 0
+                return
+            }
+
+            remainingLookupPasses -= 1
+            if remainingLookupPasses > 0 {
+                scheduleLookup(passes: remainingLookupPasses)
+            }
+        }
+
+        private func applyPresentation(to button: NSPopUpButton) {
+            let tint = state == .interactive
+                ? NSColor(calibratedWhite: 0.10, alpha: 0.92)
+                : NSColor(calibratedWhite: 0.30, alpha: 0.72)
+
+            if button.isBordered { button.isBordered = false }
+            if button.focusRingType != .none { button.focusRingType = .none }
+            if button.bezelColor != nil { button.bezelColor = nil }
+            if button.contentTintColor?.isEqual(tint) != true {
+                button.contentTintColor = tint
+            }
+        }
+
+        /// Locate the popup only when the bridge is mounted, reconstructed or
+        /// its semantic state changes. The result is cached so ordinary AppKit
+        /// layout never performs a recursive subtree scan.
         private func nearestPopUpButton() -> NSPopUpButton? {
             var scope = superview
             while let currentScope = scope {
