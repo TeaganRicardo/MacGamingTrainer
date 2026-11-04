@@ -24,7 +24,10 @@ for label, view in (("Hades", hades), ("Hades rooms", rooms), ("Hades II", hades
     assert not re.search(r"\bif\s*!?\s*model\.connected\s*\{", view), label
 
 # Durable Hades I desired state follows the Hades II detached-edit contract.
-assert "var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible }" in hades_model
+assert "var canEditIntent: Bool {" in hades_model
+assert "backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect" in hades_model
+for unsafe_code in ("outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"):
+    assert f'"{unsafe_code}"' in hades_model
 set_feature = hades_adapter.split("if command == 'set_feature':", 1)[1].split("if command == 'disable_all':", 1)[0]
 assert "raise AdapterError('not_connected'" not in set_feature
 hades_speed = hades.split("private var gameSpeedPanel: some View {", 1)[1].split("private var boonRarityPanel:", 1)[0]
