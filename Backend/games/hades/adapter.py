@@ -12,7 +12,7 @@ from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, rew
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
-                     RESOURCE_IDS, preference_value, invalid_value, number)
+                     RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
 
 
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
@@ -135,6 +135,10 @@ class HadesAdapter(GameAdapter):
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
+            if self.connected:
+                state = self.runtime.command(
+                    'set_boon_rarity', {'target': self.features['boonRarityTarget']}
+                )
             self._reconcile_game_speed()
             if not self.connected:
                 state = {**self._offline(), 'features': self.features}
@@ -158,9 +162,17 @@ class HadesAdapter(GameAdapter):
             return self._observe(state)
         if command == 'set_invincibility':
             command, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
+        if command == 'set_boon_rarity':
+            target = preference_value('boonRarityTarget', params.get('target'))
+            candidate = {**self.features, 'boonRarityTarget': target}
+            self.preferences.save(candidate)
+            self.features = candidate
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
+            return self._observe(self.runtime.command('set_boon_rarity', {'target': target}))
         if command == 'set_feature':
             name = params.get('feature')
-            value = preference_value(name, params.get('value'))
+            value = preference_value(name, params.get('value')) if name == 'gameSpeed' else feature_value(name, params.get('value'))
             candidate = {**self.features, name: value}
             self.preferences.save(candidate)
             self.features = candidate
@@ -364,6 +376,7 @@ class HadesAdapter(GameAdapter):
         features = dict(features) if isinstance(features, dict) else {}
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
+        state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
         return state
 
     @staticmethod
