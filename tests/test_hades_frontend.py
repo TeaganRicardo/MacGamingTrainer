@@ -8,6 +8,7 @@ from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 from native_picker_harness import NATIVE_PICKER
+from macos_test_budget import scaled_outer_timeout
 import shutil
 import subprocess
 import sys
@@ -1534,13 +1535,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
             case_state['features']['gameSpeed'] = {'desired': 1.0, 'actual': 1.0, 'active': True}
         (case_folder / 'state.json').write_text(json.dumps(case_state))
         (case_folder / 'catalog.json').write_text(json.dumps(catalog))
+        effective_budget = scaled_outer_timeout(budget)
         print('hades_frontend_launch:' + journey, flush=True)
         try:
             proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
-                                  capture_output=True, text=True, timeout=budget)
+                                  capture_output=True, text=True, timeout=effective_budget)
         except subprocess.TimeoutExpired as error:
             phase = case_folder / 'native-phase.txt'
-            print(f'Native {journey} fixture exceeded {budget}s; last phase: ' +
+            print(f'Native {journey} fixture exceeded {effective_budget:g}s; last phase: ' +
                   (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
                   file=sys.stderr)
             for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):

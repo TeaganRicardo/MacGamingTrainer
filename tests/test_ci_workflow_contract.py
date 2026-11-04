@@ -122,6 +122,7 @@ assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
 assert 'needs_full_build: ${{ steps.scope.outputs.needs_full_build }}' in build2
 assert 'needs: scope' in build2
 assert "needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in build2
+assert "MGT_MACOS_OUTER_TIMEOUT_SCALE: ${{ github.event_name == 'pull_request' && '1.5' || '1.0' }}" in build2
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2

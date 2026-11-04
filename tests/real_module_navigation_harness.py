@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from macos_test_budget import scaled_outer_timeout
 
 
 WORKER = r'''
@@ -593,7 +594,7 @@ def _failure_diagnostics(project: Path) -> None:
 
 
 def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> None:
-    """Compile once; the independent native episode has a 30-second budget."""
+    """Compile once; the independent native episode has a scaled 45-second base budget."""
     with tempfile.TemporaryDirectory(prefix="mgt-real-module-navigation-") as directory:
         project = Path(directory)
         for name in ("Core", "Hades", "Hades2"):
@@ -633,7 +634,7 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         arguments = [str(binary), str(project), sys.executable] + (["startup"] if startup_only else [])
         completion = "context_startup_availability_ok" if startup_only else "hades_and_hades2_host_navigation_ok"
         try:
-            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=45)
+            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=scaled_outer_timeout(45))
         except subprocess.TimeoutExpired as error:
             for output in (error.stdout, error.stderr):
                 if output:

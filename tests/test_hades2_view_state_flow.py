@@ -12,6 +12,7 @@ from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
 from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
+from macos_test_budget import scaled_outer_timeout
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -494,7 +495,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     env = dict(os.environ)
     env["HOME"] = str(home)
     hierarchy = subprocess.run([str(binary), PYTHON, str(worker_path), "hierarchy"],
-                               cwd=ROOT, env=env, text=True, capture_output=True, timeout=20)
+                               cwd=ROOT, env=env, text=True, capture_output=True, timeout=scaled_outer_timeout(20))
     if hierarchy.returncode != 0:
         print(hierarchy.stdout)
         print(hierarchy.stderr)
@@ -508,7 +509,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     shutil.copy2(worker_path, slider_worker)
     slider_proc = subprocess.run(
         [str(binary), PYTHON, str(slider_worker), "slider"], cwd=ROOT, env=env,
-        text=True, capture_output=True, timeout=20,
+        text=True, capture_output=True, timeout=scaled_outer_timeout(20),
     )
     if slider_proc.returncode != 0:
         print(slider_proc.stdout)
@@ -520,7 +521,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     shutil.copy2(worker_path, disclosure_worker)
     disclosure_proc = subprocess.run(
         [str(binary), PYTHON, str(disclosure_worker), "disclosure"], cwd=ROOT, env=env,
-        text=True, capture_output=True, timeout=40,
+        text=True, capture_output=True, timeout=scaled_outer_timeout(40),
     )
     if disclosure_proc.returncode != 0:
         print(disclosure_proc.stdout)
@@ -529,7 +530,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     assert "hades2_disclosure_module_journey_ok" in disclosure_proc.stdout, disclosure_proc.stdout
     print(disclosure_proc.stdout.strip())
     search_proc = subprocess.run([str(binary), PYTHON, str(worker_path), "search"],
-                                 cwd=ROOT, env=env, text=True, capture_output=True, timeout=20)
+                                 cwd=ROOT, env=env, text=True, capture_output=True, timeout=scaled_outer_timeout(20))
     if search_proc.returncode != 0:
         print(search_proc.stdout)
         print(search_proc.stderr)
@@ -542,7 +543,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         env=env,
         text=True,
         capture_output=True,
-        timeout=30,
+        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)
@@ -943,7 +944,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
         env=env,
         text=True,
         capture_output=True,
-        timeout=30,
+        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)
