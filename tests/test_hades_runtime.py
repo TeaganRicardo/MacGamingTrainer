@@ -127,11 +127,12 @@ function SpendMoney(amount, source)
 end
 function IsMetaUpgradeSelected() return true end
 local rerollsSeenInMenu = {}
-function AttemptBoonLootReroll()
+function AttemptBoonLootReroll(loot, args)
   if CurrentRun.NumRerolls <= 0 then return end
   CurrentRun.NumRerolls = CurrentRun.NumRerolls - 1
   UpdateRerollUI(CurrentRun.NumRerolls)
   rerollsSeenInMenu[#rerollsSeenInMenu + 1] = CurrentRun.NumRerolls
+  if loot ~= nil then return SetTraitsOnLoot(loot, args) end
 end
 function AttemptPanelReroll(screen, button)
   if CurrentRun.NumRerolls < button.Cost then return end
@@ -410,6 +411,19 @@ runtime.set_feature("boonRarityTarget", "Heroic")
 assert(olympian.RarityChances == original and original.Heroic == 0,
   "rarity override leaked to the native loot's persisted chances")
 assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
+local rerolled = { Name = "ZeusUpgrade",
+  RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
+  allowed = { Epic = true, Rare = true } }
+local rerollsBeforeRarity = CurrentRun.NumRerolls
+local rerollResult, rerollMissing, rerollRarity = AttemptBoonLootReroll(
+  rerolled, { ExclusionNames = { "AlreadyOfferedTrait" } }
+)
+assert(rerollResult == "native" and rerollMissing == nil and rerollRarity == "Heroic",
+  "native boon reroll bypassed the minimum-rarity hook")
+assert(rerolled.nativeArgs.ExclusionNames[1] == "AlreadyOfferedTrait",
+  "native boon reroll lost its exclusion arguments")
+CurrentRun.NumRerolls = rerollsBeforeRarity
+UpdateRerollUI(CurrentRun.NumRerolls)
 for _, name in ipairs({ "HermesUpgrade", "ZeusUpgrade" }) do
   local rareOnly = { Name = name, RarityChances = original, allowed = { Rare = true } }
   SetTraitsOnLoot(rareOnly)
