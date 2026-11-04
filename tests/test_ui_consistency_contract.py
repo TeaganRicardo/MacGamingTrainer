@@ -53,7 +53,7 @@ assert "static func commonControlsWidth(" in trait_layout
 assert "42 + 58 + compactActionWidth + 2 * 6" in trait_layout
 assert "48 + pickerWidth + compactActionWidth + 2 * 6" in trait_layout
 assert "+ removeControlWidth" in trait_layout
-assert "TrainerTrainerTraitManagerLayout.commonControlsWidth(" in view
+assert "TrainerTraitManagerLayout.commonControlsWidth(" in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "trait.hasTemporaryContextualControls" in view
 assert "trait.hasContextualControls" in view
