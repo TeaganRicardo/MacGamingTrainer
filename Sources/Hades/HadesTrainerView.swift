@@ -880,7 +880,7 @@ private struct HadesCurrentTraitRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
                 HStack(spacing: 6) {
                     Text(text("hades.level"))
                         .font(.caption)
