@@ -485,8 +485,12 @@ struct HadesSaveEditorView: View {
     }
 
     private var selectedTargetLabel: String {
-        model.targets.first(where: { $0.id == model.selectedTargetID })?.label
-            ?? model.selectedTargetID
+        if let target = model.targets.first(where: { $0.id == model.selectedTargetID }) {
+            return target.label
+        }
+        return model.selectedTargetID.isEmpty
+            ? text("hades.saveEditor.selectTarget")
+            : model.selectedTargetID
     }
 
     private var reviewDrawer: some View {
