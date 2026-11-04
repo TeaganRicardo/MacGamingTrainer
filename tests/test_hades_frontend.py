@@ -1418,12 +1418,27 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("native remaining-use control missing")
         }
         check(usesField.stringValue=="3","remaining-use observation missing")
+        let usesBefore=commands().filter { $0["command"] as? String == "set_trait_uses" }.count
         usesCoordinator.begin();usesField.stringValue="6"
         usesCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:usesField))
         usesCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:usesField))
+        pump()
+        check(commands().filter { $0["command"] as? String == "set_trait_uses" }.count==usesBefore,
+              "remaining-use draft committed on blur instead of waiting for Apply")
+        let usesFrame=window.convertToScreen(usesField.convert(usesField.bounds,to:nil))
+        let applyTitle=HadesPresentation.text("hades.apply",language:localization.language)
+        let applyCandidates=nativeAccessibilityControls(host).filter {
+            $0.role=="AXButton" && $0.label==applyTitle && $0.enabled
+        }
+        guard let usesApply=applyCandidates.min(by:{
+            abs($0.frame.midY-usesFrame.midY) < abs($1.frame.midY-usesFrame.midY)
+        }), abs(usesApply.frame.midY-usesFrame.midY) < 50 else {
+            fatalError("remaining-use Apply action missing beside its native field")
+        }
+        check(usesApply.press(),"remaining-use Apply refused native AX input")
         wait("native remaining-use set_trait_uses reply: six uses observed") { !model.busy && model.traits.first?.remainingUses==6 }
         host.layoutSubtreeIfNeeded();pump()
-        check(usesField.stringValue=="6","remaining-use commit did not refresh observation")
+        check(usesField.stringValue=="6","remaining-use Apply did not refresh observation")
         let usesRequests=commands().filter { $0["command"] as? String == "set_trait_uses" }
         let usesParams=usesRequests.last?["params"] as? [String:Any]
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
