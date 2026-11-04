@@ -220,6 +220,47 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load()['rerollsLock'] is None and runtime.state['rerollsLocked'] is False
     adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': False}, 'normal-rerolls')
 
+    class RejectingLockPreferences:
+        def save(self, features):
+            raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
+
+    adapter.preferences = RejectingLockPreferences()
+    before_lock_failure = dict(runtime.state)
+    try:
+        adapter.dispatch(
+            'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed fixed-lock persistence was presented as success')
+    assert runtime.state['moneyLocked'] is False and runtime.state['moneyLock'] is None
+    assert runtime.state['money'] == before_lock_failure['money'], (
+        'failed lock persistence left a native fixed-value owner mounted'
+    )
+
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money-before-edit-failure'
+    )
+    previous_lock = store.load()['moneyLock']
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'set_value', {'field': 'money', 'value': previous_lock + 9, 'target': owner}, 'locked-edit-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed locked edit persistence was presented as success')
+    assert runtime.state['moneyLock'] == previous_lock and runtime.state['money'] == previous_lock, (
+        'failed locked edit did not restore the previous native lock target'
+    )
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-after-rollback'
+    )
+
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True
     state = adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 2.5}, 'speed-up')
