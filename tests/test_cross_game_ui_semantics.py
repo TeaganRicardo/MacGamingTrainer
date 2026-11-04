@@ -329,6 +329,9 @@ assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
 assert "theme.compactActionWidth" in hades_current_row
 assert "theme.pickerCompactWidth" in hades_current_row
 assert 'title: text("hades.apply")' in hades_contextual
+hades_types = (ROOT / "Sources/Hades/HadesTypes.swift").read_text()
+assert "var hasContextualControls: Bool" in hades_types
+assert "if trait.hasContextualControls {" in hades_current_row
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
