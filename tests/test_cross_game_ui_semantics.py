@@ -87,6 +87,8 @@ shared_labels = {
     "hades.chaosPair": "hades2.spawn.chaosPair",
     "hades.chaosBlessing": "hades2.spawn.chaosBlessing",
     "hades.chaosCurse": "hades2.spawn.chaosCurse",
+    "hades.cancelCurse": "hades2.traits.chaos.cancelPair",
+    "hades.cancelTemporaryEffect": "hades2.traits.temporary.cancel",
     "hades.acquire": "hades2.spawn.acquire",
     "hades.minimumRarity": "hades2.rarity.minimum",
     "hades.setLevel": "hades2.traits.applyLevel",
@@ -344,6 +346,11 @@ assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
 assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
 assert "theme.compactActionWidth" in hades_current_row
 assert "theme.pickerCompactWidth" in hades_current_row
+assert 'entry?.kind == "temporary"' in hades_current_row
+assert "trait.level > 1" in hades_current_row
+assert 'return text("hades.cancelCurse")' in hades_current_row
+assert 'return text("hades.cancelTemporaryEffect")' in hades_current_row
+assert 'text("hades.removeAllMatching")' in hades_current_row
 assert 'title: text("hades.apply")' in hades_contextual
 hades_types = (ROOT / "Sources/Hades/HadesTypes.swift").read_text()
 assert "var hasContextualControls: Bool" in hades_types
