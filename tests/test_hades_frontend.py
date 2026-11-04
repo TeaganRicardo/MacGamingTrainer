@@ -796,7 +796,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             HadesPresentation.text("hades.health",language:.en)])
         guard let field=fields(in:host).first(where:{$0.accessibilityLabel()==currentLife}),
               let coordinator=field.delegate as? TrainerTextField.Coordinator else { fatalError("native health control missing") }
-        check(field.stringValue=="50","native control did not show observation")
+        let manualSetValueBaseline = commands().filter { $0["command"] as? String == "set_value" }.count
+        check(field.stringValue=="42","native control did not show the post-lock observation")
         coordinator.begin();field.stringValue="70"
         coordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field))
         try updateState(hero:"run:hero:1",health:60)
@@ -805,8 +806,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field))
         wait("native health set_value reply: health 70, trainer idle") { !model.busy && model.health==70 }
         let sent=commands().filter { $0["command"] as? String == "set_value" }
-        check(sent.count==1,"native commit did not send exactly one mutation")
-        let params=sent[0]["params"] as! [String:Any]
+        check(sent.count==manualSetValueBaseline + 1,"native commit did not send exactly one mutation")
+        let params=sent.last!["params"] as! [String:Any]
         check((params["target"] as? [String:String])?["heroId"]=="run:hero:1","numeric commit lost its captured hero")
         check(params["field"] as? String == "health" && params["value"] as? Double == 70,"numeric commit changed the wrong value")
 
@@ -816,7 +817,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         model.refreshFromHost();wait("hero replacement status: health 30, trainer idle") { !model.busy && model.health==30 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="80","hero replacement erased focused draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field));pump()
-        check(commands().filter { $0["command"] as? String == "set_value" }.count==1,"stale draft mutated replacement hero")
+        check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 1,"stale draft mutated replacement hero")
         check(model.localError=="hades.error.staleHero","stale draft lacked actionable feedback")
         try updateState(hero:"run:hero:2",health:31)
         model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
@@ -853,7 +854,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enterNative("32").doCommand(by:#selector(NSResponder.insertNewline(_:)))
         window.makeFirstResponder(nil)
         wait("native Return corrected health exactly once") { !model.busy && model.health==32 }
-        check(commands().filter { $0["command"] as? String == "set_value" }.count==2
+        check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 2
               && nativeField.validationMessage==nil, "Hades I correction duplicated dispatch or retained its old error")
         let bilingualDraft=enterNative("33")
         localization.language = .zhCN
@@ -925,7 +926,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "native rarity selection did not display immediately within its width role")
         let pickerCommits=commands().filter { $0["command"] as? String == "set_value" }
         let pickerCommit=pickerCommits.last?["params"] as? [String:Any]
-        check(pickerCommits.count==3 && pickerCommit?["field"] as? String == "health"
+        check(pickerCommits.count==manualSetValueBaseline + 3 && pickerCommit?["field"] as? String == "health"
               && pickerCommit?["value"] as? Double == 34
               && (pickerCommit?["target"] as? [String:String])?["heroId"]=="run:hero:2",
               "native picker click-away duplicated or lost the numeric commit")
