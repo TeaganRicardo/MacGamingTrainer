@@ -309,9 +309,9 @@ struct StartupAvailabilityModule: TrainerGameModule {
         }
         let startupScale = min(2.0, max(1.0,
             Double(ProcessInfo.processInfo.environment["MGT_MACOS_OUTER_TIMEOUT_SCALE"] ?? "1.0") ?? 1.0))
-        journeyWait("active native Host and both real module backends",
+        journeyWait("visible native Host and both real module backends",
                     timeout: 4 * startupScale, onFailure: diagnoseStartup) {
-            app.isActive && window.isKeyWindow && first.backendAvailable && second.backendAvailable
+            app.isRunning && window.isVisible && first.backendAvailable && second.backendAvailable
                 && !first.busy && !second.busy
                 && !firstContext.saveManager.busy && !secondContext.saveManager.busy
                 && commands("hades").contains { ($0["command"] as? String) == "core.save.apply_staged" }
@@ -524,17 +524,19 @@ struct StartupAvailabilityModule: TrainerGameModule {
 
         let toolDraft = RetainedNavigationDraft()
         let source = toolDraft.source
-        // This direct Store call models a user opening a tool from the active Host.
-        // Restore that product precondition after the synthetic focus journey.
+        // Request the product activation path before opening the retained tool.
+        // Hosted headless runners do not guarantee global key-window ownership;
+        // this journey owns visibility/document retention, while the dedicated
+        // tool-window contract owns native key/minimize behavior.
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
-        journeyWait("active Host before context tool window") { app.isActive && window.isKeyWindow }
+        journeyPump(0.03)
         let tool = firstContext.toolWindows.open(id: "retained-native-draft", title: "Retained native draft",
             localization: localization, theme: .standard) {
                 TrainerToolWindowContent { RetainedNavigationTool(draft: toolDraft) }
             }
         let document = tool.contentView
-        journeyWait("actual context tool window") { app.isActive && tool.isVisible && tool.isKeyWindow }
+        journeyWait("actual context tool window") { tool.isVisible }
         let toolField = journeyFields(tool.contentView!).first { $0.isEditable }!
         journeyCheck(tool.makeFirstResponder(toolField), "retained tool refused native focus")
         let toolEditor = toolField.currentEditor() as! NSTextView
