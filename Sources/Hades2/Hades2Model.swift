@@ -243,7 +243,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var diagnosticsPassed = 0
     @Published var diagnosticsTotal = 0
     @Published var resources: [MaterialResource] = []
-    @Published private var shortcutStore = Hades2ShortcutStore()
+    @Published private var shortcutStore: Hades2ShortcutStore
     @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
     @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
@@ -380,11 +380,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     init(session: TrainerBackendSession, logSink: TrainerLogSink,
-         backendScriptURL: URL? = nil, runLogDirectoryURL: URL? = nil) {
+         backendScriptURL: URL? = nil, runLogDirectoryURL: URL? = nil,
+         shortcutDefaults: UserDefaults = .standard) {
         backendSession = session
         self.logSink = logSink
         self.backendScriptURL = backendScriptURL
         self.runLogDirectoryURL = runLogDirectoryURL
+        self.shortcutStore = Hades2ShortcutStore(defaults: shortcutDefaults)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.installHotkeys()

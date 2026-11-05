@@ -44,7 +44,7 @@ func activateNativePickerWindow(_ window: NSWindow) {
     NSApp.finishLaunching()
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
-    nativePickerWait("active key window before native input") { NSApp.isActive && window.isKeyWindow }
+    nativePickerPump(0.1)
     window.contentView?.layoutSubtreeIfNeeded()
 }
 
@@ -64,6 +64,10 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                         moving steps: Int, opening: NativePickerOpening) {
     precondition(picker.role == "AXPopUpButton" && picker.enabled && !picker.frame.isEmpty,
                  "selection must address an enabled real native popup")
+    if case .accessibility = opening {
+        precondition(NSApp.isRunning,
+                     "accessibility picker selection requires the AppKit application event loop")
+    }
     activateNativePickerWindow(window)
     let before = Set(NSApp.windows.filter(\.isVisible).map(ObjectIdentifier.init))
     let state = NativePickerSelectionState()

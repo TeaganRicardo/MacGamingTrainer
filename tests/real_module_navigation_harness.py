@@ -56,18 +56,17 @@ import SwiftUI
 }
 
 @MainActor func journeyPump(_ duration: TimeInterval = 0.03) {
-    let deadline = Date().addingTimeInterval(duration)
-    while Date() < deadline {
-        if let event = NSApp.nextEvent(matching: .any,
-            until: min(deadline, Date().addingTimeInterval(0.005)), inMode: .default, dequeue: true) {
-            NSApp.sendEvent(event)
-        }
-        NSApp.updateWindows()
-    }
+    // BackendProcess delivers decoded replies through DispatchQueue.main.
+    // This journey itself runs inside an AppKit timer callback, so a manual
+    // nextEvent loop can starve those main-queue callbacks indefinitely.
+    RunLoop.current.run(until: Date().addingTimeInterval(duration))
 }
 
-@MainActor func journeyWait(_ message: String, onFailure: () -> Void = {}, _ condition: () -> Bool) {
-    let deadline = Date().addingTimeInterval(4)
+@MainActor func journeyWait(
+    _ message: String, timeout: TimeInterval = 4,
+    onFailure: () -> Void = {}, _ condition: () -> Bool
+) {
+    let deadline = Date().addingTimeInterval(timeout)
     repeat {
         if condition() { return }
         journeyPump(0.01)
@@ -308,7 +307,10 @@ struct StartupAvailabilityModule: TrainerGameModule {
             let data = try! JSONSerialization.data(withJSONObject: diagnostic, options: [.sortedKeys])
             FileHandle.standardError.write(Data("real_module_navigation_startup=".utf8) + data + Data("\n".utf8))
         }
-        journeyWait("active native Host and both real module backends", onFailure: diagnoseStartup) {
+        let startupScale = min(2.0, max(1.0,
+            Double(ProcessInfo.processInfo.environment["MGT_MACOS_OUTER_TIMEOUT_SCALE"] ?? "1.0") ?? 1.0))
+        journeyWait("active native Host and both real module backends",
+                    timeout: 4 * startupScale, onFailure: diagnoseStartup) {
             app.isActive && window.isKeyWindow && first.backendAvailable && second.backendAvailable
                 && !first.busy && !second.busy
                 && !firstContext.saveManager.busy && !secondContext.saveManager.busy
@@ -410,13 +412,13 @@ struct StartupAvailabilityModule: TrainerGameModule {
         // Warm both retained real module trees before measuring the steady-state
         // interaction the user reported. The settle boundary is the first point
         // where the destination module's native section index is actually exposed.
-        for _ in 0..<1 {
+        for _ in 0..<2 {
             selectGame("hades2")
             selectGame("hades")
         }
         let mainLoopSampler = MainRunLoopGapSampler()
         mainLoopSampler.start()
-        for _ in 0..<3 {
+        for _ in 0..<6 {
             selectGame("hades2", measure: true)
             selectGame("hades", measure: true)
         }
@@ -522,12 +524,17 @@ struct StartupAvailabilityModule: TrainerGameModule {
 
         let toolDraft = RetainedNavigationDraft()
         let source = toolDraft.source
+        // This direct Store call models a user opening a tool from the active Host.
+        // Restore that product precondition after the synthetic focus journey.
+        window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
+        journeyWait("active Host before context tool window") { app.isActive && window.isKeyWindow }
         let tool = firstContext.toolWindows.open(id: "retained-native-draft", title: "Retained native draft",
             localization: localization, theme: .standard) {
                 TrainerToolWindowContent { RetainedNavigationTool(draft: toolDraft) }
             }
         let document = tool.contentView
-        journeyWait("actual context tool window") { tool.isKeyWindow }
+        journeyWait("actual context tool window") { app.isActive && tool.isVisible && tool.isKeyWindow }
         let toolField = journeyFields(tool.contentView!).first { $0.isEditable }!
         journeyCheck(tool.makeFirstResponder(toolField), "retained tool refused native focus")
         let toolEditor = toolField.currentEditor() as! NSTextView
@@ -594,7 +601,7 @@ def _failure_diagnostics(project: Path) -> None:
 
 
 def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> None:
-    """Compile once; the independent native episode has a scaled 45-second base budget."""
+    """Compile once; the native episode keeps a 30-second base budget scaled by runner profile."""
     with tempfile.TemporaryDirectory(prefix="mgt-real-module-navigation-") as directory:
         project = Path(directory)
         for name in ("Core", "Hades", "Hades2"):
@@ -633,8 +640,14 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         env = {**os.environ, "HOME": str(home), "CFFIXED_USER_HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"}
         arguments = [str(binary), str(project), sys.executable] + (["startup"] if startup_only else [])
         completion = "context_startup_availability_ok" if startup_only else "hades_and_hades2_host_navigation_ok"
+        # Startup-only validates one bounded ownership handshake. The full native
+        # journey also traverses every section, two delayed reads, retained focus,
+        # tool-window ownership and localization changes, so its process guard
+        # must remain outside those behavioral assertion windows.
+        base_outer_timeout = 30 if startup_only else 45
         try:
-            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=scaled_outer_timeout(45))
+            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True,
+                                    timeout=scaled_outer_timeout(base_outer_timeout))
         except subprocess.TimeoutExpired as error:
             for output in (error.stdout, error.stderr):
                 if output:
