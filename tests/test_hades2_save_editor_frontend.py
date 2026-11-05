@@ -1405,7 +1405,6 @@ struct Main {
         let retiredBaseline = model.baselineGeneration
         model.apply(baseline: retiredBaseline)
         pumpUntil { !model.busy && !model.querying && model.baselineGeneration != retiredBaseline }
-        pump(0.10)
         let beforeObsoleteControls = commands(at: commandLog).count
         var obsoleteDetailWasConsumed = false
         model.loadAdvancedValue(retiredTyped, language: .en) { _, _ in obsoleteDetailWasConsumed = true }
@@ -1428,6 +1427,20 @@ struct Main {
             || model.membershipDrafts[retiredTyped.id] != nil || model.editFailures[retiredInline.id] != nil
             || model.editFailures[retiredTyped.id] != nil || obsoleteDetailWasConsumed {
             fail("old structural draft, error, or captured detail control rebound to the new baseline")
+        }
+        let replacementControlDeadline = Date().addingTimeInterval(2)
+        while Date() < replacementControlDeadline {
+            let replacementInput = fields(window.contentView!).first(where: {
+                $0.isEditable && $0.accessibilityLabel() == retiredInline.displayName
+            })
+            let continuedInput = fields(window.contentView!).first(where: {
+                $0.isEditable && $0.accessibilityLabel() == unrelatedDraft.displayName
+            })
+            if replacementInput?.stringValue == "44" && continuedInput?.stringValue == "4.5"
+                && model.textDrafts[unrelatedDraft.id] == "4.5" && model.editFailures[unrelatedDraft.id] != nil {
+                break
+            }
+            pump(0.02)
         }
         guard let replacementInput = fields(window.contentView!).first(where: {
                   $0.isEditable && $0.accessibilityLabel() == retiredInline.displayName
