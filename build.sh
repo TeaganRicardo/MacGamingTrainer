@@ -62,7 +62,7 @@ prepare_python_runtime() (
         return
     fi
 
-    local version release url sha cache_root archive actual
+    local version release url sha cache_root archive actual runtime_arches
     version="$(python_runtime_field version)"
     release="$(python_runtime_field release)"
     url="$(python_runtime_field "distributions.$arch.url")"
@@ -88,11 +88,29 @@ prepare_python_runtime() (
         echo "Pinned Python runtime is missing bin/python3 for $arch." >&2
         exit 1
     }
-    actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
-    [[ "$actual" == "$version" ]] || {
-        echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
-        exit 1
-    }
+    if [[ "$arch" == "$(uname -m)" ]]; then
+        actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
+        [[ "$actual" == "$version" ]] || {
+            echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
+            exit 1
+        }
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+        # The archive checksum above authenticates the pinned runtime version.
+        # A cross-architecture macOS build host cannot execute the target
+        # interpreter, so validate the Mach-O architecture without launching it.
+        # Portable non-Darwin bootstrap tests rely on the same per-arch checksum.
+        runtime_arches="$(xcrun lipo -archs "$runtime/bin/python3")" || {
+            echo "Pinned Python runtime is not a valid Mach-O executable for $arch." >&2
+            exit 1
+        }
+        case " $runtime_arches " in
+            *" $arch "*) ;;
+            *)
+                echo "Pinned Python runtime architecture mismatch for $arch: got $runtime_arches." >&2
+                exit 1
+                ;;
+        esac
+    fi
     printf '%s\n' "$runtime"
 )
 
