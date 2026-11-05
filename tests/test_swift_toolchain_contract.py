@@ -73,6 +73,15 @@ for name in ("build2-macos.yml", "module-build-matrix.yml"):
     assert "--expected-workflow-source .github/workflows/" in source, name
     assert "macos-latest" not in source, name
 
+build2 = (workflow_root / "build2-macos.yml").read_text()
+# Workflow-only changes stay orchestration-only in scope routing. Linux
+# contracts therefore pin the product-build invocations that must remain in
+# the changed workflow even when that PR does not build the app package.
+assert "run: ./build.sh --typecheck --all" in build2
+assert "run: ./build.sh --all" in build2
+assert "needs.scope.outputs.needs_build == 'true'" in build2
+assert "needs.scope.outputs.needs_full_build == 'true'" in build2
+
 release = (workflow_root / "direct-release.yml").read_text()
 # The release job now coordinates Linux-side dispatch and verifies the retained
 # artifact's recorded macOS toolchain; compilation/signing remain macOS-owned.
