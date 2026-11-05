@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
-from select_macos_pr_tests import selected_tests
+from select_macos_pr_tests import PR_DEFERRED, pr_smoke_tests, selected_tests
 
 TESTS = {
     "test_multi_game_contexts.py",
@@ -138,5 +138,17 @@ assert selected_tests(["Sources/FutureGame/SomeView.swift"], TESTS, SOURCES) == 
 assert selected_tests(["Sources/FutureGame/SomeView.swift"], TESTS, {
     **SOURCES, "future": "Sources/FutureGame/"
 }) == ["test_multi_game_contexts.py"]
+
+# Activation-dependent native journeys gate the convergence lane, not every PR.
+assert pr_smoke_tests(["Sources/Hades2/Hades2View.swift"], TESTS, SOURCES) == []
+assert pr_smoke_tests(["Sources/Core/UI/Components/TrainerSearchField.swift"], TESTS, SOURCES) == sorted({
+    "test_reference_fixture_session_integration.py", "test_global_hotkey_routing.py",
+    "test_trainer_search_field_appearance.py", "test_hades_frontend.py",
+})
+assert pr_smoke_tests([], TESTS, SOURCES) == sorted(TESTS - PR_DEFERRED)
+# Deferral must not drop coverage: every deferred test stays in the full inventory
+# that the exact-SHA convergence lane executes.
+inventory = set((ROOT / "Tools/macos_only_tests.txt").read_text(encoding="utf-8").split())
+assert PR_DEFERRED <= inventory, sorted(PR_DEFERRED - inventory)
 
 print("ci_pr_macos_selection_ok")

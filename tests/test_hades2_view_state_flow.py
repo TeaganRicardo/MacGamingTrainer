@@ -468,6 +468,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     worker_path = td / "worker.py"
     main_path = td / "main.swift"
     binary = td / "view_state_flow"
+    # UserDefaults.standard for a bare executable resolves to a domain named
+    # after the process, and CFFIXED_USER_HOME does not redirect it on current
+    # macOS. A fixed binary name therefore carries the shortcut one run captured
+    # into the next run's baseline, which makes the "captured chord changed"
+    # journey unsatisfiable on every run after the first. Start from a clean
+    # domain so repeated and concurrent runs observe the same initial state.
+    subprocess.run(["/usr/bin/defaults", "delete", binary.stem],
+                   capture_output=True, check=False)
     home = td / "home"
     home.mkdir()
     for language in ("en", "zh-CN"):
@@ -924,6 +932,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     worker_path = td / "worker.py"
     main_path = td / "main.swift"
     binary = td / "live_trait_model_flow"
+    subprocess.run(["/usr/bin/defaults", "delete", binary.stem],
+                   capture_output=True, check=False)
     home = td / "home"
     home.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
