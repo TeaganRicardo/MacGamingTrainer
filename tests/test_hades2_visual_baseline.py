@@ -82,7 +82,9 @@ assert 'theme.compactControlSpacing' in search_field
 assert 'theme.controlPadding' in search_field
 assert '.trainerSurface(.subtle, cornerRadius: theme.controlCornerRadius)' in search_field
 assert 'TrainerSearchField(' in view
-assert 'TrainerSearchField(' in save_editor
+assert 'TrainerSaveEditorWorkbenchBar(' in save_editor
+save_editor_shell = (CORE_UI / 'Components/TrainerSaveEditorShell.swift').read_text()
+assert 'TrainerSearchField(' in save_editor_shell
 assert 'struct TrainerSecondaryActionButton' in action_buttons
 assert 'TrainerSecondaryActionButton(' in occurrence
 assert 'TrainerSearchField(' in resource_controls
