@@ -24,6 +24,18 @@ SHARED_SMOKE = (
 )
 BUILD_SMOKE = "test_build_signing_metadata_macos.py"
 
+# Journeys that assert native focus, key-window and foreground activation state.
+# A hosted runner cannot guarantee that a background test process becomes the
+# active application, and macOS activation is cooperative: the wait then expires
+# even though the product is correct. They stay in the convergence inventory and
+# run against an exact SHA there; gating every PR on them only produced
+# non-deterministic red results.
+PR_DEFERRED = frozenset({
+    "test_hades2_view_state_flow.py",
+    "test_multi_game_contexts.py",
+    "test_runtime_text_edit_completion.py",
+})
+
 
 def source_directories(root: Path = ROOT) -> dict[str, str]:
     result = {}
@@ -124,12 +136,21 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
     return sorted(chosen)
 
 
+def pr_smoke_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -> list[str]:
+    """Bounded PR suite: relevant inventory minus activation-dependent journeys."""
+    chosen = selected_tests(paths, tests, sources)
+    deferred = [name for name in chosen if name in PR_DEFERRED]
+    if deferred:
+        print("macOS PR smoke defers to convergence: " + ", ".join(deferred), file=sys.stderr)
+    return [name for name in chosen if name not in PR_DEFERRED]
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         raise SystemExit("usage: select_macos_pr_tests.py BASE_SHA HEAD_SHA")
     try:
         paths = changed_paths(argv[1], argv[2])
-        names = selected_tests(paths, load_macos_only_tests(), source_directories())
+        names = pr_smoke_tests(paths, load_macos_only_tests(), source_directories())
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"macOS PR selection failed: {exc}", file=sys.stderr)
         return 2
