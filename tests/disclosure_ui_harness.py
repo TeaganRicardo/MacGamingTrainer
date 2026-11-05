@@ -642,7 +642,7 @@ func exerciseModuleDisclosure<Content: View>(
                             "layout retirement committed or discarded the native draft")
             disclosureCheck(nativeDetail.validationMessage == rejection,
                             "layout retirement treated an unvalidated correction as a successful edit")
-            for _ in 0..<2 {
+            for _ in 0..<6 {
                 disclosureCheck(button()!.press(), "rapid disclosure reversal refused input")
                 disclosurePump(0.025)
             }
