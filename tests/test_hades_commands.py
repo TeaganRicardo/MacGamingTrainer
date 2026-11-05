@@ -19,10 +19,15 @@ class Runtime:
         self.state = {'connected': True, 'pid': 42, 'heroReady': True,
                       'heroId': 'generation:run:hero', 'target': {'heroId': 'generation:run:hero'},
                       'features': dict(DEFAULT_FEATURES), 'health': 50, 'maxHealth': 100,
-                      'money': 25, 'resources': {}, 'traits': [], 'invincible': False}
+                      'money': 25, 'rerolls': 3,
+                      'healthLocked': False, 'healthLock': None,
+                      'moneyLocked': False, 'moneyLock': None,
+                      'rerollsLocked': False, 'rerollsLock': None,
+                      'resources': {}, 'traits': [], 'invincible': False}
 
     def connect(self, pid, executable, features=None):
         self.events.append(('connect', features))
+        self.state['connected'] = True
         self.state['features'] = dict(features)
         return self.status()
 
@@ -46,10 +51,62 @@ class Runtime:
         self.events.append((name, params))
         if name == 'set_feature':
             self.state['features'][params['feature']] = params['value']
+            if params['feature'] == 'moneyNoDecrease' and params['value']:
+                self.state['moneyLocked'] = False
+                self.state['moneyLock'] = None
+            if params['feature'] == 'rerollsNoDecrease' and params['value']:
+                self.state['rerollsLocked'] = False
+                self.state['rerollsLock'] = None
+        if name == 'configure_locks':
+            self.state['healthLock'] = params.get('health')
+            self.state['healthLocked'] = params.get('health') is not None
+            if self.state['healthLocked']:
+                self.state['health'] = self.state['healthLock']['current']
+                self.state['maxHealth'] = self.state['healthLock']['max']
+            self.state['moneyLock'] = params.get('money')
+            self.state['moneyLocked'] = params.get('money') is not None
+            self.state['rerollsLock'] = params.get('rerolls')
+            self.state['rerollsLocked'] = params.get('rerolls') is not None
+            if self.state['moneyLocked']:
+                self.state['money'] = self.state['moneyLock']
+            if self.state['rerollsLocked']:
+                self.state['rerolls'] = self.state['rerollsLock']
+        if name == 'lock_vital':
+            assert params['vital'] == 'health'
+            self.state['healthLocked'] = params['locked']
+            self.state['healthLock'] = (
+                {'current': self.state['health'], 'max': self.state['maxHealth']}
+                if params['locked'] else None
+            )
+        if name == 'lock_resource':
+            assert params['resource'] == 'Money'
+            self.state['moneyLocked'] = params['locked']
+            self.state['moneyLock'] = self.state['money'] if params['locked'] else None
+        if name == 'lock_rerolls':
+            self.state['rerollsLocked'] = params['locked']
+            self.state['rerollsLock'] = self.state['rerolls'] if params['locked'] else None
+        if name == 'set_value':
+            self.state[params['field']] = params['value']
+            if params['field'] in ('health', 'maxHealth') and self.state['healthLocked']:
+                self.state['healthLock'] = {
+                    'current': min(self.state['health'], self.state['maxHealth']),
+                    'max': self.state['maxHealth'],
+                }
+                self.state['health'] = self.state['healthLock']['current']
+            if params['field'] == 'money' and self.state['moneyLocked']:
+                self.state['moneyLock'] = params['value']
+            if params['field'] == 'rerolls' and self.state['rerollsLocked']:
+                self.state['rerollsLock'] = params['value']
         if name == 'set_boon_rarity':
             self.state['boonRarityTarget'] = params['target']
         if name == 'disable_all':
             self.state['features'] = dict(DEFAULT_FEATURES)
+            self.state['healthLocked'] = False
+            self.state['healthLock'] = None
+            self.state['moneyLocked'] = False
+            self.state['moneyLock'] = None
+            self.state['rerollsLocked'] = False
+            self.state['rerollsLock'] = None
         return self.status()
 
     def disconnect(self):
@@ -75,13 +132,25 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **legacy}, 'original preferences did not migrate'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
     assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
-    previous_current = {name: value for name, value in DEFAULT_PREFERENCES.items()
-                        if name != 'boonRarityTarget'}
+    previous_before_rarity_target = {
+        name: value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'boonRarityTarget', 'healthLock', 'moneyLock', 'rerollsLock'}
+    }
+    previous_before_rarity_target['boonRarityEnabled'] = True
+    previous_before_rarity_target['gameSpeed'] = 2.0
+    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_before_rarity_target}))
+    assert store.load() == {**DEFAULT_PREFERENCES, **previous_before_rarity_target}, (
+        'older schema-1 preferences did not acquire the neutral rarity/lock targets'
+    )
+    previous_current = {
+        name: value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'healthLock', 'moneyLock', 'rerollsLock'}
+    }
     previous_current['boonRarityEnabled'] = True
-    previous_current['gameSpeed'] = 2.0
+    previous_current['boonRarityTarget'] = 'Rare'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_current}))
     assert store.load() == {**DEFAULT_PREFERENCES, **previous_current}, (
-        'immediately previous schema-1 preferences did not acquire the new neutral rarity target'
+        'immediately previous schema-1 preferences did not acquire neutral fixed locks'
     )
 
     adapter.profiles.root.mkdir(parents=True, exist_ok=True)
@@ -91,8 +160,11 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'updatedAt': '2026-11-04T00:00:00+00:00', 'features': previous_current,
     }))
     loaded_profile = adapter.dispatch('load_profile', {'name': profile_name}, 'load-previous-profile')
-    assert loaded_profile['boonRarityTarget'] == 'Heroic'
-    assert store.load()['boonRarityTarget'] == 'Heroic'
+    assert loaded_profile['boonRarityTarget'] == 'Rare'
+    assert loaded_profile['healthLock'] is None
+    assert loaded_profile['moneyLock'] is None and loaded_profile['rerollsLock'] is None
+    assert store.load()['healthLock'] is None
+    assert store.load()['moneyLock'] is None and store.load()['rerollsLock'] is None
     assert runtime.events == []
 
     offline = adapter.dispatch('catalog', {'language': 'en', 'query': 'Zeus'}, 'catalog')
@@ -115,6 +187,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert connect_features['boonRarityEnabled'] is True
     assert 'boonRarityTarget' not in connect_features
     assert 'gameSpeed' not in connect_features
+    assert not any(event[0] == 'configure_locks' for event in runtime.events), (
+        'neutral locks added a redundant native status round-trip'
+    )
     assert ('set_boon_rarity', {'target': 'Rare'}) in runtime.events
     assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
@@ -146,6 +221,118 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert profile_state['boonRarityTarget'] == 'Epic'
     assert ('set_boon_rarity', {'target': 'Epic'}) in runtime.events[before_profile_events:]
     assert store.load()['boonRarityTarget'] == 'Epic'
+
+    owner = {'heroId': 'generation:run:hero'}
+    locked_health = adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': True, 'target': owner}, 'lock-health'
+    )
+    assert locked_health['healthLocked'] is True
+    assert store.load()['healthLock'] == {'current': 50, 'max': 100}
+    adapter.dispatch('set_value', {'field': 'health', 'value': 40, 'target': owner}, 'edit-locked-health')
+    assert store.load()['healthLock'] == {'current': 40, 'max': 100}
+    adapter.dispatch('set_value', {'field': 'maxHealth', 'value': 80, 'target': owner}, 'edit-locked-max-health')
+    assert store.load()['healthLock'] == {'current': 40, 'max': 80}
+    adapter.dispatch('disconnect', {}, 'detach-health-lock')
+    before_reconnect = len(runtime.events)
+    reconnected = adapter.dispatch('connect', {}, 'reconnect-health-lock')
+    assert reconnected['healthLocked'] is True
+    assert ('configure_locks', {
+        'health': {'current': 40, 'max': 80}, 'money': None, 'rerolls': None
+    }) in runtime.events[before_reconnect:], 'durable health lock did not replay on reconnect'
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': False, 'target': owner}, 'unlock-health'
+    )
+    assert store.load()['healthLock'] is None
+
+    locked_money = adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money'
+    )
+    assert locked_money['moneyLocked'] is True and locked_money['moneyLock'] == 25
+    assert store.load()['moneyLock'] == 25
+    adapter.dispatch('set_value', {'field': 'money', 'value': 44, 'target': owner}, 'edit-locked-money')
+    assert store.load()['moneyLock'] == 44 and runtime.state['moneyLock'] == 44
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-money'
+    )
+    assert store.load()['moneyLock'] is None
+
+    locked_rerolls = adapter.dispatch(
+        'lock_rerolls', {'locked': True, 'target': owner}, 'lock-rerolls'
+    )
+    assert locked_rerolls['rerollsLocked'] is True and locked_rerolls['rerollsLock'] == 3
+    assert store.load()['rerollsLock'] == 3
+    adapter.dispatch('set_value', {'field': 'rerolls', 'value': 7, 'target': owner}, 'edit-locked-rerolls')
+    assert store.load()['rerollsLock'] == 7 and runtime.state['rerollsLock'] == 7
+    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': True}, 'infinite-rerolls')
+    assert store.load()['rerollsLock'] is None and runtime.state['rerollsLocked'] is False
+    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': False}, 'normal-rerolls')
+
+    class RejectingLockPreferences:
+        def save(self, features):
+            raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
+
+    # Health pair rollback uses the same durable-owner contract as scalar locks.
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': True, 'target': owner}, 'lock-health-before-edit-failure'
+    )
+    previous_health_lock = dict(store.load()['healthLock'])
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'set_value', {'field': 'maxHealth', 'value': previous_health_lock['max'] - 5, 'target': owner},
+            'locked-health-edit-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed health-lock edit persistence was presented as success')
+    assert runtime.state['healthLock'] == previous_health_lock
+    assert runtime.state['health'] == previous_health_lock['current']
+    assert runtime.state['maxHealth'] == previous_health_lock['max'], (
+        'failed max-health lock edit did not restore the previous native pair'
+    )
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_vital', {'vital': 'health', 'locked': False, 'target': owner}, 'unlock-health-after-rollback'
+    )
+
+    adapter.preferences = RejectingLockPreferences()
+    before_lock_failure = dict(runtime.state)
+    try:
+        adapter.dispatch(
+            'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed fixed-lock persistence was presented as success')
+    assert runtime.state['moneyLocked'] is False and runtime.state['moneyLock'] is None
+    assert runtime.state['money'] == before_lock_failure['money'], (
+        'failed lock persistence left a native fixed-value owner mounted'
+    )
+
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money-before-edit-failure'
+    )
+    previous_lock = store.load()['moneyLock']
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'set_value', {'field': 'money', 'value': previous_lock + 9, 'target': owner}, 'locked-edit-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed locked edit persistence was presented as success')
+    assert runtime.state['moneyLock'] == previous_lock and runtime.state['money'] == previous_lock, (
+        'failed locked edit did not restore the previous native lock target'
+    )
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-after-rollback'
+    )
 
     adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
     assert store.load()['moneyNoDecrease'] is True

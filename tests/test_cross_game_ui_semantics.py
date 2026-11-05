@@ -223,6 +223,28 @@ hades2_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 for semantic in ("impact", "movement", "actionSpeed", "timeScale"):
     assert f"TrainerSemanticIcon.Concept.{semantic}" in hades2_view
 
+# Equivalent run-data counters use the Hades II fixed-lock affordance. Hades I
+# keeps God Gauge game-specific because Hades II has no matching fixed counter.
+hades_amount_metric = hades_view.split("private struct HadesAmountMetricCard:", 1)[1].split(
+    "private struct HadesValueRow:", 1
+)[0]
+assert "TrainerLockButton(" in hades_amount_metric
+run_data = hades_view.split("private var runDataSection:", 1)[1].split(
+    "private var commonSection:", 1
+)[0]
+assert "locked: model.moneyLocked" in run_data
+assert "lockEnabled: !model.isEnabled(.moneyNoDecrease)" in run_data
+assert "locked: model.rerollsLocked" in run_data
+assert "lockEnabled: !model.isEnabled(.rerollsNoDecrease)" in run_data
+assert "model.healthLocked" in hades_view
+assert "model.lockHealth(!model.healthLocked)" in hades_view
+assert "field: \"godGauge\"" in run_data
+assert "locked: model.healthLocked" in hades2_view
+assert "locked: model.moneyLocked" in hades2_view
+assert "locked: model.rerollsLocked" in hades2_view
+stat_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatControls.swift").read_text()
+assert "TrainerLockButton(" in stat_controls
+
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
     ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",

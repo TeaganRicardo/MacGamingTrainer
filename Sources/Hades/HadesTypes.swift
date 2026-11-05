@@ -148,6 +148,9 @@ struct HadesObservation: Decodable {
     let maxHealth: Double?
     let money: Double?
     let rerolls: Double?
+    let healthLocked: Bool?
+    let moneyLocked: Bool?
+    let rerollsLocked: Bool?
     let godGauge: Double?
     let maxGodGauge: Double?
     let target: HadesHeroTarget?

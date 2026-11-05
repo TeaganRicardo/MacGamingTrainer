@@ -10,6 +10,16 @@ from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades runtime feature journeys')
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
+
+def run_lua(script):
+    """Run the resident source through stdin so test size never depends on ARG_MAX."""
+    return subprocess.run(
+        [lua, '-'],
+        input='local SOURCE=' + json.dumps(source) + '\n' + script,
+        text=True,
+        capture_output=True,
+    )
+
 harness = r'''
 local function copy(value)
   if type(value) ~= "table" then return value end
@@ -199,6 +209,14 @@ function Heal(unit, args)
   assert(args.Silent and args.HealAmount >= 0)
   unit.Health = math.min(unit.MaxHealth, unit.Health + args.HealAmount)
 end
+function ValidateMaxHealth() end
+local damageCalls = 0
+function Damage(unit, args)
+  damageCalls = damageCalls + 1
+  local floor = args.MinHealth or 0
+  unit.Health = math.max(floor, unit.Health - (args.DamageAmount or 0))
+  return "damaged", floor
+end
 function GetProcessedTraitData(args)
   local result = copy(TraitData[args.TraitName])
   -- Native ProcessTraitData only gives the first level an explicit rarity.
@@ -367,10 +385,10 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 6 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 8 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 }, { revision = 6 }, { revision = 7 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -382,6 +400,24 @@ assert(runtime.status().heroId:find("fixture-generation:", 1, true) == 1)
 assert(baseline.heroReady and baseline.resources.MetaPoints == 17 and baseline.features.damageMultiplier == 1)
 assert(runtime.json(baseline):find('"traits":[]', 1, true))
 assert(runtime.json({ quote = '"\\\n', truth = true }):find('\\u000a', 1, true))
+
+-- Health uses the Hades II fixed-pair contract while preserving native damage
+-- and healing callbacks. The pair owns presentation/settlement, not history.
+local unit = CurrentRun.Hero
+runtime.configure({})
+runtime.lock_vital("health", true)
+local healthState = runtime.status()
+assert(healthState.healthLocked and healthState.healthLock.current == 30 and healthState.healthLock.max == 100)
+local damageResult, damageFloor = Damage(unit, { DamageAmount = 12, MinHealth = 1 })
+assert(damageResult == "damaged" and damageFloor == 30 and unit.Health == 30 and damageCalls == 1,
+  "fixed health lock bypassed native damage or lost its current target")
+Heal(unit, { HealAmount = 20, Silent = true })
+assert(unit.Health == 30, "fixed health lock accepted a native heal")
+runtime.set_value("health", 24)
+assert(runtime.status().healthLock.current == 24 and unit.Health == 24,
+  "absolute current-health edit did not advance the active lock")
+runtime.disable_all()
+assert(not runtime.status().healthLocked, "Disable All did not release the health lock")
 
 -- Rarity changes only future legal Olympian/Hermes offers, including rerolls.
 local olympian = { Name = "ZeusUpgrade", RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
@@ -455,7 +491,11 @@ runtime.set_feature("boonRarityEnabled", false)
 SetTraitsOnLoot(olympian)
 assert(olympian.UpgradeOptions[1].Rarity == "Common", "turning rarity off did not restore natural rolls")
 runtime.set_feature("boonRarityEnabled", true)
+runtime.lock_resource("Money", true)
+runtime.lock_rerolls(true)
 runtime.disable_all()
+assert(not runtime.status().moneyLocked and not runtime.status().rerollsLocked,
+  "Disable All did not release fixed value locks")
 assert(runtime.status().features.boonRarityEnabled == false, "Disable All did not reset rarity policy")
 assert(runtime.status().boonRarityTarget == "Heroic", "Disable All did not reset rarity target")
 SetTraitsOnLoot(olympian)
@@ -512,6 +552,24 @@ assert(CurrentRun.Money == 123 and CurrentRun.MoneySpent == 60)
 SpendMoney(0, "nothing")
 assert(CurrentRun.Money == 123)
 
+runtime.set_feature("moneyNoDecrease", false)
+CurrentRun.Money = 80
+UpdateMoneyUI(CurrentRun.Money)
+runtime.lock_resource("Money", true)
+assert(runtime.status().moneyLocked and runtime.status().moneyLock == 80)
+CurrentRun.Money = CurrentRun.Money + 25
+UpdateMoneyUI(CurrentRun.Money)
+assert(CurrentRun.Money == 80 and updates.money == 80, "fixed gold lock did not reject a native gain")
+SpendMoney(15, "locked-shop")
+assert(CurrentRun.Money == 80 and CurrentRun.MoneySpent == 75, "fixed gold lock erased native spend history")
+runtime.set_value("money", 91)
+assert(CurrentRun.Money == 91 and runtime.status().moneyLock == 91,
+  "absolute gold edit did not advance the active fixed lock")
+runtime.set_feature("moneyNoDecrease", true)
+assert(not runtime.status().moneyLocked, "Infinite Gold did not release the conflicting fixed lock")
+expectError("invalidValue", function() runtime.lock_resource("Money", true) end)
+runtime.set_feature("moneyNoDecrease", false)
+
 runtime.set_feature("rerollsNoDecrease", true)
 AttemptBoonLootReroll()
 assert(CurrentRun.NumRerolls == 3 and rerollsSeenInMenu[1] == 3)
@@ -525,6 +583,24 @@ assert(ok and result == "panel" and absent == nil and number == 5)
 assert(CurrentRun.NumRerolls == 5, "native gains were swallowed")
 assert(AttemptReroll(CurrentRun, { CanBeRerolled = true }) == "door" and CurrentRun.NumRerolls == 5)
 assert(AttemptReroll(CurrentRun, nil) == nil and CurrentRun.NumRerolls == 5)
+
+runtime.set_feature("rerollsNoDecrease", false)
+CurrentRun.NumRerolls = 6
+UpdateRerollUI(CurrentRun.NumRerolls)
+runtime.lock_rerolls(true)
+assert(runtime.status().rerollsLocked and runtime.status().rerollsLock == 6)
+AttemptBoonLootReroll()
+assert(CurrentRun.NumRerolls == 6 and updates.rerolls == 6, "fixed reroll lock did not reject native spend")
+CurrentRun.NumRerolls = CurrentRun.NumRerolls + 3
+UpdateRerollUI(CurrentRun.NumRerolls)
+assert(CurrentRun.NumRerolls == 6 and updates.rerolls == 6, "fixed reroll lock did not reject native gain")
+runtime.set_value("rerolls", 8)
+assert(CurrentRun.NumRerolls == 8 and runtime.status().rerollsLock == 8,
+  "absolute reroll edit did not advance the active fixed lock")
+runtime.set_feature("rerollsNoDecrease", true)
+assert(not runtime.status().rerollsLocked, "Infinite Rerolls did not release the conflicting fixed lock")
+expectError("invalidValue", function() runtime.lock_rerolls(true) end)
+runtime.set_feature("rerollsNoDecrease", false)
 
 unit.hasCall, unit.SuperMeter = true, 10
 local existingDrain = coroutine.create(PostEncounterDrainSuper)
@@ -747,7 +823,7 @@ assert(not runtime.status().features.invincibility)
 print(runtime.json(runtime.status()))
 print("hades_runtime_journeys_ok")
 '''
-proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + harness], text=True, capture_output=True)
+proc = run_lua(harness)
 assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
 lines = proc.stdout.splitlines()
 state = json.loads(lines[-2])
@@ -1429,10 +1505,31 @@ assert(unit.MaxHealth == 1011 and unit.Health == 11, "native multiplier semantic
 unit.metaHealth = 3
 ValidateMaxHealth()
 assert(unit.MaxHealth == 1017 and unit.Health == 17, "native mirror recomputation lost the run contribution")
+
+runtime.lock_vital("health", true)
+assert(runtime.status().healthLock.current == 17 and runtime.status().healthLock.max == 1017)
+unit.metaHealth = 4
+ValidateMaxHealth()
+assert(unit.MaxHealth == 1017 and unit.Health == 17,
+  "native maximum-health recomputation escaped the fixed pair")
+runtime.set_value("health", 16)
+runtime.set_value("maxHealth", 1000)
+local lockedHealth = runtime.status()
+assert(lockedHealth.healthLock.current == 16 and lockedHealth.healthLock.max == 1000
+  and unit.Health == 16 and unit.MaxHealth == 1000,
+  "absolute health edits did not advance the active fixed pair")
+runtime.lock_vital("health", false)
+assert(not runtime.status().healthLocked and unit.MaxHealth == 1019 and unit.Health == 16,
+  "fixed max-health editing rewrote the native Heart/Mirror/trait owner underneath the lock")
+unit.metaHealth = 3
+runtime.set_value("maxHealth", 1017)
+assert(unit.MaxHealth == 1017 and unit.Health == 16,
+  "post-unlock absolute maximum edit could not restore the native baseline")
+
 runtime.set_feature("invincibility", true)
 runtime.set_feature("damageMultiplier", 3)
 runtime.disable_all()
-assert(unit.MaxHealth == 1017 and unit.Health == 17, "Disable All reverted a committed numeric edit")
+assert(unit.MaxHealth == 1017 and unit.Health == 16, "Disable All reverted a committed numeric edit")
 Save()
 for _, trait in pairs(savedState.run.Hero.Traits) do
   assert(TraitData[trait.Name], "numeric persistence requires a Trainer-only trait definition")
@@ -1442,7 +1539,7 @@ local liveRun = CurrentRun
 CurrentRun = copy(savedState.run)
 CurrentRun.Hero.MaxHealth = 1
 ValidateMaxHealth(true)
-assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 17,
+assert(CurrentRun.Hero.MaxHealth == 1017 and CurrentRun.Hero.Health == 16,
   "native recomputation of the saved run required Trainer state")
 CurrentRun = liveRun
 
@@ -1593,7 +1690,7 @@ print("hades_runtime_native_max_health_and_movement_ok")
 
 '''
 native_harness = harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0] + native_setup + native_owners + native_cases
-proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + native_harness], text=True, capture_output=True)
+proc = run_lua(native_harness)
 assert proc.returncode == 0, proc.stdout + '\n' + proc.stderr
 assert proc.stdout.strip() == 'hades_runtime_native_max_health_and_movement_ok', proc.stdout
 print(proc.stdout.strip())
@@ -2163,6 +2260,6 @@ near(unit.properties.Speed, 594)
 for name, case in scheduler_cases.items():
     script = (harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0]
               + native_setup + native_owners + native_scheduler + case)
-    proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + script], text=True, capture_output=True)
+    proc = run_lua(script)
     assert proc.returncode == 0, name + ': ' + proc.stdout + '\n' + proc.stderr
 print('hades_runtime_native_scheduler_adoption_ok')

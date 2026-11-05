@@ -74,10 +74,26 @@ struct HadesTrainerView: View {
             VStack(spacing: 0) {
                 TrainerMetricGrid {
                     HadesVitalMetricCard(model: model)
-                    HadesAmountMetricCard(model: model, title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency,
-                                          value: model.money, field: "money")
-                    HadesAmountMetricCard(model: model, title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize,
-                                          value: model.rerolls, field: "rerolls")
+                    HadesAmountMetricCard(
+                        model: model,
+                        title: text("hades.money"),
+                        icon: TrainerSemanticIcon.Concept.currency,
+                        value: model.money,
+                        field: "money",
+                        locked: model.moneyLocked,
+                        lockEnabled: !model.isEnabled(.moneyNoDecrease),
+                        onLock: { model.lockMoney(!model.moneyLocked) }
+                    )
+                    HadesAmountMetricCard(
+                        model: model,
+                        title: text("hades.rerolls"),
+                        icon: TrainerSemanticIcon.Concept.randomize,
+                        value: model.rerolls,
+                        field: "rerolls",
+                        locked: model.rerollsLocked,
+                        lockEnabled: !model.isEnabled(.rerollsNoDecrease),
+                        onLock: { model.lockRerolls(!model.rerollsLocked) }
+                    )
                     HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
                                           value: model.godGauge, field: "godGauge")
                 }
@@ -308,7 +324,12 @@ private struct HadesVitalMetricCard: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
-            Color.clear.frame(width: 26, height: 24)
+            TrainerLockButton(
+                title: title,
+                locked: model.healthLocked,
+                enabled: model.canMutate,
+                action: { model.lockHealth(!model.healthLocked) }
+            )
         } content: {
             HStack(spacing: 2) {
                 TrainerNumberField(
@@ -344,17 +365,45 @@ private struct HadesAmountMetricCard: View {
     let icon: String
     let value: Double
     let field: String
+    let locked: Bool?
+    let lockEnabled: Bool
+    let onLock: (() -> Void)?
     @Environment(\.trainerTheme) private var theme
     @State private var draft: HadesNumberDraft
 
-    init(model: HadesTrainerModel, title: String, icon: String, value: Double, field: String) {
-        self.model = model; self.title = title; self.icon = icon; self.value = value; self.field = field
+    init(
+        model: HadesTrainerModel,
+        title: String,
+        icon: String,
+        value: Double,
+        field: String,
+        locked: Bool? = nil,
+        lockEnabled: Bool = true,
+        onLock: (() -> Void)? = nil
+    ) {
+        self.model = model
+        self.title = title
+        self.icon = icon
+        self.value = value
+        self.field = field
+        self.locked = locked
+        self.lockEnabled = lockEnabled
+        self.onLock = onLock
         _draft = State(initialValue: HadesNumberDraft(value: value))
     }
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
-            Color.clear.frame(width: 26, height: 24)
+            if let locked, let onLock {
+                TrainerLockButton(
+                    title: title,
+                    locked: locked,
+                    enabled: model.canMutate && lockEnabled,
+                    action: onLock
+                )
+            } else {
+                Color.clear.frame(width: 26, height: 24)
+            }
         } content: {
             TrainerNumberField(
                 text: Binding(get: { draft.text }, set: { draft.update($0) }),

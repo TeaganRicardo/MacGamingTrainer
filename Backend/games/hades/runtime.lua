@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 6 then error("hades.error.restartRequired") end
+  if existing.revision ~= 8 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 6,
+  version = 1, revision = 8,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -48,6 +48,25 @@ local function requireHero()
 end
 local function sameOwner(run, unit)
   return CurrentRun == run and hero() == unit
+end
+local function healthLockValid(lock)
+  return type(lock) == "table" and finite(lock.current) and finite(lock.max)
+    and lock.current >= 1 and lock.max >= 1 and lock.current <= lock.max
+end
+local function enforceHealthLock(unit)
+  local lock = runtime.healthLock
+  if not unit or not healthLockValid(lock) then return end
+  unit.MaxHealth = lock.max
+  unit.Health = math.min(lock.current, lock.max)
+end
+local function releaseHealthLock(unit)
+  runtime.healthLock = nil
+  if not unit then return end
+  assert(type(ValidateMaxHealth) == "function" and type(UpdateHealthUI) == "function",
+    "hades.error.unsupportedRuntime")
+  ValidateMaxHealth(true)
+  unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
+  UpdateHealthUI()
 end
 local function instanceId(trait)
   if not runtime.instanceIds[trait] then
@@ -200,6 +219,10 @@ local function mount(unit, rebuilt)
   mountIncomingDamage(unit)
   refillAmmo(unit)
   if desired.fullHealth and not unit.IsDead then unit.Health = unit.MaxHealth; UpdateHealthUI() end
+  if healthLockValid(runtime.healthLock) and not unit.IsDead then
+    enforceHealthLock(unit)
+    UpdateHealthUI()
+  end
   local damage = damageModifier(unit)
   if desired.damageMultiplier == 1 then
     if damage then removeDamageModifier(unit) end
@@ -225,6 +248,14 @@ local function mount(unit, rebuilt)
     nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
       ChangeValue = desired.dashBonus - mounted.dash, ChangeType = "Add" })
     mounted.dash = desired.dashBonus
+  end
+  if finite(runtime.moneyLock) and finite(CurrentRun.Money) then
+    CurrentRun.Money = runtime.moneyLock
+    if type(UpdateMoneyUI) == "function" then UpdateMoneyUI(runtime.moneyLock) end
+  end
+  if finite(runtime.rerollsLock) and finite(CurrentRun.NumRerolls) then
+    CurrentRun.NumRerolls = runtime.rerollsLock
+    if type(UpdateRerollUI) == "function" then UpdateRerollUI(runtime.rerollsLock) end
   end
   fillGauge(unit)
 end
@@ -499,16 +530,48 @@ local function installHooks()
   end
   hook("Damage", function(original)
     return function(victim, args, ...)
-      local unit = hero()
-      if runtime.features.fullHealth and unit and victim == unit and not unit.IsDead then
-        -- Combat.lua clamps to MinHealth before checking Death Defiance/death.
-        -- Only this hero's damage call receives the temporary life floor.
+      local run, unit = CurrentRun, hero()
+      if unit and victim == unit and not unit.IsDead
+          and (healthLockValid(runtime.healthLock) or runtime.features.fullHealth) then
+        -- Preserve native damage bookkeeping while preventing the locked/full
+        -- health owner from crossing its requested floor.
         local parameters = {}
         for key, value in pairs(args) do parameters[key] = value end
-        parameters.MinHealth = unit.MaxHealth
-        return original(victim, parameters, ...)
+        parameters.MinHealth = healthLockValid(runtime.healthLock)
+          and runtime.healthLock.current or unit.MaxHealth
+        local result = table.pack(original(victim, parameters, ...))
+        if sameOwner(run, unit) and healthLockValid(runtime.healthLock) then
+          enforceHealthLock(unit)
+        end
+        return table.unpack(result, 1, result.n)
       end
       return original(victim, args, ...)
+    end
+  end)
+  hook("Heal", function(original)
+    return function(unit, args, ...)
+      local run, owner = CurrentRun, hero()
+      local result = table.pack(original(unit, args, ...))
+      if owner and unit == owner and sameOwner(run, owner) and healthLockValid(runtime.healthLock) then
+        enforceHealthLock(owner)
+      end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("ValidateMaxHealth", function(original)
+    return function(blockHealing, ...)
+      local run, unit = CurrentRun, hero()
+      local locked = unit and healthLockValid(runtime.healthLock)
+      local result = table.pack(original(locked and true or blockHealing, ...))
+      if locked and sameOwner(run, unit) then enforceHealthLock(unit) end
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("UpdateHealthUI", function(original)
+    return function(...)
+      local unit = hero()
+      if unit and healthLockValid(runtime.healthLock) then enforceHealthLock(unit) end
+      return original(...)
     end
   end)
   for _, name in ipairs({ "UpdateAmmoUI", "UpdateGunUI" }) do
@@ -587,6 +650,16 @@ local function installHooks()
       return original(loot, ...)
     end
   end)
+  hook("UpdateMoneyUI", function(original)
+    return function(value, ...)
+      local run, unit = CurrentRun, hero()
+      if unit and finite(runtime.moneyLock) and finite(run and run.Money) then
+        run.Money = runtime.moneyLock
+        value = runtime.moneyLock
+      end
+      return original(value, ...)
+    end
+  end)
   hook("SpendMoney", function(original)
     return function(amount, ...)
       local run, unit = CurrentRun, hero()
@@ -630,6 +703,11 @@ local function installHooks()
         lease.run.NumRerolls = lease.run.NumRerolls + lease.cost
         value = lease.run.NumRerolls
         lease.restored = true
+      end
+      local unit = hero()
+      if unit and finite(runtime.rerollsLock) and type(CurrentRun) == "table" then
+        CurrentRun.NumRerolls = runtime.rerollsLock
+        value = runtime.rerollsLock
       end
       return original(value, ...)
     end
@@ -716,6 +794,9 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
+    healthLocked = healthLockValid(runtime.healthLock), healthLock = runtime.healthLock,
+    moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
+    rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
     features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
     resources = resources, traits = traits, world = world.observation(),
   }
@@ -737,6 +818,8 @@ function runtime.configure(features)
   installHooks()
   for name, value in pairs(features) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  if runtime.features.moneyNoDecrease then runtime.moneyLock = nil end
+  if runtime.features.rerollsNoDecrease then runtime.rerollsLock = nil end
   if not runtime.features.forceRerolls then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
@@ -746,6 +829,8 @@ function runtime.set_feature(name, value)
   validateFeature(name, value)
   installHooks()
   runtime.features[name] = value
+  if name == "moneyNoDecrease" and value then runtime.moneyLock = nil end
+  if name == "rerollsNoDecrease" and value then runtime.rerollsLock = nil end
   if name == "forceRerolls" and not value then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
@@ -758,6 +843,74 @@ function runtime.set_boon_rarity(target)
   runtime.boonRarityTarget = target
   return runtime.status()
 end
+function runtime.configure_locks(health, money, rerolls)
+  if health ~= nil then
+    assert(healthLockValid(health), "hades.error.invalidValue")
+  end
+  if money ~= nil then
+    assert(finite(money) and money == math.floor(money) and money >= 0 and money <= 1000000000,
+      "hades.error.invalidValue")
+    assert(not runtime.features.moneyNoDecrease, "hades.error.invalidValue")
+  end
+  if rerolls ~= nil then
+    assert(finite(rerolls) and rerolls == math.floor(rerolls) and rerolls >= 0 and rerolls <= 1000000000,
+      "hades.error.invalidValue")
+    assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
+  end
+  installHooks()
+  local unit = hero()
+  local releasingHealth = health == nil and healthLockValid(runtime.healthLock)
+  if releasingHealth then
+    releaseHealthLock(unit)
+  else
+    runtime.healthLock = health and { current = health.current, max = health.max } or nil
+  end
+  runtime.moneyLock, runtime.rerollsLock = money, rerolls
+  if unit then mount(unit, false) end
+  return runtime.status()
+end
+function runtime.lock_vital(name, locked)
+  local unit = requireHero()
+  assert(name == "health" and type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(finite(unit.Health) and finite(unit.MaxHealth) and unit.Health >= 1
+      and unit.MaxHealth >= 1 and unit.Health <= unit.MaxHealth, "hades.error.invalidValue")
+    runtime.healthLock = { current = unit.Health, max = unit.MaxHealth }
+    enforceHealthLock(unit)
+    UpdateHealthUI()
+  else
+    -- Restore the game's trait/mirror-owned maximum without retroactively
+    -- healing damage that was suppressed while the lock was active.
+    releaseHealthLock(unit)
+  end
+  return runtime.status()
+end
+function runtime.lock_resource(name, locked)
+  local unit = requireHero()
+  assert(name == "Money" and type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(not runtime.features.moneyNoDecrease and finite(CurrentRun.Money),
+      "hades.error.invalidValue")
+    runtime.moneyLock = CurrentRun.Money
+  else
+    runtime.moneyLock = nil
+  end
+  mount(unit, false)
+  return runtime.status()
+end
+function runtime.lock_rerolls(locked)
+  local unit = requireHero()
+  assert(type(locked) == "boolean", "hades.error.invalidValue")
+  if locked then
+    assert(not runtime.features.rerollsNoDecrease and finite(CurrentRun.NumRerolls),
+      "hades.error.invalidValue")
+    runtime.rerollsLock = CurrentRun.NumRerolls
+  else
+    runtime.rerollsLock = nil
+  end
+  mount(unit, false)
+  return runtime.status()
+end
 function runtime.set_invincibility(enabled)
   requireHero()
   return runtime.set_feature("invincibility", enabled)
@@ -766,8 +919,11 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
-  restoreRerollDoors()
   local unit = hero()
+  if healthLockValid(runtime.healthLock) then releaseHealthLock(unit)
+  else runtime.healthLock = nil end
+  runtime.moneyLock, runtime.rerollsLock = nil, nil
+  restoreRerollDoors()
   if unit then mount(unit, false) end
   return runtime.status()
 end
@@ -777,23 +933,34 @@ function runtime.set_value(field, value)
   if field == "health" then
     assert(value >= 1 and value <= unit.MaxHealth, "hades.error.invalidValue")
     unit.Health = value
+    if healthLockValid(runtime.healthLock) then runtime.healthLock.current = value end
     UpdateHealthUI()
   elseif field == "maxHealth" then
     assert(value >= 1, "hades.error.invalidValue")
-    local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
-    assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
-    local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
-    if change ~= 0 then
-      local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
-      trait.PropertyChanges[1].ChangeValue = change
-      -- ApplyUnitPropertyChange clamps health before its multiplier-aware
-      -- validation. Keep that intermediate maximum positive on large decreases.
-      unit.MaxHealth = math.max(unit.MaxHealth, value - change)
-      AddTraitToHero({ TraitData = trait })
+    local activeLock = healthLockValid(runtime.healthLock) and runtime.healthLock or nil
+    if activeLock then
+      -- A fixed vital lock owns only its visible current/max pair. Do not
+      -- rewrite the native run contribution underneath it: Hearts, Mirror,
+      -- curses and trait multipliers keep evolving there and resume on unlock.
+      activeLock.max = value
+      activeLock.current = math.min(activeLock.current, value)
+      enforceHealthLock(unit)
     else
-      ValidateMaxHealth(true)
+      local multiplier = GetTotalHeroTraitValue("MaxHealthMultiplier", { IsMultiplier = true })
+      assert(finite(multiplier) and multiplier > 0, "hades.error.unsupportedRuntime")
+      local change = (value - unit.MaxHealth - GetMaxHealthUpgradeIncrement(0)) / multiplier
+      if change ~= 0 then
+        local trait = GetProcessedTraitData({ Unit = unit, TraitName = "RoomRewardEmptyMaxHealthTrait" })
+        trait.PropertyChanges[1].ChangeValue = change
+        -- ApplyUnitPropertyChange clamps health before its multiplier-aware
+        -- validation. Keep that intermediate maximum positive on large decreases.
+        unit.MaxHealth = math.max(unit.MaxHealth, value - change)
+        AddTraitToHero({ TraitData = trait })
+      else
+        ValidateMaxHealth(true)
+      end
+      unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
     end
-    unit.Health = math.max(0, math.min(unit.Health, unit.MaxHealth))
     UpdateHealthUI()
   elseif field == "godGauge" then
     assert(not unit.SuperActive and finite(unit.SuperMeterLimit) and value <= unit.SuperMeterLimit,
@@ -802,9 +969,11 @@ function runtime.set_value(field, value)
     UpdateSuperMeterUI()
   elseif field == "money" then
     CurrentRun.Money = value
+    if runtime.moneyLock ~= nil then runtime.moneyLock = value end
     UpdateMoneyUI(value)
   elseif field == "rerolls" then
     CurrentRun.NumRerolls = value
+    if runtime.rerollsLock ~= nil then runtime.rerollsLock = value end
     UpdateRerollUI(value)
   else error("hades.error.invalidValue") end
   return runtime.status()

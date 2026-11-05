@@ -95,6 +95,7 @@ class HadesAdapter(GameAdapter):
             return {'profiles': self.profiles.list()}
         if command == 'load_profile':
             features = self.profiles.load(params.get('name'))
+            previous_features = dict(self.features)
             self.preferences.save(features)
             self.features = features
             state = {**self._offline(), 'features': self.features}
@@ -102,6 +103,13 @@ class HadesAdapter(GameAdapter):
                 runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
+                    if any(features.get(key) is not None or previous_features.get(key) is not None
+                           for key in ('healthLock', 'moneyLock', 'rerollsLock')):
+                        state = self.runtime.command('configure_locks', {
+                            'health': features['healthLock'],
+                            'money': features['moneyLock'],
+                            'rerolls': features['rerollsLock'],
+                        })
                     if features['boonRarityTarget'] != 'Heroic':
                         state = self.runtime.command(
                             'set_boon_rarity', {'target': features['boonRarityTarget']}
@@ -139,6 +147,14 @@ class HadesAdapter(GameAdapter):
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
+            if self.connected and any(
+                    self.features.get(key) is not None
+                    for key in ('healthLock', 'moneyLock', 'rerollsLock')):
+                state = self.runtime.command('configure_locks', {
+                    'health': self.features['healthLock'],
+                    'money': self.features['moneyLock'],
+                    'rerolls': self.features['rerollsLock'],
+                })
             if self.connected and self.features['boonRarityTarget'] != 'Heroic':
                 state = self.runtime.command(
                     'set_boon_rarity', {'target': self.features['boonRarityTarget']}
@@ -178,6 +194,10 @@ class HadesAdapter(GameAdapter):
             name = params.get('feature')
             value = preference_value(name, params.get('value')) if name == 'gameSpeed' else feature_value(name, params.get('value'))
             candidate = {**self.features, name: value}
+            if name == 'moneyNoDecrease' and value:
+                candidate['moneyLock'] = None
+            if name == 'rerollsNoDecrease' and value:
+                candidate['rerollsLock'] = None
             self.preferences.save(candidate)
             self.features = candidate
             if name == 'gameSpeed':
@@ -195,6 +215,54 @@ class HadesAdapter(GameAdapter):
             if not self.connected:
                 return self._observe({**self._offline(), 'features': self.features})
             return self._observe(self.runtime.command(command, {'feature': name, 'value': value}))
+        if command in ('lock_vital', 'lock_resource', 'lock_rerolls'):
+            if not self.connected:
+                raise AdapterError('not_connected', 'hades.error.notConnected')
+            target = params.get('target')
+            if not isinstance(target, dict) or not isinstance(target.get('heroId'), str) or not target['heroId']:
+                raise AdapterError('stale_target', 'hades.error.staleTarget')
+            locked = params.get('locked')
+            if type(locked) is not bool:
+                raise invalid_value()
+            if command == 'lock_vital':
+                if params.get('vital') != 'health':
+                    raise invalid_value()
+                runtime_params = {'vital': 'health', 'locked': locked, 'target': target}
+                key, state_key, flag_key = 'healthLock', 'healthLock', 'healthLocked'
+            elif command == 'lock_resource':
+                if params.get('resource') != 'Money':
+                    raise invalid_value()
+                runtime_params = {'resource': 'Money', 'locked': locked, 'target': target}
+                key, state_key, flag_key = 'moneyLock', 'moneyLock', 'moneyLocked'
+            else:
+                runtime_params = {'locked': locked, 'target': target}
+                key, state_key, flag_key = 'rerollsLock', 'rerollsLock', 'rerollsLocked'
+            previous = dict(self.features)
+            state = self.runtime.command(command, runtime_params)
+            candidate = dict(self.features)
+            try:
+                if state.get(flag_key) is True:
+                    candidate[key] = (
+                        preference_value('healthLock', state.get(state_key))
+                        if key == 'healthLock'
+                        else number(state.get(state_key), 0, 1_000_000_000, integer=True)
+                    )
+                elif state.get(flag_key) is False:
+                    candidate[key] = None
+                else:
+                    raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+            except AdapterError as error:
+                self._rollback_runtime_locks(previous)
+                if error.code == 'invalid_value':
+                    raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol') from error
+                raise
+            try:
+                self.preferences.save(candidate)
+            except AdapterError:
+                self._rollback_runtime_locks(previous)
+                raise
+            self.features = candidate
+            return self._observe(state)
         if command == 'disable_all':
             persistence_error = None
             try:
@@ -238,7 +306,44 @@ class HadesAdapter(GameAdapter):
                 raise AdapterError('stale_target', 'hades.error.staleTarget')
             values = self._mutation_params(command, params)
             values['target'] = target
-            return self._observe(self.runtime.command(command, values))
+            previous = dict(self.features)
+            state = self.runtime.command(command, values)
+            if command == 'set_value':
+                key = {
+                    'health': 'healthLock',
+                    'maxHealth': 'healthLock',
+                    'money': 'moneyLock',
+                    'rerolls': 'rerollsLock',
+                }.get(values.get('field'))
+                if key is not None and previous.get(key) is not None:
+                    state_key = key
+                    flag_key = {
+                        'healthLock': 'healthLocked',
+                        'moneyLock': 'moneyLocked',
+                        'rerollsLock': 'rerollsLocked',
+                    }[key]
+                    if state.get(flag_key) is not True:
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                    candidate = dict(self.features)
+                    try:
+                        candidate[key] = (
+                            preference_value('healthLock', state.get(state_key))
+                            if key == 'healthLock'
+                            else number(state.get(state_key), 0, 1_000_000_000, integer=True)
+                        )
+                    except AdapterError as error:
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError(
+                            'debugger_protocol', 'hades.error.debuggerProtocol'
+                        ) from error
+                    try:
+                        self.preferences.save(candidate)
+                    except AdapterError:
+                        self._rollback_runtime_locks(previous)
+                        raise
+                    self.features = candidate
+            return self._observe(state)
         raise AdapterError('unknown_command', 'hades.error.unknownCommand')
 
     def _save_editor(self, command, params):
@@ -330,6 +435,18 @@ class HadesAdapter(GameAdapter):
             result.update({'rarity': rarity, 'level': number(params.get('level'), 1, 100, integer=True)})
         return result
 
+    def _rollback_runtime_locks(self, preferences):
+        try:
+            self.runtime.command('configure_locks', {
+                'health': preferences.get('healthLock'),
+                'money': preferences.get('moneyLock'),
+                'rerolls': preferences.get('rerollsLock'),
+            })
+        except AdapterError:
+            # The original persistence/protocol failure remains authoritative.
+            # Recovery on reconnect will replay the durable document.
+            pass
+
     def _reconcile_game_speed(self):
         if not self.connected:
             return
@@ -382,6 +499,12 @@ class HadesAdapter(GameAdapter):
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
         state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
+        state['healthLocked'] = self.features.get('healthLock') is not None
+        state['healthLock'] = self.features.get('healthLock')
+        state['moneyLocked'] = self.features.get('moneyLock') is not None
+        state['moneyLock'] = self.features.get('moneyLock')
+        state['rerollsLocked'] = self.features.get('rerollsLock') is not None
+        state['rerollsLock'] = self.features.get('rerollsLock')
         return state
 
     @staticmethod

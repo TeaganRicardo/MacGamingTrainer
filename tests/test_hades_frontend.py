@@ -167,15 +167,41 @@ for raw in sys.stdin:
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
         if command=='set_feature':
-            if params.get('feature')=='gameSpeed':
+            feature=params.get('feature')
+            if feature=='gameSpeed':
                 state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
             else:
-                state['features'][params['feature']]=params['value']
+                state['features'][feature]=params['value']
+                if feature=='moneyNoDecrease' and params['value']:
+                    state['moneyLocked']=False;state['moneyLock']=None
+                if feature=='rerollsNoDecrease' and params['value']:
+                    state['rerollsLocked']=False;state['rerollsLock']=None
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_boon_rarity':
             state['boonRarityTarget']=params['target']
             (folder/'state.json').write_text(json.dumps(state))
-        if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_vital':
+            assert params.get('vital')=='health'
+            state['healthLocked']=bool(params['locked'])
+            state['healthLock']={'current':state['health'],'max':state['maxHealth']} if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_resource':
+            assert params.get('resource')=='Money'
+            state['moneyLocked']=bool(params['locked'])
+            state['moneyLock']=state['money'] if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='lock_rerolls':
+            state['rerollsLocked']=bool(params['locked'])
+            state['rerollsLock']=state['rerolls'] if params['locked'] else None
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_value':
+            state[params['field']]=params['value']
+            if params['field'] in ('health','maxHealth') and state.get('healthLocked'):
+                state['health']=min(state['health'],state['maxHealth'])
+                state['healthLock']={'current':state['health'],'max':state['maxHealth']}
+            if params['field']=='money' and state.get('moneyLocked'):state['moneyLock']=params['value']
+            if params['field']=='rerolls' and state.get('rerollsLocked'):state['rerollsLock']=params['value']
+            (folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
                 if trait['instanceId']==params['instanceId']:trait['remainingUses']=params['uses']
@@ -690,6 +716,52 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("status after target replacement restores runtime observation") {
             model.connected && !model.busy && model.boonRarityTarget == "Epic"
         }
+
+        let beforeHealthLocks = commands().filter { $0["command"] as? String == "lock_vital" }.count
+        model.lockHealth(true)
+        wait("fixed health lock reply") {
+            !model.busy && model.healthLocked
+                && commands().filter { $0["command"] as? String == "lock_vital" }.count == beforeHealthLocks + 1
+        }
+        let healthLockArgs = commands().last { $0["command"] as? String == "lock_vital" }?["params"] as? [String:Any]
+        check(healthLockArgs?["vital"] as? String == "health"
+              && healthLockArgs?["locked"] as? Bool == true
+              && (healthLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed health lock lost its current hero owner")
+        model.setValue("health", value: 42, target: model.target)
+        wait("fixed health current edit reply") { !model.busy && model.health == 42 && model.healthLocked }
+        model.setValue("maxHealth", value: 90, target: model.target)
+        wait("fixed health maximum edit reply") { !model.busy && model.maxHealth == 90 && model.healthLocked }
+        model.lockHealth(false)
+        wait("fixed health unlock reply") { !model.busy && !model.healthLocked }
+
+        let beforeMoneyLocks = commands().filter { $0["command"] as? String == "lock_resource" }.count
+        model.lockMoney(true)
+        wait("fixed gold lock reply") {
+            !model.busy && model.moneyLocked
+                && commands().filter { $0["command"] as? String == "lock_resource" }.count == beforeMoneyLocks + 1
+        }
+        let moneyLockArgs = commands().last { $0["command"] as? String == "lock_resource" }?["params"] as? [String:Any]
+        check(moneyLockArgs?["resource"] as? String == "Money"
+              && moneyLockArgs?["locked"] as? Bool == true
+              && (moneyLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed gold lock lost its current hero owner")
+        model.lockMoney(false)
+        wait("fixed gold unlock reply") { !model.busy && !model.moneyLocked }
+
+        let beforeRerollLocks = commands().filter { $0["command"] as? String == "lock_rerolls" }.count
+        model.lockRerolls(true)
+        wait("fixed reroll lock reply") {
+            !model.busy && model.rerollsLocked
+                && commands().filter { $0["command"] as? String == "lock_rerolls" }.count == beforeRerollLocks + 1
+        }
+        let rerollLockArgs = commands().last { $0["command"] as? String == "lock_rerolls" }?["params"] as? [String:Any]
+        check(rerollLockArgs?["locked"] as? Bool == true
+              && (rerollLockArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1",
+              "fixed reroll lock lost its current hero owner")
+        model.lockRerolls(false)
+        wait("fixed reroll unlock reply") { !model.busy && !model.rerollsLocked }
+
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
@@ -726,7 +798,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             HadesPresentation.text("hades.health",language:.en)])
         guard let field=fields(in:host).first(where:{$0.accessibilityLabel()==currentLife}),
               let coordinator=field.delegate as? TrainerTextField.Coordinator else { fatalError("native health control missing") }
-        check(field.stringValue=="50","native control did not show observation")
+        let manualSetValueBaseline = commands().filter { $0["command"] as? String == "set_value" }.count
+        check(field.stringValue=="42","native control did not show the post-lock observation")
         coordinator.begin();field.stringValue="70"
         coordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:field))
         try updateState(hero:"run:hero:1",health:60)
@@ -735,8 +808,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field))
         wait("native health set_value reply: health 70, trainer idle") { !model.busy && model.health==70 }
         let sent=commands().filter { $0["command"] as? String == "set_value" }
-        check(sent.count==1,"native commit did not send exactly one mutation")
-        let params=sent[0]["params"] as! [String:Any]
+        check(sent.count==manualSetValueBaseline + 1,"native commit did not send exactly one mutation")
+        let params=sent.last!["params"] as! [String:Any]
         check((params["target"] as? [String:String])?["heroId"]=="run:hero:1","numeric commit lost its captured hero")
         check(params["field"] as? String == "health" && params["value"] as? Double == 70,"numeric commit changed the wrong value")
 
@@ -746,7 +819,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         model.refreshFromHost();wait("hero replacement status: health 30, trainer idle") { !model.busy && model.health==30 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="80","hero replacement erased focused draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field));pump()
-        check(commands().filter { $0["command"] as? String == "set_value" }.count==1,"stale draft mutated replacement hero")
+        check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 1,"stale draft mutated replacement hero")
         check(model.localError=="hades.error.staleHero","stale draft lacked actionable feedback")
         try updateState(hero:"run:hero:2",health:31)
         model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
@@ -783,7 +856,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enterNative("32").doCommand(by:#selector(NSResponder.insertNewline(_:)))
         window.makeFirstResponder(nil)
         wait("native Return corrected health exactly once") { !model.busy && model.health==32 }
-        check(commands().filter { $0["command"] as? String == "set_value" }.count==2
+        check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 2
               && nativeField.validationMessage==nil, "Hades I correction duplicated dispatch or retained its old error")
         let bilingualDraft=enterNative("33")
         localization.language = .zhCN
@@ -855,7 +928,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "native rarity selection did not display immediately within its width role")
         let pickerCommits=commands().filter { $0["command"] as? String == "set_value" }
         let pickerCommit=pickerCommits.last?["params"] as? [String:Any]
-        check(pickerCommits.count==3 && pickerCommit?["field"] as? String == "health"
+        check(pickerCommits.count==manualSetValueBaseline + 3 && pickerCommit?["field"] as? String == "health"
               && pickerCommit?["value"] as? Double == 34
               && (pickerCommit?["target"] as? [String:String])?["heroId"]=="run:hero:2",
               "native picker click-away duplicated or lost the numeric commit")
@@ -1568,6 +1641,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'MODULE_VERSION', str(json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['protocolVersion']))
     initial_state = {'connected': True, 'pid': 42, 'heroReady': True,
         'health': 50, 'maxHealth': 100, 'money': 25, 'rerolls': 3, 'target': {'heroId': 'run:hero:1'},
+        'healthLocked': False, 'healthLock': None,
+        'moneyLocked': False, 'moneyLock': None, 'rerollsLocked': False, 'rerollsLock': None,
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
         'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
