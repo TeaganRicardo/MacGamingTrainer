@@ -537,7 +537,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     shutil.copy2(worker_path, disclosure_worker)
     disclosure_proc = subprocess.run(
         [str(binary), PYTHON, str(disclosure_worker), "disclosure"], cwd=ROOT, env=env,
-        text=True, capture_output=True, timeout=scaled_outer_timeout(25),
+        # The Hades I equivalent measures 41.6s end to end, and this worker was
+        # killed at 25s on the standard profile. Keep a margin that does not
+        # depend on the Intel lane's 2x outer scale.
+        text=True, capture_output=True, timeout=scaled_outer_timeout(60),
     )
     if disclosure_proc.returncode != 0:
         print(disclosure_proc.stdout)
