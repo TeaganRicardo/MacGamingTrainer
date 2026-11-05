@@ -482,13 +482,21 @@ private func disclosurePump(_ duration: TimeInterval) {
 }
 
 @MainActor
-private func disclosureWait(_ host: NSView, _ expectation: String, _ condition: () -> Bool) {
-    let deadline = Date().addingTimeInterval(4)
+private func disclosureWait(_ host: NSView, _ expectation: String,
+                            _ diagnostics: () -> String = { "" },
+                            _ condition: () -> Bool) {
+    let started = Date()
+    var pumps = 0
+    let deadline = started.addingTimeInterval(4)
     repeat {
         host.layoutSubtreeIfNeeded()
         if condition() { return }
         disclosurePump(0.02)
+        pumps += 1
     } while Date() < deadline
+    let elapsed = String(format: "%.2f", Date().timeIntervalSince(started))
+    fputs("MGT_WAIT_TIMEOUT surface=disclosure expectation=\(expectation) "
+        + "elapsed=\(elapsed) pumps=\(pumps) \(diagnostics())\n", stderr)
     disclosureCheck(condition(), "timed out: " + expectation)
 }
 
@@ -538,7 +546,13 @@ func exerciseModuleDisclosure<Content: View>(
             func conditional() -> NativeAccessibilityControl? {
                 namedNativeControl(host, role: conditionalRole, name: conditionalLabel(language))
             }
-            disclosureWait(host, "mounted real numeric fields and capability") {
+            disclosureWait(host, "mounted real numeric fields and capability", {
+                "active=\(NSApp.isActive) key=\(window.isKeyWindow) busy=\(busy()) "
+                    + "capability=\(String(describing: button()?.enabled)) "
+                    + "primary=\(field(primaryLabel(language)) != nil) "
+                    + "expanded=\(String(describing: field(expandedLabel(language))?.isEnabled)) "
+                    + "conditional=\(String(describing: conditional()?.enabled))"
+            }) {
                 NSApp.isActive && window.isKeyWindow && !busy()
                     && button()?.enabled == true && field(primaryLabel(language)) != nil
                     && field(expandedLabel(language))?.isEnabled == false && conditional()?.enabled == true

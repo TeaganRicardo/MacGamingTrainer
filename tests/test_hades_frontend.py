@@ -1,5 +1,6 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
+import os
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
@@ -1596,7 +1597,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         ('management', 30, 'hades_management_native_workflows_ok'),
         ('slider', 20, 'hades_slider_module_journey_ok'),
         ('hierarchy', 20, 'hades_visual_hierarchy_ok'),
-        ('disclosure', 25, 'hades_disclosure_module_journey_ok'),
+        # Measured 41.6s end to end on the hosted runner. The previous 25s gate
+        # only passed while the PR lane ran on the Intel profile, whose 2x outer
+        # scale turned it into 50s; on the standard profile the same journey is
+        # killed mid-assertion. Keep a real margin instead of relying on a
+        # runner-specific multiplier.
+        ('disclosure', 60, 'hades_disclosure_module_journey_ok'),
         ('search', 20, 'hades_workbench_search_native_ok'),
     ):
         case_folder = folder / 'journeys' / journey
@@ -1607,11 +1613,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
             case_state['features']['gameSpeed'] = {'desired': 1.0, 'actual': 1.0, 'active': True}
         (case_folder / 'state.json').write_text(json.dumps(case_state))
         (case_folder / 'catalog.json').write_text(json.dumps(catalog))
+        home = case_folder / 'home'
+        home.mkdir()
+        env = {**os.environ, 'HOME': str(home), 'CFFIXED_USER_HOME': str(home)}
         effective_budget = scaled_outer_timeout(budget)
         print('hades_frontend_launch:' + journey, flush=True)
         try:
             proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
-                                  capture_output=True, text=True, timeout=effective_budget)
+                                  capture_output=True, text=True, timeout=effective_budget, env=env)
         except subprocess.TimeoutExpired as error:
             phase = case_folder / 'native-phase.txt'
             print(f'Native {journey} fixture exceeded {effective_budget:g}s; last phase: ' +
