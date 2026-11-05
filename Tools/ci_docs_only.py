@@ -159,10 +159,9 @@ def needs_build_for_path(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
-    # Native test-only changes and unrelated workflow edits need no app
-    # package; changes to this builder's own recipe do.
-    if path == ".github/workflows/build2-macos.yml":
-        return True
+    # Workflow files describe CI orchestration. Their own changed job graph is
+    # exercised by the PR workflow, while Linux contracts pin the product-build
+    # invocations. Product recipe inputs remain owned by build/tool paths below.
     if path in MACOS_TEST_SUPPORT_PATHS or path.startswith(("tests/", ".github/workflows/")) or path in {
         "Tools/macos_only_tests.txt",
         "Tools/run_macos_checks.sh",

@@ -253,7 +253,24 @@ assert_scope(["Sources/App.swift"], docs_only=False, linux=True, macos=True, mod
 assert_scope(["Info.plist"], docs_only=False, linux=True, macos=True, module_build=False)
 assert_scope(["app.json"], docs_only=False, linux=True, macos=True, module_build=True)
 assert_scope(["build.sh"], docs_only=False, linux=True, macos=True, module_build=True)
-assert_scope([".github/workflows/build2-macos.yml"], docs_only=False, linux=True, macos=True, module_build=False)
+assert_scope(
+    [".github/workflows/build2-macos.yml"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+    build=False,
+    full_build=False,
+)
+assert_scope(
+    [".github/workflows/build2-macos.yml", "build.sh"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+    build=True,
+    full_build=True,
+)
 assert_scope(["Tools/python_runtime.json"], docs_only=False, linux=True, macos=True, module_build=True)
 assert_scope(["Sources/Hades2/Hades2Model.swift", "Backend/games/hades/runtime.lua"],
              docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
