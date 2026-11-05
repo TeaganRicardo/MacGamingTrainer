@@ -31,6 +31,7 @@ extension HadesShortcutAction {
         case .fullGodGauge: HadesWorkbenchIcon.godGauge
         case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
         case .forceRerolls: TrainerSemanticIcon.Concept.refresh
+        case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .generateFishing: TrainerSemanticIcon.Context.fishing
         case .generateChaosGate: TrainerSemanticIcon.Context.portal
@@ -95,12 +96,13 @@ enum HadesWorkbenchIcon {
         case "hades.godGauge": return godGauge
         case "host.timeWarp.title": return TrainerSemanticIcon.Concept.timeScale
         case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
-        case "hades.catalog", "hades.exactSource": return catalog
-        case "hades.rarity": return TrainerSemanticIcon.Concept.quality
-        case "hades.level": return level
+        case "hades.catalog", "hades.exactSource", "hades.selectTrait": return catalog
+        case "hades.rarity", "hades.minimumRarity", "hades.setRarity": return TrainerSemanticIcon.Concept.quality
+        case "hades.level", "hades.setLevel": return level
         case "hades.apply": return TrainerSemanticIcon.Action.apply
         case "hades.remove", "hades.cancelCurse": return TrainerSemanticIcon.Action.remove
         case "hades.chaosPair": return TrainerSemanticIcon.Context.portal
+        case "hades.chaosBlessing", "hades.chaosCurse": return TrainerSemanticIcon.Section.effects
         case "hades.remainingUses", "hades.expireEffect": return TrainerSemanticIcon.Concept.duration
         case "hades.activateBlessing": return TrainerSemanticIcon.Concept.actionSpeed
         case "hades.refreshEffect": return TrainerSemanticIcon.Concept.refresh
@@ -155,6 +157,8 @@ enum HadesWorkbenchCatalog {
         .fullGodGauge,
         .infiniteAmmo,
         .forceRerolls,
+        .decreaseGameSpeed,
+        .increaseGameSpeed,
         .boonRarityEnabled,
         .generateFishing,
         .generateChaosGate,
@@ -189,8 +193,10 @@ enum HadesWorkbenchCatalog {
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
             (.common, ["host.timeWarp.title"]),
-            (.boons, ["hades.currentTraits", "hades.catalog", "hades.rarity",
-                      "hades.level", "hades.apply", "hades.remove", "hades.chaosPair",
+            (.boons, ["hades.currentTraits", "hades.catalog", "hades.exactSource", "hades.selectTrait",
+                      "hades.rarity", "hades.minimumRarity",
+                      "hades.level", "hades.setLevel", "hades.setRarity", "hades.apply", "hades.remove", "hades.chaosPair",
+                      "hades.chaosBlessing", "hades.chaosCurse",
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
             (.rooms, ["hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),

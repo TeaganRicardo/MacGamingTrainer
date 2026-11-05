@@ -59,12 +59,16 @@ jobs:
   build:
     needs: scope
     if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
-      # macos-26 is GA but its hosted image is serviced in place. Exact image
-      # identity and native tool versions are retained in artifact provenance.
-      MGT_MACOS_RUNNER_LABEL: macos-26
+      # PR validation uses the independent x64 pool to avoid ARM64 hosted-runner
+      # queue starvation. Explicit convergence/release dispatches retain the ARM64
+      # baseline. Both profiles use Xcode 26.6 and are recorded in provenance.
+      MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}
+      # Scale process-level and startup-convergence guards for the slower x64
+      # profile. Behavioral assertion windows inside native journeys stay fixed.
+      MGT_MACOS_OUTER_TIMEOUT_SCALE: ${{ github.event_name == 'pull_request' && '2.0' || '1.0' }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
     steps:

@@ -16,6 +16,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var maxGodGauge = 0.0
     @Published private(set) var features: [String: HadesFeatureValue] = [:]
     @Published private(set) var activeFeatures: [String: Bool] = [:]
+    @Published private(set) var boonRarityTarget = "Heroic"
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
     @Published private(set) var world: HadesWorldObservation?
@@ -53,8 +54,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
     var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
-    var canEditIntent: Bool { backendAvailable && backendStatus.protocolCompatible && connected }
-    var canMutate: Bool { backendAvailable && backendStatus.protocolCompatible && connected && heroReady }
+    private var requiresExplicitReconnect: Bool {
+        ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
+            .contains(backendStatus.errorCode)
+    }
+    var canEditIntent: Bool {
+        backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect
+    }
+    var canMutate: Bool { canEditIntent && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
         TrainerTextToken(key: connected ? (heroReady ? "hades.ready" : "hades.waitingForHero") : "hades.connectionHelp")
@@ -108,6 +115,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
     func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
+    func setBoonRarityTarget(_ target: String) {
+        guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
+        send("set_boon_rarity", params: ["target": target], operation: "hades.boonRarityEnabled")
+    }
     func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
         guard canEditIntent else { return }
@@ -269,13 +280,36 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func installShortcuts() {
         hotkeys.register(HadesWorkbenchCatalog.orderedShortcutActions.map { HotkeyBinding(actionID: $0.rawValue, chord: shortcuts.chord($0)) })
     }
+    private func canPerformShortcut(_ action: HadesShortcutAction) -> Bool {
+        switch action {
+        case .disableAll:
+            return hostActionsEnabled
+        case .generateFishing:
+            return canMutate && world?.canFish == true
+        case .generateChaosGate:
+            return canMutate && world?.canChaos == true
+        default:
+            return canEditIntent
+        }
+    }
+
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              (action == .disableAll ? hostActionsEnabled : canEditIntent) else {
+              canPerformShortcut(action) else {
             TrainerHotkeyFeedbackPlayer.play(.rejected); return
         }
         if action == .generateFishing { generateFishing() }
         else if action == .generateChaosGate { generateChaosGate() }
+        else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
+            let delta = action == .decreaseGameSpeed ? -0.1 : 0.1
+            let current = number(.gameSpeed)
+            let next = min(10.0, max(0.0, (current + delta) * 10.0).rounded() / 10.0)
+            guard abs(next - current) >= 0.0001 else {
+                TrainerHotkeyFeedbackPlayer.play(.rejected)
+                return
+            }
+            setFeature(.gameSpeed, value: next)
+        }
         else if action == .disableAll { disableAll() }
         else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
     }
@@ -370,6 +404,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             target = state.target
             features = state.features ?? [:]
             activeFeatures = state.activeFeatures ?? [:]
+            boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
             resources = state.resources ?? [:]
             traits = state.traits ?? []
             world = state.world
@@ -381,7 +416,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0; godGauge = 0; maxGodGauge = 0
-        target = nil; features = [:]; activeFeatures = [:]; resources = [:]; traits = []; world = nil
+        target = nil
+        if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
+            features[HadesFeature.gameSpeed.rawValue] = .gameSpeed(
+                desired: desired, actual: nil, active: nil,
+                errorPresentation: nil, errorArguments: []
+            )
+        }
+        activeFeatures = [:]; resources = [:]; traits = []; world = nil
     }
 }
 

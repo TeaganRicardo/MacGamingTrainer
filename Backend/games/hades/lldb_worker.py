@@ -7,7 +7,8 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .schema import DEFAULT_FEATURES, ONE_SHOT_COMMANDS, WORLD_COMMANDS, feature_document, feature_value
+from .schema import (DEFAULT_FEATURES, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
+                     feature_document, feature_value)
 from .world import mutation_params as world_mutation_params, runtime_definitions
 
 
@@ -66,7 +67,7 @@ class HadesLLDBWorker:
         elif method == 'status':
             if self.transport.alive():
                 return self._invoke()
-        elif method in ('set_feature', 'set_invincibility', 'configure', 'disable_all') or method in ONE_SHOT_COMMANDS:
+        elif method in ('set_feature', 'set_boon_rarity', 'set_invincibility', 'configure', 'disable_all') or method in ONE_SHOT_COMMANDS:
             if not self.transport.alive():
                 raise AdapterError('not_connected', 'hades.error.notConnected')
             if method == 'set_invincibility':
@@ -82,6 +83,9 @@ class HadesLLDBWorker:
                 result = self._invoke(method, (name, value))
                 self.features[name] = value
                 return result
+            if method == 'set_boon_rarity':
+                target = boon_rarity_target(params.get('target'))
+                return self._invoke(method, (target,))
             if method == 'configure':
                 values = feature_document(params.get('features'))
                 result = self._invoke(method, (values,))

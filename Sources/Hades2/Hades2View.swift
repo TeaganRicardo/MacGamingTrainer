@@ -14,27 +14,6 @@ struct Hades2TrainerView: View {
         case element(String)
     }
 
-    private enum TraitManagerLayout {
-        static let rowSpacing: CGFloat = 12
-        static let removeControlWidth: CGFloat = 132
-        static let searchWidth: CGFloat = 260
-
-        static func levelControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
-            42 + 58 + compactActionWidth + 2 * 6
-        }
-
-        static func rarityControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat) -> CGFloat {
-            48 + pickerWidth + compactActionWidth + 2 * 6
-        }
-
-        static func commonControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat) -> CGFloat {
-            levelControlsWidth(compactActionWidth: compactActionWidth)
-                + rarityControlsWidth(compactActionWidth: compactActionWidth, pickerWidth: pickerWidth)
-                + removeControlWidth
-                + 2 * rowSpacing
-        }
-    }
-
     private struct ExactBoonSourceGroup: Identifiable {
         let id: String
         let title: String
@@ -560,7 +539,7 @@ struct Hades2TrainerView: View {
                     placeholder: text("hades2.traits.search"),
                     clearLabel: localization.localized("host.search.clear")
                 )
-                .frame(width: TraitManagerLayout.searchWidth)
+                .frame(width: TrainerTraitManagerLayout.searchWidth)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -656,7 +635,7 @@ struct Hades2TrainerView: View {
     }
 
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
-        HStack(spacing: TraitManagerLayout.rowSpacing) {
+        HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.levelLabel"))
                     .font(.caption)
@@ -700,7 +679,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TraitManagerLayout.levelControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
+            .frame(width: TrainerTraitManagerLayout.levelControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             HStack(spacing: 6) {
                 Text(text("hades2.traits.targetRarity"))
@@ -748,7 +727,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
+            .frame(width: TrainerTraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
 
             Button(role: .destructive) {
                 guard let trait else { return }
@@ -764,10 +743,10 @@ struct Hades2TrainerView: View {
                 }
             }
             .buttonStyle(.bordered)
-            .frame(width: TraitManagerLayout.removeControlWidth)
+            .frame(width: TrainerTraitManagerLayout.removeControlWidth)
             .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
-        .frame(width: TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
+        .frame(width: TrainerTraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
     }
 
     private var resourceSection: some View {

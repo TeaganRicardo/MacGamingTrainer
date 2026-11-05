@@ -42,23 +42,24 @@ assert "compactActionWidth: 88" in theme
 assert "TrainerSecondaryActionButton(" in resource
 assert "TrainerSecondaryActionButton(" in occurrence
 assert view.count("TrainerSecondaryActionButton(") >= 6
-assert "static let removeControlWidth: CGFloat = 132" in view
-assert "static let commonControlsWidth: CGFloat = 606" not in view
-assert "static let levelControlsWidth: CGFloat = 200" not in view
-assert "static let rarityControlsWidth: CGFloat = 250" not in view
-assert "static func levelControlsWidth(compactActionWidth: CGFloat)" in view
-assert "static func rarityControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat)" in view
-assert "static func commonControlsWidth(compactActionWidth: CGFloat, pickerWidth: CGFloat)" in view
-assert "42 + 58 + compactActionWidth + 2 * 6" in view
-assert "48 + pickerWidth + compactActionWidth + 2 * 6" in view
-assert "+ removeControlWidth" in view
-assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth)" in view
+trait_layout = (CORE_UI / "Components/TrainerTraitManagerLayout.swift").read_text()
+assert "static let removeControlWidth: CGFloat = 132" in trait_layout
+assert "static let commonControlsWidth: CGFloat = 606" not in trait_layout
+assert "static let levelControlsWidth: CGFloat = 200" not in trait_layout
+assert "static let rarityControlsWidth: CGFloat = 250" not in trait_layout
+assert "static func levelControlsWidth(compactActionWidth: CGFloat)" in trait_layout
+assert "static func rarityControlsWidth(" in trait_layout
+assert "static func commonControlsWidth(" in trait_layout
+assert "42 + 58 + compactActionWidth + 2 * 6" in trait_layout
+assert "48 + pickerWidth + compactActionWidth + 2 * 6" in trait_layout
+assert "+ removeControlWidth" in trait_layout
+assert "TrainerTraitManagerLayout.commonControlsWidth(" in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "trait.hasTemporaryContextualControls" in view
 assert "trait.hasContextualControls" in view
 assert "var hasTemporaryContextualControls: Bool" in types
 assert "var hasContextualControls: Bool" in types
-assert ".padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)" not in view
+assert ".padding(.trailing, TrainerTraitManagerLayout.commonControlsWidth + TrainerTraitManagerLayout.rowSpacing)" not in view
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
 assert ".frame(width: theme.connectionActionWidth)" not in status

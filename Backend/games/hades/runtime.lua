@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 5 then error("hades.error.restartRequired") end
+  if existing.revision ~= 6 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,11 +22,12 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 5,
+  version = 1, revision = 6,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
   rerollDoors = setmetatable({}, { __mode = "k" }),
+  boonRarityTarget = "Heroic",
 }
 runtime.generationId = tostring(runtime)
 for name, value in pairs(defaults) do runtime.features[name] = value end
@@ -561,17 +562,20 @@ local function installHooks()
   end)
   hook("SetTraitsOnLoot", function(original)
     return function(loot, ...)
-      if runtime.features.boonRarityEnabled and type(loot) == "table"
-          and rarityLootNames[loot.Name] and not loot.ForceCommon
+      if runtime.features.boonRarityEnabled and runtime.boonRarityTarget ~= "Common"
+          and type(loot) == "table" and rarityLootNames[loot.Name] and not loot.ForceCommon
           and type(loot.RarityChances) == "table" then
-        -- Native TraitScripts.lua selects a Legendary only when eligible; the
-        -- Heroic roll uses the Epic-capable trait pool. Keep the Legendary
-        -- chance and source/slot legality, while preferring Heroic (or Rare
-        -- for a Rare-only trait). Original odds are never changed in-place.
+        -- Native TraitScripts.lua selects the highest legal rarity whose chance
+        -- succeeds. Raise only tiers at or below the configured minimum, leaving
+        -- higher native odds (especially Legendary) untouched.
         local odds = loot.RarityChances
         local boosted = {}
         for key, value in pairs(odds) do boosted[key] = value end
-        boosted.Heroic, boosted.Epic, boosted.Rare = 1, 1, 1
+        boosted.Rare = 1
+        if runtime.boonRarityTarget == "Epic" or runtime.boonRarityTarget == "Heroic" then
+          boosted.Epic = 1
+        end
+        if runtime.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
         loot.RarityChances = boosted
         -- The native selection path is synchronous; restore the exact native
         -- odds on both success and a rejected/failed native offer generation.
@@ -712,7 +716,8 @@ function runtime.status()
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
     money = ready and tonumber(CurrentRun.Money) or 0, rerolls = ready and tonumber(CurrentRun.NumRerolls) or 0,
     godGauge = ready and tonumber(unit.SuperMeter) or 0, maxGodGauge = ready and tonumber(unit.SuperMeterLimit) or 0,
-    features = features, activeFeatures = activeFeatures, resources = resources, traits = traits, world = world.observation(),
+    features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
+    resources = resources, traits = traits, world = world.observation(),
   }
 end
 local function validateFeature(name, value)
@@ -731,6 +736,7 @@ function runtime.configure(features)
   for name, value in pairs(features) do validateFeature(name, value) end
   installHooks()
   for name, value in pairs(features) do runtime.features[name] = value end
+  runtime.boonRarityTarget = "Heroic"
   if not runtime.features.forceRerolls then restoreRerollDoors() end
   local unit = hero()
   if unit then mount(unit, false) end
@@ -745,6 +751,13 @@ function runtime.set_feature(name, value)
   if unit then mount(unit, false) end
   return runtime.status()
 end
+function runtime.set_boon_rarity(target)
+  assert(target == "Common" or target == "Rare" or target == "Epic" or target == "Heroic",
+    "hades.error.invalidValue")
+  installHooks()
+  runtime.boonRarityTarget = target
+  return runtime.status()
+end
 function runtime.set_invincibility(enabled)
   requireHero()
   return runtime.set_feature("invincibility", enabled)
@@ -752,6 +765,7 @@ end
 function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
+  runtime.boonRarityTarget = "Heroic"
   restoreRerollDoors()
   local unit = hero()
   if unit then mount(unit, false) end

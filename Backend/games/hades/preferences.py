@@ -3,7 +3,7 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.persistence import atomic_write_text
-from .schema import DEFAULT_PREFERENCES, preference_document
+from .schema import DEFAULT_PREFERENCES, migrate_preference_document, preference_document
 
 
 class HadesPreferenceStore:
@@ -20,19 +20,8 @@ class HadesPreferenceStore:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed', diagnostic=str(error)) from error
         if not isinstance(document, dict) or document.get('schemaVersion') != 1:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed')
-        features = document.get('features')
-        # Schema 1 has three shipped feature sets, extended only by neutral
-        # durable settings. An unknown or partially corrupted set stays invalid.
-        if isinstance(features, dict):
-            original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
-                        'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
-                        'attackSpeedMultiplier', 'dashBonus'}
-            shipped = (original, original | {'boonRarityEnabled'},
-                       original | {'boonRarityEnabled', 'gameSpeed'})
-            if set(features) in shipped:
-                features = {**DEFAULT_PREFERENCES, **features}
         try:
-            return preference_document(features)
+            return migrate_preference_document(document.get('features'))
         except AdapterError as error:
             raise AdapterError('preferences_failed', 'hades.error.preferencesFailed') from error
 

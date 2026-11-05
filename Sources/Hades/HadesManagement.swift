@@ -33,6 +33,7 @@ struct HadesManagementUtilities: View {
             }, openSaveManagement: managementActions.openSaveManagement)
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             TrainerManagementGroups(groups: catalog.groups)
+                .trainerPanel()
             if !model.shortcutError.isEmpty {
                 TrainerMessageBanner(text: text(model.shortcutError), icon: "keyboard", color: theme.warning)
             }
@@ -76,7 +77,7 @@ struct HadesDiagnosticsView: View {
             labels: .init(title: text("hades.manage.diagnostics"), explanation: text("hades.diagnostics.explanation"),
                 refresh: text("host.refresh"), export: text("hades.diagnostics.export")),
             checks: model.diagnostics.map {
-                .init(id: $0.id, name: text($0.name), detail: $0.detail, status: $0.ok ? .passed : .warning)
+                .init(id: $0.id, name: text($0.name), detail: $0.detail, status: $0.ok ? .passed : .failed)
             },
             busy: model.busy, canRefresh: model.hostActionsEnabled, canExport: model.hostActionsEnabled,
             error: hadesManagementError(model, localization: localization),

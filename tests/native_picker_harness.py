@@ -44,7 +44,7 @@ func activateNativePickerWindow(_ window: NSWindow) {
     NSApp.finishLaunching()
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
-    nativePickerWait("active key window before native input") { NSApp.isActive && window.isKeyWindow }
+    nativePickerPump(0.1)
     window.contentView?.layoutSubtreeIfNeeded()
 }
 
@@ -64,6 +64,10 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                         moving steps: Int, opening: NativePickerOpening) {
     precondition(picker.role == "AXPopUpButton" && picker.enabled && !picker.frame.isEmpty,
                  "selection must address an enabled real native popup")
+    if case .accessibility = opening {
+        precondition(NSApp.isRunning,
+                     "accessibility picker selection requires the AppKit application event loop")
+    }
     activateNativePickerWindow(window)
     let before = Set(NSApp.windows.filter(\.isVisible).map(ObjectIdentifier.init))
     let state = NativePickerSelectionState()
@@ -249,9 +253,14 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                 state.returnQueued = true
                 postKey("\r", code: 36)
             } else {
+                // A newly opened or rebuilt popup can briefly have no highlighted
+                // item. Do not synthesize navigation from an invented -1 index;
+                // wait until AppKit exposes the real current choice, then send one
+                // Arrow relative to that semantic position.
+                guard let highlightedTitle, let highlightedIndex else { return }
                 state.previousHighlightTitle = highlightedTitle
                 state.awaitingArrow = true
-                let down = (highlightedIndex ?? -1) < destinationIndex
+                let down = highlightedIndex < destinationIndex
                 postKey(down ? "\u{F701}" : "\u{F700}", code: down ? 125 : 126)
             }
         }

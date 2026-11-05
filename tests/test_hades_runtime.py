@@ -127,11 +127,12 @@ function SpendMoney(amount, source)
 end
 function IsMetaUpgradeSelected() return true end
 local rerollsSeenInMenu = {}
-function AttemptBoonLootReroll()
+function AttemptBoonLootReroll(loot, args)
   if CurrentRun.NumRerolls <= 0 then return end
   CurrentRun.NumRerolls = CurrentRun.NumRerolls - 1
   UpdateRerollUI(CurrentRun.NumRerolls)
   rerollsSeenInMenu[#rerollsSeenInMenu + 1] = CurrentRun.NumRerolls
+  if loot ~= nil then return SetTraitsOnLoot(loot, args) end
 end
 function AttemptPanelReroll(screen, button)
   if CurrentRun.NumRerolls < button.Cost then return end
@@ -366,10 +367,10 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 5 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 6 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 } }) do
+for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 } }) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end
@@ -390,12 +391,40 @@ local x, missing, unmodified = SetTraitsOnLoot(olympian)
 assert(x == "native" and missing == nil and unmodified == "Common")
 runtime.set_feature("boonRarityEnabled", true)
 assert(runtime.status().features.boonRarityEnabled == true)
+assert(runtime.status().boonRarityTarget == "Heroic")
+
+runtime.set_boon_rarity("Rare")
+local _, _, rare = SetTraitsOnLoot(olympian)
+assert(rare == "Rare", "Rare minimum did not use the native Rare tier")
+runtime.set_boon_rarity("Epic")
+local _, _, epic = SetTraitsOnLoot(olympian)
+assert(epic == "Epic", "Epic minimum did not use the native Epic tier")
+runtime.set_boon_rarity("Heroic")
 local x2, empty, heroic = SetTraitsOnLoot(olympian, { ExclusionNames = { "OtherTrait" } })
 assert(x2 == "native" and empty == nil and heroic == "Heroic",
   "native Epic-capable boon was not upgraded to Heroic")
+assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
+runtime.set_boon_rarity("Common")
+local _, _, commonTarget = SetTraitsOnLoot(olympian)
+assert(commonTarget == "Common", "Common minimum should preserve natural rarity")
+runtime.set_boon_rarity("Heroic")
+
 assert(olympian.RarityChances == original and original.Heroic == 0,
   "rarity override leaked to the native loot's persisted chances")
-assert(olympian.nativeArgs.ExclusionNames[1] == "OtherTrait", "reroll exclusion lost native arguments")
+local rerolled = { Name = "ZeusUpgrade",
+  RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
+  allowed = { Epic = true, Rare = true } }
+local rerollsBeforeRarity = CurrentRun.NumRerolls
+local rerollResult, rerollMissing, rerollRarity = AttemptBoonLootReroll(
+  rerolled, { ExclusionNames = { "AlreadyOfferedTrait" } }
+)
+assert(rerollResult == "native" and rerollMissing == nil and rerollRarity == "Heroic",
+  "native boon reroll bypassed the minimum-rarity hook")
+assert(rerolled.nativeArgs.ExclusionNames[1] == "AlreadyOfferedTrait",
+  "native boon reroll lost its exclusion arguments")
+CurrentRun.NumRerolls = rerollsBeforeRarity
+UpdateRerollUI(CurrentRun.NumRerolls)
+rerollsSeenInMenu = {}
 for _, name in ipairs({ "HermesUpgrade", "ZeusUpgrade" }) do
   local rareOnly = { Name = name, RarityChances = original, allowed = { Rare = true } }
   SetTraitsOnLoot(rareOnly)
@@ -428,9 +457,11 @@ assert(olympian.UpgradeOptions[1].Rarity == "Common", "turning rarity off did no
 runtime.set_feature("boonRarityEnabled", true)
 runtime.disable_all()
 assert(runtime.status().features.boonRarityEnabled == false, "Disable All did not reset rarity policy")
+assert(runtime.status().boonRarityTarget == "Heroic", "Disable All did not reset rarity target")
 SetTraitsOnLoot(olympian)
 assert(olympian.UpgradeOptions[1].Rarity == "Common")
 expectError("invalidValue", function() runtime.set_feature("boonRarityEnabled", 1) end)
+expectError("invalidValue", function() runtime.set_boon_rarity("Legendary") end)
 
 runtime.set_feature("invincibility", true)
 assert(runtime.status().invincible and CurrentRun.InvulnerableFlags.NativeMenu)

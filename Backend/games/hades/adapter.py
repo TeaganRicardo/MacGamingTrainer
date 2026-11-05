@@ -12,7 +12,7 @@ from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, rew
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
-                     RESOURCE_IDS, preference_value, invalid_value, number)
+                     RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
 
 
 EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
@@ -102,6 +102,10 @@ class HadesAdapter(GameAdapter):
                 runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
+                    if features['boonRarityTarget'] != 'Heroic':
+                        state = self.runtime.command(
+                            'set_boon_rarity', {'target': features['boonRarityTarget']}
+                        )
                 except AdapterError as error:
                     if error.code in ('outcome_unknown', 'restart_required') or not self.runtime.connected:
                         self.connected = False
@@ -135,6 +139,10 @@ class HadesAdapter(GameAdapter):
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
+            if self.connected and self.features['boonRarityTarget'] != 'Heroic':
+                state = self.runtime.command(
+                    'set_boon_rarity', {'target': self.features['boonRarityTarget']}
+                )
             self._reconcile_game_speed()
             if not self.connected:
                 state = {**self._offline(), 'features': self.features}
@@ -158,23 +166,34 @@ class HadesAdapter(GameAdapter):
             return self._observe(state)
         if command == 'set_invincibility':
             command, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
+        if command == 'set_boon_rarity':
+            target = preference_value('boonRarityTarget', params.get('target'))
+            candidate = {**self.features, 'boonRarityTarget': target}
+            self.preferences.save(candidate)
+            self.features = candidate
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
+            return self._observe(self.runtime.command('set_boon_rarity', {'target': target}))
         if command == 'set_feature':
             name = params.get('feature')
-            value = preference_value(name, params.get('value'))
-            if not self.connected:
-                raise AdapterError('not_connected', 'hades.error.notConnected')
+            value = preference_value(name, params.get('value')) if name == 'gameSpeed' else feature_value(name, params.get('value'))
             candidate = {**self.features, name: value}
             self.preferences.save(candidate)
             self.features = candidate
             if name == 'gameSpeed':
+                if not self.connected:
+                    self._game_speed_actual = None
+                    self._game_speed_error = None
+                    return self._observe({**self._offline(), 'features': self.features})
                 try:
                     self._game_speed_actual = self.runtime.set_game_speed(value)
                     self._game_speed_error = None
                 except AdapterError as error:
                     self._record_game_speed_error(error)
                     raise
-                state = self.runtime.status() if self.connected else {**self._offline(), 'features': self.features}
-                return self._observe(state)
+                return self._observe(self.runtime.status())
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
             return self._observe(self.runtime.command(command, {'feature': name, 'value': value}))
         if command == 'disable_all':
             persistence_error = None
@@ -357,10 +376,12 @@ class HadesAdapter(GameAdapter):
 
     def _observe(self, state):
         self.connected = state['connected']
-        features = state.get('features')
-        features = dict(features) if isinstance(features, dict) else {}
+        observed = state.get('features')
+        features = ({name: value for name, value in observed.items() if name in DEFAULT_FEATURES}
+                    if isinstance(observed, dict) else {})
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
+        state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
         return state
 
     @staticmethod
