@@ -189,8 +189,12 @@ func exerciseDisclosureEditLifetime() {
     precondition(retainedOwner.edit == nil && retained.currentEditor() == nil
                  && events.filter { $0 == "retained:true" }.count == retainedBegins,
                  "native resignation revived the suspended edit")
-    disclosureLifetimePump(0.02)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    let retainedPublicationDeadline = Date().addingTimeInterval(1)
+    while !(draft == "2.75" && retained.stringValue == "2.75" && commits == retainedCommits
+             && events.filter { $0 == "retained:false" }.count == retainedEnds + 1)
+          && Date() < retainedPublicationDeadline {
+        RunLoop.current.run(until: min(retainedPublicationDeadline, Date().addingTimeInterval(0.01)))
+    }
     precondition(draft == "2.75" && retained.stringValue == "2.75" && commits == retainedCommits
                  && events.filter { $0 == "retained:false" }.count == retainedEnds + 1,
                  "same-identity disclosure did not publish its retained native composition")
@@ -435,7 +439,14 @@ func exerciseDisclosureNativeRetirementBoundaries() {
         precondition(current.currentEditor() == nil && current.stringValue == expected
                      && completions.count == beforeCompletions,
                      "native retirement revived an obsolete draft or completed an edit; boundary=\(boundary)")
-        disclosureLifetimePump(0.03)
+        let retirementDeadline = Date().addingTimeInterval(1)
+        while Date() < retirementDeadline {
+            let settled = source == expected && completions.count == beforeCompletions
+                && editing.filter { $0 == "original:true" }.count == beforeBegins
+                && editing.filter { $0 == "original:false" }.count == beforeEnds + 1
+            if settled { break }
+            disclosureLifetimePump(0.01)
+        }
         precondition(source == expected && completions.count == beforeCompletions
                      && editing.filter { $0 == "original:true" }.count == beforeBegins
                      && editing.filter { $0 == "original:false" }.count == beforeEnds + 1,

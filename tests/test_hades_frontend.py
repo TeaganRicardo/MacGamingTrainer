@@ -1,5 +1,6 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 import json
+import os
 from pathlib import Path
 from management_ui_harness import PROFILE_JOURNEY, DIAGNOSTICS_JOURNEY, MANAGEMENT_JOURNEY
 from slider_ui_harness import SLIDER_JOURNEY
@@ -1518,10 +1519,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
             case_state['features']['gameSpeed'] = {'desired': 1.0, 'actual': 1.0, 'active': True}
         (case_folder / 'state.json').write_text(json.dumps(case_state))
         (case_folder / 'catalog.json').write_text(json.dumps(catalog))
+        home = case_folder / 'home'
+        home.mkdir()
+        env = {**os.environ, 'HOME': str(home), 'CFFIXED_USER_HOME': str(home)}
         print('hades_frontend_launch:' + journey, flush=True)
         try:
             proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
-                                  capture_output=True, text=True, timeout=budget)
+                                  capture_output=True, text=True, timeout=budget, env=env)
         except subprocess.TimeoutExpired as error:
             phase = case_folder / 'native-phase.txt'
             print(f'Native {journey} fixture exceeded {budget}s; last phase: ' +

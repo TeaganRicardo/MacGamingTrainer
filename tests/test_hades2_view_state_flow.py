@@ -138,7 +138,8 @@ struct Main {
             let sliderModel = Hades2TrainerModel(session: sliderSession,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("slider.log")),
                 backendScriptURL: worker,
-                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"))
+                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"),
+                shortcutDefaults: InMemoryDefaults())
             sliderModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
             let deadline = Date().addingTimeInterval(4)
             while (!sliderModel.backendAvailable || sliderModel.busy) && Date() < deadline { pump(0.02) }
@@ -168,7 +169,8 @@ struct Main {
             let model = Hades2TrainerModel(session: session,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("disclosure.log")),
                 backendScriptURL: worker,
-                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"))
+                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"),
+                shortcutDefaults: InMemoryDefaults())
             model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
             let deadline = Date().addingTimeInterval(4)
             while (!model.backendAvailable || model.busy) && Date() < deadline { pump(0.02) }
@@ -209,7 +211,11 @@ struct Main {
             onStatusChange: { _ in }
         )
 
-        let model = Hades2GameModule.makeModel(session: session)
+        let model = Hades2TrainerModel(
+            session: session,
+            logSink: TrainerLogSink(gameID: Hades2GameModule.descriptor.id),
+            shortcutDefaults: InMemoryDefaults()
+        )
         // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
         // real preferences directory; a real suite there cannot be cleaned up
         // afterwards.
@@ -365,7 +371,8 @@ struct Main {
             executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
         let managementModel = Hades2TrainerModel(session: managementSession,
             logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("management.log")),
-            backendScriptURL: worker)
+            backendScriptURL: worker,
+            shortcutDefaults: InMemoryDefaults())
         managementModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
         managementWait(host, "management backend startup") { managementModel.backendAvailable && !managementModel.busy }
         managementModel.listProfiles()
@@ -493,6 +500,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
+    env["CFFIXED_USER_HOME"] = str(home)
     hierarchy = subprocess.run([str(binary), PYTHON, str(worker_path), "hierarchy"],
                                cwd=ROOT, env=env, text=True, capture_output=True, timeout=20)
     if hierarchy.returncode != 0:
@@ -767,7 +775,11 @@ struct Main {
                 onStatusChange: { _ in }
             )
             waitForWorkerReady(ready)
-            let model = Hades2GameModule.makeModel(session: session)
+            let model = Hades2TrainerModel(
+                session: session,
+                logSink: TrainerLogSink(gameID: Hades2GameModule.descriptor.id),
+                shortcutDefaults: InMemoryDefaults()
+            )
             model.connected = true
             model.status = "ready"
             model.scene = "run"
@@ -928,7 +940,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [generated, main_path]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated, main_path]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
@@ -937,6 +949,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
+    env["CFFIXED_USER_HOME"] = str(home)
     proc = subprocess.run(
         [str(binary), PYTHON, str(worker_path)],
         cwd=ROOT,

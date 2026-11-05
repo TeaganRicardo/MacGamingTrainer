@@ -55,18 +55,17 @@ import SwiftUI
 }
 
 @MainActor func journeyPump(_ duration: TimeInterval = 0.03) {
-    let deadline = Date().addingTimeInterval(duration)
-    while Date() < deadline {
-        if let event = NSApp.nextEvent(matching: .any,
-            until: min(deadline, Date().addingTimeInterval(0.005)), inMode: .default, dequeue: true) {
-            NSApp.sendEvent(event)
-        }
-        NSApp.updateWindows()
-    }
+    // BackendProcess delivers decoded replies through DispatchQueue.main.
+    // This journey itself runs inside an AppKit timer callback, so a manual
+    // nextEvent loop can starve those main-queue callbacks indefinitely.
+    RunLoop.current.run(until: Date().addingTimeInterval(duration))
 }
 
-@MainActor func journeyWait(_ message: String, onFailure: () -> Void = {}, _ condition: () -> Bool) {
-    let deadline = Date().addingTimeInterval(4)
+@MainActor func journeyWait(
+    _ message: String, timeout: TimeInterval = 4,
+    onFailure: () -> Void = {}, _ condition: () -> Bool
+) {
+    let deadline = Date().addingTimeInterval(timeout)
     repeat {
         if condition() { return }
         journeyPump(0.01)
@@ -307,8 +306,8 @@ struct StartupAvailabilityModule: TrainerGameModule {
             let data = try! JSONSerialization.data(withJSONObject: diagnostic, options: [.sortedKeys])
             FileHandle.standardError.write(Data("real_module_navigation_startup=".utf8) + data + Data("\n".utf8))
         }
-        journeyWait("active native Host and both real module backends", onFailure: diagnoseStartup) {
-            app.isActive && window.isKeyWindow && first.backendAvailable && second.backendAvailable
+        journeyWait("visible native Host and both real module backends", onFailure: diagnoseStartup) {
+            app.isRunning && window.isVisible && first.backendAvailable && second.backendAvailable
                 && !first.busy && !second.busy
                 && !firstContext.saveManager.busy && !secondContext.saveManager.busy
                 && commands("hades").contains { ($0["command"] as? String) == "core.save.apply_staged" }
@@ -521,12 +520,19 @@ struct StartupAvailabilityModule: TrainerGameModule {
 
         let toolDraft = RetainedNavigationDraft()
         let source = toolDraft.source
+        // Request the product activation path before opening the retained tool.
+        // Hosted headless runners do not guarantee global key-window ownership;
+        // this journey owns visibility/document retention, while the dedicated
+        // tool-window contract owns native key/minimize behavior.
+        window.makeKeyAndOrderFront(nil)
+        app.activate(ignoringOtherApps: true)
+        journeyPump(0.03)
         let tool = firstContext.toolWindows.open(id: "retained-native-draft", title: "Retained native draft",
             localization: localization, theme: .standard) {
                 TrainerToolWindowContent { RetainedNavigationTool(draft: toolDraft) }
             }
         let document = tool.contentView
-        journeyWait("actual context tool window") { tool.isKeyWindow }
+        journeyWait("actual context tool window") { tool.isVisible }
         let toolField = journeyFields(tool.contentView!).first { $0.isEditable }!
         journeyCheck(tool.makeFirstResponder(toolField), "retained tool refused native focus")
         let toolEditor = toolField.currentEditor() as! NSTextView
