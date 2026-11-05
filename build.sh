@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
-for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file; do
+for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file lipo; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
@@ -88,11 +88,29 @@ prepare_python_runtime() (
         echo "Pinned Python runtime is missing bin/python3 for $arch." >&2
         exit 1
     }
-    actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
-    [[ "$actual" == "$version" ]] || {
-        echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
-        exit 1
-    }
+
+    # A foreign-architecture interpreter cannot be executed on this host: the
+    # translation layer only runs x86_64 code on arm64, so staging the arm64
+    # runtime on an x86_64 builder would fail with "Bad CPU type in executable"
+    # even though the payload is correct. Verify the slice and the pinned layout
+    # without running it; the checksum above already fixes the exact content.
+    if [[ "$arch" == "$HOST_ARCH" ]]; then
+        actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
+        [[ "$actual" == "$version" ]] || {
+            echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
+            exit 1
+        }
+    else
+        slices="$(lipo -archs "$runtime/bin/python3" 2>/dev/null || true)"
+        printf '%s\n' "$slices" | tr ' ' '\n' | grep -qx "$arch" || {
+            echo "Pinned Python runtime for $arch has unexpected slices: ${slices:-none}." >&2
+            exit 1
+        }
+        [[ -d "$runtime/lib/python${version%.*}" ]] || {
+            echo "Pinned Python runtime for $arch is missing lib/python${version%.*}." >&2
+            exit 1
+        }
+    fi
     printf '%s\n' "$runtime"
 )
 
