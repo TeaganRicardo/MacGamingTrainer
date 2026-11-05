@@ -158,4 +158,80 @@ shutil.copyfile(os.environ['MGT_CACHE_PAYLOAD'],destination)
         assert cached.read_bytes() == b'old invalid cache', 'failed download replaced the prior archive'
         assert not list(cache.glob('*.tmp.*')), 'failed download left temporary state'
 
+with tempfile.TemporaryDirectory(prefix="mgt-runtime-arch-") as temporary:
+    # A runtime for another architecture cannot be executed on the build host,
+    # so the bootstrap must verify the staged slice without running it. The
+    # fixture interpreter records every execution, which separates the two
+    # paths instead of depending on the architecture of the machine running
+    # this test.
+    root = Path(temporary)
+    fakebin = root / "bin"
+    fakebin.mkdir()
+    marker = root / "executed"
+    payload = root / "runtime.tar.gz"
+    runtime_python = f'#!/bin/sh\ntouch "{marker}"\nprintf "3.15.0\\n"\n'.encode()
+    with tarfile.open(payload, "w:gz") as archive:
+        interpreter = tarfile.TarInfo("python/bin/python3")
+        interpreter.mode = 0o755
+        interpreter.size = len(runtime_python)
+        archive.addfile(interpreter, io.BytesIO(runtime_python))
+        stdlib = tarfile.TarInfo("python/lib/python3.15")
+        stdlib.type = tarfile.DIRTYPE
+        stdlib.mode = 0o755
+        archive.addfile(stdlib)
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+    manifest = root / "runtime.json"
+    manifest.write_text(json.dumps({"version": "3.15.0", "release": "fixture", "distributions": {
+        "arm64": {"url": "https://fixture.invalid/arm64", "sha256": digest},
+        "x86_64": {"url": "https://fixture.invalid/x86_64", "sha256": digest}}}))
+    plutil = fakebin / "plutil"
+    plutil.write_text(f"#!{sys.executable}\n" + """
+import json,sys
+value=json.load(open(sys.argv[-1]))
+for component in sys.argv[2].split('.'): value=value[component]
+print(value)
+""")
+    plutil.chmod(0o755)
+    curl = fakebin / "curl"
+    curl.write_text(f"#!{sys.executable}\n" + """
+import os,pathlib,shutil,sys
+shutil.copyfile(os.environ['MGT_ARCH_PAYLOAD'], pathlib.Path(sys.argv[sys.argv.index('-o')+1]))
+""")
+    curl.chmod(0o755)
+    lipo = fakebin / "lipo"
+    lipo.write_text('#!/bin/sh\necho "$MGT_ARCH_SLICES"\n')
+    lipo.chmod(0o755)
+
+    build_source = (ROOT / "build.sh").read_text()
+    functions = build_source.split("python_runtime_field()", 1)[1].split('\nHOST_ARCH=', 1)[0]
+    harness = root / "bootstrap.sh"
+    harness.write_text(
+        'set -euo pipefail\npython_runtime_field()' + functions
+        + '\nHOST_ARCH="$MGT_ARCH_HOST"\nprepare_python_runtime "$MGT_ARCH_TARGET"\n'
+    )
+
+    def bootstrap(host: str, target: str, slices: str, label: str):
+        env = {**os.environ, "PATH": str(fakebin) + os.pathsep + os.environ["PATH"],
+               "PYTHON_RUNTIME_MANIFEST": str(manifest),
+               "MGT_PYTHON_RUNTIME_CACHE_DIR": str(root / f"cache-{label}"),
+               "GENERATED_DIR": str(root / f"build-{label}"),
+               "MGT_ARCH_PAYLOAD": str(payload), "MGT_ARCH_HOST": host,
+               "MGT_ARCH_TARGET": target, "MGT_ARCH_SLICES": slices}
+        return subprocess.run(["bash", str(harness)], env=env, text=True,
+                              capture_output=True, timeout=30)
+
+    foreign = bootstrap("arm64", "x86_64", "x86_64", "foreign")
+    assert foreign.returncode == 0, foreign.stdout + foreign.stderr
+    assert not marker.exists(), "a foreign-architecture runtime was executed on the build host"
+
+    native = bootstrap("arm64", "arm64", "arm64", "native")
+    assert native.returncode == 0, native.stdout + native.stderr
+    assert marker.exists(), "the host-architecture runtime was not verified by execution"
+
+    marker.unlink()
+    wrong = bootstrap("arm64", "x86_64", "arm64", "wrong-slice")
+    assert wrong.returncode != 0, "a runtime with the wrong Mach-O slice was accepted"
+    assert "unexpected slices" in wrong.stderr, wrong.stderr
+    assert not marker.exists(), "the rejected runtime was executed"
+
 print("build_preflight_and_runtime_cache_ok")
