@@ -44,6 +44,7 @@ struct TrainerTextField: NSViewRepresentable {
     let title: String
     @Binding var text: String
     var accessibilityLabel: String? = nil
+    var accessibilityIdentifier: String? = nil
     var onEditingChanged: (Bool) -> Void = { _ in }
     var onCommit: (Completion) -> String = { $0.text }
     var onCancel: (() -> Void)?
@@ -404,6 +405,9 @@ struct TrainerTextField: NSViewRepresentable {
         }
         if field.accessibilityLabel() != (accessibilityLabel ?? title) {
             field.setAccessibilityLabel(accessibilityLabel ?? title)
+        }
+        if field.accessibilityIdentifier() != accessibilityIdentifier {
+            field.setAccessibilityIdentifier(accessibilityIdentifier)
         }
         if field.font != font {
             field.font = font

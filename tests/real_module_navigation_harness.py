@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from macos_test_budget import scaled_outer_timeout
 
 
 WORKER = r'''
@@ -306,7 +307,10 @@ struct StartupAvailabilityModule: TrainerGameModule {
             let data = try! JSONSerialization.data(withJSONObject: diagnostic, options: [.sortedKeys])
             FileHandle.standardError.write(Data("real_module_navigation_startup=".utf8) + data + Data("\n".utf8))
         }
-        journeyWait("visible native Host and both real module backends", onFailure: diagnoseStartup) {
+        let startupScale = min(2.0, max(1.0,
+            Double(ProcessInfo.processInfo.environment["MGT_MACOS_OUTER_TIMEOUT_SCALE"] ?? "1.0") ?? 1.0))
+        journeyWait("visible native Host and both real module backends",
+                    timeout: 4 * startupScale, onFailure: diagnoseStartup) {
             app.isRunning && window.isVisible && first.backendAvailable && second.backendAvailable
                 && !first.busy && !second.busy
                 && !firstContext.saveManager.busy && !secondContext.saveManager.busy
@@ -599,7 +603,7 @@ def _failure_diagnostics(project: Path) -> None:
 
 
 def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> None:
-    """Compile once; the independent native episode has a 30-second budget."""
+    """Compile once; the native episode keeps a 30-second base budget scaled by runner profile."""
     with tempfile.TemporaryDirectory(prefix="mgt-real-module-navigation-") as directory:
         project = Path(directory)
         for name in ("Core", "Hades", "Hades2"):
@@ -638,8 +642,14 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         env = {**os.environ, "HOME": str(home), "CFFIXED_USER_HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"}
         arguments = [str(binary), str(project), sys.executable] + (["startup"] if startup_only else [])
         completion = "context_startup_availability_ok" if startup_only else "hades_and_hades2_host_navigation_ok"
+        # Startup-only validates one bounded ownership handshake. The full native
+        # journey also traverses every section, two delayed reads, retained focus,
+        # tool-window ownership and localization changes, so its process guard
+        # must remain outside those behavioral assertion windows.
+        base_outer_timeout = 30 if startup_only else 45
         try:
-            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(arguments, cwd=project, env=env, capture_output=True, text=True,
+                                    timeout=scaled_outer_timeout(base_outer_timeout))
         except subprocess.TimeoutExpired as error:
             for output in (error.stdout, error.stderr):
                 if output:

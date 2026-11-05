@@ -17,26 +17,45 @@ def source(path):
 hades = source("Sources/Hades/HadesTrainerView.swift")
 rooms = source("Sources/Hades/HadesRoomsPanel.swift")
 hades2 = source("Sources/Hades2/Hades2View.swift")
+hades_model = source("Sources/Hades/HadesModule.swift")
+hades_adapter = source("Backend/games/hades/adapter.py")
 
 for label, view in (("Hades", hades), ("Hades rooms", rooms), ("Hades II", hades2)):
     assert not re.search(r"\bif\s*!?\s*model\.connected\s*\{", view), label
+
+# Durable Hades I desired state follows the Hades II detached-edit contract.
+assert "var canEditIntent: Bool {" in hades_model
+assert "backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect" in hades_model
+for unsafe_code in ("outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"):
+    assert f'"{unsafe_code}"' in hades_model
+set_feature = hades_adapter.split("if command == 'set_feature':", 1)[1].split("\n        if command", 1)[0]
+assert "raise AdapterError('not_connected'" not in set_feature
+hades_speed = hades.split("private var gameSpeedPanel: some View {", 1)[1].split("private var boonRarityPanel:", 1)[0]
+assert "enabled: model.canEditIntent" in hades_speed
+assert "enabled: model.canEditIntent && pageVisible" in hades_speed
+boon_policy = hades.split("private var boonRarityPanel: some View {", 1)[1].split("private var boonsSection:", 1)[0]
+assert 'ForEach(["Common", "Rare", "Epic", "Heroic"]' in boon_policy
+assert "model.boonRarityTarget" in boon_policy
 
 # Both modules keep current-run management selectors visible without live data.
 traits = hades.split("private struct HadesCurrentTraitsPanel:", 1)[1].split("private struct HadesCurrentTraitRow:", 1)[0]
 assert 'Picker(text("hades.currentTraits")' in traits
 assert 'Text(text("hades.emptyTraits")).tag("")' in traits
-assert ".trainerPicker(.expanding, state: matches.isEmpty ? .unavailable : .interactive)" in traits
+assert ".trainerPicker(.expanding, state: pickerSections.allSatisfy({ $0.items.isEmpty }) ? .unavailable : .interactive)" in traits
+assert "HadesCurrentTraitPlaceholderRow()" in traits
+assert ".trainerPicker(.compactValue, state: .unavailable)" in traits
 # Exact boon acquisition is a fixed feature whose source/items can be empty.
 # Preserve its selectors and action until runtime data arrives.
 catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private struct HadesCurrentTraitsPanel:", 1)[0]
 assert 'Picker(text("hades.exactSource")' in catalog
 assert 'Picker(text("hades.selectTrait")' in catalog
-assert 'TrainerPrimaryActionButton(title: text("hades.acquire")' in catalog
-assert ".trainerPicker(.expanding, state: sourceGroups.isEmpty ? .unavailable : .interactive)" in catalog
-assert ".trainerPicker(.expanding, state: selectedEntries.isEmpty ? .unavailable : .interactive)" in catalog
+assert 'TrainerSecondaryActionButton(' in catalog and 'title: text("hades.acquire")' in catalog
+assert ".trainerPicker(.expanding, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)" in catalog
+assert ".trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)" in catalog
 assert "selected != nil && model.canMutate" in catalog
 assert 'if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }' in catalog
 assert "if matches.isEmpty { TrainerEmptyState" not in catalog
+assert "HadesChaosPairControls(model: model)" in catalog
 
 assert not re.search(r"if\s+matches\.isEmpty\s*\{[\s\S]*?\}\s*else\s*\{\s*Picker\(", traits)
 

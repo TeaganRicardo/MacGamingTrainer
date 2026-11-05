@@ -20,7 +20,7 @@ DEFAULT_FEATURES = {
 }
 # Process Time Warp is a separate Core-owned native helper. It is a durable
 # module preference, but it must never enter the Lua resident feature document.
-DEFAULT_PREFERENCES = {**DEFAULT_FEATURES, 'gameSpeed': 1.0}
+DEFAULT_PREFERENCES = {**DEFAULT_FEATURES, 'boonRarityTarget': 'Heroic', 'gameSpeed': 1.0}
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
@@ -28,7 +28,7 @@ WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
 ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
-MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_invincibility',
+MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {'set_feature', 'set_boon_rarity', 'set_invincibility',
                                        'configure', 'disable_all'}
 
 
@@ -61,7 +61,15 @@ def feature_document(values):
     return {name: feature_value(name, value) for name, value in values.items()}
 
 
+def boon_rarity_target(value):
+    if value not in ('Common', 'Rare', 'Epic', 'Heroic'):
+        raise invalid_value()
+    return value
+
+
 def preference_value(name, value):
+    if name == 'boonRarityTarget':
+        return boon_rarity_target(value)
     if name == 'gameSpeed':
         return number(value, 0, 10)
     return feature_value(name, value)
@@ -71,3 +79,19 @@ def preference_document(values):
     if not isinstance(values, dict) or set(values) != set(DEFAULT_PREFERENCES):
         raise invalid_value()
     return {name: preference_value(name, value) for name, value in values.items()}
+
+
+def migrate_preference_document(values):
+    """Accept only exact shipped schema-1 feature sets, filling new neutral defaults."""
+    if not isinstance(values, dict):
+        raise invalid_value()
+    original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
+                'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
+                'attackSpeedMultiplier', 'dashBonus'}
+    previous_current = set(DEFAULT_PREFERENCES) - {'boonRarityTarget'}
+    shipped = (original, original | {'boonRarityEnabled'},
+               original | {'boonRarityEnabled', 'gameSpeed'},
+               previous_current)
+    if set(values) in shipped:
+        values = {**DEFAULT_PREFERENCES, **values}
+    return preference_document(values)

@@ -9,6 +9,7 @@ from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 from native_picker_harness import NATIVE_PICKER
+from macos_test_budget import scaled_outer_timeout
 import shutil
 import subprocess
 import sys
@@ -165,8 +166,14 @@ for raw in sys.stdin:
         if state.get('diagnosticsMode')=='empty':checks=[]
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
-        if command=='set_feature' and params.get('feature')=='gameSpeed':
-            state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
+        if command=='set_feature':
+            if params.get('feature')=='gameSpeed':
+                state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
+            else:
+                state['features'][params['feature']]=params['value']
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_boon_rarity':
+            state['boonRarityTarget']=params['target']
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_value':state[params['field']]=params['value'];(folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
@@ -574,7 +581,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 refreshTitle: localization.localized("host.refresh"),
                 exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
                 checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
-                nonpassingStatus: "host.diagnostics.warning", busy: { model.busy }, count: { model.diagnostics.count },
+                nonpassingStatus: "host.diagnostics.failed", busy: { model.busy }, count: { model.diagnostics.count },
                 dismissed: { !model.diagnosticsPresented }, commands: commands, setMode: setDiagnosticsMode)
             stopBackend()
             model.profilesPresented = false; model.diagnosticsPresented = false
@@ -593,7 +600,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
+            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
+             .boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
@@ -647,6 +655,41 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(rarityArgs?["feature"] as? String == "boonRarityEnabled"
               && rarityArgs?["value"] as? Bool == true,
               "boon rarity shortcut lost the boolean feature semantics")
+        let targetMutations = commands().filter {
+            $0["command"] as? String == "set_boon_rarity"
+        }.count
+        model.setBoonRarityTarget("Epic")
+        wait("boon rarity target reply: Epic desired state observed") {
+            !model.busy && model.boonRarityTarget == "Epic"
+                && commands().filter {
+                    $0["command"] as? String == "set_boon_rarity"
+                }.count == targetMutations + 1
+        }
+        let targetArgs = commands().last {
+            $0["command"] as? String == "set_boon_rarity"
+        }?["params"] as? [String:Any]
+        check(targetArgs?["target"] as? String == "Epic",
+              "boon rarity target lost the selectable minimum-rarity semantics")
+        let speedBefore = model.number(.gameSpeed)
+        model.performShortcut(HadesShortcutAction.increaseGameSpeed.rawValue)
+        wait("game speed increase shortcut reply") {
+            !model.busy && abs(model.number(.gameSpeed) - min(10.0, speedBefore + 0.1)) < 0.0001
+        }
+        let retainedSpeed = model.number(.gameSpeed)
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(
+            isRunning: false, launchGeneration: 1, processIdentifier: nil
+        ))
+        check(!model.connected && !model.heroReady && model.boonRarityTarget == "Epic"
+              && abs(model.number(.gameSpeed) - retainedSpeed) < 0.0001
+              && model.features[HadesFeature.gameSpeed.rawValue]?.actualNumber == nil,
+              "target loss erased desired feature state or retained stale speed observation")
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(
+            isRunning: true, launchGeneration: 2, processIdentifier: 42
+        ))
+        model.refreshFromHost()
+        wait("status after target replacement restores runtime observation") {
+            model.connected && !model.busy && model.boonRarityTarget == "Epic"
+        }
         check(searchFunctions("damage").contains { $0.requiresExpandedMetrics && $0.section == .values },
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
@@ -710,9 +753,17 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(field.stringValue=="31","unfocused native value did not refresh")
         // Drive the actual field editor, then the actual native rarity popup.
         // These are input/selection checks on a synthetic worker, not gameplay.
+        func nativeEditor(_ field: NSTextField, _ failure: String) -> NSTextView {
+            check(window.makeFirstResponder(field), failure + " refused focus")
+            field.selectText(nil)
+            pump(0.02)
+            guard let editor = field.currentEditor() as? NSTextView else {
+                fatalError(failure + " did not establish its AppKit field editor")
+            }
+            return editor
+        }
         func enterNative(_ value: String) -> NSTextView {
-            check(window.makeFirstResponder(field), "Hades I numeric field refused focus")
-            let editor=field.currentEditor() as! NSTextView
+            let editor=nativeEditor(field, "Hades I numeric field")
             editor.selectAll(nil); editor.insertText(value,replacementRange:editor.selectedRange())
             return editor
         }
@@ -814,17 +865,21 @@ func pump(_ seconds: TimeInterval = 0.1) {
         guard let choices=nativeAccessibilityControls(host).first(where:{
                   $0.role=="AXPopUpButton" && $0.label==traitLabel && $0.valueText==primaryName
               }),
-              let oldLevel=fields(in:host).first(where:{$0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en)}) else {
+              let oldLevel=fields(in:host).first(where:{
+                  $0.accessibilityIdentifier()=="hades.catalog.level"
+              }) else {
             fatalError("Hades I selected-catalog native inputs missing")
         }
         let beforeSelection=commands().count
-        check(window.makeFirstResponder(oldLevel), "catalog level refused focus")
-        let levelEditor=oldLevel.currentEditor() as! NSTextView
+        _ = oldLevel.scrollToVisible(oldLevel.bounds)
+        host.layoutSubtreeIfNeeded()
+        nativePickerPump()
+        let levelEditor=nativeEditor(oldLevel, "catalog level")
         levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
         // Native menu input can also begin through accessibility. Replacing
         // selection while its field still edits must retire the old identity.
         selectNativePicker(choices,in:window,moving:1,opening:.accessibility);pump()
-        let newLevel=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.level",language:.en) }
+        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.catalog.level" }
         let catalogOwnerPassed=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText==secondaryName
               && oldLevel.currentEditor()==nil && newLevel?.stringValue=="1" && commands().count==beforeSelection
         if !catalogOwnerPassed {
@@ -1380,12 +1435,27 @@ func pump(_ seconds: TimeInterval = 0.1) {
             fatalError("native remaining-use control missing")
         }
         check(usesField.stringValue=="3","remaining-use observation missing")
+        let usesBefore=commands().filter { $0["command"] as? String == "set_trait_uses" }.count
         usesCoordinator.begin();usesField.stringValue="6"
         usesCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:usesField))
         usesCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:usesField))
+        pump()
+        check(commands().filter { $0["command"] as? String == "set_trait_uses" }.count==usesBefore,
+              "remaining-use draft committed on blur instead of waiting for Apply")
+        let usesFrame=window.convertToScreen(usesField.convert(usesField.bounds,to:nil))
+        let applyTitle=HadesPresentation.text("hades.apply",language:localization.language)
+        let applyCandidates=nativeAccessibilityControls(host).filter {
+            $0.role=="AXButton" && $0.label==applyTitle && $0.enabled
+        }
+        guard let usesApply=applyCandidates.min(by:{
+            abs($0.frame.midY-usesFrame.midY) < abs($1.frame.midY-usesFrame.midY)
+        }), abs(usesApply.frame.midY-usesFrame.midY) < 50 else {
+            fatalError("remaining-use Apply action missing beside its native field")
+        }
+        check(usesApply.press(),"remaining-use Apply refused native AX input")
         wait("native remaining-use set_trait_uses reply: six uses observed") { !model.busy && model.traits.first?.remainingUses==6 }
         host.layoutSubtreeIfNeeded();pump()
-        check(usesField.stringValue=="6","remaining-use commit did not refresh observation")
+        check(usesField.stringValue=="6","remaining-use Apply did not refresh observation")
         let usesRequests=commands().filter { $0["command"] as? String == "set_trait_uses" }
         let usesParams=usesRequests.last?["params"] as? [String:Any]
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
@@ -1430,8 +1500,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(commands().count == feedbackRequests && model.connected == connected,
                   "Hades feedback presentation replayed a command or changed connection truth")
             let afterDisable=commands().count
+            let errorBeforeOneShot=model.localError
             model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
-            check(commands().count==afterDisable,"a hero-owned shortcut ran without a hero")
+            model.performShortcut(HadesShortcutAction.generateChaosGate.rawValue);pump()
+            check(commands().count==afterDisable && model.localError==errorBeforeOneShot,
+                  "a one-shot shortcut escaped live-owner gating")
         }
         feedbackWindow.contentView = nil; feedbackWindow.close()
         try setConnection(true,heroReady:true)
@@ -1527,13 +1600,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         home = case_folder / 'home'
         home.mkdir()
         env = {**os.environ, 'HOME': str(home), 'CFFIXED_USER_HOME': str(home)}
+        effective_budget = scaled_outer_timeout(budget)
         print('hades_frontend_launch:' + journey, flush=True)
         try:
             proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
-                                  capture_output=True, text=True, timeout=budget, env=env)
+                                  capture_output=True, text=True, timeout=effective_budget, env=env)
         except subprocess.TimeoutExpired as error:
             phase = case_folder / 'native-phase.txt'
-            print(f'Native {journey} fixture exceeded {budget}s; last phase: ' +
+            print(f'Native {journey} fixture exceeded {effective_budget:g}s; last phase: ' +
                   (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
                   file=sys.stderr)
             for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):

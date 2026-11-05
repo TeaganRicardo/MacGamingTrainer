@@ -106,6 +106,9 @@ struct HadesCurrentTrait: Decodable, Identifiable, Equatable {
     var blessing: String? = nil
     var curse: String? = nil
     var id: String { instanceId }
+    var hasContextualControls: Bool {
+        remainingUses != nil || canRefresh == true || canExpire == true
+    }
 }
 
 struct HadesWorldReward: Decodable, Identifiable {
@@ -150,6 +153,7 @@ struct HadesObservation: Decodable {
     let target: HadesHeroTarget?
     let features: [String: HadesFeatureValue]?
     let activeFeatures: [String: Bool]?
+    let boonRarityTarget: String?
     let resources: [String: Double]?
     let traits: [HadesCurrentTrait]?
     let world: HadesWorldObservation?
@@ -205,9 +209,18 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, generateFishing, generateChaosGate, disableAll
+    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
+    case decreaseGameSpeed, increaseGameSpeed
+    case boonRarityEnabled, generateFishing, generateChaosGate, disableAll
     var id: String { rawValue }
-    var key: String { self == .disableAll ? "host.disableAll" : "hades.\(rawValue)" }
+    var key: String {
+        switch self {
+        case .disableAll: "host.disableAll"
+        case .decreaseGameSpeed: "hades.shortcut.decreaseGameSpeed"
+        case .increaseGameSpeed: "hades.shortcut.increaseGameSpeed"
+        default: "hades.\(rawValue)"
+        }
+    }
     var defaultChord: HotkeyChord { HadesShortcutStore.defaultLayout()[self]! }
 }
 

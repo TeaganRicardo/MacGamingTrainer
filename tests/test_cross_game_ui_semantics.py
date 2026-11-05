@@ -80,6 +80,21 @@ shared_labels = {
     "hades.infiniteAmmo": "hades2.feature.infiniteAmmo",
     "hades.forceRerolls": "hades2.feature.forceEnableRerolls",
     "hades.boonRarityEnabled": "hades2.feature.boonRarity",
+    "hades.currentTraits": "hades2.traits.manager",
+    "hades.catalog": "hades2.spawn.exactBoons",
+    "hades.exactSource": "hades2.spawn.exactSource",
+    "hades.selectTrait": "hades2.spawn.exactTarget",
+    "hades.chaosPair": "hades2.spawn.chaosPair",
+    "hades.chaosBlessing": "hades2.spawn.chaosBlessing",
+    "hades.chaosCurse": "hades2.spawn.chaosCurse",
+    "hades.cancelCurse": "hades2.traits.chaos.cancelPair",
+    "hades.cancelTemporaryEffect": "hades2.traits.temporary.cancel",
+    "hades.acquire": "hades2.spawn.acquire",
+    "hades.minimumRarity": "hades2.rarity.minimum",
+    "hades.setLevel": "hades2.traits.applyLevel",
+    "hades.setRarity": "hades2.traits.applyRarity",
+    "hades.shortcut.decreaseGameSpeed": "hades2.shortcut.decreaseGameSpeed",
+    "hades.shortcut.increaseGameSpeed": "hades2.shortcut.increaseGameSpeed",
     "hades.damageMultiplier": "hades2.feature.damageMultiplier",
     "hades.moveSpeedMultiplier": "hades2.stat.moveSpeed",
     "hades.attackSpeedMultiplier": "hades2.stat.attackSpeed",
@@ -259,7 +274,8 @@ for semantic in ("grasp", "spellCharge", "sprintSpeed", "occurrence", "specialRe
 hades_icon_map = hades_nav[hades_nav.index("static func icon(for titleKey: String)") : hades_nav.index("struct HadesWorkbenchEntry")]
 for key in (
     "hades.health", "hades.maxHealth", "hades.money", "hades.rerolls", "hades.godGauge",
-    "hades.currentTraits", "hades.catalog", "hades.rarity", "hades.level", "hades.apply",
+    "hades.currentTraits", "hades.catalog", "hades.rarity", "hades.minimumRarity", "hades.level",
+    "hades.setLevel", "hades.setRarity", "hades.apply",
     "hades.remove", "hades.chaosPair", "hades.remainingUses", "hades.activateBlessing",
     "hades.expireEffect", "hades.refreshEffect", "hades.resources", "hades.gainResource",
     "hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
@@ -295,6 +311,50 @@ hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(
 assert "icon: { $0.icon }" in hades2_host
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert 'ForEach(["Common", "Rare", "Epic", "Heroic"]' in hades_view
+assert 'model.boonRarityTarget' in hades_view
+assert 'title: text("hades.setLevel")' in hades_view
+assert 'title: text("hades.setRarity")' in hades_view
+assert 'TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))' in hades_view
+assert 'TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))' in hades_view
+hades_lifecycle = (ROOT / "Sources/Hades/HadesBoonLifecycle.swift").read_text()
+hades_current_panel = hades_view.split("private struct HadesCurrentTraitsPanel:", 1)[1].split(
+    "private struct HadesCurrentTraitRow:", 1
+)[0]
+assert "TrainerPickerSection<HadesCurrentTrait>" in hades_current_panel
+assert "Section(header: Text(section.title))" in hades_current_panel
+assert "sourceLabel(trait, language:" in hades_current_panel
+assert "searchable.append(sourceLabel(trait, language: language))" in hades_current_panel
+hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[1].split(
+    "private struct HadesShortcutSettingsView:", 1
+)[0]
+hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:", 1)[1]
+assert hades_current_row.count("model.removeTrait(trait)") == 1
+assert "model.removeTrait(trait)" not in hades_contextual
+trait_layout = (ROOT / "Sources/Core/UI/Components/TrainerTraitManagerLayout.swift").read_text()
+for token in ("rowSpacing", "removeControlWidth", "searchWidth", "levelControlsWidth",
+              "rarityControlsWidth", "commonControlsWidth"):
+    assert token in trait_layout
+assert "private enum TraitManagerLayout" not in hades2_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades_view
+assert "TrainerTraitManagerLayout.searchWidth" in hades2_view
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades_current_row
+assert "TrainerTraitManagerLayout.removeControlWidth" in hades2_view
+assert "HadesCurrentTraitPlaceholderRow()" in hades_current_panel
+assert ".trainerPicker(.compactValue, state: .unavailable)" in hades_current_panel
+assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
+assert ".frame(width: 48, alignment: .trailing)" in hades_current_row
+assert "theme.compactActionWidth" in hades_current_row
+assert "theme.pickerCompactWidth" in hades_current_row
+assert 'entry?.kind == "temporary"' in hades_current_row
+assert "trait.level > 1" in hades_current_row
+assert 'return text("hades.cancelCurse")' in hades_current_row
+assert 'return text("hades.cancelTemporaryEffect")' in hades_current_row
+assert 'text("hades.removeAllMatching")' in hades_current_row
+assert 'title: text("hades.apply")' in hades_contextual
+hades_types = (ROOT / "Sources/Hades/HadesTypes.swift").read_text()
+assert "var hasContextualControls: Bool" in hades_types
+assert "if trait.hasContextualControls {" in hades_current_row
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav

@@ -192,6 +192,7 @@ features = {key: (False if type(value) is bool else 20 if key == 'dashBonus' els
             for key, value in DEFAULT_FEATURES.items()}
 worker.dispatch('connect', {'pid': 42, 'executable': '/tmp/Hades/Game.macOS', 'features': features})
 worker.dispatch('configure', {'features': features})
+worker.dispatch('set_boon_rarity', {'target': 'Epic'})
 target = {'heroId': 'a' * 32 + ':1:2:40000'}
 longest = max((row for row in catalog_data()['entries'] if row.get('acquirable', True)), key=lambda row: len(row['id']))
 worker.dispatch('add_trait', {'target': target, 'trait': longest['id'],
