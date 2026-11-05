@@ -7,6 +7,8 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+from macos_test_budget import scaled_outer_timeout
+
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 Save Editor frontend test")
 
@@ -2110,7 +2112,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
         env=env,
         text=True,
         capture_output=True,
-        timeout=30,
+        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)
