@@ -1508,7 +1508,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         ('management', 30, 'hades_management_native_workflows_ok'),
         ('slider', 20, 'hades_slider_module_journey_ok'),
         ('hierarchy', 20, 'hades_visual_hierarchy_ok'),
-        ('disclosure', 25, 'hades_disclosure_module_journey_ok'),
+        # Measured 41.6s end to end on the hosted runner. The previous 25s gate
+        # only passed while the PR lane ran on the Intel profile, whose 2x outer
+        # scale turned it into 50s; on the standard profile the same journey is
+        # killed mid-assertion. Keep a real margin instead of relying on a
+        # runner-specific multiplier.
+        ('disclosure', 60, 'hades_disclosure_module_journey_ok'),
         ('search', 20, 'hades_workbench_search_native_ok'),
     ):
         case_folder = folder / 'journeys' / journey
