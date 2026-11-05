@@ -30,17 +30,23 @@ assert "base_outer_timeout = 30 if startup_only else 45" in real_navigation
 assert "timeout=scaled_outer_timeout(base_outer_timeout)" in real_navigation
 assert "RunLoop.current.run(until:" in real_navigation
 assert "NSApp.nextEvent(matching: .any" not in real_navigation
+assert 'journeyWait("visible native Host and both real module backends"' in real_navigation
+assert "app.isActive && window.isKeyWindow && first.backendAvailable" not in real_navigation
+assert 'journeyWait("actual context tool window") { tool.isVisible }' in real_navigation
 
 runtime_text_edit = Path(__file__).with_name("test_runtime_text_edit_completion.py").read_text()
 assert "func runRuntimeTextEditJourney() throws" in runtime_text_edit
 assert 'check(NSApp.isRunning,"runtime text-edit fixture did not enter the AppKit application event loop")' in runtime_text_edit
 assert "app.run()" in runtime_text_edit
+assert runtime_text_edit.count("@main struct Main") == 1
+assert 'phase("editing:complete")\n }\n\n@main struct Main' in runtime_text_edit
 
 native_picker = Path(__file__).with_name("native_picker_harness.py").read_text()
 assert "if case .accessibility = opening" in native_picker
 assert "accessibility picker selection requires the AppKit application event loop" in native_picker
 
 disclosure = Path(__file__).with_name("disclosure_ui_harness.py").read_text()
+assert "let retainedPublicationDeadline = Date().addingTimeInterval(1)" in disclosure
 assert "let retirementDeadline = Date().addingTimeInterval(1)" in disclosure
 assert "while Date() < retirementDeadline" in disclosure
 assert "if settled { break }" in disclosure

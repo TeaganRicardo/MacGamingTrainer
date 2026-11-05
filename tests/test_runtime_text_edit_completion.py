@@ -828,7 +828,6 @@ struct HeaderFixture: View {
   session.stop(); pump(); window.close()
   phase("editing:complete")
  }
-}
 
 @main struct Main {
  @MainActor static func main() {
