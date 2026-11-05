@@ -40,10 +40,22 @@ assert 'check(NSApp.isRunning,"runtime text-edit fixture did not enter the AppKi
 assert "app.run()" in runtime_text_edit
 assert runtime_text_edit.count("@main struct Main") == 1
 assert 'phase("editing:complete")\n }\n\n@main struct Main' in runtime_text_edit
+assert 'wait("native Hades II selected-trait inputs did not mount")' in runtime_text_edit
+assert 'wait("native trait selection did not mount the replacement level input")' in runtime_text_edit
+assert 'wait("trait observation did not mount the replacement remaining-use input")' in runtime_text_edit
+assert 'wait("material owner replacement did not reset the displayed amount")' in runtime_text_edit
+assert 'wait("restored material owner did not restore its observed amount")' in runtime_text_edit
+assert 'model.currentRunTraits=[firstTrait,secondTrait];pump()' not in runtime_text_edit
+assert 'phase("editing:material:replace-owner:assigned"); pump()' not in runtime_text_edit
+assert "import Darwin" in runtime_text_edit
+assert "fflush(nil)" in runtime_text_edit
+assert "Darwin._exit(0)" in runtime_text_edit
 
 native_picker = Path(__file__).with_name("native_picker_harness.py").read_text()
 assert "if case .accessibility = opening" in native_picker
 assert "accessibility picker selection requires the AppKit application event loop" in native_picker
+assert "guard let highlightedTitle, let highlightedIndex else { return }" in native_picker
+assert "(highlightedIndex ?? -1) < destinationIndex" not in native_picker
 
 disclosure = Path(__file__).with_name("disclosure_ui_harness.py").read_text()
 assert "let retainedPublicationDeadline = Date().addingTimeInterval(1)" in disclosure
