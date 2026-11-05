@@ -7,6 +7,8 @@ import tempfile
 import textwrap
 from pathlib import Path
 
+from macos_test_budget import scaled_outer_timeout
+
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 Save Editor frontend test")
 
@@ -641,10 +643,17 @@ func pump(_ seconds: TimeInterval) {
     }
 }
 
-func pumpUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) {
+func pumpUntil(
+    timeout: TimeInterval = 2.0,
+    line: UInt = #line,
+    _ condition: () -> Bool
+) {
     let deadline = Date().addingTimeInterval(timeout)
     while !condition() && Date() < deadline {
         RunLoop.current.run(until: min(deadline, Date().addingTimeInterval(0.02)))
+    }
+    if !condition() {
+        fail("pumpUntil timed out at harness line \(line)")
     }
 }
 
@@ -829,8 +838,9 @@ struct Main {
                 Hades2SaveEditorView(model: model)
             }
         }
-        pumpUntil {
-            model.profile == "Profile1" && model.items.count == 1
+        pumpUntil(timeout: 4.0) {
+            model.profile == "Profile1" && !model.querying
+                && model.total == 2 && model.items.count == 2
         }
 
         if model.profile != "Profile1" {
@@ -1103,10 +1113,10 @@ struct Main {
         )
         window.makeKeyAndOrderFront(nil)
         app.activate(ignoringOtherApps: true)
-        let activationDeadline = Date().addingTimeInterval(2)
-        while !(app.isActive && window.isKeyWindow) && Date() < activationDeadline { pump(0.02) }
-        guard app.isActive && window.isKeyWindow,
-              let retainedDraft = inlineField("3.5"), window.makeFirstResponder(retainedDraft) else {
+        pump(0.1)
+        guard let retainedDraft = inlineField("3.5"),
+              window.makeFirstResponder(retainedDraft),
+              retainedDraft.currentEditor() != nil else {
             fail("could not retain a focused correction through review collapse")
         }
         let retainedEditor = window.firstResponder
@@ -1395,7 +1405,6 @@ struct Main {
         let retiredBaseline = model.baselineGeneration
         model.apply(baseline: retiredBaseline)
         pumpUntil { !model.busy && !model.querying && model.baselineGeneration != retiredBaseline }
-        pump(0.10)
         let beforeObsoleteControls = commands(at: commandLog).count
         var obsoleteDetailWasConsumed = false
         model.loadAdvancedValue(retiredTyped, language: .en) { _, _ in obsoleteDetailWasConsumed = true }
@@ -1418,6 +1427,20 @@ struct Main {
             || model.membershipDrafts[retiredTyped.id] != nil || model.editFailures[retiredInline.id] != nil
             || model.editFailures[retiredTyped.id] != nil || obsoleteDetailWasConsumed {
             fail("old structural draft, error, or captured detail control rebound to the new baseline")
+        }
+        let replacementControlDeadline = Date().addingTimeInterval(2)
+        while Date() < replacementControlDeadline {
+            let replacementInput = fields(window.contentView!).first(where: {
+                $0.isEditable && $0.accessibilityLabel() == retiredInline.displayName
+            })
+            let continuedInput = fields(window.contentView!).first(where: {
+                $0.isEditable && $0.accessibilityLabel() == unrelatedDraft.displayName
+            })
+            if replacementInput?.stringValue == "44" && continuedInput?.stringValue == "4.5"
+                && model.textDrafts[unrelatedDraft.id] == "4.5" && model.editFailures[unrelatedDraft.id] != nil {
+                break
+            }
+            pump(0.02)
         }
         guard let replacementInput = fields(window.contentView!).first(where: {
                   $0.isEditable && $0.accessibilityLabel() == retiredInline.displayName
@@ -1655,12 +1678,16 @@ struct Main {
             fail("Workbench navigation resolves the wrong entity browse scope")
         }
         model.selectDomain(.quests)
-        pump(0.20)
+        pumpUntil {
+            !model.querying && model.items.map(\.id) == ["quest:QuestHelpDora"]
+        }
         if model.items.map(\.id) != ["quest:QuestHelpDora"] {
             fail("Quest navigation included unrelated progression data")
         }
         model.selectDomain(.arcana)
-        pump(0.20)
+        pumpUntil {
+            !model.querying && model.items.map(\.id) == ["card:ChanneledCast:Level"]
+        }
         if model.items.map(\.id) != ["card:ChanneledCast:Level"] {
             fail("Growth navigation included unrelated quest progress")
         }
@@ -1874,7 +1901,8 @@ struct Main {
 
         manualModel.selectedSourceID = "main/Profile2_Archive.sav"
         pumpUntil {
-            manualModel.workspaceID != nil && !manualModel.busy && manualModel.items.count == 1
+            manualModel.workspaceID != nil && !manualModel.busy && !manualModel.querying
+                && manualModel.total == 2 && manualModel.items.count == 2
         }
         guard let manualWorkspace = manualModel.workspaceID,
               manualModel.sourceRelativePath == "Profile2_Archive.sav",
@@ -1918,7 +1946,10 @@ struct Main {
         let backupModel = Hades2SaveEditorModel(session: session, snapshotID: "verified-backup")
         let beforeBackup = commands(at: commandLog).count
         backupModel.open(language: .en)
-        pumpUntil { !backupModel.busy && backupModel.items.count == 1 }
+        pumpUntil {
+            !backupModel.busy && !backupModel.querying
+                && backupModel.total == 2 && backupModel.items.count == 2
+        }
         guard let backupWorkspace = backupModel.workspaceID else { fail("backup workbench did not open") }
         if backupModel.sourceRootID != "main" || backupModel.sourceRelativePath != "Profile2_Temp.sav"
             || backupModel.sourceSHA256 != String(repeating: "a", count: 64)
@@ -2094,7 +2125,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
         env=env,
         text=True,
         capture_output=True,
-        timeout=30,
+        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)
