@@ -201,6 +201,15 @@ shutil.copyfile(os.environ['MGT_ARCH_PAYLOAD'], pathlib.Path(sys.argv[sys.argv.i
     lipo = fakebin / "lipo"
     lipo.write_text('#!/bin/sh\necho "$MGT_ARCH_SLICES"\n')
     lipo.chmod(0o755)
+    xcrun = fakebin / "xcrun"
+    xcrun.write_text("""#!/bin/sh
+if [ "$1" = "--find" ] && [ "$2" = "lipo" ]; then
+    echo "$MGT_ARCH_LIPO"
+    exit 0
+fi
+exit 92
+""")
+    xcrun.chmod(0o755)
 
     build_source = (ROOT / "build.sh").read_text()
     functions = build_source.split("python_runtime_field()", 1)[1].split('\nHOST_ARCH=', 1)[0]
@@ -216,7 +225,8 @@ shutil.copyfile(os.environ['MGT_ARCH_PAYLOAD'], pathlib.Path(sys.argv[sys.argv.i
                "MGT_PYTHON_RUNTIME_CACHE_DIR": str(root / f"cache-{label}"),
                "GENERATED_DIR": str(root / f"build-{label}"),
                "MGT_ARCH_PAYLOAD": str(payload), "MGT_ARCH_HOST": host,
-               "MGT_ARCH_TARGET": target, "MGT_ARCH_SLICES": slices}
+               "MGT_ARCH_TARGET": target, "MGT_ARCH_SLICES": slices,
+               "MGT_ARCH_LIPO": str(lipo)}
         return subprocess.run(["bash", str(harness)], env=env, text=True,
                               capture_output=True, timeout=30)
 

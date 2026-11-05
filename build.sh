@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
-for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file lipo; do
+for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
@@ -62,7 +62,7 @@ prepare_python_runtime() (
         return
     fi
 
-    local version release url sha cache_root archive actual
+    local version release url sha cache_root archive actual slices="" runtime_lipo
     version="$(python_runtime_field version)"
     release="$(python_runtime_field release)"
     url="$(python_runtime_field "distributions.$arch.url")"
@@ -101,7 +101,14 @@ prepare_python_runtime() (
             exit 1
         }
     else
-        slices="$(lipo -archs "$runtime/bin/python3" 2>/dev/null || true)"
+        # Only the cross-architecture path reads the Mach-O header, so resolve
+        # the tool here instead of requiring it for every build mode.
+        runtime_lipo="$(xcrun --find lipo 2>/dev/null || true)"
+        [[ -n "$runtime_lipo" ]] || {
+            echo "Cross-architecture runtime verification requires lipo." >&2
+            exit 1
+        }
+        slices="$("$runtime_lipo" -archs "$runtime/bin/python3" 2>/dev/null || true)"
         printf '%s\n' "$slices" | tr ' ' '\n' | grep -qx "$arch" || {
             echo "Pinned Python runtime for $arch has unexpected slices: ${slices:-none}." >&2
             exit 1
