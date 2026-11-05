@@ -138,7 +138,8 @@ module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
-assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
+assert "matrix.game == 'reference_fixture') && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in module_matrix
+assert "MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}" in module_matrix
 assert "MGT_RUN_MODULE_BUILD:" in module_matrix
 assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
