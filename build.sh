@@ -94,10 +94,11 @@ prepare_python_runtime() (
             echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
             exit 1
         }
-    else
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
         # The archive checksum above authenticates the pinned runtime version.
-        # A cross-architecture build host cannot execute the target interpreter,
-        # so validate the Mach-O architecture without launching it.
+        # A cross-architecture macOS build host cannot execute the target
+        # interpreter, so validate the Mach-O architecture without launching it.
+        # Portable non-Darwin bootstrap tests rely on the same per-arch checksum.
         runtime_arches="$(xcrun lipo -archs "$runtime/bin/python3")" || {
             echo "Pinned Python runtime is not a valid Mach-O executable for $arch." >&2
             exit 1
