@@ -69,6 +69,7 @@ HARNESS = r"""
 import AppKit
 import SwiftUI
 import Foundation
+import Darwin
 enum RuntimeTextTrace {
  static var updateDepth=0
  static var currentPhase=""
@@ -468,29 +469,45 @@ struct HeaderFixture: View {
   let firstTrait=inputTrait("Input First",level:2,uses:7)
   let secondTrait=inputTrait("Input Second",level:4,uses:9)
   model.capabilities["traitMutation"]=true
-  model.currentRunTraits=[firstTrait,secondTrait];pump()
+  model.currentRunTraits=[firstTrait,secondTrait]
   let levelName=Hades2GameModule.resolveText(key:"hades2.traits.targetLevel",localization:localization)
   let usesName=Hades2GameModule.resolveText(key:"hades2.traits.remainingUses",localization:localization)
   let traitPickerName=Hades2GameModule.resolveText(key:"hades2.traits.manager",localization:localization)
-  guard let oldLevel=fields(host).first(where:{$0.accessibilityLabel()==levelName && $0.isEnabled}),
-        let picker=namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName),
-        picker.valueText?.contains("Input First")==true else {
+  var mountedLevel:NSTextField?
+  var mountedPicker:NativeAccessibilityControl?
+  wait("native Hades II selected-trait inputs did not mount") {
+   host.layoutSubtreeIfNeeded()
+   mountedLevel=fields(host).first(where:{$0.accessibilityLabel()==levelName && $0.isEnabled})
+   mountedPicker=namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName)
+   return mountedLevel != nil && mountedPicker?.valueText?.contains("Input First")==true
+  }
+  guard let oldLevel=mountedLevel, let picker=mountedPicker else {
    fatalError("native Hades II selected-trait inputs missing")
   }
   let beforeTraitSelection=commands().count
   _ = edit(oldLevel,to:"42",in:window)
-  selectNativePicker(picker,in:window,moving:1,opening:.accessibility);pump()
-  let selectedLevel=fields(host).first { $0.accessibilityLabel()==levelName && $0.isEnabled }
-  check(namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName)?.valueText?.contains("Input Second")==true
-        && oldLevel.currentEditor()==nil && selectedLevel?.stringValue=="5" && commands().count==beforeTraitSelection,
+  selectNativePicker(picker,in:window,moving:1,opening:.accessibility)
+  var selectedLevel:NSTextField?
+  wait("native trait selection did not mount the replacement level input") {
+   host.layoutSubtreeIfNeeded()
+   selectedLevel=fields(host).first { $0.accessibilityLabel()==levelName && $0.isEnabled }
+   return namedNativeControl(host,role:"AXPopUpButton",name:traitPickerName)?.valueText?.contains("Input Second")==true
+        && oldLevel.currentEditor()==nil && selectedLevel?.stringValue=="5"
+  }
+  check(commands().count==beforeTraitSelection,
         "native trait selection redirected a focused level draft")
   guard let oldUses=fields(host).first(where:{$0.accessibilityLabel()==usesName && $0.isEnabled}) else {
    fatalError("native remaining-use input missing")
   }
   _ = edit(oldUses,to:"77",in:window)
-  model.currentRunTraits=[firstTrait];pump()
-  let selectedUses=fields(host).first { $0.accessibilityLabel()==usesName && $0.isEnabled }
-  check(oldUses.currentEditor()==nil && selectedUses?.stringValue=="7" && commands().count==beforeTraitSelection,
+  model.currentRunTraits=[firstTrait]
+  var selectedUses:NSTextField?
+  wait("trait observation did not mount the replacement remaining-use input") {
+   host.layoutSubtreeIfNeeded()
+   selectedUses=fields(host).first { $0.accessibilityLabel()==usesName && $0.isEnabled }
+   return oldUses.currentEditor()==nil && selectedUses?.stringValue=="7"
+  }
+  check(commands().count==beforeTraitSelection,
         "an observation-selected replacement inherited or submitted another trait's remaining-use draft")
   model.currentRunTraits=[];model.capabilities["traitMutation"]=false;pump()
   guard var money=fields(host).first(where:{$0.isEditable && $0.stringValue == "123"}) else { fatalError("money text field not found: \(fields(host).map(\.stringValue))") }
@@ -506,9 +523,12 @@ struct HeaderFixture: View {
   else { fatalError("selected material amount field missing") }
   window.makeFirstResponder(nil); pump()
   phase("editing:material:idle-observation")
-  model.resources=[material("MetaCurrency",31)]; pump()
-  check(amount.stringValue=="31" && mutations().isEmpty,
-        "external selected-material observation left the unfocused amount stale: \(amount.stringValue)")
+  model.resources=[material("MetaCurrency",31)]
+  wait("external selected-material observation left the unfocused amount stale") {
+   amount.stringValue=="31"
+  }
+  check(mutations().isEmpty,
+        "external selected-material observation submitted a mutation")
   check(window.makeFirstResponder(amount), "could not focus selected material")
   phase("editing:material:focused-observation")
   model.resources=[material("MetaCurrency",32)]; pump()
@@ -531,12 +551,19 @@ struct HeaderFixture: View {
   _ = edit(amount,to:"51",in:window)
   phase("editing:material:replace-owner:before")
   model.resources=[material("PlantFNightshade",73)]
-  phase("editing:material:replace-owner:assigned"); pump()
+  phase("editing:material:replace-owner:assigned")
+  var replacementAmount:NSTextField?
+  wait("material owner replacement did not reset the displayed amount") {
+   host.layoutSubtreeIfNeeded()
+   replacementAmount=fields(host).first(where:{$0.isEditable && $0.stringValue=="73"})
+   return replacementAmount != nil && amount.currentEditor()==nil
+  }
   phase("editing:material:replace-owner:after")
-  guard let replacementAmount=fields(host).first(where:{$0.isEditable && $0.stringValue=="73"})
-  else { fatalError("material owner replacement did not reset the displayed amount") }
+  guard let replacementAmount else {
+   fatalError("material owner replacement did not reset the displayed amount")
+  }
   window.makeFirstResponder(nil); pump()
-  check(amount.currentEditor()==nil && mutations().count==1,
+  check(mutations().count==1,
         "material owner replacement submitted an abandoned draft")
   let replacementEditor=edit(replacementAmount,to:"81",in:window)
   phase("editing:material:replacement-observation")
@@ -551,9 +578,11 @@ struct HeaderFixture: View {
   check(replacementAmount.currentEditor()==nil && mutations().count==1,
         "losing every material submitted an abandoned draft")
   phase("editing:material:restore-owner")
-  model.refreshFromHost(); wait { !model.busy }; pump()
-  check(fields(host).contains(where:{$0.isEditable && $0.stringValue=="41"}),
-        "restored material owner did not restore its observed amount")
+  model.refreshFromHost(); wait { !model.busy }
+  wait("restored material owner did not restore its observed amount") {
+   host.layoutSubtreeIfNeeded()
+   return fields(host).contains(where:{$0.isEditable && $0.stringValue=="41"})
+  }
   phase("editing:material:complete")
   try? FileManager.default.removeItem(at:log)
   phase("editing:money:untyped-observation")
@@ -840,11 +869,12 @@ struct HeaderFixture: View {
    MainActor.assumeIsolated {
     do { try runRuntimeTextEditJourney() }
     catch { fatalError("runtime text edit fixture: " + String(describing:error)) }
-    app.stop(nil)
-    let wake=NSEvent.otherEvent(with:.applicationDefined,location:.zero,modifierFlags:[],
-     timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,
-     subtype:0,data1:0,data2:0)!
-    app.postEvent(wake,atStart:false)
+    // Every journey is a standalone fixture subprocess and explicitly stops its
+    // backend before returning. Skip SwiftUI/AppKit process teardown here: it is
+    // outside the product contract and can crash after all native assertions
+    // have completed while deferred framework callbacks are still draining.
+    fflush(nil)
+    Darwin._exit(0)
    }
   }
   app.run()

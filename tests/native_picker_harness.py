@@ -253,9 +253,14 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                 state.returnQueued = true
                 postKey("\r", code: 36)
             } else {
+                // A newly opened or rebuilt popup can briefly have no highlighted
+                // item. Do not synthesize navigation from an invented -1 index;
+                // wait until AppKit exposes the real current choice, then send one
+                // Arrow relative to that semantic position.
+                guard let highlightedTitle, let highlightedIndex else { return }
                 state.previousHighlightTitle = highlightedTitle
                 state.awaitingArrow = true
-                let down = (highlightedIndex ?? -1) < destinationIndex
+                let down = highlightedIndex < destinationIndex
                 postKey(down ? "\u{F701}" : "\u{F700}", code: down ? 125 : 126)
             }
         }
