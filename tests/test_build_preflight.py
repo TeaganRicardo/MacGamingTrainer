@@ -158,4 +158,84 @@ shutil.copyfile(os.environ['MGT_CACHE_PAYLOAD'],destination)
         assert cached.read_bytes() == b'old invalid cache', 'failed download replaced the prior archive'
         assert not list(cache.glob('*.tmp.*')), 'failed download left temporary state'
 
+with tempfile.TemporaryDirectory(prefix="mgt-cross-arch-runtime-") as temporary:
+    root = Path(temporary)
+    fakebin = root / "bin"
+    fakebin.mkdir()
+    payload = root / "runtime.tar.gz"
+    marker_path = root / "foreign-runtime-executed"
+    lipo_log = root / "lipo.log"
+    runtime_python = b'#!/bin/sh\nprintf "foreign runtime must not execute\\n" >&2\ntouch "$MGT_FOREIGN_RUNTIME_MARKER"\nexit 97\n'
+    with tarfile.open(payload, "w:gz") as archive:
+        member = tarfile.TarInfo("python/bin/python3")
+        member.mode = 0o755
+        member.size = len(runtime_python)
+        archive.addfile(member, io.BytesIO(runtime_python))
+    digest = hashlib.sha256(payload.read_bytes()).hexdigest()
+    manifest = root / "runtime.json"
+    manifest.write_text(json.dumps({"version": "3.13.0", "release": "fixture", "distributions": {
+        "arm64": {"url": "https://fixture.invalid/runtime", "sha256": digest}}}))
+
+    plutil = fakebin / "plutil"
+    plutil.write_text(f"#!{sys.executable}\n" + """
+import json,sys
+value=json.load(open(sys.argv[-1]))
+for component in sys.argv[2].split('.'): value=value[component]
+print(value)
+""")
+    plutil.chmod(0o755)
+    curl = fakebin / "curl"
+    curl.write_text(f"#!{sys.executable}\n" + """
+import os,pathlib,shutil,sys
+destination=pathlib.Path(sys.argv[sys.argv.index('-o')+1])
+shutil.copyfile(os.environ['MGT_CACHE_PAYLOAD'], destination)
+""")
+    curl.chmod(0o755)
+    executable(fakebin / "uname", """
+case "${1:-}" in
+    -m) echo x86_64 ;;
+    -s) echo Darwin ;;
+    *) echo Darwin ;;
+esac
+""")
+    executable(fakebin / "xcrun", """
+if [ "${1:-}" = "lipo" ] && [ "${2:-}" = "-archs" ]; then
+    printf '%s\\n' "${MGT_LIPO_ARCHS:-arm64}"
+    printf '%s\\n' "$*" >> "$MGT_LIPO_LOG"
+    exit 0
+fi
+exit 96
+""")
+
+    build_source = (ROOT / "build.sh").read_text()
+    functions = build_source.split("python_runtime_field()", 1)[1].split('\nHOST_ARCH=', 1)[0]
+    harness = root / "bootstrap.sh"
+    harness.write_text('set -euo pipefail\npython_runtime_field()' + functions + '\nprepare_python_runtime arm64\n')
+    env = {
+        **os.environ,
+        "PATH": str(fakebin) + os.pathsep + os.environ["PATH"],
+        "PYTHON_RUNTIME_MANIFEST": str(manifest),
+        "MGT_PYTHON_RUNTIME_CACHE_DIR": str(root / "cache"),
+        "MGT_CACHE_PAYLOAD": str(payload),
+        "MGT_FOREIGN_RUNTIME_MARKER": str(marker_path),
+        "MGT_LIPO_LOG": str(lipo_log),
+        "MGT_LIPO_ARCHS": "arm64",
+        "GENERATED_DIR": str(root / "build-ok"),
+    }
+    result = subprocess.run(
+        ["bash", str(harness)], env=env, text=True, capture_output=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stdout + '\n' + result.stderr
+    assert not marker_path.exists(), "cross-architecture validation executed the target runtime"
+    assert "lipo -archs" in lipo_log.read_text(), "cross-architecture validation skipped Mach-O inspection"
+
+    mismatch = subprocess.run(
+        ["bash", str(harness)],
+        env={**env, "MGT_LIPO_ARCHS": "x86_64", "GENERATED_DIR": str(root / "build-mismatch")},
+        text=True, capture_output=True, timeout=20,
+    )
+    assert mismatch.returncode != 0, mismatch.stdout + '\n' + mismatch.stderr
+    assert "architecture mismatch for arm64" in mismatch.stderr
+    assert not marker_path.exists(), "architecture mismatch path executed the target runtime"
+
 print("build_preflight_and_runtime_cache_ok")
