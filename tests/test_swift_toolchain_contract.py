@@ -64,10 +64,13 @@ for name in pinned_workflows:
 
 for name in ("build2-macos.yml", "module-build-matrix.yml"):
     source = (workflow_root / name).read_text()
-    assert "'macos-26-intel'" in source, name
-    assert "'macos-26'" in source, name
-    assert "github.event_name == 'pull_request'" in source, name
-    assert "MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}" in source, name
+    if name == "build2-macos.yml":
+        # PR smoke uses the independent Intel pool; release dispatch stays ARM64.
+        assert "(github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in source, name
+        assert "MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}" in source, name
+    else:
+        assert "'macos-26' || 'ubuntu-latest'" in source, name
+        assert "MGT_MACOS_RUNNER_LABEL: macos-26" in source, name
     assert "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer" in source, name
     assert "python3 Tools/macos_toolchain_identity.py" in source, name
     assert "Tools/verify_build_provenance.py" in source, name

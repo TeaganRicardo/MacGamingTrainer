@@ -180,11 +180,10 @@ struct HeaderFixture: View {
    .environment(\.trainerNavigateToSection) { visibility.destinations.append($0) }
  }
 }
-@main struct Main {
- @MainActor static func main() throws {
+@MainActor func runRuntimeTextEditJourney() throws {
   let journey=CommandLine.arguments[3]
   phase("\(journey):start")
-  _ = NSApplication.shared
+  check(NSApp.isRunning,"runtime text-edit fixture did not enter the AppKit application event loop")
   enableNativeAccessibility()
   let python=URL(fileURLWithPath:CommandLine.arguments[1])
   let worker=URL(fileURLWithPath:CommandLine.arguments[2]); let temporary=worker.deletingLastPathComponent()
@@ -828,6 +827,28 @@ struct HeaderFixture: View {
   try? FileManager.default.removeItem(at:log)
   session.stop(); pump(); window.close()
   phase("editing:complete")
+ }
+}
+
+@main struct Main {
+ @MainActor static func main() {
+  let app=NSApplication.shared
+  app.setActivationPolicy(.regular)
+  app.finishLaunching()
+  // Accessibility-triggered native popup tracking must run inside the real
+  // AppKit application loop; RunLoop pumps alone leave NSApp.isRunning false.
+  Timer.scheduledTimer(withTimeInterval:0.01,repeats:false) { _ in
+   MainActor.assumeIsolated {
+    do { try runRuntimeTextEditJourney() }
+    catch { fatalError("runtime text edit fixture: " + String(describing:error)) }
+    app.stop(nil)
+    let wake=NSEvent.otherEvent(with:.applicationDefined,location:.zero,modifierFlags:[],
+     timestamp:ProcessInfo.processInfo.systemUptime,windowNumber:0,context:nil,
+     subtype:0,data1:0,data2:0)!
+    app.postEvent(wake,atStart:false)
+   }
+  }
+  app.run()
  }
 }
 """

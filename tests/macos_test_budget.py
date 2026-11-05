@@ -1,4 +1,4 @@
-"""Bound only outer macOS fixture-process variance for slower hosted runner profiles."""
+"""Bound outer macOS fixture-process variance for slower hosted runner profiles."""
 import os
 
 ENVIRONMENT_VARIABLE = "MGT_MACOS_OUTER_TIMEOUT_SCALE"
