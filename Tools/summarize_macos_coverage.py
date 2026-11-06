@@ -176,6 +176,16 @@ def render(report: dict[str, object], timings: list[dict], identity: dict[str, s
     return "\n".join(lines)
 
 
+TIMING_FIELDS = (
+    "journey", "profile", "budget_seconds", "elapsed_seconds", "outcome",
+    "source", "architecture", "image", "image_version",
+)
+
+
+def _bounded_timing(record: dict) -> dict:
+    return {field: record[field] for field in TIMING_FIELDS if field in record}
+
+
 def write_jsonl(path: Path, report: dict[str, object], timings: list[dict],
                 identity: dict[str, str]) -> None:
     rows = [{
@@ -195,8 +205,10 @@ def write_jsonl(path: Path, report: dict[str, object], timings: list[dict],
         rows.append({"kind": "result", "test": name, "status": "pass"})
     for name in report["failed_tests"]:
         rows.append({"kind": "result", "test": name, "status": "fail"})
-    for row in timings:
-        rows.append({"kind": "timing", **row})
+    # Raw observations, not the per-run aggregate: several artifacts must be
+    # mergeable into one distribution before any baseline claim is made.
+    for record in timings:
+        rows.append({"kind": "timing", **_bounded_timing(record)})
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as stream:
         for row in rows:
@@ -222,7 +234,8 @@ def main(argv: list[str]) -> int:
             read_results(args.results),
             load_macos_only_tests(ROOT),
         )
-        timings = timing_summary(read_timings(args.timings), read_timings(args.baseline))
+        observed = read_timings(args.timings)
+        timings = timing_summary(observed, read_timings(args.baseline))
     except CoverageError as error:
         print(f"macOS coverage contract violated: {error}", file=sys.stderr)
         return 2
@@ -239,7 +252,7 @@ def main(argv: list[str]) -> int:
             print(f"macOS coverage summary not written: {error}", file=sys.stderr)
     if args.output is not None:
         try:
-            write_jsonl(args.output, report, timings, identity)
+            write_jsonl(args.output, report, observed, identity)
         except OSError as error:
             print(f"macOS coverage artifact not written: {error}", file=sys.stderr)
     # A produced report is a success. Failed tests are already the runner's own

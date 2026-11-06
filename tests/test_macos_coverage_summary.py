@@ -126,6 +126,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
     kinds = [row["kind"] for row in rows]
     assert kinds[0] == "coverage" and "timing" in kinds and "result" in kinds, kinds
+    # The artifact carries raw observations so several runs can be merged into
+    # one distribution; a per-run aggregate would make that impossible.
+    timing_rows = [row for row in rows if row["kind"] == "timing"]
+    assert timing_rows and timing_rows[0]["elapsed_seconds"] == 25.2, timing_rows
+    assert "samples" not in timing_rows[0], timing_rows
     # The artifact is tagged with the lane's own identity, whatever it is.
     identity = summary._identity()
     assert rows[0]["source"] == identity["source"], rows[0]
