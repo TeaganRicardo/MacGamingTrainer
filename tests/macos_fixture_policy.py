@@ -26,7 +26,6 @@ from typing import Iterable, Mapping, Sequence
 
 HOSTED_PROFILE = "macos-26"
 LOCAL_PROFILE = "local"
-VERIFIED_PROFILES = (HOSTED_PROFILE, LOCAL_PROFILE)
 
 # GitHub Actions exports this label from the owning workflow. A hosted run that
 # cannot state its profile has no verified budget and must fail closed.
