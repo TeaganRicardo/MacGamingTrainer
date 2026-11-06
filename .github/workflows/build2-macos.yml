@@ -60,7 +60,12 @@ jobs:
     needs: scope
     if: ${{ always() }}
     runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # Convergence runs the full native inventory, the resident mutation gate and
+    # the unified build in one job; a measured dispatch run reached the 30 minute
+    # limit inside the build after the inventory had already passed, and was
+    # cancelled with the deferred suites unverified. Pull requests keep the
+    # original 30 minutes so their cost does not change.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 60 || 30 }}
     env:
       # Pull requests and explicit convergence both run on the ARM64 profile.
       # The independent x64 pool was tried to avoid ARM64 queue starvation, but

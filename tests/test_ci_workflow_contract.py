@@ -142,6 +142,14 @@ for step in ("Run full macOS contracts for release convergence",
     window = build2[build2.index(step):][:800]
     assert "MGT_FIXTURE_TIMINGS" in window, step
     assert "MGT_MACOS_COVERAGE_OUTPUT" in window, step
+# Convergence must be able to finish: it runs the full native inventory, the
+# resident mutation gate and the unified build in one job, and a measured
+# dispatch run hit the 30 minute limit inside the build after the inventory had
+# passed. A cancelled convergence leaves the deferred suites unverified while
+# the PR lane still looks green. Pull requests keep their original budget.
+assert "timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 60 || 30 }}" in build2, (
+    "the convergence job needs more than 30 minutes; a cancelled run verifies nothing"
+)
 assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true'" in build2
 assert "needs.scope.outputs.needs_full_build == 'false'" in build2
 assert "steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false'" in build2
