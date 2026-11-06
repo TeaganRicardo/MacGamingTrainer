@@ -446,15 +446,31 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")
             let pickerIndicatorFrame = NSRect(
-                x: picker.frame.maxX - min(28, picker.frame.width),
+                x: picker.frame.maxX - min(24, picker.frame.width),
                 y: picker.frame.minY,
-                width: min(28, picker.frame.width),
+                width: min(24, picker.frame.width),
                 height: picker.frame.height
             )
             let interactivePickerChrome = hierarchyBitmapExact(host, around: pickerIndicatorFrame)
             let interactivePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(picker.frame))
+            // The corrected presentation keeps the native control height; the
+            // earlier redraw forced every Picker to 34 pt.
+            hierarchyCheck(picker.frame.height < 32,
+                           "Picker height inflated beyond the native control: height=\(picker.frame.height)")
+            let interactiveBodyColor = hierarchyColorSample(host, at: NSPoint(
+                x: pickerFrame.minX + 3,
+                y: pickerFrame.midY
+            ))
+            let interactiveBodyLuminance = (interactiveBodyColor.redComponent
+                + interactiveBodyColor.greenComponent
+                + interactiveBodyColor.blueComponent) / 3
+            hierarchyCheck(interactiveBodyLuminance < 0.32,
+                           "interactive Picker body is not a dark surface: sample=\(interactiveBodyColor)")
             let accentSample = hierarchyColorSample(host, at: NSPoint(
-                x: pickerFrame.maxX - 25,
+                // The purple plate spans the trailing 18 pt of the 24 pt
+                // indicator lane; sample inside it but clear of the white
+                // chevron glyphs at the lane centre.
+                x: pickerFrame.maxX - 19,
                 y: pickerFrame.midY
             ))
             let accentDelta = abs(accentSample.redComponent - 0.64)
@@ -465,14 +481,25 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             hierarchyCheck(accentSample.redComponent > 0.45,
                            "interactive Picker indicator fell back to system-blue chrome: sample=\(accentSample)")
             let simultaneousUnavailableChrome = hierarchyBitmapExact(host, around: NSRect(
-                x: simultaneouslyUnavailablePicker.frame.maxX - min(28, simultaneouslyUnavailablePicker.frame.width),
+                x: simultaneouslyUnavailablePicker.frame.maxX - min(24, simultaneouslyUnavailablePicker.frame.width),
                 y: simultaneouslyUnavailablePicker.frame.minY,
-                width: min(28, simultaneouslyUnavailablePicker.frame.width),
+                width: min(24, simultaneouslyUnavailablePicker.frame.width),
                 height: simultaneouslyUnavailablePicker.frame.height
             ))
             let simultaneousUnavailableBody = hierarchyBitmapExact(
                 host, around: hierarchyPickerBodySample(simultaneouslyUnavailablePicker.frame)
             )
+            let unavailableBodyColor = hierarchyColorSample(host, at: NSPoint(
+                x: simultaneouslyUnavailablePicker.frame.minX + 3,
+                y: simultaneouslyUnavailablePicker.frame.midY
+            ))
+            let unavailableBodyLuminance = (unavailableBodyColor.redComponent
+                + unavailableBodyColor.greenComponent
+                + unavailableBodyColor.blueComponent) / 3
+            hierarchyCheck(unavailableBodyLuminance < 0.32,
+                           "unavailable Picker body is not a dark surface: sample=\(unavailableBodyColor)")
+            hierarchyCheck(unavailableBodyLuminance < interactiveBodyLuminance,
+                           "unavailable Picker did not read as a dimmed interactive surface")
             hierarchyCheck(simultaneousUnavailableChrome != interactivePickerChrome,
                            "simultaneous interactive/unavailable Pickers shared one chrome presentation")
             hierarchyCheck(simultaneousUnavailableBody != interactivePickerBody,
@@ -485,9 +512,9 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             }) else { fatalError("Picker disappeared after selection change") }
             hierarchyCheck(
                 hierarchyBitmapExact(host, around: NSRect(
-                    x: selectedPicker.frame.maxX - min(28, selectedPicker.frame.width),
+                    x: selectedPicker.frame.maxX - min(24, selectedPicker.frame.width),
                     y: selectedPicker.frame.minY,
-                    width: min(28, selectedPicker.frame.width),
+                    width: min(24, selectedPicker.frame.width),
                     height: selectedPicker.frame.height
                 )) == interactivePickerChrome,
                 "Picker selection changed the interactive chrome presentation"
@@ -509,9 +536,9 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
                 $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
             }) else { fatalError("Picker disappeared in unavailable state") }
             let unavailablePickerChrome = hierarchyBitmapExact(host, around: NSRect(
-                x: unavailablePicker.frame.maxX - min(28, unavailablePicker.frame.width),
+                x: unavailablePicker.frame.maxX - min(24, unavailablePicker.frame.width),
                 y: unavailablePicker.frame.minY,
-                width: min(28, unavailablePicker.frame.width),
+                width: min(24, unavailablePicker.frame.width),
                 height: unavailablePicker.frame.height
             ))
             let unavailablePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
@@ -532,9 +559,9 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             }) else { fatalError("Picker disappeared after restoring interaction") }
             hierarchyCheck(
                 hierarchyBitmapExact(host, around: NSRect(
-                    x: restoredPicker.frame.maxX - min(28, restoredPicker.frame.width),
+                    x: restoredPicker.frame.maxX - min(24, restoredPicker.frame.width),
                     y: restoredPicker.frame.minY,
-                    width: min(28, restoredPicker.frame.width),
+                    width: min(24, restoredPicker.frame.width),
                     height: restoredPicker.frame.height
                 )) == interactivePickerChrome,
                 "Picker did not restore the same interactive chrome after unavailable state"
@@ -555,9 +582,9 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             }) else { fatalError("Picker disappeared after native reconstruction") }
             hierarchyCheck(
                 hierarchyBitmapExact(host, around: NSRect(
-                    x: rebuiltPicker.frame.maxX - min(28, rebuiltPicker.frame.width),
+                    x: rebuiltPicker.frame.maxX - min(24, rebuiltPicker.frame.width),
                     y: rebuiltPicker.frame.minY,
-                    width: min(28, rebuiltPicker.frame.width),
+                    width: min(24, rebuiltPicker.frame.width),
                     height: rebuiltPicker.frame.height
                 )) == interactivePickerChrome,
                 "reconstructed Picker escaped the interactive chrome presentation"

@@ -6,6 +6,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var application: TrainerApplicationCoordinator?
     private var terminationInFlight = false
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // The product is dark-only. Declare that once at the AppKit boundary:
+        // NSWindow, sheet, panel and NSMenu all inherit this appearance, so a
+        // native control can never resolve the system light bezel merely
+        // because its hosting window was created outside the SwiftUI scene.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
     }
