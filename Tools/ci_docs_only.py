@@ -216,9 +216,13 @@ def classify_scope(
 
     docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
     if docs_only:
+        # Documentation never builds the product, but portable contract tests
+        # read policy and reference documents. Skipping the Linux lane would
+        # let a docs-only change pass every required check while breaking the
+        # suite for the next, unrelated pull request.
         return {
             "docs_only": True,
-            "needs_linux": False,
+            "needs_linux": True,
             "needs_macos": False,
             "needs_module": False,
             "needs_build": False,

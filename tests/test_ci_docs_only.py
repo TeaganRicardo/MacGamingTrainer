@@ -44,10 +44,15 @@ def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None, fu
 assert_scope(
     ["README.md"],
     docs_only=True,
-    linux=False,
+    linux=True,
     macos=False,
     module_build=False,
 )
+# Portable tests read documentation (VERSIONING.md, GAME_MODULES.md and the
+# reference snapshots), so every documentation-only diff keeps the Linux lane.
+tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, text=True, capture_output=True).stdout.split()
+for document in [path for path in tracked if path.endswith(".md") or path.startswith("docs/")]:
+    assert module.classify_scope([document], macos_only_tests=MACOS_ONLY)["needs_linux"], document
 # Documentation is not a product build input, at any depth and in a mixed diff:
 # a docs file next to code must not escalate the lane to the unified build.
 for documentation in (
