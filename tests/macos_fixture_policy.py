@@ -9,7 +9,7 @@ Three contracts are deliberately kept apart:
 * **Performance observation** is reported, never asserted.
 
 A budget is resolved once per launch from the verified profile, printed before
-the launch, and enforced against the fixture's own process group so an owned
+the launch, and enforced against the fixture's observed worker tree so an owned
 worker cannot outlive the watchdog. Expiry raises `FixtureWatchdogExpired`,
 which is a different outcome from a failed semantic assertion.
 """
@@ -211,28 +211,74 @@ def _report_expiry(budget: FixtureBudget, elapsed: float, phase: str,
               file=sys.stderr, flush=True)
 
 
-def _terminate(process: subprocess.Popen, owns_group: bool) -> None:
-    """Stop the fixture and the workers it owns, and nothing outside that group."""
+def _descendants(pid: int) -> list[int]:
+    """Snapshot the fixture's worker tree before it is signalled.
+
+    Once the fixture exits its children are reparented and the parent link is
+    gone, so the snapshot has to happen first. Only descendants observed here
+    are ever signalled, so an unrelated process is never a target.
+    """
+    try:
+        listing = subprocess.run(
+            ["ps", "-axo", "pid=,ppid="], capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    children: dict[int, list[int]] = {}
+    for line in listing.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            continue
+        try:
+            child, parent = int(fields[0]), int(fields[1])
+        except ValueError:
+            continue
+        children.setdefault(parent, []).append(child)
+    found: list[int] = []
+    pending = [pid]
+    while pending:
+        for child in children.get(pending.pop(), ()):
+            if child not in found:
+                found.append(child)
+                pending.append(child)
+    return found
+
+
+def _signal(pid: int, number: int) -> None:
+    try:
+        os.kill(pid, number)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _terminate(process: subprocess.Popen) -> None:
+    """Stop the fixture and the workers it owns, and nothing else.
+
+    The fixture keeps the harness's process group and session. A new group or a
+    detached session changes AppKit activation and key-window state, which made
+    a native journey fail its own readiness wait, so ownership is tracked by the
+    observed process tree instead.
+    """
     if process.poll() is not None:
         return
+    owned = _descendants(process.pid)
+    for pid in owned:
+        _signal(pid, signal.SIGTERM)
     try:
-        if owns_group:
-            os.killpg(process.pid, signal.SIGTERM)
-        else:
-            process.terminate()
+        process.terminate()
     except (ProcessLookupError, PermissionError):
         pass
     try:
         process.wait(timeout=GROUP_TERMINATION_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
         pass
-    try:
-        if owns_group:
-            os.killpg(process.pid, signal.SIGKILL)
-        elif process.poll() is None:
+    if process.poll() is None:
+        try:
             process.kill()
-    except (ProcessLookupError, PermissionError):
-        pass
+        except (ProcessLookupError, PermissionError):
+            pass
+    for pid in owned:
+        _signal(pid, signal.SIGKILL)
 
 
 def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
@@ -241,11 +287,11 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
                  diagnostics: Iterable[Path] = (), **kwargs) -> subprocess.CompletedProcess:
     """Run one fixture under an explicit budget and classify the outcome.
 
-    The fixture leads its own process group inside the harness's session, so an
-    owned worker is reaped with it while AppKit activation, key-window and
-    foreground state stay exactly as they were before this policy existed. A
-    detached session (`start_new_session`) changes that native behaviour and is
-    therefore not used. A caller that supplies its own group keeps its lifecycle.
+    The fixture keeps the harness's process group and session. Owning a new
+    process group, or a detached session, changes AppKit activation and
+    key-window state, so a native journey that passed would fail its own
+    readiness wait; owned workers are tracked through the observed process tree
+    instead.
     """
     if not 0 < budget.seconds <= MAXIMUM_BUDGET_SECONDS:
         raise FixturePolicyError(f"invalid watchdog budget: {budget.describe()}")
@@ -254,22 +300,17 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
     if capture:
         kwargs.setdefault("stdout", subprocess.PIPE)
         kwargs.setdefault("stderr", subprocess.PIPE)
-    if "start_new_session" in kwargs:
-        owns_group = bool(kwargs["start_new_session"])
-    else:
-        owns_group = True
-        kwargs["process_group"] = 0
     started = time.monotonic()
     process = subprocess.Popen(list(argv), **kwargs)
     try:
         stdout, stderr = process.communicate(timeout=budget.seconds)
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - started
-        _terminate(process, owns_group)
+        _terminate(process)
         try:
             stdout, stderr = process.communicate(timeout=GROUP_TERMINATION_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
-            # A descendant that left the owned group still holds a pipe; do not
+            # A descendant that outlived its parent still holds a pipe; do not
             # let the watchdog itself become the hang it is meant to report.
             process.kill()
             stdout, stderr = process.communicate()

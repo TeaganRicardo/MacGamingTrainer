@@ -145,7 +145,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-watchdog-") as directory:
             break
         time.sleep(0.05)
     else:
-        raise AssertionError("owned worker survived the watchdog's process-group cleanup")
+        raise AssertionError("owned worker survived the watchdog's cleanup")
+
+# The fixture must keep the harness's process group and session: a new group or
+# a detached session changes AppKit activation and made a native journey fail
+# its own readiness wait on a source-identical tree.
+source = (TESTS / "macos_fixture_policy.py").read_text(encoding="utf-8")
+for forbidden in ('kwargs["process_group"]', "start_new_session=True", "os.killpg"):
+    assert forbidden not in source, (
+        f"the watchdog must not change the fixture's process group or session: {forbidden}"
+    )
 
 # --- One policy, no duplicate thresholds --------------------------------------
 
