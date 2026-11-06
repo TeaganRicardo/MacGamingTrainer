@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 from core.adapter import AdapterError
@@ -41,11 +42,19 @@ class HadesProfileStore:
     def list(self):
         try:
             paths = sorted(self.root.glob('*.json'))
-            rows = [self._read(path) for path in paths]
-            return sorted(({'name': row['name'], 'updatedAt': row['updatedAt']} for row in rows),
-                          key=lambda row: row['name'].casefold())
         except OSError as error:
             raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
+        rows = []
+        for path in paths:
+            # One unreadable or newer-format file must not hide every other
+            # Profile or fail a save/delete that already completed; loading
+            # that Profile by name still reports its typed read failure.
+            try:
+                rows.append(self._read(path))
+            except AdapterError:
+                logging.exception('Ignoring unreadable Hades profile %s', path)
+        return sorted(({'name': row['name'], 'updatedAt': row['updatedAt']} for row in rows),
+                      key=lambda row: row['name'].casefold())
 
     def load(self, name):
         return self._read(self.path(name))['features']
