@@ -38,10 +38,11 @@ SOURCE_VARIABLE = "HEAD_SHA"
 # value only with controlled evidence, and never below the observed tail.
 JOURNEY_BUDGETS: dict[str, float] = {
     # Hades I native journeys (tests/test_hades_frontend.py).
-    "hades.save_editor": 65.0,
-    # Two hosted observations on the verified profile: 26.1s and 29.6s against
-    # a 30s gate. A passing run at 98.8% of its watchdog is not containment, so
-    # keep the same ~50% margin the full navigation journey uses.
+    # Five hosted observations span 40.1s to 54.0s. A gate must clear the
+    # observed maximum by at least one observed spread (13.9s), and 65s did not.
+    "hades.save_editor": 80.0,
+    # Five hosted runs on macos-26/ARM64 span 19.0s to 29.6s. The earlier 30s
+    # gate left 0.4s of headroom on a passing run, which is not containment.
     "hades.recovery": 45.0,
     "hades.management": 30.0,
     "hades.slider": 20.0,
