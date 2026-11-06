@@ -163,10 +163,14 @@ assert pr_smoke_tests(["Sources/Core/UI/Components/TrainerSearchField.swift"], T
     "test_reference_fixture_session_integration.py", "test_global_hotkey_routing.py",
     "test_trainer_search_field_appearance.py", "test_hades_frontend.py",
 })
-assert pr_smoke_tests([], TESTS, SOURCES) == sorted(TESTS - PR_DEFERRED)
+assert pr_smoke_tests([], TESTS, SOURCES) == sorted(TESTS - set(PR_DEFERRED))
 # Deferral must not drop coverage: every deferred test stays in the full inventory
 # that the exact-SHA convergence lane executes.
 inventory = set((ROOT / "Tools/macos_only_tests.txt").read_text(encoding="utf-8").split())
-assert PR_DEFERRED <= inventory, sorted(PR_DEFERRED - inventory)
+assert set(PR_DEFERRED) <= inventory, sorted(set(PR_DEFERRED) - inventory)
+# A deferral is only honest when it names why and who verifies it instead.
+for name, deferral in PR_DEFERRED.items():
+    assert deferral.reason and deferral.verification_owner, name
+    assert "workflow_dispatch" in deferral.verification_owner, name
 
 print("ci_pr_macos_selection_ok")

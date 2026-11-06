@@ -195,6 +195,7 @@ Prefer these protections over prose or implementation-shape tests:
 - `test_cross_game_isolation.py` + module build matrix/reference fixture: Core/module boundary;
 - `Tools/check_runtime_revision.py`: diff-based runtime revision discipline in Linux PR CI;
 - `Tools/run_linux_checks.sh`: exhaustive Linux-portable test discovery; new portable `test_*.py` files run by default;
+- `Tools/summarize_macos_coverage.py`: every macOS lane states selected, executed, passed, failed, deferred and not-selected, and fails closed on a coverage claim it cannot prove;
 - `test_macos_fixture_policy.py`: one outer watchdog per named journey and verified runner profile; an expiry is not a failed assertion.
 
 macOS native fixtures keep three contracts separate. **Semantic readiness** lives in the fixture: a named condition, a narrow deadline and a failure that reports the unmet predicate. **The outer watchdog** lives in `tests/macos_fixture_policy.py`: a last-resort hang containment resolved once per launch from a verified profile, printed before the launch, enforced against the fixture's observed worker tree and reported as its own outcome. **Performance observation** is reported and never asserted. No workflow, tool or fixture may multiply a hard watchdog; an unknown hosted profile fails closed instead of inheriting an unverified budget. A fixture that exceeds its watchdog is a stall, not evidence of a product regression.

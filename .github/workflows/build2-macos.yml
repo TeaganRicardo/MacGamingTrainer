@@ -60,7 +60,12 @@ jobs:
     needs: scope
     if: ${{ always() }}
     runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # Convergence runs the full native inventory, the resident mutation gate and
+    # the unified build in one job; a measured dispatch run reached the 30 minute
+    # limit inside the build after the inventory had already passed, and was
+    # cancelled with the deferred suites unverified. Pull requests keep the
+    # original 30 minutes so their cost does not change.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 60 || 30 }}
     env:
       # Pull requests and explicit convergence both run on the ARM64 profile.
       # The independent x64 pool was tried to avoid ARM64 queue starvation, but
@@ -120,10 +125,19 @@ jobs:
 
       - name: Run full macOS contracts for release convergence
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+        # Timings are observation only; they must outlive the lane's temporary
+        # directory so the coverage artifact can carry them. `runner` is not an
+        # available context in a job-level env block, only in a step.
+        env:
+          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
+          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
         run: bash Tools/run_macos_checks.sh
 
       - name: Run selected macOS PR smoke tests
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
+        env:
+          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
+          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
         run: bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"
 
       # Declared behavioural invariants, proven to fail when the code that
@@ -135,7 +149,11 @@ jobs:
         run: |
           archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
           lua_root="$RUNNER_TEMP/lua-5.2.4"
-          curl -fsSL --retry 3 -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
+          # A connection reset mid-transfer is not a 5xx, so plain --retry gives
+          # up on it. This download gates every native fixture and the checksum
+          # below still verifies the bytes, so retrying transport errors is safe.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+            -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
           printf '%s  %s\n' b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b "$archive" | shasum -a 256 -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP"
           make -C "$lua_root/src" generic
@@ -223,4 +241,15 @@ jobs:
             artifacts/${{ steps.package.outputs.provenance_name }}
             artifacts/${{ steps.package.outputs.sidecar_name }}
           if-no-files-found: error
+          retention-days: 14
+
+      # Coverage and timing evidence is diagnostic, so it is retained on every
+      # macOS run, including a failed one, and never gates the lane.
+      - name: Retain macOS coverage and journey timing evidence
+        if: needs.scope.outputs.needs_macos == 'true' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/macos-coverage.jsonl
+          if-no-files-found: warn
           retention-days: 14
