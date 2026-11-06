@@ -8,7 +8,8 @@
     "tests/feedback_ui_harness.py",
     "tests/search_ui_harness.py",
     "tests/sheet_ui_harness.py",
-    "tests/native_picker_harness.py"
+    "tests/native_picker_harness.py",
+    "tests/room_picker_alignment_harness.py"
   ],
   "test_hades2_view_state_flow.py": [
     "tests/macos_fixture_policy.py",
@@ -18,7 +19,8 @@
     "tests/disclosure_ui_harness.py",
     "tests/feedback_ui_harness.py",
     "tests/search_ui_harness.py",
-    "tests/sheet_ui_harness.py"
+    "tests/sheet_ui_harness.py",
+    "tests/room_picker_alignment_harness.py"
   ],
   "test_hades2_save_editor_frontend.py": [
     "tests/macos_fixture_policy.py"
@@ -42,5 +44,17 @@
   "test_multi_game_contexts.py": [
     "tests/macos_fixture_policy.py",
     "tests/real_module_navigation_harness.py"
+  ],
+  "test_hades2_save_editor_player_journey.py": [
+    "tests/fixtures/hades2/save_editor_player_journey.py"
+  ],
+  "test_hades2_advanced_save_frontend.py": [
+    "tests/fixtures/hades2/save_editor_player_journey.py"
+  ],
+  "test_hades2_save_record_frontend.py": [
+    "tests/fixtures/hades2/save_editor_player_journey.py"
+  ],
+  "test_hades2_save_container_frontend.py": [
+    "tests/fixtures/hades2/save_editor_player_journey.py"
   ]
 }

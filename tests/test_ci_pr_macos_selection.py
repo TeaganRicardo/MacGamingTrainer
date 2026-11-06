@@ -22,7 +22,15 @@ TESTS = {
     "test_viewport_feedback.py",
     "test_trainer_tool_windows.py",
     "test_disclosure_settle_classification.py",
+    "test_hades2_save_editor_player_journey.py",
+    "test_hades2_advanced_save_frontend.py",
+    "test_hades2_save_record_frontend.py",
+    "test_hades2_save_container_frontend.py",
 }
+SAVE_JOURNEY_CONSUMERS = [
+    "test_hades2_advanced_save_frontend.py", "test_hades2_save_container_frontend.py",
+    "test_hades2_save_editor_player_journey.py", "test_hades2_save_record_frontend.py",
+]
 SOURCES = {"hades": "Sources/Hades/", "hades2": "Sources/Hades2/"}
 
 assert selected_tests([], TESTS, SOURCES) == sorted(TESTS)
@@ -77,7 +85,13 @@ assert selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES) ==
     "test_hades2_lldb_breakpoint_lifetime.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
     "test_runtime_text_edit_completion.py", "test_trainer_text_field_appearance.py",
     "test_hades2_save_editor_frontend.py", "test_disclosure_settle_classification.py",
+    *SAVE_JOURNEY_CONSUMERS,
 })
+# Shared Python helpers route to the native journeys that import or run them.
+assert selected_tests(["tests/room_picker_alignment_harness.py"], TESTS, SOURCES) == [
+    "test_hades2_view_state_flow.py", "test_hades_frontend.py",
+]
+assert selected_tests(["tests/fixtures/hades2/save_editor_player_journey.py"], TESTS, SOURCES) == SAVE_JOURNEY_CONSUMERS
 # The watchdog policy is an input to every migrated native fixture; a change to
 # it must select each consumer rather than silently keeping the old budgets.
 assert selected_tests(["tests/macos_fixture_policy.py"], TESTS, SOURCES) == sorted({
