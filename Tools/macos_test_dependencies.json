@@ -23,6 +23,9 @@
   "test_hades2_save_editor_frontend.py": [
     "tests/macos_fixture_policy.py"
   ],
+  "test_disclosure_settle_classification.py": [
+    "tests/disclosure_ui_harness.py"
+  ],
   "test_hades2_lldb_breakpoint_lifetime.py": [
     "tests/hades2_lldb_worker_support.py",
     "tests/hades2_lldb_fixture.py",

@@ -140,6 +140,38 @@ private func disclosureLifetimePump(_ seconds: TimeInterval) {
     }
 }
 
+// Semantic readiness, reported rather than asserted. A condition that settles
+// immediately, one that needs event-loop work and one that never settles are
+// three different observations; only the third is a failure, and the caller
+// still decides that with its own strict assertion.
+struct DisclosureWaitResult {
+    let name: String
+    let settle: String
+    let milliseconds: Int
+    let satisfied: Bool
+}
+
+@MainActor
+private func disclosureSettleWait(
+    _ name: String,
+    timeout: TimeInterval = 1,
+    _ condition: () -> Bool
+) -> DisclosureWaitResult {
+    let started = Date()
+    func record(_ settle: String, _ satisfied: Bool) -> DisclosureWaitResult {
+        let milliseconds = Int((Date().timeIntervalSince(started) * 1000).rounded())
+        print("disclosure_wait name=\(name) settle=\(settle) elapsed_ms=\(milliseconds) satisfied=\(satisfied)")
+        return DisclosureWaitResult(name: name, settle: settle, milliseconds: milliseconds, satisfied: satisfied)
+    }
+    if condition() { return record("immediate", true) }
+    let deadline = started.addingTimeInterval(timeout)
+    while Date() < deadline {
+        disclosureLifetimePump(0.01)
+        if condition() { return record("event-loop", true) }
+    }
+    return record("deadline", condition())
+}
+
 @MainActor
 func exerciseDisclosureEditLifetime() {
     NSApp.setActivationPolicy(.regular)
@@ -316,6 +348,10 @@ func exerciseDisclosureNativeRetirementBoundaries() {
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
     app.finishLaunching()
+    // Readiness is measured per boundary, never asserted as a duration. A run
+    // that settles at the deadline still has to satisfy the strict retirement
+    // precondition below; the counts only make the observation visible.
+    var boundarySettleCounts: [String: Int] = ["immediate": 0, "event-loop": 0, "deadline": 0]
     func fields(_ view: NSView) -> [NSTextField] {
         (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
     }
@@ -439,22 +475,22 @@ func exerciseDisclosureNativeRetirementBoundaries() {
         precondition(current.currentEditor() == nil && current.stringValue == expected
                      && completions.count == beforeCompletions,
                      "native retirement revived an obsolete draft or completed an edit; boundary=\(boundary)")
-        let retirementDeadline = Date().addingTimeInterval(1)
-        while Date() < retirementDeadline {
-            let settled = source == expected && completions.count == beforeCompletions
+        let retirement = disclosureSettleWait("retirement:\(boundary)") {
+            source == expected && completions.count == beforeCompletions
                 && editing.filter { $0 == "original:true" }.count == beforeBegins
                 && editing.filter { $0 == "original:false" }.count == beforeEnds + 1
-            if settled { break }
-            disclosureLifetimePump(0.01)
         }
-        precondition(source == expected && completions.count == beforeCompletions
-                     && editing.filter { $0 == "original:true" }.count == beforeBegins
-                     && editing.filter { $0 == "original:false" }.count == beforeEnds + 1,
+        boundarySettleCounts[retirement.settle, default: 0] += 1
+        precondition(retirement.satisfied,
                      "native retirement published a stale target or repeated an editing callback; boundary=\(boundary)")
         host.rootView = AnyView(EmptyView())
         host.layoutSubtreeIfNeeded()
         window.close()
     }
+    print("disclosure_retirement_boundary_summary boundaries=\(Boundary.allCases.count)"
+          + " immediate=\(boundarySettleCounts["immediate"]!)"
+          + " event_loop=\(boundarySettleCounts["event-loop"]!)"
+          + " deadline=\(boundarySettleCounts["deadline"]!)")
     print("disclosure_native_retirement_boundaries_ok")
 }
 '''

@@ -1716,4 +1716,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
             print(proc.stdout)
             print(proc.stderr)
             raise SystemExit(f'{journey} fixture exited without its completion marker')
+        if journey == 'disclosure':
+            # The settle report is produced by the real AppKit run, so this
+            # checks the behaviour rather than the harness source text.
+            summary = [line for line in proc.stdout.splitlines()
+                       if line.startswith('disclosure_retirement_boundary_summary')]
+            boundaries = [line for line in proc.stdout.splitlines()
+                          if line.startswith('disclosure_wait name=retirement:')]
+            if not summary or 'boundaries=6' not in summary[0]:
+                print(proc.stdout)
+                raise SystemExit('disclosure journey did not report all six boundaries')
+            if len(boundaries) != 6 or not all('satisfied=true' in line for line in boundaries):
+                print(proc.stdout)
+                raise SystemExit('a disclosure boundary did not settle: ' + repr(boundaries))
+            print(summary[0])
         print(proc.stdout.strip())
