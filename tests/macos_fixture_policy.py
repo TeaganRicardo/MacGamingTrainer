@@ -39,7 +39,10 @@ SOURCE_VARIABLE = "HEAD_SHA"
 JOURNEY_BUDGETS: dict[str, float] = {
     # Hades I native journeys (tests/test_hades_frontend.py).
     "hades.save_editor": 65.0,
-    "hades.recovery": 30.0,
+    # Two hosted observations on the verified profile: 26.1s and 29.6s against
+    # a 30s gate. A passing run at 98.8% of its watchdog is not containment, so
+    # keep the same ~50% margin the full navigation journey uses.
+    "hades.recovery": 45.0,
     "hades.management": 30.0,
     "hades.slider": 20.0,
     "hades.hierarchy": 20.0,
