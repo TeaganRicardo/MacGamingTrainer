@@ -362,15 +362,19 @@ def serve_jsonl_requests(
             with operation(profile.get("request_id"), profile.get("command", "")):
                 with phase("sidecar.dispatch", method=method):
                     result = dispatch(method, params)
-                response = {"id": request_id, "result": result, "state": state()}
         except Exception as error:
             response = {
                 "id": request_id,
                 "error": error_payload(error),
                 "state": state(),
             }
-        # A post-dispatch serialization/size failure must terminate the worker
-        # rather than invent an ordinary error reply: the caller alone knows
-        # whether a lost mutation acknowledgement means outcome_unknown.
+        else:
+            # Outside the dispatch handler: once dispatch has returned, a state
+            # projection failure is not an ordinary error reply for an action
+            # that may have mutated the target.
+            response = {"id": request_id, "result": result, "state": state()}
+        # A post-dispatch state/serialization/size failure must terminate the
+        # worker rather than invent an ordinary error reply: the caller alone
+        # knows whether a lost mutation acknowledgement means outcome_unknown.
         with operation(profile.get("request_id"), profile.get("command", "")), phase("sidecar.reply_serialize_write"):
             _write_json_line(output_stream, response, max_line_bytes)

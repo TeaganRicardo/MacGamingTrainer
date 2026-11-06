@@ -282,4 +282,35 @@ else:
     raise AssertionError("oversized sidecar reply was emitted")
 assert oversized_output.getvalue() == ""
 
+# A completed dispatch whose state projection then fails must not be reported
+# as an ordinary error the caller could safely retry; the worker terminates.
+state_calls = []
+
+
+def failing_state():
+    # Fails once: a later projection would succeed and could carry an
+    # invented error reply for the completed action.
+    state_calls.append(1)
+    if len(state_calls) == 1:
+        raise RuntimeError("state projection failed after dispatch")
+    return {}
+
+
+mutations = []
+post_dispatch_output = io.StringIO()
+try:
+    serve_jsonl_requests(
+        io.StringIO(json.dumps({"id": "mutate", "method": "ping"}) + "\n"),
+        post_dispatch_output,
+        lambda method, params: mutations.append(method) or {"ok": True},
+        error_payload=error_payload,
+        state=failing_state,
+    )
+except RuntimeError as error:
+    assert "after dispatch" in str(error)
+else:
+    raise AssertionError("a post-dispatch state failure produced a reply")
+assert mutations == ["ping"] and state_calls == [1]
+assert post_dispatch_output.getvalue() == "", "an ordinary error reply was invented after dispatch"
+
 print("sidecar_protocol_ok")
