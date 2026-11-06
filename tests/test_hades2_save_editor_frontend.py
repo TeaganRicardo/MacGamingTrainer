@@ -7,7 +7,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from macos_test_budget import scaled_outer_timeout
+from macos_fixture_policy import launch_fixture
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 Save Editor frontend test")
@@ -2119,13 +2119,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
+        journey="hades2.save_editor",
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
-        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)

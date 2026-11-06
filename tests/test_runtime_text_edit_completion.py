@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 from native_picker_harness import NATIVE_PICKER
-from macos_test_budget import scaled_outer_timeout
+from macos_fixture_policy import launch_fixture
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only runtime text-edit behavior")
@@ -1013,15 +1013,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         home = fixture / "home"; home.mkdir()
         env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
         print(f"runtime_text_edit_completion_launch:{journey}", flush=True)
-        try:
-            result = subprocess.run([str(binary), PYTHON, str(worker), journey], env=env,
-                                    capture_output=True, text=True, timeout=scaled_outer_timeout(60))
-        except subprocess.TimeoutExpired as error:
-            for output, stream in ((error.stdout, sys.stdout), (error.stderr, sys.stderr)):
-                if output is not None:
-                    text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output
-                    print(text, end="", file=stream, flush=True)
-            raise
+        result = launch_fixture([str(binary), PYTHON, str(worker), journey], env=env,
+                                journey="runtime_text_edit.completion",
+                                capture_output=True, text=True)
         print(result.stdout, end="", flush=True)
         print(result.stderr, end="", file=sys.stderr, flush=True)
         result.check_returncode()

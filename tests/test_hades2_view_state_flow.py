@@ -12,7 +12,7 @@ from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
 from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
-from macos_test_budget import scaled_outer_timeout
+from macos_fixture_policy import launch_fixture
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -510,8 +510,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["CFFIXED_USER_HOME"] = str(home)
-    hierarchy = subprocess.run([str(binary), PYTHON, str(worker_path), "hierarchy"],
-                               cwd=ROOT, env=env, text=True, capture_output=True, timeout=scaled_outer_timeout(20))
+    hierarchy = launch_fixture([str(binary), PYTHON, str(worker_path), "hierarchy"],
+                               journey="hades2.hierarchy",
+                               cwd=ROOT, env=env, text=True, capture_output=True)
     if hierarchy.returncode != 0:
         print(hierarchy.stdout)
         print(hierarchy.stderr)
@@ -523,9 +524,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     # the existing state-flow budget and using its own backend process/journal.
     slider_worker = td / "slider_worker.py"
     shutil.copy2(worker_path, slider_worker)
-    slider_proc = subprocess.run(
-        [str(binary), PYTHON, str(slider_worker), "slider"], cwd=ROOT, env=env,
-        text=True, capture_output=True, timeout=scaled_outer_timeout(20),
+    slider_proc = launch_fixture(
+        [str(binary), PYTHON, str(slider_worker), "slider"], journey="hades2.slider",
+        cwd=ROOT, env=env, text=True, capture_output=True,
     )
     if slider_proc.returncode != 0:
         print(slider_proc.stdout)
@@ -535,12 +536,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     print(slider_proc.stdout.strip())
     disclosure_worker = td / "disclosure_worker.py"
     shutil.copy2(worker_path, disclosure_worker)
-    disclosure_proc = subprocess.run(
-        [str(binary), PYTHON, str(disclosure_worker), "disclosure"], cwd=ROOT, env=env,
-        # The Hades I equivalent measures 41.6s end to end, and this worker was
-        # killed at 25s on the standard profile. Keep a margin that does not
-        # depend on the Intel lane's 2x outer scale.
-        text=True, capture_output=True, timeout=scaled_outer_timeout(60),
+    disclosure_proc = launch_fixture(
+        [str(binary), PYTHON, str(disclosure_worker), "disclosure"], journey="hades2.disclosure",
+        cwd=ROOT, env=env, text=True, capture_output=True,
     )
     if disclosure_proc.returncode != 0:
         print(disclosure_proc.stdout)
@@ -548,21 +546,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         raise SystemExit(disclosure_proc.returncode)
     assert "hades2_disclosure_module_journey_ok" in disclosure_proc.stdout, disclosure_proc.stdout
     print(disclosure_proc.stdout.strip())
-    search_proc = subprocess.run([str(binary), PYTHON, str(worker_path), "search"],
-                                 cwd=ROOT, env=env, text=True, capture_output=True, timeout=scaled_outer_timeout(20))
+    search_proc = launch_fixture([str(binary), PYTHON, str(worker_path), "search"],
+                                 journey="hades2.search",
+                                 cwd=ROOT, env=env, text=True, capture_output=True)
     if search_proc.returncode != 0:
         print(search_proc.stdout)
         print(search_proc.stderr)
         raise SystemExit(search_proc.returncode)
     assert "hades2_workbench_search_native_ok" in search_proc.stdout, search_proc.stdout
     print(search_proc.stdout.strip())
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
+        journey="hades2.state_flow",
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
-        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)
@@ -964,13 +963,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["CFFIXED_USER_HOME"] = str(home)
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
+        journey="hades2.live_trait_flow",
         cwd=ROOT,
         env=env,
         text=True,
         capture_output=True,
-        timeout=scaled_outer_timeout(30),
     )
     if proc.returncode != 0:
         print(proc.stdout)

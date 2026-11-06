@@ -129,6 +129,11 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
+    if path.endswith(".md"):
+        # Documentation never compiles, links, signs or packages the product.
+        # Treating it as a build input forced the full unified build onto every
+        # mixed docs+code pull request.
+        return True
     if path in MACOS_TEST_SUPPORT_PATHS:
         return False
     if path.startswith("Backend/"):

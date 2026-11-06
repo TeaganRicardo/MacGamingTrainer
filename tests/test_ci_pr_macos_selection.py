@@ -75,6 +75,17 @@ assert selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES) ==
     "test_multi_game_contexts.py",
     "test_hades2_lldb_breakpoint_lifetime.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
     "test_runtime_text_edit_completion.py", "test_trainer_text_field_appearance.py",
+    "test_hades2_save_editor_frontend.py",
+})
+# The watchdog policy is an input to every migrated native fixture; a change to
+# it must select each consumer rather than silently keeping the old budgets.
+assert selected_tests(["tests/macos_fixture_policy.py"], TESTS, SOURCES) == sorted({
+    "test_hades_frontend.py", "test_hades2_view_state_flow.py",
+    "test_hades2_save_editor_frontend.py", "test_runtime_text_edit_completion.py",
+    "test_multi_game_contexts.py",
+})
+assert pr_smoke_tests(["tests/macos_fixture_policy.py"], TESTS, SOURCES) == sorted({
+    "test_hades_frontend.py", "test_hades2_save_editor_frontend.py",
 })
 assert selected_tests(["tests/real_module_navigation_harness.py"], TESTS, SOURCES) == ["test_multi_game_contexts.py"]
 for path in ("tests/management_ui_harness.py", "tests/visual_hierarchy_harness.py", "tests/disclosure_ui_harness.py", "tests/feedback_ui_harness.py", "tests/search_ui_harness.py", "tests/sheet_ui_harness.py"):

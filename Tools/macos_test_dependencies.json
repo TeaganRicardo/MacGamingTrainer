@@ -1,5 +1,6 @@
 {
   "test_hades_frontend.py": [
+    "tests/macos_fixture_policy.py",
     "tests/management_ui_harness.py",
     "tests/slider_ui_harness.py",
     "tests/visual_hierarchy_harness.py",
@@ -10,6 +11,7 @@
     "tests/native_picker_harness.py"
   ],
   "test_hades2_view_state_flow.py": [
+    "tests/macos_fixture_policy.py",
     "tests/management_ui_harness.py",
     "tests/slider_ui_harness.py",
     "tests/visual_hierarchy_harness.py",
@@ -18,6 +20,9 @@
     "tests/search_ui_harness.py",
     "tests/sheet_ui_harness.py"
   ],
+  "test_hades2_save_editor_frontend.py": [
+    "tests/macos_fixture_policy.py"
+  ],
   "test_hades2_lldb_breakpoint_lifetime.py": [
     "tests/hades2_lldb_worker_support.py",
     "tests/hades2_lldb_fixture.py",
@@ -25,12 +30,14 @@
     "Tools/profile_hades2_operations.py"
   ],
   "test_runtime_text_edit_completion.py": [
+    "tests/macos_fixture_policy.py",
     "tests/native_picker_harness.py"
   ],
   "test_trainer_text_field_appearance.py": [
     "tests/native_picker_harness.py"
   ],
   "test_multi_game_contexts.py": [
+    "tests/macos_fixture_policy.py",
     "tests/real_module_navigation_harness.py"
   ]
 }
