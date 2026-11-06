@@ -362,7 +362,6 @@
     "hades2.status.operable": "已连接 · 可操作",
     "hades2.status.restartRequired": "需要重启游戏",
     "hades2.status.run": "已连接 · 局内可用",
-    "hades2.status.runtimeInactive": "运行时未激活：{0}",
     "hades2.status.unverifiedBanner": "当前版本尚未验证，可继续尝试连接。",
     "hades2.status.versionDetail": "版本 {0}",
     "hades2.traits.empty": "当前局没有可显示的祝福。",

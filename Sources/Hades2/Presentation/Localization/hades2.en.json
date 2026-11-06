@@ -362,7 +362,6 @@
     "hades2.status.operable": "Connected · Ready",
     "hades2.status.restartRequired": "The Game Must Be Restarted",
     "hades2.status.run": "Connected · Available In Run",
-    "hades2.status.runtimeInactive": "Not active in the runtime: {0}",
     "hades2.status.unverifiedBanner": "The current game build is not verified; you can still try connecting.",
     "hades2.status.versionDetail": "Version {0}",
     "hades2.traits.empty": "No traits to show in the current run.",
