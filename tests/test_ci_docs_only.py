@@ -48,6 +48,22 @@ assert_scope(
     macos=False,
     module_build=False,
 )
+# Documentation is not a product build input, at any depth and in a mixed diff:
+# a docs file next to code must not escalate the lane to the unified build.
+for documentation in (
+    "README.md", "ENGINEERING_INVARIANTS.md",
+    "docs/development/lldb-fixture-lifetime.md",
+):
+    assert_scope(
+        [documentation, "tests/test_hades2_run_log_watcher.py"],
+        docs_only=False, linux=True, macos=True, module_build=False,
+        build=False, full_build=False,
+    )
+assert_scope(
+    ["docs/development/lldb-fixture-lifetime.md", "tests/test_ci_docs_only.py"],
+    docs_only=False, linux=True, macos=False, module_build=False,
+    build=False, full_build=False,
+)
 assert_scope(
     [],
     docs_only=False,
