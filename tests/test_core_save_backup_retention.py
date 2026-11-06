@@ -142,8 +142,20 @@ class BackupRetentionTests(unittest.TestCase):
             self.edit(b'interrupted', interrupted)
         interrupted_id = next(iter(self.rows()))
         transaction = self.service._transaction()
+        install = transaction._install_entries
+        attempts = []
+
+        def replace_then_fail_rollback(entries, destinations, progress=None):
+            # The real replacement lands, then the transaction fails and its
+            # rollback cannot reinstall the baseline: a genuine rollback failure.
+            attempts.append(len(entries))
+            if len(attempts) == 1:
+                install(entries, destinations, progress=progress)
+                raise OSError('synthetic disk failure after replacement')
+            raise OSError('synthetic rollback failure')
+
         with mock.patch.object(self.service, '_transaction', return_value=transaction), \
-             mock.patch.object(transaction, '_install_entries', side_effect=OSError('synthetic disk failure')):
+             mock.patch.object(transaction, '_install_entries', side_effect=replace_then_fail_rollback):
             with self.assertRaises(SaveRollbackError):
                 self.edit(b'failed')
         recovery = self.service._recovery_paths()
