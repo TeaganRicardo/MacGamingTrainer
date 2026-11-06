@@ -16,7 +16,7 @@ env:
   # merge ref), so every consumer sees exactly the proposed changes.
   BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
   HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-  MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}
+  MGT_MACOS_RUNNER_LABEL: macos-26
   DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
 jobs:
@@ -51,15 +51,15 @@ jobs:
   build:
     needs: scope
     if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest' }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
       # Hades isolated diagnostics remain part of explicit release convergence,
       # while PRs run only the reference fixture for shared module seams.
       MGT_RUN_MODULE_BUILD: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') }}
-      # PR validation uses the independent x64 pool; explicit convergence keeps
-      # the ARM64 release baseline. The selected profile is verified below.
-      MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}
+      # Pull requests and explicit convergence share the ARM64 profile; the
+      # selected profile is verified below.
+      MGT_MACOS_RUNNER_LABEL: macos-26
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     strategy:
       fail-fast: false
