@@ -68,10 +68,6 @@ jobs:
       # artifact CI never executed and needed a 2x timeout scale that hid the
       # real margins instead of measuring them.
       MGT_MACOS_RUNNER_LABEL: macos-26
-      # Journey timings are observation only; they must outlive the lane's
-      # temporary directory so the coverage artifact can carry them.
-      MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
-      MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
     steps:
@@ -124,10 +120,19 @@ jobs:
 
       - name: Run full macOS contracts for release convergence
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+        # Timings are observation only; they must outlive the lane's temporary
+        # directory so the coverage artifact can carry them. `runner` is not an
+        # available context in a job-level env block, only in a step.
+        env:
+          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
+          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
         run: bash Tools/run_macos_checks.sh
 
       - name: Run selected macOS PR smoke tests
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
+        env:
+          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
+          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
         run: bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"
 
       # Declared behavioural invariants, proven to fail when the code that
