@@ -40,9 +40,8 @@ assert "(highlightedIndex ?? -1) < destinationIndex" not in native_picker
 
 disclosure = (TESTS / "disclosure_ui_harness.py").read_text(encoding="utf-8")
 assert "let retainedPublicationDeadline = Date().addingTimeInterval(1)" in disclosure
-assert "let retirementDeadline = Date().addingTimeInterval(1)" in disclosure
-assert "while Date() < retirementDeadline" in disclosure
-assert "if settled { break }" in disclosure
+# The six retirement boundaries report their settle mode and elapsed time; that
+# contract is owned by tests/test_disclosure_boundary_readiness.py.
 assert "disclosureLifetimePump(0.01)" in disclosure
 assert "disclosureLifetimePump(0.03)" not in disclosure
 
