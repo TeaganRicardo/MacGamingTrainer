@@ -121,8 +121,12 @@ assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
 assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
 assert 'needs_full_build: ${{ steps.scope.outputs.needs_full_build }}' in build2
 assert 'needs: scope' in build2
-assert "needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in build2
-assert "MGT_MACOS_OUTER_TIMEOUT_SCALE: ${{ github.event_name == 'pull_request' && '2.0' || '1.0' }}" in build2
+assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
+assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in build2
+# The product declares only the arm64 architecture. An x64 PR profile built an
+# artifact CI never executed and needed a 2x outer scale that hid real margins.
+assert 'macos-26-intel' not in build2, 'PR and convergence must share the ARM64 profile'
+assert 'MGT_MACOS_OUTER_TIMEOUT_SCALE' not in build2, 'no runner profile may scale the outer timeout'
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
@@ -138,8 +142,9 @@ module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
-assert "matrix.game == 'reference_fixture') && (github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26') || 'ubuntu-latest'" in module_matrix
-assert "MGT_MACOS_RUNNER_LABEL: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'macos-26' }}" in module_matrix
+assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
+assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in module_matrix
+assert 'macos-26-intel' not in module_matrix, 'PR and convergence must share the ARM64 profile'
 assert "MGT_RUN_MODULE_BUILD:" in module_matrix
 assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
