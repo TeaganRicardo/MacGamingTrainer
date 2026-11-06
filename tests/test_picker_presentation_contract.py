@@ -25,6 +25,44 @@ assert "Color.white.opacity" not in picker
 assert "case .interactive: Color(red:" in picker
 assert "case .unavailable: Color(red:" in picker
 
+# The corrected presentation keeps the native control height and the app's
+# dark identity. The previous redraw inflated every Picker to 34 pt and painted
+# a near-white surface, which is the regression this contract now forbids.
+assert "frame(minHeight: 34)" not in picker
+assert ".frame(minHeight:" not in picker
+assert "0.965" not in picker
+assert ".padding(.leading, 4)" in picker
+assert ".disabled(effectiveState != .interactive)" in picker
+
+# Appearance is owned once at the AppKit application boundary. Re-forcing it on
+# every NSPopUpButton would hide the real defect (per-view dark declarations do
+# not cover windows, sheets, panels and reconstructed native controls) and would
+# leave any other native control free to resolve the light system appearance.
+app_source = (ROOT / "Sources/App.swift").read_text()
+assert "applicationWillFinishLaunching" in app_source
+assert "NSApp.appearance = NSAppearance(named: .darkAqua)" in app_source
+assert "button.appearance" not in picker
+assert "button.menu?.appearance" not in picker
+
+
+def fill_luminance(name: str) -> float:
+    match = re.search(
+        rf"case \.{name}: Color\(red: ([\d.]+), green: ([\d.]+), blue: ([\d.]+)\)",
+        picker,
+    )
+    assert match, f"{name} Picker fill is missing"
+    red, green, blue = (float(value) for value in match.groups())
+    return (red + green + blue) / 3
+
+
+interactive_luminance = fill_luminance("interactive")
+unavailable_luminance = fill_luminance("unavailable")
+assert interactive_luminance < 0.32, "interactive Picker must use a dark surface"
+assert unavailable_luminance < 0.32, "unavailable Picker must use a dark surface"
+assert unavailable_luminance < interactive_luminance, (
+    "unavailable Picker must read as a dimmed interactive surface"
+)
+
 # Every production visual Picker passes through the shared presentation owner.
 # The language Picker lives inside a command menu rather than the app's control
 # surfaces, so it intentionally remains native.

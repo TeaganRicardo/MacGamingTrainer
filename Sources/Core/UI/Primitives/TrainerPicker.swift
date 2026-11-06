@@ -21,26 +21,33 @@ private struct TrainerPickerPresentationModifier: ViewModifier {
         state.allowsInteraction && environmentEnabled ? .interactive : .unavailable
     }
 
+    /// Both classes stay inside the app's dark hierarchy. The interactive
+    /// surface tracks the native dark popup family; the unavailable surface is
+    /// the same control dimmed, never the light system appearance.
     private var fill: Color {
         switch effectiveState {
-        case .interactive: Color(red: 0.965, green: 0.965, blue: 0.975)
-        case .unavailable: Color(red: 0.585, green: 0.595, blue: 0.615)
+        case .interactive: Color(red: 0.208, green: 0.212, blue: 0.231)
+        case .unavailable: Color(red: 0.137, green: 0.141, blue: 0.157)
         }
     }
 
     private var boundary: Color {
         switch effectiveState {
-        case .interactive: Color.black.opacity(0.10)
-        case .unavailable: Color.black.opacity(0.08)
+        case .interactive: Color(red: 0.310, green: 0.318, blue: 0.345)
+        case .unavailable: Color(red: 0.192, green: 0.196, blue: 0.212)
         }
     }
 
     func body(content: Content) -> some View {
         content
             .pickerStyle(.menu)
+            // A borderless NSPopUpButton drops its title origin from x=12 to
+            // x=8 (measured against the regular bordered cell). Restore the
+            // native 4 pt inset inside the fixed width so text stays aligned
+            // with every other row value; the control height is never forced.
+            .padding(.leading, 4)
             .trainerPickerWidth(role)
             .controlSize(.regular)
-            .frame(minHeight: 34)
             .background(fill, in: RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous)
@@ -57,7 +64,7 @@ private struct TrainerPickerPresentationModifier: ViewModifier {
                     .accessibilityHidden(true)
             }
             .clipShape(RoundedRectangle(cornerRadius: theme.compactCornerRadius, style: .continuous))
-            .disabled(!state.allowsInteraction)
+            .disabled(effectiveState != .interactive)
     }
 }
 
@@ -68,29 +75,38 @@ private struct TrainerPickerIndicator: View {
 
     var body: some View {
         ZStack {
+            // Mask the native popup chevron so the product indicator is the
+            // only trailing mark; the strip matches the control surface.
             Rectangle().fill(fill)
             VStack(spacing: -2) {
                 Image(systemName: "chevron.up")
                 Image(systemName: "chevron.down")
             }
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(state == .interactive ? Color.white : Color.black.opacity(0.30))
-            .frame(width: 24, height: 24)
+            .font(.system(size: 7, weight: .bold))
+            .foregroundStyle(
+                state == .interactive
+                    ? Color(red: 1.0, green: 1.0, blue: 1.0)
+                    : Color(red: 0.44, green: 0.45, blue: 0.48)
+            )
+            .frame(width: 18, height: 18)
             .background(
-                state == .interactive ? theme.accent : Color.clear,
-                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                state == .interactive
+                    ? theme.accent
+                    : Color(red: 0.200, green: 0.205, blue: 0.220),
+                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
             )
         }
-        .frame(width: 32)
+        .frame(width: 24)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
 
-/// SwiftUI still hosts Picker as NSPopUpButton on macOS. Strip the native
-/// bezel/focus drawing so it cannot leak system white/blue variants through
-/// retained or reconstructed controls; SwiftUI above owns the two product
-/// presentations. The native button continues to own menu semantics and AX.
+/// SwiftUI still hosts Picker as NSPopUpButton on macOS. The application owns
+/// the dark appearance once (see AppDelegate); this bridge only removes the
+/// native bezel/focus chrome that would otherwise resolve the system accent,
+/// and keeps the product text tint. The native button continues to own menu
+/// semantics, title metrics and AX.
 private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
     let state: TrainerPickerPresentationState
 
@@ -156,9 +172,12 @@ private struct TrainerNativePickerPresentationBridge: NSViewRepresentable {
 
         private func applyPresentation(to button: NSPopUpButton) {
             let tint = state == .interactive
-                ? NSColor(calibratedWhite: 0.10, alpha: 0.92)
-                : NSColor(calibratedWhite: 0.30, alpha: 0.72)
+                ? NSColor(calibratedWhite: 0.92, alpha: 1.0)
+                : NSColor(calibratedWhite: 0.46, alpha: 1.0)
 
+            // Appearance is owned once by NSApp (see AppDelegate). This owner
+            // only removes the native bezel/focus chrome that would otherwise
+            // resolve the system accent, and keeps the product text tint.
             if button.isBordered { button.isBordered = false }
             if button.focusRingType != .none { button.focusRingType = .none }
             if button.bezelColor != nil { button.bezelColor = nil }

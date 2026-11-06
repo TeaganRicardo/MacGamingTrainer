@@ -17,7 +17,7 @@ Profiles/shortcuts/diagnostics, Save Editor and typed Advanced editing.
 | Shortcut badges | `TrainerBadge.swift` | Actual action registration and ordered allocation |
 | Panels, grouped-row clipping, spacing and Picker width tokens | `Sources/Core/UI/TrainerTheme.swift` | Section and multi-control composition |
 | Sheets, tool windows and feedback | Core sheet/window/feedback components | Profiles, diagnostics, Save workspaces and receipts |
-| Native popup menus and contextual actions | SwiftUI `Picker`, `Menu` and `Button` | Trait lifecycle actions, shortcut capture, save selection and contextual menus; every in-window Picker uses a Core width role |
+| Native popup menus and contextual actions | SwiftUI `Picker`, `Menu` and `Button` | Trait lifecycle actions, shortcut capture, save selection and contextual menus; every in-window Picker uses the Core presentation owner and a Core width role |
 
 Not every native control is instantiated through a Host wrapper. Game-owned
 popup content and some native contextual buttons remain direct SwiftUI calls.
@@ -45,15 +45,32 @@ editing and the native `GetRarityChances` hook are removed. The existing v17
 serialized `multiplier` field stays at its neutral value for stored documents
 and transport compatibility; old values cannot change native probabilities.
 
-## Picker widths and material editor layout
+## Picker presentation, widths and material editor layout
 
-Every in-window native SwiftUI `Picker` uses `.trainerPickerWidth(...)` from Core. The
-width roles are compact (152 pt) for short categorical values, standard (216 pt)
-for ordinary selectors, wide (288 pt) for long source/profile labels, and
-flexible (minimum 216 pt, then fills its parent row) for selectors in shared
-columns. Call sites select a semantic role; they do not set independent widths
-or content-driven maximums. Two selectors in the same comparison row use the
-same role so their columns remain balanced.
+Every in-window native SwiftUI `Picker` uses `.trainerPicker(...)` from Core. The
+caller selects a semantic width role and a presentation state:
+
+- width roles: compact (152 pt), standard (216 pt), wide (288 pt), flexible
+  (minimum 216 pt, then fills its parent row);
+- presentation states: `interactive` and `unavailable`.
+
+Width is geometry only and stays independent from presentation. Call sites do
+not set independent widths, content-driven maximums or raw `.disabled(...)` on
+the Picker. Two selectors in the same comparison row use the same role so their
+columns remain balanced.
+
+Both presentations are dark-mode surfaces. The application declares
+`NSApp.appearance = .darkAqua` once at launch, so every window, sheet, panel,
+menu and reconstructed native control inherits the dark appearance; per-view
+`.preferredColorScheme` is not the AppKit appearance owner. `interactive` keeps
+the native dark control surface with the product purple indicator; `unavailable`
+is the same control dimmed with a muted indicator. The native focus ring is
+suppressed because AppKit would draw it with the system accent; the product
+indicator is the only accent mark. Native control height and title metrics are
+retained: the shared owner must not add a fixed minimum height. Removing the
+native bezel drops the popup title origin from x=12 to x=8, so the owner restores
+the measured 4 pt leading inset inside the fixed width; text alignment then
+matches a bordered popup at every row.
 
 The Hades II material editor is a two-row control: the first row holds its
 icon/title and search field; the second holds the flexible material Picker,
