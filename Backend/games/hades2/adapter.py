@@ -373,7 +373,10 @@ class Hades2Adapter(GameAdapter):
         # on the next trainer launch.
         self._persist_preferences_candidate(preferences)
         self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=False
+        # The reset is durable, not yet observed: the resident may still hold
+        # every feature and lock if the teardown never runs (for example a
+        # waiting boon menu). Only a confirmed replay clears reconciliation.
+        self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
 
     def reset_desired(self):
