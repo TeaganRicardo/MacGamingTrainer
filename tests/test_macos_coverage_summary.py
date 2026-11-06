@@ -40,13 +40,14 @@ assert report["passed"] == 1 and report["failed"] == 1
 assert report["deferred"] == 3, report["deferred"]
 assert report["not_selected"] == 1, report["not_selected"]
 assert report["inventory"] == 6
-assert report["deferred_covered"] is True
+assert report["deferred_verified"] is False, "a PR lane cannot verify what it deferred"
 assert set(report["deferred_tests"]) == set(summary.PR_DEFERRED)
 
 convergence = coverage("convergence", sorted(INVENTORY),
                        [{"test": name, "status": "pass"} for name in sorted(INVENTORY)],
                        INVENTORY)
 assert convergence["deferred"] == 0, "convergence must not defer native coverage"
+assert convergence["deferred_verified"] is True
 assert convergence["executed"] == convergence["selected"] == 6
 assert convergence["not_selected"] == 0
 
@@ -64,6 +65,16 @@ for description, lane, selected, results, inventory in (
         pass
     else:
         raise AssertionError(f"coverage contract accepted {description}")
+
+# Claiming the convergence lane while running part of it would report deferred
+# work as verified by a run that never executed it.
+try:
+    coverage("convergence", ["test_hades_frontend.py"],
+             [{"test": "test_hades_frontend.py", "status": "pass"}], INVENTORY)
+except CoverageError as error:
+    assert "whole inventory" in str(error), error
+else:
+    raise AssertionError("a partial convergence run was accepted")
 
 # A pull request may legitimately affect no macOS behavior; it must say so
 # rather than fail or imply that something ran.
@@ -96,7 +107,7 @@ assert trend[0]["budget_seconds"] == 60.0, trend
 block = render(report, trend, IDENTITY)
 for token in ("lane=pr", "profile=macos-26", "source=af69f2e", "image=macos-26/1",
               "selected=2", "executed=2", "passed=1", "failed=1", "deferred=3",
-              "not_selected=1", "inventory=6", "deferred_covered=true", "no threshold"):
+              "not_selected=1", "inventory=6", "deferred_verified=false", "no threshold"):
     assert token in block, token
 for name, deferral in summary.PR_DEFERRED.items():
     assert f"deferred {name}" in block, name
@@ -118,6 +129,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     results.write_text("test_hades_frontend.py\tpass\n"
                        "test_hades2_save_editor_frontend.py\tfail\n", encoding="utf-8")
     timings.write_text(json.dumps(records[0], sort_keys=True) + "\n", encoding="utf-8")
+    # A retained artifact holds coverage and result rows beside the timings, so
+    # merging two artifacts must not fail on the rows that carry no timing.
+    mixed = root / "mixed.jsonl"
+    mixed.write_text(
+        json.dumps({"kind": "coverage", "lane": "pr"}) + "\n"
+        + json.dumps({"kind": "result", "test": "x", "status": "pass"}) + "\n"
+        + json.dumps(records[0], sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    assert [row["journey"] for row in summary.read_timings(mixed)] == ["hades.disclosure"]
     assert summary.main([
         "--lane", "pr", "--selected", str(selected), "--results", str(results),
         "--timings", str(timings), "--output", str(output), "--summary", str(step),
@@ -138,13 +159,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     assert rows[0]["architecture"] == identity["architecture"], rows[0]
     assert "macOS coverage" in step.read_text(encoding="utf-8")
 
-    # A lane that cannot prove its deferral coverage fails closed.
+    # A partial selection is a valid report; it must simply say so.
     selected.write_text("test_hades_frontend.py\n", encoding="utf-8")
     results.write_text("test_hades_frontend.py\tpass\n", encoding="utf-8")
     assert summary.main([
         "--lane", "pr", "--selected", str(selected), "--results", str(results),
     ]) == 0
 
+    # A lane that would claim coverage it did not run fails closed.
     results.write_text("test_hades_frontend.py\tpass\ntest_unknown.py\tpass\n", encoding="utf-8")
     assert summary.main([
         "--lane", "pr", "--selected", str(selected), "--results", str(results),

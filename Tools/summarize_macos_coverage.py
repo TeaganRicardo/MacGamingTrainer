@@ -65,13 +65,24 @@ def read_results(path: Path | None) -> list[dict[str, str]]:
 
 
 def read_timings(path: Path | None) -> list[dict]:
+    """Read timing observations, skipping the other records in an artifact.
+
+    A retained artifact holds `coverage` and `result` rows beside the `timing`
+    ones, so feeding two artifacts back in as a baseline must not fail on the
+    rows that carry no timing.
+    """
     records = []
     for line in _lines(path):
         try:
             record = json.loads(line)
         except json.JSONDecodeError as error:
             raise CoverageError(f"unreadable timing record: {line!r}") from error
-        if not isinstance(record, dict) or "journey" not in record:
+        if not isinstance(record, dict):
+            raise CoverageError(f"timing record is not an object: {line!r}")
+        kind = record.get("kind")
+        if kind is not None and kind != "timing":
+            continue
+        if "journey" not in record:
             raise CoverageError(f"timing record is missing its journey: {line!r}")
         records.append(record)
     return records
@@ -94,6 +105,13 @@ def coverage(lane: str, selected: list[str], results: list[dict[str, str]],
         raise CoverageError(
             f"deferred tests are missing from the convergence inventory: {unverifiable}"
         )
+    if lane == "convergence" and not inventory <= set(selected):
+        # Claiming the convergence lane while running part of it would report
+        # deferred work as verified by a run that never executed it.
+        raise CoverageError(
+            "convergence must select the whole inventory; missing: "
+            + ", ".join(sorted(inventory - set(selected))[:6])
+        )
 
     executed = [row["test"] for row in results]
     unexpected = sorted(set(executed) - set(selected))
@@ -115,7 +133,10 @@ def coverage(lane: str, selected: list[str], results: list[dict[str, str]],
         "deferred_tests": deferred,
         "not_selected": len(inventory - set(selected) - set(deferred)),
         "inventory": len(inventory),
-        "deferred_covered": True,
+        # True only when this lane executed the suites it would otherwise have
+        # deferred. On a pull request that is false by construction, and the
+        # block must not read as though the deferred work passed.
+        "deferred_verified": set(deferred) <= set(executed),
         "passed_tests": passed,
         "failed_tests": failed,
     }
@@ -161,8 +182,8 @@ def render(report: dict[str, object], timings: list[dict], identity: dict[str, s
     for name, deferral in sorted(report["deferred_tests"].items()):
         lines.append(f"  deferred {name} reason=\"{deferral.reason}\" owner=\"{deferral.verification_owner}\"")
     lines.append(
-        f"  inventory={report['inventory']} deferred_covered="
-        f"{str(report['deferred_covered']).lower()}"
+        f"  inventory={report['inventory']} deferred_verified="
+        f"{str(report['deferred_verified']).lower()}"
     )
     if timings:
         lines.append(f"  timings={len(timings)} journey/profile samples (observation only, no threshold)")
@@ -198,7 +219,7 @@ def write_jsonl(path: Path, report: dict[str, object], timings: list[dict],
         "deferred": report["deferred"],
         "not_selected": report["not_selected"],
         "inventory": report["inventory"],
-        "deferred_covered": report["deferred_covered"],
+        "deferred_verified": report["deferred_verified"],
         **identity,
     }]
     for name in report["passed_tests"]:
