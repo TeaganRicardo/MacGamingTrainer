@@ -5,6 +5,7 @@ and an unmet semantic predicate stay three different outcomes. These checks are
 portable: they never require AppKit or a hosted runner.
 """
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -146,6 +147,34 @@ with tempfile.TemporaryDirectory(prefix="mgt-watchdog-") as directory:
         time.sleep(0.05)
     else:
         raise AssertionError("owned worker survived the watchdog's cleanup")
+
+# A worker that outlives its parent still holds the write end of the pipe. The
+# watchdog must report on its own schedule rather than read that pipe to EOF,
+# which would make the watchdog the hang it exists to report.
+with tempfile.TemporaryDirectory(prefix="mgt-orphan-") as directory:
+    pid_file = Path(directory) / "orphan.pid"
+    parent = (
+        "import pathlib, subprocess, sys\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        "pathlib.Path(sys.argv[1]).write_text(str(child.pid))\n"
+        "sys.exit(0)\n"
+    )
+    started = time.monotonic()
+    try:
+        run_watchdog([sys.executable, "-c", parent, str(pid_file)],
+                     budget=FixtureBudget("test.orphan", LOCAL_PROFILE, 0.5),
+                     capture_output=True, text=True)
+    except FixtureWatchdogExpired:
+        pass
+    else:
+        raise AssertionError("an orphaned worker holding the pipe was reported as a normal exit")
+    waited = time.monotonic() - started
+    assert waited < 10, f"the watchdog outlived its budget by {waited:.1f}s"
+    orphan = int(pid_file.read_text())
+    try:
+        os.kill(orphan, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 # The fixture must keep the harness's process group and session: a new group or
 # a detached session changes AppKit activation and made a native journey fail

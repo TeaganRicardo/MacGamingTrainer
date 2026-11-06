@@ -255,34 +255,63 @@ def _signal(pid: int, number: int) -> None:
         pass
 
 
-def _terminate(process: subprocess.Popen) -> None:
+def _terminate(process: subprocess.Popen, fallback: Sequence[int] = ()) -> None:
     """Stop the fixture and the workers it owns, and nothing else.
 
     The fixture keeps the harness's process group and session. A new group or a
     detached session changes AppKit activation and key-window state, which made
     a native journey fail its own readiness wait, so ownership is tracked by the
-    observed process tree instead.
+    observed process tree instead. `fallback` holds a snapshot taken at launch,
+    because a fixture that exits before the deadline reparents its workers and
+    they can no longer be found from its pid.
     """
-    if process.poll() is not None:
-        return
-    owned = _descendants(process.pid)
-    for pid in owned:
-        _signal(pid, signal.SIGTERM)
-    try:
-        process.terminate()
-    except (ProcessLookupError, PermissionError):
-        pass
-    try:
-        process.wait(timeout=GROUP_TERMINATION_GRACE_SECONDS)
-    except subprocess.TimeoutExpired:
-        pass
+    owned = list(dict.fromkeys([*_descendants(process.pid), *fallback]))
     if process.poll() is None:
+        for pid in owned:
+            _signal(pid, signal.SIGTERM)
         try:
-            process.kill()
+            process.terminate()
         except (ProcessLookupError, PermissionError):
             pass
+        try:
+            process.wait(timeout=GROUP_TERMINATION_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            pass
+        if process.poll() is None:
+            try:
+                process.kill()
+            except (ProcessLookupError, PermissionError):
+                pass
     for pid in owned:
         _signal(pid, signal.SIGKILL)
+
+
+def _drain(process: subprocess.Popen,
+           timeout: float) -> tuple[str | None, str | None]:
+    """Collect the fixture's output without outliving its own watchdog.
+
+    A worker that outlived its parent still holds the write end of the pipe, so
+    reading to EOF would make the watchdog the hang it exists to report. When
+    the grace window expires, stop reading and report without output; the phase
+    file and the owned journals still describe the stall.
+    """
+    try:
+        return process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        for stream in (process.stdout, process.stderr):
+            try:
+                if stream is not None:
+                    stream.close()
+            except OSError:
+                pass
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except (ProcessLookupError, PermissionError):
+                pass
+        return None, None
 
 
 def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
@@ -306,18 +335,15 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
         kwargs.setdefault("stderr", subprocess.PIPE)
     started = time.monotonic()
     process = subprocess.Popen(list(argv), **kwargs)
+    # One cheap snapshot at launch: a fixture that exits before its deadline
+    # reparents its workers, and their pids can no longer be recovered from it.
+    launched = _descendants(process.pid)
     try:
         stdout, stderr = process.communicate(timeout=budget.seconds)
     except subprocess.TimeoutExpired:
         elapsed = time.monotonic() - started
-        _terminate(process)
-        try:
-            stdout, stderr = process.communicate(timeout=GROUP_TERMINATION_GRACE_SECONDS)
-        except subprocess.TimeoutExpired:
-            # A descendant that outlived its parent still holds a pipe; do not
-            # let the watchdog itself become the hang it is meant to report.
-            process.kill()
-            stdout, stderr = process.communicate()
+        _terminate(process, launched)
+        stdout, stderr = _drain(process, GROUP_TERMINATION_GRACE_SECONDS)
         phase = _read_phase(phase_file)
         _report_expiry(budget, elapsed, phase, stdout, stderr, tuple(diagnostics), env)
         raise FixtureWatchdogExpired(budget, elapsed, phase, stdout, stderr) from None
