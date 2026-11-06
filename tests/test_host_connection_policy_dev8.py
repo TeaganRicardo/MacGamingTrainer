@@ -230,6 +230,40 @@ if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
     fail("target-exit refresh was not one-shot")
 }
 
+// A target exit while a connect request is still in flight must also keep
+// its refresh: the connect reply can report connected=true for the process
+// that already exited, and only the deferred refresh corrects that.
+var exitDuringConnectPolicy = TrainerConnectionPolicy()
+exitDuringConnectPolicy.targetStateChanged(running: true)
+exitDuringConnectPolicy.targetStateChanged(running: false)
+if exitDuringConnectPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: true,
+    connected: false
+) {
+    fail("target-exit refresh ran while the connect was still busy")
+}
+exitDuringConnectPolicy.connectionChanged(connected: true)
+if !exitDuringConnectPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: true
+) {
+    fail("a connect in flight discarded the target-exit refresh")
+}
+
+// Idle and disconnected, there is no stale observation left to refresh.
+var exitWhileIdlePolicy = TrainerConnectionPolicy()
+exitWhileIdlePolicy.targetStateChanged(running: true)
+exitWhileIdlePolicy.targetStateChanged(running: false)
+if exitWhileIdlePolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: false
+) || exitWhileIdlePolicy.targetExitRefreshRequested {
+    fail("an idle disconnected exit kept a refresh it cannot use")
+}
+
 // A target exit invalidates the observed connection even if a replacement
 // process launches before the old busy request can finish. The new lifetime
 // must not erase that invalidation: otherwise a transport-free reply can leave

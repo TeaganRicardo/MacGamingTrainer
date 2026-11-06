@@ -131,13 +131,11 @@ struct TrainerConnectionPolicy {
         connected: Bool
     ) -> Bool {
         guard targetExitRefreshRequested else { return false }
-        guard connected else {
-            targetExitRefreshRequested = false
-            return false
-        }
+        // Busy work, including a connect still in flight, may yet report
+        // connected=true for the exited process: keep the refresh until idle.
         guard backendAvailable, !busy else { return false }
         targetExitRefreshRequested = false
-        return true
+        return connected
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
