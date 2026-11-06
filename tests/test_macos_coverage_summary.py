@@ -126,7 +126,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
     kinds = [row["kind"] for row in rows]
     assert kinds[0] == "coverage" and "timing" in kinds and "result" in kinds, kinds
-    assert rows[0]["source"] == "af69f2e" or rows[0]["source"] == "local", rows[0]
+    # The artifact is tagged with the lane's own identity, whatever it is.
+    identity = summary._identity()
+    assert rows[0]["source"] == identity["source"], rows[0]
+    assert rows[0]["profile"] == identity["profile"], rows[0]
+    assert rows[0]["architecture"] == identity["architecture"], rows[0]
     assert "macOS coverage" in step.read_text(encoding="utf-8")
 
     # A lane that cannot prove its deferral coverage fails closed.
