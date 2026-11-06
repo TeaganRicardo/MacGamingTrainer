@@ -186,6 +186,9 @@ assert_scope(["tests/native_picker_harness.py"],
 # The watchdog policy is a native fixture input, not a portable-only helper.
 assert_scope(["tests/macos_fixture_policy.py"],
              docs_only=False, linux=True, macos=True, module_build=False, build=False)
+# Coverage reporting interprets test metadata; it never builds the product.
+assert_scope(["Tools/summarize_macos_coverage.py"],
+             docs_only=False, linux=True, macos=False, module_build=False, build=False)
 # Native test ownership must not classify the production controls as fixture
 # support and thereby suppress the product compiler preflight.
 for source in (

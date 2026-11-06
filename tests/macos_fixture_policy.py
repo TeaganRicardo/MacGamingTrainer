@@ -15,7 +15,9 @@ which is a different outcome from a failed semantic assertion.
 """
 from __future__ import annotations
 
+import json
 import os
+import platform
 import signal
 import subprocess
 import sys
@@ -31,6 +33,7 @@ LOCAL_PROFILE = "local"
 # cannot state its profile has no verified budget and must fail closed.
 PROFILE_VARIABLE = "MGT_MACOS_RUNNER_LABEL"
 SOURCE_VARIABLE = "HEAD_SHA"
+TIMINGS_VARIABLE = "MGT_FIXTURE_TIMINGS"
 
 # Hosted values are the previously effective ARM64 budgets. They are hang
 # containment, not performance targets: each one stays well above the measured
@@ -159,6 +162,32 @@ def _source_identity(environ: Mapping[str, str]) -> str:
     sha = environ.get(SOURCE_VARIABLE) or environ.get("GITHUB_SHA") or ""
     sha = sha.strip()
     return sha[:12] if sha else "local"
+
+
+def _record_timing(budget: FixtureBudget, elapsed: float, outcome: str,
+                   environ: Mapping[str, str]) -> None:
+    """Append one bounded observation. Timing never changes a fixture's verdict."""
+    path = environ.get(TIMINGS_VARIABLE, "").strip()
+    if not path:
+        return
+    record = {
+        "journey": budget.journey,
+        "profile": budget.profile,
+        "budget_seconds": budget.seconds,
+        "elapsed_seconds": round(elapsed, 3),
+        "outcome": outcome,
+        "source": _source_identity(environ),
+        "architecture": environ.get("RUNNER_ARCH", "").strip() or platform.machine(),
+        "image": environ.get("ImageOS", "").strip(),
+        "image_version": environ.get("ImageVersion", "").strip(),
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+    except OSError as error:
+        # Observation must not turn a passing fixture into a failing one.
+        print(f"macos_fixture_timing_unwritten {budget.journey}: {error}",
+              file=sys.stderr, flush=True)
 
 
 def _tail(text: str | None, limit: int = DIAGNOSTIC_TAIL_CHARACTERS) -> str:
@@ -346,10 +375,12 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
         stdout, stderr = _drain(process, GROUP_TERMINATION_GRACE_SECONDS)
         phase = _read_phase(phase_file)
         _report_expiry(budget, elapsed, phase, stdout, stderr, tuple(diagnostics), env)
+        _record_timing(budget, elapsed, "watchdog_expired", env)
         raise FixtureWatchdogExpired(budget, elapsed, phase, stdout, stderr) from None
     elapsed = time.monotonic() - started
     print(f"macos_fixture_watchdog_done {budget.describe()} elapsed={elapsed:.1f}s",
           flush=True)
+    _record_timing(budget, elapsed, "completed", env)
     return subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
 
 

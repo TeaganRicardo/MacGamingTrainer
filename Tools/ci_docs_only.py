@@ -27,6 +27,7 @@ PORTABLE_TOOL_PATHS = {
     "Tools/run_linux_checks.sh",
     "Tools/ci_docs_only.py",
     "Tools/select_macos_pr_tests.py",
+    "Tools/summarize_macos_coverage.py",
 }
 MACOS_TEST_DEPENDENCIES_PATH = "Tools/macos_test_dependencies.json"
 # Only native/module composition boundaries need the reference-fixture compiler lane.

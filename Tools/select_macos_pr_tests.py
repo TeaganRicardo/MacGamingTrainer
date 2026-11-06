@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from ci_docs_only import (
@@ -30,11 +31,28 @@ BUILD_SMOKE = "test_build_signing_metadata_macos.py"
 # even though the product is correct. They stay in the convergence inventory and
 # run against an exact SHA there; gating every PR on them only produced
 # non-deterministic red results.
-PR_DEFERRED = frozenset({
-    "test_hades2_view_state_flow.py",
-    "test_multi_game_contexts.py",
-    "test_runtime_text_edit_completion.py",
-})
+@dataclass(frozen=True)
+class Deferral:
+    """Why a native journey is absent from the PR lane, and who verifies it."""
+
+    reason: str
+    verification_owner: str
+
+
+PR_DEFERRED: dict[str, Deferral] = {
+    "test_hades2_view_state_flow.py": Deferral(
+        reason="asserts native focus, key-window and foreground activation",
+        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+    ),
+    "test_multi_game_contexts.py": Deferral(
+        reason="drives two real module adapters through foreground activation",
+        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+    ),
+    "test_runtime_text_edit_completion.py": Deferral(
+        reason="requires a focused native field editor in the foreground",
+        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+    ),
+}
 
 
 def source_directories(root: Path = ROOT) -> dict[str, str]:

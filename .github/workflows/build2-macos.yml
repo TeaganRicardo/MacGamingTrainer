@@ -68,6 +68,10 @@ jobs:
       # artifact CI never executed and needed a 2x timeout scale that hid the
       # real margins instead of measuring them.
       MGT_MACOS_RUNNER_LABEL: macos-26
+      # Journey timings are observation only; they must outlive the lane's
+      # temporary directory so the coverage artifact can carry them.
+      MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
+      MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
     steps:
@@ -223,4 +227,15 @@ jobs:
             artifacts/${{ steps.package.outputs.provenance_name }}
             artifacts/${{ steps.package.outputs.sidecar_name }}
           if-no-files-found: error
+          retention-days: 14
+
+      # Coverage and timing evidence is diagnostic, so it is retained on every
+      # macOS run, including a failed one, and never gates the lane.
+      - name: Retain macOS coverage and journey timing evidence
+        if: needs.scope.outputs.needs_macos == 'true' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/macos-coverage.jsonl
+          if-no-files-found: warn
           retention-days: 14
