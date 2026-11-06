@@ -117,6 +117,30 @@ def app_spec_from_manifest(raw, game_id, game_display_name, executable):
     return AppBuildSpec(bundle_identifier, display_name.strip(), executable)
 
 
+def load_product_declaration(required=True):
+    """Read the unified product declaration owned by ``app.json``.
+
+    A module-only project (for example the isolated reference fixture) has no
+    product declaration; callers that merely compare identities pass
+    ``required=False`` and receive ``None``. A present declaration is always
+    validated, so a malformed product file never weakens a check.
+    """
+    path = ROOT / 'app.json'
+    if not path.exists():
+        if required:
+            raise ManifestError('app.json product declaration is missing.')
+        return None
+    raw = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(raw, dict) or raw.get('schemaVersion') != 1:
+        raise ManifestError('app.json schemaVersion must be 1.')
+    return raw
+
+
+def product_app_spec(raw, executable):
+    """Resolve the product App identity; app.json is its only owner."""
+    return app_spec_from_manifest(raw, 'product', 'Product', executable)
+
+
 def load_manifest(game_id: str) -> BuildManifest:
     path = manifest_path(game_id)
     runtime = GameModuleManifest.load(path)

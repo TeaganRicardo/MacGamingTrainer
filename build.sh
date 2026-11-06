@@ -151,7 +151,10 @@ PY
 }
 
 read -r -a GAME_IDS <<< "$(manifest_field moduleIDs)"
-ACTIVE_GAME_ID="${GAME_IDS[0]}"
+# Packaged selection marker: "all" for the unified product, or the module ID of
+# an isolated diagnostic App. Publication and verification compare it, so a
+# diagnostic build can never be mistaken for the product it is not.
+SELECTION_ID="$(manifest_field id)"
 GAME_SELECTION_CSV="$(IFS=,; echo "${GAME_IDS[*]}")"
 ARCHITECTURES_RAW="$(manifest_field frontend.architectures)"
 MIN_MACOS="$(manifest_field frontend.minimumMacOS)"
@@ -217,7 +220,7 @@ while IFS= read -r directory; do
     while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/$directory" -type f -name '*.swift' | sort)
 done < <("$PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["frontend"]["sourceDirectories"]))' "$NORMALIZED_MANIFEST")
 SWIFT_SOURCES+=("$GENERATED_SWIFT")
-[[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
+[[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $SELECTION_ID." >&2; exit 1; }
 
 record_build_timing "product-frontend-inputs"
 
@@ -452,7 +455,7 @@ Path(sys.argv[2]).write_text(json.dumps(selection['moduleIDs']) + '\n')
 PY
 
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
-printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
+printf '%s\n' "$SELECTION_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
 record_build_timing "backend-and-native"
 
 HAS_ICON=0

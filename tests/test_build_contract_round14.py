@@ -12,8 +12,9 @@ base_plist = plistlib.loads((root/'Info.plist').read_bytes())
 
 assert manifest['frontend']['architectures'] == ['arm64']
 assert manifest['frontend']['minimumMacOS'] == '14.0'
-assert manifest['app']['bundleIdentifier'] == 'com.gao.macgamingtrainer'
-assert manifest['app']['displayName'] == 'Mac Gaming Trainer'
+# app.json owns the product identity; the isolated diagnostic module App
+# resolves its own distinct default identity (see test_app_identity_contract).
+assert 'app' not in manifest
 assert 'ui' not in manifest
 
 # Runtime core cannot grow into a universal build/UI schema again. Check the
@@ -65,7 +66,9 @@ normalized = json.loads(subprocess.check_output(
     ['python3', str(root/'Tools/validate_game_module.py'), 'hades2', '--json'], text=True
 ))
 assert normalized['frontend']['architectures'] == ['arm64']
-assert normalized['app']['bundleIdentifier'] == 'com.gao.macgamingtrainer'
+product_app = json.loads((root/'app.json').read_text())['app']
+assert normalized['app']['bundleIdentifier'] != product_app['bundleIdentifier']
+assert normalized['app']['displayName'] != product_app['displayName']
 assert normalized['backend']['adapter'] == 'games.hades2.adapter:Hades2Adapter'
 assert normalized['saveManagement'] == {
     'supported': True,

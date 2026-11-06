@@ -10,6 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 MANIFEST_PATH = ROOT / 'Backend/games/hades2/module.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text())
+# The isolated diagnostic identity is resolved by the module validator owner.
+APP = json.loads(subprocess.check_output(
+    [sys.executable, str(ROOT / 'Tools/validate_game_module.py'), 'hades2', '--json'], text=True,
+))['app']
 VERIFY = ROOT / 'Tools/verify_module_build.py'
 PYTHON_RUNTIME_SOURCE = json.loads((ROOT / 'Tools/python_runtime.json').read_text())
 
@@ -53,7 +57,7 @@ assert 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.
 with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     dist = Path(temporary)
     (dist / 'A-Stale.app').mkdir()
-    app = dist / f"{MANIFEST['app']['displayName']}.app"
+    app = dist / f"{APP['displayName']}.app"
     resources = app / 'Contents/Resources'
     games = resources / 'Backend/games/hades2'
     games.mkdir(parents=True)
@@ -67,9 +71,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
         native.write_bytes(b'temporary native library fixture')
     (resources / 'ACTIVE_GAME_ID').write_text('hades2\n')
     info = {
-        'CFBundleIdentifier': MANIFEST['app']['bundleIdentifier'],
-        'CFBundleName': MANIFEST['app']['displayName'],
-        'CFBundleDisplayName': MANIFEST['app']['displayName'],
+        'CFBundleIdentifier': APP['bundleIdentifier'],
+        'CFBundleName': APP['displayName'],
+        'CFBundleDisplayName': APP['displayName'],
         'CFBundleExecutable': plistlib.loads((ROOT / 'Info.plist').read_bytes())['CFBundleExecutable'],
     }
     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
@@ -131,6 +135,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
             capture_output=True,
         )
         assert missing.returncode != 0
-        assert f"{MANIFEST['app']['displayName']}.app" in missing.stderr
+        assert f"{APP['displayName']}.app" in missing.stderr
 
 print('module_build_output_ok')

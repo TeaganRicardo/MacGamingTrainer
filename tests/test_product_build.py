@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         packaged = resources / 'Backend/games' / module.id
         shutil.copytree(module.runtime.source_path.parent, packaged)
         (packaged / 'native/libBridge.dylib').write_bytes(b'fixture library')
-    (resources / 'ACTIVE_GAME_ID').write_text('one\n')
+    (resources / 'ACTIVE_GAME_ID').write_text('all\n')
     (resources / 'GAME_MODULES.json').write_text(json.dumps(['one', 'two']))
     executable = app / 'Contents/MacOS/Trainer'
     executable.parent.mkdir()
@@ -108,6 +108,16 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         'architectures': ['arm64'],
         'distributions': {'arm64': runtime_source['distributions']['arm64']},
     }))
+    # The product marker names the selection, not its first module: a
+    # module-only diagnostic App must not verify as the product.
+    (resources / 'ACTIVE_GAME_ID').write_text('one\n')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'marker' in str(error), error
+    else:
+        raise AssertionError('A product package marked as its first module was accepted')
+    (resources / 'ACTIVE_GAME_ID').write_text('all\n')
     assert verify_module_build.verify_module_build('all', dist) == app.resolve()
     assert not (resources / 'Backend/debugger').exists(), 'non-debugger modules acquired an LLDB dependency'
     module_path = project / 'Backend/games/one/module.json'
