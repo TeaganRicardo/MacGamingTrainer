@@ -7,7 +7,7 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .schema import (DEFAULT_FEATURES, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
+from .schema import (DEFAULT_FEATURES, LOCK_FIELDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
                      feature_document, feature_value)
 from .world import mutation_params as world_mutation_params, runtime_definitions
 
@@ -36,21 +36,38 @@ class HadesLLDBWorker:
         self.transport = transport
         self.source = Path(__file__).with_name('runtime.lua').read_text()
         self.features = dict(DEFAULT_FEATURES)
+        # The resident's last acknowledged lock and rarity intent. A same-process
+        # Lua reset recreates the runtime table, so the bootstrap replays the
+        # complete acknowledged desired state, not only the boolean features.
+        self.locks = (None, None, None)
+        self.boon_rarity_target = 'Heroic'
 
     def _invoke(self, method='status', arguments=(), *, target=None):
         source = 'local runtime = (function()\n' + self.source + '\nend)()\n'
         source += 'runtime.worldDefinitions = runtime.worldDefinitions or ' + lua_literal(runtime_definitions()) + '\n'
+        replay = 'runtime.configure(' + lua_literal(self.features) + ')'
+        if any(lock is not None for lock in self.locks):
+            replay += ';runtime.configure_locks(' + ','.join(map(lua_literal, self.locks)) + ')'
+        if self.boon_rarity_target != 'Heroic':
+            replay += ';runtime.set_boon_rarity(' + lua_literal(self.boon_rarity_target) + ')'
         source += ('if not runtime.bootstrapId then runtime.bootstrapId=' + lua_literal(uuid.uuid4().hex)
-                   + ';runtime.generationId=runtime.bootstrapId;runtime.configure('
-                   + lua_literal(self.features) + ') end\n')
+                   + ';runtime.generationId=runtime.bootstrapId;' + replay + ' end\n')
         if target is not None:
             source += ('assert(runtime.status().heroId==' + lua_literal(target['heroId'])
                        + ',"hades.error.staleTarget")\n')
         source += 'return runtime.json(runtime.' + method + '(' + ','.join(map(lua_literal, arguments)) + '))'
         result = self.transport.execute(source, mutating=True)
+        self._remember(result)
         result.update({'connected': True, 'pid': self.transport.pid})
         result['target'] = {'heroId': result.get('heroId', '')}
         return result
+
+    def _remember(self, result):
+        """Record lock/rarity intent from a reply that reports the resident status."""
+        if all(type(result.get(flag)) is bool for flag, _ in LOCK_FIELDS):
+            self.locks = tuple(result.get(value) if result[flag] else None for flag, value in LOCK_FIELDS)
+        if result.get('boonRarityTarget') in ('Common', 'Rare', 'Epic', 'Heroic'):
+            self.boon_rarity_target = result['boonRarityTarget']
 
     def dispatch(self, method, params):
         if method == 'connect':
@@ -60,6 +77,10 @@ class HadesLLDBWorker:
                 raise ValueError('connect requires a target pid and executable path')
             if 'features' in params:
                 self.features = feature_document(params['features'])
+            # A new connection reconciles locks and rarity from durable desired
+            # state; never replay intent acknowledged by an earlier connection.
+            self.locks = (None, None, None)
+            self.boon_rarity_target = 'Heroic'
             self.transport.attach(pid, executable)
             return self._invoke('configure', (self.features,))
         if method == 'disconnect':

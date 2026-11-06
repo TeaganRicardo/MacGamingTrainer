@@ -30,6 +30,8 @@ DEFAULT_PREFERENCES = {
 }
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
+# Resident status flag and value key for each fixed-value lock.
+LOCK_FIELDS = (('healthLocked', 'healthLock'), ('moneyLocked', 'moneyLock'), ('rerollsLocked', 'rerollsLock'))
 WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object', 'set_door_reward', 'set_door_route', 'restore_door'))
 ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
