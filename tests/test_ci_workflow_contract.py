@@ -145,6 +145,9 @@ assert 'needs: scope' in module_matrix
 assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
 assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in module_matrix
 assert 'macos-26-intel' not in module_matrix, 'PR and convergence must share the ARM64 profile'
+assert 'MGT_MACOS_OUTER_TIMEOUT_SCALE' not in module_matrix, (
+    'no runner profile may scale the outer timeout'
+)
 assert "MGT_RUN_MODULE_BUILD:" in module_matrix
 assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix

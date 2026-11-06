@@ -9,7 +9,7 @@ from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 from native_picker_harness import NATIVE_PICKER
-from macos_test_budget import scaled_outer_timeout
+from macos_fixture_policy import FixtureWatchdogExpired, launch_fixture
 import shutil
 import subprocess
 import sys
@@ -1662,23 +1662,27 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(binary)], check=True, cwd=ROOT)
 
     # Compile once and give Save editing, runtime recovery and management their
-    # own workers and budgets. The hosted runner exhausted the combined 65s
-    # journey while recovery was still making progress. Keep every assertion,
-    # the original 65s editor deadline and each 5s operation limit; the separate
-    # recovery process prevents unrelated editor work from consuming that gate.
-    for journey, budget, completion_marker in (
-        ('frontend', 65, 'hades_save_editor_native_control_journeys_ok'),
-        ('recovery', 30, 'hades_frontend_native_drafts_and_target_ownership_ok'),
-        ('management', 30, 'hades_management_native_workflows_ok'),
-        ('slider', 20, 'hades_slider_module_journey_ok'),
-        ('hierarchy', 20, 'hades_visual_hierarchy_ok'),
-        # Measured 41.6s end to end on the hosted runner. The previous 25s gate
-        # only passed while the PR lane ran on the Intel profile, whose 2x outer
-        # scale turned it into 50s; on the standard profile the same journey is
-        # killed mid-assertion. Keep a real margin instead of relying on a
-        # runner-specific multiplier.
-        ('disclosure', 60, 'hades_disclosure_module_journey_ok'),
-        ('search', 20, 'hades_workbench_search_native_ok'),
+    # own workers: a separate recovery process stops unrelated editor work from
+    # consuming the editor's watchdog. Each launch takes its outer watchdog from
+    # tests/macos_fixture_policy.py; this loop owns only the journey identity and
+    # its completion marker.
+    JOURNEY_IDS = {
+        'frontend': 'hades.save_editor',
+        'recovery': 'hades.recovery',
+        'management': 'hades.management',
+        'slider': 'hades.slider',
+        'hierarchy': 'hades.hierarchy',
+        'disclosure': 'hades.disclosure',
+        'search': 'hades.search',
+    }
+    for journey, completion_marker in (
+        ('frontend', 'hades_save_editor_native_control_journeys_ok'),
+        ('recovery', 'hades_frontend_native_drafts_and_target_ownership_ok'),
+        ('management', 'hades_management_native_workflows_ok'),
+        ('slider', 'hades_slider_module_journey_ok'),
+        ('hierarchy', 'hades_visual_hierarchy_ok'),
+        ('disclosure', 'hades_disclosure_module_journey_ok'),
+        ('search', 'hades_workbench_search_native_ok'),
     ):
         case_folder = folder / 'journeys' / journey
         case_folder.mkdir(parents=True)
@@ -1691,28 +1695,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         home = case_folder / 'home'
         home.mkdir()
         env = {**os.environ, 'HOME': str(home), 'CFFIXED_USER_HOME': str(home)}
-        effective_budget = scaled_outer_timeout(budget)
         print('hades_frontend_launch:' + journey, flush=True)
         try:
-            proc = subprocess.run([str(binary), str(case_folder), sys.executable, journey],
-                                  capture_output=True, text=True, timeout=effective_budget, env=env)
-        except subprocess.TimeoutExpired as error:
-            phase = case_folder / 'native-phase.txt'
-            print(f'Native {journey} fixture exceeded {effective_budget:g}s; last phase: ' +
-                  (phase.read_text(encoding='utf-8') if phase.exists() else '<no phase>'),
-                  file=sys.stderr)
-            for filename in ('commands.jsonl', 'replies.jsonl', 'trainer.log'):
-                journal = case_folder / filename
-                if journal.exists():
-                    print(filename + ' tail:', file=sys.stderr)
-                    for line in journal.read_text(encoding='utf-8', errors='replace').splitlines()[-12:]:
-                        print(line, file=sys.stderr)
-            for stream in ('stdout', 'stderr'):
-                captured = getattr(error, stream)
-                if captured:
-                    print('Partial ' + stream + ':', file=sys.stderr)
-                    print(captured.decode(errors='replace') if isinstance(captured, bytes) else captured,
-                          file=sys.stderr)
+            proc = launch_fixture([str(binary), str(case_folder), sys.executable, journey],
+                                  journey=JOURNEY_IDS[journey],
+                                  phase_file=case_folder / 'native-phase.txt',
+                                  diagnostics=(case_folder / 'commands.jsonl',
+                                               case_folder / 'replies.jsonl',
+                                               case_folder / 'trainer.log'),
+                                  capture_output=True, text=True, env=env)
+        except FixtureWatchdogExpired:
+            # The watchdog already reported the last semantic phase, the owned
+            # journals and bounded output; a stall is not a failed assertion.
             raise SystemExit(1)
         if proc.returncode:
             print(proc.stdout)
