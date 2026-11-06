@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import subprocess
 import sys
 import time
@@ -57,9 +58,18 @@ class LLDBProcessTimeWarpDriver:
         self.transport.stop(time.monotonic() + 3)
         try:
             yield
-        finally:
+        except BaseException:
+            # The body's failure is authoritative: a resume error must never
+            # replace it, or an outcome_unknown verdict reaches callers as an
+            # ordinary resume failure and their recovery evidence is discarded.
             if resume_after and self.transport.process is not None and self.transport.alive():
-                self.transport.resume(time.monotonic() + 3)
+                try:
+                    self.transport.resume(time.monotonic() + 3)
+                except Exception:
+                    logging.exception('Resume after a failed Time Warp session also failed.')
+            raise
+        if resume_after and self.transport.process is not None and self.transport.alive():
+            self.transport.resume(time.monotonic() + 3)
 
     def _export_address(self, name, required=True):
         lldb = self._lldb()

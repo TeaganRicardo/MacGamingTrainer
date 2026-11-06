@@ -186,6 +186,36 @@ expect_error(lambda: install_driver.install(b"Hades II", 2.0), "outcome_unknown"
 assert install_transport.tainted is True
 assert install_transport.process.deallocated == [0x1000]
 
+# A session that resumed a running target must keep the body's verdict: a
+# failed resume cannot turn outcome_unknown into an ordinary, retryable error.
+class RunningProcess(FakeProcess):
+    def GetState(self):
+        return FakeLLDB.eStateStopped + 1
+
+
+class ResumeFailingTransport(FakeTransport):
+    def __init__(self):
+        super().__init__(failed=True)
+        self.process = RunningProcess(self.frame)
+
+    def resume(self, deadline):
+        self.resume_calls += 1
+        raise ProcessTimeWarpError("resume_failed", "host.timeWarp.error.callFailed")
+
+
+resuming_transport = ResumeFailingTransport()
+resuming_driver = LLDBProcessTimeWarpDriver(resuming_transport, lldb_module=FakeLLDB)
+
+
+def mutate_in_session():
+    with resuming_driver.session():
+        resuming_driver.set_speed(2.0)
+
+
+expect_error(mutate_in_session, "outcome_unknown")
+assert resuming_transport.tainted is True
+assert resuming_transport.resume_calls == 1, "the running target was not resumed after the failure"
+
 # LLDB-specific driver lifecycle stays Hades-owned: missing targets read as
 # absent helpers, while tainted transports fail before touching the debugger.
 class TargetlessTransport:
