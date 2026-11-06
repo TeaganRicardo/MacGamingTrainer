@@ -2,8 +2,11 @@
 """Choose a bounded macOS PR smoke suite; full coverage belongs to release dispatch.
 
 The inventory is the single source for available macOS tests. Only a few shared
-ownership boundaries are mapped here; new modules use convention-based smoke
-selection and always retain the product compiler check.
+ownership boundaries are mapped here. A module's own sources select its
+convention journey (test_<id>_view_state_flow.py, else test_<id>_frontend.py,
+else the shared multi-context journey) and always retain the product compiler
+check. A deferred convention journey is reported, not replaced, so such a
+module's pull requests run no native behavior test of their own.
 """
 from __future__ import annotations
 

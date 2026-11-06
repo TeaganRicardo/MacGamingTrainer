@@ -36,7 +36,10 @@ linux_runner = (ROOT / "Tools/run_linux_checks.sh").read_text()
 assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"' in linux_runner
 macos_list = (ROOT / "Tools/macos_only_tests.txt").read_text().splitlines()
 for name in SWIFT_TESTS:
-    assert name in macos_list, "compiled-only tests must run in the macOS lane"
+    # Foundation-only Swift logic compiles with the portable lane's swiftc, so
+    # it runs on every pull request; the macOS PR smoke selection cannot reach
+    # it from the production files it protects.
+    assert name not in macos_list, "portable Swift logic tests belong to the Linux lane"
 
 
 # Standing workflow dependencies are supply-chain inputs. Keep the exact commit
