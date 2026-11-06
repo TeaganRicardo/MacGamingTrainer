@@ -27,7 +27,9 @@ if [[ "${1:-}" == "--typecheck" ]]; then
     BUILD_MODE=typecheck
     shift
 fi
-BUILD_SELECTION="${1:-${MGT_GAME_ID:-all}}"
+# The selection is explicit: MGT_GAME_ID is the backend worker's runtime
+# environment and must never turn a bare ./build.sh into a diagnostic build.
+BUILD_SELECTION="${1:-all}"
 [[ "$BUILD_SELECTION" != "--all" ]] || BUILD_SELECTION="all"
 if [[ $# -gt 1 || "$BUILD_SELECTION" == --* ]]; then
     echo "Usage: ./build.sh [--typecheck] [--all|game-id]" >&2

@@ -80,6 +80,16 @@ exit 93
     assert not output.exists(), "typecheck mode published an artifact"
     assert not list(isolated_tmp.iterdir()), "typecheck mode left temporary build state"
 
+    # A bare build always selects the product, even when the backend worker's
+    # runtime selection variable leaks into the developer's shell.
+    leaked = subprocess.run(
+        ["bash", str(ROOT / "build.sh"), "--typecheck"],
+        cwd=ROOT, env={**env, "MGT_GAME_ID": "hades2"}, text=True, capture_output=True, check=False,
+    )
+    assert leaked.returncode == 0, leaked.stdout + "\n" + leaked.stderr
+    assert "MGT_BUILD_TIMING mode=typecheck selection=all phase=swift-typecheck" in leaked.stdout, leaked.stdout
+    assert not list(isolated_tmp.iterdir()), "typecheck mode left temporary build state"
+
     invalid = subprocess.run(
         ["bash", str(ROOT / "build.sh"), "--typecheck", "--all", "extra"],
         cwd=ROOT, env=env, text=True, capture_output=True, check=False,
