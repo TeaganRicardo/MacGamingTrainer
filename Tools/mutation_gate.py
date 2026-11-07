@@ -105,7 +105,7 @@ PROVENANCE = {
     "trait-direct-removal-verification": "#227: single-instance force removal must fail closed when the game-owned callback leaves the instance mounted, and that receipt guard had no owning behaviour test after the D01 model was retired",
     "core-save-physical-directory-identity": "#515: Core Save §5 requires a captured directory descriptor to remain bound to the selected physical directory; path-only validation can accept same-path inode replacement.",
     "core-save-recovery-evidence-retention": "#515: Core Save §5 requires the last rollback copy to survive an unverified rollback; a cleanup-flag regression can delete the only recoverable bytes.",
-    "core-save-transaction-boundary": "#515: Core Save §5 requires every exit after the first real mutation to attempt rollback; a misplaced transaction-start flag bypasses recovery.",
+    "core-save-transaction-boundary": "#515: Core Save §5 requires every exit after the first real mutation to attempt rollback; unrecorded rename progress bypasses recovery.",
     "core-save-recovery-evidence-discovery": "#515: Core Save §5 requires preserved .rollback-* evidence to be rediscovered by a later CoreSaveService; otherwise process loss hides the only recovery copy."
 }
 
@@ -195,10 +195,10 @@ def manifest() -> list[Mutation]:
             ident="core-save-transaction-boundary",
             invariant="an exit after the first real save mutation still attempts rollback",
             path=ROOT / "Backend/core/save_restore.py",
-            old="            mutation_started = True\n",
-            new="            mutation_started = False\n",
+            old="                progress.add(key)\n            try:\n                os.replace(temporary, destination.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)\n",
+            new="                pass\n            try:\n                os.replace(temporary, destination.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)\n",
             test="tests/test_core_save_restore.py",
-            note="#515: the mutation-start marker separates preflight interruption from a partial write requiring rollback",
+            note="#515: per-key progress recorded before each real rename separates an untouched save set from a partial write requiring rollback",
         ),
         Mutation(
             ident="core-save-recovery-evidence-discovery",
