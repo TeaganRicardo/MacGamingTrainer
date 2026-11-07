@@ -224,12 +224,12 @@ precopy_target = precopy_service.backup()
 running = True
 precopy_service.restore(precopy_target['id'], preserve_current=False)
 running = False
-real_copy2 = save_restore_module.shutil.copy2
+real_copy = save_restore_module.copy_owned_save_file
 def interrupt_rollback_copy(source, destination, *args, **kwargs):
     if '.rollback-' in str(destination):
         raise KeyboardInterrupt()
-    return real_copy2(source, destination, *args, **kwargs)
-save_restore_module.shutil.copy2 = interrupt_rollback_copy
+    return real_copy(source, destination, *args, **kwargs)
+save_restore_module.copy_owned_save_file = interrupt_rollback_copy
 try:
     try:
         precopy_service.apply_staged()
@@ -238,7 +238,7 @@ try:
     else:
         raise AssertionError('rollback pre-copy interruption unexpectedly succeeded')
 finally:
-    save_restore_module.shutil.copy2 = real_copy2
+    save_restore_module.copy_owned_save_file = real_copy
 precopy_transactions = precopy_service.store.ensure_storage_root() / 'transactions'
 assert not list(precopy_transactions.glob('.rollback-*'))
 assert precopy_service._staged_path().exists()

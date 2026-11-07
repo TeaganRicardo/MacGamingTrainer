@@ -304,6 +304,7 @@ class CoreSaveService:
         recovery_paths = self._recovery_paths()
         return {
             'snapshots': snapshots,
+            'namingWarning': 'provider_invalid' if any(row['namingWarning'] for row in snapshots) else '',
             'pendingRestore': self.pending_restore(),
             'recoveryPaths': recovery_paths,
             **self.retention.state(snapshots, recovery_paths),

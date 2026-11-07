@@ -42,5 +42,11 @@
   "test_multi_game_contexts.py": [
     "tests/macos_fixture_policy.py",
     "tests/real_module_navigation_harness.py"
+  ],
+  "test_core_save_metadata_darwin.py": [
+    "tests/test_core_structured_save_edit.py",
+    "Backend/core/save_metadata.py",
+    "Backend/core/save_snapshots.py",
+    "Backend/core/save_restore.py"
   ]
 }

@@ -1,5 +1,5 @@
-import errno
 import hashlib
+import logging
 import os
 import shutil
 import stat
@@ -10,6 +10,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .save_resolution import ResolvedSaveFile
+from .save_metadata import copy_owned_save_file, copy_save_metadata, remove_owned_save_tree
 from .save_snapshots import SaveSnapshotError, _safe_relative, _sha256
 
 
@@ -83,7 +84,7 @@ class SaveRestoreTransaction:
                 before = _sha256(row.source_path)
                 destination = rollback / 'files' / row.root_id / _safe_relative(row.relative_path)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(row.source_path, destination)
+                copy_owned_save_file(row.source_path, destination)
                 if _sha256(destination) != before or _sha256(row.source_path) != before:
                     self._raise_race(target_running, 'Save changed while preparing restore.')
                 key = self._key(row)
@@ -99,7 +100,10 @@ class SaveRestoreTransaction:
             self._ensure_cold_target_still_stopped(target_running)
             return rollback, rollback_rows, hashes
         except BaseException as error:
-            shutil.rmtree(rollback, ignore_errors=True)
+            try:
+                remove_owned_save_tree(rollback)
+            except OSError:
+                logging.exception('Rollback preparation cleanup failed: %s', rollback)
             if isinstance(error, KeyboardInterrupt):
                 raise SaveRestorePreparationInterrupted() from error
             raise
@@ -138,7 +142,7 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save destination escaped its declared root.') from error
         return destination
 
-    def _replace_file(self, source, destination, digest, *, directory_fd):
+    def _replace_file(self, source, destination, digest, *, directory_fd, progress=None, key=None):
         temporary = '.trainer-save-' + uuid.uuid4().hex
         fd = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
         try:
@@ -151,25 +155,18 @@ class SaveRestoreTransaction:
                     actual.update(chunk)
                 if actual.hexdigest() != digest:
                     raise SaveRestoreError('Staged save file failed integrity verification.')
-                metadata = os.fstat(original.fileno())
-                os.fchmod(staged.fileno(), stat.S_IMODE(metadata.st_mode))
-                os.utime(staged.fileno(), ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
-                if hasattr(os, 'listxattr'):
-                    # Match copy2's optional extended-metadata behavior while
-                    # keeping both endpoints bound to open files.
-                    ignored = {errno.ENOTSUP, errno.ENODATA, errno.EINVAL, errno.EPERM}
-                    try:
-                        for name in os.listxattr(original.fileno()):
-                            os.setxattr(staged.fileno(), name, os.getxattr(original.fileno(), name))
-                    except OSError as error:
-                        if error.errno not in ignored:
-                            raise
-                if hasattr(os, 'fchflags'):
-                    os.fchflags(staged.fileno(), metadata.st_flags)
+                copy_save_metadata(original.fileno(), staged.fileno())
                 os.fsync(staged.fileno())
             # Both names are relative to the captured directory descriptor.
             # Renaming or redirecting its pathname cannot redirect mutation.
-            os.replace(temporary, destination.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+            if progress is not None:
+                progress.add(key)
+            try:
+                os.replace(temporary, destination.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+            except OSError:
+                if progress is not None:
+                    progress.discard(key)
+                raise
             os.fsync(directory_fd)
         finally:
             try:
@@ -212,12 +209,13 @@ class SaveRestoreTransaction:
             if current != destination or (before.st_dev, before.st_ino) != (now.st_dev, now.st_ino):
                 raise SaveRestoreError('Save transaction physical directory changed.')
 
-    def _install_entries(self, entries, destinations):
+    def _install_entries(self, entries, destinations, progress=None):
         for key, source, digest in entries:
             destination, descriptor = destinations[key]
-            self._replace_file(source, destination, digest, directory_fd=descriptor)
+            self._replace_file(source, destination, digest, directory_fd=descriptor,
+                               progress=progress, key=key)
 
-    def _delete_keys(self, keys, destinations):
+    def _delete_keys(self, keys, destinations, progress=None):
         for key in keys:
             destination, descriptor = destinations[key]
             try:
@@ -226,7 +224,14 @@ class SaveRestoreTransaction:
                 continue
             if not stat.S_ISREG(metadata.st_mode):
                 raise SaveRestoreError('Save deletion target is not a regular file.')
-            os.unlink(destination.name, dir_fd=descriptor)
+            if progress is not None:
+                progress.add(key)
+            try:
+                os.unlink(destination.name, dir_fd=descriptor)
+            except OSError:
+                if progress is not None:
+                    progress.discard(key)
+                raise
             os.fsync(descriptor)
 
     def _rollback_entries(self, rollback_rows, hashes):
@@ -263,9 +268,10 @@ class SaveRestoreTransaction:
             baseline_hashes = {key: digest for key, digest in baseline_hashes.items() if key in owned_keys}
             target_hashes = {key: digest for key, digest in target_hashes.items() if key in owned_keys}
         previous_snapshot_id = None
-        mutation_started = False
+        mutated = set()
         cleanup_rollback = True
         destination_stack = ExitStack()
+        result = None
 
         try:
             destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
@@ -291,9 +297,8 @@ class SaveRestoreTransaction:
 
             self._verify_target_paths(expected_paths)
             self._verify_destinations(destinations)
-            mutation_started = True
-            self._install_entries(target_entries, destinations)
-            self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations)
+            self._install_entries(target_entries, destinations, progress=mutated)
+            self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
             self._verify_destinations(destinations)
 
             if not self._verify_state(target_hashes, owned_keys):
@@ -312,14 +317,19 @@ class SaveRestoreTransaction:
                     raise SaveRestoreError('Game rewrote save files immediately after hot restore.')
 
             self._verify_destinations(destinations)
-            return {
+            result = {
                 **success,
                 'previousSnapshotId': previous_snapshot_id,
                 'fileCount': len(target_entries),
                 'hot': target_running,
             }
+            if previous_snapshot_id and previous.get('namingWarning'):
+                result['namingWarning'] = previous['namingWarning']
+            return result
         except BaseException as error:
-            if not mutation_started:
+            if not mutated:
+                if isinstance(error, KeyboardInterrupt) and not isinstance(error, SaveRestorePreparationInterrupted):
+                    raise SaveRestorePreparationInterrupted() from error
                 if not isinstance(error, Exception):
                     raise
                 if isinstance(error, (SaveBusyError, SaveSnapshotError, SaveRestoreError, ValueError)):
@@ -355,7 +365,12 @@ class SaveRestoreTransaction:
         finally:
             destination_stack.close()
             if cleanup_rollback:
-                shutil.rmtree(rollback_root, ignore_errors=True)
+                try:
+                    remove_owned_save_tree(rollback_root)
+                except OSError:
+                    logging.exception('Verified save transaction cleanup failed: %s', rollback_root)
+                    if result is not None:
+                        result['maintenanceWarning'] = 'rollback_cleanup_failed'
 
     def _replacement_entries(self, replacements):
         if not isinstance(replacements, (list, tuple)) or not replacements:

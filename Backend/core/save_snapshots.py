@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -10,6 +11,7 @@ import uuid
 from pathlib import Path
 
 from .save_resolution import ResolvedSaveFile, SaveResolutionError, read_resolved_save_file
+from .save_metadata import copy_owned_save_file, remove_owned_save_tree
 
 _SCHEMA_VERSION = 1
 _SNAPSHOT_ORIGINS = {"manual", "automaticPreEdit", "preRestore", "unclassified"}
@@ -149,7 +151,7 @@ class SaveSnapshotStore:
                     metadata = candidate.lstat()
                     if now - metadata.st_mtime < _STAGING_MIN_AGE_SECONDS or not candidate.is_dir():
                         continue
-                    shutil.rmtree(candidate)
+                    remove_owned_save_tree(candidate)
                     continue
 
                 for manifest_stage in candidate.iterdir():
@@ -180,7 +182,11 @@ class SaveSnapshotStore:
         if path.resolve(strict=False).parent != self.snapshots.resolve(strict=False):
             raise SaveSnapshotError('Snapshot path is unsafe.')
         if require_exists:
-            if path.is_symlink() or not path.is_dir():
+            if path.is_symlink():
+                raise SaveSnapshotError('Snapshot path is unsafe.')
+            if not path.exists():
+                raise SaveNotFoundError('Snapshot does not exist.')
+            if not path.is_dir():
                 raise SaveSnapshotError('Snapshot does not exist or is unsafe.')
         return path
 
@@ -205,11 +211,11 @@ class SaveSnapshotStore:
 
         # Only operate on directories that the inventory itself would expose;
         # this excludes symlinks, files, parent paths, and non-snap storage.
-        if not any(row['id'] == snapshot_id for row in self.list_snapshots()):
-            raise SaveNotFoundError('Snapshot does not exist or is unsafe.')
         path = self.snapshots / snapshot_id
-        if path.is_symlink() or not path.is_dir():
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
             raise SaveSnapshotError('Snapshot does not exist or is unsafe.')
+        if not any(row['id'] == snapshot_id for row in self.list_snapshots()):
+            raise SaveNotFoundError('Snapshot does not exist.')
         resolved = path.resolve(strict=True)
         if resolved.parent != snapshots or resolved == snapshots:
             raise SaveSnapshotError('Snapshot path is unsafe.')
@@ -256,15 +262,23 @@ class SaveSnapshotStore:
         for attempt in range(attempts):
             current = self._normalize_sources(resolver())
             described_name, described_details, described_localized = (None, [], {})
+            naming_warning = ''
             if describe is not None:
                 if not callable(describe):
                     raise ValueError('Snapshot describe callback must be callable.')
-                description = describe(tuple(current), created_at)
-                if not isinstance(description, (tuple, list)) or len(description) not in (2, 3):
-                    raise ValueError('Snapshot describe callback must return (name, details[, localizedPresentation]).')
-                described_name, described_details = description[:2]
-                if len(description) == 3:
-                    described_localized = description[2]
+                try:
+                    description = describe(tuple(current), created_at)
+                    if not isinstance(description, (tuple, list)) or len(description) not in (2, 3):
+                        raise ValueError('Snapshot describe callback must return (name, details[, localizedPresentation]).')
+                    described_name, described_details = description[:2]
+                    if described_name is not None:
+                        described_name = _validate_display_name(described_name)
+                    described_details = _validate_name_details(described_details)
+                    described_localized = _validate_localized_presentation(description[2] if len(description) == 3 else {})
+                except Exception:
+                    logging.exception('Snapshot provider presentation is invalid; using a timestamp name')
+                    described_name, described_details, described_localized = (None, [], {})
+                    naming_warning = 'provider_invalid'
             name = explicit_name
             if name is None:
                 name = _validate_display_name(described_name) if described_name is not None else created_at.replace('T', ' ').replace(':', '-')
@@ -280,7 +294,7 @@ class SaveSnapshotStore:
                     before = _sha256(row.source_path)
                     destination = stage / 'files' / row.root_id / _safe_relative(row.relative_path)
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(row.source_path, destination)
+                    copy_owned_save_file(row.source_path, destination)
                     with destination.open('rb+') as payload:
                         payload.flush()
                         os.fsync(payload.fileno())
@@ -316,6 +330,7 @@ class SaveSnapshotStore:
                     'nameDetails': details,
                     'automaticName': automatic_name,
                     'localizedPresentation': localized_presentation,
+                    'namingWarning': naming_warning,
                     'hot': hot,
                     'files': manifest_files,
                 }
@@ -337,7 +352,10 @@ class SaveSnapshotStore:
                 time.sleep(0.08 * (attempt + 1))
             finally:
                 if stage is not None:
-                    shutil.rmtree(stage, ignore_errors=True)
+                    try:
+                        remove_owned_save_tree(stage)
+                    except OSError:
+                        logging.exception('Snapshot staging cleanup failed: %s', stage)
 
         raise SaveSnapshotError('Snapshot creation failed.')
 
@@ -363,6 +381,8 @@ class SaveSnapshotStore:
             manifest.get('localizedPresentation', {})
         )
         manifest['automaticName'] = manifest.get('automaticName', False)
+        if manifest.get('namingWarning', '') not in ('', 'provider_invalid'):
+            raise SaveSnapshotError('Snapshot naming warning is invalid.')
         if type(manifest['automaticName']) is not bool:
             raise SaveSnapshotError('Snapshot automaticName flag is invalid.')
         if manifest['automaticName'] and not manifest['localizedPresentation']:
@@ -506,6 +526,7 @@ class SaveSnapshotStore:
             'nameDetails': name_details,
             'automaticName': automatic_name,
             'localizedPresentation': localized_presentation,
+            'namingWarning': manifest.get('namingWarning', '') if valid else '',
             'hot': hot,
             'path': str(root.resolve()),
             'valid': valid,

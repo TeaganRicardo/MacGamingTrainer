@@ -6,6 +6,7 @@ Game adapters supply a structured codec and retain save eligibility and meaning.
 There is deliberately no apply-bytes entrypoint.
 """
 from hashlib import sha256
+import logging
 import os
 from pathlib import Path
 import tempfile
@@ -269,8 +270,9 @@ class StructuredSaveEditSession:
         key = (self._target.root_id, self._target.relative_path)
         recovery_before = self._recovery_snapshot()
 
-        with tempfile.TemporaryDirectory(prefix="mgt-structured-save-edit-") as temporary:
-            staged = Path(temporary) / target_path.name
+        temporary = tempfile.TemporaryDirectory(prefix="mgt-structured-save-edit-")
+        try:
+            staged = Path(temporary.name) / target_path.name
             with staged.open("wb") as handle:
                 handle.write(encoded)
                 handle.flush()
@@ -303,11 +305,18 @@ class StructuredSaveEditSession:
             except BaseException as error:
                 self._capture_recovery_after_failure(error, recovery_before)
                 raise
-
-        # Advance only after Core confirms the selected physical replacement,
-        # codec validation and rollback cleanup. The original source digest is
-        # deliberately retained for the lifetime of this session.
-        self._original_sha256 = encoded_sha256
+            self._original_sha256 = encoded_sha256
+        except BaseException:
+            try:
+                temporary.cleanup()
+            except OSError:
+                logging.exception('Failed Save Editor staging cleanup: %s', temporary.name)
+            raise
+        try:
+            temporary.cleanup()
+        except OSError:
+            logging.exception('Save Editor staging cleanup failed after a verified edit: %s', temporary.name)
+            result['maintenanceWarning'] = 'staging_cleanup_failed'
         return {
             "applied": True,
             "relativePath": self._target.relative_path,
