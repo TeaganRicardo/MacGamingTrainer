@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SWIFT_TESTS = (
     "test_hades2_feature_identity.py",
     "test_shortcut_chord_semantics.py",
+    "test_invincibility_shortcut_migration.py",
 )
 
 # Simulate a machine without Swift even when this contract itself runs on macOS.
@@ -35,8 +36,12 @@ assert "while IFS= read -r name" in macos_runner
 linux_runner = (ROOT / "Tools/run_linux_checks.sh").read_text()
 assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"' in linux_runner
 macos_list = (ROOT / "Tools/macos_only_tests.txt").read_text().splitlines()
+sys.path.insert(0, str(ROOT / "Tools"))
+from discover_linux_tests import discover_tests
+portable_tests = discover_tests(ROOT)
 for name in SWIFT_TESTS:
-    assert name in macos_list, "compiled-only tests must run in the macOS lane"
+    assert name not in macos_list and "tests/" + name in portable_tests, (
+        "Foundation-only behavior belongs to the portable Swift lane", name)
 
 
 # Standing workflow dependencies are supply-chain inputs. Keep the exact commit

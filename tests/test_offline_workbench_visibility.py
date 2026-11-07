@@ -25,7 +25,8 @@ for label, view in (("Hades", hades), ("Hades rooms", rooms), ("Hades II", hades
 
 # Durable Hades I desired state follows the Hades II detached-edit contract.
 assert "var canEditIntent: Bool {" in hades_model
-assert "backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect" in hades_model
+# The module's native recovery journey exercises detached intent after an
+# unknown result and retains live-mutation rejection; do not pin its predicate.
 for unsafe_code in ("outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"):
     assert f'"{unsafe_code}"' in hades_model
 set_feature = hades_adapter.split("if command == 'set_feature':", 1)[1].split("\n        if command", 1)[0]

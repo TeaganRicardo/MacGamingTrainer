@@ -252,6 +252,7 @@ final class Hades2API {
 
     func request(
         _ request: Hades2Request,
+        runtimeConnected: Bool = true,
         operation: String,
         operationArguments: [String] = [],
         announceSuccess: Bool = true,
@@ -260,12 +261,17 @@ final class Hades2API {
         saveDraftEntryIDs: [String]? = nil,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
+        failed: ((BackendFailure) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         var params = request.params
         if let saveWorkspaceID { params["workspaceId"] = saveWorkspaceID }
         if let saveBaselineGeneration { params["baselineGeneration"] = saveBaselineGeneration }
         if let saveDraftEntryIDs { params["draftEntryIds"] = saveDraftEntryIDs }
+        let offlineIntent = !runtimeConnected && [
+            .resetDesired, .setDesired, .setGatheringDesired, .setChaosGateDesired,
+            .setBoonRarityDesired, .setNextRoomRewardDesired, .setNextOccurrenceDesired, .loadProfile,
+        ].contains(request.command)
         session.send(
             request.command.rawValue,
             params: params,
@@ -273,8 +279,11 @@ final class Hades2API {
             operationArguments: operationArguments,
             announceSuccess: announceSuccess,
             timeout: request.command.timeout,
+            requiresTrustedTarget: !offlineIntent && !request.command.rawValue.hasPrefix("save_editor_") &&
+                ![.scan, .launch, .listProfiles, .saveProfile, .deleteProfile].contains(request.command),
             started: started,
             reply: reply,
+            failed: failed,
             completion: completion
         )
     }

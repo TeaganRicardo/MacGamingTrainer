@@ -36,6 +36,7 @@ struct BackendFailure: Equatable {
     /// sends the bare key and the values it needs; Core carries them without
     /// knowing the wording, and the owning module renders the sentence.
     let presentationArguments: [String]
+    var outcomeUnknown = false
 }
 
 struct BackendReply {
@@ -70,6 +71,7 @@ final class BackendClient {
         let timeout: TimeInterval
         let started: (() -> Void)?
         let reply: ((BackendReply) -> Void)?
+        let failed: ((BackendFailure) -> Void)?
         let completion: ((Bool) -> Void)?
     }
 
@@ -155,17 +157,20 @@ final class BackendClient {
         timeout: TimeInterval = 6.0,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
+        failed: ((BackendFailure) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         let admissionStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         guard process.isRunning && !terminalFailureReported else {
-            onClientError?(BackendFailure(
+            let failure = BackendFailure(
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
                 recoveryPath: nil,
                 presentationArguments: []
-            ), true)
+            )
+            onClientError?(failure, true)
+            failed?(failure)
             completion?(false)
             return
         }
@@ -181,6 +186,7 @@ final class BackendClient {
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
             started: started,
             reply: reply,
+            failed: failed,
             completion: completion
         )
 
@@ -194,28 +200,33 @@ final class BackendClient {
     }
 
     func stop() {
+        let activeID = current?.id
+        let failure = reportInterruptedRequest()
         terminalFailureReported = true
         let outstanding = takeOutstandingRequests()
         process.stop()
-        complete(outstanding, success: false)
+        complete(outstanding, success: false, failure: failure, activeID: activeID)
     }
 
     private func enqueue(_ request: Request) {
         if let key = request.coalesceKey, let index = queue.lastIndex(where: { $0.coalesceKey == key }) {
             let replaced = queue[index]
             queue[index] = request
+            replaced.failed?(cancelledFailure)
             replaced.completion?(false)
             onLog?("合并排队 \(request.command) · \(key)")
             return
         }
         guard queue.count < maxQueueDepth else {
-            onClientError?(BackendFailure(
+            let failure = BackendFailure(
                 code: "backend_queue_full",
                 presentation: "host.backend.error.queueFull",
                 diagnostic: "queueLimit=\(maxQueueDepth) operation=\(request.operation)",
                 recoveryPath: nil,
                 presentationArguments: []
-            ), false)
+            )
+            onClientError?(failure, false)
+            request.failed?(failure)
             request.completion?(false)
             return
         }
@@ -227,13 +238,15 @@ final class BackendClient {
         guard process.isRunning && !terminalFailureReported else {
             terminalFailureReported = true
             let queued = takeQueuedRequests()
-            onClientError?(BackendFailure(
+            let failure = BackendFailure(
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
                 recoveryPath: nil,
                 presentationArguments: []
-            ), true)
+            )
+            onClientError?(failure, true)
+            request.failed?(failure)
             request.completion?(false)
             complete(queued, success: false)
             process.stop()
@@ -257,14 +270,17 @@ final class BackendClient {
             self.current = nil
             let queued = failure.terminal ? self.takeQueuedRequests() : []
             self.deliveringReply = true
-            self.onClientError?(BackendFailure(
+            let requestFailure = BackendFailure(
                 code: "backend_send_failed",
                 presentation: "host.backend.error.sendFailed",
                 diagnostic: failure.error.localizedDescription,
                 recoveryPath: nil,
-                presentationArguments: []
-            ), failure.terminal)
+                presentationArguments: [],
+                outcomeUnknown: failure.outcomeUnknown
+            )
+            self.onClientError?(requestFailure, failure.terminal)
             if failure.terminal { self.process.stop() }
+            request.failed?(requestFailure)
             request.completion?(false)
             self.complete(queued, success: false)
             self.deliveringReply = false
@@ -302,18 +318,20 @@ final class BackendClient {
             current = nil
             let queued = takeQueuedRequests()
             process.stop()
-            request.completion?(false)
-            complete(queued, success: false)
             let actualHost = hostVersion.map(String.init) ?? "未知"
             let actualModule = moduleVersion.map(String.init) ?? "未知"
             let actualGame = gameID ?? "未知"
-            onProtocolMismatch?(BackendFailure(
+            let failure = BackendFailure(
                 code: "protocol_mismatch",
                 presentation: "host.backend.error.protocolMismatch",
                 diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
                 recoveryPath: nil,
-                presentationArguments: []
-            ))
+                presentationArguments: [], outcomeUnknown: true
+            )
+            onProtocolMismatch?(failure)
+            request.failed?(failure)
+            request.completion?(false)
+            complete(queued, success: false)
             return
         }
 
@@ -328,7 +346,8 @@ final class BackendClient {
                 presentation: detail?["presentation"] as? String ?? "host.backend.error.operationFailed",
                 diagnostic: detail?["diagnostic"] as? String,
                 recoveryPath: detail?["recoveryPath"] as? String,
-                presentationArguments: (detail?["arguments"] as? [Any])?.compactMap { $0 as? String } ?? []
+                presentationArguments: (detail?["arguments"] as? [Any])?.compactMap { $0 as? String } ?? [],
+                outcomeUnknown: detail?["outcomeUnknown"] as? Bool ?? (detail?["code"] as? String == "outcome_unknown")
             )
         }
         let reply = BackendReply(
@@ -347,11 +366,16 @@ final class BackendClient {
 
         cancelCurrentTimeout()
         current = nil
+        let terminal = detail?["terminal"] as? Bool == true
+        if terminal { terminalFailureReported = true }
         deliveringReply = true
         let applyStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         onReply?(reply)
+        let cancelled = terminal || failure?.outcomeUnknown == true ? takeQueuedRequests() : []
         request.reply?(reply)
         request.completion?(success)
+        complete(cancelled, success: false)
+        if terminal { process.stop() }
         BackendOperationProfile.emit("host.reply_callbacks", id: request.id, command: request.command,
             seconds: BackendOperationProfile.now() - applyStarted, log: onLog)
         BackendOperationProfile.emit("host.end_to_end", id: request.id, command: request.command,
@@ -380,37 +404,56 @@ final class BackendClient {
         guard !terminalFailureReported, let request = current, request.id == id else { return }
         terminalFailureReported = true
         let outstanding = takeOutstandingRequests()
-        onClientError?(BackendFailure(
+        let failure = BackendFailure(
             code: "backend_timeout",
             presentation: "host.backend.error.timeout",
             diagnostic: "request=\(request.command) id=\(request.id) timeout=\(String(format: "%.1f", request.timeout))s",
             recoveryPath: nil,
-            presentationArguments: []
-        ), true)
+            presentationArguments: [],
+            outcomeUnknown: true
+        )
+        onClientError?(failure, true)
         process.stop()
-        complete(outstanding, success: false)
+        complete(outstanding, success: false, failure: failure, activeID: request.id)
     }
 
     private func protocolViolation(_ message: String) {
         guard !terminalFailureReported else { return }
         terminalFailureReported = true
+        let outcomeUnknown = current != nil
+        let activeID = current?.id
         let outstanding = takeOutstandingRequests()
-        onClientError?(BackendFailure(
+        let failure = BackendFailure(
             code: "backend_protocol_error",
             presentation: "host.backend.error.protocolError",
             diagnostic: message,
             recoveryPath: nil,
-            presentationArguments: []
-        ), true)
+            presentationArguments: [],
+            outcomeUnknown: outcomeUnknown
+        )
+        onClientError?(failure, true)
         process.stop()
-        complete(outstanding, success: false)
+        complete(outstanding, success: false, failure: failure, activeID: activeID)
     }
 
     private func terminated(_ status: Int32) {
+        let activeID = current?.id
+        let failure = reportInterruptedRequest()
         terminalFailureReported = true
         let outstanding = takeOutstandingRequests()
-        complete(outstanding, success: false)
+        complete(outstanding, success: false, failure: failure, activeID: activeID)
         onTermination?(status, stderrTail.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private func reportInterruptedRequest() -> BackendFailure? {
+        guard !terminalFailureReported, let request = current else { return nil }
+        let failure = BackendFailure(
+            code: "backend_interrupted", presentation: "host.backend.error.outcomeUnknown",
+            diagnostic: "request=\(request.command) id=\(request.id)", recoveryPath: nil,
+            presentationArguments: [], outcomeUnknown: true
+        )
+        onClientError?(failure, true)
+        return failure
     }
 
     private func flushNext() {
@@ -439,7 +482,15 @@ final class BackendClient {
         return requests
     }
 
-    private func complete(_ requests: [Request], success: Bool) {
-        requests.forEach { $0.completion?(success) }
+    private var cancelledFailure: BackendFailure {
+        BackendFailure(code: "backend_cancelled", presentation: "host.backend.error.notSent",
+            diagnostic: nil, recoveryPath: nil, presentationArguments: [])
+    }
+
+    private func complete(_ requests: [Request], success: Bool, failure: BackendFailure? = nil, activeID: String? = nil) {
+        for request in requests {
+            if !success { request.failed?(request.id == activeID ? failure ?? cancelledFailure : cancelledFailure) }
+            request.completion?(success)
+        }
     }
 }

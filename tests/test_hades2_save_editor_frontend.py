@@ -611,6 +611,11 @@ for raw in sys.stdin:
     if command == 'save_editor_apply':
         result['continuousDraftEntryIds'] = [entry for entry in req['params']['draftEntryIds']
             if not retired_fixture_applied or not entry.startswith('advanced:retire-')]
+        drop_reply = pathlib.Path(__file__).with_suffix('.drop-apply')
+        if drop_reply.exists():
+            pathlib.Path(__file__).with_suffix('.applied-evidence').write_text(str(resource_value))
+            drop_reply.unlink()
+            sys.exit(7)
     print(json.dumps({
         'type': 'result',
         'id': req['id'],
@@ -2084,6 +2089,52 @@ struct Main {
         }
         backupModel.close()
         pump(0.05)
+        let fixtureGeneration = session.lifecycleID
+        session.restart()
+        pumpUntil { session.currentStatus.backendAvailable && !session.currentStatus.busy && session.lifecycleID != fixtureGeneration }
+        let firstDocument = Hades2SaveEditorModel(session: session)
+        let secondDocument = Hades2SaveEditorModel(session: session)
+        firstDocument.open(language: .en)
+        pumpUntil { firstDocument.documentCurrent && !firstDocument.busy && !firstDocument.querying &&
+            !firstDocument.items.isEmpty }
+        firstDocument.stage(entryID: "resource:MetaCurrency", operation: "set", value: 875, baseline: firstDocument.baselineGeneration!)
+        pumpUntil { !firstDocument.busy && firstDocument.pendingCount == 1 }
+        firstDocument.apply(baseline: firstDocument.baselineGeneration)
+        pumpUntil { !firstDocument.busy && firstDocument.lastApplyReceipt != nil && !firstDocument.querying }
+        secondDocument.open(language: .en)
+        pumpUntil { secondDocument.documentCurrent && !secondDocument.busy && !secondDocument.querying &&
+            !secondDocument.items.isEmpty }
+        let confirmed = firstDocument.lastApplyReceipt
+        let retainedSource = firstDocument.sourceSHA256
+        let retainedEntry = secondDocument.items.first!
+        secondDocument.retainTextDraft("unfinished document draft", for: retainedEntry)
+        let oldGeneration = session.lifecycleID
+        session.restart()
+        pumpUntil { session.currentStatus.backendAvailable && !session.currentStatus.busy && session.lifecycleID != oldGeneration }
+        if firstDocument.documentCurrent || secondDocument.canEditText(retainedEntry)
+            || firstDocument.busy || secondDocument.busy
+            || firstDocument.lastApplyReceipt != confirmed || confirmed == nil
+            || firstDocument.sourceSHA256 != retainedSource
+            || secondDocument.textDrafts[retainedEntry.id] != "unfinished document draft" {
+            fail("worker replacement lost document evidence or retained stale writing authority")
+        }
+        let beforeExpiredRequests = commands(at: commandLog).count
+        secondDocument.stage(entryID: retainedEntry.id, operation: "set", value: 900, baseline: retainedEntry.baselineGeneration)
+        secondDocument.close()
+        pump(0.05)
+        if commands(at: commandLog).count != beforeExpiredRequests { fail("expired stage or close reached a new worker") }
+        firstDocument.openSelection()
+        pumpUntil { firstDocument.documentCurrent && !firstDocument.busy && !firstDocument.querying }
+        firstDocument.stage(entryID: "resource:MetaCurrency", operation: "set", value: 876, baseline: firstDocument.baselineGeneration!)
+        pumpUntil { !firstDocument.busy && firstDocument.pendingCount == 1 }
+        try "drop".write(to: worker.deletingPathExtension().appendingPathExtension("drop-apply"), atomically: true, encoding: .utf8)
+        firstDocument.apply(baseline: firstDocument.baselineGeneration)
+        pumpUntil { !firstDocument.busy && firstDocument.operationFailures[.saveEditorApply]?.key == "host.save.error.applyUnconfirmed"
+            && session.currentStatus.backendAvailable && !session.currentStatus.busy }
+        let installedEvidence = try String(contentsOf: worker.deletingPathExtension().appendingPathExtension("applied-evidence"), encoding: .utf8)
+        if installedEvidence != "876" || firstDocument.documentCurrent || firstDocument.lastApplyReceipt != nil
+            || firstDocument.pendingCount != 1 { fail("lost Apply result became success or silently replayable edits") }
+        firstDocument.close()
         session.stop()
         pump(0.10)
         print("hades2_save_editor_frontend_ok")

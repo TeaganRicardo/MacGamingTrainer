@@ -5,6 +5,7 @@ struct TrainerBackendStatus: Equatable {
     var backendProtocolVersion: Int?
     var backendModuleProtocolVersion: Int?
     var protocolCompatible = true
+    var requiresTargetRestart = false
     var busy = false
     /// Language-neutral operation identity shown while a request is in flight.
     var operation = TrainerTextToken(key: "")
@@ -37,13 +38,22 @@ final class TrainerBackendSession {
 
     private let client: BackendClient
     private var status = TrainerBackendStatus()
-    private(set) var lifecycleID = UUID()
+    private(set) var lifecycleID = UUID() {
+        didSet { Array(lifecycleObservers.values).forEach { $0(lifecycleID) } }
+    }
+    private var lifecycleObservers: [UUID: (UUID) -> Void] = [:]
     private var configuration: Configuration?
     private var suppressTerminationError = false
     private var restartPending = false
     private var recoveryWorkItem: DispatchWorkItem?
     private var automaticRecoveryAttempts = 0
     private let maximumAutomaticRecoveryAttempts = 2
+    private var terminationRequested = false
+    private var targetLifetimeID = UUID()
+    private var activeRequestTargetLifetimeID: UUID?
+    private var activeRequestRequiresTrustedTarget = true
+    private var uncertainFailure: BackendFailure?
+    private var untrustedTargetLifetimeID: UUID?
 
     init(client: BackendClient = BackendClient()) {
         self.client = client
@@ -62,8 +72,7 @@ final class TrainerBackendSession {
         onStatusChange: @escaping (TrainerBackendStatus) -> Void,
         backendLog: ((String) -> Void)? = nil
     ) throws {
-        guard !client.isStarted else { return }
-        lifecycleID = UUID()
+        guard !terminationRequested, !client.isStarted else { return }
         let scriptURL: URL
         do {
             scriptURL = try resolveScriptURL(backendScriptURL)
@@ -97,10 +106,19 @@ final class TrainerBackendSession {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        requiresTrustedTarget: Bool = true,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
+        failed: ((BackendFailure) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
+        guard !requiresTrustedTarget || untrustedTargetLifetimeID != targetLifetimeID else {
+            configuration?.log("目标进程的操作结果尚未确认；等待新的目标进程后再执行 \(command)。")
+            failed?(BackendFailure(code: "backend_cancelled", presentation: "host.backend.error.notSent",
+                diagnostic: nil, recoveryPath: nil, presentationArguments: []))
+            completion?(false)
+            return
+        }
         client.send(
             command,
             params: params,
@@ -109,8 +127,13 @@ final class TrainerBackendSession {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout,
-            started: started,
+            started: { [weak self] in
+                self?.activeRequestTargetLifetimeID = self?.targetLifetimeID
+                self?.activeRequestRequiresTrustedTarget = requiresTrustedTarget
+                started?()
+            },
             reply: reply,
+            failed: failed,
             completion: completion
         )
     }
@@ -119,7 +142,7 @@ final class TrainerBackendSession {
     /// The old process remains owned until its termination callback fires, so a
     /// replacement worker cannot race the old stdout/LLDB state.
     func restart() {
-        guard configuration != nil else { return }
+        guard !terminationRequested, configuration != nil else { return }
         cancelRecovery()
         restartPending = true
         suppressTerminationError = true
@@ -151,6 +174,49 @@ final class TrainerBackendSession {
         restartPending = false
         self.suppressTerminationError = suppressTerminationError
         client.stop()
+    }
+
+    func beginTermination() {
+        terminationRequested = true
+        cancelRecovery()
+        restartPending = false
+        updateStatus {
+            $0.busy = client.hasInFlightRequest
+            if !$0.busy { $0.operation = TrainerTextToken(key: "") }
+        }
+    }
+
+    func observeLifecycle(_ observer: @escaping (UUID) -> Void) -> UUID {
+        let id = UUID()
+        lifecycleObservers[id] = observer
+        return id
+    }
+
+    func removeLifecycleObserver(_ id: UUID) {
+        lifecycleObservers.removeValue(forKey: id)
+    }
+
+    /// Only definitive target-lifetime evidence releases a runtime trust gate.
+    /// A new worker, activation, or the same PID does not establish that evidence.
+    func targetLifetimeChanged() {
+        targetLifetimeID = UUID()
+        untrustedTargetLifetimeID = nil
+        if uncertainFailure != nil {
+            uncertainFailure = nil
+            updateStatus {
+                $0.errorCode = nil
+                $0.error = ""
+                $0.errorArguments = []
+            }
+        }
+    }
+
+    private func preserveUnknownOutcome(_ failure: BackendFailure) {
+        guard failure.outcomeUnknown else { return }
+        if uncertainFailure == nil { uncertainFailure = failure }
+        if activeRequestRequiresTrustedTarget, activeRequestTargetLifetimeID == targetLifetimeID {
+            untrustedTargetLifetimeID = targetLifetimeID
+        }
     }
 
     private func publishStartupFailure(
@@ -195,7 +261,7 @@ final class TrainerBackendSession {
         guard let configuration else {
             throw NSError(domain: "TrainerBackendSession", code: 3, userInfo: [NSLocalizedDescriptionKey: "Backend session has no start configuration."])
         }
-        guard !client.isStarted else { return }
+        guard !terminationRequested, !client.isStarted else { return }
         suppressTerminationError = false
         if clearStatus { setStatus(TrainerBackendStatus()) }
 
@@ -225,6 +291,7 @@ final class TrainerBackendSession {
                     $0.protocolCompatible = true
                     $0.busy = false
                 }
+                if let failure = reply.failure { self.preserveUnknownOutcome(failure) }
                 func apply(_ payload: [String: Any]) {
                     let started = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
                     configuration.applyPayload(payload)
@@ -254,6 +321,7 @@ final class TrainerBackendSession {
                 }
             },
             onProtocolMismatch: { [weak self] failure in
+                self?.preserveUnknownOutcome(failure)
                 self?.cancelRecovery()
                 self?.updateStatus {
                     $0.protocolCompatible = false
@@ -272,6 +340,7 @@ final class TrainerBackendSession {
             },
             onClientError: { [weak self] failure, terminal in
                 guard let self else { return }
+                self.preserveUnknownOutcome(failure)
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
                     configuration.backendLog("后端通信终止 [\(failure.code)]：\(diagnostic)")
@@ -308,6 +377,7 @@ final class TrainerBackendSession {
                 }
             }
         )
+        lifecycleID = UUID()
         updateStatus {
             $0.backendAvailable = true
             $0.busy = false
@@ -321,6 +391,7 @@ final class TrainerBackendSession {
 
     private func handleTermination(status exitStatus: Int32) {
         guard let configuration else { return }
+        lifecycleID = UUID()
         let mismatch = !status.protocolCompatible
         let manualRestart = restartPending
         restartPending = false
@@ -328,7 +399,7 @@ final class TrainerBackendSession {
             && !suppressTerminationError
             && !mismatch
             && automaticRecoveryAttempts < maximumAutomaticRecoveryAttempts
-        let willRecover = manualRestart || automaticRecovery
+        let willRecover = !terminationRequested && (manualRestart || automaticRecovery)
 
         updateStatus {
             $0.backendAvailable = false
@@ -354,7 +425,7 @@ final class TrainerBackendSession {
     }
 
     private func scheduleRecovery(manual: Bool) {
-        guard configuration != nil else { return }
+        guard !terminationRequested, configuration != nil else { return }
         cancelRecovery()
         if !manual { automaticRecoveryAttempts += 1 }
         let attempt = automaticRecoveryAttempts
@@ -362,6 +433,7 @@ final class TrainerBackendSession {
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.recoveryWorkItem = nil
+            guard !self.terminationRequested else { return }
             do {
                 try self.startClient(clearStatus: false, recoveryNotice: manual ? "host.backend.notice.restarted" : "host.backend.notice.recovered")
             } catch {
@@ -413,7 +485,15 @@ final class TrainerBackendSession {
         setStatus(next)
     }
 
-    private func setStatus(_ next: TrainerBackendStatus) {
+    private func setStatus(_ value: TrainerBackendStatus) {
+        var next = value
+        next.requiresTargetRestart = untrustedTargetLifetimeID == targetLifetimeID
+        if let uncertainFailure {
+            next.errorCode = "outcome_unknown"
+            next.error = uncertainFailure.code == "outcome_unknown" ? uncertainFailure.presentation :
+                (next.requiresTargetRestart ? "host.backend.error.targetOutcomeUnknown" : "host.backend.error.outcomeUnknown")
+            next.errorArguments = uncertainFailure.code == "outcome_unknown" ? uncertainFailure.presentationArguments : []
+        }
         status = next
         configuration?.onStatusChange(next)
     }

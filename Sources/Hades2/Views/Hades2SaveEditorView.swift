@@ -212,7 +212,7 @@ struct Hades2SaveEditorView: View {
             targetPlaceholder: text("hades2.saveEditor.target.choose"),
             targetSelection: targetSelection,
             targets: targetOptions,
-            targetEnabled: !model.busy
+            targetEnabled: !model.busy && (model.workspaceID == nil || model.documentCurrent)
         )
     }
 
@@ -616,11 +616,11 @@ struct Hades2SaveEditorView: View {
                 }
                 Spacer()
                 Button(text("hades2.saveEditor.cancelChanges")) { model.cancel(baseline: baseline) }
-                    .disabled(model.busy)
+                    .disabled(model.busy || !model.documentCurrent)
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
                     systemImage: TrainerSemanticIcon.Action.apply,
-                    enabled: !model.busy && model.hasWriteTarget,
+                    enabled: !model.busy && model.hasWriteTarget && model.documentCurrent,
                     widthRole: .sheet
                 ) {
                     model.apply(baseline: baseline)
@@ -761,6 +761,12 @@ struct Hades2SaveEditorView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+            if receipt.maintenanceWarning != nil {
+                Text(localization.localized("host.save.warning.maintenance")).font(.caption).foregroundStyle(theme.warning)
+            }
+            if receipt.namingWarning != nil {
+                Text(localization.localized("host.save.warning.providerName")).font(.caption).foregroundStyle(theme.warning)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, theme.rowHorizontalPadding)

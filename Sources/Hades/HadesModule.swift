@@ -62,7 +62,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             .contains(backendStatus.errorCode)
     }
     var canEditIntent: Bool {
-        backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect
+        backendAvailable && backendStatus.protocolCompatible &&
+            (!requiresExplicitReconnect || (!connected && backendStatus.requiresTargetRestart))
     }
     var canMutate: Bool { canEditIntent && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
@@ -363,8 +364,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func send(_ command: String, params: [String: Any] = [:], operation: String,
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
         localError = ""
+        let offlineIntent = !connected && ["set_feature", "set_boon_rarity", "load_profile", "disable_all"].contains(command)
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
-                     timeout: command == "connect" ? 130 : 20, completion: { [weak self] ok in
+                     timeout: command == "connect" ? 130 : 20,
+                     requiresTrustedTarget: !offlineIntent &&
+                        !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
+                     completion: { [weak self] ok in
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
                 let pendingProfile = command == "load_profile" && !self.connected

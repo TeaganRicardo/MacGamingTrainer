@@ -305,6 +305,7 @@ final class BackendProcess {
     struct SendFailure: Error {
         let error: Error
         let terminal: Bool
+        var outcomeUnknown = false
     }
 
     func send(_ object: [String: Any], completion: @escaping (SendFailure?) -> Void) {
@@ -320,11 +321,13 @@ final class BackendProcess {
                 DispatchQueue.main.async { completion(SendFailure(error: error, terminal: false)) }
                 return
             }
+            var wroteBytes = false
             do {
-                try session.write(data, to: input, process: task)
+                try session.write(data, to: input, process: task, wroteBytes: &wroteBytes)
                 DispatchQueue.main.async { completion(nil) }
             } catch {
-                DispatchQueue.main.async { completion(SendFailure(error: error, terminal: true)) }
+                let outcomeUnknown = wroteBytes
+                DispatchQueue.main.async { completion(SendFailure(error: error, terminal: true, outcomeUnknown: outcomeUnknown)) }
             }
         }
     }
@@ -560,7 +563,7 @@ final class BackendProcess {
                             onMessage(object)
                         }
                     } catch {
-                        self.reportProtocolError("后端私有消息无效：\(error.localizedDescription)", callback: onProtocolError)
+                        DispatchQueue.main.async { onProtocolError("后端私有消息无效：\(error.localizedDescription)") }
                     }
                 }
             } catch {
@@ -578,7 +581,7 @@ final class BackendProcess {
     }
 
     private func reportProtocolError(_ message: String, callback: @escaping (String) -> Void) {
-        DispatchQueue.main.async { callback(message) }
+        payloadQueue.async { DispatchQueue.main.async { callback(message) } }
     }
 }
 
@@ -633,7 +636,7 @@ private final class BackendFileSession {
 
     /// Cancellation also releases a writer when a descendant retains stdin.
     /// The original handle closes on its writer queue after this loop exits.
-    func write(_ data: Data, to input: FileHandle, process: Process) throws {
+    func write(_ data: Data, to input: FileHandle, process: Process, wroteBytes: inout Bool) throws {
         #if os(Linux)
         // A reader can exit between poll and write. Keep its SIGPIPE local to
         // this writer rather than changing the application's signal policy.
@@ -673,6 +676,7 @@ private final class BackendFileSession {
                 let count = Glibc.write(input.fileDescriptor, raw.baseAddress!.advanced(by: offset), raw.count - offset)
                 #endif
                 if count > 0 {
+                    wroteBytes = true
                     offset += count
                 } else if count < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                     continue
@@ -684,6 +688,9 @@ private final class BackendFileSession {
     }
 
     func encode(_ object: [String: Any]) throws -> Data {
+        guard JSONSerialization.isValidJSONObject(object) else {
+            throw Self.failure("后端请求包含无法编码的 JSON 值。")
+        }
         let payload = try JSONSerialization.data(withJSONObject: object)
         if payload.count + 1 <= inlineBytes {
             var data = payload

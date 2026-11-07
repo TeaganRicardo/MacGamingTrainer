@@ -142,6 +142,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-rename-completion-") as td:
         str(ROOT/"Sources/Core/Save/TrainerSaveTypes.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSavePathValidator.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSaveManagerModel.swift"),
+        str(ROOT / "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift"),
         str(main_path),
         "-framework", "AppKit",
         "-o", str(binary),

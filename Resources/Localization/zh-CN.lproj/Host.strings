@@ -39,6 +39,13 @@
 "host.backend.error.invalidRequest" = "请求无效；请重试或查看日志。";
 "host.backend.error.timeout" = "后端请求超时；为避免未知执行结果，已停止后端。";
 "host.backend.error.protocolError" = "后端通信协议错误，已停止后端。";
+"host.backend.error.outcomeUnknown" = "操作结果不明，未自动重试。再次操作前，请先检查结果和恢复证据。";
+"host.backend.error.targetOutcomeUnknown" = "游戏操作结果不明，未自动重试。请检查并重启游戏后再连接。";
+"host.backend.error.notSent" = "请求尚未发送。请恢复后端连接后重试。";
+"host.save.error.workspaceExpired" = "打开此文档的后端已停止。原来源、目标和草稿已保留；请重新读取来源并核对目标后再应用修改。";
+"host.save.error.applyUnconfirmed" = "应用结果尚未确认。请检查目标和恢复副本，重新读取来源后再继续修改。";
+"host.save.warning.workerChanged" = "后端已重启。选择存档操作前，请先刷新此列表。";
+"host.save.warning.maintenance" = "修改已通过校验。临时文件清理尚未完成；请先检查恢复文件再决定是否移除。";
 "host.backend.notice.recovering" = "后端通信异常，正在自动恢复";
 "host.backend.notice.restarted" = "后端已重启";
 "host.backend.notice.recovered" = "后端已自动恢复";

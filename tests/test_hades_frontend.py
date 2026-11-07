@@ -137,6 +137,9 @@ def save_command(command,params,state):
         workspace['physical']=[item for item in workspace['physical'] if item not in removed]
         workspace['baselineVersion']+=1;workspace['baseline']='baseline'+workspace['id'].split(':')[1]+'v'+str(workspace['baselineVersion'])
         workspace['pending'].clear();(folder/'installed.json').write_text(json.dumps(workspace['values']))
+        if state.pop('editorApplyLostReply',False):
+            (folder/'state.json').write_text(json.dumps(state))
+            sys.exit(7)
         return {'baselineGeneration':workspace['baseline'],'applied':True,'verified':True,'runtimeReloaded':False,'installedSHA256':'installed-sha','hot':True,
             'source':workspace['source'],'sourceSHA256':workspace['sha'],'target':workspace['target'],'previousSnapshotId':'fixture-prewrite'}
 
@@ -1504,6 +1507,41 @@ func pump(_ seconds: TimeInterval = 0.1) {
               && reusedModel.rows.allSatisfy { $0.baselineGeneration == reusedModel.baselineGeneration }
               && commands().filter { $0["command"] as? String == "save_editor_stage" }.count == priorStageCount,
               "late Hades response or stale row escaped the retired document baseline")
+        let retainedReceipt = shifted.receipt?.installedSHA256
+        let retainedSource = reusedModel.sourceSHA256
+        let retainedRows = reusedModel.rows
+        let oldWorkerGeneration = session.lifecycleID
+        session.restart()
+        wait("Hades worker replaced while independent documents remain open") {
+            session.currentStatus.backendAvailable && !session.currentStatus.busy && session.lifecycleID != oldWorkerGeneration
+        }
+        check(!shifted.canEditRows && !reusedModel.canEditRows && !shifted.busy && !reusedModel.busy,
+              "a replaced worker left a stale Hades document writable or busy")
+        check(shifted.receipt?.installedSHA256 == retainedReceipt && retainedReceipt != nil
+              && reusedModel.sourceSHA256 == retainedSource && reusedModel.rows == retainedRows,
+              "worker replacement discarded a confirmed receipt or the retained source context")
+        let beforeExpiredActions = commands().count
+        _ = reusedModel.commit(originalReusedRow, text: "321", workspace: postReopenWorkspace)
+        reusedModel.apply(baseline: reusedModel.baselineGeneration)
+        shifted.close()
+        pump(0.05)
+        check(commands().count == beforeExpiredActions, "expired Hades stage/Apply/close reached a new worker")
+        reusedModel.openSelection()
+        wait("explicit Hades reread restores a new document") { reusedModel.canEditRows && !reusedModel.busy }
+        let freshRow = reusedModel.rows.first!
+        _ = reusedModel.commit(freshRow, text: "87", workspace: reusedModel.workspaceID)
+        wait("fresh Hades edit staged before lost-reply Apply") { !reusedModel.busy && reusedModel.review.count == 1 }
+        saveState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        saveState["editorApplyFailure"] = false
+        saveState["editorApplyLostReply"] = true
+        try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
+        reusedModel.apply(baseline: reusedModel.baselineGeneration)
+        wait("Hades lost Apply receipt exposes an unconfirmed result and releases busy") {
+            !reusedModel.busy && reusedModel.failures["apply"]?.key == "host.save.error.applyUnconfirmed"
+                && session.currentStatus.backendAvailable && !session.currentStatus.busy
+        }
+        check(!reusedModel.canEditRows && reusedModel.review.count == 1 && reusedModel.receipt == nil,
+              "lost Hades Apply receipt was silently treated as success or replayable")
         reusedModel.close()
         print("hades_save_editor_native_control_journeys_ok")
         stopBackend()
@@ -1610,9 +1648,25 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
                 "unsafe runtime error retained mutation authority: \(key)")
             let afterFailure=commands().count
-            model.setFeature(.invincibility,value:true)
-            model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
-            check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
+            if code == "outcome_unknown" {
+                try setFixtureError(nil)
+                try setConnection(false, heroReady: false)
+                model.setFeature(.invincibility, value: true)
+                wait("detached desired intent after unknown outcome") {
+                    !model.busy && commands().count == afterFailure + 1 && model.isEnabled(.invincibility)
+                }
+                check(session.currentStatus.requiresTargetRestart,
+                      "detached desired edit released unresolved runtime trust")
+                let afterOfflineEdit = commands().count
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count == afterOfflineEdit, "offline intent enabled a live mutation")
+                session.targetLifetimeChanged()
+                try setConnection(true, heroReady: true)
+            } else {
+                model.setFeature(.invincibility,value:true)
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
+            }
             try setFixtureError(nil)
             model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
             check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")

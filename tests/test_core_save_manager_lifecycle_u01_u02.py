@@ -343,6 +343,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
         str(ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"),
         str(ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"),
         str(ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"),
+        str(ROOT / "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift"),
         str(main_path), "-framework", "AppKit", "-o", str(binary),
     ], check=True, cwd=ROOT)
     proc = launch_fixture(

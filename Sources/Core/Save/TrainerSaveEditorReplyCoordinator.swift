@@ -18,6 +18,7 @@ final class TrainerSaveEditorReplyCoordinator {
 
     struct Ticket {
         fileprivate let epoch: UUID
+        fileprivate let backendGeneration: UUID
         fileprivate let lane: Lane?
         fileprivate let revision: UInt64
         fileprivate let bindsDocument: Bool
@@ -26,6 +27,8 @@ final class TrainerSaveEditorReplyCoordinator {
     }
 
     private var epoch = UUID()
+    private(set) var backendGeneration = UUID()
+    private(set) var documentBackendGeneration: UUID?
     private var revisions: [Lane: UInt64] = [:]
     private(set) var workspaceID: String?
     private(set) var baselineGeneration: String?
@@ -45,6 +48,7 @@ final class TrainerSaveEditorReplyCoordinator {
         if let lane { revisions[lane, default: 0] &+= 1 }
         return Ticket(
             epoch: epoch,
+            backendGeneration: backendGeneration,
             lane: lane,
             revision: lane.map { revisions[$0]! } ?? 0,
             bindsDocument: bindsDocument,
@@ -54,9 +58,10 @@ final class TrainerSaveEditorReplyCoordinator {
     }
 
     func accepts(_ ticket: Ticket) -> Bool {
-        guard ticket.epoch == epoch else { return false }
+        guard ticket.epoch == epoch, ticket.backendGeneration == backendGeneration else { return false }
         if ticket.bindsDocument {
-            guard let workspaceID, let baselineGeneration,
+            guard documentBackendGeneration == backendGeneration,
+                  let workspaceID, let baselineGeneration,
                   ticket.workspaceID == workspaceID,
                   ticket.baselineGeneration == baselineGeneration else { return false }
         }
@@ -74,7 +79,21 @@ final class TrainerSaveEditorReplyCoordinator {
 
     func owns(workspaceID: String?, baselineGeneration: String?) -> Bool {
         guard let workspaceID, let baselineGeneration else { return false }
-        return self.workspaceID == workspaceID && self.baselineGeneration == baselineGeneration
+        return documentBackendGeneration == backendGeneration &&
+            self.workspaceID == workspaceID && self.baselineGeneration == baselineGeneration
+    }
+
+    @discardableResult
+    func observeBackendGeneration(_ generation: UUID) -> Bool {
+        guard generation != backendGeneration else { return false }
+        backendGeneration = generation
+        invalidateAllReplies()
+        return workspaceID != nil
+    }
+
+    func invalidateDocument() {
+        documentBackendGeneration = nil
+        invalidateAllReplies()
     }
 
     /// Called only after validating a successful open, target change or
@@ -84,6 +103,7 @@ final class TrainerSaveEditorReplyCoordinator {
         invalidateAllReplies()
         self.workspaceID = workspaceID
         self.baselineGeneration = baselineGeneration
+        documentBackendGeneration = backendGeneration
     }
 
     /// Tool close/reopen must not resurrect a reply from the retired window.
@@ -91,6 +111,7 @@ final class TrainerSaveEditorReplyCoordinator {
         invalidateAllReplies()
         workspaceID = nil
         baselineGeneration = nil
+        documentBackendGeneration = nil
     }
 
     private func invalidateAllReplies() {

@@ -76,8 +76,10 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
     private var previousTarget: TrainerTargetObservation
+    private var lastKnownTargetProcessIdentifier: pid_t?
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
+    private var terminationRequested = false
 
     convenience init() {
         let ownership = TrainerApplicationStartup.requireOwnership(
@@ -100,6 +102,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             executablePathSuffix: Module.descriptor.targetExecutablePathSuffix
         )
         previousTarget = targetMonitor.targetObservation
+        lastKnownTargetProcessIdentifier = previousTarget.processIdentifier
         // This tracks the availability processed by this Context. A module
         // can finish starting before the Context installs its subscription.
         previousBackendAvailable = false
@@ -113,6 +116,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             self?.targetChanged(observed)
         }.store(in: &subscriptions)
         targetMonitor.$activationGeneration.dropFirst().sink { [weak self] _ in
+            guard self?.terminationRequested == false else { return }
             self?.connectionPolicy.targetActivated()
         }.store(in: &subscriptions)
         saveManager.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
@@ -129,6 +133,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     var canTerminate: Bool { !model.busy && !saveManager.busy && toolWindows.canCloseAll }
 
     func toggleConnection() {
+        guard !terminationRequested else { return }
         connectionPolicy.userWillToggleConnection(currentlyConnected: model.connected)
         model.toggleConnectionFromHost()
     }
@@ -140,6 +145,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     }
 
     private func modelChanged() {
+        guard !terminationRequested else { objectWillChange.send(); return }
         if model.backendAvailable != previousBackendAvailable {
             previousBackendAvailable = model.backendAvailable
             if model.backendAvailable {
@@ -160,9 +166,16 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     }
 
     private func targetChanged(_ observed: TrainerTargetObservation) {
+        guard !terminationRequested else { return }
         let previous = previousTarget
         previousTarget = observed
         let pidChanged = previous.processIdentifier != observed.processIdentifier
+        if observed.launchGeneration != previous.launchGeneration ||
+            (lastKnownTargetProcessIdentifier != nil && observed.processIdentifier != nil &&
+             lastKnownTargetProcessIdentifier != observed.processIdentifier) {
+            session.targetLifetimeChanged()
+        }
+        if let pid = observed.processIdentifier { lastKnownTargetProcessIdentifier = pid }
         if observed.launchGeneration != previous.launchGeneration || pidChanged ||
             (previous.isRunning && !observed.isRunning) {
             model.hostTargetLifetimeChanged(observation: observed)
@@ -183,6 +196,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     }
 
     private func applicationBecameActive() {
+        guard !terminationRequested else { return }
         targetMonitor.refresh()
         connectionPolicy.observeTarget(
             running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration,
@@ -193,6 +207,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     }
 
     private func reconcileAutomaticConnection() {
+        guard !terminationRequested, !session.currentStatus.requiresTargetRestart else { return }
         if connectionPolicy.consumeTargetExitRefreshIfEligible(
             backendAvailable: model.backendAvailable, busy: model.busy, connected: model.connected
         ) {
@@ -212,6 +227,13 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             connected: model.connected, actionsEnabled: model.hostActionsEnabled
         ) else { return }
         model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)
+    }
+
+    func beginTermination() {
+        terminationRequested = true
+        session.beginTermination()
+        model.beginTerminationFromHost()
+        toolWindows.setInteractionEnabled(false)
     }
 }
 
@@ -244,7 +266,7 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
         canTerminateValue = { context.canTerminate }
         terminate = context.model.prepareForTermination
         closeWindows = context.toolWindows.closeAll
-        suspendInteraction = { context.toolWindows.setInteractionEnabled(false) }
+        suspendInteraction = context.beginTermination
         subscription = context.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 

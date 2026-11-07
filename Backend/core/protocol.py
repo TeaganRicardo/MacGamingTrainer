@@ -120,6 +120,8 @@ class JsonlRequestRouter:
             presentation = 'host.backend.error.invalidRequest'
         elif code == 'protocol_error':
             presentation = 'host.backend.error.protocolError'
+        elif code == 'outcome_unknown':
+            presentation = 'host.backend.error.outcomeUnknown'
         else:
             presentation = 'host.backend.error.operationFailed'
         return self.error_reply(
@@ -240,6 +242,7 @@ class JsonlRequestRouter:
                 request_id, 'duplicate_conflict',
                 'request id was reused with different content',
             ))
+        dispatch_returned = False
         try:
             command = request.get('command')
             params = request.get('params', {})
@@ -263,9 +266,11 @@ class JsonlRequestRouter:
                 }
             elif command.startswith(_CORE_SAVE_PREFIX):
                 result = self._dispatch_core_save(command, params)
+                dispatch_returned = True
             else:
                 with phase("backend.adapter_dispatch"):
                     result = self.adapter.dispatch(command, params, request_id)
+                dispatch_returned = True
                 if not isinstance(result, dict):
                     raise TypeError('Game adapter dispatch() must return a JSON object.')
             reply = self._envelope(request_id, True)
@@ -278,7 +283,8 @@ class JsonlRequestRouter:
         except Exception as error:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
             state = getattr(self.adapter, 'state', None)
-            code = getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
+            code = ('outcome_unknown' if dispatch_returned else
+                    getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed'))
             arguments = None
             if hasattr(error, 'presentation'):
                 presentation = error.presentation
@@ -293,6 +299,8 @@ class JsonlRequestRouter:
                 reply = self.core_error_reply(
                     request_id, code, diagnostic, state,
                 )
+            if dispatch_returned:
+                reply['error'].update(outcomeUnknown=True, terminal=True)
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path

@@ -102,7 +102,6 @@ struct Hades2StatePatch {
     let currentRunTraitIdentityPersistent: Bool?
     let resources: [MaterialResource]?
     let lastAction: Hades2ActionReceipt?
-    let error: String?
 
     init(_ payload: [String: Any]) {
         connected = payload["connected"] as? Bool
@@ -222,7 +221,6 @@ struct Hades2StatePatch {
         } else {
             lastAction = nil
         }
-        error = payload["error"] as? String
     }
 
     private static func boolMap(_ value: Any?) -> [String: Bool]? {
