@@ -1648,9 +1648,25 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
                 "unsafe runtime error retained mutation authority: \(key)")
             let afterFailure=commands().count
-            model.setFeature(.invincibility,value:true)
-            model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
-            check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
+            if code == "outcome_unknown" {
+                try setFixtureError(nil)
+                try setConnection(false, heroReady: false)
+                model.setFeature(.invincibility, value: true)
+                wait("detached desired intent after unknown outcome") {
+                    !model.busy && commands().count == afterFailure + 1 && model.isEnabled(.invincibility)
+                }
+                check(session.currentStatus.requiresTargetRestart,
+                      "detached desired edit released unresolved runtime trust")
+                let afterOfflineEdit = commands().count
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count == afterOfflineEdit, "offline intent enabled a live mutation")
+                session.targetLifetimeChanged()
+                try setConnection(true, heroReady: true)
+            } else {
+                model.setFeature(.invincibility,value:true)
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
+            }
             try setFixtureError(nil)
             model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
             check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")

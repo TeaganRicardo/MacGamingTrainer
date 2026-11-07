@@ -51,6 +51,11 @@ for raw in sys.stdin:
         sys.exit(7)
 '''
 
+context_source = (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
+transition_start = context_source.index('        let pidChanged = previous.processIdentifier')
+target_transition = context_source[transition_start:context_source.index(
+    '        if previous.isRunning && observed.isRunning', transition_start)]
+
 harness = r'''
 import Foundation
 
@@ -58,6 +63,19 @@ struct GameModuleDescriptor {
     let backendGameID: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
+}
+
+struct TargetObservation {
+    let isRunning: Bool
+    let launchGeneration: UInt
+    let processIdentifier: Int32?
+}
+struct TargetModelProbe {
+    func hostTargetLifetimeChanged(observation: TargetObservation) {}
+}
+func observeTarget(previous: TargetObservation, observed: TargetObservation) {
+    let model = TargetModelProbe()
+__MGT_TARGET_LIFETIME_TRANSITION__
 }
 
 func fail(_ message: String) -> Never {
@@ -169,7 +187,11 @@ do {
                  requiresTrustedTarget: false, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
     if session.currentStatus.errorCode != "outcome_unknown" { fail("safe request hid the unresolved action") }
-    session.targetLifetimeChanged()
+    observeTarget(previous: .init(isRunning: false, launchGeneration: 0, processIdentifier: nil),
+                  observed: .init(isRunning: true, launchGeneration: 0, processIdentifier: 42))
+    if !session.currentStatus.requiresTargetRestart { fail("presence discovery released an unknown target outcome") }
+    observeTarget(previous: .init(isRunning: true, launchGeneration: 0, processIdentifier: 42),
+                  observed: .init(isRunning: true, launchGeneration: 1, processIdentifier: 42))
     if session.currentStatus.requiresTargetRestart || session.currentStatus.errorCode != nil {
         fail("definitive new target lifetime did not release its predecessor's gate")
     }
@@ -246,6 +268,18 @@ do {
     if unknownDone != false || queuedDone != false || queuedStarted || !session.currentStatus.requiresTargetRestart {
         fail("a nonterminal module unknown-outcome reply let queued runtime work execute")
     }
+    let api = Hades2API(session: session)
+    var offlineDone: Bool?
+    api.request(.setDesired(feature: "invincibility", value: true), runtimeConnected: false,
+        operation: "offline intent", completion: { offlineDone = $0 })
+    if !waitUntil(waitBudget, { offlineDone != nil }) || offlineDone != true || !session.currentStatus.requiresTargetRestart {
+        fail("a detached durable edit was blocked or cleared target uncertainty")
+    }
+    var connectedDone: Bool?
+    var connectedStarted = false
+    api.request(.setDesired(feature: "invincibility", value: false), runtimeConnected: true,
+        operation: "connected intent", started: { connectedStarted = true }, completion: { connectedDone = $0 })
+    if connectedDone != false || connectedStarted { fail("connected desired edit bypassed target uncertainty") }
     session.targetLifetimeChanged()
 }
 
@@ -319,12 +353,16 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
     binary = td / 'session_test'
     command_log = td / 'commands.log'
     worker_path.write_text(textwrap.dedent(worker), encoding='utf-8')
-    main_path.write_text(textwrap.dedent(harness), encoding='utf-8')
+    main_path.write_text(textwrap.dedent(harness.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)), encoding='utf-8')
     subprocess.run([
         SWIFTC,
         str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
         str(ROOT / 'Sources/Core/Runtime/BackendClient.swift'),
         str(ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift'),
+        str(ROOT / 'Sources/Hades2/Hades2API.swift'),
+        str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
+        str(ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift'),
+        str(ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
         str(main_path),
         '-o', str(binary),
     ], check=True, cwd=ROOT)
@@ -349,6 +387,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'encoding rejection reached worker: {commands!r}')
     if 'queued-after-unknown' in commands or commands.count('unknown-reply') != 1:
         raise AssertionError(f'unknown reply replayed or released queued target work: {commands!r}')
+    if commands.count('set_desired') != 1:
+        raise AssertionError(f'detached durable edit was blocked or its connected counterpart executed: {commands!r}')
     for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual'):
         if commands.count(required) != 1:
             raise AssertionError(f'missing/duplicate post-recovery request {required}: {commands!r}')

@@ -168,9 +168,12 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
         let previous = previousTarget
         previousTarget = observed
         let pidChanged = previous.processIdentifier != observed.processIdentifier
+        if observed.launchGeneration != previous.launchGeneration ||
+            (previous.processIdentifier != nil && observed.processIdentifier != nil && pidChanged) {
+            session.targetLifetimeChanged()
+        }
         if observed.launchGeneration != previous.launchGeneration || pidChanged ||
             (previous.isRunning && !observed.isRunning) {
-            session.targetLifetimeChanged()
             model.hostTargetLifetimeChanged(observation: observed)
         }
         if previous.isRunning && observed.isRunning && pidChanged &&
@@ -200,7 +203,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     }
 
     private func reconcileAutomaticConnection() {
-        guard !terminationRequested else { return }
+        guard !terminationRequested, !session.currentStatus.requiresTargetRestart else { return }
         if connectionPolicy.consumeTargetExitRefreshIfEligible(
             backendAvailable: model.backendAvailable, busy: model.busy, connected: model.connected
         ) {

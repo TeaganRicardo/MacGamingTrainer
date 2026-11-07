@@ -955,6 +955,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if repeatableSpawn { pendingRepeatableSpawns += 1 }
         api.request(
             request,
+            runtimeConnected: connected,
             operation: title,
             operationArguments: titleArguments,
             announceSuccess: announceSuccess,

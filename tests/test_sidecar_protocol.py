@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -160,6 +161,24 @@ except SidecarTerminalError:
     pass
 else:
     raise AssertionError('interrupted sidecar was restarted')
+
+deadline_process = FakeProcess()
+deadline_interrupted = JsonLineSidecarClient(['fake'], reply_timeout_seconds=1,
+    process_factory=factory_for(deadline_process))
+with patch('core.sidecar.time.monotonic', side_effect=KeyboardInterrupt):
+    try:
+        deadline_interrupted.request('mutate', outcome_unknown_on_loss=True)
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError('deadline interruption was replaced or swallowed')
+assert deadline_interrupted.terminal and not deadline_interrupted.started
+try:
+    deadline_interrupted.request('observe')
+except SidecarTerminalError as error:
+    assert not error.outcome_unknown, 'deadline interruption sent no request bytes'
+else:
+    raise AssertionError('deadline-interrupted client was restarted')
 
 # The internal deadline includes pipe backpressure, bounded by an independent
 # test-process watchdog so a regression cannot hang the contract suite.

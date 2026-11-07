@@ -268,9 +268,9 @@ class JsonLineSidecarClient:
         if len(encoded) > self.max_line_bytes:
             raise ValueError("sidecar request exceeded the configured line limit")
 
+        transmission = {'bytes': 0, 'attempted': False}
         try:
             deadline = time.monotonic() + self.reply_timeout_seconds
-            transmission = {'bytes': 0, 'attempted': False}
             self._write_request(process.stdin, encoded, deadline, transmission)
             raw = self._readline(process.stdout, deadline)
             if profile_metrics is not None:

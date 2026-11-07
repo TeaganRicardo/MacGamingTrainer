@@ -56,13 +56,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
-    var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible && !backendStatus.requiresTargetRestart }
+    var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
     private var requiresExplicitReconnect: Bool {
         ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
             .contains(backendStatus.errorCode)
     }
     var canEditIntent: Bool {
-        backendAvailable && backendStatus.protocolCompatible && !requiresExplicitReconnect
+        backendAvailable && backendStatus.protocolCompatible &&
+            (!requiresExplicitReconnect || (!connected && backendStatus.requiresTargetRestart))
     }
     var canMutate: Bool { canEditIntent && connected && heroReady }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
@@ -363,9 +364,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func send(_ command: String, params: [String: Any] = [:], operation: String,
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
         localError = ""
+        let offlineIntent = !connected && ["set_feature", "set_boon_rarity", "load_profile", "disable_all"].contains(command)
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
                      timeout: command == "connect" ? 130 : 20,
-                     requiresTrustedTarget: !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
+                     requiresTrustedTarget: !offlineIntent &&
+                        !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
                      completion: { [weak self] ok in
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
