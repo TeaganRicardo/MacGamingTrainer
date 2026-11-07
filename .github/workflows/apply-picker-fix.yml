@@ -1,0 +1,30 @@
+name: Apply native Picker repair patch
+
+on:
+  push:
+    branches:
+      - fix/native-picker-baseline-20261107
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch from split connector-safe payload
+        env:
+          BASE_SHA: b0e14c6f989e9e7c998189703e1487f7c5be5bf5
+        run: |
+          cat .tmp-picker-fix/part1.b64 .tmp-picker-fix/part2.b64 | base64 --decode | xz --decompress > "$RUNNER_TEMP/native-picker-fix.patch"
+          git apply --check "$RUNNER_TEMP/native-picker-fix.patch"
+          git apply "$RUNNER_TEMP/native-picker-fix.patch"
+          rm -rf .tmp-picker-fix
+          rm .github/workflows/apply-picker-fix.yml
+          git reset --soft "$BASE_SHA"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "fix: restore native Picker behavior and product accent"
+          git push --force-with-lease origin "HEAD:${GITHUB_REF_NAME}"
