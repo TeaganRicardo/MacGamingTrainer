@@ -22,6 +22,7 @@ TESTS = {
     "test_viewport_feedback.py",
     "test_trainer_tool_windows.py",
     "test_disclosure_settle_classification.py",
+    "test_core_save_metadata_darwin.py",
 }
 SOURCES = {"hades": "Sources/Hades/", "hades2": "Sources/Hades2/"}
 
@@ -77,6 +78,7 @@ assert selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES) ==
     "test_hades2_lldb_breakpoint_lifetime.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py",
     "test_runtime_text_edit_completion.py", "test_trainer_text_field_appearance.py",
     "test_hades2_save_editor_frontend.py", "test_disclosure_settle_classification.py",
+    "test_core_save_metadata_darwin.py",
 })
 # The watchdog policy is an input to every migrated native fixture; a change to
 # it must select each consumer rather than silently keeping the old budgets.

@@ -1,5 +1,6 @@
 """Metadata policy for Trainer-owned save copies."""
 import errno
+import ctypes
 import os
 from pathlib import Path
 import shutil
@@ -8,6 +9,16 @@ import stat
 _LOCKING_FLAGS = sum(getattr(stat, name, 0) for name in (
     'UF_IMMUTABLE', 'SF_IMMUTABLE', 'UF_APPEND', 'SF_APPEND', 'UF_NOUNLINK', 'SF_NOUNLINK',
 ))
+if hasattr(os, 'chflags'):
+    _fchflags = ctypes.CDLL(None, use_errno=True).fchflags
+    _fchflags.argtypes = (ctypes.c_int, ctypes.c_uint)
+    _fchflags.restype = ctypes.c_int
+
+
+def _set_flags(descriptor, flags):
+    if _fchflags(descriptor, flags) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
 
 
 def copy_save_metadata(source_fd, destination_fd):
@@ -22,8 +33,8 @@ def copy_save_metadata(source_fd, destination_fd):
         except OSError as error:
             if error.errno not in ignored:
                 raise
-    if hasattr(os, 'fchflags'):
-        os.fchflags(destination_fd, metadata.st_flags & ~_LOCKING_FLAGS)
+    if hasattr(os, 'chflags'):
+        _set_flags(destination_fd, metadata.st_flags & ~_LOCKING_FLAGS)
 
 
 def copy_owned_save_file(source, destination):
@@ -33,14 +44,33 @@ def copy_owned_save_file(source, destination):
         copy_save_metadata(original.fileno(), copied.fileno())
 
 
+def _clear_owned_locking_flags(descriptor):
+    metadata = os.fstat(descriptor)
+    if metadata.st_flags & _LOCKING_FLAGS:
+        _set_flags(descriptor, metadata.st_flags & ~_LOCKING_FLAGS)
+    if not stat.S_ISDIR(metadata.st_mode):
+        return
+    for name in os.listdir(descriptor):
+        item = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
+        if not (stat.S_ISDIR(item.st_mode) or stat.S_ISREG(item.st_mode)):
+            continue
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+        if stat.S_ISDIR(item.st_mode):
+            flags |= os.O_DIRECTORY
+        child = os.open(name, flags, dir_fd=descriptor)
+        try:
+            _clear_owned_locking_flags(child)
+        finally:
+            os.close(child)
+
+
 def remove_owned_save_tree(path):
-    # Only callers with a contained private staging/rollback directory use this.
-    # Old copies may already carry flags copied by earlier Trainer builds.
+    # Old private copies can carry source flags. Bind every flag change to a
+    # non-symlink descriptor so a replaced staging name cannot unlock a target.
     if hasattr(os, 'chflags'):
-        for directory, directories, files in os.walk(path, followlinks=False):
-            for candidate in (Path(directory), *(Path(directory) / name for name in directories + files)):
-                if not candidate.is_symlink():
-                    flags = candidate.stat().st_flags
-                    if flags & _LOCKING_FLAGS:
-                        os.chflags(candidate, flags & ~_LOCKING_FLAGS)
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            _clear_owned_locking_flags(descriptor)
+        finally:
+            os.close(descriptor)
     shutil.rmtree(path)

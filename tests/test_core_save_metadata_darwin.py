@@ -6,12 +6,14 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from core.save_restore import SaveRestoreError
+from core.save_metadata import remove_owned_save_tree
 from test_core_structured_save_edit import CODEC, environment, open_session
 
 
@@ -58,6 +60,62 @@ class SaveMetadataTests(unittest.TestCase):
             finally:
                 if payload.exists():
                     os.chflags(payload, 0)
+
+    def test_replaced_snapshot_stage_does_not_unlock_an_external_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            _, service, _ = environment(base / "service")
+            outside = base / "outside"
+            outside.mkdir()
+            protected = outside / "keep.sav"
+            protected.write_bytes(b"external file")
+            os.chflags(protected, stat.UF_IMMUTABLE)
+            stages = []
+
+            def swap_stage(_source, destination):
+                stage = next(path for path in destination.parents if path.name.startswith(".snapshot-"))
+                stage.rename(base / "original-stage")
+                stage.symlink_to(outside, target_is_directory=True)
+                stages.append(stage)
+                raise OSError("injected stage namespace replacement")
+
+            try:
+                with patch("core.save_snapshots.copy_owned_save_file", swap_stage), self.assertLogs(level="ERROR"):
+                    with self.assertRaises(OSError):
+                        service.backup()
+                self.assertTrue(protected.stat().st_flags & stat.UF_IMMUTABLE)
+                self.assertEqual(protected.read_bytes(), b"external file")
+            finally:
+                os.chflags(protected, 0)
+                for stage in stages:
+                    stage.unlink()
+
+    def test_child_directory_swap_cannot_redirect_flag_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            stage = base / "stage"
+            child = stage / "child"
+            child.mkdir(parents=True)
+            outside = base / "outside"
+            outside.mkdir()
+            protected = outside / "keep.sav"
+            protected.write_bytes(b"external file")
+            os.chflags(protected, stat.UF_IMMUTABLE)
+            original_open = os.open
+
+            def swap_child(name, *args, **kwargs):
+                if name == "child":
+                    child.rename(base / "original-child")
+                    child.symlink_to(outside, target_is_directory=True)
+                return original_open(name, *args, **kwargs)
+
+            try:
+                with patch("core.save_metadata.os.open", swap_child):
+                    with self.assertRaises(OSError):
+                        remove_owned_save_tree(stage)
+                self.assertTrue(protected.stat().st_flags & stat.UF_IMMUTABLE)
+            finally:
+                os.chflags(protected, 0)
 
 
 if __name__ == "__main__":
