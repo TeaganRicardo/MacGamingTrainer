@@ -27,6 +27,17 @@ for path in ("Sources/Core/Host/TrainerHost.swift", "Sources/Core/UI/TrainerSect
 for helper in {path for paths in MACOS_TEST_DEPENDENCIES.values() for path in paths}:
     expected = {test for test, paths in MACOS_TEST_DEPENDENCIES.items() if helper in paths}
     assert expected <= set(selected_tests([helper], TESTS, SOURCES)), helper
+# These were observed missing edges: changing the shared helper used to run
+# none of these actual native consumers. Exercise the real selector result.
+for helper, consumers in (
+    ("tests/room_picker_alignment_harness.py", {"test_hades_frontend.py", "test_hades2_view_state_flow.py"}),
+    ("tests/fixtures/hades2/save_editor_player_journey.py", {
+        "test_hades2_save_editor_player_journey.py", "test_hades2_advanced_save_frontend.py",
+        "test_hades2_save_record_frontend.py", "test_hades2_save_container_frontend.py",
+    }),
+):
+    assert consumers <= set(selected_tests([helper], TESTS, SOURCES)), helper
+
 assert selected_tests(["Tools/profile_hades2_operations.py"], TESTS, SOURCES) == []
 assert set(MACOS_TEST_DEPENDENCIES) <= set(selected_tests(["Tools/macos_test_dependencies.json"], TESTS, SOURCES))
 

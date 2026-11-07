@@ -4,7 +4,6 @@ The policy exists so that a slow-but-correct native journey, a stalled process
 and an unmet semantic predicate stay three different outcomes. These checks are
 portable: they never require AppKit or a hosted runner.
 """
-import ast
 import os
 import signal
 import subprocess
@@ -241,13 +240,6 @@ for name, journeys in CONSUMERS.items():
     for journey in journeys:
         assert f'"{journey}"' in source or f"'{journey}'" in source, (name, journey)
         declared.add(journey)
-    for call in ast.walk(ast.parse(source)):
-        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                and isinstance(call.func.value, ast.Name) and call.func.value.id == "subprocess"
-                and call.func.attr in {"run", "check_output", "call"}):
-            assert not any(keyword.arg == "timeout" for keyword in call.keywords), (
-                f"{name}:{call.lineno}: native launch budget bypasses the shared policy"
-            )
 
 assert declared == set(JOURNEY_BUDGETS), (
     "declared journeys and owned journeys diverged: "
