@@ -44,6 +44,14 @@ typedef enum {
     MGT_MAILBOX_UNKNOWN = 3
 } MGTMailboxOutcome;
 
+/* Installer results cross the native/Python boundary through LLDB. Keep the
+ * restart-required value named here so both sides can pin its recovery meaning. */
+typedef enum {
+    MGT_MAILBOX_INSTALL_SUCCESS = 0,
+    MGT_MAILBOX_INSTALL_FAILURE = -1,
+    MGT_MAILBOX_INSTALL_RESTART_REQUIRED = -2
+} MGTMailboxInstallStatus;
+
 #define MGT_MAILBOX_STATE_MASK UINT32_C(0xff)
 #define MGT_MAILBOX_CLOSED_FLAG UINT32_C(0x100)
 #define MGT_MAILBOX_POISONED_FLAG UINT32_C(0x200)
