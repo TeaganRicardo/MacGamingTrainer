@@ -73,7 +73,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
         created.append(adapter)
         return adapter
 
-    server.available_games = lambda: [{"id": "startup_fixture"}]
+    def unrelated_broken_inventory():
+        raise ValueError("unrelated module manifest is invalid")
+
+    server.available_games = unrelated_broken_inventory
     server.create_adapter = create_startup_adapter
     sys.stdin = io.StringIO(json.dumps({
         "id": "ping-1",
@@ -133,7 +136,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     clean_stderr = io.StringIO()
     try:
         with contextlib.redirect_stdout(clean_stdout), contextlib.redirect_stderr(clean_stderr):
-            server.main(["--game", "startup_fixture"])
+            server.main([])
     finally:
         server.create_adapter = original_factory
         server.available_games = original_available_games
