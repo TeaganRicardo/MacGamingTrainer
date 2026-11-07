@@ -13,8 +13,10 @@ enum TrainerPickerPresentationState: Equatable {
 
 /// Shared owner for geometry, availability and accent of an in-window Picker.
 ///
-/// SwiftUI hosts `Picker` as an `NSPopUpButton`; that native control owns its
-/// bezel, title, indicator, menu, keyboard behavior and accessibility. The
+/// The native popup owns its bezel, title, indicator, menu, keyboard behavior
+/// and accessibility. On macOS 26 and later SwiftUI draws it itself, with no
+/// `NSPopUpButton` in the view tree, so it cannot be restyled by repainting
+/// around it or by patching AppKit views. The
 /// dark appearance is declared once on `NSApp` and the product purple once as
 /// the application accent color (see `AppDelegate` and the asset catalog), so
 /// every window, sheet, panel, menu and reconstructed popup resolves the same
