@@ -1,8 +1,4 @@
-import hashlib
 import json
-import plistlib
-import sys
-import zipfile
 import os
 import shutil
 import subprocess
@@ -139,69 +135,6 @@ router.close()
         check=True,
         cwd=project,
     )
-
-    # Exercise the same reference module with one optional resident declaration.
-    # It is metadata capability evidence; the reference still has no injected
-    # game runtime, LLDB, sidecar, Save provider or real game dependency.
-    declared = json.loads(original_manifest)
-    declared["residentRuntime"] = {"source": "runtime/fixture.lua"}
-    resident = backend_module / "runtime/fixture.lua"
-    resident.parent.mkdir()
-    body = ("local previousModule = __ReferenceFixture\n"
-            "if previousModule and previousModule.revision ~= 7 then previousModule = nil end\n"
-            "local M = { version = 1, revision = 7 }\nreturn M\n")
-    resident.write_text(body)
-    manifest.write_text(json.dumps(declared))
-    subprocess.run([sys.executable, str(tools / "validate_game_module.py"), game_id],
-                   check=True, cwd=project, env=env)
-    subprocess.run([sys.executable, str(tools / "generate_game_binding.py"), game_id, str(generated)],
-                   check=True, cwd=project, env=env)
-    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
-    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=project, check=True)
-    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=project, check=True)
-    def commit_fixture(message):
-        subprocess.run(["git", "add", "-A"], cwd=project, check=True)
-        subprocess.run(["git", "commit", "-qm", message], cwd=project, check=True)
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project, text=True).strip()
-    base = commit_fixture("reference resident capability")
-    resident.write_text(body.replace("return M\n", "M.enabled = true\nreturn M\n"))
-    unchanged_revision = commit_fixture("change without revision")
-    refused = subprocess.run([sys.executable, str(root / "Tools/check_runtime_revision.py"), base, unchanged_revision],
-                             cwd=project, text=True, capture_output=True)
-    assert refused.returncode != 0 and "revision" in refused.stderr, refused
-    resident.write_text(resident.read_text().replace("revision ~= 7", "revision ~= 8").replace("revision = 7", "revision = 8"))
-    bumped = commit_fixture("increase reference revision")
-    subprocess.run([sys.executable, str(root / "Tools/check_runtime_revision.py"), base, bumped],
-                   check=True, cwd=project)
-    sys.path.insert(0, str(root / "Tools"))
-    from write_build_provenance import require_packaged_module_identity, resident_identity
-    app = declared["app"]
-    info = plistlib.loads((project / "Info.plist").read_bytes())
-    info.update(CFBundleName=app["displayName"], CFBundleDisplayName=app["displayName"],
-                CFBundleIdentifier=app["bundleIdentifier"])
-    app_root = app["displayName"] + ".app"
-    artifact = project.parent / "reference.zip"
-    packaged = app_root + "/Contents/Resources/Backend/games/" + game_id + "/runtime/fixture.lua"
-    def package_reference(resident_bytes):
-        with zipfile.ZipFile(artifact, "w") as archive:
-            archive.writestr(app_root + "/Contents/Info.plist", plistlib.dumps(info))
-            archive.writestr(app_root + "/Contents/MacOS/" + info["CFBundleExecutable"], b"fixture executable")
-            archive.writestr(app_root + "/Contents/Resources/ACTIVE_GAME_ID", game_id + "\n")
-            archive.writestr(app_root + "/Contents/Resources/Backend/games/" + game_id + "/module.json", manifest.read_bytes())
-            archive.writestr(packaged, resident_bytes)
-    package_reference(resident.read_bytes())
-    require_packaged_module_identity(project, artifact, game_id, info)
-    identity = resident_identity(project, artifact, game_id, app_root)
-    expected = hashlib.sha256(resident.read_bytes()).hexdigest()
-    assert identity["sourceSha256"] == identity["packagedSha256"] == expected
-    package_reference(b"tampered resident")
-    try:
-        resident_identity(project, artifact, game_id, app_root)
-    except RuntimeError as error:
-        assert "differs" in str(error)
-    else:
-        raise AssertionError("reference resident provenance accepted different packaged bytes")
-    manifest.write_text(original_manifest)
 
     generic = (
         (project / 'Sources/App.swift').read_text()

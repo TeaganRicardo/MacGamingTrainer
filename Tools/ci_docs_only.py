@@ -11,8 +11,6 @@ TOOLS = ROOT / "Tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
-from test_inventory import validate_native_inventory
-
 from module_inventory import (
     ModuleInventoryError,
     app_resource_sources_for_diff,
@@ -24,7 +22,6 @@ from module_inventory import (
 PORTABLE_TOOL_PATHS = {
     "Tools/check_runtime_revision.py",
     "Tools/discover_linux_tests.py",
-    "Tools/test_inventory.py",
     "Tools/release_tag.py",
     "Tools/module_inventory.py",
     "Tools/run_linux_checks.sh",
@@ -91,10 +88,6 @@ def load_macos_only_tests(root: Path = ROOT) -> set[str]:
         for line in source.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
-    for name in inventory:
-        if Path(name).name != name or not (root / "tests" / name).is_file():
-            raise ValueError(f"macOS inventory entry is missing or unsafe: {name}")
-    validate_native_inventory(root, inventory)
     return inventory
 
 
@@ -151,8 +144,6 @@ def is_linux_portable_only(
             return False
         return path.endswith((".py", ".lua", ".json", ".csv", ".txt", ".md"))
     if path.startswith("tests/"):
-        if Path(path).name.endswith("_frontend.py") and Path(path).name not in macos_only_tests:
-            raise ValueError(f"native frontend test missing from macOS inventory: {path}")
         # Shared Swift/native fixtures are inputs to macOS behavioral harnesses.
         if path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
             return False

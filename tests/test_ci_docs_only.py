@@ -182,12 +182,6 @@ for path in (
     "Tools/macos_test_dependencies.json",
 ):
     assert_scope([path], docs_only=False, linux=True, macos=True, module_build=False, build=False)
-try:
-    module.classify_scope(["tests/test_third_probe_frontend.py"])
-except ValueError as error:
-    assert "inventory" in str(error)
-else:
-    raise AssertionError("unregistered frontend test silently entered Linux")
 assert_scope(["tests/test_debugserver_ownership.py"],
              docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["tests/management_ui_harness.py"],

@@ -19,7 +19,7 @@ Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module
 | `buildRequirements` | The integration needs an LLDB bridge or debugger entitlement | Its actual selected build/bridge path; the base reference fixture proves these dependencies remain optional |
 | `appResources` | Runtime code needs bundled reference data | Source path from the owning manifest, package inventory and provenance |
 
-The base reference fixture requires no LLDB, Lua, sidecar, Save provider or editor. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the module contract fixture adds resident metadata and runs validation, revision rejection/increase and packaged-byte checks. These fixtures do not certify a game's native ABI.
+The base reference fixture requires no LLDB, Lua, sidecar, Save provider or editor. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the existing multi-module revision and provenance owner tests cover resident declarations and packaged source identity. These fixtures do not certify a game's native ABI.
 
 ## Register behavior coverage
 
@@ -27,7 +27,7 @@ Provide a stable macOS behavior entry using `test_<id>_model_flow.py`, `test_<id
 
 Use a foreground-independent model/API/session journey for ordinary PR smoke. The Hades II model entry exercises typed commands, explicit commit, authoritative observation refresh, guarded actions and feedback. Native focus, field-editor, key-window, activation and rendered journeys remain in their own convergence entries. A model call does not prove physical keyboard/focus behavior.
 
-Portable `test_*.py` files remain automatically discovered. A test with a top-level Darwin-only guard must be registered in the macOS inventory; an unregistered `test_*_frontend.py` change fails routing instead of silently becoming portable. Tests which compile only Foundation logic belong in the portable lane when that lane can execute them.
+Portable `test_*.py` files remain automatically discovered without an additional source-scanning gate. Register Darwin-only behavior explicitly in the macOS inventory; the process-path and native image-query entries demonstrate the formerly omitted platform branches. Tests which compile only Foundation logic belong in the portable lane when that lane can execute them.
 
 Declare every imported or executed Python/data helper in `Tools/macos_test_dependencies.json`, including indirect helpers. The inventory contract derives consumption from imports and fixture paths. Dependencies point from a consumer to its inputs; a profiling tool importing a test helper is not an input to that helper's unrelated test. Native fixture sources under `tests/` conservatively select the complete native inventory.
 
