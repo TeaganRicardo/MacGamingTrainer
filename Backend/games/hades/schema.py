@@ -1,4 +1,5 @@
 import math
+import sys
 
 from core.adapter import AdapterError
 
@@ -30,6 +31,8 @@ DEFAULT_PREFERENCES = {
 }
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
+# Resident status flag and value key for each fixed-value lock.
+LOCK_FIELDS = (('healthLocked', 'healthLock'), ('moneyLocked', 'moneyLock'), ('rerollsLocked', 'rerollsLock'))
 WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object', 'set_door_reward', 'set_door_route', 'restore_door'))
 ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
@@ -86,8 +89,8 @@ def preference_value(name, value):
             return None
         if not isinstance(value, dict) or set(value) != {'current', 'max'}:
             raise invalid_value()
-        current = number(value.get('current'), 1, 1_000_000_000, integer=True)
-        maximum = number(value.get('max'), 1, 1_000_000_000, integer=True)
+        current = number(value.get('current'), 1, sys.float_info.max)
+        maximum = number(value.get('max'), 1, sys.float_info.max)
         if current > maximum:
             raise invalid_value()
         return {'current': current, 'max': maximum}

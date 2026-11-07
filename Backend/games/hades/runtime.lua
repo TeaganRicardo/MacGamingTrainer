@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 8 then error("hades.error.restartRequired") end
+  if existing.revision ~= 9 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 8,
+  version = 1, revision = 9,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -132,8 +132,8 @@ local function traitGroups(unit)
   end
   return groups
 end
-local function damageModifier(unit)
-  local modifiers = unit.OutgoingDamageModifiers or {}
+local function damageModifier(unit, field)
+  local modifiers = unit[field] or {}
   for _, modifier in pairs(modifiers) do
     if modifier.Name == trainerFlag then return modifier end
   end
@@ -223,7 +223,7 @@ local function mount(unit, rebuilt)
     enforceHealthLock(unit)
     UpdateHealthUI()
   end
-  local damage = damageModifier(unit)
+  local damage = damageModifier(unit, "OutgoingDamageModifiers")
   if desired.damageMultiplier == 1 then
     if damage then removeDamageModifier(unit) end
   elseif damage then
@@ -232,6 +232,8 @@ local function mount(unit, rebuilt)
     assert(type(AddOutgoingDamageModifier) == "function", "hades.error.unsupportedRuntime")
     AddOutgoingDamageModifier(unit, { Name = trainerFlag, GlobalMultiplier = desired.damageMultiplier, Multiplicative = true })
   end
+  mounted.damageMultiplier = damageModifier(unit, "OutgoingDamageModifiers")
+  mounted.incomingDamageMultiplier = damageModifier(unit, "IncomingDamageModifiers")
   local movement = runtime.movementOwners[unit]
   local scriptedMovement = movement and movement.run == CurrentRun and movement.objectId == unit.ObjectId
   scriptedMovement = scriptedMovement or (CurrentRun.BlockTimerFlags and CurrentRun.BlockTimerFlags.MoveHeroToRoomPosition)
@@ -763,6 +765,12 @@ function runtime.status()
     and (unit.Weapons.RangedWeapon or unit.Weapons.GunWeapon) and true or false
   activeFeatures.fullGodGauge = activeFeatures.fullGodGauge and not unit.SuperActive and type(IsSuperValid) == "function" and IsSuperValid() or false
   local mounted = ready and runtime.mounted
+  for feature, field in pairs({ damageMultiplier = "OutgoingDamageModifiers", incomingDamageMultiplier = "IncomingDamageModifiers" }) do
+    local modifier = ready and damageModifier(unit, field)
+    activeFeatures[feature] = activeFeatures[feature] and mounted and mounted.unit == unit
+      and mounted.objectId == unit.ObjectId and modifier ~= nil and mounted[feature] == modifier
+      and modifier.GlobalMultiplier == runtime.features[feature] and modifier.Multiplicative == true or false
+  end
   for feature, property in pairs({ moveSpeedMultiplier = "move", attackSpeedMultiplier = "attack", dashBonus = "dash" }) do
     activeFeatures[feature] = activeFeatures[feature] and mounted and mounted.unit == unit
       and mounted.objectId == unit.ObjectId and mounted[property] == runtime.features[feature] or false

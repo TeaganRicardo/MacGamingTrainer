@@ -233,8 +233,19 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     adapter.dispatch('set_value', {'field': 'maxHealth', 'value': 80, 'target': owner}, 'edit-locked-max-health')
     assert store.load()['healthLock'] == {'current': 40, 'max': 80}
     adapter.dispatch('disconnect', {}, 'detach-health-lock')
+    # The resident keeps enforcing its lock across a detach; reconnect only
+    # replays durable lock intent the resident no longer holds.
     before_reconnect = len(runtime.events)
     reconnected = adapter.dispatch('connect', {}, 'reconnect-health-lock')
+    assert reconnected['healthLocked'] is True
+    assert reconnected['healthLock'] == {'current': 40, 'max': 80}
+    assert not any(event[0] == 'configure_locks' for event in runtime.events[before_reconnect:]), (
+        'reconnect re-sent a lock the resident already enforced'
+    )
+    adapter.dispatch('disconnect', {}, 'detach-before-restart')
+    runtime.state.update(healthLocked=False, healthLock=None)  # a restarted game has no resident lock
+    before_reconnect = len(runtime.events)
+    reconnected = adapter.dispatch('connect', {}, 'reconnect-after-restart')
     assert reconnected['healthLocked'] is True
     assert ('configure_locks', {
         'health': {'current': 40, 'max': 80}, 'money': None, 'rerolls': None

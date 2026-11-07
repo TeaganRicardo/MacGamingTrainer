@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -10,9 +11,12 @@ from core.adapter import AdapterError
 from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades worker captured target dispatch')
+module = ROOT / 'Backend/games/hades'
+resident = json.loads((module / 'module.json').read_text())['residentRuntime']
+revision = re.search(resident['moduleRevisionPattern'], (module / resident['source']).read_text()).group(1)
 fixture = r'''
 local mutations = 0
-local runtime = {version=1,revision=8,bootstrapId='fixture', generationId='fixture'}
+local runtime = {version=1,revision=__REVISION__,bootstrapId='fixture', generationId='fixture'}
 runtime.health, runtime.maxHealth, runtime.money, runtime.rerolls = 50, 100, 25, 3
 function runtime.status()
   return {
@@ -71,7 +75,7 @@ function runtime.json(value)
     ..',"rerollsLocked":'..tostring(value.rerollsLocked==true)..',"rerollsLock":'..nullable(value.rerollsLock)..'}'
 end
 _G.MacGamingTrainerHades=runtime
-'''
+'''.replace('__REVISION__', revision)
 
 
 class Transport:
