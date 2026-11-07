@@ -1,4 +1,8 @@
 {
+  "test_process_time_warp_bindings_macos.py": [
+    "Native/ProcessTimeWarp/vendor/fishhook/fishhook.c",
+    "Native/ProcessTimeWarp/vendor/fishhook/fishhook.h"
+  ],
   "test_hades_frontend.py": [
     "tests/macos_fixture_policy.py",
     "tests/management_ui_harness.py",

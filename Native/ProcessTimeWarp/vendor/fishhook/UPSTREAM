@@ -1,2 +1,6 @@
 https://github.com/facebook/fishhook
 commit aadc161ac3b80db07a9908851839a17ba63a9eb1
+
+Local modification: optional per-rebinding result counters record verified
+slot writes and protection/write-verification failures. Original function
+pointers remain callable-address outputs and are not installation receipts.

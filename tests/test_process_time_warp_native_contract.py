@@ -9,12 +9,12 @@ BUILD = (ROOT / 'build.sh').read_text()
 
 assert HELPER.is_file(), 'native Time Warp helper is missing'
 assert FISHHOOK.is_file() and FISHHOOK_H.is_file(), 'fishhook vendor source is missing'
-assert UPSTREAM.read_text().strip().endswith('aadc161ac3b80db07a9908851839a17ba63a9eb1')
+assert 'commit aadc161ac3b80db07a9908851839a17ba63a9eb1' in UPSTREAM.read_text().splitlines()
 
 source = HELPER.read_text()
 for symbol in (
     'MGTTimeWarpABI', 'MGTTimeWarpInstall', 'MGTTimeWarpSetSpeed',
-    'MGTTimeWarpGetSpeed', 'MGTTimeWarpHookMask',
+    'MGTTimeWarpGetSpeed', 'MGTTimeWarpHookMask', 'MGTTimeWarpInstallState',
 ):
     assert symbol in source, symbol
 

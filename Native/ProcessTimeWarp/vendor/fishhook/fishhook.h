@@ -41,10 +41,16 @@ extern "C" {
  * A structure representing a particular intended rebinding from a symbol
  * name to its replacement
  */
+struct rebinding_result {
+  size_t rebound;
+  size_t failed;
+};
+
 struct rebinding {
   const char *name;
   void *replacement;
   void **replaced;
+  struct rebinding_result *result;
 };
 
 /*

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import subprocess
 import sys
 import time
@@ -57,9 +58,18 @@ class LLDBProcessTimeWarpDriver:
         self.transport.stop(time.monotonic() + 3)
         try:
             yield
-        finally:
+        except BaseException:
+            # The body's failure is authoritative: a resume error must never
+            # replace it, or an outcome_unknown verdict reaches callers as an
+            # ordinary resume failure and their recovery evidence is discarded.
             if resume_after and self.transport.process is not None and self.transport.alive():
-                self.transport.resume(time.monotonic() + 3)
+                try:
+                    self.transport.resume(time.monotonic() + 3)
+                except Exception:
+                    logging.exception('Resume after a failed Time Warp session also failed.')
+            raise
+        if resume_after and self.transport.process is not None and self.transport.alive():
+            self.transport.resume(time.monotonic() + 3)
 
     def _export_address(self, name, required=True):
         lldb = self._lldb()
@@ -172,6 +182,13 @@ class LLDBProcessTimeWarpDriver:
         address = self._export_address("MGTTimeWarpHookMask")
         return self._evaluate_int(f"((unsigned int(*)(void)){address})()")
 
+    def install_state(self, image_names):
+        with self._image_payload(image_names) as scratch:
+            address = self._export_address("MGTTimeWarpInstallState")
+            return self._evaluate_int(
+                f"((int(*)(const char*,unsigned long)){address})((const char*){scratch},{len(image_names)})"
+            )
+
     def get_speed(self):
         address = self._export_address("MGTTimeWarpGetSpeed")
         scaled = self._evaluate_int(f"(long long)((((double(*)(void)){address})()) * 1000000.0)")
@@ -181,7 +198,8 @@ class LLDBProcessTimeWarpDriver:
         address = self._export_address("MGTTimeWarpSetSpeed")
         return self._evaluate_int(f"((int(*)(double)){address})({speed:.17g})", mutation=True)
 
-    def install(self, image_names, speed):
+    @contextmanager
+    def _image_payload(self, image_names):
         lldb = self._lldb()
         process = self.transport.process
         error = lldb.SBError()
@@ -205,11 +223,21 @@ class LLDBProcessTimeWarpDriver:
                     "host.timeWarp.error.memoryWriteFailed",
                     diagnostic="Unable to write the Time Warp image allowlist.",
                 )
+            yield scratch
+        except BaseException:
+            try:
+                process.DeallocateMemory(scratch)
+            except Exception:
+                logging.exception('Scratch cleanup after a failed Time Warp call also failed.')
+            raise
+        else:
+            process.DeallocateMemory(scratch)
+
+    def install(self, image_names, speed):
+        with self._image_payload(image_names) as scratch:
             address = self._export_address("MGTTimeWarpInstall")
             return self._evaluate_int(
                 f"((int(*)(const char*,unsigned long,double)){address})"
                 f"((const char*){scratch},{len(image_names)},{speed:.17g})",
                 mutation=True,
             )
-        finally:
-            process.DeallocateMemory(scratch)

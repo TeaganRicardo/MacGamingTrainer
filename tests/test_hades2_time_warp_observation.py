@@ -38,6 +38,9 @@ class ResidentHelperDriver:
         return self.present
 
     def abi(self):
+        return ProcessTimeWarpController.ABI_VERSION
+
+    def install_state(self, image_names):
         return 1
 
     def get_speed(self):

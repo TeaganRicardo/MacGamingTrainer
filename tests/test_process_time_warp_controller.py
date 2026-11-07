@@ -13,6 +13,7 @@ class FakeDriver:
         self.pid = 100
         self.alive = True
         self.present = False
+        self.state = 0
         self.hooks = 1
         self.speed = 1.0
         self.loads = 0
@@ -37,11 +38,15 @@ class FakeDriver:
         self.present = True
 
     def abi(self):
-        return 1
+        return ProcessTimeWarpController.ABI_VERSION
+
+    def install_state(self, image_names):
+        return self.state
 
     def install(self, image_names, speed):
         self.installs.append((image_names, speed))
         self.speed = speed
+        self.state = 1
         return 0
 
     def set_speed(self, speed):
@@ -105,6 +110,7 @@ assert driver.sets == [2.0, 0.5]
 
 driver.pid = 101
 driver.present = False
+driver.state = 0
 assert controller.set_speed(3.0) == 3.0
 assert driver.loads == 2
 assert driver.installs[-1] == (b"Hades II", 3.0)
@@ -113,9 +119,11 @@ assert driver.installs[-1] == (b"Hades II", 3.0)
 # not load a second image.
 reuse = ProcessTimeWarpController(driver, helper, ["Hades II"])
 loads_before = driver.loads
+installs_before = list(driver.installs)
 assert reuse.set_speed(1.5) == 1.5
 assert driver.loads == loads_before
-assert driver.installs[-1] == (b"Hades II", 1.5)
+assert driver.installs == installs_before
+assert driver.sets[-1] == 1.5
 
 # Unsupported target: selected images contain none of the clock imports.
 unsupported_driver = FakeDriver()
