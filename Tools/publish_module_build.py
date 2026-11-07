@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Publish a signed app without following a replaced dist directory."""
 import argparse
+import json
 import os
+import plistlib
+import re
 import shutil
 import stat
 import subprocess
@@ -29,6 +32,61 @@ def _module_id(app):
     if not game_id or '/' in game_id or '\\' in game_id:
         raise ValueError(f'App has invalid selected-module marker: {marker}')
     return game_id
+
+
+def _app_identity(app):
+    contents = app / 'Contents'
+    info_path = contents / 'Info.plist'
+    if contents.is_symlink() or info_path.is_symlink() or not info_path.is_file():
+        raise ValueError(f'App has no safe bundle identity: {app}')
+    with info_path.open('rb') as stream:
+        info = plistlib.load(stream)
+    keys = ('CFBundleIdentifier', 'CFBundleName', 'CFBundleDisplayName', 'CFBundleExecutable')
+    identity = tuple(info.get(key) for key in keys)
+    if any(not isinstance(value, str) or not value for value in identity):
+        raise ValueError(f'App has incomplete bundle identity: {info_path}')
+    return identity
+
+
+def _packaged_module_ids(app):
+    resources = app / 'Contents/Resources'
+    games = resources / 'Backend/games'
+    marker = resources / 'GAME_MODULES.json'
+    if resources.is_symlink() or games.is_symlink() or marker.is_symlink() or not marker.is_file():
+        raise ValueError(f'App has no safe packaged module inventory: {app}')
+    modules = json.loads(marker.read_text(encoding='utf-8'))
+    if (not isinstance(modules, list) or not modules
+            or any(not isinstance(item, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', item) for item in modules)
+            or len(set(modules)) != len(modules)):
+        raise ValueError(f'App has an invalid packaged module inventory: {marker}')
+    expected = set()
+    for module_id in modules:
+        module_dir = games / module_id
+        manifest = module_dir / 'module.json'
+        if module_dir.is_symlink() or manifest.is_symlink() or not manifest.is_file():
+            raise ValueError(f'App has an unsafe or missing module manifest: {manifest}')
+        payload = json.loads(manifest.read_text(encoding='utf-8'))
+        if not isinstance(payload, dict) or payload.get('id') != module_id:
+            raise ValueError(f'App module manifest identity mismatch: {manifest}')
+        expected.add(Path(module_id) / 'module.json')
+    actual = {path.relative_to(games) for path in games.rglob('module.json')}
+    if actual != expected:
+        raise ValueError(f'App module manifests differ from the declared module set: {games}')
+    return tuple(modules)
+
+
+def _is_legacy_unified_product(source, previous):
+    """Allow only the historical product marker migration, never module replacement."""
+    try:
+        if _module_id(source) != 'all' or _module_id(previous) != 'hades2':
+            return False
+        if _app_identity(source) != _app_identity(previous):
+            return False
+        source_modules = _packaged_module_ids(source)
+        previous_modules = _packaged_module_ids(previous)
+        return source_modules == ('hades2', 'hades') and previous_modules == source_modules
+    except (OSError, ValueError, json.JSONDecodeError, plistlib.InvalidFileException):
+        return False
 
 
 def publish_app(source, dist, name):
@@ -65,7 +123,7 @@ def publish_app(source, dist, name):
                 if not destination.is_dir():
                     raise ValueError(f'Build output app is not a directory: {destination}')
                 previous_game = _module_id(destination)
-                if previous_game != selected_game:
+                if previous_game != selected_game and not _is_legacy_unified_product(source, destination):
                     raise ValueError(
                         f'Build output app {destination} belongs to {previous_game}; '
                         f'cannot replace it with {selected_game}.'

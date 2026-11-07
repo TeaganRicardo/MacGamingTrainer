@@ -79,6 +79,10 @@ private struct WindowCloseBridge: NSViewRepresentable {
     @StateObject private var application: TrainerApplicationCoordinator
     @StateObject private var localization = TrainerLocalizationStore()
 
+    private var appDisplayName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Mac Gaming Trainer"
+    }
+
     init() {
         _application = StateObject(wrappedValue: TrainerApplicationCoordinator(
             contexts: TrainerGameCatalog.makeContexts()
@@ -86,7 +90,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
     }
 
     var body: some Scene {
-        Window("Mac Gaming Trainer", id: "main") {
+        Window(appDisplayName, id: "main") {
             TrainerGamePages(application: application)
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
@@ -94,7 +98,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
                 .environmentObject(localization)
                 .background(WindowCloseBridge(
                     delegate: delegate, application: application,
-                    title: "\(application.context(id: application.selectedGameID)?.descriptor.displayName ?? "") · Mac Gaming Trainer"
+                    title: "\(application.context(id: application.selectedGameID)?.descriptor.displayName ?? "") · \(appDisplayName)"
                 ).frame(width: 0, height: 0))
                 .onAppear { delegate.application = application }
         }

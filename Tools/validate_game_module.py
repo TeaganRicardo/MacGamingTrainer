@@ -5,13 +5,24 @@ import sys
 import unicodedata
 
 from module_inventory import ModuleInventoryError, discover_module_ids
-from module_support import ManifestError, load_manifest, normalized_manifest
+from module_support import (
+    ManifestError, load_manifest, load_product_declaration, normalized_manifest,
+    product_app_spec,
+)
 
 
 def _validate(game_ids):
     all_manifests = [load_manifest(game_id) for game_id in discover_module_ids()]
+    # app.json owns the unified product identity. A diagnostic App must never
+    # share it, or its output, preferences and target lease would be indistinguishable.
+    product = load_product_declaration(required=False)
+    product_app = (product_app_spec(product, all_manifests[0].app.executable)
+                   if product is not None and all_manifests else None)
     for field in ('display_name', 'bundle_identifier'):
         owners = {}
+        if product_app is not None:
+            identity = unicodedata.normalize('NFC', getattr(product_app, field)).casefold()
+            owners[identity] = 'the product (app.json)'
         for manifest in all_manifests:
             value = getattr(manifest.app, field)
             identity = unicodedata.normalize('NFC', value).casefold()

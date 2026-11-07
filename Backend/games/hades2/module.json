@@ -41,10 +41,6 @@
       ]
     }
   ],
-  "app": {
-    "bundleIdentifier": "com.gao.macgamingtrainer",
-    "displayName": "Mac Gaming Trainer"
-  },
   "appResources": [
     {
       "source": "@supportedBuild/ui_terminology.json",

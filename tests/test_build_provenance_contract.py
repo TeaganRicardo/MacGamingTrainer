@@ -759,9 +759,10 @@ else:
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'product modules'], cwd=self.root, check=True)
         self.refresh_artifact_name()
-        def package(ids):
+        def package(ids, selection='all'):
             with zipfile.ZipFile(self.artifact, 'w') as archive:
                 resources = 'Unified.app/Contents/Resources'
+                archive.writestr(resources + '/ACTIVE_GAME_ID', selection + '\n')
                 archive.writestr(resources + '/GAME_MODULES.json', json.dumps(ids))
                 archive.writestr('Unified.app/Contents/Info.plist', self.packaged_info('Unified', 'com.example.product'))
                 for game_id in ids:
@@ -771,6 +772,13 @@ else:
         env = {**self.env, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
                'GITHUB_WORKFLOW': 'Build 2 macOS', 'GITHUB_REPOSITORY': 'example/trainer',
                'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
+        result = self.run_tool('--module-id', 'all', env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        package(['one', 'two'], selection='one')
+        wrong_selection = self.run_tool('--module-id', 'all', env=env)
+        self.assertNotEqual(wrong_selection.returncode, 0)
+        self.assertIn('selection marker', wrong_selection.stderr)
+        package(['one', 'two'])
         result = self.run_tool('--module-id', 'all', env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         provenance = json.loads(self.provenance_path().read_text())
@@ -818,6 +826,7 @@ else:
         self.refresh_artifact_name()
         resources = 'Unified.app/Contents/Resources'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr(resources + '/ACTIVE_GAME_ID', 'all\n')
             archive.writestr(resources + '/GAME_MODULES.json', json.dumps(ids))
             archive.writestr('Unified.app/Contents/Info.plist',
                              self.packaged_info('Unified', 'com.example.product'))
