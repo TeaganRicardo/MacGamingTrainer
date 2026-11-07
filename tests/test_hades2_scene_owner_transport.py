@@ -64,6 +64,23 @@ try:
             assert observed["rerolls"] == 4 and observed["healthLocked"]
             assert observed["stats"]["moveSpeed"]["locked"] is True
             assert native.execute("return tostring(lastSpeedWrite)") == "1.5"
+
+            # Unlock while the Hero is absent. The next native owner must not
+            # inherit the resident's previous health/reroll targets.
+            native.evaluate("CurrentRun = nil; CurrentHubRoom = {}")
+            adapter.preferences = adapter._default_preferences()
+            adapter.preference_dirty = True
+            released = adapter.execute("status", {"includeCatalogs": False})
+            assert released["residentDesiredLocks"]["vitalLocks"] == {}
+            assert released["residentDesiredLocks"]["rerollsLock"] is None
+            native.evaluate("""
+              CurrentRun = priorRun; CurrentHubRoom = nil
+              CurrentRun.Hero.Health = 37; CurrentRun.NumRerolls = 2
+              UpdateTimers(0)
+            """)
+            observed = adapter.observe_runtime()
+            assert observed["health"] == 37 and not observed["healthLocked"]
+            assert observed["rerolls"] == 2 and not observed["rerollsLocked"]
         finally:
             native.close()
 finally:

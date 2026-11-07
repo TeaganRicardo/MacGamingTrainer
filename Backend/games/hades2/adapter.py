@@ -25,6 +25,7 @@ from .preferences import (
 from .profile_service import Hades2ProfileService
 from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
 from .resident_session import Hades2ResidentSession, ResidentConnectionError, ResidentGenerationInvalidated, ResidentSessionError
+from .runtime_error_presentation import feature_error_presentation
 from .save_workspace import Hades2SaveWorkspace
 from .schema import (
     MULTIPLIERS,
@@ -273,18 +274,19 @@ class Hades2Adapter(GameAdapter):
         support=dict(support) if isinstance(support,dict) else {}
         support['gameSpeed']=True
         self.state['featureSupport']=support
-        # Runtime-native feature errors remain in the legacy string map. A
-        # Core-owned Time Warp failure carries a presentation token instead so
-        # the frontend can resolve the Host key in the live language without
-        # embedding localized copy in module state.
+        # Resident feature errors arrive as raw runtime text, kept for
+        # diagnostics; the frontend shows the registry presentation for each.
+        # A Core-owned Time Warp failure already carries its Host presentation,
+        # so no localized copy is embedded in module state.
         errors=self.state.get('featureErrors')
         errors=dict(errors) if isinstance(errors,dict) else {}
         errors.pop('gameSpeed',None)
         self.state['featureErrors']=errors
-        presentations=self.state.get('featureErrorPresentations')
-        presentations=dict(presentations) if isinstance(presentations,dict) else {}
+        presentations={
+            feature:feature_error_presentation(message)
+            for feature,message in errors.items() if isinstance(message,str) and message
+        }
         if self._time_warp_error:presentations['gameSpeed']=dict(self._time_warp_error)
-        else:presentations.pop('gameSpeed',None)
         self.state['featureErrorPresentations']=presentations
         diagnostics=self.state.get('runtimeDiagnostics')
         if isinstance(diagnostics,dict):
@@ -373,7 +375,10 @@ class Hades2Adapter(GameAdapter):
         # on the next trainer launch.
         self._persist_preferences_candidate(preferences)
         self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=False
+        # The reset is durable, not yet observed: the resident may still hold
+        # every feature and lock if the teardown never runs (for example a
+        # waiting boon menu). Only a confirmed replay clears reconciliation.
+        self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
 
     def reset_desired(self):

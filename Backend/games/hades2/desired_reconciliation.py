@@ -160,44 +160,38 @@ class Hades2DesiredStateReconciler:
             "rerollsLock": desired.get("rerollsLock"),
         }
 
-        # Staging exists only for desired locks whose own runtime owner is
-        # currently absent. Unrelated missing owners must not make an already
-        # confirmed lock family look pending.
+        # Staging is needed for a lock family that is held, by desired state or
+        # by the resident, while its own runtime owner is absent: per-owner
+        # lock_* commands cannot reach it, and the resident re-applies a
+        # retained lock to the next owner. Unrelated missing owners must not
+        # make an already confirmed lock family look pending.
+        existing = _mapping(observed.get("residentDesiredLocks"))
+        held_stats = set(snapshot["statLocks"]) | set(_mapping(existing.get("statLocks")))
+        held_vitals = set(snapshot["vitalLocks"]) | set(_mapping(existing.get("vitalLocks")))
+        held_resources = bool(snapshot["resourceLocks"] or _mapping(existing.get("resourceLocks")))
+        held_elements = bool(snapshot["elementLocks"] or _mapping(existing.get("elementLocks")))
+        held_rerolls = snapshot["rerollsLock"] is not None or existing.get("rerollsLock") is not None
         stats = _mapping(observed.get("statAvailable"))
-        missing = any(
-            not (
-                cls._capability(observed, "setStats")
-                and stats.get(stat) is True
-            )
-            for stat in snapshot["statLocks"]
-        )
         vital_capabilities = {
             "health": "setHealth",
             "mana": "setMana",
             "armor": "setArmor",
         }
+        missing = any(
+            not (
+                cls._capability(observed, "setStats")
+                and stats.get(stat) is True
+            )
+            for stat in held_stats
+        )
         missing = missing or any(
             not cls._capability(observed, vital_capabilities[vital])
-            for vital in snapshot["vitalLocks"]
+            for vital in held_vitals
         )
-        missing = missing or (
-            bool(snapshot["resourceLocks"])
-            and not cls._capability(observed, "setResource")
-        )
-        missing = missing or (
-            bool(snapshot["elementLocks"])
-            and not cls._capability(observed, "setElements")
-        )
-        missing = missing or (
-            snapshot["rerollsLock"] is not None
-            and not cls._capability(observed, "setRerolls")
-        )
-        if not missing:
-            return None
-        existing = _mapping(observed.get("residentDesiredLocks"))
-        if existing == snapshot or not any(
-            snapshot[key] for key in ("statLocks", "vitalLocks", "resourceLocks", "elementLocks")
-        ) and snapshot["rerollsLock"] is None and not any(existing.values()):
+        missing = missing or (held_resources and not cls._capability(observed, "setResource"))
+        missing = missing or (held_elements and not cls._capability(observed, "setElements"))
+        missing = missing or (held_rerolls and not cls._capability(observed, "setRerolls"))
+        if not missing or existing == snapshot:
             return None
         return _Action("stage_desired_locks", snapshot, "residentDesiredLocks")
 

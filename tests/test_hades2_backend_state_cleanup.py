@@ -285,7 +285,6 @@ struct Main {
         check(model.warning.isEmpty && model.runtimeIssue.isEmpty,
               "runtime messages survived termination")
         check(model.noticeText.key.isEmpty && model.errorText.key.isEmpty
-                && model.runtimeIssueText.key.isEmpty
                 && model.runtimeIssuePresentations.isEmpty,
               "presentation tokens survived termination")
 
