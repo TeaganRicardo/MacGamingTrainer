@@ -1,0 +1,30 @@
+name: Apply local native Picker repair
+
+on:
+  push:
+    branches:
+      - fix/native-picker-baseline-20261107
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply the locally tested Linux-container patch
+        env:
+          BASE_SHA: b0e14c6f989e9e7c998189703e1487f7c5be5bf5
+        run: |
+          base64 --decode native-picker-fix.patch.gz.b64 | xz --decompress > "$RUNNER_TEMP/native-picker-fix.patch"
+          git apply --check "$RUNNER_TEMP/native-picker-fix.patch"
+          git apply "$RUNNER_TEMP/native-picker-fix.patch"
+          rm native-picker-fix.patch.gz.b64
+          rm .github/workflows/apply-native-picker-fix.yml
+          git reset --soft "$BASE_SHA"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "fix: restore native Picker presentation and product accent"
+          git push --force-with-lease origin "HEAD:${GITHUB_REF_NAME}"
