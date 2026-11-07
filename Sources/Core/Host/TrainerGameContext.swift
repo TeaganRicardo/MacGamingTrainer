@@ -76,6 +76,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
     private var previousTarget: TrainerTargetObservation
+    private var lastKnownTargetProcessIdentifier: pid_t?
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
     private var terminationRequested = false
@@ -101,6 +102,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             executablePathSuffix: Module.descriptor.targetExecutablePathSuffix
         )
         previousTarget = targetMonitor.targetObservation
+        lastKnownTargetProcessIdentifier = previousTarget.processIdentifier
         // This tracks the availability processed by this Context. A module
         // can finish starting before the Context installs its subscription.
         previousBackendAvailable = false
@@ -169,9 +171,11 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
         previousTarget = observed
         let pidChanged = previous.processIdentifier != observed.processIdentifier
         if observed.launchGeneration != previous.launchGeneration ||
-            (previous.processIdentifier != nil && observed.processIdentifier != nil && pidChanged) {
+            (lastKnownTargetProcessIdentifier != nil && observed.processIdentifier != nil &&
+             lastKnownTargetProcessIdentifier != observed.processIdentifier) {
             session.targetLifetimeChanged()
         }
+        if let pid = observed.processIdentifier { lastKnownTargetProcessIdentifier = pid }
         if observed.launchGeneration != previous.launchGeneration || pidChanged ||
             (previous.isRunning && !observed.isRunning) {
             model.hostTargetLifetimeChanged(observation: observed)

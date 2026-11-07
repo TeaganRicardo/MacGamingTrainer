@@ -73,6 +73,7 @@ struct TargetObservation {
 struct TargetModelProbe {
     func hostTargetLifetimeChanged(observation: TargetObservation) {}
 }
+var lastKnownTargetProcessIdentifier: Int32?
 func observeTarget(previous: TargetObservation, observed: TargetObservation) {
     let model = TargetModelProbe()
 __MGT_TARGET_LIFETIME_TRANSITION__
@@ -280,7 +281,12 @@ do {
     api.request(.setDesired(feature: "invincibility", value: false), runtimeConnected: true,
         operation: "connected intent", started: { connectedStarted = true }, completion: { connectedDone = $0 })
     if connectedDone != false || connectedStarted { fail("connected desired edit bypassed target uncertainty") }
-    session.targetLifetimeChanged()
+    observeTarget(previous: .init(isRunning: true, launchGeneration: 1, processIdentifier: 42),
+                  observed: .init(isRunning: false, launchGeneration: 1, processIdentifier: nil))
+    if !session.currentStatus.requiresTargetRestart { fail("target absence released unknown runtime trust") }
+    observeTarget(previous: .init(isRunning: false, launchGeneration: 1, processIdentifier: nil),
+                  observed: .init(isRunning: true, launchGeneration: 1, processIdentifier: 43))
+    if session.currentStatus.requiresTargetRestart { fail("a kernel-path target replacement after absence did not restore trust") }
 }
 
 do {
