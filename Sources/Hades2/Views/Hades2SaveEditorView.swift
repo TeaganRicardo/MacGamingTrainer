@@ -610,7 +610,6 @@ struct Hades2SaveEditorView: View {
                     Text(text("hades2.saveEditor.basket.summary", arguments: [
                         String(model.pendingCount),
                         String(model.pendingEffectCount),
-                        String(model.pendingPhysicalChangeCount),
                     ]))
                     .font(.caption)
                     .foregroundStyle(.secondary)

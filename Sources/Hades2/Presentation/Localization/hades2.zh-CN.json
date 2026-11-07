@@ -463,7 +463,7 @@
     "hades2.saveEditor.workbench.section.advanced": "高级数据",
     "hades2.saveEditor.workbench.search": "搜索名称或内容",
     "hades2.saveEditor.workbench.browse": "浏览",
-    "hades2.saveEditor.basket.summary": "{0} 项修改 · {1} 项关联影响 · {2} 条底层记录",
+    "hades2.saveEditor.basket.summary": "{0} 项修改 · {1} 项关联影响",
     "hades2.saveEditor.basket.remove": "移除此项",
     "hades2.saveEditor.workbench.target": "写入目标：{0}",
     "hades2.saveEditor.workbench.cancel": "取消",
