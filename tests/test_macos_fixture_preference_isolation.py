@@ -53,10 +53,13 @@ view_state = (TESTS / "test_hades2_view_state_flow.py").read_text(encoding="utf-
 # Every store that would otherwise reach cfprefsd is given memory-backed
 # defaults. The model's own default is `.standard`, so an omission here is a
 # real leak, not a style issue.
-models = calls(view_state, "Hades2TrainerModel(")
-assert len(models) == 5, f"expected five model constructions, found {len(models)}"
-for call in models:
-    assert "shortcutDefaults: InMemoryDefaults()" in call, call
+for name in ("test_hades2_view_state_flow.py", "test_hades2_model_flow.py"):
+    source = (TESTS / name).read_text(encoding="utf-8")
+    models = calls(source, "Hades2TrainerModel(")
+    assert models, f"{name}: fixture no longer exercises a model"
+    for call in models:
+        assert "shortcutDefaults: InMemoryDefaults()" in call, (name, call)
+    assert 'env["CFFIXED_USER_HOME"] = str(home)' in source, name
 
 localizations = calls(view_state, "TrainerLocalizationStore(")
 assert localizations, "the fixture no longer constructs a localization store"
@@ -66,7 +69,7 @@ assert "let localizationDefaults = InMemoryDefaults()" in view_state
 
 # The environment is still scoped for the other CF consumers; it is simply not
 # the mechanism the preference stores rely on.
-assert view_state.count('env["CFFIXED_USER_HOME"] = str(home)') == 2
+assert 'env["CFFIXED_USER_HOME"] = str(home)' in view_state
 
 # The test double has to override every accessor the stores use, or a write
 # would fall through to the real suite.
