@@ -368,7 +368,7 @@ def manifest() -> list[Mutation]:
             ident="package-module-identity",
             invariant="publishing cannot replace an app owned by another module",
             path=ROOT / "Tools/publish_module_build.py",
-            old="                if previous_game != selected_game:",
+            old="                if previous_game != selected_game and not _is_legacy_unified_product(source, destination):",
             new="                if False and previous_game != selected_game:",
             test="tests/test_module_publish_safety.py",
             note="#179/#199 selected-module output identity",
