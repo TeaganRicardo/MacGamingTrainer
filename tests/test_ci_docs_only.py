@@ -212,8 +212,6 @@ assert_scope(["tests/visual_hierarchy_harness.py"],
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     (root / "Tools").mkdir()
-    (root / "tests").mkdir()
-    (root / "tests/test_native_fixture.py").write_text("assert True\n")
     (root / "Tools/macos_only_tests.txt").write_text("test_native_fixture.py\n")
     metadata = root / "Tools/macos_test_dependencies.json"
     metadata.write_text(json.dumps({"test_native_fixture.py": ["tests/fixture.py"]}))
