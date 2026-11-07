@@ -1,5 +1,6 @@
 """Hades feature-profile persistence, native reconciliation and diagnostic truth."""
 import json
+import logging
 from pathlib import Path
 import sys
 import tempfile
@@ -138,6 +139,21 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
         rejected('profile_read_failed', lambda: adapter.profiles.load('战斗'))
         assert json.loads(path.read_text()) == malformed, 'reading modified an invalid or future profile'
     path.write_text(json.dumps(document))
+    # One unreadable Profile (truncated write or a newer format) is skipped:
+    # it neither hides the others nor fails a save/delete that completed.
+    damaged = adapter.profiles.root / ('0' * 64 + '.json')
+    damaged.write_text('{"schemaVersion": 1, "gameID": "hades"')
+    logging.disable(logging.CRITICAL)
+    try:
+        listed = adapter.dispatch('list_profiles', {}, 'list-with-damaged')['profiles']
+        assert sorted(row['name'] for row in listed) == ['恢复', '战斗'], listed
+        saved = adapter.dispatch('save_profile', {'name': '第三'}, 'save-with-damaged')['profiles']
+        assert '第三' in [row['name'] for row in saved]
+        adapter.dispatch('delete_profile', {'name': '第三'}, 'delete-with-damaged')
+    finally:
+        logging.disable(logging.NOTSET)
+    assert damaged.read_text() == '{"schemaVersion": 1, "gameID": "hades"', 'listing modified a damaged profile'
+    damaged.unlink()
     adapter.dispatch('delete_profile', {'name': '恢复'}, 'delete')
     assert [row['name'] for row in adapter.dispatch('list_profiles', {}, 'list-final')['profiles']] == ['战斗']
 

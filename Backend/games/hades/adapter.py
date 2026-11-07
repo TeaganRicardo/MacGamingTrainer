@@ -11,7 +11,7 @@ from .preferences import HadesPreferenceStore
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
-from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, ONE_SHOT_COMMANDS,
+from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
 
 
@@ -78,6 +78,14 @@ class HadesAdapter(GameAdapter):
         self.preferences = preferences or HadesPreferenceStore()
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
         self.features = dict(DEFAULT_PREFERENCES)
+        self._preferences_error = None
+        try:
+            self.features = self.preferences.load()
+        except AdapterError as error:
+            # Keep the backend available. Edits that merge into the unread
+            # document are refused (see _require_known_desired_state) so the
+            # durable file is never replaced by defaults plus one change.
+            self._preferences_error = error
         self._game_speed_actual = None
         self._game_speed_error = None
         self.save_workspaces = {}
@@ -95,21 +103,15 @@ class HadesAdapter(GameAdapter):
             return {'profiles': self.profiles.list()}
         if command == 'load_profile':
             features = self.profiles.load(params.get('name'))
-            previous_features = dict(self.features)
             self.preferences.save(features)
+            self._preferences_error = None
             self.features = features
             state = {**self._offline(), 'features': self.features}
             if self.connected:
                 runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
-                    if any(features.get(key) is not None or previous_features.get(key) is not None
-                           for key in ('healthLock', 'moneyLock', 'rerollsLock')):
-                        state = self.runtime.command('configure_locks', {
-                            'health': features['healthLock'],
-                            'money': features['moneyLock'],
-                            'rerolls': features['rerollsLock'],
-                        })
+                    state = self._reconcile_locks(state)
                     if features['boonRarityTarget'] != 'Heroic':
                         state = self.runtime.command(
                             'set_boon_rarity', {'target': features['boonRarityTarget']}
@@ -142,19 +144,14 @@ class HadesAdapter(GameAdapter):
             if target is None:
                 raise AdapterError('game_not_running', 'hades.error.notRunning')
             self.features = self.preferences.load()
+            self._preferences_error = None
             self._game_speed_actual = None
             self._game_speed_error = None
             runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
-            if self.connected and any(
-                    self.features.get(key) is not None
-                    for key in ('healthLock', 'moneyLock', 'rerollsLock')):
-                state = self.runtime.command('configure_locks', {
-                    'health': self.features['healthLock'],
-                    'money': self.features['moneyLock'],
-                    'rerolls': self.features['rerollsLock'],
-                })
+            if self.connected:
+                state = self._reconcile_locks(state)
             if self.connected and self.features['boonRarityTarget'] != 'Heroic':
                 state = self.runtime.command(
                     'set_boon_rarity', {'target': self.features['boonRarityTarget']}
@@ -179,10 +176,13 @@ class HadesAdapter(GameAdapter):
                 raise
             self._game_speed_actual = getattr(self.runtime, 'game_speed_actual', 1.0)
             self._game_speed_error = None
+            if not state.get('connected'):
+                state = {**state, 'features': self.features}
             return self._observe(state)
         if command == 'set_invincibility':
             command, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
         if command == 'set_boon_rarity':
+            self._require_known_desired_state()
             target = preference_value('boonRarityTarget', params.get('target'))
             candidate = {**self.features, 'boonRarityTarget': target}
             self.preferences.save(candidate)
@@ -191,6 +191,7 @@ class HadesAdapter(GameAdapter):
                 return self._observe({**self._offline(), 'features': self.features})
             return self._observe(self.runtime.command('set_boon_rarity', {'target': target}))
         if command == 'set_feature':
+            self._require_known_desired_state()
             name = params.get('feature')
             value = preference_value(name, params.get('value')) if name == 'gameSpeed' else feature_value(name, params.get('value'))
             candidate = {**self.features, name: value}
@@ -224,6 +225,7 @@ class HadesAdapter(GameAdapter):
             locked = params.get('locked')
             if type(locked) is not bool:
                 raise invalid_value()
+            self._require_known_desired_state()
             if command == 'lock_vital':
                 if params.get('vital') != 'health':
                     raise invalid_value()
@@ -267,6 +269,7 @@ class HadesAdapter(GameAdapter):
             persistence_error = None
             try:
                 self.preferences.save(DEFAULT_PREFERENCES)
+                self._preferences_error = None
             except AdapterError as error:
                 persistence_error = error
             self.features = dict(DEFAULT_PREFERENCES)
@@ -435,6 +438,26 @@ class HadesAdapter(GameAdapter):
             result.update({'rarity': rarity, 'level': number(params.get('level'), 1, 100, integer=True)})
         return result
 
+    def _require_known_desired_state(self):
+        if self._preferences_error is not None:
+            # Re-read: raises the typed failure while the document stays unreadable.
+            self.features = self.preferences.load()
+            self._preferences_error = None
+
+    @staticmethod
+    def _observed_locks(state):
+        return tuple(state.get(value) if state.get(flag) is True else None
+                     for flag, value in LOCK_FIELDS)
+
+    def _reconcile_locks(self, state):
+        """Converge the resident's lock intent, which survives detach, on desired state."""
+        desired = (self.features['healthLock'], self.features['moneyLock'], self.features['rerollsLock'])
+        if self._observed_locks(state) == desired:
+            return state
+        return self.runtime.command('configure_locks', {
+            'health': desired[0], 'money': desired[1], 'rerolls': desired[2],
+        })
+
     def _rollback_runtime_locks(self, preferences):
         try:
             self.runtime.command('configure_locks', {
@@ -498,13 +521,17 @@ class HadesAdapter(GameAdapter):
                     if isinstance(observed, dict) else {})
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
-        state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
-        state['healthLocked'] = self.features.get('healthLock') is not None
-        state['healthLock'] = self.features.get('healthLock')
-        state['moneyLocked'] = self.features.get('moneyLock') is not None
-        state['moneyLock'] = self.features.get('moneyLock')
-        state['rerollsLocked'] = self.features.get('rerollsLock') is not None
-        state['rerollsLock'] = self.features.get('rerollsLock')
+        # A live resident reply reports what it actually enforces; only a
+        # detached projection shows durable desired state.
+        live = state.get('connected') is True
+        for flag, value in LOCK_FIELDS:
+            if live and type(state.get(flag)) is bool:
+                state[value] = state.get(value) if state[flag] else None
+            else:
+                state[value] = self.features.get(value)
+                state[flag] = state[value] is not None
+        if not (live and state.get('boonRarityTarget') in ('Common', 'Rare', 'Epic', 'Heroic')):
+            state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
         return state
 
     @staticmethod

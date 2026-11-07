@@ -1,4 +1,5 @@
 """Hades room/reward identities and explicit one-shot payload validation."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -22,6 +23,11 @@ def world_terms():
 def runtime_definitions():
     return {identifier: {key: value for key, value in row.items() if key != 'names'}
             for identifier, row in REWARDS.items()}
+
+
+def runtime_definitions_identity(definitions):
+    canonical = json.dumps(definitions, sort_keys=True, separators=(',', ':'), allow_nan=False)
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
 
 def mutation_params(command, params):
