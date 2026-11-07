@@ -8,6 +8,13 @@ from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Build selection is explicit and independent of the backend worker environment.
+BUILD_SCRIPT = (ROOT / 'build.sh').read_text()
+assert 'BUILD_SELECTION="${1:-all}"' in BUILD_SCRIPT
+assert 'MGT_GAME_ID:-all' not in BUILD_SCRIPT
+assert 'SELECTION_ID="$(manifest_field id)"' in BUILD_SCRIPT
+assert 'ACTIVE_GAME_ID="$SELECTION_ID"' in BUILD_SCRIPT
 sys.path.insert(0, str(ROOT / 'Tools'))
 import module_support
 import product_support
@@ -53,11 +60,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
 
     selection = product_support.load_selection()
     assert selection.ids == ('one', 'two')
+    assert selection.selection_id == 'all'
+    assert selection.normalized()['id'] == 'all'
     assert selection.architectures == ('arm64',)
     assert all(module.native_libraries[0].architectures == ('x86_64',) for module in selection.modules)
     assert selection.modules[0].runtime.bundle_identifier == ''
     assert selection.modules[0].runtime.public_metadata()['targetApplication']['executablePathSuffix'] == 'one/Game.macOS'
-    assert product_support.load_selection('one').ids == ('one',)
+    module_selection = product_support.load_selection('one')
+    assert module_selection.ids == ('one',)
+    assert module_selection.selection_id == 'one'
     compiled_arches = []
     def run_native_tool(command, **kwargs):
         if command[0] == 'fixture-clang':
@@ -87,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         packaged = resources / 'Backend/games' / module.id
         shutil.copytree(module.runtime.source_path.parent, packaged)
         (packaged / 'native/libBridge.dylib').write_bytes(b'fixture library')
-    (resources / 'ACTIVE_GAME_ID').write_text('one\n')
+    (resources / 'ACTIVE_GAME_ID').write_text('all\n')
     (resources / 'GAME_MODULES.json').write_text(json.dumps(['one', 'two']))
     executable = app / 'Contents/MacOS/Trainer'
     executable.parent.mkdir()
@@ -108,6 +119,16 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         'architectures': ['arm64'],
         'distributions': {'arm64': runtime_source['distributions']['arm64']},
     }))
+    # A product package must carry the product selection marker, never its
+    # first module ID; module-only diagnostic apps have a separate identity.
+    (resources / 'ACTIVE_GAME_ID').write_text('one\n')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'marker' in str(error), error
+    else:
+        raise AssertionError('A product package marked as its first module was accepted')
+    (resources / 'ACTIVE_GAME_ID').write_text('all\n')
     assert verify_module_build.verify_module_build('all', dist) == app.resolve()
     assert not (resources / 'Backend/debugger').exists(), 'non-debugger modules acquired an LLDB dependency'
     module_path = project / 'Backend/games/one/module.json'

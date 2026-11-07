@@ -27,7 +27,9 @@ if [[ "${1:-}" == "--typecheck" ]]; then
     BUILD_MODE=typecheck
     shift
 fi
-BUILD_SELECTION="${1:-${MGT_GAME_ID:-all}}"
+# Build selection is explicit and independent from MGT_GAME_ID, which is a
+# runtime environment value for the backend worker. A bare build is the product.
+BUILD_SELECTION="${1:-all}"
 [[ "$BUILD_SELECTION" != "--all" ]] || BUILD_SELECTION="all"
 if [[ $# -gt 1 || "$BUILD_SELECTION" == --* ]]; then
     echo "Usage: ./build.sh [--typecheck] [--all|game-id]" >&2
@@ -151,7 +153,8 @@ PY
 }
 
 read -r -a GAME_IDS <<< "$(manifest_field moduleIDs)"
-ACTIVE_GAME_ID="${GAME_IDS[0]}"
+SELECTION_ID="$(manifest_field id)"
+ACTIVE_GAME_ID="$SELECTION_ID"
 GAME_SELECTION_CSV="$(IFS=,; echo "${GAME_IDS[*]}")"
 ARCHITECTURES_RAW="$(manifest_field frontend.architectures)"
 MIN_MACOS="$(manifest_field frontend.minimumMacOS)"

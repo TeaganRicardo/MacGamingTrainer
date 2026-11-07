@@ -329,6 +329,9 @@ def require_packaged_product_identity(repo_root: Path, artifact: Path,
     resources = f'{app_root}/Contents/Resources'
     with zipfile.ZipFile(artifact) as archive:
         names = archive.namelist()
+        selection_marker = f'{resources}/ACTIVE_GAME_ID'
+        if names.count(selection_marker) != 1 or archive.read(selection_marker).decode('utf-8').strip() != 'all':
+            raise RuntimeError('packaged product selection marker must be all')
         marker = f'{resources}/GAME_MODULES.json'
         if names.count(marker) != 1 or json.loads(archive.read(marker)) != list(ids):
             raise RuntimeError('packaged module set differs from app.json')

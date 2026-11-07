@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from module_support import (
-    ROOT, AppBuildSpec, ManifestError, app_spec_from_manifest, load_manifest,
-    normalized_manifest,
+    ROOT, AppBuildSpec, ManifestError, load_manifest, load_product_declaration,
+    normalized_manifest, product_app_spec,
 )
 
 
@@ -23,6 +23,11 @@ class BuildSelection:
     @property
     def ids(self):
         return tuple(module.id for module in self.modules)
+
+    @property
+    def selection_id(self):
+        """Packaged selection identity: all for the product, else its module ID."""
+        return 'all' if self.product else self.ids[0]
 
     def normalized(self):
         modules = [normalized_manifest(module) for module in self.modules]
@@ -39,7 +44,7 @@ class BuildSelection:
                 destinations[key] = module.id
                 resources.append({'source': resource.source, 'destination': resource.destination})
         return {
-            'id': 'all' if self.product else self.ids[0],
+            'id': self.selection_id,
             'moduleIDs': list(self.ids),
             'modules': modules,
             'app': {
@@ -73,9 +78,7 @@ def load_selection(selection='all'):
             module.frontend.architectures or (platform.machine(),),
             module.frontend.minimum_macos, False,
         )
-    raw = json.loads((ROOT / 'app.json').read_text(encoding='utf-8'))
-    if not isinstance(raw, dict) or raw.get('schemaVersion') != 1:
-        raise ManifestError('app.json schemaVersion must be 1.')
+    raw = load_product_declaration()
     ids = selection.split(',') if ',' in selection else raw.get('modules')
     if (not isinstance(ids, list) or not ids or any(not isinstance(item, str) for item in ids)
             or len(set(ids)) != len(ids)):
@@ -90,7 +93,7 @@ def load_selection(selection='all'):
         raise ManifestError('app.json minimumMacOS must be a macOS version.')
     minimum = max((minimum, *(module.frontend.minimum_macos for module in modules)),
                   key=lambda value: tuple(map(int, value.split('.'))))
-    app = app_spec_from_manifest(raw, 'product', 'Product', modules[0].app.executable)
+    app = product_app_spec(raw, modules[0].app.executable)
     types = [module.frontend.module_type for module in modules]
     directories = [module.frontend.source_directory for module in modules]
     if len(set(types)) != len(types) or len(set(directories)) != len(directories):

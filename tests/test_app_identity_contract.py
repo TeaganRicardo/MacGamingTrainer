@@ -16,7 +16,7 @@ def fixture(root):
                       'docs/reference/hades', 'docs/reference/hades2'):
         shutil.copytree(ROOT / directory, root / directory,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-    for name in ('Info.plist', 'ACTIVE_GAME_ID'):
+    for name in ('Info.plist', 'app.json'):
         shutil.copy2(ROOT / name, root / name)
 
 
@@ -25,12 +25,29 @@ def run(root, tool, *args):
                           cwd=root, text=True, capture_output=True)
 
 
+def resolved_app(root, selection):
+    if selection == 'all':
+        result = run(root, 'product_support.py', 'all')
+    else:
+        result = run(root, 'validate_game_module.py', selection, '--json')
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    return json.loads(result.stdout)['app']
+
+
 class AppIdentityContract(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='mgt-app-identity-')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         fixture(self.root)
+
+    def add_reference_module(self):
+        shutil.copytree(ROOT / 'ContractFixtures/reference_module/backend',
+                        self.root / 'Backend/games/reference_fixture')
+        shutil.copytree(ROOT / 'ContractFixtures/reference_module/frontend',
+                        self.root / 'Sources/ReferenceFixture')
+        return self.root / 'Backend/games/reference_fixture/module.json'
 
     def test_root_identity_reintroduction_is_rejected(self):
         plist = self.root / 'Info.plist'
@@ -44,40 +61,58 @@ class AppIdentityContract(unittest.TestCase):
         self.assertIn('Info.plist', result.stderr)
         self.assertIn('CFBundleDisplayName', result.stderr)
 
-    def test_duplicate_output_identity_is_rejected(self):
-        fixture_root = self.root / 'ContractFixtures/reference_module'
-        shutil.copytree(ROOT / 'ContractFixtures/reference_module/backend',
-                        self.root / 'Backend/games/reference_fixture')
-        shutil.copytree(ROOT / 'ContractFixtures/reference_module/frontend',
-                        self.root / 'Sources/ReferenceFixture')
-        path = self.root / 'Backend/games/reference_fixture/module.json'
-        manifest = json.loads(path.read_text())
-        for duplicate in ('Mac Gaming Trainer', 'mac gaming trainer'):
-            with self.subTest(duplicate=duplicate):
-                manifest['app']['displayName'] = duplicate
-                path.write_text(json.dumps(manifest))
-                result = run(self.root, 'validate_game_module.py', 'reference_fixture')
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('displayName', result.stderr)
-                self.assertIn('hades2', result.stderr)
+    def test_malformed_product_declaration_is_rejected(self):
+        (self.root / 'app.json').write_text('{invalid json')
+        result = run(self.root, 'validate_game_module.py', 'hades2')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('app.json', result.stderr)
+        self.assertIn('valid JSON', result.stderr)
 
-    def test_duplicate_bundle_identifier_is_rejected(self):
-        shutil.copytree(ROOT / 'ContractFixtures/reference_module/backend',
-                        self.root / 'Backend/games/reference_fixture')
-        shutil.copytree(ROOT / 'ContractFixtures/reference_module/frontend',
-                        self.root / 'Sources/ReferenceFixture')
-        path = self.root / 'Backend/games/reference_fixture/module.json'
+    def test_duplicate_output_identity_is_rejected(self):
+        path = self.add_reference_module()
         manifest = json.loads(path.read_text())
-        manifest['app']['bundleIdentifier'] = 'COM.GAO.MACGAMINGTRAINER'
+        manifest['app']['displayName'] = 'Mac Gaming Trainer'
         path.write_text(json.dumps(manifest))
         result = run(self.root, 'validate_game_module.py', 'reference_fixture')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('bundleIdentifier', result.stderr)
+        self.assertIn('displayName', result.stderr)
+        self.assertIn('product (app.json)', result.stderr)
+
+    def test_duplicate_bundle_identifier_is_rejected(self):
+        path = self.add_reference_module()
+        manifest = json.loads(path.read_text())
+        for duplicate, owner in (
+            (resolved_app(self.root, 'all')['bundleIdentifier'].upper(), 'product (app.json)'),
+            (resolved_app(self.root, 'hades2')['bundleIdentifier'].upper(), 'hades2'),
+        ):
+            with self.subTest(owner=owner):
+                manifest['app']['bundleIdentifier'] = duplicate
+                path.write_text(json.dumps(manifest))
+                result = run(self.root, 'validate_game_module.py', 'reference_fixture')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('bundleIdentifier', result.stderr)
+                self.assertIn(owner, result.stderr)
+
+    def test_module_cannot_claim_product_identity(self):
+        path = self.root / 'Backend/games/hades2/module.json'
+        manifest = json.loads(path.read_text())
+        manifest['app'] = json.loads((self.root / 'app.json').read_text())['app']
+        path.write_text(json.dumps(manifest))
+        result = run(self.root, 'validate_game_module.py', '--all')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('app.json', result.stderr)
         self.assertIn('hades2', result.stderr)
+
+    def test_isolated_diagnostic_identity_differs_from_product(self):
+        product = resolved_app(self.root, 'all')
+        diagnostic = resolved_app(self.root, 'hades2')
+        self.assertNotEqual(product['displayName'], diagnostic['displayName'])
+        self.assertNotEqual(product['bundleIdentifier'], diagnostic['bundleIdentifier'])
 
     def test_packaged_executable_is_verified_against_root_owner(self):
         manifest = json.loads((self.root / 'Backend/games/hades2/module.json').read_text())
-        app = self.root / 'dist' / (manifest['app']['displayName'] + '.app')
+        app_identity = resolved_app(self.root, 'hades2')
+        app = self.root / 'dist' / (app_identity['displayName'] + '.app')
         contents = app / 'Contents'
         resources = contents / 'Resources'
         game = resources / 'Backend/games/hades2'
@@ -85,13 +120,14 @@ class AppIdentityContract(unittest.TestCase):
         (resources / 'ACTIVE_GAME_ID').write_text('hades2\n')
         (game / 'module.json').write_text(json.dumps(manifest))
         info = plistlib.loads((self.root / 'Info.plist').read_bytes())
-        info['CFBundleIdentifier'] = manifest['app']['bundleIdentifier']
-        info['CFBundleName'] = manifest['app']['displayName']
-        info['CFBundleDisplayName'] = manifest['app']['displayName']
+        info['CFBundleIdentifier'] = app_identity['bundleIdentifier']
+        info['CFBundleName'] = app_identity['displayName']
+        info['CFBundleDisplayName'] = app_identity['displayName']
+        info['CFBundleExecutable'] = 'WrongExecutable'
         (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
         result = run(self.root, 'verify_module_build.py', 'hades2', '--dist-dir', self.root / 'dist')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('executable', result.stderr.lower())
+        self.assertIn('CFBundleExecutable', result.stderr)
 
 
 if __name__ == '__main__':

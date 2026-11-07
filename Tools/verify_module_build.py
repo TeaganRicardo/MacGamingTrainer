@@ -81,7 +81,7 @@ def verify_module_build(game_id, dist_dir):
     executable = contents / 'MacOS' / manifest.app.executable
     if not executable.is_file() or executable.is_symlink():
         raise ValueError(f'Expected packaged executable is missing or unsafe: {executable}')
-    if game_marker.read_text(encoding='utf-8').strip() != manifest.ids[0]:
+    if game_marker.read_text(encoding='utf-8').strip() != manifest.selection_id:
         raise ValueError(f'Selected module marker mismatch in {game_marker}')
     expected_paths = {games_dir / module.id / 'module.json' for module in manifest.modules}
     if set(games_dir.rglob('module.json')) != expected_paths:
