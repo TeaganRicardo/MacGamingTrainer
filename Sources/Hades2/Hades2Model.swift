@@ -451,6 +451,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.status, title: "hades2.op.probeScene", announceSuccess: false)
     }
 
+    private var terminationRequestedFromHost = false
+
+    func beginTerminationFromHost() {
+        terminationRequestedFromHost = true
+        launchAttachGate.cancel()
+    }
+
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
         guard !exiting, !terminationRequestedFromHost else { return }
         let runtimeEventName: String
@@ -1871,13 +1878,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard let self else { completion(); return }
             self.finishExit(completion: completion)
         }
-    }
-
-    private var terminationRequestedFromHost = false
-
-    func beginTerminationFromHost() {
-        terminationRequestedFromHost = true
-        launchAttachGate.cancel()
     }
 
     func prepareForTermination(completion: @escaping () -> Void) {

@@ -37,6 +37,11 @@ for raw in sys.stdin:
         continue
     if command == 'slow':
         time.sleep(0.20)
+    if command == 'unknown-reply':
+        print(json.dumps({'type':'result', 'id':req['id'], 'protocolVersion':6,
+            'moduleProtocolVersion':5, 'gameID':args.game, 'ok':False,
+            'error':{'code':'outcome_unknown', 'presentation':'host.backend.error.outcomeUnknown'}}), flush=True)
+        continue
     print(json.dumps({
         'type':'result', 'id':req.get('id',''), 'protocolVersion':6,
         'moduleProtocolVersion':5, 'gameID':args.game, 'ok':True,
@@ -230,6 +235,21 @@ do {
 // Quit freezes recovery before finalization without cancelling an existing
 // write or dropping its completion. Subsequent restart requests are inert.
 do {
+    let startIndex = states.count
+    var unknownDone: Bool?
+    var queuedDone: Bool?
+    var queuedStarted = false
+    session.send("unknown-reply", operation: "unknown", completion: { unknownDone = $0 })
+    session.send("queued-after-unknown", operation: "must-not-run",
+        started: { queuedStarted = true }, completion: { queuedDone = $0 })
+    waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
+    if unknownDone != false || queuedDone != false || queuedStarted || !session.currentStatus.requiresTargetRestart {
+        fail("a nonterminal module unknown-outcome reply let queued runtime work execute")
+    }
+    session.targetLifetimeChanged()
+}
+
+do {
     var writeFinished: Bool? = nil
     session.send("slow-before-quit", operation: "write", completion: { writeFinished = $0 })
     session.beginTermination()
@@ -327,6 +347,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'same-target request reached recovered worker: {commands!r}')
     if 'invalid-before-write' in commands:
         raise AssertionError(f'encoding rejection reached worker: {commands!r}')
+    if 'queued-after-unknown' in commands or commands.count('unknown-reply') != 1:
+        raise AssertionError(f'unknown reply replayed or released queued target work: {commands!r}')
     for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual'):
         if commands.count(required) != 1:
             raise AssertionError(f'missing/duplicate post-recovery request {required}: {commands!r}')

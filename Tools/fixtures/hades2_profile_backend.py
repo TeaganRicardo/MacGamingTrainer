@@ -36,8 +36,8 @@ class ProfileSidecar(JsonLineSidecarClient):
         rpc_id = str(self._next_id)
         received = []
         original = self._readline
-        def read(stream):
-            raw = original(stream)
+        def read(stream, deadline):
+            raw = original(stream, deadline)
             received.append(len(raw.encode('utf-8')) if isinstance(raw, str) else len(raw))
             return raw
         self._readline = read

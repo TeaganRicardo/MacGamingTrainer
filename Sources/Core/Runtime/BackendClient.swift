@@ -366,7 +366,7 @@ final class BackendClient {
 
         cancelCurrentTimeout()
         current = nil
-        let terminal = detail?["terminal"] as? Bool == true
+        let terminal = failure?.outcomeUnknown == true || detail?["terminal"] as? Bool == true
         if terminal { terminalFailureReported = true }
         let cancelled = terminal ? takeQueuedRequests() : []
         deliveringReply = true
