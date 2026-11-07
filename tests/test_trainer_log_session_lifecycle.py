@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import shutil
 import subprocess
 import tempfile
@@ -699,12 +700,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-log-session-") as td:
         str(main),
         "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), str(home)],
         cwd=ROOT,
         text=True,
         capture_output=True,
-        timeout=30,
+        journey='native.trainer_log_session_lifecycle',
     )
     if proc.returncode != 0:
         print(proc.stdout)

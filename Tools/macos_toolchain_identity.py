@@ -7,9 +7,10 @@ import subprocess
 from typing import Mapping, Sequence
 
 
+# The product declares arm64 only and every lane runs on this profile (#671).
+# tests/macos_fixture_policy.py must verify the same hosted profile.
 SUPPORTED_RUNNER_PROFILES = {
     "macos-26": "ARM64",
-    "macos-26-intel": "X64",
 }
 SUPPORTED_DEVELOPER_DIR = "/Applications/Xcode_26.6.app/Contents/Developer"
 SUPPORTED_XCODE_VERSION = "26.6"

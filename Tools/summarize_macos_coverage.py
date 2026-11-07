@@ -89,7 +89,7 @@ def read_timings(path: Path | None) -> list[dict]:
 
 
 def coverage(lane: str, selected: list[str], results: list[dict[str, str]],
-             inventory: set[str]) -> dict[str, object]:
+             inventory: set[str], selection: dict | None = None) -> dict[str, object]:
     if not inventory:
         raise CoverageError("the macOS inventory is empty; convergence would verify nothing")
     if not selected and lane == "convergence":
@@ -99,11 +99,27 @@ def coverage(lane: str, selected: list[str], results: list[dict[str, str]],
     if undeclared:
         raise CoverageError(f"{lane} lane selected tests outside the inventory: {undeclared}")
 
-    deferred = {} if lane == "convergence" else dict(PR_DEFERRED)
-    unverifiable = sorted(set(deferred) - inventory)
+    if selection is None:
+        relevant = set(selected)
+        deferred = {}
+    else:
+        relevant = set(selection["relevant"])
+        if selected != selection["selected"]:
+            raise CoverageError("executed selection differs from the selector result")
+        expected_deferred = {name: {"reason": PR_DEFERRED[name].reason,
+                                    "verification_owner": PR_DEFERRED[name].verification_owner}
+                             for name in relevant if name in PR_DEFERRED}
+        if selection["deferred"] != expected_deferred:
+            raise CoverageError("deferral details differ from the selector policy")
+        if relevant != set(selected) | set(expected_deferred):
+            raise CoverageError("relevant tests are neither selected nor deferred")
+        deferred = {name: PR_DEFERRED[name] for name in expected_deferred}
+    if lane == "convergence" and deferred:
+        raise CoverageError("convergence cannot defer tests")
+    unverifiable = sorted(relevant - inventory)
     if unverifiable:
         raise CoverageError(
-            f"deferred tests are missing from the convergence inventory: {unverifiable}"
+            f"relevant tests are missing from the convergence inventory: {unverifiable}"
         )
     if lane == "convergence" and not inventory <= set(selected):
         # Claiming the convergence lane while running part of it would report
@@ -125,6 +141,7 @@ def coverage(lane: str, selected: list[str], results: list[dict[str, str]],
     failed = [row["test"] for row in results if row["status"] == "fail"]
     return {
         "lane": lane,
+        "relevant": len(relevant),
         "selected": len(selected),
         "executed": len(executed),
         "passed": len(passed),
@@ -241,6 +258,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--lane", choices=("pr", "convergence"), required=True)
     parser.add_argument("--selected", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
+    parser.add_argument("--selection", type=Path, help="structured relevant/selected/deferred selector result")
     parser.add_argument("--timings", type=Path)
     parser.add_argument("--baseline", type=Path, help="earlier timing JSONL for a nonblocking trend")
     parser.add_argument("--output", type=Path, help="write the combined machine-readable JSONL here")
@@ -254,10 +272,11 @@ def main(argv: list[str]) -> int:
             _lines(args.selected),
             read_results(args.results),
             load_macos_only_tests(ROOT),
+            json.loads(args.selection.read_text()) if args.selection else None,
         )
         observed = read_timings(args.timings)
         timings = timing_summary(observed, read_timings(args.baseline))
-    except CoverageError as error:
+    except (CoverageError, OSError, ValueError, KeyError, TypeError) as error:
         print(f"macOS coverage contract violated: {error}", file=sys.stderr)
         return 2
 

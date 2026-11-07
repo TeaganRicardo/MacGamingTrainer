@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import json
 import os
 import shutil
@@ -156,4 +157,4 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-frontend-') as td:
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades2').rglob('*.swift'))
     subprocess.run([SWIFTC, '-parse-as-library', '-whole-module-optimization', *map(str, sources),
                     str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'), str(generated), str(main), '-o', str(binary)], check=True)
-    subprocess.run([str(binary), PYTHON, str(worker)], env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home)), check=True, timeout=30)
+    launch_fixture([str(binary), PYTHON, str(worker)], env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home)), check=True, journey='native.hades2_gathering_frontend')

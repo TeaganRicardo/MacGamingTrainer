@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Exercise the real shared SwiftUI/AppKit text control on macOS."""
 import shutil
 import subprocess
@@ -394,4 +395,4 @@ with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
         str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
         str(swift), "-o", str(binary),
     ], cwd=ROOT, check=True)
-    subprocess.run([str(binary)], cwd=ROOT, check=True, timeout=15)
+    launch_fixture([str(binary)], cwd=ROOT, check=True, journey='native.trainer_text_field_appearance')

@@ -16,7 +16,7 @@ Backend/games/<id>/
   ...game-local services/transport...
 ```
 
-Register the game ID in the product module list in `app.json`. Ordinary module additions require no edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`. The build generates the typed catalog and management-command composition from that list.
+Register the game ID in the product module list in `app.json`. Ordinary module additions require no edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`. The build generates the typed catalog and management-command composition from that list. The [module onboarding runbook](docs/development/add-a-game-module.md) records optional-capability decisions, behavior-test registration, architecture identities and verification scope. A changed module needs a stable module-owned PR smoke entry; missing or entirely deferred coverage fails explicitly.
 
 Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 

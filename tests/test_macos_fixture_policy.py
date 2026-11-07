@@ -4,6 +4,7 @@ The policy exists so that a slow-but-correct native journey, a stalled process
 and an unmet semantic predicate stay three different outcomes. These checks are
 portable: they never require AppKit or a hosted runner.
 """
+import ast
 import os
 import signal
 import subprocess
@@ -33,13 +34,39 @@ CONSUMERS = {
     ),
     "test_hades2_view_state_flow.py": (
         "hades2.hierarchy", "hades2.slider", "hades2.disclosure",
-        "hades2.search", "hades2.state_flow", "hades2.live_trait_flow",
+        "hades2.search", "hades2.state_flow",
     ),
     "test_hades2_save_editor_frontend.py": ("hades2.save_editor",),
+    "test_hades2_model_flow.py": ("hades2.live_trait_flow",),
     "test_runtime_text_edit_completion.py": ("runtime_text_edit.completion",),
     "real_module_navigation_harness.py": (
         "multi_game_navigation.startup", "multi_game_navigation.journey",
     ),
+    'test_trainer_text_field_appearance.py': ('native.trainer_text_field_appearance',),
+    'test_trainer_search_field_appearance.py': ('native.trainer_search_field_appearance',),
+    'test_core_save_batch_delete_round20.py': ('native.core_save_batch_delete_round20',),
+    'test_core_save_rename_completion_round24.py': ('native.core_save_rename_completion_round24',),
+    'test_core_save_manager_lifecycle_u01_u02.py': ('native.core_save_manager_lifecycle_u01_u02.1', 'native.core_save_manager_lifecycle_u01_u02.2'),
+    'test_hades2_run_log_watcher.py': ('native.hades2_run_log_watcher',),
+    'test_trainer_log_session_lifecycle.py': ('native.trainer_log_session_lifecycle',),
+    'test_backend_stderr_liveness.py': ('native.backend_stderr_liveness',),
+    'test_disclosure_settle_classification.py': ('native.disclosure_settle_classification',),
+    'test_viewport_feedback.py': ('native.viewport_feedback',),
+    'test_hades2_force_enable_rerolls_frontend.py': ('native.hades2_force_enable_rerolls_frontend',),
+    'test_hades2_gathering_frontend.py': ('native.hades2_gathering_frontend',),
+    'test_hades2_chaos_gate_frontend.py': ('native.hades2_chaos_gate_frontend',),
+    'test_hades2_save_editor_player_journey.py': ('native.hades2_save_editor_player_journey',),
+    'test_hades2_advanced_save_frontend.py': ('native.hades2_advanced_save_frontend',),
+    'test_hades2_save_record_frontend.py': ('native.hades2_save_record_frontend',),
+    'test_reference_fixture_session_integration.py': ('native.reference_fixture_session_integration', 'reference_fixture.suffix_identity'),
+    'test_trainer_tool_windows.py': ('native.trainer_tool_windows',),
+    'test_hades2_repeated_actions_frontend.py': ('native.hades2_repeated_actions_frontend',),
+    'test_host_target_ownership.py': ('native.host_target_ownership',),
+    'test_core_save_retention_controls.py': ('native.core_save_retention_controls',),
+    'test_mapped_slider_interaction.py': ('native.mapped_slider_interaction',),
+    'test_hades2_save_container_frontend.py': ('native.hades2_save_container_frontend',),
+    'multi_game_context_harness.py': ('multi_game.context_state', 'multi_game.context_navigation'),
+    'test_native_effect_query_macos.py': ('native_effect_query.image_identity',),
 }
 
 # --- Profile resolution -------------------------------------------------------
@@ -101,6 +128,17 @@ result = run_watchdog([sys.executable, "-c", "print('fixture_ok')"],
                       budget=FixtureBudget("test.success", LOCAL_PROFILE, 10.0),
                       capture_output=True, text=True)
 assert result.returncode == 0 and "fixture_ok" in result.stdout
+
+# A semantic assertion is the fixture's original exit failure. Migrating an
+# ordinary subprocess.run(check=True) must retain that failure and diagnostics.
+try:
+    run_watchdog([sys.executable, "-c", "import sys; print('predicate not met'); sys.exit(3)"],
+                 budget=FixtureBudget("test.semantic", LOCAL_PROFILE, 10.0),
+                 capture_output=True, text=True, check=True)
+except subprocess.CalledProcessError as error:
+    assert error.returncode == 3 and "predicate not met" in error.stdout
+else:
+    raise AssertionError("shared watchdog swallowed a semantic failure")
 
 assert not issubclass(FixtureWatchdogExpired, AssertionError), (
     "a watchdog expiry must never be reported as a semantic assertion failure"
@@ -203,9 +241,13 @@ for name, journeys in CONSUMERS.items():
     for journey in journeys:
         assert f'"{journey}"' in source or f"'{journey}'" in source, (name, journey)
         declared.add(journey)
-    assert "timeout=" not in source, (
-        f"{name}: launch budgets belong to macos_fixture_policy, not to the fixture"
-    )
+    for call in ast.walk(ast.parse(source)):
+        if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name) and call.func.value.id == "subprocess"
+                and call.func.attr in {"run", "check_output", "call"}):
+            assert not any(keyword.arg == "timeout" for keyword in call.keywords), (
+                f"{name}:{call.lineno}: native launch budget bypasses the shared policy"
+            )
 
 assert declared == set(JOURNEY_BUDGETS), (
     "declared journeys and owned journeys diverged: "

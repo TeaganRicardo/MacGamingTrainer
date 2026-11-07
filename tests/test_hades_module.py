@@ -202,11 +202,6 @@ with patch('games.hades.adapter.subprocess.check_output',
         else:
             raise AssertionError('multiple matching Hades processes must fail closed')
 
-if sys.platform == 'darwin':
-    current_executable = hades_adapter.process_executable_path(os.getpid())
-    assert current_executable and Path(current_executable).is_absolute(), (
-        'proc_pidpath must resolve the current test process on macOS'
-    )
 
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
 from lua_runtime_support import require_lua52

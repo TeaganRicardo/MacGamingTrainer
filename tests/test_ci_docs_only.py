@@ -44,10 +44,15 @@ def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None, fu
 assert_scope(
     ["README.md"],
     docs_only=True,
-    linux=False,
+    linux=True,
     macos=False,
     module_build=False,
 )
+# Portable tests read documentation (VERSIONING.md, GAME_MODULES.md and the
+# reference snapshots), so every documentation-only diff keeps the Linux lane.
+tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, text=True, capture_output=True).stdout.split()
+for document in [path for path in tracked if path.endswith(".md") or path.startswith("docs/")]:
+    assert module.classify_scope([document], macos_only_tests=MACOS_ONLY)["needs_linux"], document
 # Documentation is not a product build input, at any depth and in a mixed diff:
 # a docs file next to code must not escalate the lane to the unified build.
 for documentation in (
@@ -173,10 +178,16 @@ assert_scope(
 )
 for path in (
     "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
-    "tests/hades2_debugserver_owner.py", "Tools/profile_hades2_operations.py",
+    "tests/hades2_debugserver_owner.py",
     "Tools/macos_test_dependencies.json",
 ):
     assert_scope([path], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+try:
+    module.classify_scope(["tests/test_third_probe_frontend.py"])
+except ValueError as error:
+    assert "inventory" in str(error)
+else:
+    raise AssertionError("unregistered frontend test silently entered Linux")
 assert_scope(["tests/test_debugserver_ownership.py"],
              docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["tests/management_ui_harness.py"],
@@ -207,6 +218,8 @@ assert_scope(["tests/visual_hierarchy_harness.py"],
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
     (root / "Tools").mkdir()
+    (root / "tests").mkdir()
+    (root / "tests/test_native_fixture.py").write_text("assert True\n")
     (root / "Tools/macos_only_tests.txt").write_text("test_native_fixture.py\n")
     metadata = root / "Tools/macos_test_dependencies.json"
     metadata.write_text(json.dumps({"test_native_fixture.py": ["tests/fixture.py"]}))
@@ -264,7 +277,9 @@ assert_scope(["Backend/games/hades2/native/CommandMailbox.c"], docs_only=False, 
 assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
 assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
-assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=False, module_build=False)
+assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope([".github/workflows/module-build-matrix.yml"], docs_only=False, linux=True, macos=False, module_build=True, build=False)
+assert_scope(["Tools/profile_hades2_operations.py"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["tests/fixtures/swift/InMemoryDefaults.swift"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope(["Backend/core/native/example.c"], docs_only=False, linux=True, macos=True, module_build=False)
 assert_scope(["Backend/games/example/unknown.binary"], docs_only=False, linux=True, macos=True, module_build=False)

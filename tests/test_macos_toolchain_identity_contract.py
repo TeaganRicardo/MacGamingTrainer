@@ -51,13 +51,18 @@ arm = collect("macos-26", "ARM64")
 identity.verify_recorded_macos_toolchain(arm)
 assert arm["host"]["runnerArch"] == "ARM64"
 
-intel = collect("macos-26-intel", "X64")
-identity.verify_recorded_macos_toolchain(intel)
-assert intel["host"]["runnerArch"] == "X64"
+# The retired Intel pool (#671) is no longer a verified release profile: an
+# x86_64-built artifact cannot satisfy the arm64-only product.
+try:
+    collect("macos-26-intel", "X64")
+except RuntimeError:
+    pass
+else:
+    raise AssertionError("the retired Intel runner profile was accepted")
 
-mismatched = dict(intel)
-mismatched["host"] = dict(intel["host"])
-mismatched["host"]["runnerArch"] = "ARM64"
+mismatched = dict(arm)
+mismatched["host"] = dict(arm["host"])
+mismatched["host"]["runnerArch"] = "X64"
 try:
     identity.verify_recorded_macos_toolchain(mismatched)
 except RuntimeError:
@@ -66,10 +71,17 @@ else:
     raise AssertionError("runner label/architecture mismatch must be rejected")
 
 try:
-    collect("macos-26-intel", "ARM64")
+    collect("macos-26", "X64")
 except RuntimeError:
     pass
 else:
     raise AssertionError("runtime runner label/architecture mismatch must be rejected")
+
+# One verified hosted profile: the release verifier and the native fixture
+# watchdog policy must agree on it.
+sys.path.insert(0, str(ROOT / "tests"))
+import macos_fixture_policy
+
+assert identity.SUPPORTED_RUNNER_PROFILES == {macos_fixture_policy.HOSTED_PROFILE: "ARM64"}
 
 print("macos_toolchain_runner_profiles_ok")

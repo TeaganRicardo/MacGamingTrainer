@@ -3,6 +3,7 @@
 
 import argparse
 from pathlib import Path
+from test_inventory import validate_native_inventory
 
 
 def discover_tests(root: Path) -> list[str]:
@@ -15,6 +16,7 @@ def discover_tests(root: Path) -> list[str]:
         for line in macos_only_file.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
+    validate_native_inventory(root, macos_only)
     tests = sorted(
         path.relative_to(root).as_posix()
         for path in tests_root.rglob("test_*.py")

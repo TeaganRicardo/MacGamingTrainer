@@ -142,6 +142,11 @@ for step in ("Run full macOS contracts for release convergence",
     window = build2[build2.index(step):][:800]
     assert "MGT_FIXTURE_TIMINGS" in window, step
     assert "MGT_MACOS_COVERAGE_OUTPUT" in window, step
+assert build2.index("Build Lua 5.2 runtime test dependency") < build2.index("Run full macOS contracts for release convergence")
+assert build2.index("Build Lua 5.2 runtime test dependency") < build2.index("Run selected macOS PR smoke tests")
+assert "steps.test-selection.outputs.lua52_native == 'true'" in build2
+assert "MGT_MACOS_SELECTION=$selection" in build2
+
 # Convergence must be able to finish: it runs the full native inventory, the
 # resident mutation gate and the unified build in one job, and a measured
 # dispatch run hit the 30 minute limit inside the build after the inventory had
@@ -231,5 +236,28 @@ release = (ROOT / '.github/workflows/direct-release.yml').read_text()
 assert 'runs-on: ubuntu-latest' in release, "Release coordinator must not occupy a macOS runner"
 assert 'sha256sum -c' in release
 assert '/usr/libexec/PlistBuddy' not in release
+
+
+# A push-triggered release waits for the three dispatched convergence lanes on
+# the same SHA. Its wait must outlast the slowest producer's own dispatch
+# budget (plus runner queueing), and the job must outlast its wait; compare
+# the declared budgets rather than pinning either value.
+
+def _dispatch_minutes(text):
+    budgets = []
+    for value in re.findall(r"timeout-minutes:\s*(.+)", text):
+        conditional = re.search(r"workflow_dispatch'\s*&&\s*(\d+)", value)
+        budgets.append(int(conditional.group(1)) if conditional else int(value.strip()))
+    return max(budgets)
+
+
+release_text = (ROOT / '.github/workflows/direct-release.yml').read_text()
+producers = {name: _dispatch_minutes((ROOT / '.github/workflows' / name).read_text())
+             for name in ('linux-contracts.yml', 'build2-macos.yml', 'module-build-matrix.yml')}
+wait_minutes = int(re.search(r"CONVERGENCE_WAIT_MINUTES:\s*(\d+)", release_text).group(1))
+release_minutes = int(re.search(r"timeout-minutes:\s*(\d+)", release_text).group(1))
+assert wait_minutes >= max(producers.values()) + 30, (wait_minutes, producers)
+assert release_minutes >= wait_minutes + 10, (release_minutes, wait_minutes)
+assert 'seq 1 105' not in release_text
 
 print("ci_workflow_contract_ok")

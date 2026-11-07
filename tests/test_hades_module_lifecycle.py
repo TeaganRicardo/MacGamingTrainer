@@ -103,10 +103,8 @@ assert transport.process is None and transport.pid is None
 assert transport.addresses == {} and transport.focus_original is None
 print('hades_transport_focus_ownership_ok')
 
-if sys.platform != 'darwin':
-    print('hades_termination_swift_macos_only')
-    raise SystemExit(0)
-
+# The termination harness imports only Foundation, so it runs in the portable
+# lane; the macOS lanes execute only Tools/macos_only_tests.txt.
 model = (ROOT / 'Sources/Hades/HadesModule.swift').read_text()
 start = model.index('    func prepareForTermination(')
 termination = model[start:model.index('\n    private func send(', start)]

@@ -34,7 +34,10 @@ RESULTS = [{"test": "test_hades_frontend.py", "status": "pass"},
 
 # --- Coverage -----------------------------------------------------------------
 
-report = coverage("pr", SELECTED, RESULTS, INVENTORY)
+SELECTION = {"relevant": SELECTED + sorted(summary.PR_DEFERRED), "selected": SELECTED,
+             "deferred": {name: {"reason": item.reason, "verification_owner": item.verification_owner}
+                          for name, item in summary.PR_DEFERRED.items()}}
+report = coverage("pr", SELECTED, RESULTS, INVENTORY, SELECTION)
 assert report["selected"] == 2 and report["executed"] == 2
 assert report["passed"] == 1 and report["failed"] == 1
 assert report["deferred"] == 3, report["deferred"]
@@ -80,15 +83,26 @@ else:
 # rather than fail or imply that something ran.
 empty = coverage("pr", [], [], INVENTORY)
 assert empty["selected"] == 0 and empty["executed"] == 0, empty
-assert empty["not_selected"] == len(INVENTORY) - 3, empty
+assert empty["not_selected"] == len(INVENTORY) and empty["deferred"] == 0, empty
 
 # A deferral whose suite left the inventory would hide missing coverage.
 try:
-    coverage("pr", SELECTED, RESULTS, INVENTORY - {"test_multi_game_contexts.py"})
+    coverage("pr", SELECTED, RESULTS, INVENTORY - {"test_multi_game_contexts.py"}, SELECTION)
 except CoverageError as error:
     assert "convergence inventory" in str(error), error
 else:
     raise AssertionError("a deferred suite missing from the inventory was accepted")
+
+one_name = "test_hades2_view_state_flow.py"
+one = {"relevant": SELECTED + [one_name], "selected": SELECTED,
+       "deferred": {one_name: SELECTION["deferred"][one_name]}}
+assert coverage("pr", SELECTED, RESULTS, INVENTORY, one)["deferred"] == 1
+try:
+    coverage("pr", SELECTED, RESULTS, INVENTORY, {**one, "selected": []})
+except CoverageError:
+    pass
+else:
+    raise AssertionError("runner ignored its structured selector result")
 
 # --- Timing is observation only -----------------------------------------------
 
@@ -125,6 +139,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     timings = root / "timings.jsonl"
     output = root / "coverage.jsonl"
     step = root / "step.md"
+    selection_file = root / "selection.json"
+    selection_file.write_text(json.dumps(SELECTION))
     selected.write_text("\n".join(SELECTED) + "\n", encoding="utf-8")
     results.write_text("test_hades_frontend.py\tpass\n"
                        "test_hades2_save_editor_frontend.py\tfail\n", encoding="utf-8")
@@ -142,6 +158,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-coverage-") as directory:
     assert summary.main([
         "--lane", "pr", "--selected", str(selected), "--results", str(results),
         "--timings", str(timings), "--output", str(output), "--summary", str(step),
+        "--selection", str(selection_file),
     ]) == 0
     assert output.exists() and step.exists()
     rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]

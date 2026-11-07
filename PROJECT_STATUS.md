@@ -60,6 +60,8 @@ On 2026-10-17 the user reported completing perceived-performance testing on the 
 
 ## Execution authorization
 
+Ordinary PR verification includes foreground-independent Hades II model/API/session behavior and two live-context request/document ownership. Native focus, field-editor, key-window and activation journeys retain exact-SHA convergence ownership. The selector and coverage summary share one relevant/selected/deferred result; an unrelated deferred policy is not counted as this PR's coverage. These fixtures leave the actual App/game observations above pending.
+
 The user's latest 2026-11-01 instruction selects all open issues, including the previously deferred #429, #433 and #565, and makes the online RDC Mac available for verification. It supersedes the earlier local-testing and game/debugger pauses. Isolated local checks, required PR CI and bounded native verification are authorized. If actual-device testing becomes inefficient, record the exact unperformed scope and continue the remaining work; skipping a test does not establish its result.
 
 Development remains in the Linux workspace with GitHub as the persistent source baseline. Use independent development and review/merge threads, current source and isolated native checkouts. Tests use temporary helper processes and synthetic or disposable save trees, preserving the user's original files and saves. Required final-head checks and independent review govern merges; no additional manual confirmation is required for already-authorized work.

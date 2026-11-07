@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import os
 import shutil
 import subprocess
@@ -344,9 +345,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
         str(ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"),
         str(main_path), "-framework", "AppKit", "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path), str(recovery)],
-        cwd=ROOT, env=environment, text=True, capture_output=True, timeout=12
+        cwd=ROOT, env=environment, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.1'
     )
     if proc.returncode != 0:
         print(proc.stdout)
@@ -368,9 +369,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-path-validation-") as td:
         str(ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"),
         str(main_path), "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc = subprocess.run(
+    proc = launch_fixture(
         [str(binary), str(root), str(outside)],
-        cwd=ROOT, text=True, capture_output=True, timeout=5
+        cwd=ROOT, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.2'
     )
     if proc.returncode != 0:
         print(proc.stdout)

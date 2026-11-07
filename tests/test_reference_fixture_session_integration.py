@@ -1,3 +1,5 @@
+from macos_fixture_policy import launch_fixture
+import json
 import os
 import shutil
 import subprocess
@@ -50,7 +52,18 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 let args = CommandLine.arguments
-if args.count != 3 { fail("expected temporary backend server path and Python executable") }
+if args.count != 5 { fail("expected backend, Python, target PID and journey mode") }
+let descriptor = ReferenceFixtureGameModule.descriptor
+if !descriptor.targetBundleIdentifier.isEmpty { fail("suffix-only variant gained a Bundle ID") }
+let monitor = TrainerTargetProcessMonitor(processName: descriptor.targetProcessName,
+    bundleIdentifier: descriptor.targetBundleIdentifier,
+    executablePathSuffix: descriptor.targetExecutablePathSuffix)
+if args[3] == "absent" {
+    if monitor.isRunning { fail("same-name unrelated executable was recognized as the reference target") }
+} else if monitor.targetObservation.processIdentifier != pid_t(Int32(args[3])!) {
+    fail("generated suffix-only descriptor did not recognize its exact target process")
+}
+if args[4] == "identity-only" { print("reference_suffix_identity_ok"); exit(0) }
 if ReferenceFixtureGameModule.managedBackupEditor != nil {
     fail("A module without an editor must retain the default absent backup action")
 }
@@ -292,6 +305,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
 
     shutil.copytree(ROOT / "Backend/core", project / "Backend/core")
     shutil.copytree(FIXTURE / "backend", project / "Backend/games/reference_fixture")
+    variant_path = project / "Backend/games/reference_fixture/module.json"
+    variant = json.loads(variant_path.read_text())
+    variant["targetApplication"] = {"processName": "ReferenceTarget",
+        "executablePathSuffix": "Expected/ReferenceTarget"}
+    variant_path.write_text(json.dumps(variant))
     shutil.copytree(ROOT / "Sources/Core", project / "Sources/Core")
     shutil.copytree(FIXTURE / "frontend", project / "Sources/ReferenceFixture")
     for language in ("zh-CN", "en"):
@@ -335,14 +353,29 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     env["HOME"] = str(home)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
 
-    proc = subprocess.run(
-        [str(binary), str(project / "Backend/core/server.py"), PYTHON],
-        cwd=project,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=45,
-    )
+    native_source = temp / "target.c"
+    native_source.write_text("#include <unistd.h>\nint main(void) { for (;;) sleep(1); }\n")
+    target = temp / "Expected/ReferenceTarget"
+    unrelated = temp / "Unrelated/ReferenceTarget"
+    for executable in (target, unrelated):
+        executable.parent.mkdir()
+        subprocess.run(["clang", str(native_source), "-o", str(executable)], check=True)
+    with subprocess.Popen([str(target)]) as target_process, subprocess.Popen([str(unrelated)]) as unrelated_process:
+        try:
+            proc = launch_fixture(
+                [str(binary), str(project / "Backend/core/server.py"), PYTHON, str(target_process.pid), "session"],
+                cwd=project, env=env, text=True, capture_output=True,
+                journey="native.reference_fixture_session_integration",
+            )
+            target_process.terminate()
+            target_process.wait(timeout=5)
+            launch_fixture([str(binary), str(project / "Backend/core/server.py"), PYTHON, "absent", "identity-only"],
+                           cwd=project, env=env, check=True, journey="reference_fixture.suffix_identity")
+        finally:
+            for process in (target_process, unrelated_process):
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=5)
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)

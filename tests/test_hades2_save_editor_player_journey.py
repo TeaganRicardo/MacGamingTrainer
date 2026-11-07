@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Native Save workbench journeys against real temporary Save transactions."""
 import hashlib
 import json
@@ -48,9 +49,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-player-journey-") as temporary
     )
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                PYTHONPATH=str(ROOT / "Backend"), MGT_SAVE_JOURNEY_FIXTURE=str(base))
-    result = subprocess.run(
+    result = launch_fixture(
         [str(binary), sys.executable, str(ROOT / "tests/fixtures/hades2/save_editor_player_journey.py")],
-        check=False, cwd=ROOT, env=env, text=True, capture_output=True, timeout=60,
+        check=False, cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_editor_player_journey',
     )
     if result.returncode:
         print(result.stdout)

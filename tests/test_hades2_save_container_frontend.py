@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Actual container controls through the temporary production Save backend."""
 import json
 import os
@@ -37,8 +38,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-container-save-journey-") as tempor
     subprocess.run([swiftc, "-parse-as-library", *map(str, sources), "-o", str(binary)], check=True, cwd=ROOT)
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                PYTHONPATH=str(ROOT / "Backend"), MGT_SAVE_JOURNEY_FIXTURE=str(base), MGT_SAVE_CONTAINER_FIXTURE="1")
-    result = subprocess.run([str(binary), sys.executable, str(ROOT / "tests/fixtures/hades2/save_editor_player_journey.py")],
-                            cwd=ROOT, env=env, text=True, capture_output=True, timeout=60)
+    result = launch_fixture([str(binary), sys.executable, str(ROOT / "tests/fixtures/hades2/save_editor_player_journey.py")],
+                            cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_container_frontend')
     if result.returncode:
         print(result.stdout)
         print(result.stderr)
