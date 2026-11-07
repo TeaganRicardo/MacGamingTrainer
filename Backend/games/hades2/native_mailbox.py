@@ -7,6 +7,31 @@ from core.adapter import AdapterError
 from .native_library import load_native_library
 
 
+# These values mirror MGTMailboxInstallStatus in native/MailboxProtocol.h.
+INSTALL_SUCCESS = 0
+INSTALL_FAILURE = -1
+INSTALL_RESTART_REQUIRED = -2
+
+
+def _check_install_status(status, message, mailbox, transport):
+    if status == INSTALL_SUCCESS:
+        return
+    if status == INSTALL_RESTART_REQUIRED:
+        mailbox.poison()
+        transport.tainted = True
+        raise AdapterError("restart_required", "hades2.error.restartRequired",
+                           diagnostic=f"Native mailbox install status={status}: {message}")
+    raise AdapterError("incompatible", "hades2.error.commandConnectionUnavailable",
+                       diagnostic=f"Native mailbox install status={status}: {message}")
+
+
+def _raise_install_unreturned(error, mailbox, transport):
+    mailbox.poison()
+    transport.tainted = True
+    raise AdapterError("restart_required", "hades2.error.restartRequired",
+                       diagnostic="Mailbox installation did not return: " + str(error))
+
+
 @dataclass(frozen=True)
 class CommandMailboxLibrary:
     path: Path
@@ -86,22 +111,14 @@ def install_command_mailbox(transport, lldb, mailbox, library):
         options.SetUnwindOnError(True)
         result = thread.GetFrameAtIndex(0).EvaluateExpression(expression, options)
         if result.GetError().Fail():
-            mailbox.poison()
-            transport.tainted = True
-            raise AdapterError("restart_required", "hades2.error.restartRequired",
-                               diagnostic="Mailbox installation did not return: " + str(result.GetError()))
+            _raise_install_unreturned(result.GetError(), mailbox, transport)
         status = result.GetValueAsSigned()
-        if status != 0:
+        message = ""
+        if status != INSTALL_SUCCESS:
             message = transport.process.ReadCStringFromMemory(out, capacity, error)
             if error.Fail():
                 message = "Cannot read mailbox installation diagnostic"
-            if status == -2:
-                mailbox.poison()
-                transport.tainted = True
-            raise AdapterError("restart_required" if status == -2 else "incompatible",
-                               "hades2.error.restartRequired" if status == -2
-                               else "hades2.error.commandConnectionUnavailable",
-                               diagnostic=f"Native mailbox install status={status}: {message}")
+        _check_install_status(status, message, mailbox, transport)
         mailbox.installed_in_target()
     finally:
         if breakpoint is not None and transport.target:
