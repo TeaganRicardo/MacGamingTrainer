@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import plistlib
@@ -147,6 +148,48 @@ try:
     other = create_adapter('other', games)
     assert other.dispatch('ping', {}, 'x') == {'command':'ping'}
     other.close()
+
+    # One unreadable sibling must not prevent the explicitly selected healthy
+    # worker from starting. Inventory/build validation remains strict.
+    broken = games / "broken"
+    broken.mkdir()
+    (broken / "module.json").write_text("{broken JSON")
+    diagnostic = io.StringIO()
+    handler = logging.StreamHandler(diagnostic)
+    logging.getLogger().addHandler(handler)
+    try:
+        healthy = create_adapter("other", games)
+        assert healthy.dispatch("ping", {}, "isolated") == {"command": "ping"}
+        healthy.close()
+    finally:
+        logging.getLogger().removeHandler(handler)
+    assert "broken/module.json" in diagnostic.getvalue(), diagnostic.getvalue()
+    for operation in (lambda: available_games(games), lambda: create_adapter("broken", games)):
+        try:
+            operation()
+        except ManifestError:
+            pass
+        else:
+            raise AssertionError("selected or inventory-wide invalid metadata was ignored")
+    try:
+        create_adapter("missing", games)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown module was accepted")
+    (broken / "module.json").unlink()
+    broken.rmdir()
+    duplicate = games / "duplicate"
+    duplicate.mkdir()
+    (duplicate / "module.json").write_text((module_dir / "module.json").read_text())
+    try:
+        create_adapter("other", games)
+    except ManifestError:
+        pass
+    else:
+        raise AssertionError("duplicate module identity was accepted")
+    (duplicate / "module.json").unlink()
+    duplicate.rmdir()
 finally:
     framework_games.__path__[:] = old_path
     sys.path.remove(str(backend))

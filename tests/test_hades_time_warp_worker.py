@@ -1,11 +1,15 @@
 """Hades time-warp RPC uses the existing LLDB transport and resets before detach."""
+import json
 from pathlib import Path
+import tempfile
+from unittest.mock import patch
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
-from games.hades.time_warp_worker import HADES_TIME_WARP_IMAGE_NAMES, HadesTimeWarpWorker, error_payload
+from games.hades.time_warp_worker import HadesTimeWarpWorker, error_payload
+from games.hades.config import time_warp_image_names
 
 
 class FakeTransport:
@@ -57,7 +61,18 @@ class FakeTimeWarp:
 transport = FakeTransport()
 time_warp = FakeTimeWarp()
 worker = HadesTimeWarpWorker(transport=transport, time_warp_factory=lambda _: time_warp)
-assert HADES_TIME_WARP_IMAGE_NAMES == ('Game.macOS',)
+declared = json.loads((ROOT / 'Backend/games/hades/module.json').read_text())
+assert time_warp_image_names() == (Path(declared['targetApplication']['executablePathSuffix']).name,)
+with tempfile.TemporaryDirectory(prefix='mgt-time-warp-target-metadata-') as temporary:
+    module_dir = Path(temporary)
+    declared['targetApplication']['executablePathSuffix'] = 'Fixture/ChangedTarget'
+    (module_dir / 'module.json').write_text(json.dumps(declared))
+    with patch('games.hades.time_warp_worker.time_warp_image_names',
+               side_effect=lambda: time_warp_image_names(module_dir)), patch(
+        'games.hades.time_warp_worker.ProcessTimeWarpController'
+    ) as controller:
+        HadesTimeWarpWorker._default_time_warp_factory(transport)
+        assert controller.call_args.args[2] == ('ChangedTarget',)
 assert worker.dispatch('time_warp.current_speed', {})['gameSpeed'] == 1.0
 assert worker.dispatch('time_warp.set_speed', {'value': 2.5})['gameSpeed'] == 2.5
 assert worker.dispatch('time_warp.current_speed', {})['gameSpeed'] == 2.5

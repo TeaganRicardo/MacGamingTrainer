@@ -84,15 +84,16 @@ def _process_request(router, request, decode_seconds, request_bytes):
 
 def main(argv=None):
     args = parse_args(argv)
-    games = available_games()
     if args.game:
         game_id = args.game
-    elif len(games) == 1:
-        game_id = games[0]['id']
-    elif not games:
-        raise RuntimeError('没有安装任何游戏模块。')
     else:
-        raise RuntimeError('检测到多个游戏模块；必须使用 --game 明确选择。')
+        games = available_games()
+        if len(games) == 1:
+            game_id = games[0]['id']
+        elif not games:
+            raise RuntimeError('没有安装任何游戏模块。')
+        else:
+            raise RuntimeError('检测到多个游戏模块；必须使用 --game 明确选择。')
 
     logging_session = _BackendLoggingSession()
     router = None

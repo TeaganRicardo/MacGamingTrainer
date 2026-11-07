@@ -1,5 +1,6 @@
 """Hades command semantics; debugger lifetime is isolated in its own sidecar."""
 import ctypes
+from functools import partial
 import os
 from pathlib import Path
 import subprocess
@@ -7,15 +8,13 @@ import sys
 
 from core.adapter import AdapterError, GameAdapter
 from .catalog import catalog, get_entry, resource_catalog, trait_names
+from .config import steam_launch_url
 from .preferences import HadesPreferenceStore
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
-
-
-EXECUTABLE_SUFFIX = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
 
 
 def process_executable_path(pid):
@@ -36,9 +35,9 @@ def process_executable_path(pid):
     return str(Path(os.fsdecode(buffer.value)).resolve())
 
 
-def locate_process():
+def _locate_process(executable_suffix):
     rows = subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True)
-    expected_name = Path(EXECUTABLE_SUFFIX).name
+    expected_name = Path(executable_suffix).name
     matches = []
     for row in rows.splitlines():
         parts = row.strip().split(None, 1)
@@ -51,15 +50,15 @@ def locate_process():
         command = parts[1]
         # BSD ps may expose a process command name rather than its executable
         # path. Use it only to narrow candidates; proc_pidpath verifies identity.
-        if Path(command).name != expected_name and not command.endswith('/' + EXECUTABLE_SUFFIX):
+        if Path(command).name != expected_name and not command.endswith('/' + executable_suffix):
             continue
         executable = process_executable_path(pid)
-        if executable is None and command.endswith('/' + EXECUTABLE_SUFFIX):
+        if executable is None and command.endswith('/' + executable_suffix):
             executable = str(Path(command).resolve())
         if executable is None:
             continue
         executable = str(Path(executable).resolve())
-        if executable.endswith('/' + EXECUTABLE_SUFFIX):
+        if executable.endswith('/' + executable_suffix):
             matches.append((pid, executable))
     if len(matches) > 1:
         raise AdapterError('ambiguous_target', 'hades.error.ambiguousTarget')
@@ -67,13 +66,13 @@ def locate_process():
 
 
 class HadesAdapter(GameAdapter):
-    def __init__(self, context, *, runtime=None, locate_process=locate_process, preferences=None):
+    def __init__(self, context, *, runtime=None, locate_process=None, preferences=None):
         super().__init__(context)
         if runtime is None:
             from .client import HadesRuntimeClient
             runtime = HadesRuntimeClient()
         self.runtime = runtime
-        self.locate_process = locate_process
+        self.locate_process = locate_process or partial(_locate_process, context.executable_path_suffix)
         self.connected = False
         self.preferences = preferences or HadesPreferenceStore()
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
@@ -137,7 +136,7 @@ class HadesAdapter(GameAdapter):
             except ValueError as error:
                 raise invalid_value() from error
         if command == 'launch':
-            subprocess.run(['/usr/bin/open', 'steam://run/1145360'], check=True)
+            subprocess.run(['/usr/bin/open', steam_launch_url(self.context.module_dir)], check=True)
             return self.dispatch('status', {}, request_id)
         if command == 'connect':
             target = self.locate_process()

@@ -8,8 +8,7 @@ from core.process_time_warp import ProcessTimeWarpController
 from core.sidecar import serve_jsonl_requests
 
 from .lldb_worker import HadesLLDBWorker, error_payload as runtime_error_payload
-
-HADES_TIME_WARP_IMAGE_NAMES = ('Game.macOS',)
+from .config import time_warp_image_names
 
 
 def error_payload(error):
@@ -30,7 +29,7 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
     def _default_time_warp_factory(transport):
         helper = Path(__file__).resolve().parents[2] / 'core/native/libMGTTimeWarp.dylib'
         return ProcessTimeWarpController(
-            LLDBProcessTimeWarpDriver(transport), helper, HADES_TIME_WARP_IMAGE_NAMES
+            LLDBProcessTimeWarpDriver(transport), helper, time_warp_image_names()
         )
 
     def dispatch(self, method, params):
