@@ -18,7 +18,10 @@ intptr_t _dyld_get_image_vmaddr_slide(uint32_t i) { (void)i; return 0; }
 void _dyld_register_func_for_add_image(mgt_image_callback callback) { callback(&header, 0); }
 int rebind_symbols_image(void *h, intptr_t slide, struct rebinding bindings[], size_t count) {
     (void)h; (void)slide;
-    for (size_t i = 0; i < count; i++) if (bindings[i].replaced) *bindings[i].replaced = &header;
+    for (size_t i = 0; i < count; i++) {
+        if (bindings[i].replaced) *bindings[i].replaced = &header;
+        if (bindings[i].result) bindings[i].result->rebound++;
+    }
     return 0;
 }
 static void measure(const char *label, int samples, uint64_t (*read_clock)(void)) {
