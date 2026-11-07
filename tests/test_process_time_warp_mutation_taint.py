@@ -186,6 +186,55 @@ expect_error(lambda: install_driver.install(b"Hades II", 2.0), "outcome_unknown"
 assert install_transport.tainted is True
 assert install_transport.process.deallocated == [0x1000]
 
+# A session that resumed a running target must keep the body's verdict: a
+# failed resume cannot turn outcome_unknown into an ordinary, retryable error.
+class RunningProcess(FakeProcess):
+    def GetState(self):
+        return FakeLLDB.eStateStopped + 1
+
+
+class ResumeFailingTransport(FakeTransport):
+    def __init__(self):
+        super().__init__(failed=True)
+        self.process = RunningProcess(self.frame)
+
+    def resume(self, deadline):
+        self.resume_calls += 1
+        raise ProcessTimeWarpError("resume_failed", "host.timeWarp.error.callFailed")
+
+
+resuming_transport = ResumeFailingTransport()
+resuming_driver = LLDBProcessTimeWarpDriver(resuming_transport, lldb_module=FakeLLDB)
+
+
+def mutate_in_session():
+    with resuming_driver.session():
+        resuming_driver.set_speed(2.0)
+
+
+expect_error(mutate_in_session, "outcome_unknown")
+assert resuming_transport.tainted is True
+assert resuming_transport.resume_calls == 1, "the running target was not resumed after the failure"
+
+class CleanupFailingProcess(FakeProcess):
+    def DeallocateMemory(self, address):
+        super().DeallocateMemory(address)
+        raise ProcessTimeWarpError('cleanup_failed', 'host.timeWarp.error.callFailed')
+
+
+cleanup_transport = FakeTransport(failed=True)
+cleanup_transport.process = CleanupFailingProcess(cleanup_transport.frame)
+cleanup_driver = LLDBProcessTimeWarpDriver(cleanup_transport, lldb_module=FakeLLDB)
+expect_error(lambda: cleanup_driver.install(b'Hades II', 2.0), 'outcome_unknown')
+assert cleanup_transport.tainted is True
+assert cleanup_transport.process.deallocated == [0x1000]
+
+# A successful body still reports a failed resume rather than silently hiding it.
+resuming_transport = ResumeFailingTransport()
+resuming_transport.frame.failed = False
+resuming_driver = LLDBProcessTimeWarpDriver(resuming_transport, lldb_module=FakeLLDB)
+expect_error(mutate_in_session, 'resume_failed')
+
 # LLDB-specific driver lifecycle stays Hades-owned: missing targets read as
 # absent helpers, while tainted transports fail before touching the debugger.
 class TargetlessTransport:

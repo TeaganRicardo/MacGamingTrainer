@@ -1,9 +1,12 @@
 import subprocess
 import tempfile
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 NATIVE = ROOT / "Native/ProcessTimeWarp"
+sys.path.insert(0, str(ROOT / 'Backend'))
+from core.process_time_warp import ProcessTimeWarpController
 
 stubs = {
     "QuartzCore/CABase.h": r"""
@@ -89,6 +92,7 @@ int rebind_symbols_image(void *header, intptr_t slide, struct rebinding bindings
     atomic_fetch_add_explicit(&selected_rebinds, 1, memory_order_relaxed);
     for (size_t i = 0; i < count; ++i) {
         if (bindings[i].replaced != NULL) *bindings[i].replaced = &original_marker;
+        if (bindings[i].result != NULL) bindings[i].result->rebound++;
     }
     return 0;
 }
@@ -214,6 +218,7 @@ int rebind_symbols_image(void *header, intptr_t slide, struct rebinding bindings
     atomic_fetch_add_explicit(&selected_rebinds, 1, memory_order_relaxed);
     for (size_t i = 0; i < count; ++i) {
         if (bindings[i].replaced != NULL) *bindings[i].replaced = &original_marker;
+        if (bindings[i].result != NULL) bindings[i].result->rebound++;
     }
     return 0;
 }
@@ -260,6 +265,8 @@ int main(void) {
         fprintf(stderr, "same-config reinstall did not update speed\n");
         return 26;
     }
+    if (MGTTimeWarpInstallState("TargetA", 7) != MGT_INSTALL_INSTALLED
+            || MGTTimeWarpInstallState("TargetB", 7) != -4) return 28;
     if (atomic_load_explicit(&timebase_calls, memory_order_relaxed) != 2) {
         fprintf(stderr, "unexpected timebase initialization count: %u\n",
                 atomic_load_explicit(&timebase_calls, memory_order_relaxed));
@@ -277,7 +284,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-time-warp-install-") as td:
         header.write_text(content)
     harness_path = temp / "install_harness.c"
     binary = temp / "install_harness"
-    harness_path.write_text(harness)
+    harness_path.write_text(harness.replace('int main(void) {',
+        'int main(void) {\n    if (MGTTimeWarpABI() != ' + str(ProcessTimeWarpController.ABI_VERSION) + 'u) return 31;'))
     subprocess.run([
         "cc", "-std=c11", "-D_DEFAULT_SOURCE", "-pthread", "-Wall", "-Wextra", "-Werror",
         "-I", str(temp / "stubs"), "-I", str(NATIVE), "-I", str(NATIVE / "vendor/fishhook"),
@@ -294,5 +302,58 @@ with tempfile.TemporaryDirectory(prefix="mgt-time-warp-install-") as td:
         str(retry_path), "-lm", "-o", str(retry_binary),
     ], check=True)
     subprocess.run([str(retry_binary)], check=True, timeout=10)
+
+    # A resolved original pointer is not evidence that fishhook wrote a slot.
+    # This driver reports image traversal success but supplies no binding receipt.
+    receipt_harness = retry_harness[:retry_harness.index('int main(void)')] + r'''
+int main(void) {
+    int result = MGTTimeWarpInstall("TargetA", strlen("TargetA"), 2.0);
+    if (result != -3 || MGTTimeWarpHookMask() != 0 || MGTTimeWarpGetSpeed() != 1.0) {
+        fprintf(stderr, "original pointer became a false binding receipt: result=%d mask=%u\n",
+                result, MGTTimeWarpHookMask());
+        return 30;
+    }
+    return 0;
+}
+'''
+    receipt_path = temp / 'binding_receipt_harness.c'
+    receipt_binary = temp / 'binding_receipt_harness'
+    receipt_path.write_text(receipt_harness.replace('if (bindings[i].result != NULL) bindings[i].result->rebound++;', ''))
+    subprocess.run([
+        'cc', '-std=c11', '-D_DEFAULT_SOURCE', '-pthread', '-Wall', '-Wextra', '-Werror',
+        '-I', str(temp / 'stubs'), '-I', str(NATIVE), '-I', str(NATIVE / 'vendor/fishhook'),
+        str(receipt_path), '-lm', '-o', str(receipt_binary),
+    ], check=True)
+    subprocess.run([str(receipt_binary)], check=True, timeout=10)
+
+    partial_harness = retry_harness[:retry_harness.index('int main(void)')]
+    partial_harness = partial_harness.replace(
+        'if (bindings[i].result != NULL) bindings[i].result->rebound++;',
+        'if (i == 0) bindings[i].result->rebound++; else bindings[i].result->failed++;')
+    partial_harness += r'''
+int main(void) {
+    if (MGTTimeWarpInstallState("TargetA", 7) != MGT_INSTALL_UNINSTALLED) return 40;
+    int result = MGTTimeWarpInstall("TargetA", 7, 2.0);
+    if (result != -7 || MGTTimeWarpHookMask() != MGT_HOOK_MACH_ABSOLUTE
+            || MGTTimeWarpGetSpeed() != 1.0
+            || MGTTimeWarpInstallState("TargetA", 7) != MGT_INSTALL_PARTIAL) {
+        fprintf(stderr, "partial binding was misclassified: result=%d mask=%u speed=%g\n",
+                result, MGTTimeWarpHookMask(), MGTTimeWarpGetSpeed());
+        return 41;
+    }
+    if (MGTTimeWarpInstall("TargetA", 7, 3.0) != -7 || MGTTimeWarpSetSpeed(3.0) != -7
+            || MGTTimeWarpGetSpeed() != 1.0) return 42;
+    return 0;
+}
+'''
+    partial_path = temp / 'partial_binding_harness.c'
+    partial_binary = temp / 'partial_binding_harness'
+    partial_path.write_text(partial_harness)
+    subprocess.run([
+        'cc', '-std=c11', '-D_DEFAULT_SOURCE', '-pthread', '-Wall', '-Wextra', '-Werror',
+        '-I', str(temp / 'stubs'), '-I', str(NATIVE), '-I', str(NATIVE / 'vendor/fishhook'),
+        str(partial_path), '-lm', '-o', str(partial_binary),
+    ], check=True)
+    subprocess.run([str(partial_binary)], check=True, timeout=10)
 
 print("process_time_warp_install_contract_ok")

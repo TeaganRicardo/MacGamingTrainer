@@ -153,7 +153,16 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
              * iOS 15 has corrected the const segments prot.
              * -- Lionfore Hao Jun 11th, 2021
              **/
-            indirect_symbol_bindings[i] = cur->rebindings[j].replacement;
+            void *volatile *slot = &indirect_symbol_bindings[i];
+            *slot = cur->rebindings[j].replacement;
+            if (cur->rebindings[j].result != NULL) {
+              if (*slot == cur->rebindings[j].replacement)
+                cur->rebindings[j].result->rebound++;
+              else
+                cur->rebindings[j].result->failed++;
+            }
+          } else if (cur->rebindings[j].result != NULL) {
+            cur->rebindings[j].result->failed++;
           }
           goto symbol_loop;
         }

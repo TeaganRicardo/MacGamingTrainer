@@ -12,7 +12,7 @@
 #include "TimeWarpMath.h"
 
 #define MGT_EXPORT __attribute__((visibility("default")))
-#define MGT_TIME_WARP_ABI 1u
+#define MGT_TIME_WARP_ABI 2u
 #define MGT_MIN_SPEED 0.0
 #define MGT_MAX_SPEED 10.0
 #define MGT_IMAGE_FILTER_CAPACITY 1024u
@@ -24,6 +24,13 @@ enum {
     MGT_HOOK_CA_MEDIA_TIME = 1u << 3,
 };
 
+enum {
+    MGT_INSTALL_UNINSTALLED = 0,
+    MGT_INSTALL_INSTALLED = 1,
+    MGT_INSTALL_PARTIAL = 2,
+    MGT_INSTALL_IN_PROGRESS = 3,
+};
+
 static _Atomic uint64_t sequence = 0;
 static _Atomic uint64_t anchor_real_ticks = 0;
 static _Atomic double anchor_offset_ticks = 0.0;
@@ -31,6 +38,7 @@ static _Atomic double trainer_speed = 1.0;
 static _Atomic uint32_t hook_mask = 0;
 static atomic_flag speed_lock = ATOMIC_FLAG_INIT;
 static _Atomic bool installed = false;
+static _Atomic bool binding_failure = false;
 static _Atomic bool callback_registered = false;
 static _Atomic bool image_filter_published = false;
 static _Atomic unsigned image_filter_readers = 0;
@@ -68,12 +76,14 @@ static bool valid_speed(double speed) {
 }
 
 static double offset_ticks_at(uint64_t real_now) {
+    /* README.md proves the release/acquire fence relationship for this snapshot. */
     for (;;) {
         uint64_t before = atomic_load_explicit(&sequence, memory_order_acquire);
         if (before & 1u) continue;
         uint64_t anchor = atomic_load_explicit(&anchor_real_ticks, memory_order_relaxed);
         double offset = atomic_load_explicit(&anchor_offset_ticks, memory_order_relaxed);
         double speed = atomic_load_explicit(&trainer_speed, memory_order_relaxed);
+        atomic_thread_fence(memory_order_acquire);
         uint64_t after = atomic_load_explicit(&sequence, memory_order_acquire);
         if (before == after) {
             return offset + mgt_time_warp_elapsed_ticks(real_now, anchor) * (speed - 1.0);
@@ -95,7 +105,12 @@ static double ticks_to_seconds(double ticks) {
 static int set_speed_continuous(double speed) {
     if (!valid_speed(speed)) return -1;
     lock_speed();
+    if (speed != 1.0 && atomic_load_explicit(&binding_failure, memory_order_acquire)) {
+        unlock_speed();
+        return -7;
+    }
     atomic_fetch_add_explicit(&sequence, 1, memory_order_acq_rel);
+    atomic_thread_fence(memory_order_release);
     uint64_t now = mach_absolute_time();
     uint64_t anchor = atomic_load_explicit(&anchor_real_ticks, memory_order_relaxed);
     double offset = atomic_load_explicit(&anchor_offset_ticks, memory_order_relaxed);
@@ -204,19 +219,27 @@ static void rebind_selected_image(const struct mach_header *header, intptr_t sli
         return;
     }
 
+    struct rebinding_result results[4] = {{0}};
     struct rebinding bindings[] = {
-        {"mach_absolute_time", (void *)warped_mach_absolute_time, &original_mach_absolute},
-        {"mach_continuous_time", (void *)warped_mach_continuous_time, &original_mach_continuous},
-        {"clock_gettime", (void *)warped_clock_gettime, &original_clock_gettime},
-        {"CACurrentMediaTime", (void *)warped_ca_current_media_time, &original_ca_media_time},
+        {"mach_absolute_time", (void *)warped_mach_absolute_time, &original_mach_absolute, &results[0]},
+        {"mach_continuous_time", (void *)warped_mach_continuous_time, &original_mach_continuous, &results[1]},
+        {"clock_gettime", (void *)warped_clock_gettime, &original_clock_gettime, &results[2]},
+        {"CACurrentMediaTime", (void *)warped_ca_current_media_time, &original_ca_media_time, &results[3]},
     };
-    if (rebind_symbols_image((void *)header, slide, bindings, sizeof(bindings) / sizeof(bindings[0])) == 0) {
-        uint32_t discovered = 0;
-        if (original_mach_absolute != NULL) discovered |= MGT_HOOK_MACH_ABSOLUTE;
-        if (original_mach_continuous != NULL) discovered |= MGT_HOOK_MACH_CONTINUOUS;
-        if (original_clock_gettime != NULL) discovered |= MGT_HOOK_CLOCK_GETTIME;
-        if (original_ca_media_time != NULL) discovered |= MGT_HOOK_CA_MEDIA_TIME;
-        atomic_fetch_or_explicit(&hook_mask, discovered, memory_order_release);
+    int result = rebind_symbols_image((void *)header, slide, bindings, sizeof(bindings) / sizeof(bindings[0]));
+    const uint32_t bits[] = {MGT_HOOK_MACH_ABSOLUTE, MGT_HOOK_MACH_CONTINUOUS,
+                             MGT_HOOK_CLOCK_GETTIME, MGT_HOOK_CA_MEDIA_TIME};
+    uint32_t bound = 0;
+    bool failed = result != 0;
+    for (size_t index = 0; index < sizeof(results) / sizeof(results[0]); ++index) {
+        if (results[index].rebound != 0) bound |= bits[index];
+        if (results[index].failed != 0) failed = true;
+    }
+    atomic_fetch_or_explicit(&hook_mask, bound, memory_order_release);
+    if (failed) {
+        atomic_store_explicit(&binding_failure, true, memory_order_release);
+        atomic_store_explicit(&image_filter_published, false, memory_order_release);
+        set_speed_continuous(1.0);
     }
     atomic_fetch_sub_explicit(&image_filter_readers, 1, memory_order_release);
 }
@@ -239,6 +262,17 @@ MGT_EXPORT uint32_t MGTTimeWarpHookMask(void) {
     return atomic_load_explicit(&hook_mask, memory_order_acquire);
 }
 
+MGT_EXPORT int MGTTimeWarpInstallState(const char *image_names, size_t length) {
+    if (atomic_load_explicit(&binding_failure, memory_order_acquire)) return MGT_INSTALL_PARTIAL;
+    if (atomic_load_explicit(&installed, memory_order_acquire)) {
+        if (image_names == NULL || length != image_filter.length
+                || memcmp(image_names, image_filter.names, length) != 0) return -4;
+        return MGT_INSTALL_INSTALLED;
+    }
+    if (atomic_load_explicit(&image_filter_published, memory_order_acquire)) return MGT_INSTALL_IN_PROGRESS;
+    return MGT_INSTALL_UNINSTALLED;
+}
+
 MGT_EXPORT double MGTTimeWarpGetSpeed(void) {
     return atomic_load_explicit(&trainer_speed, memory_order_acquire);
 }
@@ -248,6 +282,10 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
     if (!valid_speed(speed)) return -1;
 
     lock_install();
+    if (atomic_load_explicit(&binding_failure, memory_order_acquire)) {
+        unlock_install();
+        return -7;
+    }
     if (atomic_load_explicit(&installed, memory_order_acquire)) {
         int result;
         if (length != image_filter.length || memcmp(image_names, image_filter.names, length) != 0) {
@@ -286,6 +324,14 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
         rebind_loaded_images();
     }
 
+    if (atomic_load_explicit(&binding_failure, memory_order_acquire)) {
+        atomic_store_explicit(&image_filter_published, false, memory_order_release);
+        while (atomic_load_explicit(&image_filter_readers, memory_order_acquire) != 0) {}
+        set_speed_continuous(1.0);
+        unlock_install();
+        return -7;
+    }
+
     if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
         atomic_store_explicit(&image_filter_published, false, memory_order_release);
         while (atomic_load_explicit(&image_filter_readers, memory_order_acquire) != 0) {}
@@ -306,6 +352,7 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
 }
 
 MGT_EXPORT int MGTTimeWarpSetSpeed(double speed) {
+    if (atomic_load_explicit(&binding_failure, memory_order_acquire)) return -7;
     if (!atomic_load_explicit(&installed, memory_order_acquire)) return -6;
     if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) return -3;
     return set_speed_continuous(speed);
