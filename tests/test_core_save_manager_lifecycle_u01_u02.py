@@ -39,6 +39,8 @@ for raw in sys.stdin:
         time.sleep(0.55)
         if params.get('name') == 'receipt-only':
             result={'operation': {'id': 'committed-backup'}, 'stateRefreshFailed': True}
+        elif params.get('name') == 'provider-invalid':
+            result['namingWarning']='provider_invalid'
     elif command == 'core.save.delete':
         snapshot_id=params.get('snapshotId')
         time.sleep(0.45 if snapshot_id == 'b' else 0.05)
@@ -141,6 +143,15 @@ struct Runner {
         model.refresh()
         if !waitUntil(2.0, { !model.busy }) || !model.observationWarning.isEmpty {
             fail("a successful observation did not clear its warning")
+        }
+        model.backup(name: "provider-invalid")
+        if !waitUntil(2.0, { !model.busy }) || !model.error.isEmpty ||
+            model.notice != "host.save.notice.created" || model.observationWarning != "host.save.warning.providerName" {
+            fail("invalid automatic naming did not preserve the backup receipt with visible maintenance feedback")
+        }
+        model.refresh()
+        if !waitUntil(2.0, { !model.busy }) || !model.observationWarning.isEmpty {
+            fail("a refreshed valid presentation did not clear its maintenance warning")
         }
 
         if model.retention?.maxCount != 20 || model.storageUsage?.snapshotBytes != 4321 {
