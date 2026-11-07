@@ -17,10 +17,19 @@ final class TrainerSaveManagerModel: ObservableObject {
 
     private let session: TrainerBackendSession
     private var activeRequestTokens: Set<UUID> = []
+    private let requests = TrainerSaveEditorReplyCoordinator()
+    private var lifecycleObserver: UUID?
 
     init(session: TrainerBackendSession) {
         self.session = session
+        requests.observeBackendGeneration(session.lifecycleID)
+        lifecycleObserver = session.observeLifecycle { [weak self] generation in
+            guard let self else { return }
+            self.requests.observeBackendGeneration(generation)
+            self.observationWarning = "host.save.warning.workerChanged"
+        }
     }
+    deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
 
     func refresh() {
         request("core.save.list", operation: "host.save.operation.refresh", successNotice: nil)
@@ -167,7 +176,7 @@ final class TrainerSaveManagerModel: ObservableObject {
             onComplete?(false)
             return
         }
-        let requestLifecycleID = session.lifecycleID
+        let ticket = requests.capture(bindsDocument: false)
         let token = UUID()
         activeRequestTokens.insert(token)
         busy = true
@@ -182,9 +191,10 @@ final class TrainerSaveManagerModel: ObservableObject {
             operation: operation,
             announceSuccess: false,
             timeout: 15,
+            requiresTrustedTarget: false,
             reply: { [weak self] reply in
                 guard let self,
-                      self.session.lifecycleID == requestLifecycleID,
+                      self.requests.accepts(ticket),
                       self.activeRequestTokens.contains(token) else { return }
                 receivedReply = true
                 self.consume(reply)
@@ -193,14 +203,19 @@ final class TrainerSaveManagerModel: ObservableObject {
                     self.setNotice(successNotice)
                 }
             },
+            failed: { [weak self] failure in
+                guard let self, self.requests.accepts(ticket), self.activeRequestTokens.contains(token) else { return }
+                if failure.outcomeUnknown || self.error.isEmpty {
+                    self.setError(failure.outcomeUnknown ? "host.save.error.incomplete" : "host.backend.error.notSent")
+                }
+            },
             completion: { [weak self] success in
                 guard let self,
-                      self.session.lifecycleID == requestLifecycleID,
                       self.activeRequestTokens.remove(token) != nil else { return }
                 if !success, !receivedReply, self.error.isEmpty {
                     self.setError("host.save.error.incomplete")
                 }
-                onComplete?(success)
+                onComplete?(success && self.requests.accepts(ticket))
                 self.busy = !self.activeRequestTokens.isEmpty
             }
         )

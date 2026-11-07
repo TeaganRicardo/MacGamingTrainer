@@ -260,6 +260,7 @@ final class Hades2API {
         saveDraftEntryIDs: [String]? = nil,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
+        failed: ((BackendFailure) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         var params = request.params
@@ -273,8 +274,11 @@ final class Hades2API {
             operationArguments: operationArguments,
             announceSuccess: announceSuccess,
             timeout: request.command.timeout,
+            requiresTrustedTarget: !request.command.rawValue.hasPrefix("save_editor_") &&
+                ![.scan, .launch, .listProfiles, .saveProfile, .deleteProfile].contains(request.command),
             started: started,
             reply: reply,
+            failed: failed,
             completion: completion
         )
     }

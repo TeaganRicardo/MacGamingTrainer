@@ -83,10 +83,12 @@ protocol TrainerHostModel: ObservableObject {
     func hostTargetLifetimeChanged(running: Bool)
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation)
     func restartBackendFromHost()
+    func beginTerminationFromHost()
     func prepareForTermination(completion: @escaping () -> Void)
 }
 
 extension TrainerHostModel {
+    func beginTerminationFromHost() {}
     var launchActionFromHost: (() -> Void)? { nil }
     /// Automatic target connection carries only generic lifecycle context.
     /// Modules that do not care about launch timing keep the normal toggle path.

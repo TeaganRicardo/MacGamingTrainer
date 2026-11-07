@@ -230,6 +230,18 @@ if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
     fail("target-exit refresh was not one-shot")
 }
 
+// A connect still in flight may publish the exited target after this event.
+var exitDuringConnect = TrainerConnectionPolicy()
+exitDuringConnect.targetStateChanged(running: true)
+exitDuringConnect.targetStateChanged(running: false)
+if exitDuringConnect.consumeTargetExitRefreshIfEligible(backendAvailable: true, busy: true, connected: false) {
+    fail("target-exit refresh ran while connect remained busy")
+}
+exitDuringConnect.connectionChanged(connected: true)
+if !exitDuringConnect.consumeTargetExitRefreshIfEligible(backendAvailable: true, busy: false, connected: true) {
+    fail("in-flight connect discarded the target-exit refresh")
+}
+
 // A target exit invalidates the observed connection even if a replacement
 // process launches before the old busy request can finish. The new lifetime
 // must not erase that invalidation: otherwise a transport-free reply can leave

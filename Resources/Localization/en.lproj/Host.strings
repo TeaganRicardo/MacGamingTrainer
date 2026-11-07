@@ -39,6 +39,13 @@
 "host.backend.error.invalidRequest" = "The request is invalid. Try again or check the log.";
 "host.backend.error.timeout" = "The backend request timed out. The backend was stopped to avoid an unknown execution result.";
 "host.backend.error.protocolError" = "A backend communication protocol error occurred. The backend was stopped.";
+"host.backend.error.outcomeUnknown" = "The operation outcome is unknown and was not retried. Inspect the result and any recovery evidence before repeating it.";
+"host.backend.error.targetOutcomeUnknown" = "The game operation outcome is unknown and was not retried. Inspect and restart the game before reconnecting.";
+"host.backend.error.notSent" = "The request was not sent. Reconnect the backend before trying again.";
+"host.save.error.workspaceExpired" = "The backend that opened this document has stopped. Your source, target and drafts are retained. Read the source again and check the target before applying changes.";
+"host.save.error.applyUnconfirmed" = "The Apply outcome is unconfirmed. Check the target and any recovery copies, then read the source again before making further changes.";
+"host.save.warning.workerChanged" = "The backend has restarted. Refresh this list before choosing a save operation.";
+"host.save.warning.maintenance" = "The edit was verified. Temporary-file cleanup is incomplete; inspect the recovery files before removing them.";
 "host.backend.notice.recovering" = "Backend communication failed. Recovering automatically.";
 "host.backend.notice.restarted" = "Backend restarted";
 "host.backend.notice.recovered" = "Backend recovered automatically";

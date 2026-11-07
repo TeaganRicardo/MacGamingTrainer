@@ -176,6 +176,8 @@ struct HadesSaveEditorReceipt: Decodable {
     let runtimeReloaded: Bool
     let previousSnapshotId: String?
     let target: HadesSaveFileIdentity
+    let maintenanceWarning: String?
+    let namingWarning: String?
 }
 struct HadesSaveFileIdentity: Decodable {
     let rootId: String
@@ -240,10 +242,23 @@ final class HadesSaveEditorModel: ObservableObject {
     private var blockingRequests = 0
     private var searchTask: DispatchWorkItem?
     private var started = false
+    private var lifecycleObserver: UUID?
 
-    init(session: TrainerBackendSession, snapshotID: String? = nil) { self.session = session; self.snapshotID = snapshotID }
+    init(session: TrainerBackendSession, snapshotID: String? = nil) {
+        self.session = session; self.snapshotID = snapshotID
+        requests.observeBackendGeneration(session.lifecycleID)
+        lifecycleObserver = session.observeLifecycle { [weak self] generation in
+            guard let self, self.requests.observeBackendGeneration(generation) else { return }
+            self.searchTask?.cancel()
+            self.queryLoading = false; self.applying = false
+            self.blockingRequests = 0; self.busy = false; self.readyGeneration = nil
+            self.failures["workspace"] = TrainerTextToken(key: "host.save.error.workspaceExpired")
+        }
+    }
+    deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
     var canEditRows: Bool {
-        baselineGeneration != nil && readyGeneration == baselineGeneration && !applying && recoveryPath == nil
+        requests.owns(workspaceID: workspaceID, baselineGeneration: baselineGeneration) &&
+            readyGeneration == baselineGeneration && !applying && recoveryPath == nil
     }
     var canApply: Bool {
         canEditRows && !busy && activeEdits.isEmpty && failedDrafts.isEmpty && !selectedTargetID.isEmpty
@@ -288,6 +303,7 @@ final class HadesSaveEditorModel: ObservableObject {
         if let snapshotID { params["snapshotId"] = snapshotID }
         if let target = targets.first(where: { $0.id == (selectedTargetID.isEmpty ? file.id : selectedTargetID) }) { params["target"] = target.identity }
         let oldWorkspace = workspaceID
+        let oldGeneration = requests.documentBackendGeneration
         searchTask?.cancel(); queryLoading = false
         perform("open", params: params, scope: "open", workspace: nil) { [weak self] result in
             guard let self else { return }
@@ -305,7 +321,8 @@ final class HadesSaveEditorModel: ObservableObject {
             self.domain = summary.domains.first ?? .resources; self.search = ""; self.editingRow = nil
             self.recoveryPath = nil; self.failures = [:]; self.editRevision += 1; self.typedEntries = []
             self.activeEdits = []; self.failedDrafts = []; self.receipt = nil
-            if let oldWorkspace { self.release(oldWorkspace) }
+            if oldGeneration == self.session.lifecycleID, let oldWorkspace,
+               oldWorkspace != self.workspaceID { self.release(oldWorkspace) }
             self.query()
         }
     }
@@ -441,15 +458,18 @@ final class HadesSaveEditorModel: ObservableObject {
     }
     func apply(baseline: String?) {
         guard canApply, baseline == baselineGeneration, let workspaceID else { return }
-        applying = true; readyGeneration = nil; searchTask?.cancel()
+        applying = true; readyGeneration = nil; receipt = nil; searchTask?.cancel()
         requests.invalidate(.query); requests.invalidate(.detail)
         queryLoading = false
         perform("apply", scope: "apply", workspace: workspaceID, baseline: baseline,
                 failed: { [weak self] in self?.readyGeneration = baseline },
                 finished: { [weak self] in self?.applying = false }) { [weak self] result in
-            guard let self, let receipt: HadesSaveEditorReceipt = self.decode(result, scope: "apply") else { return }
+            guard let self else { return }
+            guard let receipt: HadesSaveEditorReceipt = self.decode(result, scope: "apply") else {
+                self.applyUnconfirmed(); return
+            }
             guard receipt.applied, receipt.verified, receipt.baselineGeneration != baseline else {
-                self.failures["apply"] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return
+                self.applyUnconfirmed(); return
             }
             self.requests.bind(workspaceID: workspaceID, baselineGeneration: receipt.baselineGeneration)
             self.receipt = receipt; self.baselineGeneration = receipt.baselineGeneration; self.applying = false
@@ -457,6 +477,10 @@ final class HadesSaveEditorModel: ObservableObject {
             self.typedEntries = []; self.editRevision += 1; self.editingRow = nil
             self.parentID = nil; self.breadcrumbs = []; self.query()
         }
+    }
+    private func applyUnconfirmed() {
+        requests.invalidateDocument(); readyGeneration = nil; applying = false
+        failures["apply"] = TrainerTextToken(key: "host.save.error.applyUnconfirmed")
     }
     private func invalid(_ row: HadesSaveEditorRow) {
         failedDrafts.insert(draftKey(row.id, row.baselineGeneration))
@@ -470,10 +494,11 @@ final class HadesSaveEditorModel: ObservableObject {
         review = decoded; return true
     }
     func close() {
+        if let workspaceID, requests.documentBackendGeneration == session.lifecycleID { release(workspaceID) }
         searchTask?.cancel(); requests.retire(); started = false; queryLoading = false
-        if let workspaceID { release(workspaceID) }; workspaceID = nil; baselineGeneration = nil; readyGeneration = nil; editingRow = nil
+        workspaceID = nil; baselineGeneration = nil; readyGeneration = nil; editingRow = nil
     }
-    private func release(_ id: String) { session.send("save_editor_close", params: ["workspaceId": id], operation: "host.done", announceSuccess: false) }
+    private func release(_ id: String) { session.send("save_editor_close", params: ["workspaceId": id], operation: "host.done", announceSuccess: false, requiresTrustedTarget: false) }
     private func decode<T: Decodable>(_ result: [String: Any], scope: String) -> T? {
         do { return try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: result)) }
         catch { failures[scope] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return nil }
@@ -482,6 +507,11 @@ final class HadesSaveEditorModel: ObservableObject {
                          blocking: Bool = true, lane: TrainerSaveEditorReplyCoordinator.Lane? = nil,
                          failed: @escaping () -> Void = {}, finished: @escaping () -> Void = {},
                          receive: @escaping ([String: Any]) -> Void) {
+        if workspace != nil, !requests.owns(workspaceID: workspace, baselineGeneration: baselineGeneration) {
+            failures["workspace"] = TrainerTextToken(key: "host.save.error.workspaceExpired")
+            finished()
+            return
+        }
         if ["stage", "unstage", "cancel", "apply"].contains(suffix) { requests.invalidate(.review) }
         let ticket = suffix == "open"
             ? requests.beginNewDocumentRead()
@@ -493,9 +523,9 @@ final class HadesSaveEditorModel: ObservableObject {
         if blocking { blockingRequests += 1; busy = true }
         failures.removeValue(forKey: scope)
         session.send("save_editor_" + suffix, params: payload, operation: "hades.saveEditor.title", announceSuccess: false,
-                     timeout: 30, reply: { [weak self] reply in
+                     timeout: 30, requiresTrustedTarget: false, reply: { [weak self] reply in
             guard let self else { return }
-            guard self.requests.accepts(ticket), self.session.lifecycleID == lifecycle,
+            guard self.requests.accepts(ticket),
                   workspace == nil || self.workspaceID == workspace,
                   baseline == nil || self.baselineGeneration == baseline else {
                 // A discarded source read still created a real backend
@@ -514,6 +544,14 @@ final class HadesSaveEditorModel: ObservableObject {
                 if let path = failure.recoveryPath { self.recoveryPath = path }
                 failed()
             }
+        }, failed: { [weak self] failure in
+            guard let self, self.requests.accepts(ticket) else { return }
+            self.failures[scope] = TrainerTextToken(key: failure.outcomeUnknown
+                ? (suffix == "apply" ? "host.save.error.applyUnconfirmed" : "host.save.error.incomplete")
+                : "host.backend.error.notSent")
+            if suffix == "apply", failure.outcomeUnknown {
+                self.requests.invalidateDocument(); self.readyGeneration = nil; self.applying = false
+            } else { failed() }
         }, completion: { [weak self] _ in
             guard let self else { return }
             if blocking { self.blockingRequests = max(0, self.blockingRequests - 1); self.busy = self.blockingRequests > 0 }

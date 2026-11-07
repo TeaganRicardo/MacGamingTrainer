@@ -72,7 +72,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-reply-encoding-") as temporary:
         finally:
             logging.disable(logging.NOTSET)
         failure = json.loads(error)
-        assert failure["id"] == "bad-result" and failure["error"]["code"] == "operation_failed"
+        assert failure["id"] == "bad-result" and failure["error"]["code"] == "outcome_unknown"
+        assert failure["error"]["outcomeUnknown"] and failure["error"]["terminal"]
         assert "non-JSON-safe" in failure["error"]["diagnostic"]
         assert adapter.calls == 2
 

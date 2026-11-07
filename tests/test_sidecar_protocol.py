@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -89,7 +90,7 @@ handshake_first.terminated = True
 try:
     handshaken.request("mutate", outcome_unknown_on_loss=True, allow_start=False)
 except SidecarTerminalError as error:
-    assert error.outcome_unknown is True
+    assert error.outcome_unknown is False, 'no bytes crossed the stopped handshake seam'
 else:
     raise AssertionError("handshake-protected request restarted an unverified child")
 assert len(handshake_processes) == 1, "allow_start=False still spawned a replacement child"
@@ -152,6 +153,50 @@ else:
     raise AssertionError("sidecar interruption was swallowed")
 assert interrupted_process.terminated or interrupted_process.killed
 assert not interrupted.started
+assert interrupted.terminal, 'interruption discarded terminal trust state'
+try:
+    interrupted.request('observe')
+except SidecarTerminalError:
+    pass
+else:
+    raise AssertionError('interrupted sidecar was restarted')
+
+# The internal deadline includes pipe backpressure, bounded by an independent
+# test-process watchdog so a regression cannot hang the contract suite.
+backpressure = r'''
+import sys, time
+sys.path.insert(0, sys.argv[1])
+from core.sidecar import JsonLineSidecarClient, SidecarTerminalError
+client = JsonLineSidecarClient([sys.executable, '-c', 'import time; time.sleep(10)'], reply_timeout_seconds=0.05)
+started = time.monotonic()
+try:
+    client.request('mutate', {'payload': 'x' * 1_000_000}, outcome_unknown_on_loss=True)
+except SidecarTerminalError as error:
+    assert error.outcome_unknown and client.terminal
+    assert time.monotonic() - started < 1.0
+else:
+    raise AssertionError('backpressure did not time out')
+finally:
+    client.close()
+'''
+subprocess.run([sys.executable, '-c', backpressure, str(ROOT / 'Backend')], check=True, timeout=2)
+
+state_calls = []
+def state_projection():
+    state_calls.append(True)
+    if len(state_calls) == 1:
+        raise RuntimeError('post-dispatch projection failed')
+    return {}
+projection_output = io.BytesIO()
+try:
+    serve_jsonl_requests(io.BytesIO(b'{"id":"projection","method":"mutate"}\n'), projection_output,
+        lambda method, params: {'committed': True}, error_payload=lambda error: {'message': str(error)},
+        state=state_projection)
+except RuntimeError as error:
+    assert str(error) == 'post-dispatch projection failed'
+else:
+    raise AssertionError('successful dispatch projection failure became an ordinary action error')
+assert projection_output.getvalue() == b''
 
 
 class PipeProcess(FakeProcess):

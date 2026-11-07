@@ -358,6 +358,12 @@ struct HadesSaveEditorView: View {
             }
             Text(text(receipt.hot == true ? "hades.saveEditor.hot" : "hades.saveEditor.loadInGame"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if receipt.maintenanceWarning != nil {
+                Text(localization.localized("host.save.warning.maintenance")).font(.caption).foregroundStyle(theme.warning)
+            }
+            if receipt.namingWarning != nil {
+                Text(localization.localized("host.save.warning.providerName")).font(.caption).foregroundStyle(theme.warning)
+            }
         }.padding(theme.rowHorizontalPadding)
     }
 }

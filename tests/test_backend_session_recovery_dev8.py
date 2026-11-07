@@ -30,7 +30,7 @@ for raw in sys.stdin:
     req=json.loads(raw)
     command=req.get('command','')
     record(command)
-    if command == 'crash':
+    if command in {'crash', 'quit-crash'}:
         sys.exit(7)
     if command == 'hang':
         time.sleep(5)
@@ -42,6 +42,8 @@ for raw in sys.stdin:
         'moduleProtocolVersion':5, 'gameID':args.game, 'ok':True,
         'result':{'command':command}
     }), flush=True)
+    if command == 'receipt-then-exit':
+        sys.exit(7)
 '''
 
 harness = r'''
@@ -137,10 +139,20 @@ do {
 
 do {
     let startIndex = states.count
+    let workerGeneration = session.lifecycleID
     var crashCompletion: Bool? = nil
     session.send("crash", operation: "crash", timeout: requestTimeout, completion: { crashCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if crashCompletion != false { fail("crash request completion must fail") }
+    if session.currentStatus.errorCode != "outcome_unknown" {
+        fail("worker recovery erased the unknown in-flight action result: \(session.currentStatus)")
+    }
+    if !session.currentStatus.requiresTargetRestart { fail("crashed in-flight action did not constrain its target") }
+    if session.lifecycleID == workerGeneration { fail("recovery reused the departed worker generation") }
+    var rejected: Bool? = nil
+    var rejectedStarted = false
+    session.send("rejected-after-crash", operation: "unsafe", started: { rejectedStarted = true }, completion: { rejected = $0 })
+    if rejected != false || rejectedStarted { fail("same-target work crossed the unknown outcome gate") }
     if hostLogs.contains(where: { $0.contains("后端退出 status=") }) {
         fail("backend termination evidence leaked into the Host stream")
     }
@@ -148,25 +160,40 @@ do {
         fail("backend termination evidence did not reach the Backend stream")
     }
     var ping: Bool? = nil
-    session.send("ping-after-crash", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
+    session.send("ping-after-crash", operation: "ping", timeout: requestTimeout,
+                 requiresTrustedTarget: false, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
+    if session.currentStatus.errorCode != "outcome_unknown" { fail("safe request hid the unresolved action") }
+    session.targetLifetimeChanged()
+    if session.currentStatus.requiresTargetRestart || session.currentStatus.errorCode != nil {
+        fail("definitive new target lifetime did not release its predecessor's gate")
+    }
 }
 
 // A timeout is outcome-unknown: stop/recover the worker but never replay the request.
 do {
     let startIndex = states.count
     var hangCompletion: Bool? = nil
-    session.send("hang", operation: "hang", timeout: 0.15, completion: { hangCompletion = $0 })
+    var hangFailure: BackendFailure?
+    session.send("hang", operation: "hang", timeout: 0.15, failed: { hangFailure = $0 }, completion: { hangCompletion = $0 })
     var queuedStarted = false
     var queuedCompletion: Bool? = nil
+    var queuedFailure: BackendFailure?
     session.send("cancelled-on-timeout", operation: "cancelled", timeout: requestTimeout,
-                 started: { queuedStarted = true }, completion: { queuedCompletion = $0 })
+                 started: { queuedStarted = true }, failed: { queuedFailure = $0 }, completion: { queuedCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if hangCompletion != false { fail("timeout request completion must fail") }
     if queuedStarted || queuedCompletion != false { fail("terminal cancellation started or retained a queued request") }
+    if hangFailure?.outcomeUnknown != true || queuedFailure?.outcomeUnknown != false {
+        fail("active unknown action and unsent queued work lost their separate outcomes")
+    }
     var ping: Bool? = nil
-    session.send("ping-after-timeout", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
+    session.send("ping-after-timeout", operation: "ping", timeout: requestTimeout,
+                 requiresTrustedTarget: false, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("timeout recovery backend cannot accept request") }
+    if session.currentStatus.errorCode != "outcome_unknown" || !session.currentStatus.requiresTargetRestart {
+        fail("timeout recovery lost the unknown action or its target constraint")
+    }
 }
 
 // Explicit restart works while the worker is already running; no focus/UI round trip is required by the runtime layer.
@@ -174,10 +201,59 @@ do {
     let startIndex = states.count
     session.restart()
     waitForRecovery(after: startIndex, notice: "host.backend.notice.restarted")
+    if !session.currentStatus.requiresTargetRestart { fail("manual worker restart released target trust") }
+    session.targetLifetimeChanged()
     var ping: Bool? = nil
     session.send("ping-after-manual", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("manual restart backend cannot accept request") }
 }
+
+// A trustworthy action receipt precedes exit; recovery retains its success.
+do {
+    let startIndex = states.count
+    var receipt: Bool? = nil
+    session.send("receipt-then-exit", operation: "receipt", completion: { receipt = $0 })
+    waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
+    if receipt != true || session.currentStatus.requiresTargetRestart || session.currentStatus.errorCode != nil {
+        fail("a confirmed action was reclassified by the later worker exit")
+    }
+    var encodeFailure: BackendFailure?
+    var encodeCompletion: Bool?
+    session.send("invalid-before-write", params: ["value": Double.nan], operation: "invalid",
+        failed: { encodeFailure = $0 }, completion: { encodeCompletion = $0 })
+    if !waitUntil(waitBudget, { encodeCompletion != nil }) || encodeCompletion != false
+        || encodeFailure?.outcomeUnknown != false || session.currentStatus.requiresTargetRestart {
+        fail("a pre-write encoding rejection became an unknown target action")
+    }
+}
+
+// Quit freezes recovery before finalization without cancelling an existing
+// write or dropping its completion. Subsequent restart requests are inert.
+do {
+    var writeFinished: Bool? = nil
+    session.send("slow-before-quit", operation: "write", completion: { writeFinished = $0 })
+    session.beginTermination()
+    let generation = session.lifecycleID
+    session.restart()
+    if !waitUntil(waitBudget, { writeFinished != nil }) || writeFinished != true {
+        fail("quit freeze dropped the in-flight result")
+    }
+    if session.lifecycleID != generation { fail("quit freeze allowed a worker restart") }
+}
+
+// An exit already scheduled for recovery cannot resurrect a terminating context.
+let quitting = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+    executableURL: URL(fileURLWithPath: ProcessInfo.processInfo.environment["MGT_DEV8_PYTHON"]!), forceKillDelay: 0.10)))
+try quitting.start(descriptor: descriptor, backendScriptURL: URL(fileURLWithPath: worker), applyPayload: { _ in },
+    resetGameState: {}, log: { _ in }, onStatusChange: { state in
+        if !state.backendAvailable && state.busy { quitting.beginTermination() }
+    })
+quitting.send("quit-crash", operation: "quit-crash")
+if !waitUntil(waitBudget, { !quitting.isStarted && !quitting.currentStatus.busy }) { fail("quit recovery did not settle") }
+let quitGeneration = quitting.lifecycleID
+quitting.restart()
+_ = waitUntil(0.5) { quitting.isStarted }
+if quitting.isStarted || quitting.lifecycleID != quitGeneration { fail("queued recovery restarted a terminating worker") }
 
 session.stop()
 _ = waitUntil(2.0) { !session.isStarted }
@@ -247,6 +323,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'crash request was replayed: {commands!r}')
     if 'ping-after-stop' in commands:
         raise AssertionError(f'unavailable request reached a stopped worker: {commands!r}')
+    if 'rejected-after-crash' in commands:
+        raise AssertionError(f'same-target request reached recovered worker: {commands!r}')
+    if 'invalid-before-write' in commands:
+        raise AssertionError(f'encoding rejection reached worker: {commands!r}')
     for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual'):
         if commands.count(required) != 1:
             raise AssertionError(f'missing/duplicate post-recovery request {required}: {commands!r}')

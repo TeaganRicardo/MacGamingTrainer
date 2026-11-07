@@ -110,11 +110,17 @@ class JsonLineSidecarClient:
         except (AttributeError, OSError):
             pass
         if process.poll() is None:
-            process.terminate()
+            try:
+                process.terminate()
+            except ProcessLookupError:
+                pass
             try:
                 process.wait(timeout=1.0)
             except subprocess.TimeoutExpired:
-                process.kill()
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
                 try:
                     process.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
@@ -134,13 +140,42 @@ class JsonLineSidecarClient:
     def invalidate(self, detail, *, outcome_unknown=False):
         self._fail_terminal(detail, outcome_unknown=outcome_unknown)
 
-    def _readline(self, stream):
+    def _write_request(self, stream, encoded, deadline, transmission):
+        payload = memoryview(encoded)
+        try:
+            fileno = stream.fileno()
+        except (AttributeError, OSError, ValueError):
+            while transmission['bytes'] < len(encoded):
+                transmission['attempted'] = True
+                count = stream.write(payload[transmission['bytes']:])
+                if not count:
+                    raise BrokenPipeError('sidecar request write made no progress')
+                transmission['bytes'] += count
+            stream.flush()
+            return
+
+        os.set_blocking(fileno, False)
+        with selectors.DefaultSelector() as selector:
+            selector.register(stream, selectors.EVENT_WRITE)
+            while transmission['bytes'] < len(encoded):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise TimeoutError(f'sidecar request timed out after {self.reply_timeout_seconds:g}s')
+                try:
+                    transmission['attempted'] = True
+                    count = os.write(fileno, payload[transmission['bytes']:])
+                except BlockingIOError:
+                    continue
+                if not count:
+                    raise BrokenPipeError('sidecar request write made no progress')
+                transmission['bytes'] += count
+
+    def _readline(self, stream, deadline):
         try:
             fileno = stream.fileno()
         except (AttributeError, OSError, ValueError):
             return stream.readline(self.max_line_bytes + 1)
 
-        deadline = time.monotonic() + self.reply_timeout_seconds
         chunks = []
         total = 0
         selector = selectors.DefaultSelector()
@@ -205,12 +240,12 @@ class JsonLineSidecarClient:
             status = None if process is None else process.poll()
             self._fail_terminal(
                 f"sidecar is not running (status {status!r}).",
-                outcome_unknown=outcome_unknown_on_loss,
+                outcome_unknown=False,
             )
         if process.stdin is None or process.stdout is None:
             self._fail_terminal(
                 "sidecar stdio is unavailable.",
-                outcome_unknown=outcome_unknown_on_loss,
+                outcome_unknown=False,
             )
 
         request_id = str(self._next_id)
@@ -234,18 +269,23 @@ class JsonLineSidecarClient:
             raise ValueError("sidecar request exceeded the configured line limit")
 
         try:
-            process.stdin.write(encoded)
-            process.stdin.flush()
-            raw = self._readline(process.stdout)
+            deadline = time.monotonic() + self.reply_timeout_seconds
+            transmission = {'bytes': 0, 'attempted': False}
+            self._write_request(process.stdin, encoded, deadline, transmission)
+            raw = self._readline(process.stdout, deadline)
             if profile_metrics is not None:
                 profile_metrics["reply_bytes"] = len(raw.encode("utf-8")) if isinstance(raw, str) else len(raw)
         except (KeyboardInterrupt, SystemExit):
+            self._terminal_error = SidecarTerminalError(
+                'sidecar request interrupted',
+                outcome_unknown=outcome_unknown_on_loss and transmission['attempted'],
+            )
             self._terminate_process()
             raise
         except TimeoutError as error:
-            self._fail_terminal(str(error), outcome_unknown=outcome_unknown_on_loss)
+            self._fail_terminal(str(error), outcome_unknown=outcome_unknown_on_loss and transmission['bytes'] > 0)
         except (BrokenPipeError, OSError) as error:
-            self._fail_terminal(str(error), outcome_unknown=outcome_unknown_on_loss)
+            self._fail_terminal(str(error), outcome_unknown=outcome_unknown_on_loss and transmission['bytes'] > 0)
 
         if isinstance(raw, str):
             raw_bytes = raw.encode("utf-8")
@@ -362,14 +402,15 @@ def serve_jsonl_requests(
             with operation(profile.get("request_id"), profile.get("command", "")):
                 with phase("sidecar.dispatch", method=method):
                     result = dispatch(method, params)
-                response = {"id": request_id, "result": result, "state": state()}
         except Exception as error:
             response = {
                 "id": request_id,
                 "error": error_payload(error),
                 "state": state(),
             }
-        # A post-dispatch serialization/size failure must terminate the worker
+        else:
+            response = {"id": request_id, "result": result, "state": state()}
+        # A post-dispatch state/serialization/size failure must terminate the worker
         # rather than invent an ordinary error reply: the caller alone knows
         # whether a lost mutation acknowledgement means outcome_unknown.
         with operation(profile.get("request_id"), profile.get("command", "")), phase("sidecar.reply_serialize_write"):

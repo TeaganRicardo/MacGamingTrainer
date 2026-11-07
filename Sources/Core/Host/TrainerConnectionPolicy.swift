@@ -131,13 +131,10 @@ struct TrainerConnectionPolicy {
         connected: Bool
     ) -> Bool {
         guard targetExitRefreshRequested else { return false }
-        guard connected else {
-            targetExitRefreshRequested = false
-            return false
-        }
+        // An in-flight connect can still report the exited target as connected.
         guard backendAvailable, !busy else { return false }
         targetExitRefreshRequested = false
-        return true
+        return connected
     }
 
     /// Consumes one pending backend-restart intent only when the target is still

@@ -56,7 +56,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
-    var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
+    var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible && !backendStatus.requiresTargetRestart }
     private var requiresExplicitReconnect: Bool {
         ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
             .contains(backendStatus.errorCode)
@@ -364,7 +364,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
         localError = ""
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
-                     timeout: command == "connect" ? 130 : 20, completion: { [weak self] ok in
+                     timeout: command == "connect" ? 130 : 20,
+                     requiresTrustedTarget: !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
+                     completion: { [weak self] ok in
             if announceSuccess, ok, let self {
                 let pendingCleanup = command == "disable_all" && !self.connected
                 let pendingProfile = command == "load_profile" && !self.connected

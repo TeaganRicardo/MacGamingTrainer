@@ -77,13 +77,17 @@ try:
     assert failed['error']['presentation'] == 'host.backend.error.invalidRequest'
     assert failed['error']['diagnostic'] == 'bad fake request'
     scalar = router.handle({'id':'c','command':'scalar','params':{}})
-    assert scalar['error']['code'] == 'operation_failed'
-    assert scalar['error']['presentation'] == 'host.backend.error.operationFailed'
+    assert scalar['error']['code'] == 'outcome_unknown'
+    assert scalar['error']['outcomeUnknown'] and scalar['error']['terminal']
+    assert scalar['error']['presentation'] == 'host.backend.error.outcomeUnknown'
     assert 'JSON object' in scalar['error']['diagnostic']
     for request_id, command in (('d','nan'),('e','bytes')):
         unsafe = router.handle({'id':request_id,'command':command,'params':{}})
-        assert unsafe['ok'] is False and unsafe['error']['code'] == 'operation_failed'
-        assert unsafe['error']['presentation'] == 'host.backend.error.operationFailed'
+        assert unsafe['ok'] is False and unsafe['error']['code'] == 'outcome_unknown'
+        assert unsafe['error']['presentation'] == 'host.backend.error.outcomeUnknown'
+        before_replay = len(adapter.calls)
+        assert router.handle({'id':request_id,'command':command,'params':{}}) == unsafe
+        assert len(adapter.calls) == before_replay, 'unknown result was executed twice'
         assert 'non-JSON-safe' in unsafe['error']['diagnostic']
         json.dumps(unsafe, ensure_ascii=False, allow_nan=False)
     bad_state = router.handle({'id':'f','command':'bad-state','params':{}})

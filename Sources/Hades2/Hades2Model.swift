@@ -61,7 +61,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // action. A queued lifecycle/action request closes admission immediately;
     // backend busy remains the Host's truthful transport/lifecycle observation.
     var canAcceptRuntimeAction: Bool {
-        pendingBlockingRequests == 0 && (!busy || activeEditRequest != nil)
+        !backendStatus.requiresTargetRestart && !terminationRequestedFromHost &&
+            pendingBlockingRequests == 0 && (!busy || activeEditRequest != nil)
     }
     var operation: TrainerTextToken { backendStatus.operation }
     /// Version plus PID as one token. An undetected version is its own key so
@@ -446,12 +447,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
               status == "waiting",
               backendAvailable,
               !busy,
-              !exiting else { return }
+              !exiting, !terminationRequestedFromHost else { return }
         send(.status, title: "hades2.op.probeScene", announceSuccess: false)
     }
 
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
-        guard !exiting else { return }
+        guard !exiting, !terminationRequestedFromHost else { return }
         let runtimeEventName: String
         switch event {
         case .mainMenu:
@@ -501,6 +502,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func consumeDeferredLaunchAttachIfPossible() {
+        guard !terminationRequestedFromHost, !backendStatus.requiresTargetRestart else { return }
         guard launchAttachGate.consumeIfEligible(
             backendAvailable: backendAvailable,
             busy: busy,
@@ -513,6 +515,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func consumeRunLogReadySignalIfPossible() {
+        guard !terminationRequestedFromHost, !backendStatus.requiresTargetRestart else { return }
         guard Hades2RunLogRefreshGate.shouldConsume(
             pending: pendingRunReadySignal,
             connected: connected,
@@ -563,7 +566,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func startBackend() {
-        guard !backendSession.isStarted else { return }
+        guard !terminationRequestedFromHost, !backendSession.isStarted else { return }
         do {
             try backendSession.start(
                 descriptor: Hades2GameModule.descriptor,
@@ -799,7 +802,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.runCount.isPresent { runCount = patch.runCount.value }
         if let value = patch.elements { elements = value }
         if let value = patch.resources { resources = value }
-        if let issue = patch.error, !issue.isEmpty { error = issue }
 
 
     }
@@ -1869,6 +1871,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard let self else { completion(); return }
             self.finishExit(completion: completion)
         }
+    }
+
+    private var terminationRequestedFromHost = false
+
+    func beginTerminationFromHost() {
+        terminationRequestedFromHost = true
+        launchAttachGate.cancel()
     }
 
     func prepareForTermination(completion: @escaping () -> Void) {

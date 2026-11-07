@@ -531,6 +531,13 @@ func navigationTrace(_ message: String) {
         precondition(terminated == nil && firstSession.isStarted && secondSession.isStarted,
                      "Quit bypassed a tool-window write barrier")
         precondition(application.terminationRequested && !firstContext.toolWindows.interactionEnabled)
+        let beforeFrozenActions = requestCount()
+        firstContext.toggleConnection()
+        secondContext.toggleConnection()
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        navigationPump(0.05)
+        precondition(requestCount() == beforeFrozenActions,
+                     "Quit admitted a new Context connection or activation request")
         mayClose = true
         first.refreshFromHost()
         wait { first.pendingTermination != nil && !second.busy }
