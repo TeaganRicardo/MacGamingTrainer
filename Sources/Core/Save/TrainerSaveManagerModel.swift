@@ -257,7 +257,10 @@ final class TrainerSaveManagerModel: ObservableObject {
         }
         if let rows = result["snapshots"] as? [[String: Any]] {
             snapshots = rows.compactMap(TrainerSaveSnapshot.init(row:))
-            if result["stateRefreshFailed"] as? Bool != true { observationWarning = "" }
+            if result["stateRefreshFailed"] as? Bool != true {
+                observationWarning = result["namingWarning"] as? String == "provider_invalid"
+                    ? "host.save.warning.providerName" : ""
+            }
         }
         if let row = result["retention"] as? [String: Any] {
             retention = TrainerSaveRetention(row: row)

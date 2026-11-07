@@ -34,3 +34,4 @@ test_hades2_save_container_frontend.py
 test_global_hotkey_routing.py
 test_multi_game_contexts.py
 test_hades_frontend.py
+test_core_save_metadata_darwin.py

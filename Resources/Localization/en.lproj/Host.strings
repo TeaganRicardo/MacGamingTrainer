@@ -89,6 +89,7 @@
 "host.save.notice.renamed" = "Save backup renamed";
 "host.save.notice.restoreSubmitted" = "Restore request submitted";
 "host.save.warning.refreshFailed" = "The save operation completed, but backup status could not be refreshed. Refresh the list; there is no need to repeat the operation.";
+"host.save.warning.providerName" = "A backup used a timestamp because its automatic description was invalid. Its files were verified; you can rename it here.";
 "host.save.notice.pendingCancelled" = "Staged restore cancelled";
 "host.save.notice.pendingApplied" = "Staged restore applied";
 "host.save.notice.deletedOne" = "1 save backup deleted";
