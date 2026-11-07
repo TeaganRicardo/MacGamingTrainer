@@ -6,7 +6,6 @@ test_core_save_manager_lifecycle_u01_u02.py
 test_hades2_run_log_watcher.py
 test_host_localization_behavior.py
 test_trainer_log_session_lifecycle.py
-test_shortcut_chord_semantics.py
 test_backend_stderr_liveness.py
 test_hades2_view_state_flow.py
 test_disclosure_settle_classification.py
