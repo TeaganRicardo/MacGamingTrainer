@@ -463,7 +463,7 @@
     "hades2.saveEditor.workbench.section.advanced": "Advanced Data",
     "hades2.saveEditor.workbench.search": "Search names and content",
     "hades2.saveEditor.workbench.browse": "Browse",
-    "hades2.saveEditor.basket.summary": "{0} requested · {1} linked effects · {2} records",
+    "hades2.saveEditor.basket.summary": "{0} requested · {1} linked effects",
     "hades2.saveEditor.basket.remove": "Remove change",
     "hades2.saveEditor.workbench.target": "Write target: {0}",
     "hades2.saveEditor.workbench.cancel": "Cancel",
