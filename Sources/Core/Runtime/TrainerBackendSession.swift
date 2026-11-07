@@ -284,7 +284,6 @@ final class TrainerBackendSession {
             },
             onReply: { [weak self] reply in
                 guard let self else { return }
-                if let failure = reply.failure { self.preserveUnknownOutcome(failure) }
                 if reply.success { self.automaticRecoveryAttempts = 0 }
                 self.updateStatus {
                     $0.backendProtocolVersion = reply.hostProtocolVersion
@@ -292,6 +291,7 @@ final class TrainerBackendSession {
                     $0.protocolCompatible = true
                     $0.busy = false
                 }
+                if let failure = reply.failure { self.preserveUnknownOutcome(failure) }
                 func apply(_ payload: [String: Any]) {
                     let started = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
                     configuration.applyPayload(payload)

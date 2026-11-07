@@ -665,7 +665,7 @@ struct Main {
         let unknown = nextNotice("hades2.receipt.outcomeUnknown")
         check(model.currentIssues.contains { $0.id == "recovery" },
               "outcome-unknown omitted the retained restart requirement")
-        // The receipt, runtime error and retained terminal recovery must give
+        // The receipt, runtime error and retained target recovery must give
         // the same safe next step in both languages, including after a live
         // language change. A reconnect alone cannot restore unknown trust.
         let originalLanguage = localization.language
@@ -705,6 +705,10 @@ struct Main {
         pump(0.1)
         check(model.feedbackNotice == nil, "expired feedback reappeared during an incidental render")
 
+        // A definite new target releases the earlier one-shot uncertainty.
+        // Reconnecting the healthy worker alone cannot establish that trust.
+        session.targetLifetimeChanged()
+        wait { model.backendAvailable && !model.busy }
         model.refreshFromHost()
         wait { !model.busy && model.feedbackNotice != nil }
         let routine = model.feedbackNotice!
@@ -727,9 +731,8 @@ struct Main {
                 "gameSpeed": ["presentation": "host.timeWarp.error.setFailed", "arguments": [-7]],
             ],
         ]).write(to: issues)
-        // Explicit worker restart is the existing owner transition that clears
-        // the earlier retained outcome-unknown error. An unrelated successful
-        // read must not be treated as resolving that one-shot operation.
+        // Explicit worker restart keeps this disk-backed fixture's structured
+        // issues separate from the preceding one-shot receipt journey.
         model.restartBackendFromHost()
         wait { model.backendAvailable && !model.busy }
         model.refreshFromHost()

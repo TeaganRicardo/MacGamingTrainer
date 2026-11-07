@@ -40,7 +40,8 @@ for raw in sys.stdin:
     if command == 'unknown-reply':
         print(json.dumps({'type':'result', 'id':req['id'], 'protocolVersion':6,
             'moduleProtocolVersion':5, 'gameID':args.game, 'ok':False,
-            'error':{'code':'outcome_unknown', 'presentation':'host.backend.error.outcomeUnknown'}}), flush=True)
+            'error':{'code':'outcome_unknown', 'presentation':'host.backend.error.outcomeUnknown'},
+            'state':{'lastAction':{'requestId':req['id'], 'command':command, 'outcome':'outcome_unknown'}}}), flush=True)
         continue
     print(json.dumps({
         'type':'result', 'id':req.get('id',''), 'protocolVersion':6,
@@ -113,16 +114,36 @@ var states: [TrainerBackendStatus] = []
 var payloadCommands: [String] = []
 var hostLogs: [String] = []
 var backendLogs: [String] = []
+var expectingActionReceipt = false
+var actionReceiptApplied = false
+var errorBeforeActionReceipt = false
+var admittedDuringReply = false
+var duringReplyStarted = false
+var duringReplyDone: Bool?
 
 try session.start(
     descriptor: descriptor,
     backendScriptURL: URL(fileURLWithPath: worker),
     applyPayload: { payload in
         if let command = payload["command"] as? String { payloadCommands.append(command) }
+        if let receipt = payload["lastAction"] as? [String: Any], receipt["outcome"] as? String == "outcome_unknown" {
+            actionReceiptApplied = true
+        }
     },
     resetGameState: {},
     log: { hostLogs.append($0) },
-    onStatusChange: { states.append($0) },
+    onStatusChange: {
+        states.append($0)
+        if expectingActionReceipt, !$0.busy, !actionReceiptApplied, !admittedDuringReply {
+            admittedDuringReply = true
+            session.send("queued-during-unknown-status", operation: "must-not-run",
+                coalesceKey: "unknown-queue", started: { duringReplyStarted = true },
+                completion: { duringReplyDone = $0 })
+        }
+        if expectingActionReceipt, $0.errorCode == "outcome_unknown", !actionReceiptApplied {
+            errorBeforeActionReceipt = true
+        }
+    },
     backendLog: { backendLogs.append($0) }
 )
 if !session.currentStatus.backendAvailable { fail("backend not available after start") }
@@ -255,19 +276,29 @@ do {
     }
 }
 
-// Quit freezes recovery before finalization without cancelling an existing
-// write or dropping its completion. Subsequent restart requests are inert.
+// A valid module unknown-outcome reply constrains its target and cancels
+// unsent work while keeping the healthy worker available for safe disk work.
 do {
-    let startIndex = states.count
+    let workerGeneration = session.lifecycleID
     var unknownDone: Bool?
     var queuedDone: Bool?
     var queuedStarted = false
+    expectingActionReceipt = true
     session.send("unknown-reply", operation: "unknown", completion: { unknownDone = $0 })
-    session.send("queued-after-unknown", operation: "must-not-run",
+    session.send("queued-after-unknown", operation: "must-not-run", coalesceKey: "unknown-queue",
         started: { queuedStarted = true }, completion: { queuedDone = $0 })
-    waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
+    if !waitUntil(waitBudget, { unknownDone != nil && queuedDone != nil }) {
+        fail("unknown reply and its cancelled queue did not settle")
+    }
+    expectingActionReceipt = false
+    if errorBeforeActionReceipt || !actionReceiptApplied {
+        fail("unknown error was presented before its trustworthy action receipt")
+    }
     if unknownDone != false || queuedDone != false || queuedStarted || !session.currentStatus.requiresTargetRestart {
         fail("a nonterminal module unknown-outcome reply let queued runtime work execute")
+    }
+    if !admittedDuringReply || duringReplyStarted || duringReplyDone != false {
+        fail("work admitted by the first reply status escaped unknown-outcome cancellation")
     }
     let api = Hades2API(session: session)
     var offlineDone: Bool?
@@ -275,6 +306,9 @@ do {
         operation: "offline intent", completion: { offlineDone = $0 })
     if !waitUntil(waitBudget, { offlineDone != nil }) || offlineDone != true || !session.currentStatus.requiresTargetRestart {
         fail("a detached durable edit was blocked or cleared target uncertainty")
+    }
+    if session.lifecycleID != workerGeneration || !session.currentStatus.backendAvailable {
+        fail("a valid module unknown-outcome reply replaced its healthy worker")
     }
     var connectedDone: Bool?
     var connectedStarted = false
@@ -289,6 +323,8 @@ do {
     if session.currentStatus.requiresTargetRestart { fail("a kernel-path target replacement after absence did not restore trust") }
 }
 
+// Quit freezes recovery before finalization without cancelling an existing
+// write or dropping its completion. Subsequent restart requests are inert.
 do {
     var writeFinished: Bool? = nil
     session.send("slow-before-quit", operation: "write", completion: { writeFinished = $0 })
@@ -391,7 +427,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'same-target request reached recovered worker: {commands!r}')
     if 'invalid-before-write' in commands:
         raise AssertionError(f'encoding rejection reached worker: {commands!r}')
-    if 'queued-after-unknown' in commands or commands.count('unknown-reply') != 1:
+    if any(command in commands for command in ('queued-after-unknown', 'queued-during-unknown-status')) or commands.count('unknown-reply') != 1:
         raise AssertionError(f'unknown reply replayed or released queued target work: {commands!r}')
     if commands.count('set_desired') != 1:
         raise AssertionError(f'detached durable edit was blocked or its connected counterpart executed: {commands!r}')

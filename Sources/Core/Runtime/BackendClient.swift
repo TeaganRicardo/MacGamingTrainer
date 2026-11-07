@@ -366,12 +366,12 @@ final class BackendClient {
 
         cancelCurrentTimeout()
         current = nil
-        let terminal = failure?.outcomeUnknown == true || detail?["terminal"] as? Bool == true
+        let terminal = detail?["terminal"] as? Bool == true
         if terminal { terminalFailureReported = true }
-        let cancelled = terminal ? takeQueuedRequests() : []
         deliveringReply = true
         let applyStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         onReply?(reply)
+        let cancelled = terminal || failure?.outcomeUnknown == true ? takeQueuedRequests() : []
         request.reply?(reply)
         request.completion?(success)
         complete(cancelled, success: false)
