@@ -33,7 +33,7 @@ Declare every imported or executed Python/data helper in `Tools/macos_test_depen
 
 Use `tests/macos_fixture_policy.py` for an actual native journey's outer watchdog. Give the journey one budget and one launch. Preserve named semantic predicates and their own failures inside the harness; compilation timeouts and an LLDB coordinator with its own worker cleanup are different contracts. Never multiply budgets or wrap an existing coordinator with a second watchdog. Unknown hosted profiles fail closed. Runtime timing is observation, never a speed threshold.
 
-`Tools/select_macos_pr_tests.py` writes one structured relevant/selected/deferred result. The runner executes its selected list and passes that same result to the coverage summary. A deferred record includes its reason and exact-SHA verification owner; unrelated global deferral policy is not counted as this PR's deferred coverage.
+`Tools/select_macos_pr_tests.py` uses the actual merge-base inventory/dependency delta for registration changes, while changed sources and helpers retain their consumers. It writes one structured relevant/selected/deferred result. The runner executes its selected list and passes that same result to the coverage summary. A deferred record includes its reason and exact-SHA verification owner; unrelated global deferral policy is not counted as this PR's deferred coverage.
 
 ## Keep architecture identities separate
 

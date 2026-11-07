@@ -8,6 +8,7 @@ selection and always retain the product compiler check.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -67,14 +68,34 @@ def source_directories(root: Path = ROOT) -> dict[str, str]:
     return result
 
 
-def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -> list[str]:
+def metadata_test_changes(base_sha: str, head_sha: str, paths: list[str],
+                          cwd: Path = ROOT) -> dict[str, set[str]]:
+    metadata_paths = {"Tools/macos_only_tests.txt", MACOS_TEST_DEPENDENCIES_PATH} & set(paths)
+    if not metadata_paths:
+        return {}
+    base = subprocess.check_output(["git", "merge-base", base_sha, head_sha], cwd=cwd, text=True).strip()
+    changes = {}
+    for path in sorted(metadata_paths):
+        before, after = (subprocess.check_output(["git", "show", f"{ref}:{path}"], cwd=cwd, text=True)
+                         for ref in (base, head_sha))
+        if path == "Tools/macos_only_tests.txt":
+            changes[path] = set(after.split()) - set(before.split())
+        else:
+            old, new = json.loads(before), json.loads(after)
+            changes[path] = {name for name in old.keys() | new.keys() if old.get(name) != new.get(name)}
+    return changes
+
+
+def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str],
+                   metadata_changes: dict[str, set[str]] | None = None) -> list[str]:
     if not paths:
         return sorted(tests)  # Unknown change scope must never quietly skip tests.
 
     chosen: set[str] = set()
     for path in paths:
         if path == MACOS_TEST_DEPENDENCIES_PATH:
-            chosen.update(MACOS_TEST_DEPENDENCIES)
+            changed = metadata_changes.get(path) if metadata_changes is not None else None
+            chosen.update(MACOS_TEST_DEPENDENCIES if changed is None else changed & tests)
         chosen.update(name for name, dependencies in MACOS_TEST_DEPENDENCIES.items() if path in dependencies)
         if path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
             # These fixtures are shared across native behavior tests; a narrow
@@ -144,7 +165,10 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
         if path in ("Tools/run_macos_checks.sh", "Tools/select_macos_pr_tests.py"):
             chosen.update(("test_multi_game_context_state.py", BUILD_SMOKE))
         if path == "Tools/macos_only_tests.txt":
-            return sorted(tests)
+            changed = metadata_changes.get(path) if metadata_changes is not None else None
+            if changed is None:
+                return sorted(tests)
+            chosen.update(changed)
         for game_id, source_prefix in sources.items():
             if not path.startswith(source_prefix):
                 continue
@@ -164,8 +188,9 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
     return sorted(chosen)
 
 
-def smoke_selection(paths: list[str], tests: set[str], sources: dict[str, str]) -> dict:
-    relevant = selected_tests(paths, tests, sources)
+def smoke_selection(paths: list[str], tests: set[str], sources: dict[str, str],
+                    metadata_changes: dict[str, set[str]] | None = None) -> dict:
+    relevant = selected_tests(paths, tests, sources, metadata_changes)
     deferred = {name: asdict(PR_DEFERRED[name]) for name in relevant if name in PR_DEFERRED}
     selected = [name for name in relevant if name not in deferred]
     return {
@@ -192,11 +217,12 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv[1:])
     try:
-        selection = smoke_selection(changed_paths(args.base_sha, args.head_sha),
-                                    load_macos_only_tests(), source_directories())
+        paths = changed_paths(args.base_sha, args.head_sha)
+        changes = metadata_test_changes(args.base_sha, args.head_sha, paths)
+        selection = smoke_selection(paths, load_macos_only_tests(), source_directories(), changes)
         if args.output:
             args.output.write_text(json.dumps(selection, sort_keys=True) + "\n", encoding="utf-8")
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"macOS PR selection failed: {exc}", file=sys.stderr)
         return 2
     print("\n".join(selection["selected"]))

@@ -1,11 +1,14 @@
 """PR behavior coverage follows actual consumers and fails missing module ownership."""
+import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
 from ci_docs_only import MACOS_TEST_DEPENDENCIES, load_macos_only_tests
-from select_macos_pr_tests import PR_DEFERRED, pr_smoke_tests, selected_tests, smoke_selection
+from select_macos_pr_tests import PR_DEFERRED, metadata_test_changes, pr_smoke_tests, selected_tests, smoke_selection
 
 TESTS = load_macos_only_tests()
 SOURCES = {"hades": "Sources/Hades/", "hades2": "Sources/Hades2/"}
@@ -62,6 +65,42 @@ assert selected_tests(["Tools/macos_only_tests.txt"], TESTS, SOURCES) == sorted(
 assert selected_tests(["tests/test_debugserver_ownership.py"], TESTS, SOURCES) == []
 for name in TESTS:
     assert name in selected_tests(["tests/" + name], TESTS, SOURCES), name
+
+# Adding one inventory entry or dependency must not select all older native
+# journeys. Keep the diff based on the same merge base as source selection.
+with tempfile.TemporaryDirectory(prefix="mgt-native-selection-delta-") as directory:
+    project = Path(directory)
+    (project / "Tools").mkdir()
+    inventory = project / "Tools/macos_only_tests.txt"
+    dependencies = project / "Tools/macos_test_dependencies.json"
+    inventory.write_text("test_hades_frontend.py\n")
+    dependencies.write_text(json.dumps({"test_hades_frontend.py": ["tests/old_helper.py"]}))
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=project, check=True)
+    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=project, check=True)
+    def commit(message):
+        subprocess.run(["git", "add", "."], cwd=project, check=True)
+        subprocess.run(["git", "commit", "-qm", message], cwd=project, check=True)
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project, text=True).strip()
+    base = commit("base native ownership")
+    added = "test_hades2_model_flow.py"
+    inventory.write_text(inventory.read_text() + added + "\n")
+    dependencies.write_text(json.dumps({"test_hades_frontend.py": ["tests/old_helper.py"],
+                                        added: ["tests/new_helper.py"]}))
+    head = commit("add one native owner")
+    paths = ["Tools/macos_only_tests.txt", "Tools/macos_test_dependencies.json"]
+    delta = metadata_test_changes(base, head, paths, project)
+    assert selected_tests(paths, TESTS, SOURCES, delta) == [added]
+    # Inventory removal moves responsibility to portable discovery; it does not
+    # justify running every unrelated native suite.
+    inventory.write_text("test_hades_frontend.py\n")
+    removed = commit("remove native owner")
+    assert selected_tests([paths[0]], TESTS - {added}, SOURCES,
+                          metadata_test_changes(head, removed, [paths[0]], project)) == []
+    # A real helper/source change keeps all its existing consumers even when
+    # the same PR adds a new native owner.
+    mixed = selected_tests(paths + ["tests/room_picker_alignment_harness.py"], TESTS, SOURCES, delta)
+    assert {added, "test_hades_frontend.py", "test_hades2_view_state_flow.py"} <= set(mixed)
 
 # A registered module cannot borrow a different game's coverage or have every
 # one of its own entries removed by the foreground deferral policy.
