@@ -21,6 +21,14 @@ Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module
 
 The base reference fixture requires no LLDB, Lua, sidecar, Save provider or editor. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the existing multi-module revision and provenance owner tests cover resident declarations and packaged source identity. These fixtures do not certify a game's native ABI.
 
+## Terminology, localization and shared responsibilities
+
+Native game terms come from the module's terminology owner and its verified reference sources. The current examples are `Backend/games/hades2/terminology.py` with the manifest-declared supported-build terminology resource, and Hades I's `catalog.py`, `world.py` and `save_owners.py`. Follow [terminology ownership](../../ENGINEERING_INVARIANTS.md#8-terminology-ownership) for bilingual native identities and Trainer-owned labels.
+
+A frontend supplies `TrainerGameModule.presentationKeyPrefix` and `presentationText(key:arguments:language:)`; `TrainerGameContext.registerPresentation` registers that module resolver with `TrainerLocalizationStore`. Shared Host keys live in `Resources/Localization/en.lproj/Host.strings` and `zh-CN.lproj/Host.strings`. Game-owned examples are `Sources/Hades/HadesPresentation.swift` and `Sources/Hades2/Presentation/Hades2Presentation.swift`; the latter's English/Chinese JSON resources are packaged through its manifest's `appResources`. Reuse these Host/module entry points when adding labels and live language switching.
+
+Put a responsibility in Core when actual behavior demonstrates a game-agnostic contract, as described in [architecture evolution](../../GAME_MODULES.md#architecture-evolution). Keep game meaning, validation and native execution semantics in the module. When an owner moves, migrate its consumers and remove the superseded policy rather than leaving both implementations active.
+
 ## Register behavior coverage
 
 Provide a stable macOS behavior entry using `test_<id>_model_flow.py`, `test_<id>_frontend.py` or `test_<id>_view_state_flow.py`, and add the native entry to `Tools/macos_only_tests.txt`. The selector requires a module-owned entry for changed module Swift sources. Missing entries and an entry set entirely deferred to convergence fail with an explicit module diagnostic.
