@@ -26,7 +26,6 @@ PORTABLE_TOOL_PATHS = {
     "Tools/module_inventory.py",
     "Tools/run_linux_checks.sh",
     "Tools/ci_docs_only.py",
-    "Tools/select_macos_pr_tests.py",
     "Tools/summarize_macos_coverage.py",
 }
 MACOS_TEST_DEPENDENCIES_PATH = "Tools/macos_test_dependencies.json"
@@ -84,11 +83,12 @@ def is_docs_only(
 
 def load_macos_only_tests(root: Path = ROOT) -> set[str]:
     source = root / "Tools/macos_only_tests.txt"
-    return {
+    inventory = {
         line.strip()
         for line in source.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
+    return inventory
 
 
 def load_macos_test_dependencies(root: Path = ROOT) -> dict[str, frozenset[str]]:
@@ -151,7 +151,12 @@ def is_linux_portable_only(
     if path.startswith(".github/workflows/"):
         # A change to Build 2's own execution recipe must exercise the real
         # macOS product; the separate module-matrix workflow owns its lane.
-        return path not in MODULE_EXACT_PATHS and path != ".github/workflows/build2-macos.yml"
+        return path != ".github/workflows/build2-macos.yml"
+    if path == "Tools/select_macos_pr_tests.py":
+        return False
+    if path.startswith("Tools/profile_") and path.endswith(".py"):
+        # Instrumentation tools consume test helpers; they are not product inputs.
+        return True
     if path in PORTABLE_TOOL_PATHS:
         return True
     if is_executable_reference_data(path, reference_prefixes):
@@ -174,7 +179,7 @@ def needs_build_for_path(
         "Tools/select_macos_pr_tests.py",
     }:
         return False
-    return not is_linux_portable_only(
+    return needs_module_build_for_path(path) or not is_linux_portable_only(
         path, macos_only_tests, reference_prefixes, app_resource_sources
     )
 
@@ -190,7 +195,7 @@ def needs_full_build_for_path(
     # build tooling must still compile/link/sign the actual App on every PR.
     if path.startswith("Sources/") and path.endswith(".swift") and path != "Sources/App.swift":
         return False
-    return needs_module_build_for_path(path) or needs_build_for_path(
+    return needs_build_for_path(
         path, macos_only_tests, reference_prefixes, app_resource_sources
     )
 
@@ -216,9 +221,13 @@ def classify_scope(
 
     docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
     if docs_only:
+        # Documentation never builds the product, but portable contract tests
+        # read policy and reference documents. Skipping the Linux lane would
+        # let a docs-only change pass every required check while breaking the
+        # suite for the next, unrelated pull request.
         return {
             "docs_only": True,
-            "needs_linux": False,
+            "needs_linux": True,
             "needs_macos": False,
             "needs_module": False,
             "needs_build": False,
@@ -232,8 +241,9 @@ def classify_scope(
         else current_app_resource_sources()
     )
     needs_module = any(needs_module_build_for_path(path) for path in normalized)
-    needs_macos = needs_module or any(
-        not is_linux_portable_only(
+    needs_macos = any(
+        (needs_module_build_for_path(path) and not path.startswith(".github/workflows/"))
+        or not is_linux_portable_only(
             path,
             macos_only,
             reference_prefixes,
@@ -246,7 +256,7 @@ def classify_scope(
         "needs_linux": True,
         "needs_macos": needs_macos,
         "needs_module": needs_module,
-        "needs_build": needs_module or any(
+        "needs_build": any(
             needs_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
             for path in normalized
         ),

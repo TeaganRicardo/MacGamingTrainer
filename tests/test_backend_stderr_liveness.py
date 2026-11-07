@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Backend stderr read/flush must remain live with an open, quiet worker."""
 import os
 import shutil
@@ -184,10 +185,10 @@ extension BackendProcess {
         "-o", str(binary),
     ], cwd=ROOT, check=True)
     try:
-        result = subprocess.run(
+        result = launch_fixture(
             [str(binary), PYTHON, str(worker_path), str(backpressure_path)],
             cwd=ROOT, env=os.environ.copy(),
-            capture_output=True, text=True, timeout=8,
+            capture_output=True, text=True, journey='native.backend_stderr_liveness',
         )
     except subprocess.TimeoutExpired as exc:
         print("BackendProcess liveness deadlock (last captured phases):")

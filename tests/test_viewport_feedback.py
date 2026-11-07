@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import ctypes
 import json
 import math
@@ -857,7 +858,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
                     str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
                     str(generated), str(main), "-o", str(binary)], check=True, cwd=ROOT)
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
-    subprocess.run([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, timeout=45)
+    launch_fixture([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, journey='native.viewport_feedback')
     interaction_directory = td / "interactions"
     interaction_directory.mkdir()
     interaction_worker = interaction_directory / "worker.py"

@@ -61,9 +61,40 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "hades2.live_trait_flow": 30.0,
     "hades2.save_editor": 30.0,
     # Shared ownership journeys.
+    "reference_fixture.suffix_identity": 30.0,
     "runtime_text_edit.completion": 60.0,
     "multi_game_navigation.startup": 30.0,
     "multi_game_navigation.journey": 45.0,
+    # Remaining native entrypoints retain their former containment ceiling,
+    # with a 20s minimum for the shortest journeys. Hosted timings are retained
+    # before any later tightening; no performance assertion is added here.
+    'native.trainer_text_field_appearance': 20.0,
+    'native.trainer_search_field_appearance': 20.0,
+    'native.core_save_batch_delete_round20': 20.0,
+    'native.core_save_rename_completion_round24': 20.0,
+    'native.core_save_manager_lifecycle_u01_u02.1': 20.0,
+    'native.core_save_manager_lifecycle_u01_u02.2': 20.0,
+    'native.hades2_run_log_watcher': 20.0,
+    'native.trainer_log_session_lifecycle': 30.0,
+    'native.backend_stderr_liveness': 20.0,
+    'native.disclosure_settle_classification': 120.0,
+    'native.viewport_feedback': 45.0,
+    'native.hades2_force_enable_rerolls_frontend': 30.0,
+    'native.hades2_gathering_frontend': 30.0,
+    'native.hades2_chaos_gate_frontend': 30.0,
+    'native.hades2_save_editor_player_journey': 60.0,
+    'native.hades2_advanced_save_frontend': 60.0,
+    'native.hades2_save_record_frontend': 60.0,
+    'native.reference_fixture_session_integration': 45.0,
+    'native.trainer_tool_windows': 20.0,
+    'native.hades2_repeated_actions_frontend': 30.0,
+    'native.host_target_ownership': 20.0,
+    'native.core_save_retention_controls': 45.0,
+    'native.mapped_slider_interaction': 20.0,
+    'native.hades2_save_container_frontend': 60.0,
+    'multi_game.context_state': 90.0,
+    'multi_game.context_navigation': 90.0,
+    'native_effect_query.image_identity': 30.0,
 }
 
 MAXIMUM_BUDGET_SECONDS = 300.0
@@ -346,7 +377,7 @@ def _drain(process: subprocess.Popen,
 def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
                  environ: Mapping[str, str] | None = None,
                  phase_file: Path | None = None,
-                 diagnostics: Iterable[Path] = (), **kwargs) -> subprocess.CompletedProcess:
+                 diagnostics: Iterable[Path] = (), check: bool = False, **kwargs) -> subprocess.CompletedProcess:
     """Run one fixture under an explicit budget and classify the outcome.
 
     The fixture keeps the harness's process group and session. Owning a new
@@ -381,7 +412,10 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
     print(f"macos_fixture_watchdog_done {budget.describe()} elapsed={elapsed:.1f}s",
           flush=True)
     _record_timing(budget, elapsed, "completed", env)
-    return subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
+    result = subprocess.CompletedProcess(list(argv), process.returncode, stdout, stderr)
+    if check:
+        result.check_returncode()
+    return result
 
 
 def launch_fixture(argv: Sequence[str], *, journey: str,

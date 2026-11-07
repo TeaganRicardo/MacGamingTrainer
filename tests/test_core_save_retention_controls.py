@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Exercise automatic-backup policy/protection through real native controls.
 
 The synthetic app talks to the real Core JSONL router and Save service, using
@@ -280,4 +281,4 @@ with tempfile.TemporaryDirectory(prefix="mgt-retention-controls-") as temporary:
                    cwd=ROOT, check=True)
     (directory / "home").mkdir()
     environment = dict(os.environ, HOME=str(directory / "home"))
-    subprocess.run([str(binary), sys.executable, str(worker)], cwd=ROOT, env=environment, check=True, timeout=45)
+    launch_fixture([str(binary), sys.executable, str(worker)], cwd=ROOT, env=environment, check=True, journey='native.core_save_retention_controls')

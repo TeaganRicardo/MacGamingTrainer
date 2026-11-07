@@ -6,8 +6,8 @@ test_core_save_manager_lifecycle_u01_u02.py
 test_hades2_run_log_watcher.py
 test_hades2_feature_identity.py
 test_host_localization_behavior.py
-test_shortcut_chord_semantics.py
 test_trainer_log_session_lifecycle.py
+test_shortcut_chord_semantics.py
 test_backend_stderr_liveness.py
 test_hades2_view_state_flow.py
 test_disclosure_settle_classification.py
@@ -34,4 +34,8 @@ test_hades2_save_container_frontend.py
 test_global_hotkey_routing.py
 test_multi_game_contexts.py
 test_hades_frontend.py
+test_hades2_model_flow.py
+test_multi_game_context_state.py
+test_hades_process_identity_macos.py
+test_native_effect_query_macos.py
 test_core_save_metadata_darwin.py

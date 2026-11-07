@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import shutil
 import subprocess
 import tempfile
@@ -145,7 +146,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-rename-completion-") as td:
         "-framework", "AppKit",
         "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc=subprocess.run([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, timeout=10)
+    proc=launch_fixture([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, journey='native.core_save_rename_completion_round24')
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)

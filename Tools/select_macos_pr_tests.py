@@ -8,8 +8,9 @@ selection and always retain the product compiler check.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from ci_docs_only import (
@@ -20,6 +21,7 @@ from module_inventory import discover_module_ids
 
 SHARED_SMOKE = (
     "test_multi_game_contexts.py",
+    "test_multi_game_context_state.py",
     "test_reference_fixture_session_integration.py",
     "test_global_hotkey_routing.py",
 )
@@ -66,14 +68,34 @@ def source_directories(root: Path = ROOT) -> dict[str, str]:
     return result
 
 
-def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -> list[str]:
+def metadata_test_changes(base_sha: str, head_sha: str, paths: list[str],
+                          cwd: Path = ROOT) -> dict[str, set[str]]:
+    metadata_paths = {"Tools/macos_only_tests.txt", MACOS_TEST_DEPENDENCIES_PATH} & set(paths)
+    if not metadata_paths:
+        return {}
+    base = subprocess.check_output(["git", "merge-base", base_sha, head_sha], cwd=cwd, text=True).strip()
+    changes = {}
+    for path in sorted(metadata_paths):
+        before, after = (subprocess.check_output(["git", "show", f"{ref}:{path}"], cwd=cwd, text=True)
+                         for ref in (base, head_sha))
+        if path == "Tools/macos_only_tests.txt":
+            changes[path] = set(after.split()) - set(before.split())
+        else:
+            old, new = json.loads(before), json.loads(after)
+            changes[path] = {name for name in old.keys() | new.keys() if old.get(name) != new.get(name)}
+    return changes
+
+
+def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str],
+                   metadata_changes: dict[str, set[str]] | None = None) -> list[str]:
     if not paths:
         return sorted(tests)  # Unknown change scope must never quietly skip tests.
 
     chosen: set[str] = set()
     for path in paths:
         if path == MACOS_TEST_DEPENDENCIES_PATH:
-            chosen.update(MACOS_TEST_DEPENDENCIES)
+            changed = metadata_changes.get(path) if metadata_changes is not None else None
+            chosen.update(MACOS_TEST_DEPENDENCIES if changed is None else changed & tests)
         chosen.update(name for name, dependencies in MACOS_TEST_DEPENDENCIES.items() if path in dependencies)
         if path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
             # These fixtures are shared across native behavior tests; a narrow
@@ -134,45 +156,76 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -
             chosen.add("test_reference_fixture_session_integration.py")
         if path in ("Sources/Hades2/Views/Hades2SaveEditorView.swift", "Sources/Hades2/Hades2SaveEditorModel.swift"):
             chosen.add("test_hades2_save_editor_frontend.py")
+        if path == "Backend/games/hades/adapter.py":
+            chosen.add("test_hades_process_identity_macos.py")
+        if path.startswith("Backend/games/hades2/native/") or path == "tests/test_native_effect_query.py":
+            chosen.add("test_native_effect_query_macos.py")
         if path.startswith("Native/") or path == "build.sh":
             chosen.add(BUILD_SMOKE)
         if path in ("Tools/run_macos_checks.sh", "Tools/select_macos_pr_tests.py"):
-            chosen.update(("test_multi_game_contexts.py", BUILD_SMOKE))
+            chosen.update(("test_multi_game_context_state.py", BUILD_SMOKE))
         if path == "Tools/macos_only_tests.txt":
-            return sorted(tests)
+            changed = metadata_changes.get(path) if metadata_changes is not None else None
+            if changed is None:
+                return sorted(tests)
+            chosen.update(changed)
         for game_id, source_prefix in sources.items():
             if not path.startswith(source_prefix):
                 continue
-            smoke = next((name for name in (
+            module_tests = {name for name in (
+                f"test_{game_id}_model_flow.py",
                 f"test_{game_id}_view_state_flow.py",
                 f"test_{game_id}_frontend.py",
-            ) if name in tests), "test_multi_game_contexts.py")
-            chosen.add(smoke)
+            ) if name in tests}
+            if not module_tests:
+                raise ValueError(f"{game_id}: no macOS behavior smoke entry in the inventory")
+            if not module_tests - PR_DEFERRED.keys():
+                raise ValueError(f"{game_id}: every module behavior smoke entry is deferred; declare a stable PR owner")
+            chosen.update(module_tests)
     missing = chosen - tests
     if missing:
         raise ValueError(f"macOS smoke tests missing from inventory: {sorted(missing)}")
     return sorted(chosen)
 
 
+def smoke_selection(paths: list[str], tests: set[str], sources: dict[str, str],
+                    metadata_changes: dict[str, set[str]] | None = None) -> dict:
+    relevant = selected_tests(paths, tests, sources, metadata_changes)
+    deferred = {name: asdict(PR_DEFERRED[name]) for name in relevant if name in PR_DEFERRED}
+    selected = [name for name in relevant if name not in deferred]
+    return {
+        "relevant": relevant,
+        "selected": selected,
+        "deferred": deferred,
+        "requirements": {"lua52_native": any(
+            "tests/lua_native_prerequisites.py" in MACOS_TEST_DEPENDENCIES.get(name, ())
+            for name in selected
+        )},
+    }
+
+
 def pr_smoke_tests(paths: list[str], tests: set[str], sources: dict[str, str]) -> list[str]:
-    """Bounded PR suite: relevant inventory minus activation-dependent journeys."""
-    chosen = selected_tests(paths, tests, sources)
-    deferred = [name for name in chosen if name in PR_DEFERRED]
-    if deferred:
-        print("macOS PR smoke defers to convergence: " + ", ".join(deferred), file=sys.stderr)
-    return [name for name in chosen if name not in PR_DEFERRED]
+    """Bounded PR suite with a stable behavior owner for every changed module."""
+    return smoke_selection(paths, tests, sources)["selected"]
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        raise SystemExit("usage: select_macos_pr_tests.py BASE_SHA HEAD_SHA")
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("base_sha")
+    parser.add_argument("head_sha")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv[1:])
     try:
-        paths = changed_paths(argv[1], argv[2])
-        names = pr_smoke_tests(paths, load_macos_only_tests(), source_directories())
-    except (OSError, ValueError, RuntimeError) as exc:
+        paths = changed_paths(args.base_sha, args.head_sha)
+        changes = metadata_test_changes(args.base_sha, args.head_sha, paths)
+        selection = smoke_selection(paths, load_macos_only_tests(), source_directories(), changes)
+        if args.output:
+            args.output.write_text(json.dumps(selection, sort_keys=True) + "\n", encoding="utf-8")
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"macOS PR selection failed: {exc}", file=sys.stderr)
         return 2
-    print("\n".join(names))
+    print("\n".join(selection["selected"]))
     return 0
 
 

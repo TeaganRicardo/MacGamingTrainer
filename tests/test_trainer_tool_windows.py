@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Native tool-window reuse and close ownership with isolated content."""
 import os
 from pathlib import Path
@@ -253,7 +254,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-tool-windows-") as directory:
                     str(main), "-o", str(binary)], check=True)
     env = dict(os.environ, HOME=str(root / "home"))
     (root / "home").mkdir()
-    result = subprocess.run([str(binary)], env=env, capture_output=True, text=True, timeout=20)
+    result = launch_fixture([str(binary)], env=env, capture_output=True, text=True, journey='native.trainer_tool_windows')
     assert result.returncode == 0, result.stdout + result.stderr
     assert "trainer_tool_windows_ok" in result.stdout
     print(result.stdout.strip())

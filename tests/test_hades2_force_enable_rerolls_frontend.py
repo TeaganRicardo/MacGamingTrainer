@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import json
 import os
 import shutil
@@ -158,7 +159,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-force-enable-rerolls-frontend-') as
         str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'),
         str(generated), str(main), '-o', str(binary),
     ], check=True)
-    subprocess.run([
+    launch_fixture([
         str(binary), PYTHON, str(worker),
     ], env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home)),
-       check=True, timeout=30)
+       check=True, journey='native.hades2_force_enable_rerolls_frontend')

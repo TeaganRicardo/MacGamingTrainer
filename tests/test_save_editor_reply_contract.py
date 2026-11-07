@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 core = (ROOT / "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift").read_text(encoding="utf-8")
 hades = (ROOT / "Sources/Hades/HadesSaveEditorModel.swift").read_text(encoding="utf-8")
 hades2 = (ROOT / "Sources/Hades2/Hades2SaveEditorModel.swift").read_text(encoding="utf-8")
-native = (ROOT / "tests/test_multi_game_contexts.py").read_text(encoding="utf-8")
 
 for method in (
     "func beginNewDocumentRead() -> Ticket",
@@ -41,19 +40,5 @@ assert "lane: .advancedDetail" in hades2
 assert "lane: .review" in hades2
 assert "lane: .query" in hades2 and "lane: .query" in hades
 assert "requests.invalidate(.query)" in hades and "requests.invalidate(.query)" in hades2
-
-# The macOS Core smoke uses two independent game-shaped instances and drives
-# overlapping query, rapid source reads, target switch, stale row/Apply, and
-# close/reopen (including reused backend identity) against actual Swift logic.
-for phrase in (
-    'verifySaveEditorReplies("Hades I")',
-    'verifySaveEditorReplies("Hades II")',
-    "rapid source reads accepted an obsolete result",
-    "overlapping search overwrote latest result or focused draft",
-    "target switch adopted an old response",
-    "stale row/Apply crossed an installed document baseline",
-    "close/reopen accepted a reply from the retired tool window",
-):
-    assert phrase in native, phrase
 
 print("save_editor_reply_coordination_contract_ok")

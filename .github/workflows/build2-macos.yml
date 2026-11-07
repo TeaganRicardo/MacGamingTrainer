@@ -123,6 +123,36 @@ jobs:
           echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
           echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
+      - name: Select macOS PR behavior and prerequisites
+        id: test-selection
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
+        run: |
+          selection="$RUNNER_TEMP/macos-selection.json"
+          python3 Tools/select_macos_pr_tests.py "$BASE_SHA" "$HEAD_SHA" --output "$selection"
+          python3 - "$selection" <<'PYTHON'
+          import json, os, sys
+          selection = json.load(open(sys.argv[1]))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('lua52_native=' + str(selection['requirements']['lua52_native']).lower() + '\n')
+          PYTHON
+          echo "MGT_MACOS_SELECTION=$selection" >> "$GITHUB_ENV"
+
+      - name: Build Lua 5.2 runtime test dependency
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || steps.test-selection.outputs.lua52_native == 'true')
+        run: |
+          archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
+          lua_root="$RUNNER_TEMP/lua-5.2.4"
+          # A connection reset mid-transfer is not a 5xx, so plain --retry gives
+          # up on it. Lua-dependent native fixtures need this source; the checksum
+          # below still verifies the bytes, so retrying transport errors is safe.
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
+            -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
+          printf '%s  %s\n' b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b "$archive" | shasum -a 256 -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          make -C "$lua_root/src" generic
+          test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
+          echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
+
       - name: Run full macOS contracts for release convergence
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         # Timings are observation only; they must outlive the lane's temporary
@@ -144,22 +174,6 @@ jobs:
       # guards them is broken. Several of these tests compile Swift and drive
       # the real presentation and protocol paths, so this belongs in the
       # macOS lane rather than the portable one.
-      - name: Build Lua 5.2 runtime test dependency
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
-        run: |
-          archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
-          lua_root="$RUNNER_TEMP/lua-5.2.4"
-          # A connection reset mid-transfer is not a 5xx, so plain --retry gives
-          # up on it. This download gates every native fixture and the checksum
-          # below still verifies the bytes, so retrying transport errors is safe.
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
-            -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
-          printf '%s  %s\n' b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b "$archive" | shasum -a 256 -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP"
-          make -C "$lua_root/src" generic
-          test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
-          echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
-
       - name: Verify declared invariants fail under mutation
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: python3 Tools/mutation_gate.py

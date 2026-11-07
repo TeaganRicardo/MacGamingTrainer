@@ -49,6 +49,7 @@ fi
 
 RESULTS_FILE="$LANE_TMP/macos-results.tsv"
 SELECTED_FILE="$LANE_TMP/macos-selected.txt"
+SELECTION_FILE="${MGT_MACOS_SELECTION:-$LANE_TMP/macos-selection.json}"
 : > "$RESULTS_FILE"
 : > "$SELECTED_FILE"
 
@@ -70,7 +71,11 @@ elif [[ $# -eq 0 ]]; then
   selected="$(cat "$MACOS_ONLY_LIST")"
 elif [[ $# -eq 3 && "$1" == "--pr" ]]; then
   LANE="pr"
-  if ! selected="$(python3 Tools/select_macos_pr_tests.py "$2" "$3")"; then
+  if [[ -n "${MGT_MACOS_SELECTION:-}" ]]; then
+    if ! selected="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["selected"]))' "$SELECTION_FILE")"; then
+      record_failure "read PR macOS selection"
+    fi
+  elif ! selected="$(python3 Tools/select_macos_pr_tests.py "$2" "$3" --output "$SELECTION_FILE")"; then
     record_failure "select PR macOS tests"
   fi
 else
@@ -95,6 +100,9 @@ fi
 # deferred work. A coverage contract violation fails closed; a slow journey
 # never does.
 coverage_args=(--lane "$LANE" --selected "$SELECTED_FILE" --results "$RESULTS_FILE")
+if [[ "$LANE" == "pr" ]]; then
+  coverage_args+=(--selection "$SELECTION_FILE")
+fi
 if [[ -n "${MGT_FIXTURE_TIMINGS:-}" ]]; then
   coverage_args+=(--timings "$MGT_FIXTURE_TIMINGS")
 fi

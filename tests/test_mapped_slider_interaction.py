@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Exercise actual mouse, keyboard and accessibility input on the shared slider."""
 import os
 from pathlib import Path
@@ -260,5 +261,5 @@ with tempfile.TemporaryDirectory(prefix="mgt-slider-interaction-") as temporary:
     ]
     subprocess.run([SWIFTC, "-parse-as-library", *map(str, sources), str(harness), "-o", str(binary)],
                    cwd=ROOT, check=True)
-    subprocess.run([str(binary)], cwd=ROOT, env=dict(os.environ, HOME=str(directory)),
-                   check=True, timeout=20)
+    launch_fixture([str(binary)], cwd=ROOT, env=dict(os.environ, HOME=str(directory)),
+                   check=True, journey='native.mapped_slider_interaction')

@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 """Exercise real App admission with inert UI/backend and isolated OS processes."""
 import json
 from pathlib import Path
@@ -312,10 +313,10 @@ import Foundation
     ):
         process = subprocess.Popen([str(executable)])
         try:
-            subprocess.run(
+            launch_fixture(
                 [str(swift_binary), str(process.pid), expected],
                 check=True,
-                timeout=15,
+                journey='native.host_target_ownership',
                 cwd=ROOT,
             )
         finally:

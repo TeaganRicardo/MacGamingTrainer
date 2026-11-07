@@ -1,3 +1,4 @@
+from macos_fixture_policy import launch_fixture
 import json
 """Exercise the Hades input admission seam without starting or attaching to the game."""
 import os
@@ -336,9 +337,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-repeat-actions-") as td:
     )
     env = dict(os.environ)
     env["HOME"] = str(home_path)
-    result = subprocess.run(
+    result = launch_fixture(
         [str(binary_path), PYTHON, str(worker_path)],
-        cwd=ROOT, env=env, capture_output=True, text=True, timeout=30,
+        cwd=ROOT, env=env, capture_output=True, text=True, journey='native.hades2_repeated_actions_frontend',
     )
     if result.returncode:
         print(result.stdout)
