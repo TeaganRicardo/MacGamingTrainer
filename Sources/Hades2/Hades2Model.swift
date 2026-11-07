@@ -98,7 +98,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var feedbackDetailsNoticeID: UUID?
     private var receiptPresentedDuringReply = false
     @Published private(set) var receivedActionResultText: TrainerTextToken?
-    @Published private var runtimeIssueToken: TrainerTextToken?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
     private var runtimeFeatureErrors: [String: String] = [:]
     private var runtimeFeaturePresentationTokens: [String: TrainerTextToken] = [:]
@@ -142,8 +141,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var noticeText: TrainerTextToken { noticeToken ?? TrainerTextToken(key: "") }
     /// Latest user-facing error, resolved by the module's presentation layer.
     var errorText: TrainerTextToken { errorToken ?? TrainerTextToken(key: "") }
-    /// Runtime activation issues, when the backend reported any.
-    var runtimeIssueText: TrainerTextToken { runtimeIssueToken ?? TrainerTextToken(key: "") }
     @Published var pid: Int?
     @Published var version = ""
     @Published var status = "disconnected"
@@ -622,7 +619,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // cleared: the banner prefers the token, so a stale token would
         // outlive this reset.
         runtimeIssue = ""
-        runtimeIssueToken = nil
         runtimeIssuePresentations = []
         runtimeFeatureErrors = [:]
         runtimeFeaturePresentationTokens = [:]
@@ -809,9 +805,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func rebuildRuntimeIssuePresentations() {
-        // Keep legacy runtime-owned text working, but let structured
-        // presentations override the same feature so a Core-owned Host key
-        // never becomes an opaque argument inside a Hades sentence.
+        // The backend supplies a registry presentation for every resident
+        // feature failure; its raw runtime text is diagnostic only and stays a
+        // defensive fallback. Presentations override the same feature so a
+        // Core-owned Host key never becomes an opaque argument in a sentence.
         var entries = runtimeFeatureErrors.compactMap { featureID, message -> Hades2RuntimeIssuePresentation? in
             guard !message.isEmpty else { return nil }
             return Hades2RuntimeIssuePresentation(
@@ -824,16 +821,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             entries.append(Hades2RuntimeIssuePresentation(featureID: featureID, token: token))
         }
         runtimeIssuePresentations = entries.sorted { $0.featureID < $1.featureID }
-
-        // Preserve the old single-token seam for callers that only know about
-        // legacy string featureErrors. The view uses the owner-aware entries
-        // above so Host presentation arguments are never flattened into text.
-        let legacy = runtimeFeatureErrors.compactMap { featureID, message in
-            message.isEmpty ? nil : "\(featureID): \(message)"
-        }.sorted()
-        runtimeIssueToken = legacy.isEmpty
-            ? nil
-            : presentation("hades2.status.runtimeInactive", arguments: [legacy.joined(separator: "; ")])
     }
 
     private func presentActionReceipt(_ receipt: Hades2ActionReceipt) {
