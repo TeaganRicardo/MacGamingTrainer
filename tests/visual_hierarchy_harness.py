@@ -178,55 +178,76 @@ private func hierarchyBitmap(_ view: NSView, around screenFrame: NSRect) -> Data
     return png
 }
 
-private func hierarchyBitmapExact(_ view: NSView, around screenFrame: NSRect) -> Data {
+private func hierarchyPixels(_ view: NSView, in screenFrame: NSRect) -> [NSColor] {
     view.layoutSubtreeIfNeeded()
     guard let window = view.window else { fatalError("native hierarchy window is missing") }
     let windowFrame = window.convertFromScreen(screenFrame)
     let localFrame = view.convert(windowFrame, from: nil).intersection(view.bounds)
     guard !localFrame.isEmpty,
           let bitmap = view.bitmapImageRepForCachingDisplay(in: localFrame) else {
-        fatalError("native Picker chrome bitmap allocation failed")
+        fatalError("native Picker pixel sample allocation failed")
     }
     view.cacheDisplay(in: localFrame, to: bitmap)
-    guard let png = bitmap.representation(using: .png, properties: [:]) else {
-        fatalError("native Picker chrome bitmap encoding failed")
+    var colors: [NSColor] = []
+    colors.reserveCapacity(bitmap.pixelsWide * bitmap.pixelsHigh)
+    for y in 0..<bitmap.pixelsHigh {
+        for x in 0..<bitmap.pixelsWide {
+            if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) { colors.append(color) }
+        }
     }
-    return png
-}
-
-private func hierarchyPickerBodySample(_ frame: NSRect) -> NSRect {
-    NSRect(
-        x: frame.minX + min(7, max(2, frame.width * 0.03)),
-        y: frame.midY - 2,
-        width: min(6, max(2, frame.width * 0.03)),
-        height: 4
-    )
-}
-
-private func hierarchyColorSample(_ view: NSView, at screenPoint: NSPoint) -> NSColor {
-    view.layoutSubtreeIfNeeded()
-    guard let window = view.window else { fatalError("native hierarchy window is missing") }
-    let windowPoint = window.convertPoint(fromScreen: screenPoint)
-    let localPoint = view.convert(windowPoint, from: nil)
-    let sampleRect = NSRect(x: localPoint.x - 1, y: localPoint.y - 1, width: 2, height: 2)
-        .intersection(view.bounds)
-    guard !sampleRect.isEmpty,
-          let bitmap = view.bitmapImageRepForCachingDisplay(in: sampleRect) else {
-        fatalError("native Picker color sample allocation failed")
-    }
-    view.cacheDisplay(in: sampleRect, to: bitmap)
-    let x = max(0, min(bitmap.pixelsWide - 1, bitmap.pixelsWide / 2))
-    let y = max(0, min(bitmap.pixelsHigh - 1, bitmap.pixelsHigh / 2))
-    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
-        fatalError("native Picker color sample unavailable")
-    }
-    return color
+    guard !colors.isEmpty else { fatalError("native Picker pixel sample unavailable") }
+    return colors
 }
 
 private func hierarchyColorDelta(_ lhs: NSColor, _ rhs: NSColor) -> CGFloat {
     abs(lhs.redComponent - rhs.redComponent)
         + abs(lhs.greenComponent - rhs.greenComponent)
         + abs(lhs.blueComponent - rhs.blueComponent)
+}
+
+private func hierarchyChroma(_ color: NSColor) -> CGFloat {
+    max(color.redComponent, color.greenComponent, color.blueComponent)
+        - min(color.redComponent, color.greenComponent, color.blueComponent)
+}
+
+private func hierarchyLuminance(_ color: NSColor) -> CGFloat {
+    (color.redComponent + color.greenComponent + color.blueComponent) / 3
+}
+
+private func hierarchyIndicatorLaneWidth(_ frame: NSRect) -> CGFloat {
+    min(32, frame.width / 3)
+}
+
+// The native popup (drawn by SwiftUI itself on macOS 26+) owns its trailing
+// indicator geometry. Measure the most saturated rendered pixel in that lane so
+// the check observes the indicator colour without assuming its exact layout.
+private func hierarchyPickerIndicator(_ view: NSView, _ frame: NSRect) -> NSColor {
+    let width = hierarchyIndicatorLaneWidth(frame)
+    let lane = NSRect(x: frame.maxX - width, y: frame.minY + 2, width: width, height: max(1, frame.height - 4))
+    return hierarchyPixels(view, in: lane).max { hierarchyChroma($0) < hierarchyChroma($1) }!
+}
+
+// The native bezel is the majority of the control outside the indicator lane;
+// title glyphs are a minority, so the median-luminance pixel is the bezel body.
+private func hierarchyPickerBody(_ view: NSView, _ frame: NSRect) -> NSColor {
+    let body = NSRect(x: frame.minX + 2, y: frame.minY + 2,
+                      width: max(1, frame.width - hierarchyIndicatorLaneWidth(frame) - 4),
+                      height: max(1, frame.height - 4))
+    let pixels = hierarchyPixels(view, in: body).sorted { hierarchyLuminance($0) < hierarchyLuminance($1) }
+    return pixels[pixels.count / 2]
+}
+
+// The product purple (0.64, 0.51, 1.0) keeps a strong red component; the
+// system blue accent (about 0.04, 0.52, 1.0) does not.
+private func hierarchyIsProductAccent(_ color: NSColor) -> Bool {
+    hierarchyChroma(color) >= 0.25
+        && color.redComponent >= 0.45
+        && color.blueComponent >= max(color.redComponent, color.greenComponent) + 0.10
+}
+
+private func hierarchyIsSystemBlue(_ color: NSColor) -> Bool {
+    hierarchyChroma(color) >= 0.25 && color.redComponent < 0.30
+        && color.blueComponent > color.greenComponent + 0.15
 }
 
 @MainActor
@@ -451,142 +472,77 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             hierarchyCheck(picker.frame.width > 0 && picker.frame.height > 0 && bounds.contains(picker.frame)
                            && pickerFrame.insetBy(dx: -1, dy: -1).contains(picker.frame),
                            "native Picker bezel escaped its allocated control width")
-            let interactivePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(picker.frame))
-            // The corrected presentation keeps the native control height; the
-            // earlier redraw forced every Picker to 34 pt.
+            // v0.5.1 is the accepted baseline: the native popup owns its bezel,
+            // title, indicator and disabled state. Core only selects width,
+            // availability and the product accent, and must keep native metrics.
             hierarchyCheck(picker.frame.height < 32,
                            "Picker height inflated beyond the native control: height=\(picker.frame.height)")
-            let interactiveBodyColor = hierarchyColorSample(host, at: NSPoint(
-                x: pickerFrame.minX + 3,
-                y: pickerFrame.midY
-            ))
-            let interactiveBodyLuminance = (interactiveBodyColor.redComponent
-                + interactiveBodyColor.greenComponent
-                + interactiveBodyColor.blueComponent) / 3
-            hierarchyCheck(interactiveBodyLuminance < 0.32,
-                           "interactive Picker body is not a dark surface: sample=\(interactiveBodyColor)")
-            let accentSample = hierarchyColorSample(host, at: NSPoint(
-                // The purple plate spans the trailing 18 pt of the 24 pt
-                // indicator lane; sample inside it but clear of the white
-                // chevron glyphs at the lane centre.
-                x: pickerFrame.maxX - 19,
-                y: pickerFrame.midY
-            ))
-            let accentDelta = abs(accentSample.redComponent - 0.64)
-                + abs(accentSample.greenComponent - 0.51)
-                + abs(accentSample.blueComponent - 1.0)
-            hierarchyCheck(accentDelta < 0.30,
-                           "interactive Picker indicator is not the product purple accent: sample=\(accentSample)")
-            hierarchyCheck(accentSample.redComponent > 0.45,
-                           "interactive Picker indicator fell back to system-blue chrome: sample=\(accentSample)")
-            let simultaneousUnavailableIndicatorColor = hierarchyColorSample(host, at: NSPoint(
-                x: simultaneouslyUnavailablePicker.frame.maxX - 19,
-                y: simultaneouslyUnavailablePicker.frame.midY
-            ))
-            let simultaneousUnavailableBody = hierarchyBitmapExact(
-                host, around: hierarchyPickerBodySample(simultaneouslyUnavailablePicker.frame)
-            )
-            let unavailableBodyColor = hierarchyColorSample(host, at: NSPoint(
-                x: simultaneouslyUnavailablePicker.frame.minX + 3,
-                y: simultaneouslyUnavailablePicker.frame.midY
-            ))
-            let unavailableBodyLuminance = (unavailableBodyColor.redComponent
-                + unavailableBodyColor.greenComponent
-                + unavailableBodyColor.blueComponent) / 3
-            hierarchyCheck(unavailableBodyLuminance < 0.32,
-                           "unavailable Picker body is not a dark surface: sample=\(unavailableBodyColor)")
-            hierarchyCheck(unavailableBodyLuminance < interactiveBodyLuminance,
-                           "unavailable Picker did not read as a dimmed interactive surface")
-            hierarchyCheck(hierarchyColorDelta(accentSample, simultaneousUnavailableIndicatorColor) > 0.10,
-                           "simultaneous interactive/unavailable Pickers shared one chrome presentation")
-            hierarchyCheck(simultaneousUnavailableBody != interactivePickerBody,
-                           "simultaneous interactive/unavailable Pickers shared one body fill")
+            func pickerControl(_ identifier: String, _ context: String) -> NativeAccessibilityControl {
+                hierarchyPump(0.10)
+                host.layoutSubtreeIfNeeded()
+                guard let control = nativeAccessibilityControls(host).first(where: {
+                    $0.identifier == identifier && $0.role == "AXPopUpButton"
+                }) else { fatalError("Picker disappeared " + context) }
+                return control
+            }
+            func pickerPresentation(_ control: NativeAccessibilityControl, _ label: String) -> (indicator: NSColor, body: NSColor) {
+                let indicator = hierarchyPickerIndicator(host, control.frame)
+                let body = hierarchyPickerBody(host, control.frame)
+                print("hierarchy_picker_presentation game=\(descriptor.id) language=\(language.rawValue) " +
+                      "window=\(width) state=\(label) frame=\(control.frame) indicator=\(indicator) body=\(body)")
+                return (indicator, body)
+            }
+            let interactive = pickerPresentation(picker, "interactive")
+            // A light-appearance popup body is near white; the dark native body is
+            // a mid/dark grey. This is the user-visible light-leak symptom.
+            hierarchyCheck(hierarchyLuminance(interactive.body) < 0.6,
+                           "interactive Picker resolved a light-appearance body: \(interactive.body)")
+            hierarchyCheck(hierarchyIsProductAccent(interactive.indicator),
+                           "interactive Picker indicator is not the product purple accent: \(interactive.indicator)")
+            hierarchyCheck(!hierarchyIsSystemBlue(interactive.indicator),
+                           "interactive Picker indicator fell back to system-blue chrome: \(interactive.indicator)")
+            let simultaneousUnavailable = pickerPresentation(simultaneouslyUnavailablePicker, "unavailable-simultaneous")
+            hierarchyCheck(hierarchyLuminance(simultaneousUnavailable.body) < 0.6,
+                           "unavailable Picker resolved a light-appearance body: \(simultaneousUnavailable.body)")
+            hierarchyCheck(!hierarchyIsSystemBlue(simultaneousUnavailable.indicator),
+                           "unavailable Picker indicator fell back to system-blue chrome: \(simultaneousUnavailable.indicator)")
+            hierarchyCheck(hierarchyColorDelta(interactive.indicator, simultaneousUnavailable.indicator) > 0.10,
+                           "simultaneous interactive/unavailable Pickers shared one native presentation")
             state.pickerSelection = "second"
-            hierarchyPump(0.10)
-            host.layoutSubtreeIfNeeded()
-            guard let selectedPicker = nativeAccessibilityControls(host).first(where: {
-                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
-            }) else { fatalError("Picker disappeared after selection change") }
-            let selectedIndicatorColor = hierarchyColorSample(host, at: NSPoint(
-                x: selectedPicker.frame.maxX - 19,
-                y: selectedPicker.frame.midY
-            ))
-            hierarchyCheck(hierarchyColorDelta(selectedIndicatorColor, accentSample) < 0.08,
-                           "Picker selection changed the interactive chrome presentation: " +
-                           "selected=\(selectedIndicatorColor) interactive=\(accentSample)")
-            hierarchyCheck(
-                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(selectedPicker.frame))
-                    == interactivePickerBody,
-                "Picker selection changed the interactive body fill"
-            )
+            let selected = pickerPresentation(pickerControl("hierarchy.picker", "after selection change"), "selected")
+            hierarchyCheck(hierarchyColorDelta(selected.indicator, interactive.indicator) < 0.08
+                           && hierarchyColorDelta(selected.body, interactive.body) < 0.06,
+                           "Picker selection changed the interactive presentation: " +
+                           "selected=\(selected) interactive=\(interactive)")
             // Exercise the original offline failure shape: runtime data disappears
             // while the same permanent control becomes unavailable. Menu content
             // and native enabled state change together, but presentation must still
-            // collapse to the single unavailable class.
+            // collapse to the single native unavailable class.
             state.pickerCatalogLoaded = false
             state.pickerAvailable = false
-            hierarchyPump(0.10)
-            host.layoutSubtreeIfNeeded()
-            guard let unavailablePicker = nativeAccessibilityControls(host).first(where: {
-                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
-            }) else { fatalError("Picker disappeared in unavailable state") }
-            let unavailableIndicatorColor = hierarchyColorSample(host, at: NSPoint(
-                x: unavailablePicker.frame.maxX - 19,
-                y: unavailablePicker.frame.midY
-            ))
-            let unavailablePickerBody = hierarchyBitmapExact(host, around: hierarchyPickerBodySample(unavailablePicker.frame))
-            FileHandle.standardError.write(Data(("hierarchy_picker_geometry " +
-                "interactive=\(picker.frame) simultaneousUnavailable=\(simultaneouslyUnavailablePicker.frame) " +
-                "unavailable=\(unavailablePicker.frame)\n").utf8))
-            hierarchyCheck(hierarchyColorDelta(accentSample, unavailableIndicatorColor) > 0.10,
-                           "interactive and unavailable Picker chrome collapsed into one presentation")
-            hierarchyCheck(unavailablePickerBody != interactivePickerBody,
-                           "interactive and unavailable Picker body fills collapsed into one presentation")
-            hierarchyCheck(hierarchyColorDelta(unavailableIndicatorColor, simultaneousUnavailableIndicatorColor) < 0.08,
+            let unavailable = pickerPresentation(pickerControl("hierarchy.picker", "in unavailable state"), "unavailable")
+            hierarchyCheck(hierarchyColorDelta(interactive.indicator, unavailable.indicator) > 0.10,
+                           "interactive and unavailable Picker collapsed into one presentation")
+            hierarchyCheck(hierarchyColorDelta(unavailable.indicator, simultaneousUnavailable.indicator) < 0.08
+                           && hierarchyColorDelta(unavailable.body, simultaneousUnavailable.body) < 0.06,
                            "unavailable Pickers diverged by runtime/catalog reason: " +
-                           "unavailable=\(unavailableIndicatorColor) simultaneous=\(simultaneousUnavailableIndicatorColor)")
-            hierarchyCheck(unavailablePickerBody == simultaneousUnavailableBody,
-                           "unavailable Picker body fill diverged by runtime/catalog reason")
+                           "unavailable=\(unavailable) simultaneous=\(simultaneousUnavailable)")
             state.pickerCatalogLoaded = true
             state.pickerAvailable = true
-            hierarchyPump(0.10)
-            host.layoutSubtreeIfNeeded()
-            guard let restoredPicker = nativeAccessibilityControls(host).first(where: {
-                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
-            }) else { fatalError("Picker disappeared after restoring interaction") }
-            let restoredIndicatorColor = hierarchyColorSample(host, at: NSPoint(
-                x: restoredPicker.frame.maxX - 19,
-                y: restoredPicker.frame.midY
-            ))
-            hierarchyCheck(hierarchyColorDelta(restoredIndicatorColor, accentSample) < 0.08,
-                           "Picker did not restore the same interactive chrome after unavailable state: " +
-                           "restored=\(restoredIndicatorColor) interactive=\(accentSample)")
-            hierarchyCheck(
-                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(restoredPicker.frame))
-                    == interactivePickerBody,
-                "Picker did not restore the same interactive body fill after unavailable state"
-            )
+            let restored = pickerPresentation(pickerControl("hierarchy.picker", "after restoring interaction"), "restored")
+            hierarchyCheck(hierarchyColorDelta(restored.indicator, interactive.indicator) < 0.08
+                           && hierarchyColorDelta(restored.body, interactive.body) < 0.06,
+                           "Picker did not restore the interactive presentation after unavailable state: " +
+                           "restored=\(restored) interactive=\(interactive)")
             // Force SwiftUI/AppKit to discard and recreate the popup. The bug
-            // report included system-blue/native chrome returning after state
-            // changes; reconstruction must not escape the Core presentation owner.
+            // report included light/system-blue chrome returning after a control
+            // was rebuilt; reconstruction must resolve the same presentation.
             state.pickerGeneration += 1
-            hierarchyPump(0.10)
-            host.layoutSubtreeIfNeeded()
-            guard let rebuiltPicker = nativeAccessibilityControls(host).first(where: {
-                $0.identifier == "hierarchy.picker" && $0.role == "AXPopUpButton"
-            }) else { fatalError("Picker disappeared after native reconstruction") }
-            let rebuiltIndicatorColor = hierarchyColorSample(host, at: NSPoint(
-                x: rebuiltPicker.frame.maxX - 19,
-                y: rebuiltPicker.frame.midY
-            ))
-            hierarchyCheck(hierarchyColorDelta(rebuiltIndicatorColor, accentSample) < 0.08,
-                           "reconstructed Picker escaped the interactive chrome presentation: " +
-                           "rebuilt=\(rebuiltIndicatorColor) interactive=\(accentSample)")
-            hierarchyCheck(
-                hierarchyBitmapExact(host, around: hierarchyPickerBodySample(rebuiltPicker.frame))
-                    == interactivePickerBody,
-                "reconstructed Picker escaped the interactive body fill"
-            )
+            let rebuilt = pickerPresentation(pickerControl("hierarchy.picker", "after native reconstruction"), "rebuilt")
+            hierarchyCheck(hierarchyColorDelta(rebuilt.indicator, interactive.indicator) < 0.08
+                           && hierarchyColorDelta(rebuilt.body, interactive.body) < 0.06,
+                           "reconstructed Picker escaped the interactive presentation: " +
+                           "rebuilt=\(rebuilt) interactive=\(interactive)")
             let fields = hierarchyFields(host).filter { ["125", "150", "12345", "20", "3"].contains($0.stringValue) }
             for field in fields {
                 let frame = window.convertToScreen(field.convert(field.bounds, to: nil))

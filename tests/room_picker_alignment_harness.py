@@ -99,11 +99,7 @@ private func exerciseRoomPickerAlignment() {
                 .sorted { $0.frame.minY < $1.frame.minY }
             hierarchyCheck(pickers.count == 5, "five real Rooms & Rewards popups not mounted")
             let first = pickers[0].frame
-            // The shared owner restores the native 4 pt title inset inside the
-            // fixed width after removing the bezel, so the native popup is 4 pt
-            // narrower than its layout allocation. Keep the 2 pt measurement
-            // tolerance on top of that inset.
-            hierarchyCheck(first.width >= theme.pickerStandardWidth - 6
+            hierarchyCheck(first.width >= theme.pickerStandardWidth - 2
                            && first.width <= theme.pickerActionMaxWidth + 2,
                            "native room popup escaped its responsive allocation: language=\(language.rawValue) window=\(width) frame=\(first)")
             if #available(macOS 26.0, *), let previousPickerWidth {

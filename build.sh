@@ -307,6 +307,31 @@ for language in ("en", "zh-CN"):
         raise SystemExit(f"Host localization package mismatch: {packaged}")
 PY
 
+# The product purple is the application accent color. AppKit resolves popup
+# indicators, menu selection, focus rings and other native accent chrome from
+# NSAccentColorName, so a native control redrawn outside a SwiftUI update (for
+# example after a system appearance change) keeps the product accent instead of
+# falling back to the system blue.
+ASSET_CATALOG="${ROOT}/Resources/Assets.xcassets"
+ACCENT_COLOR_NAME="AccentColor"
+[[ -f "${ASSET_CATALOG}/${ACCENT_COLOR_NAME}.colorset/Contents.json" ]] || {
+    echo "Missing application accent color: ${ASSET_CATALOG}/${ACCENT_COLOR_NAME}.colorset" >&2; exit 1;
+}
+ACTOOL="$(xcrun --find actool 2>/dev/null || true)"
+[[ -n "$ACTOOL" ]] || { echo "Xcode developer tools must provide actool." >&2; exit 1; }
+ASSET_INFO_PLIST="$GENERATED_DIR/asset-catalog-info.plist"
+"$ACTOOL" "$ASSET_CATALOG" \
+    --compile "${CONTENTS}/Resources" \
+    --platform macosx \
+    --minimum-deployment-target "$MIN_MACOS" \
+    --accent-color "$ACCENT_COLOR_NAME" \
+    --output-partial-info-plist "$ASSET_INFO_PLIST" \
+    --errors --warnings --output-format human-readable-text
+[[ -f "${CONTENTS}/Resources/Assets.car" ]] || { echo "Asset catalog compilation produced no Assets.car." >&2; exit 1; }
+[[ "$(plutil -extract NSAccentColorName raw -o - "$ASSET_INFO_PLIST" 2>/dev/null || true)" == "$ACCENT_COLOR_NAME" ]] || {
+    echo "Asset catalog compilation did not declare the application accent color." >&2; exit 1;
+}
+
 record_build_timing "package-runtime"
 
 ARCH_BINARIES=()
@@ -464,13 +489,14 @@ if [[ -f "$ROOT/AppIcon.icns" ]]; then
     HAS_ICON=1
 fi
 
-"$PYTHON" - "${CONTENTS}/Info.plist" "$APP_BUNDLE_ID" "$APP_NAME" "$MIN_MACOS" "$HAS_ICON" "${ARCHITECTURES[@]}" <<'PY'
+"$PYTHON" - "${CONTENTS}/Info.plist" "$APP_BUNDLE_ID" "$APP_NAME" "$MIN_MACOS" "$HAS_ICON" "$ASSET_INFO_PLIST" "${ARCHITECTURES[@]}" <<'PY'
 import plistlib, sys
 from pathlib import Path
 path = Path(sys.argv[1])
 bundle_id, app_name, minimum_macos = sys.argv[2:5]
 has_icon = sys.argv[5] == '1'
-architectures = sys.argv[6:]
+asset_info = plistlib.loads(Path(sys.argv[6]).read_bytes())
+architectures = sys.argv[7:]
 with path.open('rb') as stream:
     data = plistlib.load(stream)
 data['CFBundleIdentifier'] = bundle_id
@@ -482,6 +508,8 @@ if has_icon:
     data['CFBundleIconFile'] = 'AppIcon'
 else:
     data.pop('CFBundleIconFile', None)
+# actool owns the accent declaration it compiled into Assets.car.
+data['NSAccentColorName'] = asset_info['NSAccentColorName']
 with path.open('wb') as stream:
     plistlib.dump(data, stream, sort_keys=False)
 PY

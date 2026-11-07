@@ -59,18 +59,28 @@ not set independent widths, content-driven maximums or raw `.disabled(...)` on
 the Picker. Two selectors in the same comparison row use the same role so their
 columns remain balanced.
 
-Both presentations are dark-mode surfaces. The application declares
-`NSApp.appearance = .darkAqua` once at launch, so every window, sheet, panel,
-menu and reconstructed native control inherits the dark appearance; per-view
-`.preferredColorScheme` is not the AppKit appearance owner. `interactive` keeps
-the native dark control surface with the product purple indicator; `unavailable`
-is the same control dimmed with a muted indicator. The native focus ring is
-suppressed because AppKit would draw it with the system accent; the product
-indicator is the only accent mark. Native control height and title metrics are
-retained: the shared owner must not add a fixed minimum height. Removing the
-native bezel drops the popup title origin from x=12 to x=8, so the owner restores
-the measured 4 pt leading inset inside the fixed width; text alignment then
-matches a bordered popup at every row.
+Both states are the native macOS popup, as released in v0.5.1: `interactive`
+is the enabled control with the product purple indicator and `unavailable` is
+the native disabled control. Core never repaints the bezel, title, indicator,
+focus ring or height. On macOS 26 and later SwiftUI draws the Picker itself
+rather than hosting an `NSPopUpButton`, so a SwiftUI fill or AppKit view-tree
+bridge cannot replace the native drawing; the removed #654/#675 repaint left the
+native body visible on top of its own surface and indicator.
+
+The appearance and accent each have one application-level owner:
+
+- `NSApp.appearance = .darkAqua` is declared once at launch, so every window,
+  sheet, panel, menu and reconstructed control resolves the dark appearance;
+  per-view `.preferredColorScheme` is not the AppKit appearance owner.
+- The product purple is the application accent color
+  (`Resources/Assets.xcassets/AccentColor`, compiled by `build.sh` and declared
+  as `NSAccentColorName`). AppKit resolves the popup indicator, open-menu
+  selection and focus ring from it, including when a control is redrawn outside
+  a SwiftUI update such as a system appearance change. The colour equals
+  `TrainerTheme.accent`. macOS applies an application accent only while the
+  user's system accent is Multicolor (the default); the Picker owner's SwiftUI
+  tint keeps the product purple for SwiftUI-driven updates under an explicitly
+  chosen system accent.
 
 The Hades II material editor is a two-row control: the first row holds its
 icon/title and search field; the second holds the flexible material Picker,
