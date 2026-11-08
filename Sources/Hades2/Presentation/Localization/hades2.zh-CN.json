@@ -37,6 +37,8 @@
     "hades2.error.elementRange": "元素数量必须为 0–{0} 的整数。",
     "hades2.error.exactAlreadyOwned": "该祝福已经生效，请在当前局祝福管理中修改等级或稀有度。",
     "hades2.error.exactNotEligible": "该祝福与当前局状态不兼容，目前无法获取。",
+    "hades2.error.exactRarityUnsupported": "所选祝福不支持以该稀有度获取。",
+    "hades2.error.exactLevelUnsupported": "所选祝福不支持以该等级获取。",
     "hades2.error.chaosExactUnavailable": "当前状态下无法构造该卡俄斯配对。",
     "hades2.error.chaosExactFailed": "卡俄斯配对获取失败，未能建立有效效果。",
     "hades2.error.chaosTraitEditUnavailable": "当前卡俄斯效果暂不支持此项修改。",

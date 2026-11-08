@@ -44,6 +44,11 @@ default to Heroic; an explicitly saved target survives loading. Probability
 editing and the native `GetRarityChances` hook are removed. The existing v17
 serialized `multiplier` field stays at its neutral value for stored documents
 and transport compatibility; old values cannot change native probabilities.
+The panel acts only on the native offer roll (`SetTraitsOnLoot`), so it governs
+naturally offered boons. Exact acquisition (`spawn_reward` with an exact target)
+and `acquire_chaos_pair` never reach that roll: they take the caller's `rarity`
+and `level` within the options each exact catalog row declares (`rarities`,
+`supportsLevel`), validated by the resident.
 
 ## Picker presentation, widths and material editor layout
 

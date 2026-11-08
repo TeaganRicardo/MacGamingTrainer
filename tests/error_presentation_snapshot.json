@@ -1158,6 +1158,14 @@
       ],
       "key": "hades2.error.missingSymbol"
     },
+    "获取稀有度无效。": {
+      "arguments": [],
+      "key": "hades2.error.exactRarityUnsupported"
+    },
+    "获取等级无效。": {
+      "arguments": [],
+      "key": "hades2.error.exactLevelUnsupported"
+    },
     "请先启动  失败（5）": {
       "arguments": [
         " 失败（5）"
@@ -1420,6 +1428,14 @@
     "acquire_chaos_pair::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "acquire_chaos_pair::Selected boon does not support the requested level": {
+      "arguments": [],
+      "key": "hades2.error.exactLevelUnsupported"
+    },
+    "acquire_chaos_pair::Selected boon does not support the requested rarity": {
+      "arguments": [],
+      "key": "hades2.error.exactRarityUnsupported"
     },
     "acquire_chaos_pair::Selected boon is already owned": {
       "arguments": [],
@@ -1975,9 +1991,13 @@
       "arguments": [],
       "key": "hades2.error.exactNotEligible"
     },
-    "spawn_reward::Selected boon became unavailable before acquisition": {
+    "spawn_reward::Selected boon does not support the requested level": {
       "arguments": [],
-      "key": "hades2.error.exactNotEligible"
+      "key": "hades2.error.exactLevelUnsupported"
+    },
+    "spawn_reward::Selected boon does not support the requested rarity": {
+      "arguments": [],
+      "key": "hades2.error.exactRarityUnsupported"
     },
     "spawn_reward::Selected boon is already owned": {
       "arguments": [],
