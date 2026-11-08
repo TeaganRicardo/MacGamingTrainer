@@ -133,11 +133,35 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
 
     path = adapter.profiles.path('战斗')
     document = json.loads(path.read_text())
-    for key, value in [('gameID', 'hades2'), ('schemaVersion', 2), ('schemaVersion', True), ('features', {'health': 100})]:
+    assert document['schemaVersion'] == 2, 'a Profile must identify the current feature set as schema 2'
+    schema_one_set = {key: value for key, value in document['features'].items()
+                      if key not in {'healthLock', 'moneyLock', 'rerollsLock'}}
+    path.write_text(json.dumps({**document, 'schemaVersion': 1, 'features': schema_one_set}))
+    assert adapter.profiles.load('战斗') == document['features'], 'a schema-1 Profile did not migrate'
+    for key, value in [('gameID', 'hades2'), ('schemaVersion', 0), ('schemaVersion', True),
+                       ('features', {'health': 100}), ('features', schema_one_set)]:
         malformed = {**document, key: value}
         path.write_text(json.dumps(malformed))
         rejected('profile_read_failed', lambda: adapter.profiles.load('战斗'))
-        assert json.loads(path.read_text()) == malformed, 'reading modified an invalid or future profile'
+        assert json.loads(path.read_text()) == malformed, 'reading modified an invalid profile'
+    # A Profile from a newer Trainer is refused, skipped by listing and never
+    # replaced by saving the same name; deleting it stays an explicit choice.
+    newer = json.dumps({**document, 'schemaVersion': 3, 'features': {'futureFeature': True}})
+    path.write_text(newer)
+    try:
+        adapter.dispatch('load_profile', {'name': '战斗'}, 'load-newer')
+    except AdapterError as error:
+        assert (error.code, error.presentation) == ('profile_unsupported_schema', 'hades.error.profileNewerFormat')
+    else:
+        raise AssertionError('a Profile from a newer Trainer was loaded')
+    rejected('profile_unsupported_schema', lambda: adapter.dispatch('save_profile', {'name': '战斗'}, 'replace-newer'))
+    logging.disable(logging.CRITICAL)
+    try:
+        listed = adapter.dispatch('list_profiles', {}, 'list-with-newer')['profiles']
+    finally:
+        logging.disable(logging.NOTSET)
+    assert [row['name'] for row in listed] == ['恢复'], listed
+    assert path.read_text() == newer, 'a Profile from a newer Trainer was modified'
     path.write_text(json.dumps(document))
     # One unreadable Profile (truncated write or a newer format) is skipped:
     # it neither hides the others nor fails a save/delete that completed.

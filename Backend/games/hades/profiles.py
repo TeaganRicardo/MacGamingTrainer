@@ -7,7 +7,13 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.persistence import atomic_write_text
-from .schema import migrate_preference_document, preference_document
+from .preferences import refuse_replacing_newer_schema
+from .schema import (PREFERENCE_SCHEMA_VERSION, newer_preference_schema, persisted_preference_document,
+                     preference_document)
+
+
+def _newer_format():
+    return AdapterError('profile_unsupported_schema', 'hades.error.profileNewerFormat')
 
 
 class HadesProfileStore:
@@ -29,14 +35,19 @@ class HadesProfileStore:
     def _read(self, path):
         try:
             value = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError) as error:
+            raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
+        if newer_preference_schema(value):
+            raise _newer_format()
+        try:
             if (not isinstance(value, dict) or set(value) != {'schemaVersion', 'gameID', 'name', 'updatedAt', 'features'}
-                    or type(value['schemaVersion']) is not int or value['schemaVersion'] != 1 or value['gameID'] != 'hades'
+                    or value['gameID'] != 'hades'
                     or self.path(value['name']) != path or self.name(value['name']) != value['name']
                     or not isinstance(value['updatedAt'], str) or not value['updatedAt']):
                 raise ValueError('Invalid Hades profile envelope')
-            value['features'] = migrate_preference_document(value['features'])
+            value['features'] = persisted_preference_document(value['schemaVersion'], value['features'])
             return value
-        except (OSError, ValueError, AdapterError) as error:
+        except (ValueError, AdapterError) as error:
             raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
 
     def list(self):
@@ -61,9 +72,10 @@ class HadesProfileStore:
 
     def save(self, name, features):
         name = self.name(name)
-        document = {'schemaVersion': 1, 'gameID': 'hades', 'name': name,
+        document = {'schemaVersion': PREFERENCE_SCHEMA_VERSION, 'gameID': 'hades', 'name': name,
                     'updatedAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
                     'features': preference_document(features)}
+        refuse_replacing_newer_schema(self.path(name), _newer_format)
         try:
             atomic_write_text(
                 self.path(name), json.dumps(document, ensure_ascii=False, allow_nan=False),
