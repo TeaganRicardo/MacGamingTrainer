@@ -14,7 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / 'tests'
-sys.path.insert(0, str(ROOT / 'Tools'))
+TOOLS = ROOT / 'Tools'
+sys.path.insert(0, str(TOOLS))
 
 from ci_docs_only import is_linux_portable_only, load_macos_only_tests
 from select_macos_pr_tests import selected_tests, source_directories
@@ -31,8 +32,12 @@ def tests_file(relative):
 
 
 def imported_module(dotted):
+    # Native tests import their helpers from tests/ and the tools they exercise
+    # from Tools/ (placed on sys.path); both change what the test verifies.
     path = dotted.replace('.', '/')
-    return tests_file(path + '.py') or tests_file(path + '/__init__.py')
+    tool = (TOOLS / (path + '.py')).resolve()
+    return (tests_file(path + '.py') or tests_file(path + '/__init__.py')
+            or (tool if tool.is_file() and TOOLS in tool.parents else None))
 
 
 def path_parts(node):

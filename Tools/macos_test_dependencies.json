@@ -49,7 +49,10 @@
   "test_multi_game_contexts.py": [
     "tests/macos_fixture_policy.py",
     "tests/real_module_navigation_harness.py",
-    "tests/multi_game_context_harness.py"
+    "tests/multi_game_context_harness.py",
+    "Tools/module_support.py",
+    "Tools/resident_runtime.py",
+    "Tools/supported_build.py"
   ],
   "test_hades2_save_editor_player_journey.py": [
     "tests/fixtures/hades2/save_editor_player_journey.py",
@@ -141,5 +144,9 @@
     "Backend/core/save_metadata.py",
     "Backend/core/save_snapshots.py",
     "Backend/core/save_restore.py"
+  ],
+  "test_build_signing_metadata_macos.py": [
+    "Tools/clean_signing_metadata.py",
+    "Tools/publish_module_build.py"
   ]
 }

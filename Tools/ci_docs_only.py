@@ -130,13 +130,24 @@ def is_linux_portable_only(
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
+    # A declared native-test dependency must run its macOS consumers.
+    return path not in MACOS_TEST_SUPPORT_PATHS and _is_portable_input(
+        path, macos_only_tests, reference_prefixes, app_resource_sources
+    )
+
+
+def _is_portable_input(
+    path: str,
+    macos_only_tests: set[str],
+    reference_prefixes: tuple[str, ...] | None,
+    app_resource_sources: tuple[str, ...],
+) -> bool:
+    """Whether the file itself is consumed only by portable code."""
     if path.endswith(".md"):
         # Documentation never compiles, links, signs or packages the product.
         # Treating it as a build input forced the full unified build onto every
         # mixed docs+code pull request.
         return True
-    if path in MACOS_TEST_SUPPORT_PATHS:
-        return False
     if path.startswith("Backend/"):
         # Portable Backend source is explicitly typed. An unrecognized or
         # native input must not silently become Linux-only.
@@ -173,13 +184,16 @@ def needs_build_for_path(
     # Workflow files describe CI orchestration. Their own changed job graph is
     # exercised by the PR workflow, while Linux contracts pin the product-build
     # invocations. Product recipe inputs remain owned by build/tool paths below.
-    if path in MACOS_TEST_SUPPORT_PATHS or path.startswith(("tests/", ".github/workflows/")) or path in {
+    if path.startswith(("tests/", ".github/workflows/")) or path in {
+        MACOS_TEST_DEPENDENCIES_PATH,
         "Tools/macos_only_tests.txt",
         "Tools/run_macos_checks.sh",
         "Tools/select_macos_pr_tests.py",
     }:
         return False
-    return needs_module_build_for_path(path) or not is_linux_portable_only(
+    # Declaring a file as a native-test dependency selects that test; the file
+    # remains whatever product input it is.
+    return needs_module_build_for_path(path) or not _is_portable_input(
         path, macos_only_tests, reference_prefixes, app_resource_sources
     )
 

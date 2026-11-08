@@ -266,6 +266,12 @@ assert_scope(
 # verification is reserved for shared module/build boundaries.
 assert_scope(["Backend/games/hades/runtime/hades.lua"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["Backend/games/hades2/native/CommandMailbox.c"], docs_only=False, linux=True, macos=True, module_build=False)
+# Declaring a product input as a native-test dependency routes that test; it
+# must not turn the input into fixture support that skips the product build.
+assert "Backend/games/hades2/native/EffectBlockQuery.c" in module.MACOS_TEST_SUPPORT_PATHS
+assert_scope(["Backend/games/hades2/native/EffectBlockQuery.c"], docs_only=False, linux=True, macos=True, module_build=False)
+assert "Tools/clean_signing_metadata.py" in module.MACOS_TEST_SUPPORT_PATHS
+assert_scope(["Tools/resident_runtime.py"], docs_only=False, linux=True, macos=True, module_build=False)
 assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
 assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
