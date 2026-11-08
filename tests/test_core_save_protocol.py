@@ -280,18 +280,14 @@ identity_router.close()
 # lists each executable path, while `pgrep -x` compares only the kernel p_comm,
 # truncated to MAXCOMLEN bytes.
 MACOS_MAXCOMLEN = 16
-# macOS ps(1) sizes its output to a terminal found on stdout, stderr or stdin.
-# The backend worker has none and no COLUMNS, so each line is cut to 79
-# columns unless a doubled -w lifts the width limit.
-MACOS_PS_WIDTH_WITHOUT_TERMINAL = 79
 
 
+# Piped `ps -axo comm=` lists each full executable path; the macOS inventory
+# test test_core_save_target_probe_macos.py proves that on a real host.
 def macos_process_table(*executables):
     def run(command, **kwargs):
-        if command[0] == '/bin/ps' and command[-1] == 'comm=':
-            unlimited = ''.join(command[1:-1]).count('w') >= 2
-            rows = executables if unlimited else [path[:MACOS_PS_WIDTH_WITHOUT_TERMINAL] for path in executables]
-            return SimpleNamespace(returncode=0, stdout=''.join(row + '\n' for row in rows))
+        if command == ['/bin/ps', '-axo', 'comm=']:
+            return SimpleNamespace(returncode=0, stdout=''.join(path + '\n' for path in executables))
         raise AssertionError(f'unexpected process query: {command}')
     return run
 
@@ -309,13 +305,12 @@ with patch.object(protocol_module.subprocess, 'run', macos_process_table(
 hades_suffix = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
 steam_hades = '/Users/fixture/Library/Application Support/Steam/steamapps/common/' + hades_suffix
 steam_hades2 = '/Users/fixture/Library/Application Support/Steam/steamapps/common/Hades II/Hades II.app/Contents/MacOS/Hades II'
-assert min(len(steam_hades), len(steam_hades2)) > MACOS_PS_WIDTH_WITHOUT_TERMINAL
 with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades)):
     assert protocol_module._target_process_running('Game.macOS', hades_suffix) is True, \
-        'A running Steam install path longer than the terminal-less ps width was reported stopped'
+        'A running Steam install was reported stopped (path suffix)'
 with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades2)):
     assert protocol_module._target_process_running('Hades II') is True, \
-        'A running Steam install path longer than the terminal-less ps width was reported stopped'
+        'A running Steam install whose path contains spaces was reported stopped (executable name)'
 with patch.object(protocol_module.subprocess, 'run', macos_process_table(
         '/tmp/AnotherGame/Game.macOS', '/tmp/NotHades/Game.macOS.app/Contents/MacOS/Game.macOS')):
     assert protocol_module._target_process_running('Game.macOS', hades_suffix) is False, \

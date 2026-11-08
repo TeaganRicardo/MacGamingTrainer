@@ -1,8 +1,8 @@
 """The Core Save running-target probe sees a long-path game from a terminal-less worker.
 
-The backend worker runs with piped stdin/stdout and no terminal, which is when
-ps(1) on macOS falls back to a fixed output width. A Steam install path is
-longer than that width, so the probe must list executables at unlimited width.
+The backend worker runs with piped stdio and no terminal. The probe must still
+identify a running Steam-style install whose path is long and contains spaces
+and whose executable name exceeds the kernel's 16-byte process name.
 """
 import os
 import shutil
