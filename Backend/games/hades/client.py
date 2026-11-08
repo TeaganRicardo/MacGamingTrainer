@@ -127,9 +127,6 @@ class HadesRuntimeClient:
         self.game_speed_actual = float(actual)
         return self.game_speed_actual
 
-    def set_invincibility(self, value):
-        return self._call('set_invincibility', {'value': value})
-
     def command(self, method, params):
         if method not in MUTATING_COMMANDS:
             raise ValueError('Unsupported Hades runtime command: ' + method)

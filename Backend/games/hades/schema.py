@@ -41,7 +41,7 @@ ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'ad
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
-    'set_feature', 'set_boon_rarity', 'set_invincibility', 'configure',
+    'set_feature', 'set_boon_rarity', 'configure',
     'configure_locks', 'lock_vital', 'lock_resource', 'lock_rerolls', 'disable_all',
 }
 
