@@ -13,6 +13,7 @@ private final class NativePickerSelectionState {
     var returnQueued = false
     var failure: String?
     var reportedFailure = false
+    var menuStructure: [String] = []
     var accessibilityAction: [String: Any] = [:]
 }
 
@@ -59,9 +60,11 @@ func nativePickerHasName(_ picker: NativeAccessibilityControl, _ name: String) -
     return NativeAccessibilityControl(object: title).text == name
 }
 
-@MainActor
+/// Returns the opened menu's visible structure: section headers prefixed "# ",
+/// then their choices, as the real popup presented them.
+@MainActor @discardableResult
 func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindow,
-                        moving steps: Int, opening: NativePickerOpening) {
+                        moving steps: Int, opening: NativePickerOpening) -> [String] {
     precondition(picker.role == "AXPopUpButton" && picker.enabled && !picker.frame.isEmpty,
                  "selection must address an enabled real native popup")
     if case .accessibility = opening {
@@ -215,6 +218,10 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                 return
             }
             if state.destinationTitle == nil {
+                state.menuStructure = menu.items.filter { !$0.isSeparatorItem && !$0.isHidden }.map { item in
+                    if #available(macOS 14.0, *), item.isSectionHeader { return "# " + item.title }
+                    return item.title
+                }
                 guard choices.filter({ $0.state == .on }).count == 1,
                       let selected = choices.firstIndex(where: { $0.state == .on }),
                       choices.indices.contains(selected + steps) else {
@@ -303,5 +310,6 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
     if state.failure != nil { reportFailure("menu selection rejected") }
     precondition(state.failure == nil, "native picker selection failed: " + (state.failure ?? ""))
     nativePickerPump()
+    return state.menuStructure
 }
 '''

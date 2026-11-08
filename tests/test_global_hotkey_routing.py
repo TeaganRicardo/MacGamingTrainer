@@ -120,10 +120,11 @@ flushCapture()
 precondition(committed == ["second:⌃⌥1"] && capture.issue == nil)
 precondition(!GlobalHotkeys.isShortcutCaptureActive && monitorHandlers.isEmpty)
 
-capture.begin(actionID: "invalid") { _, _ in .rejected(messageKey: "hades.error.shortcutModifier") }
+// A module refuses an assignment it cannot own, e.g. an unknown action.
+capture.begin(actionID: "unknown") { _, _ in .rejected(messageKey: "host.hotkeys.unrecognized") }
 precondition(capture.handleKeyDown(testKey(18, flags: [.shift], characters: "1")) == nil)
 flushCapture()
-precondition(capture.issue == .rejected(messageKey: "hades.error.shortcutModifier"))
+precondition(capture.issue == .rejected(messageKey: "host.hotkeys.unrecognized"))
 precondition(monitorHandlers.isEmpty)
 
 capture.begin(actionID: "escape", onAssign: accept)

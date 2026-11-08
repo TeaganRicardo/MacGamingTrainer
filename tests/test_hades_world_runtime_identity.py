@@ -11,9 +11,14 @@ from games.hades.world import runtime_definitions, runtime_definitions_identity
 class HadesWorldRuntimeIdentity(unittest.TestCase):
     def test_presentation_names_are_outside_runtime_identity(self):
         semantic = {'kind': 'fixture', 'doorAllowed': False}
-        with patch('games.hades.world.REWARDS', {'Fixture': {**semantic, 'names': {'en': 'Before'}}}):
+        with patch('games.hades.world.REWARDS', {'Fixture': {**semantic, 'names': {'en': 'Before'},
+                                                             'group': 'pickup', 'section': 'before'}}):
             before = runtime_definitions_identity(runtime_definitions())
-        with patch('games.hades.world.REWARDS', {'Fixture': {**semantic, 'names': {'en': 'After'}}}):
+        # Names and Generate-row grouping are presentation; regrouping a reward
+        # must not require restarting an attached resident.
+        with patch('games.hades.world.REWARDS', {'Fixture': {**semantic, 'names': {'en': 'After'},
+                                                             'group': 'special', 'section': 'after',
+                                                             'sectionNames': {'en': 'After'}}}):
             self.assertEqual(runtime_definitions_identity(runtime_definitions()), before)
 
     def test_changed_definitions_refuse_existing_runtime_before_mutation(self):

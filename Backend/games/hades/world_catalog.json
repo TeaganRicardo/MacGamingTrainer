@@ -9,7 +9,9 @@
         "en": "Zeus"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "PoseidonUpgrade": {
       "id": "PoseidonUpgrade",
@@ -19,7 +21,9 @@
         "en": "Poseidon"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "AthenaUpgrade": {
       "id": "AthenaUpgrade",
@@ -29,7 +33,9 @@
         "en": "Athena"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "AphroditeUpgrade": {
       "id": "AphroditeUpgrade",
@@ -39,7 +45,9 @@
         "en": "Aphrodite"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "AresUpgrade": {
       "id": "AresUpgrade",
@@ -49,7 +57,9 @@
         "en": "Ares"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "ArtemisUpgrade": {
       "id": "ArtemisUpgrade",
@@ -59,7 +69,9 @@
         "en": "Artemis"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "DionysusUpgrade": {
       "id": "DionysusUpgrade",
@@ -69,7 +81,9 @@
         "en": "Dionysus"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "DemeterUpgrade": {
       "id": "DemeterUpgrade",
@@ -79,7 +93,9 @@
         "en": "Demeter"
       },
       "rewardType": "Boon",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "HermesUpgrade": {
       "id": "HermesUpgrade",
@@ -89,7 +105,9 @@
         "en": "Hermes"
       },
       "rewardType": "HermesUpgrade",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "olympian",
+      "section": "olympians"
     },
     "WeaponUpgrade": {
       "id": "WeaponUpgrade",
@@ -99,7 +117,9 @@
         "en": "Daedalus Hammer"
       },
       "rewardType": "WeaponUpgrade",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "standardDrops"
     },
     "StackUpgrade": {
       "id": "StackUpgrade",
@@ -109,7 +129,9 @@
         "en": "Pom of Power"
       },
       "rewardType": "StackUpgrade",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "standardDrops"
     },
     "TrialUpgrade": {
       "id": "TrialUpgrade",
@@ -119,7 +141,13 @@
         "en": "Chaos"
       },
       "rewardType": "TrialUpgrade",
-      "doorAllowed": false
+      "doorAllowed": false,
+      "group": "special",
+      "section": "chaos",
+      "sectionNames": {
+        "zh-CN": "卡俄斯",
+        "en": "Chaos"
+      }
     },
     "RoomRewardMetaPointDrop": {
       "id": "RoomRewardMetaPointDrop",
@@ -129,7 +157,9 @@
         "en": "Darkness"
       },
       "rewardType": "RoomRewardMetaPointDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "GemDrop": {
       "id": "GemDrop",
@@ -139,7 +169,9 @@
         "en": "Gemstones"
       },
       "rewardType": "GemDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "LockKeyDrop": {
       "id": "LockKeyDrop",
@@ -149,7 +181,9 @@
         "en": "Chthonic Keys"
       },
       "rewardType": "LockKeyDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "GiftDrop": {
       "id": "GiftDrop",
@@ -159,7 +193,9 @@
         "en": "Nectar"
       },
       "rewardType": "GiftDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "SuperGemDrop": {
       "id": "SuperGemDrop",
@@ -169,7 +205,9 @@
         "en": "Diamond"
       },
       "rewardType": "SuperGemDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "SuperLockKeyDrop": {
       "id": "SuperLockKeyDrop",
@@ -179,7 +217,9 @@
         "en": "Titan Blood"
       },
       "rewardType": "SuperLockKeyDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "SuperGiftDrop": {
       "id": "SuperGiftDrop",
@@ -189,7 +229,9 @@
         "en": "Ambrosia"
       },
       "rewardType": "SuperGiftDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "metaResources"
     },
     "RoomRewardMaxHealthDrop": {
       "id": "RoomRewardMaxHealthDrop",
@@ -199,7 +241,9 @@
         "en": "Centaur Heart"
       },
       "rewardType": "RoomRewardMaxHealthDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "standardDrops"
     },
     "RoomRewardMoneyDrop": {
       "id": "RoomRewardMoneyDrop",
@@ -209,7 +253,9 @@
         "en": "Charon's Obol"
       },
       "rewardType": "RoomRewardMoneyDrop",
-      "doorAllowed": true
+      "doorAllowed": true,
+      "group": "pickup",
+      "section": "standardDrops"
     }
   },
   "terms": {

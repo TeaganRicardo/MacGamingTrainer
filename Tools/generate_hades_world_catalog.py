@@ -13,9 +13,22 @@ OUTPUT = ROOT / 'Backend/games/hades/world_catalog.json'
 OLYMPIANS = ('ZeusUpgrade', 'PoseidonUpgrade', 'AthenaUpgrade', 'AphroditeUpgrade',
              'AresUpgrade', 'ArtemisUpgrade', 'DionysusUpgrade', 'DemeterUpgrade')
 LOOT = (*OLYMPIANS, 'HermesUpgrade', 'WeaponUpgrade', 'StackUpgrade', 'TrialUpgrade')
-CONSUMABLES = ('RoomRewardMetaPointDrop', 'GemDrop', 'LockKeyDrop', 'GiftDrop',
-               'SuperGemDrop', 'SuperLockKeyDrop', 'SuperGiftDrop',
-               'RoomRewardMaxHealthDrop', 'RoomRewardMoneyDrop')
+META_DROPS = ('RoomRewardMetaPointDrop', 'GemDrop', 'LockKeyDrop', 'GiftDrop',
+              'SuperGemDrop', 'SuperLockKeyDrop', 'SuperGiftDrop')
+CONSUMABLES = (*META_DROPS, 'RoomRewardMaxHealthDrop', 'RoomRewardMoneyDrop')
+# Generate-reward rows follow the Hades II resident catalog's classification:
+# Olympian gods and Hermes are Olympian boon loot; Hammer, Pom, Centaur Heart
+# and Obol are standard pickups, permanent resources are meta pickups; Chaos is
+# a character reward grouped under its native NPC. Sections without a native
+# title take a Trainer-owned bilingual label from the frontend.
+GROUPS = {
+    **{identifier: ('olympian', 'olympians') for identifier in (*OLYMPIANS, 'HermesUpgrade')},
+    **{identifier: ('pickup', 'standardDrops') for identifier in
+       ('WeaponUpgrade', 'StackUpgrade', 'RoomRewardMaxHealthDrop', 'RoomRewardMoneyDrop')},
+    **{identifier: ('pickup', 'metaResources') for identifier in META_DROPS},
+    'TrialUpgrade': ('special', 'chaos'),
+}
+SECTION_TEXT_IDS = {'chaos': 'NPC_Chaos_01'}
 TERMS = {'trove': 'ChallengeSwitch', 'well': 'Store_Title', 'purge': 'SellTrait_Title',
          'fishing': 'FishingPoint', 'chaos': 'HealthGate'}
 SCRIPTS = ('RoomManager.lua', 'RunManager.lua', 'RoomEvents.lua', 'RoomPresentation.lua',
@@ -42,12 +55,20 @@ def generate(content):
             raise ValueError(f'Missing native bilingual name: {identifier}')
         return result
 
-    rewards = {identifier: {
-        'id': identifier, 'kind': 'loot' if identifier in LOOT else 'consumable',
-        'names': names(identifier),
-        'rewardType': 'Boon' if identifier in OLYMPIANS else identifier,
-        'doorAllowed': identifier != 'TrialUpgrade',
-    } for identifier in (*LOOT, *CONSUMABLES)}
+    def reward(identifier):
+        group, section = GROUPS[identifier]
+        row = {
+            'id': identifier, 'kind': 'loot' if identifier in LOOT else 'consumable',
+            'names': names(identifier),
+            'rewardType': 'Boon' if identifier in OLYMPIANS else identifier,
+            'doorAllowed': identifier != 'TrialUpgrade',
+            'group': group, 'section': section,
+        }
+        if section in SECTION_TEXT_IDS:
+            row['sectionNames'] = names(SECTION_TEXT_IDS[section])
+        return row
+
+    rewards = {identifier: reward(identifier) for identifier in (*LOOT, *CONSUMABLES)}
     paths.extend(content / 'Scripts' / name for name in SCRIPTS)
     return {
         'schemaVersion': 1, 'rewards': rewards,

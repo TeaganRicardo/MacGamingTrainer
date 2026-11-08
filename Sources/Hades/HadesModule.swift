@@ -29,6 +29,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var traits: [HadesCurrentTrait] = []
     @Published private(set) var world: HadesWorldObservation?
     @Published private(set) var worldRewards: [HadesWorldReward] = []
+    /// The shown selection of each Generate row; its shortcut generates it.
+    @Published var selectedRewards: [HadesRewardGroup: String] = [:]
     @Published private(set) var worldTerms: [String: [String: String]] = [:]
     @Published private(set) var catalog: [HadesCatalogEntry] = []
     @Published private(set) var resourceCatalog: [HadesResourceDefinition] = []
@@ -266,20 +268,33 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func gainResource(_ resource: String, amount: Double, target: HadesHeroTarget?) {
         sendToHero("gain_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.gainResource")
     }
-    func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String) {
+    @discardableResult
+    func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String,
+                     completion: ((Bool) -> Void)? = nil) -> Bool {
         guard let roomID, roomID == world?.roomId else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleRoom"), tone: .warning)
-            return
+            return false
         }
         var payload = params
         payload["roomId"] = roomID
-        sendToHero(command, params: payload, target: target, operation: operation)
+        return sendToHero(command, params: payload, target: target, operation: operation, completion: completion)
     }
-    func generateFishing() {
-        worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing")
+    func generateFishing(completion: ((Bool) -> Void)? = nil) {
+        worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
     }
-    func generateChaosGate() {
-        worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate")
+    func generateChaosGate(completion: ((Bool) -> Void)? = nil) {
+        worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate", completion: completion)
+    }
+    /// A Generate row acts for a ready hero in an observed room.
+    var canSpawnReward: Bool { canMutate && world != nil }
+    /// One Generate row's rewards, in world-catalog order.
+    func rewards(in group: HadesRewardGroup) -> [HadesWorldReward] { worldRewards.filter { $0.group == group } }
+    /// Generates one reward of a row in the current room; false when the row cannot act on it.
+    @discardableResult
+    func spawnReward(_ reward: String, in group: HadesRewardGroup, completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canSpawnReward, rewards(in: group).contains(where: { $0.id == reward }) else { return false }
+        return worldAction("spawn_reward", roomID: world?.roomId, params: ["reward": reward],
+                           operation: "hades.spawnReward", completion: completion)
     }
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
         sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")
@@ -400,23 +415,23 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             ?? HadesPresentation.text("hades.unknownTrait", language: language)
     }
 
-    private func sendToHero(_ command: String, params: [String: Any] = [:], target captured: HadesHeroTarget?, operation: String) {
-        guard canMutate else { return }
+    @discardableResult
+    private func sendToHero(_ command: String, params: [String: Any] = [:], target captured: HadesHeroTarget?,
+                            operation: String, completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMutate else { return false }
         guard let captured, captured == target else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
-            return
+            return false
         }
         var payload = params
         payload["target"] = captured.payload
-        send(command, params: payload, operation: operation)
+        send(command, params: payload, operation: operation, completion: completion)
+        return true
     }
 
     func shortcutText(_ action: HadesShortcutAction) -> String { shortcuts.chord(action).displayText }
     @discardableResult
     func setShortcut(_ action: HadesShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {
-        guard chord.modifiers & (HotkeyChord.controlModifier | HotkeyChord.optionModifier | HotkeyChord.commandModifier) != 0 else {
-            return .rejected(messageKey: "hades.error.shortcutModifier")
-        }
         if let conflict = shortcuts.set(action, chord: chord) {
             return .conflict(actionID: conflict.rawValue)
         }
@@ -441,19 +456,38 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
+    /// Hades II's refusal feedback: a log line, a warning notice and the rejected sound.
+    private func rejectShortcut(_ actionID: String) {
+        logSink.append("shortcut.rejected action=\(actionID) reason=unavailable")
+        presentFeedback(TrainerTextToken(key: "hades.shortcut.unavailable"), tone: .warning)
+        TrainerHotkeyFeedbackPlayer.play(.rejected)
+    }
+
+    private static func playOneShotShortcutResult(_ success: Bool) {
+        TrainerHotkeyFeedbackPlayer.play(success ? .completed : .rejected)
+    }
+
     func performShortcut(_ rawValue: String) {
-        guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue),
-              canPerformShortcut(action) else {
-            TrainerHotkeyFeedbackPlayer.play(.rejected); return
+        guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue) else {
+            rejectShortcut(rawValue); return
         }
-        if action == .generateFishing { generateFishing() }
-        else if action == .generateChaosGate { generateChaosGate() }
+        // A Generate row's shortcut acts on the selection the row shows, under
+        // the same gate as its button.
+        if let group = action.rewardGroup {
+            if !spawnReward(selectedRewards[group] ?? "", in: group, completion: Self.playOneShotShortcutResult) {
+                rejectShortcut(rawValue)
+            }
+            return
+        }
+        guard canPerformShortcut(action) else { rejectShortcut(rawValue); return }
+        if action == .generateFishing { generateFishing(completion: Self.playOneShotShortcutResult) }
+        else if action == .generateChaosGate { generateChaosGate(completion: Self.playOneShotShortcutResult) }
         else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
             let delta = action == .decreaseGameSpeed ? -0.1 : 0.1
             let current = number(.gameSpeed)
             let next = min(10.0, max(0.0, (current + delta) * 10.0).rounded() / 10.0)
             guard abs(next - current) >= 0.0001 else {
-                TrainerHotkeyFeedbackPlayer.play(.rejected)
+                rejectShortcut(rawValue)
                 return
             }
             setFeature(.gameSpeed, value: next)
@@ -552,6 +586,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             traitNames = decoded.traitNames ?? [:]
             worldRewards = decoded.worldRewards ?? []
             worldTerms = decoded.worldTerms ?? [:]
+            // Each Generate row shows a reward the catalog still offers it.
+            for group in HadesRewardGroup.allCases {
+                let offered = rewards(in: group)
+                if !offered.contains(where: { $0.id == selectedRewards[group] }) {
+                    selectedRewards[group] = offered.first?.id
+                }
+            }
         }
         guard payload["connected"] != nil else { return }
         let state = try JSONDecoder().decode(HadesObservation.self, from: data)

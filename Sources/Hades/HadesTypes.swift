@@ -123,13 +123,37 @@ struct HadesCurrentTrait: Decodable, Identifiable, Equatable {
     }
 }
 
+/// The Generate row a reward belongs to. The world catalog classifies each
+/// reward as Hades II's resident catalog does.
+enum HadesRewardGroup: String, Decodable, CaseIterable {
+    case olympian, pickup, special
+
+    /// The shortcut that generates this row's shown selection.
+    var shortcut: HadesShortcutAction {
+        switch self {
+        case .olympian: .spawnOlympian
+        case .pickup: .spawnPickup
+        case .special: .spawnSpecial
+        }
+    }
+}
+
 struct HadesWorldReward: Decodable, Identifiable {
     let id: String
     let kind: String
     let names: [String: String]
     let doorAllowed: Bool
+    let group: HadesRewardGroup
+    /// Section identity inside its Generate row, in catalog order.
+    let section: String
+    /// The section's native title where the game names it.
+    let sectionNames: [String: String]?
     func name(language: TrainerPresentationLanguage) -> String {
         names[language.rawValue] ?? names["en"] ?? id
+    }
+    /// Both official names, "中文 · English", as Hades II labels generated rewards.
+    var bilingualName: String {
+        [names["zh-CN"], names["en"]].compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -227,16 +251,23 @@ struct HadesNumberDraft {
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
     case decreaseGameSpeed, increaseGameSpeed
-    case boonRarityEnabled, generateFishing, generateChaosGate, disableAll
+    case boonRarityEnabled, generateFishing, generateChaosGate
+    case spawnOlympian, spawnPickup, spawnSpecial
+    case disableAll
     var id: String { rawValue }
     var key: String {
         switch self {
         case .disableAll: "host.disableAll"
         case .decreaseGameSpeed: "hades.shortcut.decreaseGameSpeed"
         case .increaseGameSpeed: "hades.shortcut.increaseGameSpeed"
+        case .spawnOlympian: "hades.shortcut.spawnOlympian"
+        case .spawnPickup: "hades.shortcut.spawnPickup"
+        case .spawnSpecial: "hades.shortcut.spawnSpecial"
         default: "hades.\(rawValue)"
         }
     }
+    /// The Generate row whose shown selection this shortcut generates.
+    var rewardGroup: HadesRewardGroup? { HadesRewardGroup.allCases.first { $0.shortcut == self } }
     var defaultChord: HotkeyChord { HadesShortcutStore.defaultLayout()[self]! }
 }
 
