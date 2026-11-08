@@ -42,6 +42,7 @@
 "host.backend.error.outcomeUnknown" = "The operation outcome is unknown and was not retried. Inspect the result and any recovery evidence before repeating it.";
 "host.backend.error.targetOutcomeUnknown" = "The game operation outcome is unknown and was not retried. Inspect and restart the game before reconnecting.";
 "host.backend.error.notSent" = "The request was not sent. Reconnect the backend before trying again.";
+"host.backend.error.targetRestartRequired" = "A previous game operation's outcome is unknown, so this request was not sent. Restart the game, then reconnect.";
 "host.save.error.workspaceExpired" = "The backend that opened this document has stopped. Your source, target and drafts are retained. Read the source again and check the target before applying changes.";
 "host.save.error.applyUnconfirmed" = "The Apply outcome is unconfirmed. Check the target and any recovery copies, then read the source again before making further changes.";
 "host.save.warning.workerChanged" = "The backend has restarted. Refresh this list before choosing a save operation.";
