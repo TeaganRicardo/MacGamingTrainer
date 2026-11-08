@@ -178,8 +178,6 @@ class HadesAdapter(GameAdapter):
             if not state.get('connected'):
                 state = {**state, 'features': self.features}
             return self._observe(state)
-        if command == 'set_invincibility':
-            command, params = 'set_feature', {'feature': 'invincibility', 'value': params.get('value')}
         if command == 'set_boon_rarity':
             self._require_known_desired_state()
             target = preference_value('boonRarityTarget', params.get('target'))

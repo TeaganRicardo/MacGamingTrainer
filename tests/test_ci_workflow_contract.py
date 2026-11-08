@@ -1,263 +1,237 @@
+"""Workflow-level contracts that cannot execute outside GitHub Actions.
+
+The scripts the workflows call own their behavior tests (scope classification,
+PR smoke selection, runners, build). This file keeps only the workflow
+configuration that AGENTS.md states: PR/dispatch triggers, the stable required
+check contexts with their Ubuntu fast path, fail-closed scope decisions, the
+PR/convergence split, exact-SHA checkout, immutable actions and the pinned
+Python runtime. Rules read a parsed step model, never incidental line text.
+"""
 import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOWS = [
-    ROOT / '.github/workflows/linux-contracts.yml',
-    ROOT / '.github/workflows/build2-macos.yml',
-    ROOT / '.github/workflows/module-build-matrix.yml',
-]
-PYTHON_WORKFLOWS = [
-    *WORKFLOWS,
-    ROOT / '.github/workflows/direct-release.yml',
-]
-RUNTIME_VERSION = json.loads((ROOT / 'Tools/python_runtime.json').read_text())["version"]
-match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?", RUNTIME_VERSION)
-assert match, f"unsupported pinned Python version format: {RUNTIME_VERSION}"
-CI_PYTHON_VERSION = (
-    f"{match.group(1)}-{match.group(2)}.{match.group(3)}"
-    if match.group(2)
-    else match.group(1)
+WORKFLOW_DIR = ROOT / '.github/workflows'
+TASK_WORKFLOWS = ('linux-contracts.yml', 'build2-macos.yml', 'module-build-matrix.yml')
+RELEASE_WORKFLOW = 'direct-release.yml'
+PULL_REQUEST = "github.event_name == 'pull_request'"
+DISPATCH = "github.event_name == 'workflow_dispatch'"
+
+
+def _scalar(value):
+    value = value.split(' #', 1)[0].strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '\'"':
+        return value[1:-1]
+    return value
+
+
+def _parse_block(lines, index, indent):
+    if lines[index][1].startswith('- '):
+        sequence = []
+        while index < len(lines) and lines[index][0] == indent and lines[index][1].startswith('- '):
+            item = lines[index][1][2:].strip()
+            if re.match(r'[\w.-]+:(\s|$)', item):
+                lines[index] = (indent + 2, item)
+                node, index = _parse_block(lines, index, indent + 2)
+            else:
+                node, index = _scalar(item), index + 1
+            sequence.append(node)
+        return sequence, index
+    mapping = {}
+    while index < len(lines) and lines[index][0] == indent and not lines[index][1].startswith('- '):
+        key, separator, value = lines[index][1].partition(':')
+        assert separator, f'unsupported workflow line: {lines[index][1]}'
+        value = value.strip()
+        index += 1
+        if value in ('|', '>'):
+            block = []
+            while index < len(lines) and lines[index][0] > indent:
+                block.append(lines[index][1])
+                index += 1
+            mapping[key] = '\n'.join(block)
+        elif value:
+            mapping[key] = _scalar(value)
+        elif index < len(lines) and (lines[index][0] > indent or lines[index][1].startswith('- ')):
+            mapping[key], index = _parse_block(lines, index, lines[index][0])
+        else:
+            mapping[key] = None
+    return mapping, index
+
+
+def parse_workflow(path):
+    """Parse the block-style YAML subset the workflows use (no PyYAML in CI)."""
+    lines = []
+    for raw in path.read_text(encoding='utf-8').splitlines():
+        content = raw.strip()
+        if content and not content.startswith('#'):
+            lines.append((len(raw) - len(raw.lstrip(' ')), content))
+    workflow, index = _parse_block(lines, 0, 0)
+    assert index == len(lines), f'{path.name}: unparsed line {lines[index][1]!r}'
+    return workflow
+
+
+def steps(job):
+    return job.get('steps') or []
+
+
+def conjuncts(condition):
+    """Top-level `&&` terms of a workflow condition."""
+    text = str(condition or '').strip()
+    if text.startswith('${{') and text.endswith('}}'):
+        text = text[3:-2]
+    terms, depth, start = [], 0, 0
+    for index, character in enumerate(text):
+        depth += {'(': 1, ')': -1}.get(character, 0)
+        if depth == 0 and text.startswith('&&', index):
+            terms.append(text[start:index].strip())
+            start = index + 2
+    terms.append(text[start:].strip())
+    return terms
+
+
+workflows = {name: parse_workflow(WORKFLOW_DIR / name) for name in (*TASK_WORKFLOWS, RELEASE_WORKFLOW)}
+all_steps = {
+    name: [(job_id, step) for job_id, job in workflow['jobs'].items() for step in steps(job)]
+    for name, workflow in workflows.items()
+}
+
+# Merged main does not repeat task verification; only the release workflow has
+# its own trigger, and it never runs for pull requests.
+for name in TASK_WORKFLOWS:
+    assert set(workflows[name]['on']) == {'pull_request', 'workflow_dispatch'}, (name, workflows[name]['on'])
+    # Only pull-request runs cancel superseded runs: a repeated dispatch must
+    # not cancel the exact-SHA convergence build a release is waiting on.
+    assert workflows[name]['concurrency']['cancel-in-progress'] == "${{ github.event_name == 'pull_request' }}", name
+assert 'pull_request' not in workflows[RELEASE_WORKFLOW]['on']
+
+# The stable required contexts `backend-contracts`, `build` and
+# `build (reference_fixture)` always report: the job is never skipped, falls
+# back to an Ubuntu fast path when platform work is unnecessary, and fails
+# closed when its scope dependency failed.
+REQUIRED_JOBS = {
+    'linux-contracts.yml': 'backend-contracts',
+    'build2-macos.yml': 'build',
+    'module-build-matrix.yml': 'build',
+}
+for name, job_id in REQUIRED_JOBS.items():
+    job = workflows[name]['jobs'][job_id]
+    assert job.get('if') in (None, '${{ always() }}'), (name, job_id, job.get('if'))
+    runs_on = job['runs-on']
+    assert runs_on == 'ubuntu-latest' or re.search(r"\|\|\s*'ubuntu-latest'\s*\}\}$", runs_on), (name, runs_on)
+    declared = job.get('needs') or []
+    declared = {declared} if isinstance(declared, str) else set(declared)
+    referenced = set(re.findall(r'needs\.([\w-]+)\.', json.dumps(job)))
+    assert referenced <= declared, (name, job_id, referenced - declared)
+    for dependency in declared:
+        assert any(
+            f"needs.{dependency}.result != 'success'" in str(step.get('if')) and 'exit 1' in str(step.get('run'))
+            for step in steps(job)
+        ), f'{name}: {job_id} must fail closed when {dependency} fails'
+games = workflows['module-build-matrix.yml']['jobs']['build']['strategy']['matrix']['game']
+assert 'reference_fixture' in games, games
+assert 'hades' in games, 'isolated Hades diagnostics run on explicit convergence'
+
+# An unclassified change (no true|false decision) fails closed instead of
+# silently taking the fast path.
+DECISIONS = {
+    'linux-contracts.yml': ('needs_linux',),
+    'build2-macos.yml': ('needs_macos', 'needs_full_build'),
+    'module-build-matrix.yml': ('needs_module',),
+}
+for name, outputs in DECISIONS.items():
+    for output in outputs:
+        reference = f'steps.scope.outputs.{output}'
+        assert any(
+            f"{reference} != 'true'" in str(step.get('if'))
+            and f"{reference} != 'false'" in str(step.get('if'))
+            and 'exit 1' in str(step.get('run'))
+            for _, step in all_steps[name]
+        ), f'{name}: unclassified {output} must fail closed'
+
+# Recurring verification is PR-owned and diff-based gates need a PR base; full
+# macOS contracts, mutation audits, packaging/provenance and retained artifacts
+# belong to exact-SHA convergence dispatch.
+LANES = (
+    ('diff gate', PULL_REQUEST, lambda run, step: 'Tools/check_runtime_revision.py' in run),
+    ('macOS PR smoke', PULL_REQUEST,
+     lambda run, step: 'Tools/run_macos_checks.sh --pr' in run or 'Tools/select_macos_pr_tests.py' in run),
+    ('full macOS contracts', DISPATCH, lambda run, step: re.search(r'Tools/run_macos_checks\.sh\s*$', run, re.M)),
+    ('mutation audit', DISPATCH, lambda run, step: 'Tools/mutation_gate.py' in run),
+    ('package/provenance', DISPATCH, lambda run, step: '_build_provenance.py' in run or 'ditto -c' in run),
+    ('retained artifact', DISPATCH, lambda run, step: str(step.get('uses', '')).startswith('actions/upload-artifact@')
+     and 'artifacts/' in str((step.get('with') or {}).get('path'))),
 )
+EXPECTED_LANES = {
+    'linux-contracts.yml': {'diff gate'},
+    'build2-macos.yml': {'macOS PR smoke', 'full macOS contracts', 'mutation audit',
+                         'package/provenance', 'retained artifact'},
+    'module-build-matrix.yml': {'package/provenance', 'retained artifact'},
+}
+for name, expected in EXPECTED_LANES.items():
+    found = set()
+    for job_id, step in all_steps[name]:
+        for lane, event, matches in LANES:
+            if matches(str(step.get('run') or ''), step):
+                found.add(lane)
+                assert event in conjuncts(step.get('if')), (
+                    f"{name}: {step.get('name') or step.get('uses')} ({lane}) must require {event}"
+                )
+    assert found == expected, (name, found)
 
-# Every setup-python step in all four workflows must consume the same version
-# derived from the bundled-runtime manifest. The direct-release workflow is
-# intentionally included here even though it has a separate workflow contract.
-for workflow in PYTHON_WORKFLOWS:
-    assert workflow.is_file(), workflow
-    text = workflow.read_text()
-    setup_matches = list(re.finditer(r'actions/setup-python@[0-9a-f]{40}', text))
-    assert setup_matches, f'{workflow.name}: setup-python must use an immutable commit'
-    for setup_match in setup_matches:
-        setup_window = text[setup_match.start():setup_match.start() + 300]
-        assert f"python-version: '{CI_PYTHON_VERSION}'" in setup_window, (
-            f'{workflow.name}: every setup-python step must match Tools/python_runtime.json'
-        )
+# Evidence belongs to the exact PR head: one workflow-level BASE/HEAD pair feeds
+# both the scope classifier and every executable checkout.
+for name in TASK_WORKFLOWS:
+    workflow = workflows[name]
+    assert 'github.event.pull_request.head.sha' in workflow['env']['HEAD_SHA'], name
+    for job_id, job in workflow['jobs'].items():
+        scopes = [job.get('env') or {}, *((step.get('env') or {}) for step in steps(job))]
+        assert not any({'BASE_SHA', 'HEAD_SHA'} & set(scope) for scope in scopes), (name, job_id)
+    checkouts = [step for _, step in all_steps[name] if str(step.get('uses', '')).startswith('actions/checkout@')]
+    assert checkouts and all(step['with']['ref'] == '${{ env.HEAD_SHA }}' for step in checkouts), name
 
-for workflow in WORKFLOWS:
-    assert workflow.is_file(), workflow
-    text = workflow.read_text()
+# Supply-chain inputs are immutable commits. The runner context is unavailable
+# at job level: using it there makes GitHub reject the whole workflow file.
+for name, workflow in workflows.items():
+    for job_id, step in all_steps[name]:
+        if 'uses' in step:
+            assert re.fullmatch(r'[\w.-]+/[\w./-]+@[0-9a-f]{40}', step['uses']), (name, step['uses'])
+    for job_id, job in workflow['jobs'].items():
+        assert not any('runner.' in str(value) for value in (job.get('env') or {}).values()), (name, job_id)
 
-    setup_match = re.search(r'actions/setup-python@[0-9a-f]{40}', text)
-    assert setup_match, f'{workflow.name}: setup-python must use an immutable commit'
-    first_setup = setup_match.start()
-    first_python = min(
-        index for token in ('python3 ', 'python -')
-        if (index := text.find(token)) >= 0
-    )
-    assert first_setup < first_python, (
-        f'{workflow.name}: project Python runs before the pinned setup-python step'
-    )
-    setup_window = text[first_setup:first_setup + 300]
-    assert f"python-version: '{CI_PYTHON_VERSION}'" in setup_window, (
-        f'{workflow.name}: first setup-python must match Tools/python_runtime.json'
-    )
-
-    # Every lane resolves the change scope exactly once, at workflow level.
-    # Both consumers must read the same BASE_SHA/HEAD_SHA pair, so a PR that is
-    # behind main cannot have unrelated main-side changes pollute its routing.
-    assert 'env:' in text, f'{workflow.name}: missing workflow-level env block'
-    assert 'BASE_SHA:' in text, f'{workflow.name}: missing workflow-level BASE_SHA'
-    assert 'HEAD_SHA:' in text, f'{workflow.name}: missing workflow-level HEAD_SHA'
-    assert 'github.event.pull_request.head.sha || github.sha' in text, (
-        f'{workflow.name}: HEAD_SHA must resolve to the PR head, not the merge ref'
-    )
-    inline = re.findall(
-        r"^(?P<indent>[ ]{4,})BASE_SHA: \$\{\{ github\.event_name == 'pull_request'[^}]*\}\}",
-        text,
-        re.M,
-    )
-    step_inline = re.findall(
-        r"^(?P<indent>[ ]{4,})HEAD_SHA: \$\{\{ github\.event_name == 'pull_request'[^}]*\}\}",
-        text,
-        re.M,
-    )
-    assert not inline and not step_inline, (
-        f'{workflow.name}: change scope must not be re-declared inline per step'
-    )
-
-    # Cancellation: PR runs cancel stale superseded runs of the same PR; main
-    # pushes never cancel each other.
-    assert 'concurrency:' in text, f'{workflow.name}: missing concurrency control'
-    assert 'group: ${{ github.workflow }}-' in text, f'{workflow.name}: concurrency group must include workflow name'
-    assert re.search(r'cancel-in-progress:.*', text), (
-        f'{workflow.name}: cancel-in-progress must be declared'
-    )
-
-    # The executable checkout must be the same HEAD_SHA used for diff scope.
-    # A scope-only HEAD_SHA with default PR merge checkout gives false
-    # exact-head provenance even when both trees happen to match.
-    checkouts = re.findall(r'^([ ]*)- uses: actions/checkout@[0-9a-f]{40}[^\n]*\n((?:[ ]+[^\n]*\n)*)', text, re.M)
-    assert checkouts, f'{workflow.name}: no executable checkout found'
-    for _, block in checkouts:
-        assert re.search(r'^\s+ref: \$\{\{ env\.HEAD_SHA \}\}$', block, re.M), (
-            f'{workflow.name}: executable checkout must pin the intended HEAD_SHA'
-        )
-
-linux = (ROOT / '.github/workflows/linux-contracts.yml').read_text()
-assert 'python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA"' in linux
-assert "steps.scope.outputs.needs_linux == 'true'" in linux
-assert "steps.scope.outputs.needs_linux != 'true' && steps.scope.outputs.needs_linux != 'false'" in linux
-assert "steps.scope.outputs.needs_linux == 'false'" in linux
-runtime_line = [line for line in linux.splitlines() if 'check_runtime_revision.py' in line][0]
-assert '"$BASE_SHA"' in runtime_line and '"$HEAD_SHA"' in runtime_line
-runner = (ROOT / 'Tools/run_linux_checks.sh').read_text()
-assert 'python3 Tools/validate_game_module.py --all' in runner
-assert 'validate_game_module.py hades2' not in runner
-
-for shared_tool in (
-    ROOT / 'Tools/ci_docs_only.py',
-    ROOT / 'Tools/module_inventory.py',
-    ROOT / 'Tools/run_linux_checks.sh',
-):
-    assert 'hades2' not in shared_tool.read_text(), (
-        f'{shared_tool.name}: shared module discovery/routing must not name a game id'
-    )
-
-build2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
-assert 'scope:\n    runs-on: ubuntu-latest' in build2
-assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
-assert 'needs_build: ${{ steps.scope.outputs.needs_build }}' in build2
-assert 'needs_full_build: ${{ steps.scope.outputs.needs_full_build }}' in build2
-assert 'needs: scope' in build2
-assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
-assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in build2
-# The product declares only the arm64 architecture. An x64 PR profile built an
-# artifact CI never executed and needed a 2x outer scale that hid real margins.
-assert 'macos-26-intel' not in build2, 'PR and convergence must share the ARM64 profile'
-assert 'MGT_MACOS_OUTER_TIMEOUT_SCALE' not in build2, 'no runner profile may scale the outer timeout'
-assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
-assert "needs.scope.outputs.needs_macos == 'false'" in build2
-assert 'bash Tools/run_macos_checks.sh' in build2
-assert 'bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"' in build2
-# Coverage evidence must outlive the lane's temporary directory, and `runner` is
-# only available in a step: using it in a job-level env block makes the whole
-# workflow fail to load, which GitHub reports as a run named after the file.
-for block in re.split(r"(?m)^    env:\n", build2)[1:]:
-    job_env = block.split("\n    steps:", 1)[0]
-    assert "${{ runner." not in job_env, "job-level env cannot use the runner context"
-for step in ("Run full macOS contracts for release convergence",
-             "Run selected macOS PR smoke tests"):
-    window = build2[build2.index(step):][:800]
-    assert "MGT_FIXTURE_TIMINGS" in window, step
-    assert "MGT_MACOS_COVERAGE_OUTPUT" in window, step
-assert build2.index("Build Lua 5.2 runtime test dependency") < build2.index("Run full macOS contracts for release convergence")
-assert build2.index("Build Lua 5.2 runtime test dependency") < build2.index("Run selected macOS PR smoke tests")
-assert "steps.test-selection.outputs.lua52_native == 'true'" in build2
-assert "MGT_MACOS_SELECTION=$selection" in build2
-
-# Convergence must be able to finish: it runs the full native inventory, the
-# resident mutation gate and the unified build in one job, and a measured
-# dispatch run hit the 30 minute limit inside the build after the inventory had
-# passed. A cancelled convergence leaves the deferred suites unverified while
-# the PR lane still looks green. Pull requests keep their original budget.
-assert "timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 60 || 30 }}" in build2, (
-    "the convergence job needs more than 30 minutes; a cancelled run verifies nothing"
-)
-assert "github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true'" in build2
-assert "needs.scope.outputs.needs_full_build == 'false'" in build2
-assert "steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false'" in build2
-assert "steps.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true'" in build2
-assert './build.sh --typecheck --all' in build2
-assert './build.sh --all' in build2
-
-module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
-assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
-assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
-assert 'needs: scope' in module_matrix
-assert "matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest'" in module_matrix
-assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in module_matrix
-assert 'macos-26-intel' not in module_matrix, 'PR and convergence must share the ARM64 profile'
-assert 'MGT_MACOS_OUTER_TIMEOUT_SCALE' not in module_matrix, (
-    'no runner profile may scale the outer timeout'
-)
-assert "MGT_RUN_MODULE_BUILD:" in module_matrix
-assert "if: env.MGT_RUN_MODULE_BUILD == 'true'" in module_matrix
-assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
-assert "env.MGT_RUN_MODULE_BUILD == 'false'" in module_matrix
-assert '- reference_fixture' in module_matrix
-assert '- hades\n' in module_matrix
-assert '- hades2' not in module_matrix, 'Hades II build is already owned by Build 2 macOS'
-assert './build.sh "${{ matrix.game }}"' in module_matrix
+# Project Python always runs on the interpreter pinned by Tools/python_runtime.json.
+RUNTIME_VERSION = json.loads((ROOT / 'Tools/python_runtime.json').read_text())['version']
+match = re.fullmatch(r'(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?', RUNTIME_VERSION)
+assert match, f'unsupported pinned Python version format: {RUNTIME_VERSION}'
+CI_PYTHON_VERSION = f'{match.group(1)}-{match.group(2)}.{match.group(3)}' if match.group(2) else match.group(1)
+for name, workflow in workflows.items():
+    for job_id, job in workflow['jobs'].items():
+        job_steps = steps(job)
+        setups = [index for index, step in enumerate(job_steps)
+                  if str(step.get('uses', '')).startswith('actions/setup-python@')]
+        for index in setups:
+            assert job_steps[index]['with']['python-version'] == CI_PYTHON_VERSION, (name, job_id)
+        python_runs = [index for index, step in enumerate(job_steps)
+                       if re.search(r'\bpython3?\b', str(step.get('run') or ''))]
+        if python_runs:
+            assert setups and setups[0] < python_runs[0], f'{name}: {job_id} runs Python before setup-python'
 
 
-# Recurring verification is PR-owned; expensive convergence work is explicit.
-for name, path in {
-    "linux": ROOT / ".github/workflows/linux-contracts.yml",
-    "macos": ROOT / ".github/workflows/build2-macos.yml",
-    "module": ROOT / ".github/workflows/module-build-matrix.yml",
-}.items():
-    workflow_text = path.read_text(encoding="utf-8")
-    trigger = workflow_text.split("\npermissions:", 1)[0]
-    assert "pull_request:" in trigger, f"{name}: PR task verification trigger missing"
-    assert "workflow_dispatch:" in trigger, f"{name}: explicit convergence trigger missing"
-    assert not re.search(r"^  push:\s*$", trigger, re.M), (
-        f"{name}: merged main must not automatically rerun task verification"
-    )
-
-revision_pos = linux.index("Enforce diff-based invariants")
-revision_window = linux[revision_pos:revision_pos + 500]
-assert "github.event_name == 'pull_request'" in revision_window, (
-    "diff-based runtime revision enforcement must stay a PR task gate"
-)
-
-for step in (
-    "Verify declared invariants fail under mutation",
-    "Package release candidate",
-    "Verify release provenance and checksum",
-    "actions/upload-artifact@",
-):
-    pos = build2.index(step)
-    window = build2[pos:pos + 700]
-    assert "github.event_name == 'workflow_dispatch'" in window, (
-        f"Build 2 heavy convergence step is not dispatch-only: {step}"
-    )
-assert "Run full macOS contracts for release convergence" in build2
-assert "Run selected macOS PR smoke tests" in build2
-assert "Typecheck unified trainer on Swift PR" in build2
-assert "Build unified trainer" in build2
-assert "Verify package" in build2
-
-for step in (
-    "Retain isolated module artifact and source provenance",
-    "Verify isolated artifact checksum and declared inputs",
-    "actions/upload-artifact@",
-):
-    pos = module_matrix.index(step)
-    window = module_matrix[pos:pos + 700]
-    assert "github.event_name == 'workflow_dispatch'" in window, (
-        f"reference convergence artifact step is not dispatch-only: {step}"
-    )
-assert "Build selected module" in module_matrix
-assert "Verify packaged module isolation" in module_matrix
-
-release = (ROOT / '.github/workflows/direct-release.yml').read_text()
-assert 'runs-on: ubuntu-latest' in release, "Release coordinator must not occupy a macOS runner"
-assert 'sha256sum -c' in release
-assert '/usr/libexec/PlistBuddy' not in release
+# A push-triggered release waits for the dispatched convergence lanes on the
+# same SHA. The wait must outlast the slowest producer's dispatch budget plus
+# runner queueing, and the release job must outlast its wait.
+def dispatch_minutes(job):
+    value = str(job.get('timeout-minutes'))
+    conditional = re.search(r"workflow_dispatch'\s*&&\s*(\d+)", value)
+    return int(conditional.group(1) if conditional else value)
 
 
-# A push-triggered release waits for the three dispatched convergence lanes on
-# the same SHA. Its wait must outlast the slowest producer's own dispatch
-# budget (plus runner queueing), and the job must outlast its wait; compare
-# the declared budgets rather than pinning either value.
+producer_minutes = max(dispatch_minutes(job) for name in TASK_WORKFLOWS for job in workflows[name]['jobs'].values())
+release_job = workflows[RELEASE_WORKFLOW]['jobs']['release']
+waits = [int(step['env']['CONVERGENCE_WAIT_MINUTES']) for step in steps(release_job)
+         if 'CONVERGENCE_WAIT_MINUTES' in (step.get('env') or {})]
+assert len(waits) == 1, waits
+assert waits[0] >= producer_minutes + 30, (waits[0], producer_minutes)
+assert dispatch_minutes(release_job) >= waits[0] + 10, (dispatch_minutes(release_job), waits[0])
 
-def _dispatch_minutes(text):
-    budgets = []
-    for value in re.findall(r"timeout-minutes:\s*(.+)", text):
-        conditional = re.search(r"workflow_dispatch'\s*&&\s*(\d+)", value)
-        budgets.append(int(conditional.group(1)) if conditional else int(value.strip()))
-    return max(budgets)
-
-
-release_text = (ROOT / '.github/workflows/direct-release.yml').read_text()
-producers = {name: _dispatch_minutes((ROOT / '.github/workflows' / name).read_text())
-             for name in ('linux-contracts.yml', 'build2-macos.yml', 'module-build-matrix.yml')}
-wait_minutes = int(re.search(r"CONVERGENCE_WAIT_MINUTES:\s*(\d+)", release_text).group(1))
-release_minutes = int(re.search(r"timeout-minutes:\s*(\d+)", release_text).group(1))
-assert wait_minutes >= max(producers.values()) + 30, (wait_minutes, producers)
-assert release_minutes >= wait_minutes + 10, (release_minutes, wait_minutes)
-assert 'seq 1 105' not in release_text
-
-print("ci_workflow_contract_ok")
+print('ci_workflow_contract_ok')

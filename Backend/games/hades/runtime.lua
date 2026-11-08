@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 9 then error("hades.error.restartRequired") end
+  if existing.revision ~= 10 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 9,
+  version = 1, revision = 10,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -918,10 +918,6 @@ function runtime.lock_rerolls(locked)
   end
   mount(unit, false)
   return runtime.status()
-end
-function runtime.set_invincibility(enabled)
-  requireHero()
-  return runtime.set_feature("invincibility", enabled)
 end
 function runtime.disable_all()
   world.clearPending()

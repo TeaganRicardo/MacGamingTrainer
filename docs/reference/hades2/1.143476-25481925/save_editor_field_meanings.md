@@ -2,7 +2,7 @@
 
 #554 follows the user’s report of meaningless counters, flat result ownership, unnecessary detail clicks and broken search. It supersedes the earlier ordinary-UI requirement to expose source/trigger conditions on demand. Unknown physical data remains editable in Advanced; it receives no invented semantic name in ordinary results.
 
-The investigation used the supported source archive referenced by `ui_terminology.json`. All 1,164 entries of `manifest/FILES.sha256` were verified again. Full native scripts and dialogue remain outside the repository. `Tools/generate_hades_save_ids.py` derives target/handler and objective/description references; `save_native_ids.py` retains the exact data-source hashes. Regeneration is tested with comments, inheritance overrides and LF/CRLF/CR source files.
+The investigation used the supported source archive referenced by `ui_terminology.json`. All 1,164 entries of `manifest/FILES.sha256` were verified again. Full native scripts and dialogue remain outside the repository. `Tools/generate_hades2_save_ids.py` derives target/handler and objective/description references; `save_native_ids.py` retains the exact data-source hashes. Regeneration is tested with comments, inheritance overrides and LF/CRLF/CR source files.
 
 | Stored field | Native evidence | Display meaning |
 | --- | --- | --- |

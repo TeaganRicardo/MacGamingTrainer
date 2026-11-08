@@ -42,6 +42,7 @@
 "host.backend.error.outcomeUnknown" = "操作结果不明，未自动重试。再次操作前，请先检查结果和恢复证据。";
 "host.backend.error.targetOutcomeUnknown" = "游戏操作结果不明，未自动重试。请检查并重启游戏后再连接。";
 "host.backend.error.notSent" = "请求尚未发送。请恢复后端连接后重试。";
+"host.backend.error.targetRestartRequired" = "此前的游戏操作结果不明，本次请求未发送。请重启游戏后再连接。";
 "host.save.error.workspaceExpired" = "打开此文档的后端已停止。原来源、目标和草稿已保留；请重新读取来源并核对目标后再应用修改。";
 "host.save.error.applyUnconfirmed" = "应用结果尚未确认。请检查目标和恢复副本，重新读取来源后再继续修改。";
 "host.save.warning.workerChanged" = "后端已重启。选择存档操作前，请先刷新此列表。";

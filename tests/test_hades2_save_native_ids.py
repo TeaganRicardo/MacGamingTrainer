@@ -72,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         for path, original in native_sources.items():
             path.write_bytes(original.replace(b"\n", newline))
         generated = subprocess.check_output(
-            [sys.executable, str(ROOT / "Tools/generate_hades_save_ids.py"),
+            [sys.executable, str(ROOT / "Tools/generate_hades2_save_ids.py"),
              str(scripts)], text=True,
         )
         namespace = {}

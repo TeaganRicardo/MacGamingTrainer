@@ -196,8 +196,14 @@ do {
     if session.lifecycleID == workerGeneration { fail("recovery reused the departed worker generation") }
     var rejected: Bool? = nil
     var rejectedStarted = false
-    session.send("rejected-after-crash", operation: "unsafe", started: { rejectedStarted = true }, completion: { rejected = $0 })
+    var rejectedFailure: BackendFailure?
+    session.send("rejected-after-crash", operation: "unsafe", started: { rejectedStarted = true },
+                 failed: { rejectedFailure = $0 }, completion: { rejected = $0 })
     if rejected != false || rejectedStarted { fail("same-target work crossed the unknown outcome gate") }
+    if rejectedFailure?.presentation != "host.backend.error.targetRestartRequired"
+        || rejectedFailure?.outcomeUnknown != false {
+        fail("gate refusal did not direct a game restart for unsent work: \(String(describing: rejectedFailure))")
+    }
     if hostLogs.contains(where: { $0.contains("后端退出 status=") }) {
         fail("backend termination evidence leaked into the Host stream")
     }

@@ -6,6 +6,8 @@ from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'Tools'))
+from supported_build import supported_reference_directory
 
 from games.hades2 import catalog, localization
 
@@ -532,11 +534,11 @@ assert derived_names['BossShieldMetaUpgrade'] == (
     '区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'
 )
 
-governance_path = ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_naming.md'
+governance_path = supported_reference_directory('hades2') / 'boon_management_effect_naming.md'
 governance = governance_path.read_text(encoding='utf-8')
 assert 'boon_management_effect_names.csv' not in governance
 assert 'catalog._CURRENT_RUN_DERIVED_NAMES' in governance
-assert not (ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_names.csv').exists()
+assert not (supported_reference_directory('hades2') / 'boon_management_effect_names.csv').exists()
 
 # Runtime presentation follows the same title identity the native Trait Tray uses.
 # A CustomTitle / native tooltip title can therefore name an otherwise internal

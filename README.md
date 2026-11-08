@@ -6,7 +6,7 @@ MacGamingTrainer is a native macOS trainer host with game-specific modules. The 
 
 Requirements:
 
-- macOS 14.0 or later;
+- the macOS version declared by `minimumMacOS` in `app.json`;
 - the full Xcode toolchain for the game-owned LLDB Python paths;
 - Rosetta for the Intel macOS edition of Hades on Apple Silicon.
 

@@ -123,7 +123,6 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
         send("set_boon_rarity", params: ["target": target], operation: "hades.boonRarityEnabled")
     }
-    func setInvincibility(_ enabled: Bool) { setFeature(.invincibility, value: enabled) }
     func setFeature(_ feature: HadesFeature, value: Any) {
         guard canEditIntent else { return }
         send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key)

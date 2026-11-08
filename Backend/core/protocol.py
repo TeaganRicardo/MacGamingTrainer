@@ -48,12 +48,12 @@ _CORE_SAVE_PREFIX = 'core.save.'
 def _target_process_running(process_name, executable_path_suffix=''):
     if not process_name:
         return False
+    # macOS `ps -o comm` prints each executable path; the kernel name that
+    # `pgrep` compares is truncated to MAXCOMLEN and cannot identify long names.
     try:
-        command = (['/bin/ps', '-axo', 'comm='] if executable_path_suffix
-                   else ['/usr/bin/pgrep', '-x', process_name])
         result = subprocess.run(
-            command,
-            stdout=subprocess.PIPE if executable_path_suffix else subprocess.DEVNULL,
+            ['/bin/ps', '-axo', 'comm='],
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
             timeout=2,
@@ -61,13 +61,12 @@ def _target_process_running(process_name, executable_path_suffix=''):
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。') from error
-    if result.returncode == 0:
-        if executable_path_suffix:
-            return any(row.strip().endswith('/' + executable_path_suffix) for row in result.stdout.splitlines())
-        return True
-    if result.returncode == 1 and not executable_path_suffix:
-        return False
-    raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。')
+    if result.returncode != 0:
+        raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。')
+    executables = [row.strip() for row in result.stdout.splitlines()]
+    if executable_path_suffix:
+        return any(executable.endswith('/' + executable_path_suffix) for executable in executables)
+    return any(executable.rsplit('/', 1)[-1] == process_name for executable in executables)
 
 
 class JsonlRequestRouter:

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
 
 from module_support import load_manifest, normalized_manifest
-from supported_build import native_header, resolved_resource_source, validate_supported_build
+from supported_build import native_header, resolved_resource_source, supported_reference_directory, validate_supported_build
 from ci_docs_only import classify_scope
 
 game_root = ROOT / "Backend/games"
@@ -33,7 +33,13 @@ hades2 = json.loads((game_root / "hades2/module.json").read_text(encoding="utf-8
 assert "contentBuildInfo" in hades and "bundleVersion" not in hades
 assert "bundleVersion" in hades2 and "contentBuildInfo" not in hades2
 
-reference = ROOT / hades2["referenceDirectory"] / "ui_terminology.json"
+assert supported_reference_directory("hades2") == ROOT / hades2["referenceDirectory"]
+with tempfile.TemporaryDirectory() as temporary:
+    fixture_module = Path(temporary) / "Backend/games/fixture/module.json"
+    fixture_module.parent.mkdir(parents=True)
+    fixture_module.write_text(json.dumps({"id": "fixture", "supportedBuild": {"referenceDirectory": "docs/reference/fixture/1.2-3"}}))
+    assert supported_reference_directory("fixture", root=Path(temporary)) == Path(temporary) / "docs/reference/fixture/1.2-3"
+reference = supported_reference_directory("hades2") / "ui_terminology.json"
 terms = json.loads(reference.read_text(encoding="utf-8"))
 assert terms["target"]["gameVersion"] == "1." + hades2["bundleVersion"]
 assert terms["target"]["steamBuild"] == hades2["steamBuildID"]

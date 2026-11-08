@@ -1,9 +1,12 @@
 from pathlib import Path
 import ast
 import json
+import sys
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Tools'))
+from supported_build import supported_reference_directory
 
 ZH = ROOT / "Resources/Localization/zh-CN.lproj/Host.strings"
 EN = ROOT / "Resources/Localization/en.lproj/Host.strings"
@@ -149,7 +152,7 @@ assert not missing, f"shared Host presentation keys missing: {sorted(missing)}"
 # compatibility aliases, and Hades internal vocabulary belong to the module,
 # not shared Host localization. Derive the values from the authoritative
 # terminology registry instead of sampling a hand-maintained token list.
-TERMINOLOGY_REGISTRY = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+TERMINOLOGY_REGISTRY = supported_reference_directory("hades2") / "ui_terminology.json"
 REGISTRY = json.loads(TERMINOLOGY_REGISTRY.read_text(encoding="utf-8"))
 HADES_NATIVE_TERM_GROUPS = (
     "officialTerms",

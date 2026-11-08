@@ -5,15 +5,20 @@ import argparse
 import json
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 from macos_toolchain_identity import (
     collect_macos_toolchain,
     verify_recorded_macos_toolchain,
 )
-from module_support import app_spec_from_manifest
-from resident_runtime import parse_resident_runtime_declaration
-from write_build_provenance import git_value, require_product_identity, sha256_file, product_module_ids
+from write_build_provenance import (
+    git_value,
+    packaged_content_claims,
+    product_module_ids,
+    require_product_identity,
+    sha256_file,
+)
 
 
 def require_object(value: object, name: str) -> dict[str, object]:
@@ -28,13 +33,12 @@ def verify_provenance(
     *,
     expected_source_sha: str,
     module_id: str,
-    artifact_path: Path | None = None,
+    artifact_path: Path,
     expected_checkout: str,
     expected_generated_copies: int | None = None,
     expected_workflow: str = "",
     expected_event: str = "",
     expected_workflow_source: str = "",
-    require_macos_toolchain: bool = False,
     match_current_macos_toolchain: bool = False,
 ) -> dict[str, object]:
     if not re.fullmatch(r"[0-9a-f]{40}", expected_source_sha):
@@ -123,89 +127,41 @@ def verify_provenance(
         game_id: identity for game_id in selected
         if (identity := json.loads((repo_root / 'Backend/games' / game_id / 'module.json').read_text(encoding='utf-8')).get('supportedBuild')) is not None
     }
-    if manifest.get('supportedBuilds', {}) != expected_supported:
+    if manifest.get('supportedBuilds') != expected_supported:
         raise RuntimeError('provenance supported game build identities differ from module declarations')
 
-    python_runtime = manifest.get("pythonRuntime")
-    runtime_declaration = repo_root / "Tools" / "python_runtime.json"
-    if python_runtime is not None:
-        runtime = require_object(python_runtime, "provenance pythonRuntime")
-        if runtime.get("sourceSha256") != sha256_file(runtime_declaration):
-            raise RuntimeError("provenance Python runtime declaration differs from current source")
-
-    if module_id == 'all':
-        runtimes = require_object(manifest.get('residentRuntimes'), 'provenance residentRuntimes')
-        product = json.loads((repo_root / 'app.json').read_text(encoding='utf-8'))
-        app = app_spec_from_manifest(product, 'product', 'Product', source_plist['CFBundleExecutable'])
-        expected_residents = {}
-        for game_id in ids:
-            module_manifest = repo_root / 'Backend/games' / game_id / 'module.json'
-            declaration = json.loads(module_manifest.read_text(encoding='utf-8')).get('residentRuntime')
-            if declaration is None:
-                continue
-            spec = parse_resident_runtime_declaration(
-                declaration, manifest_path=module_manifest,
-                source_exists=lambda path: path.is_file() and not path.is_symlink(),
-            )
-            expected_residents[game_id] = {
-                'source': spec.runtime_path.relative_to(repo_root).as_posix(),
-                'packagedPath': (f'{app.display_name}.app/Contents/Resources/'
-                                 f'Backend/games/{game_id}/{spec.source}'),
-            }
-        if set(runtimes) != set(expected_residents):
-            raise RuntimeError('provenance resident runtime module set differs from module declarations')
-        for game_id, paths in expected_residents.items():
-            resident = require_object(runtimes[game_id], f'provenance resident runtime {game_id}')
-            for field, expected_path in paths.items():
-                if resident.get(field) != expected_path:
-                    raise RuntimeError(
-                        f'provenance resident runtime {field} differs from declared module: {game_id}'
-                    )
-        resident_values = list(runtimes.values())
-    else:
-        resident_values = [manifest['residentRuntime']] if 'residentRuntime' in manifest else []
-    for resident_runtime in resident_values:
-        resident = require_object(resident_runtime, "provenance residentRuntime")
-        source_path = resident.get("source")
-        if not isinstance(source_path, str) or not source_path:
-            raise RuntimeError("provenance resident runtime source is missing")
-        current_source = (repo_root / source_path).resolve()
-        if repo_root not in current_source.parents or not current_source.is_file():
-            raise RuntimeError("provenance resident runtime source is invalid")
-        source_digest = sha256_file(current_source)
-        if resident.get("sourceSha256") != source_digest:
-            raise RuntimeError("provenance resident runtime differs from current source")
-        if resident.get("packagedSha256") != source_digest:
-            raise RuntimeError("provenance packaged resident runtime differs from current source")
-
+    # Every producer packages on a macOS runner and records its toolchain.
     toolchain = manifest.get("toolchain")
-    if require_macos_toolchain or match_current_macos_toolchain:
-        verify_recorded_macos_toolchain(toolchain)
-    elif toolchain is not None:
-        verify_recorded_macos_toolchain(toolchain)
+    verify_recorded_macos_toolchain(toolchain)
     if match_current_macos_toolchain and toolchain != collect_macos_toolchain():
         raise RuntimeError("provenance macOS toolchain differs from the current build host")
 
     artifact = require_object(manifest.get("artifact"), "provenance artifact")
     if not isinstance(artifact.get("file"), str) or not artifact["file"].endswith(".zip"):
         raise RuntimeError("provenance artifact filename is invalid")
-    if not isinstance(artifact.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"]):
-        raise RuntimeError("provenance artifact SHA-256 is invalid")
-    if artifact_path is not None:
-        artifact_path = artifact_path.resolve()
-        if not artifact_path.is_file():
-            raise RuntimeError("artifact referenced by provenance verification is missing")
-        if artifact["file"] != artifact_path.name:
-            raise RuntimeError("provenance artifact filename differs from retained artifact")
-        if artifact["sha256"] != sha256_file(artifact_path):
-            raise RuntimeError("provenance artifact SHA-256 differs from retained artifact")
+    artifact_path = artifact_path.resolve()
+    if not artifact_path.is_file():
+        raise RuntimeError("artifact referenced by provenance verification is missing")
+    if artifact["file"] != artifact_path.name:
+        raise RuntimeError("provenance artifact filename differs from retained artifact")
+    if artifact.get("sha256") != sha256_file(artifact_path):
+        raise RuntimeError("provenance artifact SHA-256 differs from retained artifact")
+
+    # A matching digest identifies the retained ZIP, not its contents: the
+    # app bundle identity and every packaged claim come from the ZIP itself.
+    claims = packaged_content_claims(repo_root, artifact_path, module_id, source_plist)
+    for field, name in (("pythonRuntime", "Python runtime"),
+                        ("residentRuntime", "resident runtime"),
+                        ("residentRuntimes", "resident runtimes")):
+        if manifest.get(field) != claims.get(field):
+            raise RuntimeError(f"provenance {name} differs from source declarations and retained artifact")
     return manifest
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--provenance", type=Path, required=True)
-    parser.add_argument("--artifact", type=Path)
+    parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--expected-source-sha", required=True)
     parser.add_argument("--module-id", required=True)
@@ -214,7 +170,6 @@ def main() -> int:
     parser.add_argument("--expected-workflow", default="")
     parser.add_argument("--expected-event", default="")
     parser.add_argument("--expected-workflow-source", default="")
-    parser.add_argument("--require-macos-toolchain", action="store_true")
     parser.add_argument("--match-current-macos-toolchain", action="store_true")
     args = parser.parse_args()
     try:
@@ -229,10 +184,9 @@ def main() -> int:
             expected_workflow=args.expected_workflow,
             expected_event=args.expected_event,
             expected_workflow_source=args.expected_workflow_source,
-            require_macos_toolchain=args.require_macos_toolchain,
             match_current_macos_toolchain=args.match_current_macos_toolchain,
         )
-    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError, zipfile.BadZipFile) as error:
         print(error, file=sys.stderr)
         return 2
     return 0

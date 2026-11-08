@@ -41,17 +41,15 @@ class Runtime:
         self.speed = value
         return value
 
-    def set_invincibility(self, value):
-        self.calls.append(('set_invincibility', value))
-        self.invincible = value
-        return self.status()
-
     def command(self, method, params):
+        self.calls.append((method, params))
         if method == 'set_feature':
             assert params['feature'] == 'invincibility'
-            return self.set_invincibility(params['value'])
-        assert method == 'disable_all'
-        return self.set_invincibility(False)
+            self.invincible = params['value']
+        else:
+            assert method == 'disable_all'
+            self.invincible = False
+        return self.status()
 
     def disconnect(self):
         self.calls.append(('disconnect',))
@@ -75,18 +73,26 @@ assert adapter.dispatch('connect', {}, 'c1')['connected'] is True
 assert runtime.calls[0] == ('connect', 42, '/tmp/Hades/Game.macOS')
 with patch('games.hades.adapter.subprocess.run'):
     assert adapter.dispatch('launch', {}, 'launch')['connected'] is True
-assert adapter.dispatch('set_invincibility', {'value': True}, 'm1')['invincible'] is True
+invincible = {'feature': 'invincibility', 'value': True}
+assert adapter.dispatch('set_feature', invincible, 'm1')['invincible'] is True
+assert runtime.calls[-1] == ('set_feature', invincible)
 assert adapter.dispatch('disconnect', {}, 'd1')['connected'] is False
 assert runtime.invincible, 'manual disconnect preserves the current game effect'
 assert adapter.dispatch('connect', {}, 'c2')['invincible'] is True
 assert adapter.dispatch('disable_all', {}, 'x1')['invincible'] is False
 try:
-    adapter.dispatch('set_invincibility', {'value': 'false'}, 'invalid')
-except (ValueError, AdapterError):
-    pass
+    adapter.dispatch('set_feature', {'feature': 'invincibility', 'value': 'false'}, 'invalid')
+except AdapterError as error:
+    assert error.code == 'invalid_value', error.code
 else:
     raise AssertionError('non-boolean intent must be rejected before runtime mutation')
-assert runtime.calls[-1] == ('set_invincibility', False)
+try:
+    adapter.dispatch('set_invincibility', {'value': True}, 'retired')
+except AdapterError as error:
+    assert error.code == 'unknown_command', error.code
+else:
+    raise AssertionError('the retired set_invincibility alias still mutates the runtime')
+assert runtime.calls[-1] == ('disable_all', {}), 'a rejected request reached runtime mutation'
 adapter.close()
 assert runtime.calls[-1] == ('close',)
 
@@ -103,7 +109,7 @@ class Sidecar:
 
     def request(self, method, params, **options):
         self.calls.append((method, params, options))
-        if method == 'set_invincibility':
+        if method == 'set_feature':
             self.terminal = True
             self.started = False
             raise SidecarTerminalError('acknowledgement lost', outcome_unknown=True)
@@ -117,7 +123,7 @@ sidecar = Sidecar()
 client = HadesRuntimeClient(sidecar, recovery=HadesRecoveryJournal(Path(test_data.name) / 'runtime.json'), identity=lambda pid: str(pid))
 client.connect(42, '/tmp/Hades/Game.macOS')
 try:
-    client.set_invincibility(True)
+    client.command('set_feature', {'feature': 'invincibility', 'value': True})
 except AdapterError as error:
     assert error.code == 'outcome_unknown'
 else:
@@ -222,17 +228,20 @@ end
 local runtime = assert(load(SOURCE))()
 local before = runtime.status()
 assert(before.heroReady and not before.invincible)
-local enabled = runtime.set_invincibility(true)
+local enabled = runtime.set_feature("invincibility", true)
 assert(enabled.invincible and CurrentRun.InvulnerableFlags.NativeMenu)
 assert(CurrentRun.Hero.InvulnerableFlags.NativeMenu)
-local disabled = runtime.set_invincibility(false)
+local disabled = runtime.set_feature("invincibility", false)
 assert(not disabled.invincible and CurrentRun.InvulnerableFlags.NativeMenu)
 assert(CurrentRun.Hero.InvulnerableFlags.NativeMenu)
 assert(calls[1][2] == calls[2][2] and calls[1][2] ~= 'Generic')
+assert(not pcall(runtime.set_feature, "invincibility", "true") and #calls == 2)
 CurrentRun = nil
 assert(not runtime.status().heroReady)
-local ok = pcall(function() runtime.set_invincibility(true) end)
-assert(not ok and #calls == 2)
+-- Without a hero the durable intent is kept and native work waits for a mount.
+local detached = runtime.set_feature("invincibility", true)
+assert(not detached.heroReady and not detached.invincible and runtime.features.invincibility == true)
+assert(#calls == 2)
 print('hades_runtime_ownership_ok')
 '''
 proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + harness], capture_output=True, text=True)

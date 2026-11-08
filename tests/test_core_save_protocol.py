@@ -276,4 +276,56 @@ with patch.object(protocol_module.subprocess, 'run', return_value=process_rows):
         raise AssertionError('A failed executable-path query was treated as a stopped target')
 identity_router.close()
 
+# The running-target probe answers from the macOS process table: `ps -o comm`
+# lists each executable path, while `pgrep -x` compares only the kernel p_comm,
+# truncated to MAXCOMLEN bytes.
+MACOS_MAXCOMLEN = 16
+
+
+# Piped `ps -axo comm=` lists each full executable path; the macOS inventory
+# test test_core_save_target_probe_macos.py proves that on a real host.
+def macos_process_table(*executables):
+    def run(command, **kwargs):
+        if command == ['/bin/ps', '-axo', 'comm=']:
+            return SimpleNamespace(returncode=0, stdout=''.join(path + '\n' for path in executables))
+        raise AssertionError(f'unexpected process query: {command}')
+    return run
+
+
+long_name = 'Example Long Game Name'
+assert len(long_name.encode()) > MACOS_MAXCOMLEN
+long_executable = f'/Applications/{long_name}.app/Contents/MacOS/{long_name}'
+with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', long_executable)):
+    assert protocol_module._target_process_running(long_name) is True, \
+        'A running target whose name exceeds MAXCOMLEN was reported stopped'
+with patch.object(protocol_module.subprocess, 'run', macos_process_table(
+        '/Applications/Hades II.app/Contents/MacOS/Hades II', '/opt/Hades/launcher', '/usr/libexec/Hadesd')):
+    assert protocol_module._target_process_running('Hades') is False, \
+        'A name that is only a prefix, substring or directory of an executable matched the target'
+hades_suffix = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
+steam_hades = '/Users/fixture/Library/Application Support/Steam/steamapps/common/' + hades_suffix
+steam_hades2 = '/Users/fixture/Library/Application Support/Steam/steamapps/common/Hades II/Hades II.app/Contents/MacOS/Hades II'
+with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades)):
+    assert protocol_module._target_process_running('Game.macOS', hades_suffix) is True, \
+        'A running Steam install was reported stopped (path suffix)'
+with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades2)):
+    assert protocol_module._target_process_running('Hades II') is True, \
+        'A running Steam install whose path contains spaces was reported stopped (executable name)'
+with patch.object(protocol_module.subprocess, 'run', macos_process_table(
+        '/tmp/AnotherGame/Game.macOS', '/tmp/NotHades/Game.macOS.app/Contents/MacOS/Game.macOS')):
+    assert protocol_module._target_process_running('Game.macOS', hades_suffix) is False, \
+        'An executable outside the declared path suffix matched the target'
+for executable_path_suffix in ('', hades_suffix):
+    for failure in (
+            {'return_value': SimpleNamespace(returncode=1, stdout='')},
+            {'side_effect': OSError('ps unavailable')},
+            {'side_effect': protocol_module.subprocess.TimeoutExpired(['/bin/ps'], 2)}):
+        with patch.object(protocol_module.subprocess, 'run', **failure):
+            try:
+                protocol_module._target_process_running(long_name, executable_path_suffix)
+            except protocol_module.SaveBusyError:
+                pass
+            else:
+                raise AssertionError(f'A failed process listing was treated as a stopped target: {failure}')
+
 print('core_save_protocol_ok')

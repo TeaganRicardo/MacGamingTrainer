@@ -1,8 +1,11 @@
 import json
+import sys
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Tools'))
+from supported_build import supported_reference_directory
 
 def read(path):
     return (ROOT / path).read_text(encoding='utf-8')
@@ -248,7 +251,7 @@ gathering_action_key = "hades2.gathering.generate"
 gathering_help_key = "hades2.gathering.generateHelp"
 zh_localization = read('Sources/Hades2/Presentation/Localization/hades2.zh-CN.json')
 en_localization = read('Sources/Hades2/Presentation/Localization/hades2.en.json')
-terminology = json.loads(read('docs/reference/hades2/1.143476-25481925/ui_terminology.json'))
+terminology = json.loads((supported_reference_directory('hades2') / 'ui_terminology.json').read_text(encoding='utf-8'))
 # The compact action label is one short product term; the hover help stays an
 # explanation, so it must not collapse into a copy of the label.
 assert terminology['productTerms']['generateGathering']['value'] == "生成"

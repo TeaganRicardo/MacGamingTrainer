@@ -214,4 +214,13 @@ else: raise AssertionError('runtime manifest accepted adapter outside its game p
 core_text = '\n'.join(path.read_text() for path in (root/'Backend/core').glob('*.py'))
 for token in ('Hades II','WeaponCast','CurrentRun','TraitData','1145350','import lldb','SteamSpec'):
     assert token not in core_text, token
+
+# The runtime manifest is the backend's view of a module. Build, frontend and
+# app-identity metadata are interpreted by Tools/module_support.py, so the
+# runtime dataclass must not grow into a universal build/UI schema again.
+from dataclasses import fields
+assert {field.name for field in fields(GameModuleManifest)} == {
+    'id', 'display_name', 'module_protocol_version', 'adapter', 'process_name',
+    'bundle_identifier', 'source_path', 'save_management', 'executable_path_suffix',
+}
 print('backend_core_round12_ok')

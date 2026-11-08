@@ -156,11 +156,11 @@ def load_manifest(game_id: str) -> BuildManifest:
 
     with (ROOT / 'Info.plist').open('rb') as stream:
         root_plist = plistlib.load(stream)
-    duplicate_keys = sorted({'CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier'} & root_plist.keys())
+    duplicate_keys = sorted({'CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier', 'LSMinimumSystemVersion'} & root_plist.keys())
     if duplicate_keys:
         raise ManifestError(
-            'Info.plist declares module-owned app identity ' + ', '.join(duplicate_keys)
-            + '; remove these keys and edit module app.displayName/app.bundleIdentifier instead.'
+            'Info.plist declares build-owned keys ' + ', '.join(duplicate_keys)
+            + '; remove these keys and edit module app.displayName/app.bundleIdentifier or minimumMacOS in app.json/module frontend instead.'
         )
     executable = root_plist.get('CFBundleExecutable')
     if (not isinstance(executable, str) or not executable or executable in ('.', '..')
@@ -203,7 +203,7 @@ def load_manifest(game_id: str) -> BuildManifest:
         raise ManifestError('frontend.architectures may contain only arm64/x86_64.')
     if len(set(arches)) != len(arches):
         raise ManifestError('frontend.architectures contains duplicates.')
-    minimum_macos = frontend.get('minimumMacOS', '14.0')
+    minimum_macos = frontend.get('minimumMacOS')
     if not isinstance(minimum_macos, str) or not _MACOS_VERSION_RE.fullmatch(minimum_macos):
         raise ManifestError('frontend.minimumMacOS must look like 14.0 or 14.4.1.')
     frontend_spec = FrontendBuildSpec(source_directory, module_type, tuple(arches), minimum_macos)

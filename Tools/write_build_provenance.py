@@ -186,13 +186,9 @@ def resident_identity(repo_root: Path, artifact: Path, module_id: str,
 
 
 def python_runtime_identity(repo_root: Path, artifact: Path,
-                            app_root: str) -> dict[str, object] | None:
+                            app_root: str) -> dict[str, object]:
     """Bind bundled Python provenance to the tracked declaration and ZIP metadata."""
-    source_path = repo_root / "Tools/python_runtime.json"
-    if not source_path.is_file() or source_path.is_symlink():
-        return None
-
-    source_bytes = source_path.read_bytes()
+    source_bytes = (repo_root / "Tools/python_runtime.json").read_bytes()
     source = json.loads(source_bytes)
     if not isinstance(source, dict):
         raise RuntimeError("Python runtime source manifest must be an object")
@@ -361,6 +357,26 @@ def require_packaged_product_identity(repo_root: Path, artifact: Path,
     return app_root
 
 
+def packaged_content_claims(repo_root: Path, artifact: Path, module_id: str,
+                            source_plist: dict[str, object]) -> dict[str, object]:
+    """Derive every provenance claim about packaged content from the artifact ZIP.
+
+    The writer records these claims and the verifier re-derives them from the
+    retained ZIP, so neither trusts a digest it did not compute itself.
+    """
+    if module_id == 'all':
+        app_root = require_packaged_product_identity(repo_root, artifact, source_plist)
+        residents = {'residentRuntimes': {
+            game_id: identity for game_id in product_module_ids(repo_root)
+            if (identity := resident_identity(repo_root, artifact, game_id, app_root)) is not None
+        }}
+    else:
+        app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
+        resident = resident_identity(repo_root, artifact, module_id, app_root)
+        residents = {} if resident is None else {'residentRuntime': resident}
+    return {'pythonRuntime': python_runtime_identity(repo_root, artifact, app_root), **residents}
+
+
 def build_manifest(
     artifact: Path,
     product_version: str,
@@ -403,42 +419,21 @@ def build_manifest(
         build_inputs["workflowSource"] = tracked_source_identity(repo_root, workflow_source)
 
     if not local:
-        event_name = require_env(env, "GITHUB_EVENT_NAME")
+        # Provenance is produced only by workflow_dispatch packaging on macOS;
+        # the verifier's expected event and recorded toolchain checks own both.
         manifest["workflow"] = {
-            "eventName": event_name,
+            "eventName": require_env(env, "GITHUB_EVENT_NAME"),
             "name": require_env(env, "GITHUB_WORKFLOW"),
             "repository": require_env(env, "GITHUB_REPOSITORY"),
             "runId": require_env(env, "GITHUB_RUN_ID"),
             "runAttempt": require_env(env, "GITHUB_RUN_ATTEMPT"),
             "runNumber": require_env(env, "GITHUB_RUN_NUMBER"),
         }
-        if event_name == "pull_request":
-            event_path = Path(require_env(env, "GITHUB_EVENT_PATH"))
-            payload = json.loads(event_path.read_text(encoding="utf-8"))
-            pull_request = payload.get("pull_request")
-            if not isinstance(pull_request, dict):
-                raise RuntimeError("pull_request event is missing pull_request metadata")
-            head, base = pull_request.get("head"), pull_request.get("base")
-            if not isinstance(head, dict) or not isinstance(base, dict):
-                raise RuntimeError("pull_request event is missing head/base metadata")
-            head_sha, base_sha = head.get("sha"), base.get("sha")
-            if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", head_sha):
-                raise RuntimeError("pull_request event has invalid head SHA")
-            if not isinstance(base_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", base_sha):
-                raise RuntimeError("pull_request event has invalid base SHA")
-            if head_sha != source_sha:
-                raise RuntimeError(f"pull_request head {head_sha} differs from executing checkout {source_sha}")
-            manifest["pullRequest"] = {
-                "number": payload.get("number"), "headSha": head_sha, "baseSha": base_sha,
-            }
-        elif event_name == "push" and require_env(env, "GITHUB_SHA") != source_sha:
-            raise RuntimeError("push event SHA differs from executing checkout")
+        manifest["toolchain"] = collect_macos_toolchain(env)
 
-        if env.get("RUNNER_OS") == "macOS":
-            manifest["toolchain"] = collect_macos_toolchain(env)
-
+    if module_id:
+        manifest.update(packaged_content_claims(repo_root, artifact, module_id, source_plist))
     if module_id == 'all':
-        app_root = require_packaged_product_identity(repo_root, artifact, source_plist)
         ids = product_module_ids(repo_root)
         manifest['moduleId'] = 'all'
         manifest['moduleIds'] = list(ids)
@@ -446,15 +441,7 @@ def build_manifest(
         manifest['buildInputs']['moduleManifests'] = [
             tracked_source_identity(repo_root, f'Backend/games/{game_id}/module.json') for game_id in ids
         ]
-        runtime = python_runtime_identity(repo_root, artifact, app_root)
-        if runtime is not None:
-            manifest['pythonRuntime'] = runtime
-        manifest['residentRuntimes'] = {
-            game_id: identity for game_id in ids
-            if (identity := resident_identity(repo_root, artifact, game_id, app_root)) is not None
-        }
     elif module_id:
-        app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
         module_manifest = repo_root / "Backend/games" / module_id / "module.json"
         build_inputs = manifest["buildInputs"]
@@ -464,12 +451,6 @@ def build_manifest(
             "path": module_manifest.relative_to(repo_root).as_posix(),
             "sha256": sha256_file(module_manifest),
         }
-        python_runtime = python_runtime_identity(repo_root, artifact, app_root)
-        if python_runtime is not None:
-            manifest["pythonRuntime"] = python_runtime
-        resident = resident_identity(repo_root, artifact, module_id, app_root)
-        if resident is not None:
-            manifest["residentRuntime"] = resident
 
     if module_id:
         selected = ids if module_id == 'all' else (module_id,)

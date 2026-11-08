@@ -114,7 +114,7 @@ final class TrainerBackendSession {
     ) {
         guard !requiresTrustedTarget || untrustedTargetLifetimeID != targetLifetimeID else {
             configuration?.log("目标进程的操作结果尚未确认；等待新的目标进程后再执行 \(command)。")
-            failed?(BackendFailure(code: "backend_cancelled", presentation: "host.backend.error.notSent",
+            failed?(BackendFailure(code: "backend_cancelled", presentation: "host.backend.error.targetRestartRequired",
                 diagnostic: nil, recoveryPath: nil, presentationArguments: []))
             completion?(false)
             return

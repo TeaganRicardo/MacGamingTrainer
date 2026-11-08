@@ -29,6 +29,8 @@ DEFAULT_PREFERENCES = {
     'moneyLock': None,
     'rerollsLock': None,
 }
+# Persisted feature-set format of HadesPreferenceStore and HadesProfileStore.
+PREFERENCE_SCHEMA_VERSION = 2
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 # Resident status flag and value key for each fixed-value lock.
@@ -39,7 +41,7 @@ ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'ad
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
-    'set_feature', 'set_boon_rarity', 'set_invincibility', 'configure',
+    'set_feature', 'set_boon_rarity', 'configure',
     'configure_locks', 'lock_vital', 'lock_resource', 'lock_rerolls', 'disable_all',
 }
 
@@ -112,8 +114,28 @@ def preference_document(values):
     return normalized
 
 
-def migrate_preference_document(values):
-    """Accept only exact shipped schema-1 feature sets, filling new neutral defaults."""
+def persisted_preference_document(schema_version, values):
+    """Interpret a preference or Profile feature document of a supported schema.
+
+    Schema 2 is exactly the current set. Callers refuse a newer schema first.
+    """
+    if type(schema_version) is not int:
+        raise invalid_value()
+    if schema_version == 1:
+        return _migrate_v1_preference_document(values)
+    if schema_version == PREFERENCE_SCHEMA_VERSION:
+        return preference_document(values)
+    raise invalid_value()
+
+
+def newer_preference_schema(document):
+    """Whether a parsed document was written by a newer Trainer feature-set format."""
+    version = document.get('schemaVersion') if isinstance(document, dict) else None
+    return type(version) is int and version > PREFERENCE_SCHEMA_VERSION
+
+
+def _migrate_v1_preference_document(values):
+    """Schema 1 named every shipped feature set below; fill new neutral defaults."""
     if not isinstance(values, dict):
         raise invalid_value()
     original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',

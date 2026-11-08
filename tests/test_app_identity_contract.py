@@ -61,6 +61,33 @@ class AppIdentityContract(unittest.TestCase):
         self.assertIn('Info.plist', result.stderr)
         self.assertIn('CFBundleDisplayName', result.stderr)
 
+    def test_root_minimum_macos_copy_is_rejected(self):
+        plist = self.root / 'Info.plist'
+        data = plistlib.loads(plist.read_bytes())
+        data['LSMinimumSystemVersion'] = '14.0'
+        plist.write_bytes(plistlib.dumps(data))
+        result = run(self.root, 'validate_game_module.py', 'hades2')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('LSMinimumSystemVersion', result.stderr)
+
+    def test_module_without_minimum_macos_is_rejected(self):
+        path = self.root / 'Backend/games/hades2/module.json'
+        data = json.loads(path.read_text())
+        del data['frontend']['minimumMacOS']
+        path.write_text(json.dumps(data))
+        result = run(self.root, 'validate_game_module.py', 'hades2')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('frontend.minimumMacOS', result.stderr)
+
+    def test_product_without_minimum_macos_is_rejected(self):
+        path = self.root / 'app.json'
+        data = json.loads(path.read_text())
+        del data['minimumMacOS']
+        path.write_text(json.dumps(data))
+        result = run(self.root, 'product_support.py', 'all')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('minimumMacOS', result.stderr)
+
     def test_malformed_product_declaration_is_rejected(self):
         (self.root / 'app.json').write_text('{invalid json')
         result = run(self.root, 'validate_game_module.py', 'hades2')

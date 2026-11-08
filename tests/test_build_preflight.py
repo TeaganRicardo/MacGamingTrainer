@@ -76,7 +76,10 @@ exit 93
     assert any(name.endswith("/Sources/Hades/HadesModule.swift") for name in arguments)
     assert any(name.endswith("/Sources/Hades2/Hades2Module.swift") for name in arguments)
     assert any(name.endswith("/ActiveGame.generated.swift") for name in arguments)
-    assert "-target" in arguments and "arm64-apple-macosx14.0" in arguments
+    # The compile target is the product manifest's declaration, not a build.sh literal.
+    product = json.loads((ROOT / "app.json").read_text(encoding="utf-8"))
+    target = arguments[arguments.index("-target") + 1]
+    assert target == f"{product['architectures'][-1]}-apple-macosx{product['minimumMacOS']}", target
     assert not output.exists(), "typecheck mode published an artifact"
     assert not list(isolated_tmp.iterdir()), "typecheck mode left temporary build state"
 

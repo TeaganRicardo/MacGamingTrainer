@@ -37,3 +37,4 @@ test_multi_game_context_state.py
 test_hades_process_identity_macos.py
 test_native_effect_query_macos.py
 test_core_save_metadata_darwin.py
+test_core_save_target_probe_macos.py

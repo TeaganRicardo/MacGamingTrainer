@@ -152,6 +152,46 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {**DEFAULT_PREFERENCES, **previous_current}, (
         'immediately previous schema-1 preferences did not acquire neutral fixed locks'
     )
+    # Schema 1 named every one of those shipped feature sets. The next write
+    # identifies the current set as schema 2, which accepts exactly that set.
+    store.save(store.load())
+    assert json.loads(store.path.read_text()) == {
+        'schemaVersion': 2, 'features': {**DEFAULT_PREFERENCES, **previous_current}}
+    for shipped in (legacy, historical, previous_before_rarity_target, previous_current):
+        store.path.write_text(json.dumps({'schemaVersion': 2, 'features': shipped}))
+        try:
+            store.load()
+        except AdapterError as error:
+            assert (error.code, error.presentation) == ('preferences_failed', 'hades.error.preferencesReadFailed')
+        else:
+            raise AssertionError('schema 2 accepted a schema-1 feature set')
+
+    # Settings written by a newer Trainer are refused and never replaced: not by
+    # edits, a Profile load, or the Disable All the Host sends on app exit.
+    newer = json.dumps({'schemaVersion': 3, 'features': {'futureFeature': True}})
+    store.path.write_text(newer)
+    newer_runtime = Runtime()
+    newer_adapter = HadesAdapter(context, runtime=newer_runtime, preferences=store,
+                                 locate_process=lambda: (42, '/tmp/Hades/Game.macOS'))
+    newer_adapter.profiles.save('Older', DEFAULT_PREFERENCES)
+    refusals = [store.load, lambda: store.save(DEFAULT_PREFERENCES)] + [
+        lambda command=command, params=params: newer_adapter.dispatch(command, params, command)
+        for command, params in (('connect', {}), ('set_feature', {'feature': 'invincibility', 'value': True}),
+                                ('set_boon_rarity', {'target': 'Rare'}), ('save_profile', {'name': 'Newer'}),
+                                ('load_profile', {'name': 'Older'}), ('disable_all', {}))]
+    for refused in refusals:
+        try:
+            refused()
+        except AdapterError as error:
+            assert (error.code, error.presentation) == (
+                'preferences_unsupported_schema', 'hades.error.preferencesNewerFormat'), error.code
+        else:
+            raise AssertionError('settings from a newer Trainer were accepted')
+        assert store.path.read_text() == newer, 'settings from a newer Trainer were replaced'
+    assert newer_runtime.events == [], 'refused settings reached the runtime'
+    assert [row['name'] for row in newer_adapter.profiles.list()] == ['Older']
+    newer_adapter.profiles.delete('Older')
+    store.path.unlink()
 
     adapter.profiles.root.mkdir(parents=True, exist_ok=True)
     profile_name = 'Previous Current'
@@ -381,7 +421,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert runtime.speed == 1.0
     adapter.dispatch('disable_all', {}, 'offline-disable')
     assert store.load() == DEFAULT_PREFERENCES
-    assert json.loads(store.path.read_text())['schemaVersion'] == 1
+    assert json.loads(store.path.read_text())['schemaVersion'] == 2
 
     class UnwritablePreferences:
         def save(self, features):
