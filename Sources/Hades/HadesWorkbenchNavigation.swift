@@ -94,7 +94,7 @@ enum HadesWorkbenchIcon {
         case "hades.money": return TrainerSemanticIcon.Concept.currency
         case "hades.rerolls": return TrainerSemanticIcon.Concept.randomize
         case "hades.godGauge": return godGauge
-        case "host.timeWarp.title": return TrainerSemanticIcon.Concept.timeScale
+        case "hades.gameSpeed": return TrainerSemanticIcon.Concept.timeScale
         case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
         case "hades.catalog", "hades.exactSource", "hades.selectTrait": return catalog
         case "hades.rarity", "hades.minimumRarity", "hades.setRarity": return TrainerSemanticIcon.Concept.quality
@@ -192,7 +192,7 @@ enum HadesWorkbenchCatalog {
         let other: [(HadesWorkbenchSection, [String])] = [
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
-            (.common, ["host.timeWarp.title"]),
+            (.common, ["hades.gameSpeed"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.exactSource", "hades.selectTrait",
                       "hades.rarity", "hades.minimumRarity",
                       "hades.level", "hades.setLevel", "hades.setRarity", "hades.apply", "hades.remove", "hades.chaosPair",
@@ -255,6 +255,13 @@ struct HadesSidebarActions: View {
                 }
                 .accessibilityIdentifier("trainer.section.\(section.id)")
             }
+            TrainerCurrentIssuesEntry(
+                issues: model.currentIssues,
+                detailsPresented: model.feedbackDetailsPresented,
+                onShowDetails: { model.showFeedbackDetails() },
+                onCloseDetails: model.closeFeedbackDetails,
+                onOpenLog: model.openLog
+            )
         }
     }
 }

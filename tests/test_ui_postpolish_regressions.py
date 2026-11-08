@@ -58,12 +58,14 @@ assert '.frame(width: 26, height: 24)' in lock_button
 assert ".accessibilityLabel(" in lock_button
 assert "TrainerLockButton(" in read("Sources/Core/UI/Components/TrainerStatControls.swift")
 
-# The Hades I workbench should not show a persistent waiting/hero-ready banner
-# above its actual sections. Error presentations remain intentionally separate.
+# The Hades I workbench shows no persistent banner above its actual sections,
+# neither for waiting/hero-ready nor for errors. As in Hades II, operation
+# feedback is the transient notice and retained failures are current issues
+# (asserted natively by test_hades_frontend.py).
 root = section(section(hades, "struct HadesTrainerView"), "var body: some View", "private var runDataSection")
 assert 'if !model.heroReady {' not in root
 assert 'runDataSection.trainerSectionTarget(' in root
-assert "if !error.isEmpty" in root
+assert "TrainerMessageBanner(" not in root
 
 # Labeled action widths belong to one Core semantic policy, not game call sites.
 assert "enum TrainerActionWidthRole" in controls

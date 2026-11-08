@@ -400,7 +400,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 "inFlight":client.hasInFlightRequest,"queued":client.queuedRequestCount,"lifecycle":session.lifecycleID.uuidString,
                 "sessionBusy":status.busy,"operation":status.operation.key,"error":status.error,"errorArguments":status.errorArguments,
                 "trainerBusy":model.busy,"connected":model.connected,"heroReady":model.heroReady,"health":model.health,
-                "canMutate":model.canMutate,"localError":model.localError]
+                "canMutate":model.canMutate,"currentIssues":model.currentIssues.map(\.id)]
             let windows=diagnosticWindows.map { name, window -> String in
                 let responder=String(describing:window.firstResponder)
                 let drafts=(window.contentView.map(fields) ?? []).filter { $0.delegate is TrainerTextField.Coordinator }.map {
@@ -507,8 +507,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         if journey == "slider" {
             recordPhase("slider: real Hades workbench and backend")
             try exerciseModuleSlider(HadesTrainerView(model: model), localization: localization,
-                sliderLabel: localization.localized("host.timeWarp.title"),
-                fieldLabel: localization.localized("host.timeWarp.title"),
+                sliderLabel: HadesPresentation.text("hades.gameSpeed", language: localization.language),
+                fieldLabel: HadesPresentation.text("hades.gameSpeed", language: localization.language),
                 gameID: "hades", mutation: "set_feature", currentValue: { model.number(.gameSpeed) },
                 busy: { model.busy }, commands: commands, observe: { speed in
                     var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
@@ -527,7 +527,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 expanded: Binding(get: { model.numericControlsExpanded }, set: { model.numericControlsExpanded = $0 }),
                 primaryLabel: { HadesPresentation.text("hades.money", language: $0) },
                 expandedLabel: { HadesPresentation.text("hades.damageMultiplier", language: $0) },
-                outsideLabel: { _ in localization.localized("host.timeWarp.title") },
+                outsideLabel: { HadesPresentation.text("hades.gameSpeed", language: $0) },
                 conditionalRole: "AXPopUpButton",
                 conditionalLabel: { HadesPresentation.text("hades.chamberObject", language: $0) },
                 busy: { model.busy }, commands: commands, observeAvailability: { count in
@@ -574,6 +574,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 openSaveEditor: { editorOpens += 1 }, openSaveManagement: { backupOpens += 1 })
             documentCatalog.saveEditor?.perform(); documentCatalog.saveManagement?.perform()
             check(editorOpens == 1 && backupOpens == 1, "Hades optional document actions lost their original callbacks")
+            // Per-action gates: a request in flight closes the commands that
+            // start another request, while backend-owned Save tools stay open.
+            recordPhase("management: per-action gates while a request runs")
+            model.saveProfile("Closing while saving")
+            wait("slow profile save in flight") { model.busy }
+            check(documentCatalog.saveEditor?.isEnabled == true && documentCatalog.saveManagement?.isEnabled == true
+                  && documentCatalog.shortcuts.isEnabled && documentCatalog.log.isEnabled,
+                  "a running request closed Hades tools that start no request")
+            check(!documentCatalog.refresh.isEnabled && !documentCatalog.profiles.isEnabled
+                  && !documentCatalog.diagnostics.isEnabled && !documentCatalog.disableAll.isEnabled
+                  && !model.canAcceptRuntimeAction,
+                  "a running request admitted another Hades backend command")
+            wait("slow profile save reply") { !model.busy && model.profiles.contains { $0.name == "Closing while saving" } }
+            model.deleteProfile("Closing while saving")
+            wait("gate fixture profile removed") { !model.busy && model.profiles.map(\.name) == ["Fixture"] }
+            check(documentCatalog.refresh.isEnabled && documentCatalog.diagnostics.isEnabled && model.canAcceptRuntimeAction,
+                  "idle Hades backend commands stayed closed")
             exerciseManagementLayout(content: {
                 HadesManagementUtilities(model: model)
                     .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
@@ -606,8 +623,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             model.runDiagnostics()
             wait("shared diagnostic viewer fixture") { !model.busy && model.diagnostics.count == 2 }
             model.diagnosticsPresented = true
+            check(HadesPresentation.text("hades.diagnostics.rerun", language: .en) == "Run Again"
+                  && HadesPresentation.text("hades.diagnostics.rerun", language: .zhCN) == "重新检测",
+                  "Hades diagnostics lost the shared Run Again label")
             try exerciseDiagnostics(HadesDiagnosticsView(model: model), localization: localization,
-                refreshTitle: localization.localized("host.refresh"),
+                refreshTitle: HadesPresentation.text("hades.diagnostics.rerun", language: .en),
                 exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
                 checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
                 nonpassingStatus: "host.diagnostics.failed", busy: { model.busy }, count: { model.diagnostics.count },
@@ -771,9 +791,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
         let beforeWorld = commands().count
         model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
-        pump(); check(commands().count == beforeWorld && model.localError == "hades.error.staleRoom", "old-room intent crossed the backend")
+        pump(); check(commands().count == beforeWorld && model.feedback?.text.key == "hades.error.staleRoom"
+                      && model.feedback?.tone == .warning
+                      && !model.currentIssues.contains { $0.text.key == "hades.error.staleRoom" },
+                      "old-room intent crossed the backend or became a retained issue")
+        let staleRoomNotice = model.feedback!.id
         model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
         wait("spawn_reward reply for current room: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
+        check(model.feedback?.id != staleRoomNotice && model.feedback?.text.key == "host.backend.notice.completed",
+              "a completed room action left the earlier refusal as its feedback")
         let worldArgs = commands().last { $0["command"] as? String == "spawn_reward" }?["params"] as? [String:Any]
         check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
         model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
@@ -823,7 +849,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(field.stringValue=="80","hero replacement erased focused draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field));pump()
         check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 1,"stale draft mutated replacement hero")
-        check(model.localError=="hades.error.staleHero","stale draft lacked actionable feedback")
+        check(model.feedback?.text.key=="hades.error.staleHero" && model.feedback?.tone == .warning
+              && !model.currentIssues.contains { $0.text.key=="hades.error.staleHero" },
+              "stale draft lacked actionable feedback or became a retained issue")
         try updateState(hero:"run:hero:2",health:31)
         model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="31","unfocused native value did not refresh")
@@ -852,6 +880,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(nativeField.presentation == .invalid && nativeField.validationMessage == HadesPresentation.text("hades.error.invalidValue",language:.en)
               && nativeField.accessibilityHelp() == nativeField.validationMessage,
               "Hades I invalid field lacked local visible/accessibility feedback")
+        let invalidMessage=HadesPresentation.text("hades.error.invalidValue",language:.en)
+        check(model.feedback?.text.key=="hades.error.invalidValue" && model.feedback?.tone == .warning
+              && !model.currentIssues.contains { $0.text.key=="hades.error.invalidValue" }
+              && !nativeAccessibilityControls(host).contains { $0.role=="AXStaticText" && $0.text==invalidMessage },
+              "a rejected Hades I value was not reported once, as its field state and one transient notice")
         enterNative("99").doCommand(by:#selector(NSResponder.cancelOperation(_:)))
         pump()
         check(commands().count==beforeInvalid && field.stringValue=="-1" && nativeField.presentation == .invalid,
@@ -1000,7 +1033,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
         window.setContentSize(NSSize(width:1150,height:viewportHeight));window.center();host.layoutSubtreeIfNeeded();pump()
         let count=commands().count
         _=model.setNumber(.damageMultiplier,text:"nan");pump()
-        check(commands().count==count,"invalid multiplier crossed the backend boundary")
+        check(commands().count==count && model.feedback?.text.key=="hades.error.invalidValue"
+              && !model.currentIssues.contains { $0.text.key=="hades.error.invalidValue" },
+              "invalid multiplier crossed the backend boundary or lacked its transient notice")
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
         let currentLifeCN=localization.localized("host.input.currentValue",arguments:[
             HadesPresentation.text("hades.health",language:.zhCN)])
@@ -1549,6 +1584,44 @@ func pump(_ seconds: TimeInterval = 0.1) {
         return
         }
 
+        // Gathering and Chaos Gate place their shortcut before Generate, and the
+        // fishing action explains its availability from the room observation.
+        recordPhase("recovery: generate shortcut placement and fishing availability")
+        let fishingTitle=HadesPresentation.text("hades.generateFishing",language:.en)
+        func fishingButton() -> NativeAccessibilityControl? { accessibilityButton(named:fishingTitle,in:host) }
+        func checkBadgePrecedes(_ chord: String, action name: String) {
+            let badge=requireNativeControl("shortcut badge "+chord,in:host) { view in
+                nativeAccessibilityControls(view).first { $0.role=="AXStaticText" && $0.text==chord }
+            }
+            let action=nativeAccessibilityControls(host).filter { $0.role=="AXButton" && $0.label==name }
+                .min { abs($0.frame.midY-badge.frame.midY) < abs($1.frame.midY-badge.frame.midY) }
+            check(action != nil && abs(action!.frame.midY-badge.frame.midY) < 12 && badge.frame.maxX <= action!.frame.minX,
+                  "shortcut badge did not precede its row action: "+chord)
+        }
+        checkBadgePrecedes(model.shortcutText(.generateFishing),action:fishingTitle)
+        checkBadgePrecedes(model.shortcutText(.generateChaosGate),action:HadesPresentation.text("hades.generate",language:.en))
+        check(fishingButton()?.enabled==true && fishingButton()?.help==HadesPresentation.text("hades.fishingHelp",language:.en),
+              "available fishing Generate lost its action help")
+        func setFishing(_ available: Bool) throws {
+            var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+            var room=state["world"] as! [String:Any]
+            room["canFish"]=available;state["world"]=room
+            try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
+            model.refreshFromHost()
+        }
+        try setFishing(false)
+        wait("unavailable fishing explains its room reason") {
+            host.layoutSubtreeIfNeeded()
+            return !model.busy && model.world?.canFish==false && fishingButton()?.enabled==false
+                && fishingButton()?.help==HadesPresentation.text("hades.fishing.unavailable.room",language:.en)
+        }
+        try setFishing(true)
+        wait("restored fishing returns to its action help") {
+            host.layoutSubtreeIfNeeded()
+            return !model.busy && fishingButton()?.enabled==true
+                && fishingButton()?.help==HadesPresentation.text("hades.fishingHelp",language:.en)
+        }
+
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
             "rarity":"Common","level":1,"canEdit":true,"canRemove":true,"limitation":"",
@@ -1627,18 +1700,85 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(commands().count == feedbackRequests && model.connected == connected,
                   "Hades feedback presentation replayed a command or changed connection truth")
             let afterDisable=commands().count
-            let errorBeforeOneShot=model.localError
+            let issuesBeforeOneShot=model.currentIssues
             model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
             model.performShortcut(HadesShortcutAction.generateChaosGate.rawValue);pump()
-            check(commands().count==afterDisable && model.localError==errorBeforeOneShot,
+            check(commands().count==afterDisable && model.currentIssues==issuesBeforeOneShot,
                   "a one-shot shortcut escaped live-owner gating")
         }
-        feedbackWindow.contentView = nil; feedbackWindow.close()
         try setConnection(true,heroReady:true)
         model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
         try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
         model.refreshFromHost();wait("known Time Warp verification failure: trainer idle") { !model.busy && model.backendStatus.errorCode=="time_warp_verify_failed" }
         check(model.connected && model.canMutate,"a known verification failure discarded a trusted runtime")
+        recordPhase("recovery: current issues details")
+        check(model.feedback?.tone == .warning && model.feedback?.text.key=="host.timeWarp.error.verifyFailed",
+              "a known runtime failure lacked its warning notice")
+        check(model.currentIssues.map(\.id)==["backend"] && model.currentIssues[0].text.key=="host.timeWarp.error.verifyFailed",
+              "a known runtime failure was not projected as a current issue")
+        let failureNotice=model.feedback!.id
+        let sidebarHost=NSHostingView(rootView:ManagementPageFixture(
+            content:HadesGameModule.makeSidebarActions(model:model).frame(width:220),visibility:feedbackVisibility)
+            .environmentObject(localization))
+        let sidebarWindow=NSWindow(contentRect:NSRect(x:0,y:200,width:240,height:420),
+            styleMask:[.titled],backing:.buffered,defer:false)
+        sidebarWindow.isReleasedWhenClosed=false
+        sidebarWindow.contentView=sidebarHost
+        sidebarWindow.makeKeyAndOrderFront(nil)
+        let issuesTitle=localization.localized("host.feedback.currentIssues")
+        let closeTitle=localization.localized("host.feedback.closeDetails")
+        func noticeDetails() -> NativeAccessibilityControl? {
+            nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.details" && $0.role == "AXButton" }
+        }
+        // The details popover is its own native window beside the fixtures.
+        func detailsControls() -> [NativeAccessibilityControl] {
+            NSApp.windows.filter { $0.isVisible && $0 !== window && $0 !== feedbackWindow && $0 !== sidebarWindow }
+                .flatMap { nativeAccessibilityControls($0) }
+        }
+        func closeDetails() -> NativeAccessibilityControl? {
+            detailsControls().first { $0.role=="AXButton" && $0.label==closeTitle }
+        }
+        wait("warning notice offers details for its retained issue") { noticeDetails()?.enabled == true }
+        check(noticeDetails()!.press(),"Hades notice Details refused native AX input")
+        wait("notice Details opens the current issues") {
+            model.feedbackDetailsPresented && model.feedbackDetailsNoticeID==failureNotice && closeDetails()?.enabled==true
+        }
+        check(closeDetails()!.press(),"Hades current issues refused native Close")
+        wait("native Close retires only the details") { !model.feedbackDetailsPresented && closeDetails()==nil }
+        check(model.feedback?.id==failureNotice && !model.currentIssues.isEmpty,
+              "closing details erased the originating notice or issue")
+        var speedState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        var speedFeatures=speedState["features"] as! [String:Any]
+        var speedProjection=(speedFeatures["gameSpeed"] as? [String:Any]) ?? ["desired":1.0]
+        speedProjection["errorPresentation"]="host.timeWarp.error.setFailed"
+        speedProjection["errorArguments"]=["7"]
+        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+        speedState["fixtureError"]=nil
+        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("speed failure becomes a titled current issue") {
+            !model.busy && model.backendStatus.error.isEmpty && model.currentIssues.map(\.id)==["runtime.gameSpeed"]
+        }
+        let speedIssue=model.currentIssues[0]
+        check(speedIssue.title?.key=="hades.gameSpeed" && speedIssue.text.arguments==["7"],
+              "speed failure lost its Hades title or Host arguments")
+        pressNativeButton(named:issuesTitle,in:sidebarHost)
+        wait("sidebar entry opens titled speed details") {
+            model.feedbackDetailsPresented && closeDetails()?.enabled==true
+                && detailsControls().contains { $0.text==HadesPresentation.text("hades.gameSpeed",language:.en) }
+                && detailsControls().contains { $0.text==localization.string(speedIssue.text) }
+        }
+        speedProjection.removeValue(forKey:"errorPresentation");speedProjection.removeValue(forKey:"errorArguments")
+        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("resolved issues retire their details and sidebar entry") {
+            sidebarHost.layoutSubtreeIfNeeded()
+            return !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
+                && closeDetails()==nil && accessibilityButton(named:issuesTitle,in:sidebarHost)==nil
+        }
+        sidebarWindow.contentView=nil;sidebarWindow.close()
+        feedbackWindow.contentView = nil; feedbackWindow.close()
         for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
                            ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
                            ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
@@ -1675,7 +1815,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
         malformed.removeValue(forKey:"heroReady")
         try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
         model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
-        check(model.localError=="hades.error.protocol" && !model.canMutate,"malformed observation retained mutation authority")
+        check(!model.canMutate && model.currentIssues.contains { $0.id=="observation" && $0.text.key=="hades.error.protocol" }
+              && model.feedback?.text.key=="hades.error.protocol",
+              "malformed observation retained mutation authority or lacked its current issue")
+        malformed["heroReady"]=true
+        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("well-formed status resolves the protocol issue") {
+            !model.busy && model.connected && !model.currentIssues.contains { $0.id=="observation" }
+        }
         stopBackend()
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")

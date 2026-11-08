@@ -3,7 +3,16 @@ import SwiftUI
 
 struct HadesOperationFeedback: View {
     @ObservedObject var model: HadesTrainerModel
-    var body: some View { TrainerFeedbackOverlay(notice: model.feedback, onDismiss: model.dismissFeedback) }
+
+    var body: some View {
+        TrainerOperationFeedback(
+            notice: model.feedback,
+            hasCurrentIssues: !model.currentIssues.isEmpty,
+            detailsNoticeID: model.feedbackDetailsNoticeID,
+            onDismiss: model.dismissFeedback,
+            onShowDetails: { model.showFeedbackDetails(for: $0) }
+        )
+    }
 }
 
 struct HadesTrainerView: View {
@@ -15,7 +24,6 @@ struct HadesTrainerView: View {
     @State private var gameSpeedEditing = false
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
-    private var error: String { model.localError.isEmpty ? model.backendStatus.error : model.localError }
 
     private func state(_ feature: HadesFeature) -> TrainerFeatureControlState {
         let enabled = model.isEnabled(feature)
@@ -34,12 +42,6 @@ struct HadesTrainerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.pageSpacing) {
-            if !error.isEmpty {
-                TrainerMessageBanner(
-                    text: localization.presentation(error, arguments: model.backendStatus.errorArguments),
-                    icon: "exclamationmark.triangle.fill", color: theme.warning
-                )
-            }
             runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
             commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
             boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
@@ -159,7 +161,7 @@ struct HadesTrainerView: View {
     private var gameSpeedPanel: some View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
-                title: localization.localized("host.timeWarp.title"),
+                title: text(HadesFeature.gameSpeed.key),
                 icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditIntent ? theme.accent : theme.inactive,
                 emphasized: model.canEditIntent,
@@ -168,7 +170,7 @@ struct HadesTrainerView: View {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: "1.0",
-                    accessibilityLabel: localization.localized("host.timeWarp.title"),
+                    accessibilityLabel: text(HadesFeature.gameSpeed.key),
                     width: 62,
                     enabled: model.canEditIntent,
                     onEditingChanged: { active in
@@ -193,7 +195,7 @@ struct HadesTrainerView: View {
                     TrainerMappedSlider(
                         value: gameSpeedSliderValue,
                         mapping: gameSpeedMapping,
-                        accessibilityLabel: localization.localized("host.timeWarp.title"),
+                        accessibilityLabel: text(HadesFeature.gameSpeed.key),
                         accessibilityHint: localization.localized("host.timeWarp.hint"),
                         enabled: model.canEditIntent && pageVisible,
                         onPreviewValue: { preview in
@@ -212,12 +214,6 @@ struct HadesTrainerView: View {
                     ? "host.timeWarp.actual" : "host.timeWarp.pending"
                 Text(localization.presentation(key, arguments: [speedNumber(actual)]))
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            if let error = model.features[HadesFeature.gameSpeed.rawValue]?.errorPresentation {
-                Text(localization.presentation(
-                    error, arguments: model.features[HadesFeature.gameSpeed.rawValue]?.errorArguments ?? []
-                ))
-                .font(.caption).foregroundStyle(theme.warning)
             }
         }
         .onChange(of: model.number(.gameSpeed), initial: true) { _, value in

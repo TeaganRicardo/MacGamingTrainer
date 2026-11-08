@@ -300,7 +300,7 @@ struct StartupAvailabilityModule: TrainerGameModule {
             let diagnostic: [String: Any] = [
                 "active": app.isActive, "key": window.isKeyWindow,
                 "visible": window.isVisible, "running": app.isRunning,
-                "hades": state(first.backendStatus, modelError: first.localError,
+                "hades": state(first.backendStatus, modelError: first.currentIssues.map(\.text.key).joined(separator: ","),
                     session: firstSession, save: firstContext.saveManager, game: "hades"),
                 "hades2": state(second.backendStatus, modelError: second.error,
                     session: secondSession, save: secondContext.saveManager, game: "hades2")]

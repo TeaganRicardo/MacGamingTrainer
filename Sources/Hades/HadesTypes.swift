@@ -5,7 +5,7 @@ enum HadesFeature: String, CaseIterable, Identifiable {
     case damageMultiplier, incomingDamageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
 
     var id: String { rawValue }
-    var key: String { self == .gameSpeed ? "host.timeWarp.title" : "hades.\(rawValue)" }
+    var key: String { "hades.\(rawValue)" }
     var isToggle: Bool {
         switch self {
         case .invincibility, .fullHealth, .moneyNoDecrease, .rerollsNoDecrease,

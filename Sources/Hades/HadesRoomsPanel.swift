@@ -10,6 +10,12 @@ struct HadesGatheringPanel: View {
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
 
+    /// The current-room observation explains why Generate is unavailable.
+    private var fishingHelp: String {
+        guard let world = model.world else { return text("hades.fishing.unavailable.scene") }
+        return text(world.canFish ? "hades.fishingHelp" : "hades.fishing.unavailable.room")
+    }
+
     private func gain() {
         guard let value = Double(amount), value.isFinite, value.rounded() == value,
               value >= 1, value <= 1_000_000 else { model.rejectInvalidValue(); return }
@@ -35,16 +41,17 @@ struct HadesGatheringPanel: View {
                 TrainerSecondaryActionButton(title: text("hades.gain"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate, action: gain)
             }
             TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
                 TrainerSecondaryActionButton(
                     title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
                     enabled: model.canMutate && model.world?.canFish == true,
+                    helpText: fishingHelp,
+                    accessibilityLabel: text("hades.generateFishing"),
                     action: model.generateFishing
                 )
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
             }
         }
         .trainerGroupedRows()
-        .help(text("hades.fishingHelp"))
     }
 }
 
@@ -88,12 +95,12 @@ struct HadesRoomsPanel: View {
                     }
                 }
                 TrainerLabeledControlRow(title: text("hades.generateChaosGate"), icon: TrainerSemanticIcon.Context.portal, tint: theme.accent, emphasized: false) {
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                     TrainerSecondaryActionButton(
                         title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
                         enabled: model.canMutate && model.world?.canChaos == true,
                         action: model.generateChaosGate
                     )
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                 }
                 .help(text("hades.chaosGateHelp"))
                 TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false, layout: .pickerAction) {

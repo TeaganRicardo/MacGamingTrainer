@@ -29,11 +29,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var resourceCatalog: [HadesResourceDefinition] = []
     @Published private(set) var traitNames: [String: [String: String]] = [:]
     @Published private(set) var target: HadesHeroTarget?
-    @Published private(set) var localError = ""
-    @Published private(set) var shortcutError = ""
     @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
     @Published private(set) var shortcutRevision = 0
+    /// A transient presentation event, separate from the owner state below.
     @Published private(set) var feedback: TrainerFeedbackNotice?
+    @Published private(set) var feedbackDetailsPresented = false
+    @Published private(set) var feedbackDetailsNoticeID: UUID?
+    /// Owner-state failures. Each one remains current until the same kind of
+    /// payload decodes again; a one-shot rejection is only feedback.
+    @Published private(set) var catalogIssue: TrainerTextToken?
+    @Published private(set) var observationIssue: TrainerTextToken?
     @Published var shortcutSettingsPresented = false
     @Published var workbenchSearch = ""
     @Published var numericControlsExpanded = false
@@ -50,13 +55,17 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private var shortcuts: HadesShortcutStore
     private lazy var hotkeys = GlobalHotkeys(gameID: "hades", registrationChanged: { [weak self] failure in
         self?.shortcutRegistrationFailure = failure
-        self?.shortcutError = failure == nil ? "" : "hades.error.shortcutRegistration"
     }) { [weak self] action in self?.performShortcut(action) }
 
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
-    var hostActionsEnabled: Bool { backendAvailable && !busy && backendStatus.protocolCompatible }
+    /// Backend-owned tools, such as Save documents, stay usable while a request runs.
+    var canUseBackend: Bool { backendAvailable && backendStatus.protocolCompatible }
+    var hostActionsEnabled: Bool { canUseBackend && !busy }
+    /// A new request for the current target lifetime: none is in flight and
+    /// the session still trusts that target.
+    var canAcceptRuntimeAction: Bool { !busy && !backendStatus.requiresTargetRestart }
     private var requiresExplicitReconnect: Bool {
         ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
             .contains(backendStatus.errorCode)
@@ -130,8 +139,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func setNumber(_ feature: HadesFeature, text: String, onRejection: (String) -> Void = { _ in }) -> String {
         guard let value = Double(text), value.isFinite,
               feature == .dashBonus ? (value >= 0 && value <= 20 && value.rounded() == value) : (value >= 0.1 && value <= 100) else {
-            localError = "hades.error.invalidValue"
-            onRejection(localError)
+            onRejection("hades.error.invalidValue")
+            rejectInvalidValue()
             return text
         }
         setFeature(feature, value: value)
@@ -173,7 +182,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         sendToHero("gain_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.gainResource")
     }
     func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String) {
-        guard let roomID, roomID == world?.roomId else { localError = "hades.error.staleRoom"; return }
+        guard let roomID, roomID == world?.roomId else {
+            presentFeedback(TrainerTextToken(key: "hades.error.staleRoom"), tone: .warning)
+            return
+        }
         var payload = params
         payload["roomId"] = roomID
         sendToHero(command, params: payload, target: target, operation: operation)
@@ -233,13 +245,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             logSink.flush()
             try FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
             NSWorkspace.shared.open(logSink.historyURL)
-        } catch { localError = "hades.error.logOpen" }
+        } catch { presentFeedback(TrainerTextToken(key: "hades.error.logOpen"), tone: .warning) }
     }
     func clearCompletedLogs() {
         let cleared = logSink.clearCompletedSessions()
-        feedback = TrainerFeedbackNotice(
-            text: TrainerTextToken(key: cleared ? "host.logs.cleared" : "host.logs.clearFailed"),
-            tone: cleared ? .success : .warning)
+        presentFeedback(TrainerTextToken(key: cleared ? "host.logs.cleared" : "host.logs.clearFailed"),
+                        tone: cleared ? .success : .warning)
     }
     func exportDiagnostics() {
         session.flushDiagnostics()
@@ -266,14 +277,37 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                     guard response == .OK, let url = panel.url else { return }
                     do {
                         try data.write(to: url, options: .atomic)
-                        self?.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
-                    } catch { self?.localError = "hades.error.diagnosticsExport" }
+                        self?.presentFeedback(TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
+                    } catch {
+                        self?.presentFeedback(TrainerTextToken(key: "hades.error.diagnosticsExport"), tone: .warning)
+                    }
                 }
-            } catch { self.localError = "hades.error.diagnosticsExport" }
+            } catch { self.presentFeedback(TrainerTextToken(key: "hades.error.diagnosticsExport"), tone: .warning) }
         }
     }
-    func rejectInvalidValue() { localError = "hades.error.invalidValue" }
+    /// The originating field shows the same rejection inline; this is only the
+    /// transient page notice, never retained as a current issue.
+    func rejectInvalidValue() { presentFeedback(TrainerTextToken(key: "hades.error.invalidValue"), tone: .warning) }
+
+    private func presentFeedback(_ text: TrainerTextToken, tone: TrainerFeedbackTone) {
+        feedback = TrainerFeedbackNotice(text: text, tone: tone)
+    }
+
+    /// Consume only the transient presentation event; current issues keep
+    /// their owner state.
     func dismissFeedback(_ id: UUID) { if feedback?.id == id { feedback = nil } }
+
+    func showFeedbackDetails(for noticeID: UUID? = nil) {
+        guard !currentIssues.isEmpty else { return }
+        if let noticeID, feedback?.id != noticeID { return }
+        feedbackDetailsNoticeID = noticeID ?? feedback?.id
+        feedbackDetailsPresented = true
+    }
+
+    func closeFeedbackDetails() {
+        feedbackDetailsPresented = false
+        feedbackDetailsNoticeID = nil
+    }
     func traitName(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
         catalog.first { $0.id == trait.name }?.name(language: language.rawValue)
             ?? traitNames[trait.name]?[language.rawValue]
@@ -283,7 +317,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     private func sendToHero(_ command: String, params: [String: Any] = [:], target captured: HadesHeroTarget?, operation: String) {
         guard canMutate else { return }
-        guard let captured, captured == target else { localError = "hades.error.staleHero"; return }
+        guard let captured, captured == target else {
+            presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
+            return
+        }
         var payload = params
         payload["target"] = captured.payload
         send(command, params: payload, operation: operation)
@@ -293,14 +330,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @discardableResult
     func setShortcut(_ action: HadesShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {
         guard chord.modifiers & (HotkeyChord.controlModifier | HotkeyChord.optionModifier | HotkeyChord.commandModifier) != 0 else {
-            shortcutError = "hades.error.shortcutModifier"
             return .rejected(messageKey: "hades.error.shortcutModifier")
         }
         if let conflict = shortcuts.set(action, chord: chord) {
-            shortcutError = "hades.error.shortcutConflict"
             return .conflict(actionID: conflict.rawValue)
         }
-        shortcutError = ""
         shortcutRevision += 1
         installShortcuts()
         return .applied
@@ -362,7 +396,6 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     private func send(_ command: String, params: [String: Any] = [:], operation: String,
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
-        localError = ""
         let offlineIntent = !connected && ["set_feature", "set_boon_rarity", "load_profile", "disable_all"].contains(command)
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
                      timeout: command == "connect" ? 130 : 20,
@@ -378,8 +411,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 else if command == "set_door_route" && params["route"] as? String == "thanatos" {
                     noticeKey = "hades.routeScheduled"
                 } else { noticeKey = "host.backend.notice.completed" }
-                self.feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: noticeKey),
-                    tone: pendingCleanup || pendingProfile ? .warning : .success)
+                self.presentFeedback(TrainerTextToken(key: noticeKey),
+                                     tone: pendingCleanup || pendingProfile ? .warning : .success)
             }
             completion?(ok)
         })
@@ -394,61 +427,75 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         default: break
         }
         if !status.error.isEmpty && status.error != previousError {
-            feedback = TrainerFeedbackNotice(text: TrainerTextToken(key: status.error, arguments: status.errorArguments), tone: .warning)
+            presentFeedback(TrainerTextToken(key: status.error, arguments: status.errorArguments), tone: .warning)
         }
     }
 
     private func apply(_ payload: [String: Any]) {
+        let catalogPayload = payload["catalog"] != nil
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload)
-            if let rows = payload["profiles"] {
-                profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
-                    from: JSONSerialization.data(withJSONObject: rows))
-            }
-            if let report = payload["diagnostics"] as? [String: Any], let checks = report["checks"] {
-                diagnostics = try JSONDecoder().decode([HadesDiagnosticCheck].self,
-                    from: JSONSerialization.data(withJSONObject: checks))
-                diagnosticsReport = report
-            }
-            if payload["catalog"] != nil {
-                let decoded = try JSONDecoder().decode(HadesCatalogPayload.self, from: data)
-                catalog = decoded.catalog
-                resourceCatalog = decoded.resourceCatalog
-                traitNames = decoded.traitNames ?? [:]
-                worldRewards = decoded.worldRewards ?? []
-                worldTerms = decoded.worldTerms ?? [:]
-            }
-            guard payload["connected"] != nil else { return }
-            let state = try JSONDecoder().decode(HadesObservation.self, from: data)
-            if state.connected, let observation = targetObservation {
-                if !observation.isRunning || (observation.processIdentifier != nil && state.pid != observation.processIdentifier) {
-                    resetObservation(); return
-                }
-            }
-            connected = state.connected
-            heroReady = state.heroReady
-            invincible = state.invincible ?? false
-            health = state.health ?? 0
-            maxHealth = state.maxHealth ?? 0
-            money = state.money ?? 0
-            rerolls = state.rerolls ?? 0
-            healthLocked = state.healthLocked ?? false
-            moneyLocked = state.moneyLocked ?? false
-            rerollsLocked = state.rerollsLocked ?? false
-            godGauge = state.godGauge ?? 0
-            maxGodGauge = state.maxGodGauge ?? 0
-            target = state.target
-            features = state.features ?? [:]
-            activeFeatures = state.activeFeatures ?? [:]
-            boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
-            resources = state.resources ?? [:]
-            traits = state.traits ?? []
-            world = state.world
+            try decode(payload)
+            // Only the same kind of payload proves its failure resolved.
+            if catalogPayload { catalogIssue = nil }
+            else if payload["connected"] != nil { observationIssue = nil }
         } catch {
-            if payload["catalog"] == nil { resetObservation() }
-            localError = payload["catalog"] != nil ? "hades.error.catalog" : "hades.error.protocol"
+            let issue = TrainerTextToken(key: catalogPayload ? "hades.error.catalog" : "hades.error.protocol")
+            let previous = catalogPayload ? catalogIssue : observationIssue
+            if catalogPayload { catalogIssue = issue } else {
+                resetObservation()
+                observationIssue = issue
+            }
+            if previous != issue { presentFeedback(issue, tone: .warning) }
         }
     }
+
+    private func decode(_ payload: [String: Any]) throws {
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        if let rows = payload["profiles"] {
+            profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
+                from: JSONSerialization.data(withJSONObject: rows))
+        }
+        if let report = payload["diagnostics"] as? [String: Any], let checks = report["checks"] {
+            diagnostics = try JSONDecoder().decode([HadesDiagnosticCheck].self,
+                from: JSONSerialization.data(withJSONObject: checks))
+            diagnosticsReport = report
+        }
+        if payload["catalog"] != nil {
+            let decoded = try JSONDecoder().decode(HadesCatalogPayload.self, from: data)
+            catalog = decoded.catalog
+            resourceCatalog = decoded.resourceCatalog
+            traitNames = decoded.traitNames ?? [:]
+            worldRewards = decoded.worldRewards ?? []
+            worldTerms = decoded.worldTerms ?? [:]
+        }
+        guard payload["connected"] != nil else { return }
+        let state = try JSONDecoder().decode(HadesObservation.self, from: data)
+        if state.connected, let observation = targetObservation {
+            if !observation.isRunning || (observation.processIdentifier != nil && state.pid != observation.processIdentifier) {
+                resetObservation(); return
+            }
+        }
+        connected = state.connected
+        heroReady = state.heroReady
+        invincible = state.invincible ?? false
+        health = state.health ?? 0
+        maxHealth = state.maxHealth ?? 0
+        money = state.money ?? 0
+        rerolls = state.rerolls ?? 0
+        healthLocked = state.healthLocked ?? false
+        moneyLocked = state.moneyLocked ?? false
+        rerollsLocked = state.rerollsLocked ?? false
+        godGauge = state.godGauge ?? 0
+        maxGodGauge = state.maxGodGauge ?? 0
+        target = state.target
+        features = state.features ?? [:]
+        activeFeatures = state.activeFeatures ?? [:]
+        boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
+        resources = state.resources ?? [:]
+        traits = state.traits ?? []
+        world = state.world
+    }
+
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = 0; maxHealth = 0; money = 0; rerolls = 0
