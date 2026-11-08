@@ -88,7 +88,7 @@ def load_selection(selection='all'):
     if (not isinstance(arches, list) or not arches or len(set(arches)) != len(arches)
             or any(arch not in ('arm64', 'x86_64') for arch in arches)):
         raise ManifestError('app.json architectures must contain unique arm64/x86_64 values.')
-    minimum = raw.get('minimumMacOS', '14.0')
+    minimum = raw.get('minimumMacOS')
     if not isinstance(minimum, str) or not re.fullmatch(r'[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}', minimum):
         raise ManifestError('app.json minimumMacOS must be a macOS version.')
     minimum = max((minimum, *(module.frontend.minimum_macos for module in modules)),

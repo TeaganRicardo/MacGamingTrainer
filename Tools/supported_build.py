@@ -33,6 +33,12 @@ def resolved_resource_source(value: str, build: dict | None) -> str:
     return build["referenceDirectory"].rstrip("/") + "/" + relative
 
 
+def supported_reference_directory(game_id: str, *, root: Path = ROOT) -> Path:
+    """Directory of the reference snapshot for the game's declared supported build."""
+    declaration = json.loads((root / "Backend/games" / game_id / "module.json").read_text(encoding="utf-8"))
+    return root / declaration["supportedBuild"]["referenceDirectory"]
+
+
 def native_header(build: dict, *, game_name: str) -> str:
     if not isinstance(game_name, str) or not game_name or '"' in game_name or chr(92) in game_name:
         raise ValueError("native header game display name is invalid")

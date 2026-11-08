@@ -167,8 +167,6 @@ ENTITLEMENTS_REL="$(manifest_field buildRequirements.entitlements)"
 
 [[ -n "$APP_NAME" && "$APP_NAME" != *'/'* ]] || { echo "Invalid app display name from module manifest." >&2; exit 1; }
 [[ -n "$APP_BUNDLE_ID" ]] || { echo "Missing app bundle identifier." >&2; exit 1; }
-[[ -n "$MIN_MACOS" ]] || MIN_MACOS="14.0"
-[[ -n "$ARCHITECTURES_RAW" ]] || ARCHITECTURES_RAW="$(uname -m)"
 read -r -a ARCHITECTURES <<< "$ARCHITECTURES_RAW"
 [[ ${#ARCHITECTURES[@]} -gt 0 ]] || { echo "No frontend architecture selected." >&2; exit 1; }
 for arch in "${ARCHITECTURES[@]}"; do

@@ -1,7 +1,10 @@
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Tools'))
+from supported_build import supported_reference_directory
 
 types = (ROOT / "Sources/Hades2/Hades2Types.swift").read_text(encoding="utf-8")
 api = (ROOT / "Sources/Hades2/Hades2API.swift").read_text(encoding="utf-8")
@@ -11,7 +14,7 @@ view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 runtime = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
 en = json.loads((ROOT / "Sources/Hades2/Presentation/Localization/hades2.en.json").read_text(encoding="utf-8"))["entries"]
 zh = json.loads((ROOT / "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json").read_text(encoding="utf-8"))["entries"]
-terms = json.loads((ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8"))
+terms = json.loads((supported_reference_directory("hades2") / "ui_terminology.json").read_text(encoding="utf-8"))
 
 sources = [
     "Arachne", "Artemis", "Narcissus", "Echo", "Nemesis", "Hades",

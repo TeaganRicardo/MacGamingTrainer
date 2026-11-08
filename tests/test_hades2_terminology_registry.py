@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "Tools"))
+from supported_build import supported_reference_directory
 
 from games.hades2.terminology import (
     TermClass,
@@ -44,7 +46,7 @@ def test_native_terms_keep_shared_localization_provenance():
 
 
 def test_target_build_source_evidence_is_pinned():
-    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference_path = supported_reference_directory("hades2") / "ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
 
     assert reference["target"] == {
@@ -244,7 +246,7 @@ def test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms():
 
 
 def test_registry_rejects_mismatched_native_bilingual_source_pair():
-    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference_path = supported_reference_directory("hades2") / "ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["officialTerms"]["boon"]["englishSource"] = "TraitText.en.sjson"
 
@@ -268,7 +270,7 @@ def test_registry_reports_forbidden_surface_leakage_from_registry_policy():
 
 
 def test_aliases_have_one_authoritative_registry_representation():
-    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference_path = supported_reference_directory("hades2") / "ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     assert "forbiddenUserFacingAliases" not in reference
     assert {row["value"] for row in reference["compatibilityAliases"].values()} == {
@@ -277,7 +279,7 @@ def test_aliases_have_one_authoritative_registry_representation():
 
 
 def test_registry_rejects_alias_target_regression():
-    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference_path = supported_reference_directory("hades2") / "ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["compatibilityAliases"]["specialBoon"]["canonicalTerm"] = "productTerms.missing"
 

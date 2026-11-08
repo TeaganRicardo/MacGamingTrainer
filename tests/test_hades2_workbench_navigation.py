@@ -3,10 +3,13 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Tools'))
+from supported_build import supported_reference_directory
 for path in ('Sources/Hades/HadesWorkbenchNavigation.swift',
              'Sources/Hades2/Views/Hades2HostActions.swift'):
     header_actions = (ROOT/path).read_text()
@@ -14,7 +17,7 @@ for path in ('Sources/Hades/HadesWorkbenchNavigation.swift',
     assert 'resultsPresented' not in header_actions
 SWIFTC = shutil.which('swiftc')
 assert SWIFTC, 'swiftc required for workbench search behavior'
-reference = json.loads((ROOT/'docs/reference/hades2/1.143476-25481925/ui_terminology.json').read_text())
+reference = json.loads((supported_reference_directory('hades2')/'ui_terminology.json').read_text())
 labels = {}
 for language, term_field in [('zh-CN', 'value'), ('en', 'englishValue')]:
     entries = json.loads((ROOT/f'Sources/Hades2/Presentation/Localization/hades2.{language}.json').read_text())['entries']
