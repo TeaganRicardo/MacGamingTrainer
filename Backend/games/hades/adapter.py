@@ -521,6 +521,11 @@ class HadesAdapter(GameAdapter):
         # A live resident reply reports what it actually enforces; only a
         # detached projection shows durable desired state.
         live = state.get('connected') is True
+        # Dormancy is the resident's observation of a desired intent waiting
+        # for its native environment. A detached projection observes none.
+        dormant = state.get('dormantFeatures')
+        state['dormantFeatures'] = ({name: value for name, value in dormant.items() if name in DEFAULT_FEATURES}
+                                    if live and isinstance(dormant, dict) else {})
         for flag, value in LOCK_FIELDS:
             if live and type(state.get(flag)) is bool:
                 state[value] = state.get(value) if state[flag] else None

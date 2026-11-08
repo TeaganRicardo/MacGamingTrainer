@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 10 then error("hades.error.restartRequired") end
+  if existing.revision ~= 11 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 10,
+  version = 1, revision = 11,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -753,10 +753,13 @@ function runtime.status()
   world.install()
   local unit = hero()
   local ready = unit ~= nil
-  local resources, traits, features, activeFeatures = {}, array(), {}, {}
+  local resources, traits, features, activeFeatures, dormantFeatures = {}, array(), {}, {}, {}
+  local alive = ready and not unit.IsDead
   for name, value in pairs(runtime.features) do
     features[name] = value
-    activeFeatures[name] = ready and not unit.IsDead and value ~= defaults[name]
+    activeFeatures[name] = alive and value ~= defaults[name]
+    -- Desired intent waits for its native owner: no hero, or a dead one.
+    dormantFeatures[name] = value ~= defaults[name] and not alive
   end
   activeFeatures.invincibility = activeFeatures.invincibility
     and type(unit.InvulnerableFlags) == "table" and unit.InvulnerableFlags[trainerFlag] == true or false
@@ -778,6 +781,15 @@ function runtime.status()
   local movement = ready and runtime.movementOwners[unit]
   if movement or (ready and CurrentRun.BlockTimerFlags and CurrentRun.BlockTimerFlags.MoveHeroToRoomPosition) then
     activeFeatures.moveSpeedMultiplier = false
+    dormantFeatures.moveSpeedMultiplier = runtime.features.moveSpeedMultiplier ~= defaults.moveSpeedMultiplier
+  end
+  if alive then
+    -- These intents also wait for their native environment: an available Aid
+    -- that is not in use, and a ranged weapon to refill.
+    dormantFeatures.fullGodGauge = runtime.features.fullGodGauge and (unit.SuperActive
+      or not (type(IsSuperValid) == "function" and IsSuperValid())) or false
+    dormantFeatures.infiniteAmmo = runtime.features.infiniteAmmo and not (type(unit.Weapons) == "table"
+      and (unit.Weapons.RangedWeapon or unit.Weapons.GunWeapon)) or false
   end
   for _, name in ipairs(resourceNames) do
     resources[name] = type(GameState) == "table" and type(GameState.Resources) == "table" and tonumber(GameState.Resources[name]) or 0
@@ -805,7 +817,8 @@ function runtime.status()
     healthLocked = healthLockValid(runtime.healthLock), healthLock = runtime.healthLock,
     moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
     rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
-    features = features, activeFeatures = activeFeatures, boonRarityTarget = runtime.boonRarityTarget,
+    features = features, activeFeatures = activeFeatures, dormantFeatures = dormantFeatures,
+    boonRarityTarget = runtime.boonRarityTarget,
     resources = resources, traits = traits, world = world.observation(),
   }
 end

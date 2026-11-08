@@ -94,6 +94,9 @@ class HadesLockObservation(unittest.TestCase):
                     state = adapter.dispatch('status', {}, 'changed-value')
                     self.assertFalse(state['activeFeatures'][feature])
                     self.assertEqual(state['features'][feature], 2)
+                    # A live hero whose modifier drifted is not waiting for an
+                    # environment: the intent is unconfirmed, not dormant.
+                    self.assertFalse(state['dormantFeatures'][feature])
                     adapter.dispatch('set_feature', {'feature': feature, 'value': 2}, 'reconcile')
                     # A same-name clone is a replacement, not the mounted receipt.
                     game.native('CurrentRun.Hero.' + collection + '[1]={Name="MacGamingTrainer.Hades",'
@@ -110,13 +113,17 @@ class HadesLockObservation(unittest.TestCase):
                     self.assertFalse(adapter.dispatch('status', {}, 'replacement-hero')['activeFeatures'][feature])
                     adapter.dispatch('set_feature', {'feature': feature, 'value': 2}, 'replacement-mount')
                     game.native('CurrentRun.Hero.IsDead=true')
-                    self.assertFalse(adapter.dispatch('status', {}, 'dead')['activeFeatures'][feature])
+                    dead = adapter.dispatch('status', {}, 'dead')
+                    self.assertFalse(dead['activeFeatures'][feature])
+                    self.assertTrue(dead['dormantFeatures'][feature])
                     game.native('CurrentRun.Hero.IsDead=false; CurrentRun.Hero.ObjectId=40001')
                     self.assertFalse(adapter.dispatch('status', {}, 'new-object')['activeFeatures'][feature])
                     adapter.dispatch('set_feature', {'feature': feature, 'value': 2}, 'new-object-mount')
                     self.assertTrue(adapter.dispatch('status', {}, 'new-object-mounted')['activeFeatures'][feature])
                     adapter.dispatch('disable_all', {}, 'disable')
-                    self.assertFalse(adapter.dispatch('status', {}, 'disabled')['activeFeatures'][feature])
+                    disabled = adapter.dispatch('status', {}, 'disabled')
+                    self.assertFalse(disabled['activeFeatures'][feature])
+                    self.assertFalse(disabled['dormantFeatures'][feature])
                     game.native('CurrentRun.Hero.ObjectId=40000')
 
 

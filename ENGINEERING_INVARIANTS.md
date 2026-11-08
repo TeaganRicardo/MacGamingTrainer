@@ -57,7 +57,8 @@ Selecting a different game only changes presentation. It never disconnects anoth
 | Hades II durable desired state | `Hades2PreferenceStore` / `Hades2ProfileService`, projected by `Hades2Adapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
 | Hades I observable runtime state | game-owned `runtime.lua` and Process Time Warp projection, decoded by `HadesModel` | what is actually active/available now | never infer active from desired alone |
 | Hades II observable runtime state | game-owned resident Lua + Process Time Warp, decoded through `Hades2StatePatch` | what is actually active/available now | never infer active from desired alone |
-| Hades II dormant state | adapter/resident status projection | desired but currently not active in the observed runtime/scene | may become active after a valid lifecycle transition |
+| Hades I / Hades II dormant state | resident status projection (`dormantFeatures`), passed through by each adapter | desired but currently not active because its native environment is unavailable in the observed runtime/scene | may become active after a valid lifecycle transition |
+| Feature phase presentation | `TrainerFeaturePresentation` (Core), fed each game's observations | unsupported/off/active/pending/waiting/detached/mismatch with per-phase help | presentation only; never runtime truth |
 | UI optimistic/edit state | Swift model/view-local state | temporary presentation/input state | never becomes runtime truth without backend confirmation |
 | Core Save transaction/recovery state | snapshot/restore service, staged claim files and contained rollback directories | durable filesystem transaction progress/outcome/recovery evidence | uncertain applying state is never auto-replayed; preserved recovery bytes remain discoverable |
 
