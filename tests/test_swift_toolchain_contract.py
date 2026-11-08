@@ -97,7 +97,6 @@ assert "sha256sum -c" in release
 assert "/usr/libexec/PlistBuddy" not in release
 assert "macos-latest" not in release
 assert "Tools/verify_build_provenance.py" in release
-assert "--require-macos-toolchain" in release
 assert "--expected-workflow-source .github/workflows/build2-macos.yml" in release
 
 print("swift_toolchain_ci_contract_ok")

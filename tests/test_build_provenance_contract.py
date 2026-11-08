@@ -14,6 +14,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'Tools/write_build_provenance.py'
 VERIFY_SCRIPT = ROOT / 'Tools/verify_build_provenance.py'
+PYTHON_RUNTIME = {
+    'schemaVersion': 1,
+    'provider': 'astral-sh/python-build-standalone',
+    'release': '20261013',
+    'version': '3.15.0',
+    'distributions': {
+        'arm64': {
+            'target': 'aarch64-apple-darwin',
+            'url': 'https://example.invalid/python-arm64.tar.gz',
+            'sha256': 'a' * 64,
+        },
+        'x86_64': {
+            'target': 'x86_64-apple-darwin',
+            'url': 'https://example.invalid/python-x86_64.tar.gz',
+            'sha256': 'b' * 64,
+        },
+    },
+}
+# build.sh packages the tracked declaration's selected architectures in every app.
+PACKAGED_PYTHON_RUNTIME = {
+    **{field: PYTHON_RUNTIME[field] for field in ('schemaVersion', 'provider', 'release', 'version')},
+    'architectures': ['arm64'],
+    'distributions': {'arm64': PYTHON_RUNTIME['distributions']['arm64']},
+}
+
+
+def packaged_python_runtime(runtime=PACKAGED_PYTHON_RUNTIME):
+    return (json.dumps(runtime, indent=2, sort_keys=True) + '\n').encode()
 
 
 def git(root, *args):
@@ -30,6 +58,8 @@ class BuildProvenanceContract(unittest.TestCase):
         subprocess.run(['git', 'config', 'user.email', 'ci@example.invalid'], cwd=self.root, check=True)
         subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=self.root, check=True)
         (self.root / 'source.txt').write_text('source\n')
+        (self.root / 'Tools').mkdir()
+        (self.root / 'Tools/python_runtime.json').write_text(json.dumps(PYTHON_RUNTIME, indent=2) + '\n')
         (self.root / 'Info.plist').write_bytes(plistlib.dumps({
             'CFBundleExecutable': 'TestTrainer',
             'CFBundleShortVersionString': '0.1.0',
@@ -99,69 +129,8 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Backend/generated.py', result.stderr)
 
-    def test_ci_pr_head_must_be_executed_checkout(self):
-        event_path = Path(self.temporary.name) / 'event.json'
-        event_path.write_text(json.dumps({
-            'number': 199,
-            'pull_request': {'head': {'sha': '1' * 40}, 'base': {'sha': '2' * 40}},
-        }))
-        env = {**self.env, 'GITHUB_EVENT_NAME': 'pull_request',
-               'GITHUB_EVENT_PATH': str(event_path), 'GITHUB_WORKFLOW': 'Build 2 macOS',
-               'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
-               'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
-        result = self.run_tool(env=env)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('head', result.stderr.lower())
-
-    def test_ci_pr_metadata_records_exact_checkout(self):
-        actual = git(self.root, 'rev-parse', 'HEAD')
-        tree = git(self.root, 'rev-parse', 'HEAD^{tree}')
-        base = '2' * 40
-        event_path = Path(self.temporary.name) / 'event.json'
-        event_path.write_text(json.dumps({
-            'number': 84,
-            'pull_request': {'head': {'sha': actual}, 'base': {'sha': base}},
-        }))
-        env = {
-            **self.env,
-            'GITHUB_EVENT_NAME': 'pull_request',
-            'GITHUB_EVENT_PATH': str(event_path),
-            'GITHUB_WORKFLOW': 'Build 2 macOS',
-            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
-            'GITHUB_RUN_ID': '12345',
-            'GITHUB_RUN_ATTEMPT': '2',
-            'GITHUB_RUN_NUMBER': '99',
-            'GITHUB_SHA': '1' * 40,
-        }
-        result = self.run_tool(env=env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads(self.provenance_path().read_text())
-        self.assertEqual(manifest['source'], {'commit': actual, 'tree': tree})
-        self.assertEqual(manifest['pullRequest'], {
-            'number': 84,
-            'headSha': actual,
-            'baseSha': base,
-        })
-        self.assertEqual(manifest['workflow'], {
-            'eventName': 'pull_request',
-            'name': 'Build 2 macOS',
-            'repository': 'TeaganRicardo/MacGamingTrainer',
-            'runId': '12345',
-            'runAttempt': '2',
-            'runNumber': '99',
-        })
-        self.assertEqual(manifest['artifact'], {
-            'file': self.artifact.name,
-            'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
-        })
-        sidecar = self.artifact.with_name(self.artifact.name + '.sha256')
-        self.assertEqual(
-            sidecar.read_text(),
-            f"{manifest['artifact']['sha256']}  {self.artifact.name}\n",
-        )
-
-    def test_ci_macos_provenance_records_exact_host_and_native_toolchain(self):
-        actual = git(self.root, 'rev-parse', 'HEAD')
+    def github_macos_env(self):
+        """Every producer packages from workflow_dispatch on a macOS runner."""
         fake_bin = Path(self.temporary.name) / 'fake-bin'
         fake_bin.mkdir()
         script = fake_bin / 'tool'
@@ -211,20 +180,15 @@ else:
                     if sys.platform == 'darwin' else shutil.which('git'))
         self.assertTrue(real_git)
         (fake_bin / 'git').symlink_to(real_git)
-
-        event_path = Path(self.temporary.name) / 'dispatch.json'
-        event_path.write_text('{}')
-        env = {
+        return {
             **self.env,
             'PATH': str(fake_bin) + os.pathsep + self.env.get('PATH', ''),
             'GITHUB_EVENT_NAME': 'workflow_dispatch',
-            'GITHUB_EVENT_PATH': str(event_path),
             'GITHUB_WORKFLOW': 'Build 2 macOS',
             'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
             'GITHUB_RUN_ID': '456',
             'GITHUB_RUN_ATTEMPT': '1',
             'GITHUB_RUN_NUMBER': '11',
-            'GITHUB_SHA': actual,
             'RUNNER_OS': 'macOS',
             'RUNNER_ARCH': 'ARM64',
             'ImageOS': 'macos26',
@@ -232,12 +196,30 @@ else:
             'MGT_MACOS_RUNNER_LABEL': 'macos-26',
             'DEVELOPER_DIR': '/Applications/Xcode_26.6.app/Contents/Developer',
         }
+
+    def test_ci_macos_provenance_records_exact_host_and_native_toolchain(self):
+        actual = git(self.root, 'rev-parse', 'HEAD')
+        env = self.github_macos_env()
         result = self.run_tool(env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads(self.provenance_path().read_text())
         self.assertEqual(manifest['source'], {
             'commit': actual, 'tree': git(self.root, 'rev-parse', 'HEAD^{tree}'),
         })
+        self.assertEqual(manifest['workflow'], {
+            'eventName': 'workflow_dispatch',
+            'name': 'Build 2 macOS',
+            'repository': 'TeaganRicardo/MacGamingTrainer',
+            'runId': '456',
+            'runAttempt': '1',
+            'runNumber': '11',
+        })
+        self.assertEqual(manifest['artifact'], {
+            'file': self.artifact.name,
+            'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
+        })
+        sidecar = self.artifact.with_name(self.artifact.name + '.sha256')
+        self.assertEqual(sidecar.read_text(), f"{manifest['artifact']['sha256']}  {self.artifact.name}\n")
         self.assertEqual(manifest['toolchain'], {
             'host': {
                 'runnerLabel': 'macos-26',
@@ -281,15 +263,18 @@ else:
             },
         })
 
-        missing_image = dict(env)
-        missing_image.pop('ImageVersion')
-        rejected = self.run_tool(env=missing_image)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('ImageVersion', rejected.stderr)
+        # GitHub provenance always records its macOS host; no runner omits it.
+        for variable in ('ImageVersion', 'RUNNER_OS'):
+            with self.subTest(missing=variable):
+                incomplete = dict(env)
+                incomplete.pop(variable)
+                rejected = self.run_tool(env=incomplete)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn(variable, rejected.stderr)
 
     def test_verifier_centralizes_source_module_and_recorded_toolchain_policy(self):
         module = self.root / 'Backend/games/hades2'
-        module.mkdir(parents=True)
+        (module / 'runtime').mkdir(parents=True)
         module_manifest = module / 'module.json'
         supported_build = {
             'architecture': 'arm64', 'bundleVersion': '42', 'steamBuildID': '123',
@@ -301,69 +286,51 @@ else:
             'id': 'hades2', 'displayName': 'Hades II',
             'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
             'supportedBuild': supported_build,
+            'residentRuntime': {'source': 'runtime/hades.lua'},
         }))
+        resident = module / 'runtime/hades.lua'
+        resident.write_bytes(b'resident fixture\n')
         workflow = self.root / '.github/workflows/build2-macos.yml'
         workflow.parent.mkdir(parents=True)
         workflow.write_text('name: Build 2 macOS\n')
         subprocess.run(['git', 'add', 'Backend', '.github'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'module and workflow'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
         actual = git(self.root, 'rev-parse', 'HEAD')
-        tree = git(self.root, 'rev-parse', 'HEAD^{tree}')
-        provenance = Path(self.temporary.name) / 'fixture.provenance.json'
-        toolchain = {
-            'host': {
-                'runnerLabel': 'macos-26', 'runnerOS': 'macOS', 'runnerArch': 'ARM64',
-                'imageOS': 'macos26', 'imageVersion': '20260907.0351.1',
-                'imageMutable': True, 'macOSVersion': '26.6.2', 'macOSBuild': '25G83',
-            },
-            'developer': {
-                'requestedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
-                'selectedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
-                'xcodeSelectDeveloperDir': '/Applications/Xcode.app/Contents/Developer',
-                'xcodeVersion': '26.6', 'xcodeBuild': '17F113',
-                'sdk': {'name': 'macosx', 'path': '/SDKs/MacOSX26.5.sdk',
-                        'version': '26.5', 'build': '25F90'},
-                'swift': {'path': '/toolchain/swiftc', 'version': 'Apple Swift version 6.3'},
-                'clang': {'path': '/toolchain/clang', 'version': 'Apple clang version 17.0.0'},
-                'lldb': {'path': '/toolchain/lldb', 'version': 'lldb-2600.0.31.7',
-                         'pythonModulePath': '/LLDB/Python'},
-                'xcodePython': {'path': '/toolchain/python3', 'version': 'Python 3.9.6'},
-            },
-        }
-        manifest = {
-            'schemaVersion': 1,
-            'productVersion': '0.1.0',
-            'bundleBuild': '7',
-            'source': {'commit': actual, 'tree': tree},
-            'buildInputs': {
-                'checkout': 'clean',
-                'generatedCopies': [],
-                'moduleManifest': {
-                    'path': 'Backend/games/hades2/module.json',
-                    'sha256': hashlib.sha256(module_manifest.read_bytes()).hexdigest(),
-                },
-                'workflowSource': {
-                    'path': '.github/workflows/build2-macos.yml',
-                    'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
-                },
-            },
-            'artifact': {
-                'file': self.artifact.name,
-                'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
-            },
-            'origin': 'github',
-            'workflow': {'name': 'Build 2 macOS', 'eventName': 'workflow_dispatch'},
-            'moduleId': 'hades2',
-            'supportedBuilds': {'hades2': supported_build},
-            'toolchain': toolchain,
-        }
 
-        def verify(payload):
+        def app_files(app='Test.app', info=None, resident_bytes=None,
+                      runtime=PACKAGED_PYTHON_RUNTIME):
+            resources = f'{app}/Contents/Resources'
+            return {
+                f'{app}/Contents/Info.plist': info or self.packaged_info(),
+                f'{app}/Contents/MacOS/TestTrainer': b'binary',
+                f'{resources}/ACTIVE_GAME_ID': b'hades2\n',
+                f'{resources}/Backend/games/hades2/module.json': module_manifest.read_bytes(),
+                f'{resources}/Backend/games/hades2/runtime/hades.lua':
+                    resident_bytes or resident.read_bytes(),
+                f'{resources}/Python/runtime.json': packaged_python_runtime(runtime),
+            }
+
+        def package(files):
+            with zipfile.ZipFile(self.artifact, 'w') as archive:
+                for name, data in files.items():
+                    archive.writestr(name, data)
+            return hashlib.sha256(self.artifact.read_bytes()).hexdigest()
+
+        package(app_files())
+        written = self.run_tool('--module-id', 'hades2',
+                                '--workflow-source', '.github/workflows/build2-macos.yml',
+                                env=self.github_macos_env())
+        self.assertEqual(written.returncode, 0, written.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        provenance = Path(self.temporary.name) / 'fixture.provenance.json'
+
+        def verify(payload, retained=True):
             provenance.write_text(json.dumps(payload))
+            artifact = ['--artifact', str(self.artifact)] if retained else []
             return subprocess.run([
                 sys.executable, str(VERIFY_SCRIPT),
-                '--provenance', str(provenance),
-                '--artifact', str(self.artifact),
+                '--provenance', str(provenance), *artifact,
                 '--repo-root', str(self.root),
                 '--expected-source-sha', actual,
                 '--module-id', 'hades2',
@@ -372,68 +339,59 @@ else:
                 '--expected-workflow', 'Build 2 macOS',
                 '--expected-event', 'workflow_dispatch',
                 '--expected-workflow-source', '.github/workflows/build2-macos.yml',
-                '--require-macos-toolchain',
             ], cwd=self.root, env=self.env, text=True, capture_output=True)
+
+        def changed(edit):
+            payload = json.loads(json.dumps(manifest))
+            edit(payload)
+            return payload
 
         valid = verify(manifest)
         self.assertEqual(valid.returncode, 0, valid.stderr)
+        with self.subTest(case='unretained artifact'):
+            rejected = verify(manifest, retained=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('--artifact', rejected.stderr)
 
-        wrong_supported = json.loads(json.dumps(manifest))
-        wrong_supported['supportedBuilds']['hades2']['uuid'] = 'WRONG'
-        rejected = verify(wrong_supported)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('supported game build identities', rejected.stderr)
+        for case, edit, message in [
+            ('supported build', lambda p: p['supportedBuilds']['hades2'].update(uuid='WRONG'),
+             'supported game build identities'),
+            ('missing supported builds', lambda p: p.pop('supportedBuilds'),
+             'supported game build identities'),
+            ('toolchain', lambda p: p['toolchain']['developer'].update(xcodeBuild='wrong'),
+             'xcodeBuild'),
+            ('missing toolchain', lambda p: p.pop('toolchain'), 'toolchain'),
+            ('missing Python runtime', lambda p: p.pop('pythonRuntime'), 'Python runtime'),
+            ('missing resident runtime', lambda p: p.pop('residentRuntime'), 'resident runtime'),
+            ('module manifest', lambda p: p['buildInputs']['moduleManifest'].update(sha256='b' * 64),
+             'module manifest'),
+            ('workflow source', lambda p: p['buildInputs']['workflowSource'].update(sha256='c' * 64),
+             'workflow source'),
+            ('artifact digest', lambda p: p['artifact'].update(sha256='d' * 64), 'artifact SHA-256'),
+        ]:
+            with self.subTest(case=case):
+                rejected = verify(changed(edit))
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn(message, rejected.stderr)
 
-        missing_supported = json.loads(json.dumps(manifest))
-        missing_supported.pop('supportedBuilds')
-        rejected = verify(missing_supported)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('supported game build identities', rejected.stderr)
-
-        wrong_toolchain = json.loads(json.dumps(manifest))
-        wrong_toolchain['toolchain']['developer']['xcodeBuild'] = 'wrong'
-        rejected = verify(wrong_toolchain)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('xcodeBuild', rejected.stderr)
-
-        wrong_module = json.loads(json.dumps(manifest))
-        wrong_module['buildInputs']['moduleManifest']['sha256'] = 'b' * 64
-        rejected = verify(wrong_module)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('module manifest', rejected.stderr)
-
-        wrong_workflow = json.loads(json.dumps(manifest))
-        wrong_workflow['buildInputs']['workflowSource']['sha256'] = 'c' * 64
-        rejected = verify(wrong_workflow)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('workflow source', rejected.stderr)
-
-        wrong_artifact = json.loads(json.dumps(manifest))
-        wrong_artifact['artifact']['sha256'] = 'd' * 64
-        rejected = verify(wrong_artifact)
-        self.assertNotEqual(rejected.returncode, 0)
-        self.assertIn('artifact SHA-256', rejected.stderr)
-
-    def test_workflow_dispatch_does_not_invent_pull_request(self):
-        event_path = Path(self.temporary.name) / 'dispatch.json'
-        event_path.write_text('{}')
-        env = {
-            **self.env,
-            'GITHUB_EVENT_NAME': 'workflow_dispatch',
-            'GITHUB_EVENT_PATH': str(event_path),
-            'GITHUB_WORKFLOW': 'Build 2 macOS',
-            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
-            'GITHUB_RUN_ID': '456',
-            'GITHUB_RUN_ATTEMPT': '1',
-            'GITHUB_RUN_NUMBER': '11',
-            'GITHUB_SHA': git(self.root, 'rev-parse', 'HEAD'),
-        }
-        result = self.run_tool(env=env)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads(self.provenance_path().read_text())
-        self.assertNotIn('pullRequest', manifest)
-        self.assertEqual(manifest['workflow']['eventName'], 'workflow_dispatch')
-        self.assertEqual(manifest['workflow']['runId'], '456')
+        # A replaced ZIP can carry a forged matching digest, so every claim about
+        # packaged content must be re-derived from the retained ZIP itself.
+        wrong_info = plistlib.loads(self.packaged_info())
+        wrong_info['CFBundleVersion'] = '999'
+        for case, files, message in [
+            ('no app bundle', {'README.txt': b'not an app'}, 'selected-module marker'),
+            ('other app bundle', app_files(app='Other.app'), 'app name'),
+            ('Info.plist identity', app_files(info=plistlib.dumps(wrong_info)), 'CFBundleVersion'),
+            ('tampered resident', app_files(resident_bytes=b'tampered resident\n'), 'resident'),
+            ('tampered Python runtime',
+             app_files(runtime={**PACKAGED_PYTHON_RUNTIME, 'version': '3.15.1'}),
+             'Python runtime version'),
+        ]:
+            with self.subTest(case=case):
+                digest = package(files)
+                rejected = verify(changed(lambda p: p['artifact'].update(sha256=digest)))
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn(message, rejected.stderr)
 
     def test_producer_workflow_source_is_recorded_as_tracked_build_input(self):
         workflow = self.root / '.github/workflows/build2-macos.yml'
@@ -493,6 +451,7 @@ else:
             archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
             archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Python/runtime.json', packaged_python_runtime())
             archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
                              (module / 'module.json').read_bytes())
             archive.writestr(packaged, source.read_bytes())
@@ -506,6 +465,7 @@ else:
             archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
             archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Python/runtime.json', packaged_python_runtime())
             archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
                              (module / 'module.json').read_bytes())
             archive.writestr(packaged, b'wrong bytes')
@@ -518,6 +478,7 @@ else:
             archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
             archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Python/runtime.json', packaged_python_runtime())
             archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
                              (module / 'module.json').read_bytes())
             archive.writestr(decoy, source.read_bytes())
@@ -539,29 +500,9 @@ else:
             'id': 'hades2', 'displayName': 'Hades II',
             'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
         }))
-        tools = self.root / 'Tools'
-        tools.mkdir()
-        source_runtime = {
-            'schemaVersion': 1,
-            'provider': 'astral-sh/python-build-standalone',
-            'release': '20261013',
-            'version': '3.15.0',
-            'distributions': {
-                'arm64': {
-                    'target': 'aarch64-apple-darwin',
-                    'url': 'https://example.invalid/python-arm64.tar.gz',
-                    'sha256': 'a' * 64,
-                },
-                'x86_64': {
-                    'target': 'x86_64-apple-darwin',
-                    'url': 'https://example.invalid/python-x86_64.tar.gz',
-                    'sha256': 'b' * 64,
-                },
-            },
-        }
-        source_path = tools / 'python_runtime.json'
-        source_path.write_text(json.dumps(source_runtime, indent=2) + '\n')
-        subprocess.run(['git', 'add', 'Backend', 'Tools'], cwd=self.root, check=True)
+        source_runtime = PYTHON_RUNTIME
+        source_path = self.root / 'Tools/python_runtime.json'
+        subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'runtime'], cwd=self.root, check=True)
         self.refresh_artifact_name()
 
@@ -627,6 +568,15 @@ else:
         self.assertNotEqual(mismatch.returncode, 0)
         self.assertIn('Python runtime distributions differ', mismatch.stderr)
 
+        # Every packaged app bundles the tracked declaration; no build omits it.
+        subprocess.run(['git', 'rm', '-q', 'Tools/python_runtime.json'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'undeclared runtime'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+        package(packaged_runtime)
+        undeclared = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertNotEqual(undeclared.returncode, 0)
+        self.assertIn('python_runtime.json', undeclared.stderr)
+
     def test_module_id_must_match_packaged_marker_and_manifest(self):
         modules = self.root / 'Backend/games'
         for game_id in ('hades2', 'reference_fixture'):
@@ -667,6 +617,7 @@ else:
             archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'reference_fixture\n')
             archive.writestr(f'{resources}/Backend/games/reference_fixture/module.json',
                              (modules / 'reference_fixture/module.json').read_bytes())
+            archive.writestr(f'{resources}/Python/runtime.json', packaged_python_runtime())
         valid = self.run_tool('--local', '--module-id', 'reference_fixture')
         self.assertEqual(valid.returncode, 0, valid.stderr)
         metadata = json.loads(self.provenance_path().read_text())
@@ -697,6 +648,7 @@ else:
                 archive.writestr(f'{app}/Resources/ACTIVE_GAME_ID', 'hades2\n')
                 archive.writestr(f'{app}/Resources/Backend/games/hades2/module.json',
                                  (module / 'module.json').read_bytes())
+                archive.writestr(f'{app}/Resources/Python/runtime.json', packaged_python_runtime())
 
         for field, wrong in [
             ('CFBundleShortVersionString', '9.9.9'), ('CFBundleVersion', '999'),
@@ -768,10 +720,9 @@ else:
                 for game_id in ids:
                     archive.writestr(resources + f'/Backend/games/{game_id}/module.json',
                                      (self.root / 'Backend/games' / game_id / 'module.json').read_bytes())
+                archive.writestr(resources + '/Python/runtime.json', packaged_python_runtime())
         package(['one', 'two'])
-        env = {**self.env, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
-               'GITHUB_WORKFLOW': 'Build 2 macOS', 'GITHUB_REPOSITORY': 'example/trainer',
-               'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
+        env = self.github_macos_env()
         result = self.run_tool('--module-id', 'all', env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         package(['one', 'two'], selection='one')
@@ -837,9 +788,8 @@ else:
                 if game_id in sources:
                     archive.writestr(resources + f'/Backend/games/{game_id}/{sources[game_id]}',
                                      (module / sources[game_id]).read_bytes())
-        env = {**self.env, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
-               'GITHUB_WORKFLOW': 'Build 2 macOS', 'GITHUB_REPOSITORY': 'example/trainer',
-               'GITHUB_RUN_ID': '42', 'GITHUB_RUN_ATTEMPT': '1', 'GITHUB_RUN_NUMBER': '7'}
+            archive.writestr(resources + '/Python/runtime.json', packaged_python_runtime())
+        env = self.github_macos_env()
         result = self.run_tool('--module-id', 'all', env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         original = json.loads(self.provenance_path().read_text())
@@ -876,6 +826,19 @@ else:
                 rejected = verify(changed)
                 self.assertNotEqual(rejected.returncode, 0, rejected.stdout)
                 self.assertIn('resident runtime', rejected.stderr)
+
+        # A replaced ZIP with a forged digest cannot keep the recorded resident claim.
+        with zipfile.ZipFile(self.artifact) as archive:
+            entries = {name: archive.read(name) for name in archive.namelist()}
+        entries[resources + '/Backend/games/one/runtime/one.lua'] = b'tampered resident\n'
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        forged = json.loads(json.dumps(original))
+        forged['artifact']['sha256'] = hashlib.sha256(self.artifact.read_bytes()).hexdigest()
+        rejected = verify(forged)
+        self.assertNotEqual(rejected.returncode, 0, rejected.stdout)
+        self.assertIn('resident', rejected.stderr)
 
 
 if __name__ == '__main__':
