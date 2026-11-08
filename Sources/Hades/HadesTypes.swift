@@ -27,6 +27,18 @@ enum HadesFeature: String, CaseIterable, Identifiable {
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
 }
 
+/// A live hero value the runtime observes and edits through `set_value`.
+enum HadesHeroValue: String {
+    case health, maxHealth, money, rerolls, godGauge
+}
+
+/// One completed text edit and the owner it applies to.
+enum HadesTextEdit {
+    case value(HadesHeroValue)
+    case resource(String)
+    case feature(HadesFeature)
+}
+
 enum HadesFeatureValue: Decodable, Equatable {
     case boolean(Bool), number(Double)
     case gameSpeed(desired: Double, actual: Double?, active: Bool?,
@@ -156,6 +168,7 @@ struct HadesObservation: Decodable {
     let target: HadesHeroTarget?
     let features: [String: HadesFeatureValue]?
     let activeFeatures: [String: Bool]?
+    let dormantFeatures: [String: Bool]?
     let boonRarityTarget: String?
     let resources: [String: Double]?
     let traits: [HadesCurrentTrait]?

@@ -16,28 +16,37 @@ struct HadesOperationFeedback: View {
 }
 
 struct HadesTrainerView: View {
+    private enum EditField: Hashable {
+        case value(HadesHeroValue)
+        case feature(HadesFeature)
+        case resource
+    }
+
+    /// The selected resource and its observation, so a new selection replaces
+    /// the draft while an unfocused count refreshes it.
+    private struct ResourceObservation: Equatable {
+        let id: String
+        let value: Double?
+    }
+
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
+    @State private var focusedField: EditField?
+    @State private var drafts: [EditField: String] = [:]
+    @State private var resourceSearch = ""
+    @State private var selectedResource = ""
+
+    private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
+    private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
 
-    private func state(_ feature: HadesFeature) -> TrainerFeatureControlState {
-        let enabled = model.isEnabled(feature)
-        let active = model.isActive(feature)
-        let detached = enabled && !model.connected
-        return TrainerFeatureControlState(
-            isOn: enabled,
-            isInteractive: model.canEditIntent,
-            canEditValue: model.canEditIntent,
-            opacity: 1,
-            indicatorColor: detached ? theme.warning : (active ? theme.accent : theme.inactive),
-            helpText: detached ? text("hades.phase.detached") : text(feature.helpKey),
-            isWarning: enabled && !active
-        )
+    private func featureState(_ feature: HadesFeature) -> TrainerFeatureControlState {
+        model.featurePresentation(feature).trainerControlState(using: theme, localization: localization)
     }
 
     var body: some View {
@@ -61,6 +70,45 @@ struct HadesTrainerView: View {
                 }
             }
         }
+        // Drafts are owned through edit completion: an observation refreshes
+        // every unfocused value and never replaces the focused draft.
+        .onChange(of: observedDrafts, initial: true) { _, observed in
+            for (field, text) in observed where field != focusedField { drafts[field] = text }
+        }
+        .onChange(of: filteredResources.map(\.id), initial: true) { _, ids in
+            if !ids.contains(selectedResource) { selectedResource = ids.first ?? "" }
+        }
+        .onChange(of: resourceObservation, initial: true) { old, new in
+            if old.id != new.id || focusedField != .resource {
+                drafts[.resource] = new.value.map(HadesTrainerModel.displayText) ?? ""
+            }
+        }
+    }
+
+    private var observedDrafts: [EditField: String] {
+        var observed: [EditField: String] = [:]
+        for value in Self.heroValues {
+            observed[.value(value)] = model.observed(value).map(HadesTrainerModel.displayText) ?? ""
+        }
+        for feature in Self.multipliers {
+            observed[.feature(feature)] = HadesTrainerModel.displayText(model.number(feature))
+        }
+        return observed
+    }
+
+    private func draft(_ field: EditField) -> Binding<String> {
+        Binding(get: { drafts[field] ?? "" }, set: { drafts[field] = $0 })
+    }
+
+    /// Commits route to the hero observed when this field's edit began: the
+    /// edit captures the closure rendered for that hero.
+    private func completing(_ edit: HadesTextEdit) -> (TrainerTextField.Completion) -> String {
+        let target = model.target
+        return { draft in
+            model.completeTextEdit(edit, text: draft.text, changed: draft.changed, target: target) { key in
+                _ = draft.rejected(message: text(key))
+            }
+        }
     }
 
     private var runDataSection: some View {
@@ -75,34 +123,49 @@ struct HadesTrainerView: View {
             }
             VStack(spacing: 0) {
                 TrainerMetricGrid {
-                    HadesVitalMetricCard(model: model)
-                    HadesAmountMetricCard(
-                        model: model,
-                        title: text("hades.money"),
-                        icon: TrainerSemanticIcon.Concept.currency,
-                        value: model.money,
-                        field: "money",
-                        locked: model.moneyLocked,
+                    TrainerVitalMetricCard(
+                        title: text("hades.health"), icon: TrainerSemanticIcon.Concept.vitality, tint: .pink,
+                        current: draft(.value(.health)), maximum: draft(.value(.maxHealth)),
+                        focus: $focusedField, currentField: .value(.health),
+                        onCurrentCommit: completing(.value(.health)),
+                        onMaximumCommit: completing(.value(.maxHealth)),
+                        maximumField: .value(.maxHealth),
+                        locked: model.healthLocked, editable: model.canMutate,
+                        onLock: { model.lockHealth(!model.healthLocked) }
+                    )
+                    TrainerAmountMetricCard(
+                        title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency, tint: .yellow,
+                        text: draft(.value(.money)), focus: $focusedField, focusValue: .value(.money),
+                        locked: model.moneyLocked, editable: model.canMutate,
                         lockEnabled: !model.isEnabled(.moneyNoDecrease),
-                        onLock: { model.lockMoney(!model.moneyLocked) }
+                        onLock: { model.lockMoney(!model.moneyLocked) },
+                        onCommit: completing(.value(.money))
                     )
-                    HadesAmountMetricCard(
-                        model: model,
-                        title: text("hades.rerolls"),
-                        icon: TrainerSemanticIcon.Concept.randomize,
-                        value: model.rerolls,
-                        field: "rerolls",
-                        locked: model.rerollsLocked,
+                    TrainerAmountMetricCard(
+                        title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, tint: theme.accent,
+                        text: draft(.value(.rerolls)), focus: $focusedField, focusValue: .value(.rerolls),
+                        locked: model.rerollsLocked, editable: model.canMutate,
                         lockEnabled: !model.isEnabled(.rerollsNoDecrease),
-                        onLock: { model.lockRerolls(!model.rerollsLocked) }
+                        onLock: { model.lockRerolls(!model.rerollsLocked) },
+                        onCommit: completing(.value(.rerolls))
                     )
-                    HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
-                                          value: model.godGauge, field: "godGauge")
+                    // God Gauge has no fixed lock: Full God Gauge covers it.
+                    TrainerCounterMetricCard(
+                        title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge, tint: theme.accent,
+                        text: draft(.value(.godGauge)), focus: $focusedField, focusValue: .value(.godGauge),
+                        detail: nil, onCommit: completing(.value(.godGauge)), editable: model.canMutate
+                    )
                 }
                 TrainerDisclosure(isExpanded: model.numericControlsExpanded) {
                     TrainerMetricGrid {
-                        ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
-                            HadesFeatureMetricCard(model: model, feature: feature)
+                        ForEach(Self.multipliers) { feature in
+                            // Native units: multipliers are ×, additional dashes a count.
+                            TrainerMultiplierMetricCard(
+                                title: text(feature.key), icon: feature.icon,
+                                text: draft(.feature(feature)), focus: $focusedField, focusValue: .feature(feature),
+                                suffix: feature == .dashBonus ? "" : "×", editable: model.canEditIntent,
+                                onCommit: completing(.feature(feature))
+                            )
                         }
                     }.padding(.top, 12)
                 }
@@ -116,7 +179,8 @@ struct HadesTrainerView: View {
             VStack(spacing: 1) {
                 ForEach(HadesFeature.allCases.filter { $0.isToggle && $0 != .boonRarityEnabled }) { feature in
                     TrainerFeatureToggleRow(
-                        title: text(feature.key), icon: feature.icon, state: state(feature),
+                        title: text(feature.key), icon: feature.icon, state: featureState(feature),
+                        helpText: text(feature.helpKey),
                         shortcutText: HadesShortcutAction(rawValue: feature.rawValue).map(model.shortcutText)
                     ) {
                         model.setFeature(feature, value: !model.isEnabled(feature))
@@ -223,13 +287,14 @@ struct HadesTrainerView: View {
     }
 
     private var boonRarityPanel: some View {
-        let controlState = state(.boonRarityEnabled)
+        let controlState = featureState(.boonRarityEnabled)
         return TrainerLabeledControlRow(
             title: text(HadesFeature.boonRarityEnabled.key),
             icon: HadesFeature.boonRarityEnabled.icon,
             tint: controlState.indicatorColor,
             emphasized: controlState.isOn,
-            opacity: controlState.opacity
+            opacity: controlState.opacity,
+            helpText: text(HadesFeature.boonRarityEnabled.helpKey)
         ) {
             Picker(text("hades.minimumRarity"), selection: Binding(
                 get: { model.boonRarityTarget },
@@ -266,21 +331,51 @@ struct HadesTrainerView: View {
     private var resourcesSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.resources.titleKey),
                        icon: HadesWorkbenchSection.resources.icon) {
-            VStack(spacing: 0) {
-                ForEach(model.resourceCatalog) { resource in
-                    HadesValueRow(
-                        model: model,
-                        title: resource.name(language: localization.language.rawValue),
-                        glyph: HadesResourceIcon.glyph(for: resource.id), value: model.resources[resource.id] ?? 0
-                    ) {
-                        model.setResource(resource.id, value: $0, target: $1)
-                    }
-                    .id(resource.id)
-                }
-            }
-            .trainerGroupedRows()
+            TrainerResourceEditor(
+                title: text("hades.resources"),
+                icon: TrainerSemanticIcon.Concept.item,
+                search: $resourceSearch,
+                selection: $selectedResource,
+                amount: draft(.resource),
+                sections: resourceSections,
+                enabled: model.canMutate,
+                lock: nil,
+                itemLabel: resourceLabel,
+                onEditingChanged: TrainerTextField.editingTracker($focusedField, equals: .resource),
+                onCommit: completing(.resource(selectedResource))
+            )
+            .trainerPanel()
             HadesGatheringPanel(model: model)
         }
+    }
+
+    private var filteredResources: [HadesResourceDefinition] {
+        let query = resourceSearch.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return model.resourceCatalog }
+        return model.resourceCatalog.filter { resource in
+            ([resource.id] + resource.names.values).contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    /// The catalog owns the resources and their order. Hades I's native data
+    /// gives them no categories, so they form one section.
+    private var resourceSections: [TrainerPickerSection<HadesResourceDefinition>] {
+        filteredResources.isEmpty ? [] : [
+            TrainerPickerSection(id: 0, title: text("hades.resource.section"), items: filteredResources),
+        ]
+    }
+
+    private var resourceObservation: ResourceObservation {
+        ResourceObservation(id: selectedResource, value: model.resources[selectedResource])
+    }
+
+    /// Both official names, current language first, then the observed amount.
+    private func resourceLabel(_ resource: HadesResourceDefinition) -> String {
+        let primary = resource.name(language: localization.language.rawValue)
+        let other: TrainerPresentationLanguage = localization.language == .en ? .zhCN : .en
+        let secondary = resource.names[other.rawValue] ?? ""
+        let name = secondary.isEmpty || secondary == primary ? primary : "\(primary) · \(secondary)"
+        return name + " · " + (model.resources[resource.id].map(HadesTrainerModel.displayText) ?? "—")
     }
 
     private var managementSection: some View {
@@ -288,216 +383,6 @@ struct HadesTrainerView: View {
                        icon: HadesWorkbenchSection.management.icon) {
             HadesManagementUtilities(model: model)
         }
-    }
-}
-
-private struct HadesVitalMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
-    @State private var currentDraft: HadesNumberDraft
-    @State private var maximumDraft: HadesNumberDraft
-
-    init(model: HadesTrainerModel) {
-        self.model = model
-        _currentDraft = State(initialValue: HadesNumberDraft(value: model.health))
-        _maximumDraft = State(initialValue: HadesNumberDraft(value: model.maxHealth))
-    }
-
-    private var title: String { HadesPresentation.text("hades.health", language: localization.language) }
-
-    private func commit(_ completion: TrainerTextField.Completion,
-                        draft: HadesNumberDraft, field: String) -> String {
-        guard completion.changed else { return completion.text }
-        guard let number = Double(completion.text), number.isFinite,
-              number.rounded() == number, number >= 1, number <= 1_000_000_000 else {
-            model.rejectInvalidValue()
-            return completion.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-        }
-        model.setValue(field, value: number, target: draft.target)
-        return HadesNumberDraft.format(number)
-    }
-
-    var body: some View {
-        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
-            TrainerLockButton(
-                title: title,
-                locked: model.healthLocked,
-                enabled: model.canMutate,
-                action: { model.lockHealth(!model.healthLocked) }
-            )
-        } content: {
-            HStack(spacing: 2) {
-                TrainerNumberField(
-                    text: Binding(get: { currentDraft.text }, set: { currentDraft.update($0) }),
-                    accessibilityLabel: localization.localized("host.input.currentValue", arguments: [title]),
-                    width: 54, enabled: model.canMutate, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { currentDraft.begin(target: model.target) } else { currentDraft.end() }
-                    },
-                    onCommit: { commit($0, draft: currentDraft, field: "health") }
-                )
-                Text("/").foregroundStyle(.secondary)
-                TrainerNumberField(
-                    text: Binding(get: { maximumDraft.text }, set: { maximumDraft.update($0) }),
-                    accessibilityLabel: localization.localized("host.input.maximumValue", arguments: [title]),
-                    width: 54, enabled: model.canMutate, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { maximumDraft.begin(target: model.target) } else { maximumDraft.end() }
-                    },
-                    onCommit: { commit($0, draft: maximumDraft, field: "maxHealth") }
-                )
-            }
-        }
-        .onChange(of: model.health) { _, value in currentDraft.observe(value) }
-        .onChange(of: model.maxHealth) { _, value in maximumDraft.observe(value) }
-    }
-}
-
-private struct HadesAmountMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    let title: String
-    let icon: String
-    let value: Double
-    let field: String
-    let locked: Bool?
-    let lockEnabled: Bool
-    let onLock: (() -> Void)?
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(
-        model: HadesTrainerModel,
-        title: String,
-        icon: String,
-        value: Double,
-        field: String,
-        locked: Bool? = nil,
-        lockEnabled: Bool = true,
-        onLock: (() -> Void)? = nil
-    ) {
-        self.model = model
-        self.title = title
-        self.icon = icon
-        self.value = value
-        self.field = field
-        self.locked = locked
-        self.lockEnabled = lockEnabled
-        self.onLock = onLock
-        _draft = State(initialValue: HadesNumberDraft(value: value))
-    }
-
-    var body: some View {
-        TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
-            if let locked, let onLock {
-                TrainerLockButton(
-                    title: title,
-                    locked: locked,
-                    enabled: model.canMutate && lockEnabled,
-                    action: onLock
-                )
-            } else {
-                Color.clear.frame(width: 26, height: 24)
-            }
-        } content: {
-            TrainerNumberField(
-                text: Binding(get: { draft.text }, set: { draft.update($0) }),
-                accessibilityLabel: title, width: 96, enabled: model.canMutate, alignment: .center,
-                onEditingChanged: { active in
-                    if active { draft.begin(target: model.target) } else { draft.end() }
-                },
-                onCommit: { completed in
-                    guard completed.changed else { return completed.text }
-                    guard let number = Double(completed.text), number.isFinite,
-                          number.rounded() == number, number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue()
-                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-                    }
-                    model.setValue(field, value: number, target: draft.target)
-                    return HadesNumberDraft.format(number)
-                }
-            )
-        }
-        .onChange(of: value) { _, value in draft.observe(value) }
-    }
-}
-
-private struct HadesValueRow: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    let title: String
-    let glyph: TrainerGlyph
-    let value: Double
-    let onCommit: (Double, HadesHeroTarget?) -> Void
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(model: HadesTrainerModel, title: String, glyph: TrainerGlyph, value: Double,
-         onCommit: @escaping (Double, HadesHeroTarget?) -> Void) {
-        self.model = model; self.title = title; self.glyph = glyph; self.value = value; self.onCommit = onCommit
-        _draft = State(initialValue: HadesNumberDraft(value: value))
-    }
-    var body: some View {
-        TrainerLabeledControlRow(title: title, glyph: glyph, tint: theme.accent, emphasized: model.heroReady) {
-            TrainerNumberField(text: Binding(get: { draft.text }, set: { draft.update($0) }), accessibilityLabel: title,
-                enabled: model.canMutate, onEditingChanged: { active in
-                    if active { draft.begin(target: model.target) } else { draft.end() }
-                }, onCommit: { completed in
-                    guard completed.changed else { return completed.text }
-                    guard let number = Double(completed.text), number.isFinite, number.rounded() == number,
-                          number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue()
-                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-                    }
-                    onCommit(number, draft.target)
-                    return HadesNumberDraft.format(number)
-                })
-        }
-        .onChange(of: value) { _, value in draft.observe(value) }
-    }
-}
-
-private struct HadesFeatureMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    let feature: HadesFeature
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(model: HadesTrainerModel, feature: HadesFeature) {
-        self.model = model; self.feature = feature
-        _draft = State(initialValue: HadesNumberDraft(value: feature.neutralValue))
-    }
-
-    var body: some View {
-        let title = HadesPresentation.text(feature.key, language: localization.language)
-        return TrainerMetricCard(title: title, icon: feature.icon, tint: theme.accent) {
-            TrainerResetButton(
-                title: HadesPresentation.text("hades.reset", language: localization.language),
-                enabled: model.canEditIntent
-            ) {
-                model.setFeature(feature, value: feature.neutralValue)
-            }
-        } content: {
-            HStack(spacing: 3) {
-                TrainerNumberField(
-                    text: Binding(get: { draft.text }, set: { draft.update($0) }),
-                    accessibilityLabel: title, width: 58, enabled: model.canEditIntent, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { draft.begin(target: nil) } else { draft.end() }
-                    },
-                    onCommit: { completed in
-                        guard completed.changed else { return completed.text }
-                        return model.setNumber(feature, text: completed.text) { key in
-                            _ = completed.rejected(message: HadesPresentation.text(key, language: localization.language))
-                        }
-                    }
-                )
-                if feature != .dashBonus { Text("×").foregroundStyle(.secondary) }
-            }
-        }
-        .onChange(of: model.number(feature), initial: true) { _, value in draft.observe(value) }
     }
 }
 

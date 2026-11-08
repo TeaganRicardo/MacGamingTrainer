@@ -8,17 +8,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var connected = false
     @Published private(set) var heroReady = false
     @Published private(set) var invincible = false
-    @Published private(set) var health = 0.0
-    @Published private(set) var maxHealth = 0.0
-    @Published private(set) var money = 0.0
-    @Published private(set) var rerolls = 0.0
+    /// Hero and save values are observations of a ready hero; nil means none.
+    @Published private(set) var health: Double?
+    @Published private(set) var maxHealth: Double?
+    @Published private(set) var money: Double?
+    @Published private(set) var rerolls: Double?
     @Published private(set) var healthLocked = false
     @Published private(set) var moneyLocked = false
     @Published private(set) var rerollsLocked = false
-    @Published private(set) var godGauge = 0.0
-    @Published private(set) var maxGodGauge = 0.0
+    @Published private(set) var godGauge: Double?
+    @Published private(set) var maxGodGauge: Double?
     @Published private(set) var features: [String: HadesFeatureValue] = [:]
     @Published private(set) var activeFeatures: [String: Bool] = [:]
+    @Published private(set) var dormantFeatures: [String: Bool] = [:]
+    /// Optimistic toggle intent while its request is in flight. The reply's
+    /// observation replaces it; a newer intent is never rolled back by an older reply.
+    @Published private var pendingFeatureIntents: [HadesFeature: PendingFeatureIntent] = [:]
     @Published private(set) var boonRarityTarget = "Heroic"
     @Published private(set) var resources: [String: Double] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
@@ -125,26 +130,106 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func hostDidBecomeActive() { if connected && !busy { refreshFromHost() } }
 
-    func isEnabled(_ feature: HadesFeature) -> Bool { features[feature.rawValue]?.bool ?? false }
+    func isEnabled(_ feature: HadesFeature) -> Bool {
+        pendingFeatureIntents[feature]?.enabled ?? features[feature.rawValue]?.bool ?? false
+    }
     func isActive(_ feature: HadesFeature) -> Bool { activeFeatures[feature.rawValue] ?? false }
     func number(_ feature: HadesFeature) -> Double { features[feature.rawValue]?.number ?? feature.neutralValue }
+    func observed(_ value: HadesHeroValue) -> Double? {
+        switch value {
+        case .health: health
+        case .maxHealth: maxHealth
+        case .money: money
+        case .rerolls: rerolls
+        case .godGauge: godGauge
+        }
+    }
+    /// Hades I observations of one feature intent in the shared Core phase model.
+    /// Every feature is supported on the verified image (the adapter refuses
+    /// any other), and the runtime applies an intent only to a ready hero.
+    func featurePresentation(_ feature: HadesFeature) -> TrainerFeaturePresentation {
+        TrainerFeaturePresentation(
+            enabled: isEnabled(feature),
+            supported: true,
+            connected: connected,
+            active: isActive(feature),
+            dormant: dormantFeatures[feature.rawValue] ?? false,
+            activationPending: pendingFeatureIntents[feature] != nil,
+            canActivate: heroReady,
+            canEditDesired: canEditIntent
+        )
+    }
     func setBoonRarityTarget(_ target: String) {
         guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
         send("set_boon_rarity", params: ["target": target], operation: "hades.boonRarityEnabled")
     }
     func setFeature(_ feature: HadesFeature, value: Any) {
         guard canEditIntent else { return }
-        send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key)
-    }
-    func setNumber(_ feature: HadesFeature, text: String, onRejection: (String) -> Void = { _ in }) -> String {
-        guard let value = Double(text), value.isFinite,
-              feature == .dashBonus ? (value >= 0 && value <= 20 && value.rounded() == value) : (value >= 0.1 && value <= 100) else {
-            onRejection("hades.error.invalidValue")
-            rejectInvalidValue()
-            return text
+        var requestID: UUID?
+        if feature.isToggle, let enabled = value as? Bool {
+            let intent = PendingFeatureIntent(requestID: UUID(), enabled: enabled)
+            pendingFeatureIntents[feature] = intent
+            requestID = intent.requestID
         }
-        setFeature(feature, value: value)
-        return HadesNumberDraft.format(value)
+        send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key) { [weak self] _ in
+            // The reply has been projected; only this request's intent retires.
+            guard let self, let requestID, self.pendingFeatureIntents[feature]?.requestID == requestID else { return }
+            self.pendingFeatureIntents[feature] = nil
+        }
+    }
+    static func displayText(_ value: Double) -> String {
+        value.rounded() == value ? String(format: "%.0f", value) : String(value)
+    }
+    /// Validation and game meaning stay with Hades; Core only owns completion.
+    /// A live edit applies to the hero captured when editing began. Invalid,
+    /// unavailable or stale edits restore the observed value and emit one notice.
+    func completeTextEdit(_ edit: HadesTextEdit, text: String, changed: Bool, target captured: HadesHeroTarget?,
+                          onRejection: (String) -> Void) -> String {
+        let current: Double?
+        var range = 0.0...1_000_000_000.0
+        var integer = true
+        let available: Bool
+        var heroOwned = true
+        let apply: (Double) -> Void
+        switch edit {
+        case let .value(value):
+            current = observed(value)
+            if value == .health || value == .maxHealth { range = 1...1_000_000_000 }
+            available = canMutate
+            apply = { self.setValue(value.rawValue, value: $0, target: captured) }
+        case let .resource(id):
+            current = resources[id]
+            available = canMutate
+            apply = { self.setResource(id, value: $0, target: captured) }
+        case let .feature(feature):
+            current = number(feature)
+            range = feature == .dashBonus ? 0...20 : 0.1...100
+            integer = feature == .dashBonus
+            available = canEditIntent
+            heroOwned = false
+            apply = { self.setFeature(feature, value: $0) }
+        }
+        let restored = current.map(Self.displayText) ?? ""
+        guard changed else { return restored }
+        if heroOwned && captured != target {
+            onRejection("hades.error.staleHero")
+            presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
+            return restored
+        }
+        guard available && current != nil && !busy else {
+            onRejection("hades.input.unavailable")
+            presentFeedback(TrainerTextToken(key: "hades.input.unavailable"), tone: .warning)
+            return restored
+        }
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Double(raw), value.isFinite, range.contains(value),
+              !integer || (Int(raw) != nil && value.rounded() == value) else {
+            onRejection("hades.input.invalid")
+            presentFeedback(TrainerTextToken(key: "hades.input.invalid"), tone: .warning)
+            return restored
+        }
+        if current != value { apply(value) }
+        return Self.displayText(value)
     }
     func setValue(_ field: String, value: Double, target: HadesHeroTarget?) {
         sendToHero("set_value", params: ["field": field, "value": value], target: target, operation: "hades.values")
@@ -478,31 +563,35 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         connected = state.connected
         heroReady = state.heroReady
         invincible = state.invincible ?? false
-        health = state.health ?? 0
-        maxHealth = state.maxHealth ?? 0
-        money = state.money ?? 0
-        rerolls = state.rerolls ?? 0
+        // Without a ready hero the runtime and detached projections report
+        // placeholder zeros; they are not observations.
+        let heroObserved = state.connected && state.heroReady
+        health = heroObserved ? state.health : nil
+        maxHealth = heroObserved ? state.maxHealth : nil
+        money = heroObserved ? state.money : nil
+        rerolls = heroObserved ? state.rerolls : nil
         healthLocked = state.healthLocked ?? false
         moneyLocked = state.moneyLocked ?? false
         rerollsLocked = state.rerollsLocked ?? false
-        godGauge = state.godGauge ?? 0
-        maxGodGauge = state.maxGodGauge ?? 0
+        godGauge = heroObserved ? state.godGauge : nil
+        maxGodGauge = heroObserved ? state.maxGodGauge : nil
         target = state.target
         features = state.features ?? [:]
         activeFeatures = state.activeFeatures ?? [:]
+        dormantFeatures = state.dormantFeatures ?? [:]
         boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
-        resources = state.resources ?? [:]
+        resources = heroObserved ? (state.resources ?? [:]) : [:]
         traits = state.traits ?? []
         world = state.world
     }
 
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
-        health = 0; maxHealth = 0; money = 0; rerolls = 0
+        health = nil; maxHealth = nil; money = nil; rerolls = nil
         // Fixed locks are durable desired state. A target/process observation
         // reset clears live values but keeps their desired lock indicators until
         // the backend reprojects the preference document.
-        godGauge = 0; maxGodGauge = 0
+        godGauge = nil; maxGodGauge = nil
         target = nil
         if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
             features[HadesFeature.gameSpeed.rawValue] = .gameSpeed(
@@ -510,8 +599,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 errorPresentation: nil, errorArguments: []
             )
         }
-        activeFeatures = [:]; resources = [:]; traits = []; world = nil
+        activeFeatures = [:]; dormantFeatures = [:]; resources = [:]; traits = []; world = nil
     }
+}
+
+private struct PendingFeatureIntent {
+    let requestID: UUID
+    let enabled: Bool
 }
 
 struct HadesGameModule: TrainerGameModule {

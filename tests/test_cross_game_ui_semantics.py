@@ -98,6 +98,9 @@ shared_labels = {
     "hades.damageMultiplier": "hades2.feature.damageMultiplier",
     "hades.moveSpeedMultiplier": "hades2.stat.moveSpeed",
     "hades.attackSpeedMultiplier": "hades2.stat.attackSpeed",
+    "hades.input.invalid": "hades2.input.invalid",
+    "hades.input.unavailable": "hades2.input.unavailable",
+    "hades.resource.section": "hades2.resource.sectionDefault",
 }
 for hades_key, hades2_key in shared_labels.items():
     assert hades_key in hades_labels, f"missing Hades presentation key: {hades_key}"
@@ -223,22 +226,23 @@ hades2_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 for semantic in ("impact", "movement", "actionSpeed", "timeScale"):
     assert f"TrainerSemanticIcon.Concept.{semantic}" in hades2_view
 
-# Equivalent run-data counters use the Hades II fixed-lock affordance. Hades I
-# keeps God Gauge game-specific because Hades II has no matching fixed counter.
-hades_amount_metric = hades_view.split("private struct HadesAmountMetricCard:", 1)[1].split(
-    "private struct HadesValueRow:", 1
-)[0]
-assert "TrainerLockButton(" in hades_amount_metric
+# Equivalent run-data counters use the Hades II Core metric cards and fixed-lock
+# affordance. Hades I keeps God Gauge game-specific: a lockless Core counter,
+# because Full God Gauge covers it and Hades II has no matching fixed counter.
 run_data = hades_view.split("private var runDataSection:", 1)[1].split(
     "private var commonSection:", 1
 )[0]
+for card in ("TrainerVitalMetricCard(", "TrainerAmountMetricCard(", "TrainerCounterMetricCard(",
+             "TrainerMultiplierMetricCard("):
+    assert card in run_data, card
+assert "private struct Hades" not in hades_view.split("private struct HadesCatalogView:", 1)[0]
 assert "locked: model.moneyLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.moneyNoDecrease)" in run_data
 assert "locked: model.rerollsLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.rerollsNoDecrease)" in run_data
 assert "model.healthLocked" in hades_view
 assert "model.lockHealth(!model.healthLocked)" in hades_view
-assert "field: \"godGauge\"" in run_data
+assert "focusValue: .value(.godGauge)" in run_data
 assert "locked: model.healthLocked" in hades2_view
 assert "locked: model.moneyLocked" in hades2_view
 assert "locked: model.rerollsLocked" in hades2_view
