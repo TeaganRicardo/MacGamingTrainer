@@ -104,6 +104,11 @@ elif tool == 'codesign' and '-d' in args:
 CLEAN, PUBLISH, VERIFY = (str(TOOLS / name) for name in (
     'clean_signing_metadata.py', 'publish_module_build.py', 'verify_module_build.py'))
 packaging_tail = build[build.index('\nTIME_WARP_ROOT='):]
+# The executed slices must be the only staging layout and hold every signing
+# command; a codesign moved above the tail would escape the cleanup-order check.
+assert build.count('\nDIST=') == 1 and build.count('\nTIME_WARP_ROOT=') == 1, 'build.sh slice markers must be unique'
+assert not [line for line in build[:build.index('\nTIME_WARP_ROOT=')].splitlines()
+            if line.lstrip().startswith('codesign ')], 'build.sh signs outside the executed packaging tail'
 
 
 def run_packaging_tail(root, replace_output_with_symlink=None):

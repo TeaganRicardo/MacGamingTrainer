@@ -100,6 +100,9 @@ all_steps = {
 # its own trigger, and it never runs for pull requests.
 for name in TASK_WORKFLOWS:
     assert set(workflows[name]['on']) == {'pull_request', 'workflow_dispatch'}, (name, workflows[name]['on'])
+    # Only pull-request runs cancel superseded runs: a repeated dispatch must
+    # not cancel the exact-SHA convergence build a release is waiting on.
+    assert workflows[name]['concurrency']['cancel-in-progress'] == "${{ github.event_name == 'pull_request' }}", name
 assert 'pull_request' not in workflows[RELEASE_WORKFLOW]['on']
 
 # The stable required contexts `backend-contracts`, `build` and
