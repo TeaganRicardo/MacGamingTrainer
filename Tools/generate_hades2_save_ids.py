@@ -1,6 +1,6 @@
 """Generate versioned Hades II Save Editor identities from installed Lua.
 
-Usage: python3 Tools/generate_hades_save_ids.py PATH/TO/Content/Scripts
+Usage: python3 Tools/generate_hades2_save_ids.py PATH/TO/Content/Scripts
 Prints the native identity module to stdout. Re-run against the supported game
 build, inspect the diff, then replace save_native_ids.py.
 """

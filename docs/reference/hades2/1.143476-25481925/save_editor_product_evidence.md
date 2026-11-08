@@ -29,7 +29,7 @@
 
 ### F1：生成工具对源版本不可复现（已证实）
 
-`sources/Scripts/StoryResetData.lua:148-702` 含 **393** 个互不重复的有效 `TextLines` 字符串。第 681 行 `"HadesWithPersephone01", -- needed to provide DeathAreaPoints` 是有效 Lua 数据，后面有行内注释。`Tools/generate_hades_save_ids.py:68-75` 的正则只接受逗号/空白后直接结束行，独立执行同一规则得到 **392** 个，漏掉该有效 ID。现有 `save_native_ids.py` 却已经包含 393 个，说明程序和提交生成物不一致。只需要修复源生成器、以可重复生成及「注释整行不入选」为回归验证，不应顺便扩大写入权限。责任 Issue **#417**。
+`sources/Scripts/StoryResetData.lua:148-702` 含 **393** 个互不重复的有效 `TextLines` 字符串。第 681 行 `"HadesWithPersephone01", -- needed to provide DeathAreaPoints` 是有效 Lua 数据，后面有行内注释。`Tools/generate_hades2_save_ids.py:68-75` 的正则只接受逗号/空白后直接结束行，独立执行同一规则得到 **392** 个，漏掉该有效 ID。现有 `save_native_ids.py` 却已经包含 393 个，说明程序和提交生成物不一致。只需要修复源生成器、以可重复生成及「注释整行不入选」为回归验证，不应顺便扩大写入权限。责任 Issue **#417**。
 
 ### F2：原生 StoryReset 不是单条对话重置（已证实）
 
