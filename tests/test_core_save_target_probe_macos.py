@@ -38,7 +38,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-probe-") as temporary:
     suffix = f"{name}/{name}.app/Contents/MacOS/{name}"
     executable = Path(temporary, "Library/Application Support/Steam/steamapps/common", suffix)
     executable.parent.mkdir(parents=True)
-    shutil.copy2("/bin/sleep", executable)
+    # Content and mode only: the system binary's protected file flags cannot
+    # be applied to a copy (chflags is not permitted), and the probe needs none.
+    shutil.copy("/bin/sleep", executable)
     assert len(str(executable)) > 120 and len(name.encode()) > 16
     target = subprocess.Popen([str(executable), "60"], stdin=subprocess.DEVNULL)
     try:
