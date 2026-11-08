@@ -39,7 +39,17 @@ CurrentRun = {
   NumRerolls = 0, SpellCharge = 0, PickedTraits = {}, BannedTraits = {},
 }
 
+TraitRarityData = {
+  RarityValues = { Common = 1, Rare = 2, Epic = 3, Heroic = 4, Legendary = 5, Duo = 5, Perfect = 6 },
+}
+
 TraitData = {
+  -- A blessing with fewer native rarities that does not stack.
+  ChaosFixedBlessing = {
+    Name = "ChaosFixedBlessing",
+    BlockStacking = true,
+    RarityLevels = { Common = {}, Rare = {} },
+  },
   ChaosWeaponBlessing = {
     Name = "ChaosWeaponBlessing",
     RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} },
@@ -56,7 +66,7 @@ LootData = {
   TrialUpgrade = {
     Name = "TrialUpgrade",
     TransformingTraits = true,
-    PermanentTraits = { "ChaosWeaponBlessing", "ChaosHealthBlessing" },
+    PermanentTraits = { "ChaosFixedBlessing", "ChaosWeaponBlessing", "ChaosHealthBlessing" },
     TemporaryTraits = { "ChaosNoMoneyCurse", "ChaosDamageCurse" },
   },
 }
@@ -92,7 +102,11 @@ HeroHasTrait = function(name)
 end
 IsGodTrait = function() return false end
 GetAllUpgradeableGodTraits = function() return {} end
+GetEligibleUpgrades = function() return {} end
+-- Native draw of an unselected side of the pair.
+GetRandomValue = function(values) return values[1] end
 
+-- The native offer roll. Exact Chaos acquisition must never reach it.
 SetTraitsOnLoot = function(loot)
   calls.setTraits = calls.setTraits + 1
   local blessing = assert(loot.PermanentTraits and loot.PermanentTraits[1], "missing blessing pool")
@@ -113,7 +127,7 @@ GetProcessedTraitData = function(args)
   local value = clone(base)
   value.Name = args.TraitName
   value.Rarity = args.Rarity or "Common"
-  value.StackNum = args.StackNum or 1
+  value.StackNum = args.StackNum
   return value
 end
 
@@ -161,26 +175,54 @@ local function resetTraits()
   CurrentRun.Hero.TraitDictionary = {}
 end
 
+local function list(values) return table.concat(values or {}, ",") end
+local function expectError(needle, fn)
+  local ok, message = pcall(fn)
+  check(not ok, "expected error containing " .. needle)
+  check(string.find(tostring(message), needle, 1, true),
+    "wrong error: expected '" .. needle .. "' got '" .. tostring(message) .. "'")
+end
+
 -- The target-build TrialUpgrade pools are projected as recognizable exact
--- targets, but acquisitionMode remains backend-only routing metadata.
+-- targets, but acquisitionMode remains backend-only routing metadata. A
+-- blessing states its own native rarities/stacking; a curse row is paired
+-- with a blessing drawn at operation time, so it states what the pool accepts.
 local blessingRow = findReward("chaos:blessing:ChaosHealthBlessing")
 eq(blessingRow.group, "exact", "Chaos blessing group")
 eq(blessingRow.trait, "ChaosHealthBlessing", "Chaos blessing target")
 eq(blessingRow.sourceId, "Chaos", "Chaos blessing source")
 eq(blessingRow.acquisitionMode, "chaosBlessing", "Chaos blessing route")
+eq(list(blessingRow.rarities), "Common,Rare,Epic,Heroic", "Chaos blessing rarities")
+eq(blessingRow.supportsLevel, true, "Chaos blessing stacks")
+
+local fixedRow = findReward("chaos:blessing:ChaosFixedBlessing")
+eq(list(fixedRow.rarities), "Common,Rare", "Chaos blessing keeps its own native rarities")
+eq(fixedRow.supportsLevel, false, "non-stacking Chaos blessing offered a level")
 
 local curseRow = findReward("chaos:curse:ChaosDamageCurse")
 eq(curseRow.group, "exact", "Chaos curse group")
 eq(curseRow.trait, "ChaosDamageCurse", "Chaos curse target")
 eq(curseRow.acquisitionMode, "chaosCurse", "Chaos curse route")
+eq(list(curseRow.rarities), "Common,Rare,Epic,Heroic", "Chaos curse takes the blessing pool rarities")
+eq(curseRow.supportsLevel, true, "Chaos curse pool level support")
+
+-- The Boon Rarity panel governs natural offers only; it must not reach any
+-- exact Chaos acquisition below.
+M.dispatch("set_boon_rarity", { target = "Heroic", forceLegendary = true, forceDuo = true, includeCatalogs = false })
+M.dispatch("set_feature", { feature = "boonRarityEnabled", value = true, includeCatalogs = false })
+check(M.boonRarityEnabled, "Boon Rarity panel did not engage")
+local beforeRoll = calls.setTraits
 
 -- Selecting an exact blessing still acquires through one native-shaped
 -- TransformingTrait pair. The selected blessing is queued on the curse rather
--- than directly mounted.
+-- than directly mounted. The pair takes the requested rarity; the level is
+-- the blessing's.
 resetTraits()
 local beforeAdd = calls.add
 M.dispatch("spawn_reward", {
   reward = blessingRow.id,
+  rarity = "Epic",
+  level = 2,
   requestId = "chaos-exact-blessing",
   includeCatalogs = false,
 })
@@ -191,15 +233,20 @@ eq(mounted.Name, "ChaosNoMoneyCurse", "Chaos blessing target bypassed paired cur
 check(type(mounted.OnExpire) == "table" and type(mounted.OnExpire.TraitData) == "table",
   "Chaos curse lost queued blessing")
 eq(mounted.OnExpire.TraitData.Name, "ChaosHealthBlessing", "wrong queued exact blessing")
-eq(mounted.Rarity, "Rare", "Chaos curse rarity drifted")
-eq(mounted.OnExpire.TraitData.Rarity, "Rare", "queued Chaos blessing rarity drifted")
+eq(mounted.Rarity, "Epic", "Chaos curse did not take the requested rarity")
+eq(mounted.OnExpire.TraitData.Rarity, "Epic", "queued Chaos blessing did not take the requested rarity")
+eq(mounted.OnExpire.TraitData.StackNum, 2, "queued Chaos blessing did not take the requested level")
+eq(mounted.StackNum, nil, "Chaos curse took the blessing's level")
 check(mounted.FromLootObserved, "Chaos pair did not preserve FromLoot acquisition")
 
 -- Selecting an exact curse mirrors the same native pair shape with an eligible
--- blessing counterpart; the requested curse itself is the mounted phase.
+-- blessing counterpart that accepts the requested rarity and level; the
+-- requested curse itself is the mounted phase.
 resetTraits()
 M.dispatch("spawn_reward", {
   reward = curseRow.id,
+  rarity = "Heroic",
+  level = 2,
   requestId = "chaos-exact-curse",
   includeCatalogs = false,
 })
@@ -207,7 +254,9 @@ mounted = CurrentRun.Hero.Traits[1]
 eq(mounted.Name, "ChaosDamageCurse", "wrong exact Chaos curse mounted")
 check(type(mounted.OnExpire) == "table" and type(mounted.OnExpire.TraitData) == "table",
   "exact Chaos curse has no queued blessing")
-eq(mounted.OnExpire.TraitData.Name, "ChaosWeaponBlessing", "Chaos curse counterpart was not native-pool blessing")
+eq(mounted.OnExpire.TraitData.Name, "ChaosWeaponBlessing",
+  "Chaos curse counterpart ignored the requested rarity and level")
+eq(mounted.OnExpire.TraitData.Rarity, "Heroic", "Chaos curse counterpart rarity")
 
 -- #347: the primary product route carries both identities in one one-shot
 -- request. Runtime must mount exactly the selected curse and queue exactly the
@@ -217,6 +266,8 @@ local beforePairAdd = calls.add
 local pair = M.dispatch("acquire_chaos_pair", {
   blessing = "ChaosHealthBlessing",
   curse = "ChaosDamageCurse",
+  rarity = "Rare",
+  level = 3,
   requestId = "chaos-pair-exact",
   includeCatalogs = false,
 })
@@ -226,17 +277,59 @@ mounted = CurrentRun.Hero.Traits[1]
 eq(mounted.Name, "ChaosDamageCurse", "Chaos pair mounted the wrong curse")
 eq(mounted.OnExpire.TraitData.Name, "ChaosHealthBlessing", "Chaos pair queued the wrong blessing")
 eq(mounted.TraitTitle, "ChaosCombo_ChaosDamageCurse_ChaosHealthBlessing", "Chaos pair title drifted")
+eq(mounted.Rarity, "Rare", "Chaos pair curse rarity")
+eq(mounted.OnExpire.TraitData.Rarity, "Rare", "Chaos pair blessing rarity")
+eq(mounted.OnExpire.TraitData.StackNum, 3, "Chaos pair blessing level")
 check(mounted.FromLootObserved, "Chaos pair did not preserve FromLoot")
 eq(pair.actionOutcome, "completed", "Chaos pair did not complete")
 
 local duplicate = M.dispatch("acquire_chaos_pair", {
   blessing = "ChaosHealthBlessing",
   curse = "ChaosDamageCurse",
+  rarity = "Rare",
+  level = 3,
   requestId = "chaos-pair-exact",
   includeCatalogs = false,
 })
 check(duplicate.duplicate == true, "Chaos pair duplicate request was not deduplicated")
 eq(calls.add, beforePairAdd + 1, "Chaos pair duplicate request mutated twice")
+expectError("requestId reused for a different action", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Epic", level = 3,
+    requestId = "chaos-pair-exact", includeCatalogs = false,
+  })
+end)
+expectError("requestId reused for a different action", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Rare", level = 1,
+    requestId = "chaos-pair-exact", includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforePairAdd + 1, "Chaos pair reused request id mutated")
+
+-- A pair outside its blessing's options is refused before any mutation.
+resetTraits()
+local beforeRefused = calls.add
+expectError("does not support the requested rarity", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Legendary",
+    requestId = "chaos-pair-rarity-refused", includeCatalogs = false,
+  })
+end)
+expectError("does not support the requested rarity", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse",
+    requestId = "chaos-pair-rarity-missing", includeCatalogs = false,
+  })
+end)
+expectError("does not support the requested level", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosFixedBlessing", curse = "ChaosDamageCurse", rarity = "Common", level = 2,
+    requestId = "chaos-pair-level-refused", includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforeRefused, "refused Chaos pair mutated")
+eq(calls.setTraits, beforeRoll, "exact Chaos acquisition consulted the native offer roll")
 
 -- Native Chaos eligibility can permit another instance with the same name.
 -- Owning either phase must not replace the native eligibility decision.
@@ -247,6 +340,7 @@ local beforeOwnedPair = calls.add
 M.dispatch("acquire_chaos_pair", {
   blessing = "ChaosHealthBlessing",
   curse = "ChaosDamageCurse",
+  rarity = "Common",
   requestId = "chaos-pair-native-eligible-owned",
   includeCatalogs = false,
 })
@@ -265,6 +359,7 @@ local beforeIneligible = calls.add
 local okIneligible = pcall(M.dispatch, "acquire_chaos_pair", {
   blessing = "ChaosHealthBlessing",
   curse = "ChaosDamageCurse",
+  rarity = "Common",
   requestId = "chaos-pair-ineligible",
   includeCatalogs = false,
 })
@@ -278,6 +373,7 @@ local beforeRemoved = calls.add
 local okRemoved = pcall(M.dispatch, "acquire_chaos_pair", {
   blessing = "ChaosHealthBlessing",
   curse = "ChaosDamageCurse",
+  rarity = "Common",
   requestId = "chaos-pair-removed",
   includeCatalogs = false,
 })
@@ -293,6 +389,7 @@ local beforeUnknown = calls.add
 local okUnknown, unknownMessage = pcall(M.dispatch, "acquire_chaos_pair", {
   blessing = "ChaosWeaponBlessing",
   curse = "ChaosNoMoneyCurse",
+  rarity = "Common",
   requestId = "chaos-pair-unknown",
   includeCatalogs = false,
 })
@@ -302,6 +399,7 @@ eq(calls.add, beforeUnknown + 1, "Chaos outcome-unknown mutation did not execute
 local okReplay, replayMessage = pcall(M.dispatch, "acquire_chaos_pair", {
   blessing = "ChaosWeaponBlessing",
   curse = "ChaosNoMoneyCurse",
+  rarity = "Common",
   requestId = "chaos-pair-unknown",
   includeCatalogs = false,
 })

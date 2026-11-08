@@ -76,6 +76,10 @@ ShallowCopyTable = function(value)
   return result
 end
 
+TraitRarityData = {
+  RarityValues = { Common = 1, Rare = 2, Epic = 3, Heroic = 4, Legendary = 5, Duo = 5, Perfect = 6 },
+}
+
 TraitData = {
   LobAmmoTrait = {
     Name = "LobAmmoTrait",
@@ -459,21 +463,49 @@ check(findReward("hammer:LobGunOverheatTrait") ~= nil,
   "aspect transition did not invalidate Hammer catalog")
 GameState.LastWeaponUpgradeName.WeaponLob = "LobAmmoBoostAspect"
 
--- Exact native acquisition uses current eligibility, FromLoot, and action deduplication.
+-- A Hammer offers its own native rarities (native UpgradeHammers rarifies to
+-- Legendary) but never a level; one without rarity data offers none.
+do
+  local row = assert(findReward("hammer:LobAmmoTrait"))
+  eq(table.concat(row.rarities, ","), "Common,Legendary", "Hammer rarities")
+  eq(row.supportsLevel, false, "Hammer offered a level")
+  local plain = assert(findReward("hammer:LobPulseAmmoCollectTrait"))
+  eq(#plain.rarities, 0, "Hammer without rarity data offered rarities")
+  local beforeAdd = calls.add
+  expectError("does not support the requested level", function()
+    M.dispatch("spawn_reward", {
+      reward = "hammer:LobAmmoTrait", rarity = "Common", level = 2,
+      requestId = "hammer-level-refused", includeCatalogs = false,
+    })
+  end)
+  expectError("does not support the requested rarity", function()
+    M.dispatch("spawn_reward", {
+      reward = "hammer:LobAmmoTrait", rarity = "Epic",
+      requestId = "hammer-rarity-refused", includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeAdd, "refused Hammer acquisition mutated")
+end
+
+-- Exact native acquisition uses current eligibility, FromLoot, the requested
+-- rarity, and action deduplication.
 do
   local beforeAdd = calls.add
   local beforeFromLoot = calls.fromLoot
   local result = M.dispatch("spawn_reward", {
     reward = "hammer:LobAmmoTrait",
+    rarity = "Legendary",
     requestId = "hammer-exact",
     includeCatalogs = false,
   })
   eq(calls.add, beforeAdd + 1, "Hammer exact acquisition did not add exactly once")
   eq(calls.fromLoot, beforeFromLoot + 1, "Hammer exact acquisition skipped FromLoot semantics")
   check(HeroHasTrait("LobAmmoTrait"), "Hammer exact acquisition did not mount trait")
+  eq(assert(findRow("LobAmmoTrait")).rarity, "Legendary", "Hammer requested rarity")
   check(result.lootObjectId == nil, "Hammer exact acquisition leaked trait table in action receipt")
   local duplicate = M.dispatch("spawn_reward", {
     reward = "hammer:LobAmmoTrait",
+    rarity = "Legendary",
     requestId = "hammer-exact",
     includeCatalogs = false,
   })
@@ -600,6 +632,7 @@ do
 
   M.dispatch("spawn_reward", {
     reward = "hammer:LobAmmoTrait",
+    rarity = "Common",
     requestId = "hammer-coexist-acquire",
     includeCatalogs = false,
   })
@@ -623,6 +656,7 @@ do
   CurrentRun.Hero.Weapons = { WeaponLob = true }
   M.dispatch("spawn_reward", {
     reward = "hammer:LobPulseAmmoTrait",
+    rarity = "Common",
     requestId = "hammer-before-disable",
     includeCatalogs = false,
   })
@@ -639,6 +673,7 @@ do
   expectError("MGT_OUTCOME_UNKNOWN", function()
     M.dispatch("spawn_reward", {
       reward = "hammer:LobAmmoTrait",
+      rarity = "Common",
       requestId = "hammer-outcome-unknown",
       includeCatalogs = false,
     })
@@ -648,6 +683,7 @@ do
   expectError("Previous action outcome is unknown; do not retry", function()
     M.dispatch("spawn_reward", {
       reward = "hammer:LobAmmoTrait",
+      rarity = "Common",
       requestId = "hammer-outcome-unknown",
       includeCatalogs = false,
     })

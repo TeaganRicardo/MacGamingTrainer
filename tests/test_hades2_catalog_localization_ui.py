@@ -107,12 +107,14 @@ try:
                 'kind': 'trait', 'group': 'exact', 'sourceId': 'ZeusUpgrade',
                 'sourceName': '宙斯', 'sectionTitle': '宙斯',
                 'category': '奥林匹斯的祝福', 'acquisitionMode': 'ordinaryNative',
+                'rarities': ['Common', 'Rare', 'Epic', 'Heroic'], 'supportsLevel': True,
             },
             {
                 'id': 'trait:CritBonusBoon', 'trait': 'CritBonusBoon',
                 'kind': 'trait', 'group': 'exact', 'sourceId': 'Artemis',
                 'sourceName': 'Artemis', 'sectionTitle': 'Artemis',
                 'category': '角色奖励', 'acquisitionMode': 'direct',
+                'rarities': ['Common', 'Rare'], 'supportsLevel': False,
             },
         ]
     }
@@ -128,6 +130,9 @@ assert direct['name'] == '致命一击' and direct['englishName'] == 'Deadly Str
 assert direct['sourceName'] == '阿耳忒弥斯' and direct['sourceEnglishName'] == 'Artemis'
 assert direct['sectionTitle'] == '阿耳忒弥斯' and direct['englishSectionTitle'] == 'Artemis'
 assert direct['englishCategory'] == 'Character Rewards'
+# Acquisition options are resident-owned routing data and pass through as-is.
+assert ordinary['rarities'] == ['Common', 'Rare', 'Epic', 'Heroic'] and ordinary['supportsLevel'] is True
+assert direct['rarities'] == ['Common', 'Rare'] and direct['supportsLevel'] is False
 
 # Exact acquisition and mounted effects remain in the continuous boons section;
 # native reward generation has its own rooms/rewards panel. Recognition labels

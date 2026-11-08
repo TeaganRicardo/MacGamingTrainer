@@ -27,6 +27,7 @@ from .save_workspace import (
 from .schema import (
     BOON_RARITY_TARGETS,
     MAX_AMOUNT,
+    MAX_TRAIT_LEVEL,
     STAT_RULES,
     VITALS,
     is_known_element,
@@ -215,11 +216,27 @@ def _lock_rerolls(raw):
     return params
 
 
+def _acquisition(params):
+    # Exact acquisition takes rarity and level from the caller, never from the
+    # Boon Rarity panel. Which values the selected target accepts is resident
+    # catalog data (`rarities`, `supportsLevel`); the resident enforces it. An
+    # absent rarity means the target takes none; an absent level is one stack.
+    if "rarity" in params:
+        rarity = params["rarity"]
+        if not isinstance(rarity, str) or not rarity:
+            raise ValueError("获取稀有度无效。")
+    if "level" in params:
+        level = params["level"]
+        if type(level) is not int or not 1 <= level <= MAX_TRAIT_LEVEL:
+            raise ValueError("获取等级无效。")
+    return params
+
+
 def _spawn_reward(raw):
     params = _params(raw)
     if not isinstance(params.get("reward"), str) or not params["reward"]:
         raise ValueError("请选择掉落物或祝福。")
-    return params
+    return _acquisition(params)
 
 
 def _chaos_pair(raw):
@@ -233,7 +250,7 @@ def _chaos_pair(raw):
         or not curse
     ):
         raise ValueError("请选择掉落物或祝福。")
-    return params
+    return _acquisition(params)
 
 
 def _special_choice(raw):
@@ -277,7 +294,7 @@ def _trait_mutation(command):
             if (
                 type(target_level) is not int
                 or target_level <= level
-                or target_level > 999999
+                or target_level > MAX_TRAIT_LEVEL
             ):
                 raise ValueError("目标等级必须高于当前等级。")
         if command == "set_trait_rarity":
