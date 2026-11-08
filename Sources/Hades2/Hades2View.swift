@@ -328,10 +328,10 @@ struct Hades2TrainerView: View {
                     if let key = action.featureKey, let icon = action.commonFeatureIcon {
                         let enabled = model.isFeatureEnabled(key)
                         featureRow(text(action.presentationKey), key: key, icon: icon,
-                                   enabled: enabled, shortcut: action) {
+                                   enabled: enabled, shortcut: action,
+                                   help: action.commonFeatureHelpKey.map { text($0) } ?? "") {
                             model.feature(key, value: !model.isFeatureEnabled(key))
                         }
-                        .help(action.commonFeatureHelpKey.map { text($0) } ?? "")
                     }
                 }
             }
@@ -1326,7 +1326,10 @@ struct Hades2TrainerView: View {
                 amount: $materialAmount,
                 sections: resourceGroups(filtered),
                 enabled: model.canSetResource,
-                locked: material?.locked ?? false,
+                lock: TrainerResourceLock(locked: material?.locked ?? false) {
+                    guard let material else { return }
+                    model.lockResource(material.id, locked: !material.locked)
+                },
                 itemLabel: { resource in
                     let primaryName = localization.language == .en && !resource.englishName.isEmpty
                         ? resource.englishName : resource.name
@@ -1336,10 +1339,6 @@ struct Hades2TrainerView: View {
                     return displayName
                         + " · \(number(resource.count))"
                         + (resource.locked ? " · " + text("hades2.vital.lockedSuffix") : "")
-                },
-                onLock: {
-                    guard let material else { return }
-                    model.lockResource(material.id, locked: !material.locked)
                 },
                 onEditingChanged: tracking(.material),
                 onCommit: completing(.resource(selectedMaterial))
@@ -1594,11 +1593,12 @@ struct Hades2TrainerView: View {
         }
     }
 
-    private func featureRow(_ title: String, key: Hades2FeatureKey, icon: String, enabled: Bool, shortcut: ShortcutAction? = nil, action: @escaping () -> Void) -> some View {
+    private func featureRow(_ title: String, key: Hades2FeatureKey, icon: String, enabled: Bool, shortcut: ShortcutAction? = nil, help: String = "", action: @escaping () -> Void) -> some View {
         TrainerFeatureToggleRow(
             title: title,
             icon: icon,
             state: model.featurePresentation(key, enabled: enabled).trainerControlState(using: theme, localization: localization),
+            helpText: help,
             shortcutText: shortcut.map { model.shortcutText($0) },
             action: action
         )

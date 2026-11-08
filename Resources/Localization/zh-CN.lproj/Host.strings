@@ -135,6 +135,9 @@
 "host.hotkeys.registrationFailed" = "部分快捷键注册失败，可能已被系统或其他应用占用：{0}";
 "host.feature.enable" = "启用功能";
 "host.feature.disable" = "关闭功能";
+"host.feature.phase.waiting" = "当前运行环境尚不可用；保持开启并在条件满足时自动生效。";
+"host.feature.phase.detached" = "已保留开启状态；重新连接后自动恢复。";
+"host.feature.phase.mismatch" = "已请求开启，但运行时尚未确认生效。";
 "host.hotkeys.conflict" = "快捷键 {0} 已分配给「{1}」。";
 "host.timeWarp.error.disconnected" = "游戏进程已退出或调试连接已断开。";
 "host.timeWarp.error.unsupportedImports" = "所选游戏镜像不支持 Time Warp 所需的单调时钟函数。";

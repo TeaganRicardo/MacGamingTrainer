@@ -135,6 +135,9 @@
 "host.hotkeys.registrationFailed" = "Some hotkeys could not be registered because they may already be used by the system or another app: {0}";
 "host.feature.enable" = "Enable Feature";
 "host.feature.disable" = "Disable Feature";
+"host.feature.phase.waiting" = "The current runtime cannot apply this yet; it stays on and takes effect automatically once available.";
+"host.feature.phase.detached" = "The enabled state is retained and restores automatically after reconnecting.";
+"host.feature.phase.mismatch" = "Enable was requested, but the runtime has not confirmed it yet.";
 "host.hotkeys.conflict" = "Shortcut {0} is already assigned to “{1}”.";
 "host.timeWarp.error.disconnected" = "The game process exited or the debugger connection was lost.";
 "host.timeWarp.error.unsupportedImports" = "The selected game image does not expose the monotonic clock functions required by Time Warp.";
