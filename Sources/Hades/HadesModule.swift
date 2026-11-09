@@ -552,6 +552,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return canMutate && world?.canFish == true
         case .generateChaosGate:
             return canMutate && world?.canChaos == true
+        case .acquireChaosPair, .acquireExactBoon:
+            return canMutate && canAcceptRuntimeAction
         default:
             return canEditIntent
         }
@@ -581,6 +583,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return
         }
         guard canPerformShortcut(action) else { rejectShortcut(rawValue); return }
+        if action == .acquireExactBoon {
+            if !acquireSelectedTrait(completion: Self.playOneShotShortcutResult),
+               acquisitionRarityAdjustment == .none { rejectShortcut(rawValue) }
+            return
+        }
+        if action == .acquireChaosPair {
+            if !acquireSelectedChaosPair(completion: Self.playOneShotShortcutResult),
+               acquisitionRarityAdjustment == .none { rejectShortcut(rawValue) }
+            return
+        }
         if action == .generateFishing { generateFishing(completion: Self.playOneShotShortcutResult) }
         else if action == .generateChaosGate { generateChaosGate(completion: Self.playOneShotShortcutResult) }
         else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
