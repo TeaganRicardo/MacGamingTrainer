@@ -260,6 +260,25 @@ precondition(unique(imported))
 precondition(HotkeyChord(payload: ["keyCode":18,"modifiers":Int(UInt32.max)+1,"keyLabel":"1"]) == nil)
 precondition(HotkeyChord(payload: ["keyCode":18,"modifiers":1,"keyLabel":"1"]) == nil)
 precondition(HotkeyChord(payload: ["keyCode":18,"modifiers":6144,"keyLabel":"\n"]) == nil)
+
+// Reset is a storage operation, not a visual reflow. It removes explicit
+// overrides and persists the current derived layout across a new store.
+let resetDefaults = makeDefaults()
+var resetStore = Hades2ShortcutStore(defaults: resetDefaults)
+let resetChord = HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X")
+precondition(resetStore.set(.infiniteHealth, chord: resetChord) == nil)
+precondition(resetDefaults.object(forKey: shortcutKey(.infiniteHealth)) != nil)
+resetStore.resetToDefaults()
+precondition(matchesDerivedDefaults(resetStore) && unique(resetStore))
+precondition(resetStore.chord(.disableAll) == disableAllDefault)
+precondition(resetDefaults.object(forKey: shortcutKey(.infiniteHealth)) == nil)
+precondition(resetStore.payload().keys.sorted() == ["_layoutVersion"])
+precondition(matchesDerivedDefaults(Hades2ShortcutStore(defaults: resetDefaults)))
+// Reset remains meaningful after a Profile import and does not remove Profiles.
+precondition(resetStore.applyProfile(["_layoutVersion": 1, "infiniteHealth": resetChord.payload]) == .applied)
+precondition(resetStore.chord(.infiniteHealth) == resetChord)
+resetStore.resetToDefaults()
+precondition(matchesDerivedDefaults(resetStore))
 print("shortcut_chord_semantics_ok")
 '''
 
