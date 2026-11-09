@@ -403,19 +403,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         )
     }
 
-    func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
-        sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level],
-                   target: target, operation: "hades.acquire")
-    }
     func updateTrait(_ trait: HadesCurrentTrait, rarity: String, level: Int, target: HadesHeroTarget?) {
         sendToHero("update_trait", params: ["instanceId": trait.instanceId, "rarity": rarity, "level": level], target: target, operation: "hades.apply")
     }
     func removeTrait(_ trait: HadesCurrentTrait) {
         sendToHero("remove_trait", params: ["instanceId": trait.instanceId], target: target, operation: "hades.remove")
-    }
-    func addChaosPair(blessing: HadesCatalogEntry, curse: String, rarity: String, encounters: Int) {
-        sendToHero("add_chaos_pair", params: ["blessing": blessing.id, "curse": curse,
-                   "rarity": rarity, "encounters": encounters], target: target, operation: "hades.chaosPair")
     }
 
     func setTraitUses(_ trait: HadesCurrentTrait, uses: Int, target: HadesHeroTarget?) {

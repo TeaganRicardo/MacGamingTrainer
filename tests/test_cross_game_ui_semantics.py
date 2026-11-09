@@ -436,7 +436,6 @@ for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryA
     owner = action_controls[action_controls.index(type_name):]
     assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))" in owner
 
-print("cross_game_ui_semantics_ok")
 
 # #706: one Chaos pair row and no duplicate direct Chaos acquisition,
 # with native Chinese/English names for each selected acquisition item.
@@ -451,3 +450,7 @@ assert "private func itemTitle(_ entry: HadesCatalogEntry)" in hades_catalog_vie
 assert 'let english = entry.names["en"]' in hades_catalog_view
 assert hades_catalog_view.count("Text(itemTitle(entry))") == 3
 assert 'if options.isEmpty { return "Common" }' not in hades_model_source
+assert 'func addTrait(_ trait:' not in hades_model_source
+assert 'func addChaosPair(blessing:' not in hades_model_source
+
+print("cross_game_ui_semantics_ok")
