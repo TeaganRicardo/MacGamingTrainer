@@ -27,6 +27,12 @@ enum HadesFeature: String, CaseIterable, Identifiable {
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
 }
 
+/// Only the exact-acquisition workbench may set this session state.
+enum HadesAcquisitionTarget: String, Equatable {
+    case exact
+    case chaos
+}
+
 /// A live hero value the runtime observes and edits through `set_value`.
 enum HadesHeroValue: String {
     case health, maxHealth, money, rerolls, godGauge
@@ -251,7 +257,7 @@ struct HadesNumberDraft {
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
     case decreaseGameSpeed, increaseGameSpeed
-    case boonRarityEnabled, generateFishing, generateChaosGate
+    case boonRarityEnabled, generateFishing, generateChaosGate, acquireChaosPair, acquireExactBoon
     case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
     var id: String { rawValue }
@@ -263,6 +269,8 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
         case .spawnOlympian: "hades.shortcut.spawnOlympian"
         case .spawnPickup: "hades.shortcut.spawnPickup"
         case .spawnSpecial: "hades.shortcut.spawnSpecial"
+        case .acquireChaosPair: "hades.shortcut.acquireChaosPair"
+        case .acquireExactBoon: "hades.shortcut.acquireExactBoon"
         default: "hades.\(rawValue)"
         }
     }
