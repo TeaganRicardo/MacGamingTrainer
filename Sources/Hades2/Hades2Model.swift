@@ -707,13 +707,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
-        // Preserve an unchanged process's last observation across sparse
-        // replies. Clear it on process loss/replacement, and only accept
-        // an actual value explicitly verified by the process-owned helper.
-        if let runtimeDiagnostics {
+        // Preserve a same-process observation across sparse replies. An
+        // explicit null (unlike an absent diagnostics field) invalidates it.
+        if !connected || (patch.pid.isPresent && oldPID != pid) {
+            appliedGameSpeed = nil
+        }
+        if let runtimeDiagnostics, runtimeDiagnostics.keys.contains("gameSpeedAppliedValue") {
             let reported = (runtimeDiagnostics["gameSpeedAppliedValue"] as? NSNumber)?.doubleValue
             appliedGameSpeed = connected && (reported?.isFinite == true) ? reported : nil
-        } else if !connected || (patch.pid.isPresent && oldPID != pid) {
+        } else if payload.keys.contains("runtimeDiagnostics") && runtimeDiagnostics == nil {
             appliedGameSpeed = nil
         }
         if let value = patch.version { version = value }
