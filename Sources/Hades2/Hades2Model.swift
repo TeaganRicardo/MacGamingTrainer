@@ -212,6 +212,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
     @Published private(set) var nativeRarityOrder: [String] = []
     private var resolvedAcquisitionSignature: String?
+    private var acquisitionLevelIdentity: String?
     @Published var selectedNextRoomReward = ""
     @Published var selectedNextOccurrenceTarget = ""
     @Published var statSupport: [String: Bool] = [:]
@@ -1504,6 +1505,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             option.supportsLevel ? "level" : "no-level", nativeRarityOrder.joined(separator: ","),
             target == .chaos ? selectedChaosCurse : ""
         ].joined(separator: "|")
+        // Shared input drafts cannot be carried into a different exact boon.
+        // Keep the current draft across unchanged resident status/catalog polls.
+        let levelIdentity = target.rawValue + "|" + option.id
+        if acquisitionLevelIdentity != levelIdentity {
+            if acquisitionLevelIdentity != nil { acquisitionLevel = "1" }
+            acquisitionLevelIdentity = levelIdentity
+        }
         let showingAnotherTarget = previousTarget != target || resolvedAcquisitionSignature != signature
         let resolution = TrainerAcquisitionRarity.resolve(
             previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
