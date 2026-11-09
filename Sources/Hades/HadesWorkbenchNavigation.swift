@@ -38,6 +38,8 @@ extension HadesShortcutAction {
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
         case .spawnSpecial: TrainerSemanticIcon.Context.characterReward
+        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .acquireExactBoon: TrainerSemanticIcon.Action.acquire
         case .disableAll: TrainerSemanticIcon.Tool.disableAll
         }
     }
@@ -171,6 +173,8 @@ enum HadesWorkbenchCatalog {
         .spawnOlympian,
         .spawnPickup,
         .spawnSpecial,
+        .acquireChaosPair,
+        .acquireExactBoon,
         .disableAll,
     ]
 
@@ -180,7 +184,7 @@ enum HadesWorkbenchCatalog {
 
     private static func section(for action: HadesShortcutAction) -> HadesWorkbenchSection {
         switch action {
-        case .boonRarityEnabled: .boons
+        case .boonRarityEnabled, .acquireChaosPair, .acquireExactBoon: .boons
         case .generateFishing: .resources
         case .generateChaosGate, .spawnOlympian, .spawnPickup, .spawnSpecial: .rooms
         case .disableAll: .management
