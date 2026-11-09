@@ -494,6 +494,9 @@ private struct HadesCatalogView: View {
                             return String(level)
                         }
                     )
+                    .id(model.acquisitionTarget.rawValue + "|" +
+                        (model.acquisitionTarget == .exact
+                         ? model.selectedExactTrait : model.selectedChaosBlessing))
                 }
 
                 if model.acquisitionTarget == .chaos {
