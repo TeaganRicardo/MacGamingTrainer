@@ -40,7 +40,8 @@ for raw in sys.stdin:
         speed=float(speed_path.read_text())
         if command=='set_desired' and params.get('feature')=='gameSpeed':
             speed=params['value'];speed_path.write_text(str(speed))
-        result.update(gameSpeed=speed,featureSupport={'gameSpeed':True})
+        result.update(gameSpeed=speed, featureSupport={'gameSpeed':True},
+                      runtimeDiagnostics={'gameSpeedAppliedValue': speed})
     disclosure_path=log_path.with_suffix('.disclosure')
     if disclosure_path.exists():
         result.update(gameSpeed=1.0,featureSupport={'gameSpeed':int(disclosure_path.read_text())>0})
@@ -145,6 +146,11 @@ struct Main {
             let deadline = Date().addingTimeInterval(4)
             while (!sliderModel.backendAvailable || sliderModel.busy) && Date() < deadline { pump(0.02) }
             guard sliderModel.backendAvailable && !sliderModel.busy else { fail("slider backend startup") }
+            let observedDeadline = Date().addingTimeInterval(4)
+            while sliderModel.appliedGameSpeed == nil && Date() < observedDeadline { pump(0.02) }
+            guard sliderModel.appliedGameSpeed == 1.0 else {
+                fail("Hades II speed caption did not receive the verified helper observation")
+            }
             let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
             localization.language = .en
             localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
