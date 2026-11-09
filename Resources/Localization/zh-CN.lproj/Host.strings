@@ -139,6 +139,7 @@
 "host.feature.phase.detached" = "已保留开启状态；重新连接后自动恢复。";
 "host.feature.phase.mismatch" = "已请求开启，但运行时尚未确认生效。";
 "host.hotkeys.conflict" = "快捷键 {0} 已分配给「{1}」。";
+"host.hotkeys.resetDefaults" = "恢复默认快捷键";
 "host.timeWarp.error.disconnected" = "游戏进程已退出或调试连接已断开。";
 "host.timeWarp.error.unsupportedImports" = "所选游戏镜像不支持 Time Warp 所需的单调时钟函数。";
 "host.timeWarp.error.installFailed" = "Time Warp helper 安装失败（{0}）。";
