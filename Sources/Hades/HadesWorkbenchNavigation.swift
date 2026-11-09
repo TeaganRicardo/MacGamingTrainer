@@ -35,6 +35,11 @@ extension HadesShortcutAction {
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .generateFishing: TrainerSemanticIcon.Context.fishing
         case .generateChaosGate: TrainerSemanticIcon.Context.portal
+        case .spawnOlympian: TrainerSemanticIcon.Section.effects
+        case .spawnPickup: TrainerSemanticIcon.Section.inventory
+        case .spawnSpecial: TrainerSemanticIcon.Context.characterReward
+        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .acquireExactBoon: TrainerSemanticIcon.Action.acquire
         case .disableAll: TrainerSemanticIcon.Tool.disableAll
         }
     }
@@ -94,7 +99,7 @@ enum HadesWorkbenchIcon {
         case "hades.money": return TrainerSemanticIcon.Concept.currency
         case "hades.rerolls": return TrainerSemanticIcon.Concept.randomize
         case "hades.godGauge": return godGauge
-        case "host.timeWarp.title": return TrainerSemanticIcon.Concept.timeScale
+        case "hades.gameSpeed": return TrainerSemanticIcon.Concept.timeScale
         case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
         case "hades.catalog", "hades.exactSource", "hades.selectTrait": return catalog
         case "hades.rarity", "hades.minimumRarity", "hades.setRarity": return TrainerSemanticIcon.Concept.quality
@@ -108,7 +113,10 @@ enum HadesWorkbenchIcon {
         case "hades.refreshEffect": return TrainerSemanticIcon.Concept.refresh
         case "hades.resources": return TrainerSemanticIcon.Section.inventory
         case "hades.gainResource": return TrainerSemanticIcon.Action.acquire
-        case "hades.spawnReward", "hades.doorReward": return TrainerSemanticIcon.Context.reward
+        case "hades.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
+        case "hades.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
+        case "hades.spawn.characterRewards": return TrainerSemanticIcon.Context.characterReward
+        case "hades.doorReward": return TrainerSemanticIcon.Context.reward
         case "hades.doorRoute", "hades.route.thanatos": return route
         case "hades.restoreDoor": return TrainerSemanticIcon.Action.restore
         case "hades.chamberObject": return chamberObject
@@ -162,18 +170,25 @@ enum HadesWorkbenchCatalog {
         .boonRarityEnabled,
         .generateFishing,
         .generateChaosGate,
+        .spawnOlympian,
+        .spawnPickup,
+        .spawnSpecial,
+        .acquireChaosPair,
+        .acquireExactBoon,
         .disableAll,
     ]
 
     static func shortcutActions(in section: HadesWorkbenchSection) -> [HadesShortcutAction] {
-        orderedShortcutActions.filter { action in
-            switch action {
-            case .boonRarityEnabled: section == .boons
-            case .generateFishing: section == .resources
-            case .generateChaosGate: section == .rooms
-            case .disableAll: section == .management
-            default: section == .common
-            }
+        orderedShortcutActions.filter { self.section(for: $0) == section }
+    }
+
+    private static func section(for action: HadesShortcutAction) -> HadesWorkbenchSection {
+        switch action {
+        case .boonRarityEnabled, .acquireChaosPair, .acquireExactBoon: .boons
+        case .generateFishing: .resources
+        case .generateChaosGate, .spawnOlympian, .spawnPickup, .spawnSpecial: .rooms
+        case .disableAll: .management
+        default: .common
         }
     }
 
@@ -182,24 +197,22 @@ enum HadesWorkbenchCatalog {
             HadesWorkbenchEntry(
                 id: "shortcut.\(action.rawValue)",
                 titleKey: action.key,
-                section: action == .disableAll ? .management
-                    : (action == .boonRarityEnabled ? .boons
-                       : (action == .generateFishing ? .resources
-                          : (action == .generateChaosGate ? .rooms : .common))),
+                section: section(for: action),
                 shortcut: action
             )
         }
         let other: [(HadesWorkbenchSection, [String])] = [
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
-            (.common, ["host.timeWarp.title"]),
+            (.common, ["hades.gameSpeed"]),
             (.boons, ["hades.currentTraits", "hades.catalog", "hades.exactSource", "hades.selectTrait",
                       "hades.rarity", "hades.minimumRarity",
                       "hades.level", "hades.setLevel", "hades.setRarity", "hades.apply", "hades.remove", "hades.chaosPair",
                       "hades.chaosBlessing", "hades.chaosCurse",
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
-            (.rooms, ["hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
+            (.rooms, ["hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards",
+                      "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
             (.management, ["host.refreshStatus", "hades.saveEditor.title", "host.saveManagement", "host.shortcutSettings",
                            "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
                            "host.viewLogHistory", "host.clearCompletedLogs"]),
@@ -255,6 +268,13 @@ struct HadesSidebarActions: View {
                 }
                 .accessibilityIdentifier("trainer.section.\(section.id)")
             }
+            TrainerCurrentIssuesEntry(
+                issues: model.currentIssues,
+                detailsPresented: model.feedbackDetailsPresented,
+                onShowDetails: { model.showFeedbackDetails() },
+                onCloseDetails: model.closeFeedbackDetails,
+                onOpenLog: model.openLog
+            )
         }
     }
 }

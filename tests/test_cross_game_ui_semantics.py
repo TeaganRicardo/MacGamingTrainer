@@ -95,9 +95,18 @@ shared_labels = {
     "hades.setRarity": "hades2.traits.applyRarity",
     "hades.shortcut.decreaseGameSpeed": "hades2.shortcut.decreaseGameSpeed",
     "hades.shortcut.increaseGameSpeed": "hades2.shortcut.increaseGameSpeed",
+    "hades.spawn.pickupRewards": "hades2.spawn.pickupRewards",
+    "hades.spawn.characterRewards": "hades2.spawn.characterRewards",
+    "hades.spawn.noItems": "hades2.spawn.noItems",
+    "hades.shortcut.spawnPickup": "hades2.shortcut.spawnPickup",
+    "hades.shortcut.spawnSpecial": "hades2.shortcut.spawnSpecial",
+    "hades.shortcut.unavailable": "hades2.shortcut.unavailable",
     "hades.damageMultiplier": "hades2.feature.damageMultiplier",
     "hades.moveSpeedMultiplier": "hades2.stat.moveSpeed",
     "hades.attackSpeedMultiplier": "hades2.stat.attackSpeed",
+    "hades.input.invalid": "hades2.input.invalid",
+    "hades.input.unavailable": "hades2.input.unavailable",
+    "hades.resource.section": "hades2.resource.sectionDefault",
 }
 for hades_key, hades2_key in shared_labels.items():
     assert hades_key in hades_labels, f"missing Hades presentation key: {hades_key}"
@@ -223,22 +232,23 @@ hades2_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 for semantic in ("impact", "movement", "actionSpeed", "timeScale"):
     assert f"TrainerSemanticIcon.Concept.{semantic}" in hades2_view
 
-# Equivalent run-data counters use the Hades II fixed-lock affordance. Hades I
-# keeps God Gauge game-specific because Hades II has no matching fixed counter.
-hades_amount_metric = hades_view.split("private struct HadesAmountMetricCard:", 1)[1].split(
-    "private struct HadesValueRow:", 1
-)[0]
-assert "TrainerLockButton(" in hades_amount_metric
+# Equivalent run-data counters use the Hades II Core metric cards and fixed-lock
+# affordance. Hades I keeps God Gauge game-specific: a lockless Core counter,
+# because Full God Gauge covers it and Hades II has no matching fixed counter.
 run_data = hades_view.split("private var runDataSection:", 1)[1].split(
     "private var commonSection:", 1
 )[0]
+for card in ("TrainerVitalMetricCard(", "TrainerAmountMetricCard(", "TrainerCounterMetricCard(",
+             "TrainerMultiplierMetricCard("):
+    assert card in run_data, card
+assert "private struct Hades" not in hades_view.split("private struct HadesCatalogView:", 1)[0]
 assert "locked: model.moneyLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.moneyNoDecrease)" in run_data
 assert "locked: model.rerollsLocked" in run_data
 assert "lockEnabled: !model.isEnabled(.rerollsNoDecrease)" in run_data
 assert "model.healthLocked" in hades_view
 assert "model.lockHealth(!model.healthLocked)" in hades_view
-assert "field: \"godGauge\"" in run_data
+assert "focusValue: .value(.godGauge)" in run_data
 assert "locked: model.healthLocked" in hades2_view
 assert "locked: model.moneyLocked" in hades2_view
 assert "locked: model.rerollsLocked" in hades2_view
@@ -300,7 +310,8 @@ for key in (
     "hades.setLevel", "hades.setRarity", "hades.apply",
     "hades.remove", "hades.chaosPair", "hades.remainingUses", "hades.activateBlessing",
     "hades.expireEffect", "hades.refreshEffect", "hades.resources", "hades.gainResource",
-    "hades.spawnReward", "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
+    "hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards",
+    "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
     "hades.route.thanatos", "hades.chamberObject", "host.refreshStatus", "hades.saveEditor.title",
     "host.saveManagement", "host.shortcutSettings", "hades.manage.profiles",
     "hades.manage.diagnostics", "host.viewLog", "host.viewLogHistory", "host.clearCompletedLogs",
@@ -380,8 +391,13 @@ assert "if trait.hasContextualControls {" in hades_current_row
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
-assert 'TrainerIconLabel(' in hades_view and 'title: text("hades.catalog")' in hades_view
-assert 'TrainerIconLabel(' in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
+# Exact acquisition shares Core chrome, while each module supplies its
+# own title/icon and native target/rarity rules.
+acquisition_panel = (ROOT / "Sources/Core/UI/Components/TrainerAcquisitionPanel.swift").read_text()
+assert "TrainerIconLabel(" in acquisition_panel and "icon: icon" in acquisition_panel
+assert "TrainerAcquisitionPanel(" in hades_view and 'title: text("hades.catalog")' in hades_view
+assert "TrainerAcquisitionPanel(" in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
+assert "acquisitionSettingsRow" in hades_view and "acquisitionSettingsRow" in hades2_view
 assert "case .decreaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
 assert "case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
 assert 'static let garden = "tree.fill"' in hades2_nav
@@ -419,5 +435,22 @@ assert "Label(title, systemImage:" not in label
 for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton"):
     owner = action_controls[action_controls.index(type_name):]
     assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))" in owner
+
+
+# #706: one Chaos pair row and no duplicate direct Chaos acquisition,
+# with native Chinese/English names for each selected acquisition item.
+hades_catalog_view = hades_view.split("private struct HadesCatalogView:", 1)[1].split(
+    "private struct HadesCurrentTraitsPanel:", 1
+)[0]
+hades_model_source = (ROOT / "Sources/Hades/HadesModule.swift").read_text()
+assert 'model.catalog.filter { $0.kind != "curse" && $0.kind != "chaos" && $0.matches(query) }' in hades_catalog_view
+assert '["boon", "hammer", "temporary", "special", "keepsake", "companion"]' in hades_catalog_view
+assert 'catalog.first { $0.id == selectedExactTrait && $0.kind != "curse" && $0.kind != "chaos" }' in hades_model_source
+assert "private func itemTitle(_ entry: HadesCatalogEntry)" in hades_catalog_view
+assert 'let english = entry.names["en"]' in hades_catalog_view
+assert hades_catalog_view.count("Text(itemTitle(entry))") == 3
+assert 'if options.isEmpty { return "Common" }' not in hades_model_source
+assert 'func addTrait(_ trait:' not in hades_model_source
+assert 'func addChaosPair(blessing:' not in hades_model_source
 
 print("cross_game_ui_semantics_ok")

@@ -63,6 +63,8 @@ def is_known_element(value):
 
 
 MAX_AMOUNT = 999999
+# Resident trait-level bound shared by level edits and exact acquisition.
+MAX_TRAIT_LEVEL = 999999
 BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
 NEXT_ROOM_REWARD_MAX_LENGTH = 128
 NEXT_OCCURRENCE_MAX_LENGTH = 128

@@ -10,6 +10,9 @@ from .schema import RESOURCE_IDS, WORLD_COMMANDS, invalid_value, number
 _DATA = json.loads(Path(__file__).with_name('world_catalog.json').read_text())
 REWARDS = _DATA['rewards']
 ROUTES = frozenset(('combat', 'story', 'shop', 'reprieve', 'miniboss', 'thanatos'))
+# Names and Generate-row grouping are presentation only; the resident never
+# reads them, so they stay outside its definitions identity.
+_PRESENTATION_FIELDS = frozenset(('names', 'group', 'section', 'sectionNames'))
 
 
 def reward_catalog():
@@ -21,7 +24,7 @@ def world_terms():
 
 
 def runtime_definitions():
-    return {identifier: {key: value for key, value in row.items() if key != 'names'}
+    return {identifier: {key: value for key, value in row.items() if key not in _PRESENTATION_FIELDS}
             for identifier, row in REWARDS.items()}
 
 

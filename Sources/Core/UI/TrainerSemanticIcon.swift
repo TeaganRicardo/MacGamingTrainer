@@ -41,6 +41,7 @@ enum TrainerSemanticIcon {
         static let fishing = "fish.fill"
         static let portal = "circle.hexagongrid.fill"
         static let reward = "gift.fill"
+        static let characterReward = "moon.stars.fill"
         static let doorway = "door.left.hand.open"
     }
 

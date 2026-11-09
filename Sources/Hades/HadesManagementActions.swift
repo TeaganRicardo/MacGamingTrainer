@@ -9,24 +9,25 @@ enum HadesManagementCatalog {
         @MainActor func text(_ key: String) -> String {
             HadesGameModule.resolveText(key: key, localization: localization)
         }
-        let canUseBackend = { model.hostActionsEnabled }
+        let canUseBackend = { model.canUseBackend }
+        let canStartBackendAction = { canUseBackend() && !model.busy }
         return TrainerManagementCatalog(
             titles: .init(daily: text("hades.manage.daily"), settings: text("hades.manage.settings"),
                           maintenance: text("hades.manage.maintenance")),
             refresh: .init(.refreshStatus, localization: localization,
-                           enabled: canUseBackend, action: model.refreshFromHost),
+                           enabled: canStartBackendAction, action: model.refreshFromHost),
             // Detached Hades can still reset its durable desired settings.
             disableAll: .init(.disableAll, localization: localization,
-                              enabled: canUseBackend, action: model.disableAll),
+                              enabled: canStartBackendAction, action: model.disableAll),
             profiles: .init(id: "profiles", title: text("hades.manage.profiles"),
-                            icon: TrainerSemanticIcon.Tool.profiles, enabled: canUseBackend) {
+                            icon: TrainerSemanticIcon.Tool.profiles, enabled: canStartBackendAction) {
                 model.profilesPresented = true
                 model.listProfiles()
             },
             shortcuts: .init(.shortcuts, localization: localization) { model.shortcutSettingsPresented = true },
             log: .init(.log, localization: localization, action: model.openLog),
             diagnostics: .init(id: "diagnostics", title: text("hades.manage.diagnostics"),
-                               icon: TrainerSemanticIcon.Tool.diagnostics, enabled: canUseBackend) {
+                               icon: TrainerSemanticIcon.Tool.diagnostics, enabled: canStartBackendAction) {
                 model.diagnosticsPresented = true
                 model.runDiagnostics()
             },

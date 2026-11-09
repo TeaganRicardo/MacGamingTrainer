@@ -309,6 +309,21 @@ check(findReward("echo:lastRun:ExcludedBoon") == nil, "excluded previous-run boo
 check(findReward("echo:lastRun:NonGodBoon") == nil, "non-God previous-run trait leaked into catalog")
 check(findReward("trait:EchoLastRunBoon") == nil, "EchoLastRunBoon shell leaked as a direct exact target")
 
+-- Echo's previous-run grant owns rarity and level, so the target accepts
+-- neither from the caller.
+do
+  local echoRow = findReward("echo:lastRun:ZeusBoon")
+  eq(#echoRow.rarities, 0, "Echo previous-run target offered caller rarities")
+  eq(echoRow.supportsLevel, false, "Echo previous-run target offered a level")
+  expectError("does not support the requested rarity", function()
+    M.dispatch("spawn_reward", {
+      reward = "echo:lastRun:ZeusBoon", rarity = "Epic",
+      requestId = "echo-rarity-refused", includeCatalogs = false,
+    })
+  end)
+  check(not HeroHasTrait("ZeusBoon"), "refused Echo rarity mutated")
+end
+
 -- Direct exact materialization uses the previous-run rarity and never opens or
 -- waits for Echo's native random choice screen.
 local result = M.dispatch("spawn_reward", {

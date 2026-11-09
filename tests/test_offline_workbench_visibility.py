@@ -54,9 +54,18 @@ assert 'TrainerSecondaryActionButton(' in catalog and 'title: text("hades.acquir
 assert ".trainerPicker(.expanding, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)" in catalog
 assert ".trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)" in catalog
 assert "selected != nil && model.canMutate" in catalog
-assert 'if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }' in catalog
+# #706 uses one fixed Core acquisition panel. It is rendered even
+# while disconnected, with game-controlled fallback for empty rarity catalogs.
+assert 'if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }' in catalog
+assert 'if !model.acquisitionAllowsCallerRarity {' in catalog
+assert 'Text(text("hades.acquisition.gameControlled")).tag("")' in catalog
+assert "ForEach(model.acquisitionRarityOptions" in catalog
+assert "TrainerAcquisitionPanel(" in catalog
+assert "chaosRow" in catalog and "exactRow" in catalog
+assert 'Picker(text("hades.chaosBlessing")' in catalog
+assert 'Picker(text("hades.chaosCurse")' in catalog
 assert "if matches.isEmpty { TrainerEmptyState" not in catalog
-assert "HadesChaosPairControls(model: model)" in catalog
+assert "HadesChaosPairControls(model: model)" not in catalog
 
 assert not re.search(r"if\s+matches\.isEmpty\s*\{[\s\S]*?\}\s*else\s*\{\s*Picker\(", traits)
 

@@ -6,6 +6,12 @@ struct TrainerPickerSection<Item: Identifiable>: Identifiable {
     let items: [Item]
 }
 
+/// The selected item's lock, for a game that offers one on this editor.
+struct TrainerResourceLock {
+    let locked: Bool
+    let toggle: () -> Void
+}
+
 struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
@@ -16,11 +22,11 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     @Binding var amount: String
     let sections: [TrainerPickerSection<Item>]
     let enabled: Bool
-    let locked: Bool
+    /// Nil when the game offers no lock for these items: no lock affordance.
+    let lock: TrainerResourceLock?
     let searchPlaceholder: String
     let emptyLabel: String
     let itemLabel: (Item) -> String
-    let onLock: () -> Void
     let onCommit: (TrainerTextField.Completion) -> String
     let onEditingChanged: (Bool) -> Void
 
@@ -32,11 +38,10 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         amount: Binding<String>,
         sections: [TrainerPickerSection<Item>],
         enabled: Bool,
-        locked: Bool,
+        lock: TrainerResourceLock?,
         searchPlaceholder: String = "host.resource.searchPlaceholder",
         emptyLabel: String = "host.resource.noMatches",
         itemLabel: @escaping (Item) -> String,
-        onLock: @escaping () -> Void,
         onEditingChanged: @escaping (Bool) -> Void = { _ in },
         onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }
     ) {
@@ -47,11 +52,10 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         self._amount = amount
         self.sections = sections
         self.enabled = enabled
-        self.locked = locked
+        self.lock = lock
         self.searchPlaceholder = searchPlaceholder
         self.emptyLabel = emptyLabel
         self.itemLabel = itemLabel
-        self.onLock = onLock
         self.onEditingChanged = onEditingChanged
         self.onCommit = onCommit
     }
@@ -103,12 +107,14 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                 )
                 .id(selection)
 
-                TrainerLockButton(
-                    title: title,
-                    locked: locked,
-                    enabled: enabled && !selection.isEmpty,
-                    action: onLock
-                )
+                if let lock {
+                    TrainerLockButton(
+                        title: title,
+                        locked: lock.locked,
+                        enabled: enabled && !selection.isEmpty,
+                        action: lock.toggle
+                    )
+                }
             }
         }
     }

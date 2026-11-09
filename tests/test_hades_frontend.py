@@ -169,6 +169,7 @@ for raw in sys.stdin:
         if state.get('diagnosticsMode')=='empty':checks=[]
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
+        if command=='set_feature' and state.get('slowFeature'):time.sleep(.3)
         if command=='set_feature':
             feature=params.get('feature')
             if feature=='gameSpeed':
@@ -204,6 +205,9 @@ for raw in sys.stdin:
                 state['healthLock']={'current':state['health'],'max':state['maxHealth']}
             if params['field']=='money' and state.get('moneyLocked'):state['moneyLock']=params['value']
             if params['field']=='rerolls' and state.get('rerollsLocked'):state['rerollsLock']=params['value']
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_resource':
+            state['resources'][params['resource']]=params['value']
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
@@ -400,7 +404,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 "inFlight":client.hasInFlightRequest,"queued":client.queuedRequestCount,"lifecycle":session.lifecycleID.uuidString,
                 "sessionBusy":status.busy,"operation":status.operation.key,"error":status.error,"errorArguments":status.errorArguments,
                 "trainerBusy":model.busy,"connected":model.connected,"heroReady":model.heroReady,"health":model.health,
-                "canMutate":model.canMutate,"localError":model.localError]
+                "canMutate":model.canMutate,"currentIssues":model.currentIssues.map(\.id)]
             let windows=diagnosticWindows.map { name, window -> String in
                 let responder=String(describing:window.firstResponder)
                 let drafts=(window.contentView.map(fields) ?? []).filter { $0.delegate is TrainerTextField.Coordinator }.map {
@@ -507,8 +511,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         if journey == "slider" {
             recordPhase("slider: real Hades workbench and backend")
             try exerciseModuleSlider(HadesTrainerView(model: model), localization: localization,
-                sliderLabel: localization.localized("host.timeWarp.title"),
-                fieldLabel: localization.localized("host.timeWarp.title"),
+                sliderLabel: HadesPresentation.text("hades.gameSpeed", language: localization.language),
+                fieldLabel: HadesPresentation.text("hades.gameSpeed", language: localization.language),
                 gameID: "hades", mutation: "set_feature", currentValue: { model.number(.gameSpeed) },
                 busy: { model.busy }, commands: commands, observe: { speed in
                     var state = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
@@ -527,7 +531,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 expanded: Binding(get: { model.numericControlsExpanded }, set: { model.numericControlsExpanded = $0 }),
                 primaryLabel: { HadesPresentation.text("hades.money", language: $0) },
                 expandedLabel: { HadesPresentation.text("hades.damageMultiplier", language: $0) },
-                outsideLabel: { _ in localization.localized("host.timeWarp.title") },
+                outsideLabel: { HadesPresentation.text("hades.gameSpeed", language: $0) },
                 conditionalRole: "AXPopUpButton",
                 conditionalLabel: { HadesPresentation.text("hades.chamberObject", language: $0) },
                 busy: { model.busy }, commands: commands, observeAvailability: { count in
@@ -574,6 +578,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 openSaveEditor: { editorOpens += 1 }, openSaveManagement: { backupOpens += 1 })
             documentCatalog.saveEditor?.perform(); documentCatalog.saveManagement?.perform()
             check(editorOpens == 1 && backupOpens == 1, "Hades optional document actions lost their original callbacks")
+            // Per-action gates: a request in flight closes the commands that
+            // start another request, while backend-owned Save tools stay open.
+            recordPhase("management: per-action gates while a request runs")
+            model.saveProfile("Closing while saving")
+            wait("slow profile save in flight") { model.busy }
+            check(documentCatalog.saveEditor?.isEnabled == true && documentCatalog.saveManagement?.isEnabled == true
+                  && documentCatalog.shortcuts.isEnabled && documentCatalog.log.isEnabled,
+                  "a running request closed Hades tools that start no request")
+            check(!documentCatalog.refresh.isEnabled && !documentCatalog.profiles.isEnabled
+                  && !documentCatalog.diagnostics.isEnabled && !documentCatalog.disableAll.isEnabled
+                  && !model.canAcceptRuntimeAction,
+                  "a running request admitted another Hades backend command")
+            wait("slow profile save reply") { !model.busy && model.profiles.contains { $0.name == "Closing while saving" } }
+            model.deleteProfile("Closing while saving")
+            wait("gate fixture profile removed") { !model.busy && model.profiles.map(\.name) == ["Fixture"] }
+            check(documentCatalog.refresh.isEnabled && documentCatalog.diagnostics.isEnabled && model.canAcceptRuntimeAction,
+                  "idle Hades backend commands stayed closed")
             exerciseManagementLayout(content: {
                 HadesManagementUtilities(model: model)
                     .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
@@ -606,8 +627,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             model.runDiagnostics()
             wait("shared diagnostic viewer fixture") { !model.busy && model.diagnostics.count == 2 }
             model.diagnosticsPresented = true
+            check(HadesPresentation.text("hades.diagnostics.rerun", language: .en) == "Run Again"
+                  && HadesPresentation.text("hades.diagnostics.rerun", language: .zhCN) == "重新检测",
+                  "Hades diagnostics lost the shared Run Again label")
             try exerciseDiagnostics(HadesDiagnosticsView(model: model), localization: localization,
-                refreshTitle: localization.localized("host.refresh"),
+                refreshTitle: HadesPresentation.text("hades.diagnostics.rerun", language: .en),
                 exportTitle: HadesPresentation.text("hades.diagnostics.export", language: .en),
                 checkName: HadesPresentation.text("hades.diagnostics.hero", language: .en),
                 nonpassingStatus: "host.diagnostics.failed", busy: { model.busy }, count: { model.diagnostics.count },
@@ -630,10 +654,18 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
             .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
-             .boonRarityEnabled,.generateFishing,.generateChaosGate,.disableAll],"shortcut order drifted from the visible workbench")
+             .boonRarityEnabled,.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
+             .acquireChaosPair,.acquireExactBoon,.disableAll],
+              "shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
+        // The Generate rows follow the Chaos Gate, so earlier defaults keep their keys.
+        check(HadesShortcutAction.generateFishing.defaultChord.displayText=="⌃⌥Q"
+              && HadesShortcutAction.generateChaosGate.defaultChord.displayText=="⌃⌥W",
+              "adding the Generate row shortcuts moved an existing default")
+        check(HadesWorkbenchCatalog.shortcutActions(in:.rooms)==[.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial],
+              "Generate row shortcuts left the rooms section")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -769,11 +801,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
         check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
+        check(searchFunctions("角色奖励").contains { $0.id == "shortcut.spawnSpecial" && $0.section == .rooms }
+              && searchFunctions("standard drops").contains { $0.id == "hades.spawn.pickupRewards" && $0.section == .rooms },
+              "Generate reward rows missing from bilingual discovery")
         let beforeWorld = commands().count
         model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
-        pump(); check(commands().count == beforeWorld && model.localError == "hades.error.staleRoom", "old-room intent crossed the backend")
+        pump(); check(commands().count == beforeWorld && model.feedback?.text.key == "hades.error.staleRoom"
+                      && model.feedback?.tone == .warning
+                      && !model.currentIssues.contains { $0.text.key == "hades.error.staleRoom" },
+                      "old-room intent crossed the backend or became a retained issue")
+        let staleRoomNotice = model.feedback!.id
         model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
         wait("spawn_reward reply for current room: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
+        check(model.feedback?.id != staleRoomNotice && model.feedback?.text.key == "host.backend.notice.completed",
+              "a completed room action left the earlier refusal as its feedback")
         let worldArgs = commands().last { $0["command"] as? String == "spawn_reward" }?["params"] as? [String:Any]
         check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
         model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
@@ -823,7 +864,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(field.stringValue=="80","hero replacement erased focused draft")
         coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:field));pump()
         check(commands().filter { $0["command"] as? String == "set_value" }.count==manualSetValueBaseline + 1,"stale draft mutated replacement hero")
-        check(model.localError=="hades.error.staleHero","stale draft lacked actionable feedback")
+        check(model.feedback?.text.key=="hades.error.staleHero" && model.feedback?.tone == .warning
+              && !model.currentIssues.contains { $0.text.key=="hades.error.staleHero" },
+              "stale draft lacked actionable feedback or became a retained issue")
+        // Hades II's completion convention: a rejected edit restores the
+        // observed value and keeps its field-local recovery cue.
+        check(field.stringValue=="30" && (field as! TrainerTextField.Field).validationMessage
+              == HadesPresentation.text("hades.error.staleHero",language:.en),
+              "stale draft did not restore the replacement hero's observed value with its cue")
         try updateState(hero:"run:hero:2",health:31)
         model.refreshFromHost();wait("unfocused health status: health 31, trainer idle") { !model.busy && model.health==31 };host.layoutSubtreeIfNeeded();pump()
         check(field.stringValue=="31","unfocused native value did not refresh")
@@ -847,15 +895,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let beforeInvalid=commands().count
         enterNative("-1").doCommand(by:#selector(NSResponder.insertNewline(_:)))
         pump()
-        check(commands().count==beforeInvalid && model.health==31 && field.stringValue=="-1",
-              "Hades I invalid numeric completion dispatched or lost its correction draft")
-        check(nativeField.presentation == .invalid && nativeField.validationMessage == HadesPresentation.text("hades.error.invalidValue",language:.en)
+        check(commands().count==beforeInvalid && model.health==31 && field.stringValue=="31",
+              "Hades I invalid numeric completion dispatched or did not restore the observed value")
+        check(nativeField.presentation == .invalid && nativeField.validationMessage == HadesPresentation.text("hades.input.invalid",language:.en)
               && nativeField.accessibilityHelp() == nativeField.validationMessage,
               "Hades I invalid field lacked local visible/accessibility feedback")
+        let invalidMessage=HadesPresentation.text("hades.input.invalid",language:.en)
+        check(model.feedback?.text.key=="hades.input.invalid" && model.feedback?.tone == .warning
+              && !model.currentIssues.contains { $0.text.key=="hades.input.invalid" }
+              && !nativeAccessibilityControls(host).contains { $0.role=="AXStaticText" && $0.text==invalidMessage },
+              "a rejected Hades I value was not reported once, as its field state and one transient notice")
         enterNative("99").doCommand(by:#selector(NSResponder.cancelOperation(_:)))
         pump()
-        check(commands().count==beforeInvalid && field.stringValue=="-1" && nativeField.presentation == .invalid,
-              "Escape committed a numeric draft or hid its previously rejected input")
+        check(commands().count==beforeInvalid && field.stringValue=="31" && nativeField.presentation == .invalid,
+              "Escape committed a numeric draft or hid its previous rejection")
         enterNative("32").doCommand(by:#selector(NSResponder.insertNewline(_:)))
         window.makeFirstResponder(nil)
         wait("native Return corrected health exactly once") { !model.busy && model.health==32 }
@@ -942,7 +995,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                   $0.role=="AXPopUpButton" && $0.label==traitLabel && $0.valueText==primaryName
               }),
               let oldLevel=fields(in:host).first(where:{
-                  $0.accessibilityIdentifier()=="hades.catalog.level"
+                  $0.accessibilityIdentifier()=="hades.acquisition.level"
               }) else {
             fatalError("Hades I selected-catalog native inputs missing")
         }
@@ -953,9 +1006,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let levelEditor=nativeEditor(oldLevel, "catalog level")
         levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
         // Native menu input can also begin through accessibility. Replacing
-        // selection while its field still edits must retire the old identity.
+        // selection while the shared level field edits must retire the old
+        // target-owned NSTextField and reset the new target's level.
         selectNativePicker(choices,in:window,moving:1,opening:.accessibility);pump()
-        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.catalog.level" }
+        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.acquisition.level" }
         let catalogOwnerPassed=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText==secondaryName
               && oldLevel.currentEditor()==nil && newLevel?.stringValue=="1" && commands().count==beforeSelection
         if !catalogOwnerPassed {
@@ -999,8 +1053,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "a catalog selection retained or submitted the previous target's numeric draft")
         window.setContentSize(NSSize(width:1150,height:viewportHeight));window.center();host.layoutSubtreeIfNeeded();pump()
         let count=commands().count
-        _=model.setNumber(.damageMultiplier,text:"nan");pump()
-        check(commands().count==count,"invalid multiplier crossed the backend boundary")
+        let restoredMultiplier=model.completeTextEdit(.feature(.damageMultiplier),text:"nan",changed:true,target:nil) { _ in };pump()
+        check(commands().count==count && restoredMultiplier=="2" && model.feedback?.text.key=="hades.input.invalid"
+              && !model.currentIssues.contains { $0.text.key=="hades.input.invalid" },
+              "invalid multiplier crossed the backend boundary, kept its draft or lacked its transient notice")
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
         let currentLifeCN=localization.localized("host.input.currentValue",arguments:[
             HadesPresentation.text("hades.health",language:.zhCN)])
@@ -1549,6 +1605,291 @@ func pump(_ seconds: TimeInterval = 0.1) {
         return
         }
 
+        // Gathering and Chaos Gate place their shortcut before Generate, and the
+        // fishing action explains its availability from the room observation.
+        recordPhase("recovery: generate shortcut placement and fishing availability")
+        let fishingTitle=HadesPresentation.text("hades.generateFishing",language:.en)
+        func fishingButton() -> NativeAccessibilityControl? { accessibilityButton(named:fishingTitle,in:host) }
+        func checkBadgePrecedes(_ chord: String, action name: String) {
+            let badge=requireNativeControl("shortcut badge "+chord,in:host) { view in
+                nativeAccessibilityControls(view).first { $0.role=="AXStaticText" && $0.text==chord }
+            }
+            let action=nativeAccessibilityControls(host).filter { $0.role=="AXButton" && $0.label==name }
+                .min { abs($0.frame.midY-badge.frame.midY) < abs($1.frame.midY-badge.frame.midY) }
+            check(action != nil && abs(action!.frame.midY-badge.frame.midY) < 12 && badge.frame.maxX <= action!.frame.minX,
+                  "shortcut badge did not precede its row action: "+chord)
+        }
+        checkBadgePrecedes(model.shortcutText(.generateFishing),action:fishingTitle)
+        checkBadgePrecedes(model.shortcutText(.generateChaosGate),action:HadesPresentation.text("hades.generate",language:.en))
+        check(fishingButton()?.enabled==true && fishingButton()?.help==HadesPresentation.text("hades.fishingHelp",language:.en),
+              "available fishing Generate lost its action help")
+        func setFishing(_ available: Bool) throws {
+            var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+            var room=state["world"] as! [String:Any]
+            room["canFish"]=available;state["world"]=room
+            try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
+            model.refreshFromHost()
+        }
+        try setFishing(false)
+        wait("unavailable fishing explains its room reason") {
+            host.layoutSubtreeIfNeeded()
+            return !model.busy && model.world?.canFish==false && fishingButton()?.enabled==false
+                && fishingButton()?.help==HadesPresentation.text("hades.fishing.unavailable.room",language:.en)
+        }
+        try setFishing(true)
+        wait("restored fishing returns to its action help") {
+            host.layoutSubtreeIfNeeded()
+            return !model.busy && fishingButton()?.enabled==true
+                && fishingButton()?.help==HadesPresentation.text("hades.fishingHelp",language:.en)
+        }
+
+        // Generate reward follows Hades II: one Core grouped row per world
+        // catalog group with its sections and "中文 · English" labels, the
+        // shortcut badge before Generate, and a shortcut acting on the selection
+        // the row shows.
+        recordPhase("recovery: Generate reward rows")
+        let generateTitle=HadesPresentation.text("hades.generate",language:.en)
+        func spawnRequests() -> [[String:Any]] { commands().filter { $0["command"] as? String == "spawn_reward" } }
+        let rewardRows: [(HadesRewardGroup,String)] = [(.olympian,"hades.spawn.olympianBoons"),
+            (.pickup,"hades.spawn.pickupRewards"),(.special,"hades.spawn.characterRewards")]
+        func rewardPicker(_ key: String) -> NativeAccessibilityControl? {
+            host.layoutSubtreeIfNeeded()
+            let title=HadesPresentation.text(key,language:localization.language)
+            return nativeAccessibilityControls(host).first { $0.role=="AXPopUpButton" && nativePickerHasName($0,title) }
+        }
+        /// The catalog's sections in order, each header "# title" then its "中文 · English" items.
+        func expectedMenu(_ group: HadesRewardGroup, headers: [String]) -> [String] {
+            let offered=model.rewards(in:group)
+            let sections=offered.map(\.section).reduce(into:[String]()) { if !$0.contains($1) { $0.append($1) } }
+            check(sections.count==headers.count,"Generate row sections drifted from the catalog: \(sections)")
+            return zip(sections,headers).flatMap { section, header in
+                ["# "+header]+offered.filter { $0.section==section }.map(\.bilingualName)
+            }
+        }
+        func generateButton(near chord: String) -> NativeAccessibilityControl? {
+            host.layoutSubtreeIfNeeded()
+            guard let badge=nativeAccessibilityControls(host).first(where: { $0.role=="AXStaticText" && $0.text==chord }) else { return nil }
+            return nativeAccessibilityControls(host).filter { $0.role=="AXButton" && $0.label==generateTitle }
+                .min { abs($0.frame.midY-badge.frame.midY) < abs($1.frame.midY-badge.frame.midY) }
+        }
+        for (group,key) in rewardRows {
+            let shown=model.rewards(in:group).first!
+            let picker=requireNativeControl("Generate row picker "+key,in:host) { _ in rewardPicker(key) }
+            check(model.selectedRewards[group]==shown.id && picker.valueText==shown.bilingualName && picker.enabled,
+                  "Generate row did not show its first catalog reward bilingually: "+key+" value="+(picker.valueText ?? "nil"))
+            checkBadgePrecedes(model.shortcutText(group.shortcut),action:generateTitle)
+            check(generateButton(near:model.shortcutText(group.shortcut))?.enabled==true,"Generate row action unavailable: "+key)
+        }
+        check(HadesShortcutAction.spawnOlympian.defaultChord.displayText=="⌃⌥E"
+              && HadesShortcutAction.spawnPickup.defaultChord.displayText=="⌃⌥R"
+              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥T",
+              "Generate row shortcuts did not take the next free derived defaults")
+        // A real menu shows the catalog sections and moves the model-held
+        // selection that both the button and the shortcut generate.
+        let pickupExpected=expectedMenu(.pickup,headers:["Resources & Standard Drops","Meta Resources"])
+        let gems=model.rewards(in:.pickup).first { $0.id=="GemDrop" }!
+        let pickupMoves=pickupExpected.filter { !$0.hasPrefix("# ") }.firstIndex(of:gems.bilingualName)!
+        let pickupMenu=selectNativePicker(rewardPicker("hades.spawn.pickupRewards")!,in:window,moving:pickupMoves,opening:.accessibility)
+        check(pickupMenu==pickupExpected,"Generate row menu lost its catalog sections or bilingual items: \(pickupMenu)")
+        wait("native pickup choice selects Gemstones") {
+            model.selectedRewards[.pickup]=="GemDrop" && rewardPicker("hades.spawn.pickupRewards")?.valueText==gems.bilingualName
+        }
+        localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
+        let poseidon=model.rewards(in:.olympian)[1]
+        let olympianMenu=selectNativePicker(rewardPicker("hades.spawn.olympianBoons")!,in:window,moving:1,opening:.accessibility)
+        check(olympianMenu==expectedMenu(.olympian,headers:["奥林匹斯诸神"]),
+              "Chinese Generate row lost its section title or 中文 · English items: \(olympianMenu)")
+        wait("native Olympian choice selects the next god") {
+            model.selectedRewards[.olympian]==poseidon.id && rewardPicker("hades.spawn.olympianBoons")?.valueText==poseidon.bilingualName
+        }
+        check(rewardPicker("hades.spawn.characterRewards")?.valueText=="卡俄斯 · Chaos",
+              "the character-reward row lost Chaos's bilingual label")
+        localization.language = .en;host.layoutSubtreeIfNeeded();pump()
+        // The row button generates its shown selection in the observed room.
+        let spawnBaseline=spawnRequests().count
+        check(generateButton(near:model.shortcutText(.spawnOlympian))!.press(),"Olympian Generate refused native AX input")
+        wait("native Olympian Generate reply") { !model.busy && spawnRequests().count==spawnBaseline+1 }
+        let pressedArgs=spawnRequests().last?["params"] as? [String:Any]
+        check(pressedArgs?["reward"] as? String==poseidon.id && pressedArgs?["roomId"] as? String=="run:room:1"
+              && (pressedArgs?["target"] as? [String:String])?["heroId"]==model.target?.heroId
+              && model.feedback?.text.key=="host.backend.notice.completed",
+              "native Generate lost its selection, room or hero, or its completion notice")
+        // The shortcut acts on the selection its row shows, with the same feedback.
+        model.performShortcut(HadesShortcutAction.spawnPickup.rawValue)
+        wait("pickup shortcut spawn reply") { !model.busy && spawnRequests().count==spawnBaseline+2 }
+        let shortcutArgs=spawnRequests().last?["params"] as? [String:Any]
+        check(shortcutArgs?["reward"] as? String=="GemDrop" && shortcutArgs?["roomId"] as? String=="run:room:1"
+              && model.feedback?.text.key=="host.backend.notice.completed" && model.feedback?.tone == .success,
+              "the pickup shortcut did not generate the row's shown selection with completion feedback")
+        // Shortcut assignment follows Hades II: an unmodified key is a valid chord.
+        var monitor: ((NSEvent) -> NSEvent?)?
+        let capture=TrainerShortcutCaptureController(installMonitor: { handler in monitor=handler; return NSObject() },
+                                                     removeMonitor: { _ in monitor=nil })
+        capture.begin(actionID:HadesShortcutAction.spawnSpecial.rawValue) { actionID, chord in
+            model.setShortcut(HadesShortcutAction(rawValue:actionID)!, chord:chord)
+        }
+        let plainKey=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
+            windowNumber:window.windowNumber,context:nil,characters:"",charactersIgnoringModifiers:"",isARepeat:false,keyCode:97)!
+        check(monitor?(plainKey)==nil,"shortcut capture forwarded an unmodified key")
+        wait("unmodified Generate shortcut assignment") { capture.capturingActionID==nil }
+        check(capture.issue==nil && model.shortcutText(.spawnSpecial)=="F6",
+              "an unmodified shortcut was refused or not applied: \(String(describing:capture.issue))")
+        checkBadgePrecedes("F6",action:generateTitle)
+        model.resetShortcuts();host.layoutSubtreeIfNeeded();pump()
+        check(model.shortcutText(.spawnSpecial)=="⌃⌥T","shortcut reset did not restore the derived default")
+
+        // Core metric cards commit through Hades I's completion owner: a live
+        // amount routes to the hero captured when its edit began, a multiplier
+        // edits the durable desired value in its native unit.
+        recordPhase("recovery: Core metric cards commit through their owners")
+        func nativeCommit(_ input: NSTextField, _ value: String) {
+            guard let coordinator=input.delegate as? TrainerTextField.Coordinator else {
+                fatalError("native field lost its Core coordinator: "+(input.accessibilityLabel() ?? "unlabelled"))
+            }
+            coordinator.begin();input.stringValue=value
+            coordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:input))
+            coordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:input))
+        }
+        func requests(_ command: String) -> [[String:Any]] {
+            commands().filter { $0["command"] as? String == command }
+        }
+        let moneyTitle=HadesPresentation.text("hades.money",language:.en)
+        let moneyField=requireNativeControl("Core gold card field",in:host) { view in
+            fields(in:view).first { $0.accessibilityLabel()==moneyTitle }
+        }
+        let liveHero=model.target!.heroId
+        let moneyBaseline=requests("set_value").count
+        nativeCommit(moneyField,"77")
+        wait("Core gold card set_value reply: 77 observed") { !model.busy && model.money==77 }
+        let moneyParams=requests("set_value").last?["params"] as? [String:Any]
+        check(requests("set_value").count==moneyBaseline+1 && moneyParams?["field"] as? String == "money"
+              && moneyParams?["value"] as? Double == 77
+              && (moneyParams?["target"] as? [String:String])?["heroId"]==liveHero,
+              "Core gold card commit lost its field, value or captured hero")
+        host.layoutSubtreeIfNeeded();pump()
+        check(moneyField.stringValue=="77","Core gold card did not show its committed observation")
+        model.numericControlsExpanded=true;host.layoutSubtreeIfNeeded();pump()
+        let dashTitle=HadesPresentation.text("hades.dashBonus",language:.en)
+        let dashField=requireNativeControl("Core additional-dashes card field",in:host) { view in
+            fields(in:view).first { $0.accessibilityLabel()==dashTitle }
+        }
+        check(dashField.stringValue=="0" && dashField.isEnabled,"multiplier card did not show its desired neutral value")
+        nativeCommit(dashField,"3")
+        wait("Core multiplier set_feature reply: three additional dashes") { !model.busy && model.number(.dashBonus)==3 }
+        let dashParams=requests("set_feature").last?["params"] as? [String:Any]
+        check(dashParams?["feature"] as? String == "dashBonus" && dashParams?["value"] as? Double == 3
+              && dashParams?["target"] == nil,
+              "Core multiplier commit lost its desired feature or carried a hero")
+        let beforeFractionalDash=commands().count
+        nativeCommit(dashField,"1.5");pump()
+        check(commands().count==beforeFractionalDash && dashField.stringValue=="3"
+              && model.feedback?.text.key=="hades.input.invalid",
+              "a fractional dash count crossed its native unit or kept its rejected draft")
+        model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
+
+        // Common toggles use the shared Core phase model with per-phase help.
+        recordPhase("recovery: feature toggle phases")
+        func featureSwitch(_ feature: HadesFeature) -> NativeAccessibilityControl? {
+            let title=HadesPresentation.text(feature.key,language:.en)
+            return nativeAccessibilityControls(host).first {
+                $0.label==title && ($0.role=="AXCheckBox" || $0.role=="AXSwitch")
+            }
+        }
+        func phase(_ feature: HadesFeature) -> TrainerFeaturePhase { model.featurePresentation(feature).phase }
+        func observeFeatures(active: [String:Bool], dormant: [String:Bool], slow: Bool = false) throws {
+            var state=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+            state["activeFeatures"]=active;state["dormantFeatures"]=dormant;state["slowFeature"]=slow
+            try JSONSerialization.data(withJSONObject:state).write(to:stateURL,options:.atomic)
+        }
+        func waitPhase(_ feature: HadesFeature, _ expected: TrainerFeaturePhase, help key: String?) {
+            wait("\(feature.rawValue) reads as \(expected)") {
+                host.layoutSubtreeIfNeeded()
+                guard !model.busy, phase(feature)==expected, let control=featureSwitch(feature) else { return false }
+                return key.map { control.help==localization.localized($0) } ?? true
+            }
+        }
+        check(phase(.fullHealth) == .off,"a disabled feature did not read as off")
+        try observeFeatures(active:[:],dormant:[:],slow:true)
+        let lifeSwitch=requireNativeControl("Infinite Life native switch",in:host) { _ in featureSwitch(.fullHealth) }
+        check(lifeSwitch.press(),"Infinite Life switch refused native AX input")
+        wait("in-flight enable reads as pending") { model.busy && phase(.fullHealth) == .pending && model.isEnabled(.fullHealth) }
+        waitPhase(.fullHealth,.mismatch,help:"host.feature.phase.mismatch")
+        try observeFeatures(active:["fullHealth":true],dormant:[:]);model.refreshFromHost()
+        waitPhase(.fullHealth,.active,help:nil)
+        try observeFeatures(active:[:],dormant:["fullHealth":true]);model.refreshFromHost()
+        waitPhase(.fullHealth,.waiting,help:"host.feature.phase.waiting")
+        try setConnection(false,heroReady:false);model.refreshFromHost()
+        waitPhase(.fullHealth,.detached,help:"host.feature.phase.detached")
+        try setConnection(true,heroReady:true);try observeFeatures(active:[:],dormant:[:]);model.refreshFromHost()
+        waitPhase(.fullHealth,.mismatch,help:"host.feature.phase.mismatch")
+        check(featureSwitch(.fullHealth)!.press(),"Infinite Life switch refused native AX input")
+        waitPhase(.fullHealth,.off,help:nil)
+        check(requests("set_feature").suffix(2).compactMap { ($0["params"] as? [String:Any])?["value"] as? Bool } == [true,false],
+              "the native switch did not send one enable and one disable intent")
+
+        // All seven permanent resources use independent Core numeric inputs.
+        // No search or popup may gate direct editing, including while detached.
+        recordPhase("recovery: directly visible Core permanent resource rows")
+        let permanentResourceNames:[(String,String,String)] = [
+            ("MetaPoints","Darkness","黑暗"), ("Gems","Gemstones","宝石"),
+            ("LockKeys","Chthonic Key","冥府钥匙"), ("GiftPoints","Nectar","蜜露"),
+            ("SuperGems","Diamonds","钻石"), ("SuperGiftPoints","Ambrosia","仙酒"),
+            ("SuperLockKeys","Titan Blood","泰坦之血")
+        ]
+        func resourceField(_ id:String) -> NSTextField? {
+            guard let resource=permanentResourceNames.first(where:{$0.0==id}) else { return nil }
+            let primary=localization.language == .en ? resource.1 : resource.2
+            let secondary=localization.language == .en ? resource.2 : resource.1
+            return fields(in:host).first { $0.accessibilityLabel()=="\(primary) · \(secondary)" }
+        }
+        func checkAllResourceRows(observed:Bool) {
+            host.layoutSubtreeIfNeeded();pump()
+            for (id,_,_) in permanentResourceNames {
+                let field=resourceField(id)
+                check(field != nil,"missing always-visible resource input: \(id)")
+                let expected=id=="Gems" && observed ? "12" : ""
+                check(field?.stringValue==expected,
+                      "unexpected resource observation: \(id), expected=\(expected)")
+                check(field?.isEnabled == (id=="Gems" && observed),
+                      "resource availability is inconsistent: \(id)")
+            }
+        }
+        checkAllResourceRows(observed:true)
+        let resourceBaseline=requests("set_resource").count
+        nativeCommit(resourceField("Gems")!,"40")
+        wait("Core resource row set_resource reply: 40 Gemstones observed") {
+            !model.busy && model.resources["Gems"]==40
+        }
+        let resourceParams=requests("set_resource").last?["params"] as? [String:Any]
+        check(requests("set_resource").count==resourceBaseline+1 && resourceParams?["resource"] as? String == "Gems"
+              && resourceParams?["value"] as? Double == 40
+              && (resourceParams?["target"] as? [String:String])?["heroId"]==liveHero,
+              "Core resource commit lost its resource, amount or captured hero")
+        host.layoutSubtreeIfNeeded();pump()
+        check(resourceField("Gems")?.stringValue=="40","the Gems row did not refresh its committed count")
+        localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
+        check(resourceField("Gems")?.accessibilityLabel()=="宝石 · Gemstones",
+              "the Chinese resource label was not 中文 · English")
+        for (id,_,_) in permanentResourceNames {
+            check(resourceField(id) != nil,"language change hid permanent resource: \(id)")
+        }
+        localization.language = .en;host.layoutSubtreeIfNeeded();pump()
+        let amountField=resourceField("Gems")!
+        let amountCoordinator=amountField.delegate as! TrainerTextField.Coordinator
+        amountCoordinator.begin();amountField.stringValue="41"
+        amountCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:amountField))
+        try updateState(hero:"run:hero:3",health:model.health ?? 1)
+        model.refreshFromHost();wait("resource hero replacement status") { !model.busy && model.target?.heroId=="run:hero:3" }
+        amountCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:amountField));pump()
+        check(requests("set_resource").count==resourceBaseline+1 && amountField.stringValue=="40"
+              && model.feedback?.text.key=="hades.error.staleHero",
+              "a stale resource draft mutated the replacement hero or kept its draft")
+        try updateState(hero:liveHero,health:model.health ?? 1)
+        model.refreshFromHost();wait("resource editor hero restored") { !model.busy && model.target?.heroId==liveHero }
+        for (id,_,_) in permanentResourceNames {
+            check(resourceField(id) != nil,"editing a row hid permanent resource: \(id)")
+        }
+
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
             "rarity":"Common","level":1,"canEdit":true,"canRemove":true,"limitation":"",
@@ -1604,6 +1945,26 @@ func pump(_ seconds: TimeInterval = 0.1) {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait("no-hero status reply: connected=\(connected), trainer idle") { !model.busy && model.connected==connected && !model.heroReady }
             check(model.hostActionsEnabled && !model.canMutate,"offline shortcut fixture retained a hero")
+            // Without an observation each live card reads "—" and refuses edits,
+            // while the desired multiplier stays visible and editable.
+            model.numericControlsExpanded=true;host.layoutSubtreeIfNeeded();pump()
+            for label in [currentLife, localization.localized("host.input.maximumValue",arguments:[
+                              HadesPresentation.text("hades.health",language:.en)]),
+                          HadesPresentation.text("hades.money",language:.en), HadesPresentation.text("hades.rerolls",language:.en),
+                          HadesPresentation.text("hades.godGauge",language:.en)] {
+                let metric=fields(in:host).first { $0.accessibilityLabel()==label }
+                check(metric?.stringValue=="" && metric?.placeholderString=="—" && metric?.isEnabled==false,
+                      "\(label) fabricated a value or stayed editable without an observation (connected=\(connected))")
+            }
+            let desiredDash=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.dashBonus",language:.en) }
+            check(desiredDash?.stringValue=="3" && desiredDash?.isEnabled==true,
+                  "the desired multiplier was hidden or gated by the missing hero (connected=\(connected))")
+            for (id,_,_) in permanentResourceNames {
+                let field=resourceField(id)
+                check(field != nil && field?.stringValue=="" && field?.isEnabled==false,
+                      "an offline or unobserved permanent resource was hidden/editable: \(id), connected=\(connected)")
+            }
+            model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
             let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
             model.performShortcut(HadesShortcutAction.disableAll.rawValue)
             wait("no-hero disable_all reply: request received, trainer idle (connected=\(connected))") {
@@ -1627,18 +1988,96 @@ func pump(_ seconds: TimeInterval = 0.1) {
             check(commands().count == feedbackRequests && model.connected == connected,
                   "Hades feedback presentation replayed a command or changed connection truth")
             let afterDisable=commands().count
-            let errorBeforeOneShot=model.localError
-            model.performShortcut(HadesShortcutAction.generateFishing.rawValue);pump()
-            model.performShortcut(HadesShortcutAction.generateChaosGate.rawValue);pump()
-            check(commands().count==afterDisable && model.localError==errorBeforeOneShot,
+            let issuesBeforeOneShot=model.currentIssues
+            // Without a hero every one-shot is refused as in Hades II: no
+            // request, a transient warning and no retained issue. The Generate
+            // rows share that gate with their shortcuts.
+            for action in [HadesShortcutAction.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial] {
+                model.dismissFeedback(model.feedback?.id ?? UUID())
+                model.performShortcut(action.rawValue);pump()
+                check(model.feedback?.text.key=="hades.shortcut.unavailable" && model.feedback?.tone == .warning,
+                      "a refused \(action.rawValue) shortcut lacked Hades II's warning notice (connected=\(connected))")
+            }
+            check(commands().count==afterDisable && model.currentIssues==issuesBeforeOneShot,
                   "a one-shot shortcut escaped live-owner gating")
+            host.layoutSubtreeIfNeeded()
+            check(nativeAccessibilityControls(host).filter { $0.role=="AXButton"
+                    && $0.label==HadesPresentation.text("hades.generate",language:.en) }.allSatisfy { !$0.enabled },
+                  "a Generate action stayed available without a hero (connected=\(connected))")
         }
-        feedbackWindow.contentView = nil; feedbackWindow.close()
         try setConnection(true,heroReady:true)
         model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
         try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
         model.refreshFromHost();wait("known Time Warp verification failure: trainer idle") { !model.busy && model.backendStatus.errorCode=="time_warp_verify_failed" }
         check(model.connected && model.canMutate,"a known verification failure discarded a trusted runtime")
+        recordPhase("recovery: current issues details")
+        check(model.feedback?.tone == .warning && model.feedback?.text.key=="host.timeWarp.error.verifyFailed",
+              "a known runtime failure lacked its warning notice")
+        check(model.currentIssues.map(\.id)==["backend"] && model.currentIssues[0].text.key=="host.timeWarp.error.verifyFailed",
+              "a known runtime failure was not projected as a current issue")
+        let failureNotice=model.feedback!.id
+        let sidebarHost=NSHostingView(rootView:ManagementPageFixture(
+            content:HadesGameModule.makeSidebarActions(model:model).frame(width:220),visibility:feedbackVisibility)
+            .environmentObject(localization))
+        let sidebarWindow=NSWindow(contentRect:NSRect(x:0,y:200,width:240,height:420),
+            styleMask:[.titled],backing:.buffered,defer:false)
+        sidebarWindow.isReleasedWhenClosed=false
+        sidebarWindow.contentView=sidebarHost
+        sidebarWindow.makeKeyAndOrderFront(nil)
+        let issuesTitle=localization.localized("host.feedback.currentIssues")
+        let closeTitle=localization.localized("host.feedback.closeDetails")
+        func noticeDetails() -> NativeAccessibilityControl? {
+            nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.details" && $0.role == "AXButton" }
+        }
+        // The details popover is its own native window beside the fixtures.
+        func detailsControls() -> [NativeAccessibilityControl] {
+            NSApp.windows.filter { $0.isVisible && $0 !== window && $0 !== feedbackWindow && $0 !== sidebarWindow }
+                .flatMap { nativeAccessibilityControls($0) }
+        }
+        func closeDetails() -> NativeAccessibilityControl? {
+            detailsControls().first { $0.role=="AXButton" && $0.label==closeTitle }
+        }
+        wait("warning notice offers details for its retained issue") { noticeDetails()?.enabled == true }
+        check(noticeDetails()!.press(),"Hades notice Details refused native AX input")
+        wait("notice Details opens the current issues") {
+            model.feedbackDetailsPresented && model.feedbackDetailsNoticeID==failureNotice && closeDetails()?.enabled==true
+        }
+        check(closeDetails()!.press(),"Hades current issues refused native Close")
+        wait("native Close retires only the details") { !model.feedbackDetailsPresented && closeDetails()==nil }
+        check(model.feedback?.id==failureNotice && !model.currentIssues.isEmpty,
+              "closing details erased the originating notice or issue")
+        var speedState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        var speedFeatures=speedState["features"] as! [String:Any]
+        var speedProjection=(speedFeatures["gameSpeed"] as? [String:Any]) ?? ["desired":1.0]
+        speedProjection["errorPresentation"]="host.timeWarp.error.setFailed"
+        speedProjection["errorArguments"]=["7"]
+        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+        speedState["fixtureError"]=nil
+        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("speed failure becomes a titled current issue") {
+            !model.busy && model.backendStatus.error.isEmpty && model.currentIssues.map(\.id)==["runtime.gameSpeed"]
+        }
+        let speedIssue=model.currentIssues[0]
+        check(speedIssue.title?.key=="hades.gameSpeed" && speedIssue.text.arguments==["7"],
+              "speed failure lost its Hades title or Host arguments")
+        pressNativeButton(named:issuesTitle,in:sidebarHost)
+        wait("sidebar entry opens titled speed details") {
+            model.feedbackDetailsPresented && closeDetails()?.enabled==true
+                && detailsControls().contains { $0.text==HadesPresentation.text("hades.gameSpeed",language:.en) }
+                && detailsControls().contains { $0.text==localization.string(speedIssue.text) }
+        }
+        speedProjection.removeValue(forKey:"errorPresentation");speedProjection.removeValue(forKey:"errorArguments")
+        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("resolved issues retire their details and sidebar entry") {
+            sidebarHost.layoutSubtreeIfNeeded()
+            return !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
+                && closeDetails()==nil && accessibilityButton(named:issuesTitle,in:sidebarHost)==nil
+        }
+        sidebarWindow.contentView=nil;sidebarWindow.close()
+        feedbackWindow.contentView = nil; feedbackWindow.close()
         for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
                            ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
                            ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
@@ -1675,7 +2114,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
         malformed.removeValue(forKey:"heroReady")
         try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
         model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
-        check(model.localError=="hades.error.protocol" && !model.canMutate,"malformed observation retained mutation authority")
+        check(!model.canMutate && model.currentIssues.contains { $0.id=="observation" && $0.text.key=="hades.error.protocol" }
+              && model.feedback?.text.key=="hades.error.protocol",
+              "malformed observation retained mutation authority or lacked its current issue")
+        malformed["heroReady"]=true
+        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("well-formed status resolves the protocol issue") {
+            !model.busy && model.connected && !model.currentIssues.contains { $0.id=="observation" }
+        }
         stopBackend()
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")

@@ -3,43 +3,45 @@ import SwiftUI
 
 struct HadesOperationFeedback: View {
     @ObservedObject var model: HadesTrainerModel
-    var body: some View { TrainerFeedbackOverlay(notice: model.feedback, onDismiss: model.dismissFeedback) }
+
+    var body: some View {
+        TrainerOperationFeedback(
+            notice: model.feedback,
+            hasCurrentIssues: !model.currentIssues.isEmpty,
+            detailsNoticeID: model.feedbackDetailsNoticeID,
+            onDismiss: model.dismissFeedback,
+            onShowDetails: { model.showFeedbackDetails(for: $0) }
+        )
+    }
 }
 
 struct HadesTrainerView: View {
+    private enum EditField: Hashable {
+        case value(HadesHeroValue)
+        case feature(HadesFeature)
+        case resource(String)
+    }
+
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
+    @State private var focusedField: EditField?
+    @State private var drafts: [EditField: String] = [:]
+
+    private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
+    private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
-    private var error: String { model.localError.isEmpty ? model.backendStatus.error : model.localError }
 
-    private func state(_ feature: HadesFeature) -> TrainerFeatureControlState {
-        let enabled = model.isEnabled(feature)
-        let active = model.isActive(feature)
-        let detached = enabled && !model.connected
-        return TrainerFeatureControlState(
-            isOn: enabled,
-            isInteractive: model.canEditIntent,
-            canEditValue: model.canEditIntent,
-            opacity: 1,
-            indicatorColor: detached ? theme.warning : (active ? theme.accent : theme.inactive),
-            helpText: detached ? text("hades.phase.detached") : text(feature.helpKey),
-            isWarning: enabled && !active
-        )
+    private func featureState(_ feature: HadesFeature) -> TrainerFeatureControlState {
+        model.featurePresentation(feature).trainerControlState(using: theme, localization: localization)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.pageSpacing) {
-            if !error.isEmpty {
-                TrainerMessageBanner(
-                    text: localization.presentation(error, arguments: model.backendStatus.errorArguments),
-                    icon: "exclamationmark.triangle.fill", color: theme.warning
-                )
-            }
             runDataSection.trainerSectionTarget(HadesWorkbenchSection.values.id)
             commonSection.trainerSectionTarget(HadesWorkbenchSection.common.id)
             boonsSection.trainerSectionTarget(HadesWorkbenchSection.boons.id)
@@ -59,6 +61,40 @@ struct HadesTrainerView: View {
                 }
             }
         }
+        // Drafts are owned through edit completion: an observation refreshes
+        // every unfocused value and never replaces the focused draft.
+        .onChange(of: observedDrafts, initial: true) { _, observed in
+            for (field, text) in observed where field != focusedField { drafts[field] = text }
+        }
+    }
+
+    private var observedDrafts: [EditField: String] {
+        var observed: [EditField: String] = [:]
+        for value in Self.heroValues {
+            observed[.value(value)] = model.observed(value).map(HadesTrainerModel.displayText) ?? ""
+        }
+        for feature in Self.multipliers {
+            observed[.feature(feature)] = HadesTrainerModel.displayText(model.number(feature))
+        }
+        for resource in Self.permanentResourceFallbacks {
+            observed[.resource(resource.id)] = model.resources[resource.id].map(HadesTrainerModel.displayText) ?? ""
+        }
+        return observed
+    }
+
+    private func draft(_ field: EditField) -> Binding<String> {
+        Binding(get: { drafts[field] ?? "" }, set: { drafts[field] = $0 })
+    }
+
+    /// Commits route to the hero observed when this field's edit began: the
+    /// edit captures the closure rendered for that hero.
+    private func completing(_ edit: HadesTextEdit) -> (TrainerTextField.Completion) -> String {
+        let target = model.target
+        return { draft in
+            model.completeTextEdit(edit, text: draft.text, changed: draft.changed, target: target) { key in
+                _ = draft.rejected(message: text(key))
+            }
+        }
     }
 
     private var runDataSection: some View {
@@ -73,34 +109,49 @@ struct HadesTrainerView: View {
             }
             VStack(spacing: 0) {
                 TrainerMetricGrid {
-                    HadesVitalMetricCard(model: model)
-                    HadesAmountMetricCard(
-                        model: model,
-                        title: text("hades.money"),
-                        icon: TrainerSemanticIcon.Concept.currency,
-                        value: model.money,
-                        field: "money",
-                        locked: model.moneyLocked,
+                    TrainerVitalMetricCard(
+                        title: text("hades.health"), icon: TrainerSemanticIcon.Concept.vitality, tint: .pink,
+                        current: draft(.value(.health)), maximum: draft(.value(.maxHealth)),
+                        focus: $focusedField, currentField: .value(.health),
+                        onCurrentCommit: completing(.value(.health)),
+                        onMaximumCommit: completing(.value(.maxHealth)),
+                        maximumField: .value(.maxHealth),
+                        locked: model.healthLocked, editable: model.canMutate,
+                        onLock: { model.lockHealth(!model.healthLocked) }
+                    )
+                    TrainerAmountMetricCard(
+                        title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency, tint: .yellow,
+                        text: draft(.value(.money)), focus: $focusedField, focusValue: .value(.money),
+                        locked: model.moneyLocked, editable: model.canMutate,
                         lockEnabled: !model.isEnabled(.moneyNoDecrease),
-                        onLock: { model.lockMoney(!model.moneyLocked) }
+                        onLock: { model.lockMoney(!model.moneyLocked) },
+                        onCommit: completing(.value(.money))
                     )
-                    HadesAmountMetricCard(
-                        model: model,
-                        title: text("hades.rerolls"),
-                        icon: TrainerSemanticIcon.Concept.randomize,
-                        value: model.rerolls,
-                        field: "rerolls",
-                        locked: model.rerollsLocked,
+                    TrainerAmountMetricCard(
+                        title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, tint: theme.accent,
+                        text: draft(.value(.rerolls)), focus: $focusedField, focusValue: .value(.rerolls),
+                        locked: model.rerollsLocked, editable: model.canMutate,
                         lockEnabled: !model.isEnabled(.rerollsNoDecrease),
-                        onLock: { model.lockRerolls(!model.rerollsLocked) }
+                        onLock: { model.lockRerolls(!model.rerollsLocked) },
+                        onCommit: completing(.value(.rerolls))
                     )
-                    HadesAmountMetricCard(model: model, title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge,
-                                          value: model.godGauge, field: "godGauge")
+                    // God Gauge has no fixed lock: Full God Gauge covers it.
+                    TrainerCounterMetricCard(
+                        title: text("hades.godGauge"), icon: HadesWorkbenchIcon.godGauge, tint: theme.accent,
+                        text: draft(.value(.godGauge)), focus: $focusedField, focusValue: .value(.godGauge),
+                        detail: nil, onCommit: completing(.value(.godGauge)), editable: model.canMutate
+                    )
                 }
                 TrainerDisclosure(isExpanded: model.numericControlsExpanded) {
                     TrainerMetricGrid {
-                        ForEach(HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }) { feature in
-                            HadesFeatureMetricCard(model: model, feature: feature)
+                        ForEach(Self.multipliers) { feature in
+                            // Native units: multipliers are ×, additional dashes a count.
+                            TrainerMultiplierMetricCard(
+                                title: text(feature.key), icon: feature.icon,
+                                text: draft(.feature(feature)), focus: $focusedField, focusValue: .feature(feature),
+                                suffix: feature == .dashBonus ? "" : "×", editable: model.canEditIntent,
+                                onCommit: completing(.feature(feature))
+                            )
                         }
                     }.padding(.top, 12)
                 }
@@ -114,7 +165,8 @@ struct HadesTrainerView: View {
             VStack(spacing: 1) {
                 ForEach(HadesFeature.allCases.filter { $0.isToggle && $0 != .boonRarityEnabled }) { feature in
                     TrainerFeatureToggleRow(
-                        title: text(feature.key), icon: feature.icon, state: state(feature),
+                        title: text(feature.key), icon: feature.icon, state: featureState(feature),
+                        helpText: text(feature.helpKey),
                         shortcutText: HadesShortcutAction(rawValue: feature.rawValue).map(model.shortcutText)
                     ) {
                         model.setFeature(feature, value: !model.isEnabled(feature))
@@ -159,7 +211,7 @@ struct HadesTrainerView: View {
     private var gameSpeedPanel: some View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
-                title: localization.localized("host.timeWarp.title"),
+                title: text(HadesFeature.gameSpeed.key),
                 icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditIntent ? theme.accent : theme.inactive,
                 emphasized: model.canEditIntent,
@@ -168,7 +220,7 @@ struct HadesTrainerView: View {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: "1.0",
-                    accessibilityLabel: localization.localized("host.timeWarp.title"),
+                    accessibilityLabel: text(HadesFeature.gameSpeed.key),
                     width: 62,
                     enabled: model.canEditIntent,
                     onEditingChanged: { active in
@@ -193,7 +245,7 @@ struct HadesTrainerView: View {
                     TrainerMappedSlider(
                         value: gameSpeedSliderValue,
                         mapping: gameSpeedMapping,
-                        accessibilityLabel: localization.localized("host.timeWarp.title"),
+                        accessibilityLabel: text(HadesFeature.gameSpeed.key),
                         accessibilityHint: localization.localized("host.timeWarp.hint"),
                         enabled: model.canEditIntent && pageVisible,
                         onPreviewValue: { preview in
@@ -213,12 +265,6 @@ struct HadesTrainerView: View {
                 Text(localization.presentation(key, arguments: [speedNumber(actual)]))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if let error = model.features[HadesFeature.gameSpeed.rawValue]?.errorPresentation {
-                Text(localization.presentation(
-                    error, arguments: model.features[HadesFeature.gameSpeed.rawValue]?.errorArguments ?? []
-                ))
-                .font(.caption).foregroundStyle(theme.warning)
-            }
         }
         .onChange(of: model.number(.gameSpeed), initial: true) { _, value in
             if !gameSpeedEditing && gameSpeedPreview == nil { gameSpeedInput = speedNumber(value) }
@@ -227,13 +273,14 @@ struct HadesTrainerView: View {
     }
 
     private var boonRarityPanel: some View {
-        let controlState = state(.boonRarityEnabled)
+        let controlState = featureState(.boonRarityEnabled)
         return TrainerLabeledControlRow(
             title: text(HadesFeature.boonRarityEnabled.key),
             icon: HadesFeature.boonRarityEnabled.icon,
             tint: controlState.indicatorColor,
             emphasized: controlState.isOn,
-            opacity: controlState.opacity
+            opacity: controlState.opacity,
+            helpText: text(HadesFeature.boonRarityEnabled.helpKey)
         ) {
             Picker(text("hades.minimumRarity"), selection: Binding(
                 get: { model.boonRarityTarget },
@@ -267,24 +314,68 @@ struct HadesTrainerView: View {
         }
     }
 
+    /// Permanent resource identities and official bilingual labels, copied from
+    /// the supported Hades I catalog for the brief interval before it loads.
+    /// Once loaded, the catalog itself remains the terminology authority.
+    private static let permanentResourceFallbacks: [HadesResourceDefinition] = [
+        .init(id: "MetaPoints", names: ["zh-CN": "黑暗", "en": "Darkness"]),
+        .init(id: "Gems", names: ["zh-CN": "宝石", "en": "Gemstones"]),
+        .init(id: "LockKeys", names: ["zh-CN": "冥府钥匙", "en": "Chthonic Key"]),
+        .init(id: "GiftPoints", names: ["zh-CN": "蜜露", "en": "Nectar"]),
+        .init(id: "SuperGems", names: ["zh-CN": "钻石", "en": "Diamonds"]),
+        .init(id: "SuperGiftPoints", names: ["zh-CN": "仙酒", "en": "Ambrosia"]),
+        .init(id: "SuperLockKeys", names: ["zh-CN": "泰坦之血", "en": "Titan Blood"]),
+    ]
+
+    /// All seven native resources always have independently visible edit rows.
+    /// The catalog may arrive after the disconnected UI was first rendered.
+    private var permanentResources: [HadesResourceDefinition] {
+        let loaded = model.resourceCatalog.reduce(into: [String: HadesResourceDefinition]()) { result, entry in
+            result[entry.id] = entry
+        }
+        return Self.permanentResourceFallbacks.map { loaded[$0.id] ?? $0 }
+    }
+
     private var resourcesSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.resources.titleKey),
                        icon: HadesWorkbenchSection.resources.icon) {
-            VStack(spacing: 0) {
-                ForEach(model.resourceCatalog) { resource in
-                    HadesValueRow(
-                        model: model,
-                        title: resource.name(language: localization.language.rawValue),
-                        glyph: HadesResourceIcon.glyph(for: resource.id), value: model.resources[resource.id] ?? 0
+            VStack(spacing: 1) {
+                ForEach(permanentResources) { resource in
+                    TrainerLabeledControlRow(
+                        title: resourceLabel(resource),
+                        glyph: HadesResourceIcon.glyph(for: resource.id),
+                        tint: model.canMutate ? theme.accent : theme.inactive,
+                        emphasized: model.canMutate
                     ) {
-                        model.setResource(resource.id, value: $0, target: $1)
+                        TrainerNumberField(
+                            text: draft(.resource(resource.id)),
+                            placeholder: "host.amount",
+                            accessibilityLabel: resourceLabel(resource),
+                            accessibilityIdentifier: "hades.resource.\(resource.id)",
+                            width: 110,
+                            enabled: model.canMutate && !model.busy && model.resources[resource.id] != nil,
+                            alignment: .leading,
+                            onEditingChanged: TrainerTextField.editingTracker(
+                                $focusedField, equals: .resource(resource.id)
+                            ),
+                            onCommit: completing(.resource(resource.id))
+                        )
                     }
-                    .id(resource.id)
                 }
             }
             .trainerGroupedRows()
+            // Hades I's resource-gain action remains game-owned and visible.
             HadesGatheringPanel(model: model)
         }
+    }
+
+    /// The native catalog supplies both official terms, in the active language
+    /// first. Editing status lives in its Core number control, not the title.
+    private func resourceLabel(_ resource: HadesResourceDefinition) -> String {
+        let primary = resource.name(language: localization.language.rawValue)
+        let other: TrainerPresentationLanguage = localization.language == .en ? .zhCN : .en
+        let secondary = resource.names[other.rawValue] ?? ""
+        return secondary.isEmpty || secondary == primary ? primary : "\(primary) · \(secondary)"
     }
 
     private var managementSection: some View {
@@ -295,225 +386,12 @@ struct HadesTrainerView: View {
     }
 }
 
-private struct HadesVitalMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
-    @State private var currentDraft: HadesNumberDraft
-    @State private var maximumDraft: HadesNumberDraft
-
-    init(model: HadesTrainerModel) {
-        self.model = model
-        _currentDraft = State(initialValue: HadesNumberDraft(value: model.health))
-        _maximumDraft = State(initialValue: HadesNumberDraft(value: model.maxHealth))
-    }
-
-    private var title: String { HadesPresentation.text("hades.health", language: localization.language) }
-
-    private func commit(_ completion: TrainerTextField.Completion,
-                        draft: HadesNumberDraft, field: String) -> String {
-        guard completion.changed else { return completion.text }
-        guard let number = Double(completion.text), number.isFinite,
-              number.rounded() == number, number >= 1, number <= 1_000_000_000 else {
-            model.rejectInvalidValue()
-            return completion.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-        }
-        model.setValue(field, value: number, target: draft.target)
-        return HadesNumberDraft.format(number)
-    }
-
-    var body: some View {
-        TrainerMetricCard(title: title, icon: TrainerSemanticIcon.Concept.vitality, tint: .pink) {
-            TrainerLockButton(
-                title: title,
-                locked: model.healthLocked,
-                enabled: model.canMutate,
-                action: { model.lockHealth(!model.healthLocked) }
-            )
-        } content: {
-            HStack(spacing: 2) {
-                TrainerNumberField(
-                    text: Binding(get: { currentDraft.text }, set: { currentDraft.update($0) }),
-                    accessibilityLabel: localization.localized("host.input.currentValue", arguments: [title]),
-                    width: 54, enabled: model.canMutate, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { currentDraft.begin(target: model.target) } else { currentDraft.end() }
-                    },
-                    onCommit: { commit($0, draft: currentDraft, field: "health") }
-                )
-                Text("/").foregroundStyle(.secondary)
-                TrainerNumberField(
-                    text: Binding(get: { maximumDraft.text }, set: { maximumDraft.update($0) }),
-                    accessibilityLabel: localization.localized("host.input.maximumValue", arguments: [title]),
-                    width: 54, enabled: model.canMutate, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { maximumDraft.begin(target: model.target) } else { maximumDraft.end() }
-                    },
-                    onCommit: { commit($0, draft: maximumDraft, field: "maxHealth") }
-                )
-            }
-        }
-        .onChange(of: model.health) { _, value in currentDraft.observe(value) }
-        .onChange(of: model.maxHealth) { _, value in maximumDraft.observe(value) }
-    }
-}
-
-private struct HadesAmountMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    let title: String
-    let icon: String
-    let value: Double
-    let field: String
-    let locked: Bool?
-    let lockEnabled: Bool
-    let onLock: (() -> Void)?
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(
-        model: HadesTrainerModel,
-        title: String,
-        icon: String,
-        value: Double,
-        field: String,
-        locked: Bool? = nil,
-        lockEnabled: Bool = true,
-        onLock: (() -> Void)? = nil
-    ) {
-        self.model = model
-        self.title = title
-        self.icon = icon
-        self.value = value
-        self.field = field
-        self.locked = locked
-        self.lockEnabled = lockEnabled
-        self.onLock = onLock
-        _draft = State(initialValue: HadesNumberDraft(value: value))
-    }
-
-    var body: some View {
-        TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
-            if let locked, let onLock {
-                TrainerLockButton(
-                    title: title,
-                    locked: locked,
-                    enabled: model.canMutate && lockEnabled,
-                    action: onLock
-                )
-            } else {
-                Color.clear.frame(width: 26, height: 24)
-            }
-        } content: {
-            TrainerNumberField(
-                text: Binding(get: { draft.text }, set: { draft.update($0) }),
-                accessibilityLabel: title, width: 96, enabled: model.canMutate, alignment: .center,
-                onEditingChanged: { active in
-                    if active { draft.begin(target: model.target) } else { draft.end() }
-                },
-                onCommit: { completed in
-                    guard completed.changed else { return completed.text }
-                    guard let number = Double(completed.text), number.isFinite,
-                          number.rounded() == number, number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue()
-                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-                    }
-                    model.setValue(field, value: number, target: draft.target)
-                    return HadesNumberDraft.format(number)
-                }
-            )
-        }
-        .onChange(of: value) { _, value in draft.observe(value) }
-    }
-}
-
-private struct HadesValueRow: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    let title: String
-    let glyph: TrainerGlyph
-    let value: Double
-    let onCommit: (Double, HadesHeroTarget?) -> Void
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(model: HadesTrainerModel, title: String, glyph: TrainerGlyph, value: Double,
-         onCommit: @escaping (Double, HadesHeroTarget?) -> Void) {
-        self.model = model; self.title = title; self.glyph = glyph; self.value = value; self.onCommit = onCommit
-        _draft = State(initialValue: HadesNumberDraft(value: value))
-    }
-    var body: some View {
-        TrainerLabeledControlRow(title: title, glyph: glyph, tint: theme.accent, emphasized: model.heroReady) {
-            TrainerNumberField(text: Binding(get: { draft.text }, set: { draft.update($0) }), accessibilityLabel: title,
-                enabled: model.canMutate, onEditingChanged: { active in
-                    if active { draft.begin(target: model.target) } else { draft.end() }
-                }, onCommit: { completed in
-                    guard completed.changed else { return completed.text }
-                    guard let number = Double(completed.text), number.isFinite, number.rounded() == number,
-                          number >= 0, number <= 1_000_000_000 else {
-                        model.rejectInvalidValue()
-                        return completed.rejected(message: HadesPresentation.text("hades.error.invalidValue", language: localization.language))
-                    }
-                    onCommit(number, draft.target)
-                    return HadesNumberDraft.format(number)
-                })
-        }
-        .onChange(of: value) { _, value in draft.observe(value) }
-    }
-}
-
-private struct HadesFeatureMetricCard: View {
-    @ObservedObject var model: HadesTrainerModel
-    let feature: HadesFeature
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerTheme) private var theme
-    @State private var draft: HadesNumberDraft
-
-    init(model: HadesTrainerModel, feature: HadesFeature) {
-        self.model = model; self.feature = feature
-        _draft = State(initialValue: HadesNumberDraft(value: feature.neutralValue))
-    }
-
-    var body: some View {
-        let title = HadesPresentation.text(feature.key, language: localization.language)
-        return TrainerMetricCard(title: title, icon: feature.icon, tint: theme.accent) {
-            TrainerResetButton(
-                title: HadesPresentation.text("hades.reset", language: localization.language),
-                enabled: model.canEditIntent
-            ) {
-                model.setFeature(feature, value: feature.neutralValue)
-            }
-        } content: {
-            HStack(spacing: 3) {
-                TrainerNumberField(
-                    text: Binding(get: { draft.text }, set: { draft.update($0) }),
-                    accessibilityLabel: title, width: 58, enabled: model.canEditIntent, alignment: .center,
-                    onEditingChanged: { active in
-                        if active { draft.begin(target: nil) } else { draft.end() }
-                    },
-                    onCommit: { completed in
-                        guard completed.changed else { return completed.text }
-                        return model.setNumber(feature, text: completed.text) { key in
-                            _ = completed.rejected(message: HadesPresentation.text(key, language: localization.language))
-                        }
-                    }
-                )
-                if feature != .dashBonus { Text("×").foregroundStyle(.secondary) }
-            }
-        }
-        .onChange(of: model.number(feature), initial: true) { _, value in draft.observe(value) }
-    }
-}
-
 private struct HadesCatalogView: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @State private var query = ""
     @State private var source = ""
-    @State private var selection = ""
-    @State private var rarity = "Heroic"
-    @State private var level = "1"
 
     private struct SourceGroup: Identifiable {
         let id: String
@@ -521,26 +399,53 @@ private struct HadesCatalogView: View {
         let entries: [HadesCatalogEntry]
     }
 
-    private var matches: [HadesCatalogEntry] { model.catalog.filter { $0.kind != "curse" && $0.matches(query) } }
+    private var matches: [HadesCatalogEntry] {
+        model.catalog.filter { $0.kind != "curse" && $0.kind != "chaos" && $0.matches(query) }
+    }
+
     private func sourceID(_ entry: HadesCatalogEntry) -> String {
         let nativeName = entry.sourceNames?["en"] ?? entry.kind
         if entry.kind == "boon" && nativeName.contains(" / ") { return "boon:duo" }
         return entry.kind + ":" + nativeName
     }
+
     private var sourceGroups: [SourceGroup] {
-        let kinds = ["boon", "hammer", "chaos", "temporary", "special", "keepsake", "companion"]
+        let kinds = ["boon", "hammer", "temporary", "special", "keepsake", "companion"]
         return Dictionary(grouping: matches, by: sourceID).map { id, entries in
             SourceGroup(id: id, kind: entries[0].kind, entries: entries)
         }.sorted { lhs, rhs in
-            let lRank = kinds.firstIndex(of: lhs.kind) ?? kinds.count
-            let rRank = kinds.firstIndex(of: rhs.kind) ?? kinds.count
-            if lRank != rRank { return lRank < rRank }
+            let left = kinds.firstIndex(of: lhs.kind) ?? kinds.count
+            let right = kinds.firstIndex(of: rhs.kind) ?? kinds.count
+            if left != right { return left < right }
             return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
         }
     }
+
     private var selectedGroup: SourceGroup? { sourceGroups.first { $0.id == source } }
     private var selectedEntries: [HadesCatalogEntry] { selectedGroup?.entries ?? [] }
-    private var selected: HadesCatalogEntry? { selectedEntries.first { $0.id == selection } }
+    private var selected: HadesCatalogEntry? {
+        selectedEntries.first { $0.id == model.selectedExactTrait }
+    }
+    private var chaosBlessings: [HadesCatalogEntry] {
+        model.catalog.filter { $0.kind == "chaos" }
+    }
+    private var chaosCurses: [HadesCatalogEntry] {
+        model.catalog.filter { $0.kind == "curse" }
+    }
+    private var selectedChaosBlessing: HadesCatalogEntry? {
+        chaosBlessings.first { $0.id == model.selectedChaosBlessing }
+    }
+    /// Resolve native names once for both exact and Chaos acquisition rows.
+    private func itemTitle(_ entry: HadesCatalogEntry) -> String {
+        let primary = entry.name(language: localization.language.rawValue)
+        guard localization.language == .zhCN,
+              let english = entry.names["en"], !english.isEmpty, english != primary else { return primary }
+        return "\(primary) · \(english)"
+    }
+
+    private func text(_ key: String) -> String {
+        HadesPresentation.text(key, language: localization.language)
+    }
 
     private func sourceTitle(_ group: SourceGroup) -> String {
         if group.id == "boon:duo" { return text("hades.kind.duo") }
@@ -556,35 +461,131 @@ private struct HadesCatalogView: View {
         }
         repairItemSelection()
     }
-
     private func repairItemSelection() {
-        if !selectedEntries.contains(where: { $0.id == selection }) {
-            selection = selectedEntries.first?.id ?? ""
+        if !selectedEntries.contains(where: { $0.id == model.selectedExactTrait }) {
+            model.selectedExactTrait = selectedEntries.first?.id ?? ""
         }
     }
 
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private var acquisitionSettingsRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.rarity")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.rarity"), selection: Binding(
+                        get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
+                        set: { model.selectAcquisitionRarity($0) }
+                    )) {
+                        if !model.acquisitionAllowsCallerRarity {
+                            Text(text("hades.acquisition.gameControlled")).tag("")
+                        }
+                        ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
+                            Text(text("hades.rarity.\(rarity)")).tag(rarity)
+                        }
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+                }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                TrainerIconLabel(
-                    title: text("hades.catalog"),
-                    icon: HadesWorkbenchIcon.catalog,
-                    tint: theme.accent,
-                    emphasized: true
-                )
-                Spacer()
-                TrainerSearchField(
-                    text: $query,
-                    placeholder: text("hades.search"),
-                    clearLabel: localization.localized("host.search.clear")
-                )
-                .frame(maxWidth: 280)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.level")).font(.caption).foregroundStyle(.secondary)
+                    TrainerNumberField(
+                        text: $model.acquisitionLevel,
+                        accessibilityLabel: text("hades.level"),
+                        accessibilityIdentifier: "hades.acquisition.level",
+                        width: 64,
+                        enabled: model.acquisitionSupportsLevel,
+                        onCommit: { completion in
+                            guard let level = Int(completion.text), (1...100).contains(level) else {
+                                return completion.rejected(message: text("hades.error.invalidValue"))
+                            }
+                            return String(level)
+                        }
+                    )
+                    .id(model.acquisitionTarget.rawValue + "|" +
+                        (model.acquisitionTarget == .exact
+                         ? model.selectedExactTrait : model.selectedChaosBlessing))
+                }
+
+                if model.acquisitionTarget == .chaos {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("hades.chaosEncounters")).font(.caption).foregroundStyle(.secondary)
+                        TrainerNumberField(
+                            text: $model.acquisitionEncounters,
+                            accessibilityLabel: text("hades.chaosEncounters"),
+                            accessibilityIdentifier: "hades.acquisition.encounters",
+                            width: 64,
+                            enabled: true,
+                            onCommit: { completion in
+                                guard let count = Int(completion.text), (1...100).contains(count) else {
+                                    return completion.rejected(message: text("hades.error.invalidValue"))
+                                }
+                                return String(count)
+                            }
+                        )
+                    }
+                }
+                Spacer(minLength: 0)
+                Text(model.acquisitionTarget == .chaos ? text("hades.chaosPair") : text("hades.catalog"))
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            if model.acquisitionRarityAdjustment != .none {
+                Text(model.acquisitionAllowsCallerRarity
+                     ? text("hades.acquisition.rarityAdjusted") + " "
+                        + text("hades.rarity.\(model.acquisitionRarity)")
+                     : text("hades.acquisition.gameControlledHint"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("hades.acquisition.adjustment")
+            }
+        }
+    }
 
-            HadesChaosPairControls(model: model)
+    private var chaosRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text("hades.chaosPair")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.chaosBlessing")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.chaosBlessing"), selection: $model.selectedChaosBlessing) {
+                        if chaosBlessings.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(chaosBlessings) { entry in
+                            Text(itemTitle(entry)).tag(entry.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.expanding, state: model.canMutate && !chaosBlessings.isEmpty ? .interactive : .unavailable)
+                }
 
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades.chaosCurse")).font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades.chaosCurse"), selection: $model.selectedChaosCurse) {
+                        if chaosCurses.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                        ForEach(chaosCurses) { entry in
+                            Text(itemTitle(entry)).tag(entry.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.expanding, state: model.canMutate && !chaosCurses.isEmpty ? .interactive : .unavailable)
+                }
+
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
+                TrainerSecondaryActionButton(
+                    title: text("hades.acquire"),
+                    systemImage: TrainerSemanticIcon.Action.acquire,
+                    enabled: model.canMutate && model.canAcceptRuntimeAction
+                        && selectedChaosBlessing != nil
+                        && chaosCurses.contains(where: { $0.id == model.selectedChaosCurse }),
+                    widthRole: .compactRow
+                ) {
+                    _ = model.acquireSelectedChaosPair()
+                }
+            }
+        }
+    }
+
+    private var exactRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
@@ -600,91 +601,51 @@ private struct HadesCatalogView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.selectTrait"), selection: $selection) {
+                    Picker(text("hades.selectTrait"), selection: $model.selectedExactTrait) {
                         if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                         ForEach(selectedEntries) { entry in
-                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
+                            Text(itemTitle(entry)).tag(entry.id)
                         }
                     }
                     .labelsHidden()
                     .trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)
                 }
-            }
 
-            if let selected {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(selected.name(language: localization.language.rawValue))
-                        .font(.subheadline.weight(.semibold))
-                    if !selected.description(language: localization.language.rawValue).isEmpty {
-                        Text(selected.description(language: localization.language.rawValue))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if selected.kind == "keepsake" || selected.kind == "companion" {
-                        Text(text("hades.equipmentAcquireHelp"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.rarity")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.rarity"), selection: $rarity) {
-                        if selected == nil { Text(text("hades.emptyCatalog")).tag(rarity) }
-                        ForEach(selected?.rarities ?? [], id: \.self) {
-                            Text(text("hades.rarity.\($0)")).tag($0)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.compactValue, state: selected != nil && model.canMutate ? .interactive : .unavailable)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.level")).font(.caption).foregroundStyle(.secondary)
-                    TrainerNumberField(
-                        text: $level,
-                        accessibilityLabel: text("hades.level"),
-                        accessibilityIdentifier: "hades.catalog.level",
-                        width: 60,
-                        enabled: selected?.supportsLevel == true && model.canMutate,
-                        onCommit: { completion in
-                            guard let amount = Int(completion.text), (1...100).contains(amount) else {
-                                return completion.rejected(message: text("hades.error.invalidValue"))
-                            }
-                            return String(amount)
-                        }
-                    )
-                    .id(selected?.id ?? "")
-                }
-
-                Spacer()
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                 TrainerSecondaryActionButton(
                     title: text("hades.acquire"),
                     systemImage: TrainerSemanticIcon.Action.acquire,
-                    enabled: selected != nil && model.canMutate && selected?.acquirable != false,
+                    enabled: selected?.acquirable != false
+                        && selected != nil && model.canMutate && model.canAcceptRuntimeAction,
                     widthRole: .compactRow
                 ) {
-                    guard let selected else { return }
-                    guard let amount = Int(level), (1...100).contains(amount) else {
-                        model.rejectInvalidValue()
-                        return
-                    }
-                    model.addTrait(selected, rarity: rarity, level: selected.supportsLevel ? amount : 1)
+                    _ = model.acquireSelectedTrait()
                 }
             }
         }
-        .trainerPanel()
+    }
+
+    var body: some View {
+        TrainerAcquisitionPanel(
+            title: text("hades.catalog"),
+            icon: HadesWorkbenchIcon.catalog,
+            search: $query,
+            searchPlaceholder: text("hades.search"),
+            clearLabel: localization.localized("host.search.clear")
+        ) {
+            acquisitionSettingsRow
+        } rows: {
+            VStack(alignment: .leading, spacing: 16) {
+                chaosRow
+                exactRow
+            }
+        }
         .onChange(of: matches.map(\.id), initial: true) { _, _ in repairSelections() }
         .onChange(of: source) { _, _ in repairItemSelection() }
-        .onChange(of: selection, initial: true) { _, _ in
-            let rarities = selected?.rarities ?? []
-            rarity = rarities.contains("Heroic") ? "Heroic" : rarities.first ?? "Common"
-            level = "1"
-        }
+        .onChange(of: model.selectedExactTrait) { _, _ in model.activateAcquisition(.exact) }
+        .onChange(of: model.selectedChaosBlessing) { _, _ in model.activateAcquisition(.chaos) }
+        .onChange(of: model.selectedChaosCurse) { _, _ in model.activateAcquisition(.chaos) }
+        .onChange(of: model.catalog) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
     }
 }
 

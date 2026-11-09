@@ -218,11 +218,17 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert runtime.events == []
     assert detached['boonRarityTarget'] == 'Rare'
     assert 'boonRarityTarget' not in detached['features']
+    assert detached['dormantFeatures'] == {}, 'a detached projection fabricated a dormant observation'
     assert store.load()['boonRarityTarget'] == 'Rare'
     assert store.load()['boonRarityEnabled'] is True
     assert store.load()['gameSpeed'] == 1.5
 
-    adapter.dispatch('connect', {}, 'connect')
+    runtime.state['dormantFeatures'] = {'boonRarityEnabled': True, 'retiredFeature': True}
+    live = adapter.dispatch('connect', {}, 'connect')
+    assert live['dormantFeatures'] == {'boonRarityEnabled': True}, (
+        'the live dormant observation was not projected over the current feature set'
+    )
+    del runtime.state['dormantFeatures']
     connect_features = next(event for event in runtime.events if event[0] == 'connect')[1]
     assert connect_features['boonRarityEnabled'] is True
     assert 'boonRarityTarget' not in connect_features

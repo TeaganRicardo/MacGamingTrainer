@@ -204,6 +204,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedExactBoon = ""
     @Published var selectedChaosBlessing = ""
     @Published var selectedChaosCurse = ""
+    /// Session-held exact-acquisition settings; never persisted with desired
+    /// natural-offer boon rarity, Preferences or Profiles.
+    @Published var acquisitionRarity = "Heroic"
+    @Published var acquisitionLevel = "1"
+    @Published private(set) var acquisitionTarget: Hades2AcquisitionTarget = .exact
+    @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
+    @Published private(set) var nativeRarityOrder: [String] = []
+    private var resolvedAcquisitionSignature: String?
+    private var acquisitionLevelIdentity: String?
     @Published var selectedNextRoomReward = ""
     @Published var selectedNextOccurrenceTarget = ""
     @Published var statSupport: [String: Bool] = [:]
@@ -334,6 +343,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 nativeChoiceTitle: option.nativeChoiceTitle,
                 nativeChoiceEnglishTitle: option.nativeChoiceEnglishTitle,
                 acquisitionMode: "",
+                rarities: [],
+                supportsLevel: false,
                 sortSection: option.sortSection,
                 sortGroup: option.sortGroup,
                 sortOrder: Int.min
@@ -753,7 +764,22 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
-        if let value = patch.boons { boons = value }
+        if let value = patch.boons {
+            let oldAcquisitionCapabilities = boons.map {
+                [$0.id, $0.acquisitionMode, $0.rarities.joined(separator: ","), String($0.supportsLevel)]
+            }
+            let newAcquisitionCapabilities = value.map {
+                [$0.id, $0.acquisitionMode, $0.rarities.joined(separator: ","), String($0.supportsLevel)]
+            }
+            if oldAcquisitionCapabilities != newAcquisitionCapabilities {
+                resolvedAcquisitionSignature = nil
+            }
+            boons = value
+        }
+        if let value = patch.nativeRarityOrder {
+            if nativeRarityOrder != value { resolvedAcquisitionSignature = nil }
+            nativeRarityOrder = value
+        }
         if let value = patch.statSupport { statSupport = value }
         if let value = patch.statAvailable { statAvailable = value }
 
@@ -1432,11 +1458,118 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return true
     }
 
+    /// Current row determines the effective acquisition settings, independent
+    /// of the durable natural-offer Boon Rarity policy.
+    private func acquisitionOption(_ target: Hades2AcquisitionTarget) -> BoonOption? {
+        switch target {
+        case .exact:
+            return exactBoonOptions.first { $0.id == selectedExactBoon }
+        case .chaos:
+            return exactBoonOptions.first {
+                $0.id == selectedChaosBlessing && $0.acquisitionMode == "chaosBlessing"
+            }
+        }
+    }
+
+    var acquisitionSupportsLevel: Bool { acquisitionOption(acquisitionTarget)?.supportsLevel == true }
+    var acquisitionAllowsCallerRarity: Bool {
+        acquisitionOption(acquisitionTarget).map { !$0.rarities.isEmpty } ?? false
+    }
+    var acquisitionRarityOptions: [String] {
+        acquisitionOption(acquisitionTarget)?.rarities ?? []
+    }
+    var acquisitionTargetDescription: String {
+        switch acquisitionTarget {
+        case .exact: return selectedExactBoon
+        case .chaos: return selectedChaosBlessing
+        }
+    }
+
+    /// A target or catalog transition resolves rarity before a mutation.
+    /// When another Acquire row was invoked directly with an incompatible
+    /// setting, return false so the user sees the adjustment before retrying.
+    @discardableResult
+    func activateAcquisition(
+        _ target: Hades2AcquisitionTarget,
+        confirmationRequired: Bool = false
+    ) -> Bool {
+        let previousTarget = acquisitionTarget
+        acquisitionTarget = target
+        guard let option = acquisitionOption(target) else {
+            acquisitionRarityAdjustment = .none
+            resolvedAcquisitionSignature = nil
+            return false
+        }
+        let signature = [
+            target.rawValue, option.id, option.rarities.joined(separator: ","),
+            option.supportsLevel ? "level" : "no-level", nativeRarityOrder.joined(separator: ","),
+            target == .chaos ? selectedChaosCurse : ""
+        ].joined(separator: "|")
+        // Shared input drafts cannot be carried into a different exact boon.
+        // Keep the current draft across unchanged resident status/catalog polls.
+        let levelIdentity = target.rawValue + "|" + option.id
+        if acquisitionLevelIdentity != levelIdentity {
+            if acquisitionLevelIdentity != nil { acquisitionLevel = "1" }
+            acquisitionLevelIdentity = levelIdentity
+        }
+        let showingAnotherTarget = previousTarget != target || resolvedAcquisitionSignature != signature
+        let resolution = TrainerAcquisitionRarity.resolve(
+            previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
+            supported: option.rarities,
+            nativeOrder: nativeRarityOrder
+        )
+        // A game-controlled rarity displays N/A but retains the last user's
+        // meaningful choice for when another supported target is selected.
+        if let rarity = resolution.rarity { acquisitionRarity = rarity }
+        acquisitionRarityAdjustment = showingAnotherTarget ? resolution.adjustment : acquisitionRarityAdjustment
+        resolvedAcquisitionSignature = signature
+        return !(confirmationRequired && showingAnotherTarget && resolution.requiresVisibleConfirmation)
+    }
+
+    func selectAcquisitionRarity(_ rarity: String) {
+        guard acquisitionRarityOptions.contains(rarity) else { return }
+        acquisitionRarity = rarity
+        acquisitionRarityAdjustment = .none
+    }
+
+    var canSubmitAcquisitionSettings: Bool {
+        guard let option = acquisitionOption(acquisitionTarget) else { return false }
+        if !option.rarities.isEmpty && !option.rarities.contains(acquisitionRarity) { return false }
+        if option.supportsLevel {
+            guard let level = Int(acquisitionLevel.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  (1...999_999).contains(level) else { return false }
+        }
+        return true
+    }
+
+    private func acquisitionParameters(for option: BoonOption) -> Hades2Acquisition? {
+        if !option.rarities.isEmpty && !option.rarities.contains(acquisitionRarity) { return nil }
+        let level: Int
+        if option.supportsLevel {
+            guard let value = Int(acquisitionLevel.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  (1...999_999).contains(value) else { return nil }
+            level = value
+        } else {
+            level = 1
+        }
+        return Hades2Acquisition(rarity: option.rarities.isEmpty ? nil : acquisitionRarity, level: level)
+    }
+
     @discardableResult
     func acquireExactBoon(_ reward: String, completion: ((Bool) -> Void)? = nil) -> Bool {
-        guard canAcquireExactReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return false }
+        guard canAcquireExactReward,
+              let option = exactBoonOptions.first(where: { $0.id == reward }),
+              !["chaosBlessing", "chaosCurse"].contains(option.acquisitionMode)
+            else { return false }
+        // A shortcut may target this row while the Chaos row was active.
+        guard activateAcquisition(.exact, confirmationRequired: true),
+              let acquisition = acquisitionParameters(for: option) else { return false }
         send(
-            .spawnReward(reward),
+            .acquireExactBoon(
+                reward: reward,
+                rarity: acquisition.rarity,
+                level: option.supportsLevel ? acquisition.level : nil
+            ),
             title: "hades2.op.acquireSelectedReward",
             repeatableSpawn: true,
             completion: completion
@@ -1457,10 +1590,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
               let curse = exactBoonOptions.first(where: {
                   $0.id == curseReward && $0.acquisitionMode == "chaosCurse"
               }),
-              !blessing.targetID.isEmpty,
-              !curse.targetID.isEmpty else { return false }
+              !blessing.targetID.isEmpty, !curse.targetID.isEmpty else { return false }
+        guard activateAcquisition(.chaos, confirmationRequired: true),
+              let acquisition = acquisitionParameters(for: blessing) else { return false }
         send(
-            .acquireChaosPair(blessing: blessing.targetID, curse: curse.targetID),
+            .acquireChaosPair(
+                blessing: blessing.targetID,
+                curse: curse.targetID,
+                rarity: acquisition.rarity,
+                level: blessing.supportsLevel ? acquisition.level : nil
+            ),
             title: "hades2.op.acquireChaosPair",
             completion: completion
         )

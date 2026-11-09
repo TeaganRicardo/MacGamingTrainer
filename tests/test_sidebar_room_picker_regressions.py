@@ -108,7 +108,10 @@ assert "layout: .pickerAction" in inline_group
 assert "inline: true" in region(hades2, "private func spawnRow(", "private func multiplierRow(")
 assert "spawnRow(" in region(hades2, "private var rewardSpawningPanel", "private var boonAcquisitionPanel")
 hades1_rooms = source("Sources/Hades/HadesRoomsPanel.swift")
-assert hades1_rooms.count(".trainerPicker(.rowAction") >= 6
-assert hades1_rooms.count("layout: .pickerAction") >= 6
+assert hades1_rooms.count(".trainerPicker(.rowAction") >= 5
+assert hades1_rooms.count("layout: .pickerAction") >= 5
+# Hades I's Generate reward rows are the same inline Core grouped pickers.
+assert "inline: true" in region(hades1_rooms, "private func spawnRow(", "var body: some View")
+assert hades1_rooms.count("spawnRow(.") == 3
 
 print("sidebar_and_room_picker_regressions_ok")

@@ -4,12 +4,12 @@ struct Hades2OperationFeedback: View {
     @ObservedObject var model: Hades2TrainerModel
 
     var body: some View {
-        TrainerFeedbackOverlay(
+        TrainerOperationFeedback(
             notice: model.feedbackNotice,
+            hasCurrentIssues: !model.currentIssues.isEmpty,
+            detailsNoticeID: model.feedbackDetailsNoticeID,
             onDismiss: model.dismissFeedback,
-            onDetails: model.feedbackNotice?.tone == .warning && !model.currentIssues.isEmpty
-                ? { model.showFeedbackDetails(for: $0) } : nil,
-            detailsNoticeID: model.feedbackDetailsNoticeID
+            onShowDetails: { model.showFeedbackDetails(for: $0) }
         )
     }
 }

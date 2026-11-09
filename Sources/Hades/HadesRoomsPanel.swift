@@ -10,6 +10,12 @@ struct HadesGatheringPanel: View {
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
 
+    /// The current-room observation explains why Generate is unavailable.
+    private var fishingHelp: String {
+        guard let world = model.world else { return text("hades.fishing.unavailable.scene") }
+        return text(world.canFish ? "hades.fishingHelp" : "hades.fishing.unavailable.room")
+    }
+
     private func gain() {
         guard let value = Double(amount), value.isFinite, value.rounded() == value,
               value >= 1, value <= 1_000_000 else { model.rejectInvalidValue(); return }
@@ -35,16 +41,16 @@ struct HadesGatheringPanel: View {
                 TrainerSecondaryActionButton(title: text("hades.gain"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate, action: gain)
             }
             TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
                 TrainerSecondaryActionButton(
                     title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
                     enabled: model.canMutate && model.world?.canFish == true,
-                    action: model.generateFishing
-                )
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
+                    helpText: fishingHelp,
+                    accessibilityLabel: text("hades.generateFishing")
+                ) { model.generateFishing() }
             }
         }
         .trainerGroupedRows()
-        .help(text("hades.fishingHelp"))
     }
 }
 
@@ -52,7 +58,6 @@ struct HadesRoomsPanel: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @State private var reward = "ZeusUpgrade"
     @State private var doorID = ""
     @State private var doorReward = "ZeusUpgrade"
     @State private var route = "combat"
@@ -73,27 +78,52 @@ struct HadesRoomsPanel: View {
         model.worldAction(command, roomID: model.world?.roomId, params: params, operation: operation)
     }
 
+    /// The world catalog assigns each reward its section; sections keep catalog order.
+    private func rewardSections(_ group: HadesRewardGroup) -> [TrainerPickerSection<HadesWorldReward>] {
+        var order: [String] = []
+        var titles: [String: String] = [:]
+        var buckets: [String: [HadesWorldReward]] = [:]
+        for reward in model.rewards(in: group) {
+            if buckets[reward.section] == nil {
+                order.append(reward.section)
+                titles[reward.section] = reward.sectionNames?[localization.language.rawValue]
+                    ?? text("hades.rewardSection.\(reward.section)")
+            }
+            buckets[reward.section, default: []].append(reward)
+        }
+        return order.enumerated().map { index, section in
+            TrainerPickerSection(id: index, title: titles[section] ?? "", items: buckets[section] ?? [])
+        }
+    }
+
+    /// Hades II's Generate row: grouped picker, shortcut badge, then Generate.
+    private func spawnRow(_ group: HadesRewardGroup, title key: String, icon: String) -> some View {
+        TrainerGroupedOptionPicker(
+            title: text(key),
+            icon: icon,
+            pickerLabel: text(key),
+            selection: Binding(get: { model.selectedRewards[group] ?? "" },
+                               set: { model.selectedRewards[group] = $0 }),
+            sections: rewardSections(group),
+            enabled: model.canSpawnReward,
+            inline: true,
+            emptyLabel: text("hades.spawn.noItems"),
+            actionTitle: text("hades.generate"),
+            shortcutText: model.shortcutText(group.shortcut),
+            itemLabel: \.bilingualName,
+            onAction: { _ = model.spawnReward($0, in: group) }
+        )
+    }
+
     var body: some View {
         TrainerSection(title: text(HadesWorkbenchSection.rooms.titleKey), icon: HadesWorkbenchSection.rooms.icon) {
             VStack(spacing: 0) {
-                TrainerLabeledControlRow(title: text("hades.spawnReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
-                    Picker(text("hades.reward"), selection: $reward) {
-                        ForEach(model.worldRewards) { row in
-                            Text(row.name(language: localization.language)).tag(row.id)
-                        }
-                    }
-                    .labelsHidden().trainerPicker(.rowAction)
-                    TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate, enabled: model.canMutate && model.world != nil) {
-                        action("spawn_reward", operation: "hades.spawnReward", params: ["reward": reward])
-                    }
-                }
                 TrainerLabeledControlRow(title: text("hades.generateChaosGate"), icon: TrainerSemanticIcon.Context.portal, tint: theme.accent, emphasized: false) {
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                     TrainerSecondaryActionButton(
                         title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
-                        enabled: model.canMutate && model.world?.canChaos == true,
-                        action: model.generateChaosGate
-                    )
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
+                        enabled: model.canMutate && model.world?.canChaos == true
+                    ) { model.generateChaosGate() }
                 }
                 .help(text("hades.chaosGateHelp"))
                 TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false, layout: .pickerAction) {
@@ -107,6 +137,14 @@ struct HadesRoomsPanel: View {
                         action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
                     }
                 }
+            }
+            .trainerGroupedRows()
+
+            // As in Hades II, the Generate reward rows follow the Chaos Gate.
+            VStack(spacing: 0) {
+                spawnRow(.olympian, title: "hades.spawn.olympianBoons", icon: TrainerSemanticIcon.Section.effects)
+                spawnRow(.pickup, title: "hades.spawn.pickupRewards", icon: TrainerSemanticIcon.Section.inventory)
+                spawnRow(.special, title: "hades.spawn.characterRewards", icon: TrainerSemanticIcon.Context.characterReward)
             }
             .trainerGroupedRows()
 

@@ -209,10 +209,17 @@ assert(unit.SuperMeter == 10 and gauge.godGauge == 10, "a direct edit fabricated
 runtime.set_feature("fullGodGauge", true)
 assert(unit.SuperMeter == 10 and runtime.status().features.fullGodGauge
   and not runtime.status().activeFeatures.fullGodGauge, "unavailable Aid intent was not dormant")
+-- The resident reports why the intent is inactive: it waits for an Aid.
+assert(runtime.status().dormantFeatures.fullGodGauge, "unavailable Aid intent was not observed as dormant")
 unit.hasCall = true
 runtime.configure({ fullGodGauge = true })
 assert(unit.SuperMeter == 100 and runtime.status().activeFeatures.fullGodGauge,
   "reconciling eligible Aid intent did not fill the native meter")
+assert(not runtime.status().dormantFeatures.fullGodGauge, "an active Aid intent stayed dormant")
+unit.SuperActive = true
+assert(not runtime.status().activeFeatures.fullGodGauge and runtime.status().dormantFeatures.fullGodGauge,
+  "an Aid in use was not observed as the gauge intent's dormant environment")
+unit.SuperActive = false
 runtime.set_feature("fullGodGauge", false)
 gauge = runtime.set_value("godGauge", 50)
 assert(unit.SuperMeter == 50 and gauge.godGauge == 50 and updates.gauge == 50)
@@ -239,6 +246,8 @@ CurrentRun = nil
 runtime.configure({ fullHealth = true, forceRerolls = true, infiniteAmmo = true })
 local dormant = runtime.status()
 assert(dormant.features.fullHealth and not dormant.activeFeatures.fullHealth and not dormant.heroReady)
+assert(dormant.dormantFeatures.fullHealth and dormant.dormantFeatures.infiniteAmmo
+  and not dormant.dormantFeatures.invincibility, "heroless intent was not observed as dormant, or off intent was")
 runtime.disable_all()
 assert(not runtime.status().features.fullHealth and not runtime.status().features.infiniteAmmo
   and not runtime.status().features.forceRerolls, "disable retained dormant combat intent")

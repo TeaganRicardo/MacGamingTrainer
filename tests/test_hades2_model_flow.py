@@ -74,7 +74,9 @@ func makeBoon(
     sourceID: String = "Artemis",
     nativeChoice: Bool = false,
     acquisitionMode: String = "",
-    targetID: String? = nil
+    targetID: String? = nil,
+    rarities: [String] = [],
+    supportsLevel: Bool = false
 ) -> BoonOption {
     BoonOption(
         id: id,
@@ -95,6 +97,8 @@ func makeBoon(
         nativeChoiceTitle: nativeChoice ? "奖励选择" : "",
         nativeChoiceEnglishTitle: nativeChoice ? "Reward Choice" : "",
         acquisitionMode: acquisitionMode,
+        rarities: rarities,
+        supportsLevel: supportsLevel,
         sortSection: group == "exact" ? 25 : 30,
         sortGroup: 1,
         sortOrder: 1
@@ -311,7 +315,9 @@ struct Main {
             id: "trait:CritBonusBoon",
             group: "exact",
             nativeChoice: true,
-            acquisitionMode: "direct"
+            acquisitionMode: "direct",
+            rarities: ["Common", "Rare", "Epic", "Heroic"],
+            supportsLevel: true
         )
         let special = makeBoon(id: "TalentDrop", group: "special", kind: "consumable", sourceID: "Selene")
         try withModel(expectedNewCommands: 1) { model in
@@ -322,13 +328,17 @@ struct Main {
             check(!model.specialRewardOptions.contains { $0.id == exact.id }, "exact trait leaked into Character Rewards")
             check(model.specialRewardOptions.contains { $0.id == special.id }, "non-boon character reward disappeared")
             check(model.specialRewardOptions.contains { $0.id == "native-choice:Artemis" }, "native character choice entry disappeared")
-            model.acquireExactBoon(exact.id)
+            model.selectedExactBoon = exact.id
+            model.acquisitionLevel = "3"
+            check(model.acquireExactBoon(exact.id), "exact acquisition was rejected")
         }
         let afterExact = commands(at: commandLog)
         check(afterExact.count == 5, "exact acquisition did not emit one command: \(afterExact)")
         check(afterExact[4]["command"] as? String == "spawn_reward", "exact acquisition used the wrong command")
         guard let exactParams = afterExact[4]["params"] as? [String: Any] else { fail("exact acquisition params missing") }
         check(exactParams["reward"] as? String == exact.id, "exact acquisition lost reward identity")
+        check(exactParams["rarity"] as? String == "Heroic" && exactParams["level"] as? Int == 3,
+              "exact acquisition did not forward independent rarity and stack level")
 
         // Deterministic Chaos acquisition carries both native TraitData identities
         // in one one-shot request; row ids and localized labels never cross the
@@ -338,7 +348,9 @@ struct Main {
             group: "exact",
             sourceID: "Chaos",
             acquisitionMode: "chaosBlessing",
-            targetID: "ChaosHealthBlessing"
+            targetID: "ChaosHealthBlessing",
+            rarities: ["Common", "Rare", "Epic"],
+            supportsLevel: false
         )
         let chaosCurse = makeBoon(
             id: "chaos:curse:ChaosDamageCurse",
@@ -350,10 +362,13 @@ struct Main {
         try withModel(expectedNewCommands: 1) { model in
             model.capabilities["acquireChaosPair"] = true
             model.boons = [chaosBlessing, chaosCurse]
-            model.acquireChaosPair(
+            model.selectedChaosBlessing = chaosBlessing.id
+            model.selectedChaosCurse = chaosCurse.id
+            model.acquisitionRarity = "Epic"
+            check(model.acquireChaosPair(
                 blessingReward: chaosBlessing.id,
                 curseReward: chaosCurse.id
-            )
+            ), "Chaos pair acquisition was rejected")
         }
         let afterChaosPair = commands(at: commandLog)
         check(afterChaosPair.count == 6, "Chaos pair acquisition did not emit one command: \(afterChaosPair)")
@@ -363,6 +378,26 @@ struct Main {
         }
         check(chaosParams["blessing"] as? String == "ChaosHealthBlessing", "Chaos blessing identity drifted")
         check(chaosParams["curse"] as? String == "ChaosDamageCurse", "Chaos curse identity drifted")
+        check(chaosParams["rarity"] as? String == "Epic", "Chaos pair lost selected rarity")
+        check(chaosParams["level"] == nil, "nonstackable Chaos pair forwarded a level")
+
+        // The same Core level editor serves multiple native targets. A target
+        // change resets its draft; unchanged observations retain the draft.
+        try withModel(expectedNewCommands: 0) { model in
+            model.boons = [exact, chaosBlessing, chaosCurse]
+            model.selectedExactBoon = exact.id
+            check(model.activateAcquisition(.exact), "exact target could not activate")
+            model.acquisitionLevel = "7"
+            model.selectedChaosBlessing = chaosBlessing.id
+            model.selectedChaosCurse = chaosCurse.id
+            check(model.activateAcquisition(.chaos), "Chaos target could not activate")
+            check(model.acquisitionLevel == "1", "Hades II retained another target's draft level")
+            model.acquisitionLevel = "4"
+            check(model.activateAcquisition(.chaos), "unchanged Chaos target lost its selection")
+            check(model.acquisitionLevel == "4", "unchanged Chaos target reset the level draft")
+            check(model.activateAcquisition(.exact), "return to exact target refused")
+            check(model.acquisitionLevel == "1", "returning to exact reused the Chaos level draft")
+        }
 
         // The shipped model owns decoding and completion on this path. No
         // native view, field editor, window or foreground activation is used.

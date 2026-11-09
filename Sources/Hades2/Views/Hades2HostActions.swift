@@ -21,26 +21,13 @@ struct Hades2SidebarActions: View {
                 }
                 .accessibilityIdentifier("trainer.section.\(section.id)")
             }
-            if !model.currentIssues.isEmpty {
-                Button { model.showFeedbackDetails() } label: {
-                    Label(localization.localized("host.feedback.currentIssues"), systemImage: "exclamationmark.circle")
-                        .font(.callout)
-                }
-                .popover(isPresented: Binding(
-                    get: { model.feedbackDetailsPresented },
-                    set: { if !$0 { model.closeFeedbackDetails() } }
-                )) {
-                    Hades2FeedbackDetails(model: model)
-                }
-            }
-        }
-        .onChange(of: model.currentIssues) { _, issues in
-            if issues.isEmpty { model.closeFeedbackDetails() }
-        }
-        .background {
-            TrainerGamePageVisibilityObserver { visible in
-                if !visible { model.closeFeedbackDetails() }
-            }
+            TrainerCurrentIssuesEntry(
+                issues: model.currentIssues,
+                detailsPresented: model.feedbackDetailsPresented,
+                onShowDetails: { model.showFeedbackDetails() },
+                onCloseDetails: model.closeFeedbackDetails,
+                onOpenLog: model.openLog
+            )
         }
     }
 }

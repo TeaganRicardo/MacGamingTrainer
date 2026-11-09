@@ -43,9 +43,38 @@ struct BoonOption: Identifiable {
     /// Language-neutral resident strategy identity for exact acquisition.
     /// Empty for ordinary reward rows and synthetic native-choice actions.
     let acquisitionMode: String
+    /// The rarities an exact acquisition of this target accepts, in native
+    /// order: one entry is a fixed rarity, none means it takes no rarity.
+    let rarities: [String]
+    /// Whether an exact acquisition of this target accepts a level above 1.
+    let supportsLevel: Bool
     let sortSection: Int
     let sortGroup: Int
     let sortOrder: Int
+}
+
+extension Sequence where Element == BoonOption {
+    /// The resident catalog's section, source and item order.
+    func catalogOrdered() -> [BoonOption] {
+        sorted {
+            if $0.sortSection != $1.sortSection { return $0.sortSection < $1.sortSection }
+            if $0.sortGroup != $1.sortGroup { return $0.sortGroup < $1.sortGroup }
+            if $0.sortOrder != $1.sortOrder { return $0.sortOrder < $1.sortOrder }
+            return $0.id < $1.id
+        }
+    }
+}
+
+/// The rarity and level one exact acquisition request carries. A nil rarity
+/// is omitted: the target takes none.
+enum Hades2AcquisitionTarget: String, Equatable {
+    case exact
+    case chaos
+}
+
+struct Hades2Acquisition: Equatable {
+    let rarity: String?
+    let level: Int
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {

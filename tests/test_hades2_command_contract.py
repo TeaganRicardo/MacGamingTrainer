@@ -257,6 +257,38 @@ expect_error(
     "请选择掉落物或祝福。",
 )
 
+# Exact acquisition carries the caller's rarity and level unchanged; the
+# resident decides which values the selected target accepts.
+_, params = dispatch_runtime(
+    "spawn_reward",
+    {"reward": "exact:ZeusUpgrade:ZeusWeaponBoon", "rarity": "Epic", "level": 3},
+    "exact-id",
+)
+assert params == {
+    "reward": "exact:ZeusUpgrade:ZeusWeaponBoon",
+    "rarity": "Epic",
+    "level": 3,
+    "requestId": "exact-id",
+}
+_, params = dispatch_runtime(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse", "rarity": "Rare", "level": 999999},
+    "chaos-level-id",
+)
+assert params == {
+    "blessing": "ChaosHealthBlessing",
+    "curse": "ChaosDamageCurse",
+    "rarity": "Rare",
+    "level": 999999,
+    "requestId": "chaos-level-id",
+}
+pair = {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"}
+for command, base in (("spawn_reward", {"reward": "exact:ZeusUpgrade:ZeusWeaponBoon"}), ("acquire_chaos_pair", pair)):
+    for rarity in ("", None, 3, ["Epic"]):
+        expect_error(command, dict(base, rarity=rarity), "获取稀有度无效。")
+    for level in (0, -1, 1000000, 2.0, True, "2", None):
+        expect_error(command, dict(base, rarity="Epic", level=level), "获取等级无效。")
+
 _, params = dispatch_runtime("open_sell_traits", {}, "sell-id")
 assert params == {"requestId": "sell-id"}
 _, params = dispatch_runtime("open_special_choice", {"source": "Zeus"}, "choice-id")

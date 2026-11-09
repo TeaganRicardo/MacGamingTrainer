@@ -83,7 +83,7 @@ struct InputFixture: View {
                 sections: [.init(id: 0, title: "", items: [
                     InputOption(id: "first", title: localization.language == .en ? "First resource" : "第一种材料"),
                     InputOption(id: "second", title: localization.language == .en ? "Second resource with a longer name" : "名称较长的第二种材料")])],
-                enabled: model.enabled, locked: false, itemLabel: { $0.title }, onLock: {},
+                enabled: model.enabled, lock: nil, itemLabel: { $0.title },
                 onCommit: { completion in
                     if completion.changed { model.resourceCommits.append((target, completion.text)) }
                     return completion.text

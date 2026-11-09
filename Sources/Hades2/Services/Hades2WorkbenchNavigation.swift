@@ -7,7 +7,7 @@ enum Hades2WorkbenchIcon {
     static let spellCharge = "moonphase.waxing.crescent"
     static let sprintSpeed = "hare.fill"
     static let occurrence = "figure.walk.motion"
-    static let specialReward = "moon.stars.fill"
+    static let specialReward = TrainerSemanticIcon.Context.characterReward
     static let purge = "arrow.left.arrow.right.circle"
     static let flora = "leaf.fill"
     static let garden = "tree.fill"

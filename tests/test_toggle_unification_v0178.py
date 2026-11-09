@@ -8,7 +8,8 @@ core = '\n'.join(p.read_text() for p in CORE_UI.rglob('*.swift'))
 toggle = (CORE_UI / 'Primitives/TrainerToggleControl.swift').read_text()
 features = (CORE_UI / 'Components/TrainerFeatureControls.swift').read_text()
 stats = (CORE_UI / 'Components/TrainerStatControls.swift').read_text()
-presentation = (HADES / 'Presentation/Hades2FeaturePresentation.swift').read_text()
+# The shared phase model is Core-owned; each game only supplies its observations.
+presentation = features
 theme = (CORE_UI / 'TrainerTheme.swift').read_text()
 view = (HADES / 'Hades2View.swift').read_text()
 

@@ -26,6 +26,20 @@ assert len(set(expected_kinds.values())) == len(expected_kinds)
 view = (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 resources = view.split("private var resourcesSection:", 1)[1].split("private var managementSection:", 1)[0]
 assert "glyph: HadesResourceIcon.glyph(for: resource.id)" in resources
+# Seven fixed domain resources remain independently visible with Core editing.
+fallbacks = view.split("private static let permanentResourceFallbacks:", 1)[1].split(
+    "private var resourcesSection:", 1
+)[0]
+assert all(f'.init(id: "{resource_id}"' in fallbacks for resource_id in expected_kinds)
+assert "ForEach(permanentResources)" in resources
+assert "TrainerLabeledControlRow(" in resources
+assert "TrainerNumberField(" in resources
+assert "HadesResourceIcon.glyph(for: resource.id)" in resources
+assert 'draft(.resource(resource.id))' in resources
+assert "model.resources[resource.id] != nil" in resources
+assert "model.resourceCatalog" in fallbacks
+assert "TrainerResourceEditor(" not in resources
+assert "TrainerLockButton(" not in resources
 assert "icon: TrainerSemanticIcon.Concept.item" not in resources
 
 navigation = (ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift").read_text()

@@ -394,6 +394,12 @@ check(findReward("selene:talent:Polymorph:ChargeRegenTalent") ~= nil,
   "current Path of Stars talent missing")
 check(findReward("selene:talent:Polymorph:MeteorDamageTalent") == nil,
   "talent from another spell leaked into current exact catalog")
+-- Selene's Hex and Path of Stars nodes own rarity and level.
+for _, id in ipairs({ "selene:spell:Polymorph", "selene:talent:Polymorph:ChargeRegenTalent" }) do
+  local row = findReward(id)
+  eq(#row.rarities, 0, id .. " offered caller rarities")
+  eq(row.supportsLevel, false, id .. " offered a level")
+end
 
 -- With no slotted spell, main Hex targets remain available but no generated
 -- Path of Stars talent can leak from the previous source.

@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 122 then
+if previousModule and previousModule.revision ~= 123 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 122 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 122,
+    version = 1, revision = 123,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -1951,6 +1951,59 @@ if __MacGamingTrainerV1 == nil then
       end
       return order
     end
+    -- Exact acquisition applies the caller's rarity and level; the Boon Rarity
+    -- panel governs naturally offered boons only. What a target accepts is
+    -- native trait data: its own RarityLevels in the game's
+    -- TraitRarityData.RarityValues order (a single entry for a fixed
+    -- Legendary/Duo definition), and native stacking, which Pom eligibility
+    -- denies to BlockStacking and duration (RemainingUses) traits. Hammer
+    -- upgrades rarify natively (UpgradeHammers) but never stack. Selene, Echo's
+    -- previous-run grant and Arachne's outfit fix rarity and level through
+    -- their own native owner, so their targets accept neither.
+    local function orderedRarities(levels)
+      local result = setmetatable({}, arrayMeta)
+      local values = type(TraitRarityData) == "table" and TraitRarityData.RarityValues or nil
+      if type(levels) ~= "table" or type(values) ~= "table" then return result end
+      for rarity in pairs(levels) do
+        if finite(values[rarity]) then result[#result + 1] = rarity end
+      end
+      table.sort(result, function(a, b)
+        if values[a] ~= values[b] then return values[a] < values[b] end
+        return a < b
+      end)
+      return result
+    end
+    -- The whole native rarity scale in the same order. A frontend offering one
+    -- rarity choice for several targets orders that choice by this list; the
+    -- per-target lists above are subsequences of it.
+    local function rarityOrder()
+      return orderedRarities(type(TraitRarityData) == "table" and TraitRarityData.RarityValues or nil)
+    end
+    local function nativeStackable(definition)
+      return type(definition) == "table" and not definition.BlockStacking
+        and definition.RemainingUses == nil
+    end
+    local function acquisitionOptions(mode, traitName)
+      local definition = type(TraitData) == "table" and TraitData[traitName] or nil
+      local options = { rarities = setmetatable({}, arrayMeta), supportsLevel = false }
+      if (mode == "ordinaryNative" or mode == "direct" or mode == "chaosBlessing"
+          or mode == "hammerNative") and type(definition) == "table" then
+        options.rarities = orderedRarities(definition.RarityLevels)
+        options.supportsLevel = mode ~= "hammerNative" and nativeStackable(definition)
+      end
+      return options
+    end
+    -- An exact Chaos curse is paired with a blessing drawn from the native pool
+    -- at operation time, and the pair takes the blessing's rarity and level.
+    local function chaosCounterpartOptions(blessingNames)
+      local levels, supportsLevel = {}, false
+      for _, name in ipairs(blessingNames) do
+        local options = acquisitionOptions("chaosBlessing", name)
+        for _, rarity in ipairs(options.rarities) do levels[rarity] = true end
+        supportsLevel = supportsLevel or options.supportsLevel
+      end
+      return { rarities = orderedRarities(levels), supportsLevel = supportsLevel }
+    end
     local function orderedTraitIds(traits)
       local result, found = {}, {}
       if type(traits) ~= "table" or type(TraitData) ~= "table" then return result end
@@ -2082,10 +2135,12 @@ if __MacGamingTrainerV1 == nil then
           for index, traitName in ipairs(ordered) do
             local id = "exact:" .. entry.id .. ":" .. traitName
             if not allowed[id] then
+              local options = acquisitionOptions("ordinaryNative", traitName)
               local item = {
                 id = id, name = traitName, category = "奥林匹斯的祝福", group = "exact", kind = "trait",
                 trait = traitName, family = "olympianHermes", sourceId = entry.id, sourceName = entry.name,
                 sectionTitle = entry.name, acquisitionMode = "ordinaryNative",
+                rarities = options.rarities, supportsLevel = options.supportsLevel,
                 sortSection = 25, sortGroup = officialGodOrder[entry.id] or entry.order or 999, sortOrder = index,
               }
               allowed[id] = item
@@ -2101,14 +2156,18 @@ if __MacGamingTrainerV1 == nil then
       local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
       if type(chaosSource) == "table" and chaosSource.TransformingTraits then
         local chaosOrder = officialSourceOrder.Chaos or 20
+        local counterpartOptions = chaosCounterpartOptions(orderedTraitIds(chaosSource.PermanentTraits))
         local function addChaosExactRows(pool, prefix, mode, sectionTitle, orderOffset)
           for index, traitName in ipairs(orderedTraitIds(pool)) do
             local id = "chaos:" .. prefix .. ":" .. traitName
             if not allowed[id] then
+              local options = mode == "chaosCurse" and counterpartOptions
+                or acquisitionOptions(mode, traitName)
               local item = {
                 id = id, name = traitName, category = "卡俄斯的祝福", group = "exact", kind = "trait",
                 trait = traitName, family = "chaos", sourceId = "Chaos", sourceName = "卡俄斯",
                 sectionTitle = sectionTitle, acquisitionMode = mode,
+                rarities = options.rarities, supportsLevel = options.supportsLevel,
                 sortSection = 25, sortGroup = chaosOrder + orderOffset, sortOrder = index,
               }
               allowed[id] = item
@@ -2144,6 +2203,7 @@ if __MacGamingTrainerV1 == nil then
             id = id, name = spellData.TraitName, category = "角色奖励", group = "exact", kind = "trait",
             trait = spellData.TraitName, family = "hex", sourceId = "Selene", sourceName = "塞勒涅",
             sectionTitle = "塞勒涅", acquisitionMode = "seleneSpell", spellName = spellName,
+            rarities = setmetatable({}, arrayMeta), supportsLevel = false,
             sortSection = 25, sortGroup = seleneOrder, sortOrder = index,
           }
           allowed[id] = item
@@ -2173,6 +2233,7 @@ if __MacGamingTrainerV1 == nil then
               id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
               trait = traitName, family = "hexTalent", sourceId = "Selene", sourceName = "塞勒涅",
               sectionTitle = "繁星之路", acquisitionMode = "seleneTalent", spellName = slotted.Name,
+              rarities = setmetatable({}, arrayMeta), supportsLevel = false,
               sortSection = 25, sortGroup = seleneOrder + 1, sortOrder = index,
             }
             allowed[id] = item
@@ -2192,6 +2253,7 @@ if __MacGamingTrainerV1 == nil then
             id = id, name = target.name, category = "角色奖励", group = "exact", kind = "trait",
             trait = target.name, family = "Echo", sourceId = "Echo", sourceName = "回声",
             sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
+            rarities = setmetatable({}, arrayMeta), supportsLevel = false,
             sortSection = 25, sortGroup = echoOrder, sortOrder = index,
           }
           allowed[id] = item
@@ -2211,11 +2273,13 @@ if __MacGamingTrainerV1 == nil then
         local hammerOrder = 850
         for index, traitName in ipairs(allowedNames) do
           local id = "hammer:" .. traitName
+          local options = acquisitionOptions("hammerNative", traitName)
           local item = {
             id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
             trait = traitName, family = "hammer", sourceId = "WeaponUpgrade",
             sourceName = "狄德勒斯之锤", sectionTitle = "狄德勒斯之锤",
             acquisitionMode = "hammerNative",
+            rarities = options.rarities, supportsLevel = options.supportsLevel,
             sortSection = 25, sortGroup = hammerOrder, sortOrder = index,
           }
           allowed[id] = item
@@ -2260,11 +2324,14 @@ if __MacGamingTrainerV1 == nil then
         for index, traitName in ipairs(bucket and bucket.traits or {}) do
           local id = "trait:" .. traitName
           if not allowed[id] and not catalogs.nativeChoiceOnlyTraits[traitName] then
+            local mode = source.id == "Arachne" and "costume" or "direct"
+            local options = acquisitionOptions(mode, traitName)
             local item = {
               id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait", trait = traitName,
               family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
               nativeChoice = catalogs.nativeSpecialChoiceSources[source.id] == true,
-              acquisitionMode = source.id == "Arachne" and "costume" or "direct",
+              acquisitionMode = mode,
+              rarities = options.rarities, supportsLevel = options.supportsLevel,
               sortSection = 25, sortGroup = officialSourceOrder[source.id] or catalogs.specialTraitSourceOrder[source.id] or 999, sortOrder = index,
             }
             allowed[id] = item; result[#result + 1] = item
@@ -2294,6 +2361,8 @@ if __MacGamingTrainerV1 == nil then
       resources = resources,
       boons = boons,
       orderedTraitIds = orderedTraitIds,
+      acquisitionOptions = acquisitionOptions,
+      rarityOrder = rarityOrder,
       rewards = rewards,
     }
   end)()
@@ -2737,7 +2806,9 @@ if __MacGamingTrainerV1 == nil then
       return table.concat(parts, "|")
     end
 
-    local function applyExact(name)
+    -- Native WeaponUpgrade loot is ForceCommon; a Hammer whose definition
+    -- carries its own rarities is acquired at the caller's rarity instead.
+    local function applyExact(name, rarity)
       local value = source()
       if value == nil or not sourceContains(name) then
         error("Selected boon is not currently eligible")
@@ -2748,7 +2819,7 @@ if __MacGamingTrainerV1 == nil then
       local _, eligible = nativeEligible()
       if not eligible[name] then error("Selected boon is not currently eligible") end
       local processed = GetProcessedTraitData({
-        Unit = CurrentRun.Hero, TraitName = name, Rarity = "Common",
+        Unit = CurrentRun.Hero, TraitName = name, Rarity = rarity or "Common",
       })
       if type(processed) ~= "table" then error("Exact boon processing failed") end
       local added = AddTraitToHero({
@@ -2912,6 +2983,7 @@ if __MacGamingTrainerV1 == nil then
         id = rewardId, name = name, category = "角色奖励", group = "exact", kind = "trait",
         trait = name, family = "Echo", sourceId = "Echo", sourceName = "回声",
         sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
+        rarities = setmetatable({}, arrayMeta), supportsLevel = false,
       }
     end
 
@@ -7620,9 +7692,10 @@ if __MacGamingTrainerV1 == nil then
     local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
     local list
     if not retainResources then list = M.catalogProjection.resources() end
-    local boonList, rewardList, occurrenceList = nil, nil, nil
+    local boonList, rewardList, occurrenceList, rarityList = nil, nil, nil, nil
     if includeCatalogs ~= false then
       boonList, rewardList = M.catalogProjection.boons(), M.catalogProjection.rewards()
+      rarityList = M.catalogProjection.rarityOrder()
       occurrenceList = setmetatable({}, arrayMeta)
       if type(occurrenceTargets) == "table" and type(occurrenceTargetOrder) == "table" then
         for _, id in ipairs(occurrenceTargetOrder) do
@@ -7680,8 +7753,7 @@ if __MacGamingTrainerV1 == nil then
       "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
     }
     local chaosPairFunctions = {
-      "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
-      "GetProcessedTraitData", "AddTraitToHero",
+      "GetEligibleTransformingTrait", "GetProcessedTraitData", "AddTraitToHero",
     }
     local canSellTraits = traitOwner ~= nil and M.nativeFunctionsAvailable(sellTraitsFunctions)
       and type(ScreenData) == "table" and type(ScreenData.SellTraits) == "table"
@@ -7807,6 +7879,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
+      nativeRarityOrder = rarityList,
       occurrenceTargets = occurrenceList,
       lastAction = actionLedger.latestReceipt() or jsonNull,
       runtimeOutcomeUnknown = not not M.terminalActionUnknown,
@@ -9282,8 +9355,8 @@ if __MacGamingTrainerV1 == nil then
       open_special_choice = { "source" },
       generate_gathering = { "family", "scopeToken" },
       mature_garden = { "scopeToken" },
-      acquire_chaos_pair = { "blessing", "curse" },
-      spawn_reward = { "reward" },
+      acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
+      spawn_reward = { "reward", "rarity", "level" },
     }
     local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
     local function actionFingerprint(command, params)
@@ -9395,11 +9468,41 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function prepareChaos(blessingName, curseName, requirementLabel)
-      requireFunctions(requirementLabel or "exact Chaos acquisition", {
-        "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
-        "GetProcessedTraitData", "AddTraitToHero",
-      })
+    -- Exact acquisition takes rarity and level only from the caller and only
+    -- as the target's catalog options allow. A target without rarities takes
+    -- none; an absent level is the native single stack.
+    local function rarityAccepted(options, rarity)
+      if rarity == nil then return #options.rarities == 0 end
+      return listContains(options.rarities, rarity)
+    end
+
+    local function levelAccepted(options, level)
+      return level == 1 or options.supportsLevel
+    end
+
+    local noAcquisitionOptions = { rarities = {}, supportsLevel = false }
+
+    local function requestedAcquisition(params, options)
+      if not rarityAccepted(options, params.rarity) then
+        error("Selected boon does not support the requested rarity")
+      end
+      local level = params.level
+      if level == nil then level = 1 end
+      integer(level, 1)
+      if not levelAccepted(options, level) then
+        error("Selected boon does not support the requested level")
+      end
+      return { rarity = params.rarity, level = level }
+    end
+
+    -- Native transforming loot draws each unselected side of the pair from its
+    -- eligible pool (SetTransformingTraitsOnLoot). The pair takes the caller's
+    -- rarity, and its blessing the caller's level, so an unselected blessing is
+    -- drawn only from blessings that accept both.
+    local function prepareChaos(blessingName, curseName, requirementLabel, acquisition)
+      local required = { "GetEligibleTransformingTrait", "GetProcessedTraitData", "AddTraitToHero" }
+      if blessingName == nil or curseName == nil then required[#required + 1] = "GetRandomValue" end
+      requireFunctions(requirementLabel or "exact Chaos acquisition", required)
       local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
       if type(source) ~= "table" or not source.TransformingTraits then
         error("Chaos exact acquisition is unavailable")
@@ -9418,67 +9521,55 @@ if __MacGamingTrainerV1 == nil then
         error("Chaos exact acquisition is unavailable")
       end
 
-      local eligibleBlessings
+      local blessings = {}
       if blessingName ~= nil then
-        eligibleBlessings = GetEligibleTransformingTrait({ blessingName })
-        if not listContains(eligibleBlessings, blessingName) then
+        if not listContains(GetEligibleTransformingTrait({ blessingName }), blessingName) then
           error("Chaos exact acquisition is unavailable")
         end
+        blessings[1] = blessingName
       else
-        eligibleBlessings = GetEligibleTransformingTrait(source.PermanentTraits)
-        if type(eligibleBlessings) ~= "table" or next(eligibleBlessings) == nil then
-          error("Chaos exact acquisition is unavailable")
+        local eligible = GetEligibleTransformingTrait(source.PermanentTraits)
+        for _, name in ipairs(type(eligible) == "table" and eligible or {}) do
+          local options = M.catalogProjection.acquisitionOptions("chaosBlessing", name)
+          if rarityAccepted(options, acquisition.rarity) and levelAccepted(options, acquisition.level) then
+            blessings[#blessings + 1] = name
+          end
         end
+        if #blessings == 0 then error("Chaos exact acquisition is unavailable") end
       end
 
-      local eligibleCurses
+      local curses
       if curseName ~= nil then
-        eligibleCurses = GetEligibleTransformingTrait({ curseName })
-        if not listContains(eligibleCurses, curseName) then
+        if not listContains(GetEligibleTransformingTrait({ curseName }), curseName) then
           error("Chaos exact acquisition is unavailable")
         end
+        curses = { curseName }
       else
-        eligibleCurses = GetEligibleTransformingTrait(source.TemporaryTraits)
-        if type(eligibleCurses) ~= "table" or next(eligibleCurses) == nil then
+        curses = GetEligibleTransformingTrait(source.TemporaryTraits)
+        if type(curses) ~= "table" or next(curses) == nil then
           error("Chaos exact acquisition is unavailable")
         end
       end
 
-      source = DeepCopyTable(source)
-      if blessingName ~= nil then source.PermanentTraits = { blessingName } end
-      if curseName ~= nil then source.TemporaryTraits = { curseName } end
-      source.UpgradeOptions = nil
-      source.Rarity = nil
       return {
         mode = "chaos",
-        source = source,
         blessing = blessingName,
         curse = curseName,
+        blessings = blessings,
+        curses = curses,
+        acquisition = acquisition,
       }
     end
 
     local function runChaos(plan)
-      local source = plan.source
-      SetTraitsOnLoot(source)
-      local option = nil
-      for _, candidate in pairs(source.UpgradeOptions or {}) do
-        if type(candidate) == "table"
-            and (plan.blessing == nil or candidate.ItemName == plan.blessing)
-            and (plan.curse == nil or candidate.SecondaryItemName == plan.curse) then
-          option = candidate
-          break
-        end
-      end
-      if type(option) ~= "table" then error("Chaos exact acquisition is unavailable") end
-      if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
-        error("Chaos exact acquisition failed")
-      end
-      local rarity = option.Rarity or "Common"
+      local blessingName = plan.blessing or GetRandomValue(plan.blessings)
+      local curseName = plan.curse or GetRandomValue(plan.curses)
       local blessing = GetProcessedTraitData({
-        Unit = CurrentRun.Hero, TraitName = option.ItemName, Rarity = rarity,
+        Unit = CurrentRun.Hero, TraitName = blessingName,
+        Rarity = plan.acquisition.rarity, StackNum = plan.acquisition.level,
       })
       local curse = GetProcessedTraitData({
-        Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
+        Unit = CurrentRun.Hero, TraitName = curseName, Rarity = plan.acquisition.rarity,
       })
       if type(blessing) ~= "table" or type(curse) ~= "table" then
         error("Chaos exact acquisition failed")
@@ -9497,7 +9588,7 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function prepareExactReward(entry)
+    local function prepareExactReward(entry, acquisition)
       if entry.kind ~= "trait" or entry.group ~= "exact" then return nil end
       if type(entry.trait) ~= "string" or type(TraitData) ~= "table"
           or type(TraitData[entry.trait]) ~= "table" then
@@ -9509,10 +9600,10 @@ if __MacGamingTrainerV1 == nil then
       end
 
       if entry.acquisitionMode == "chaosBlessing" then
-        return prepareChaos(entry.trait, nil)
+        return prepareChaos(entry.trait, nil, nil, acquisition)
       end
       if entry.acquisitionMode == "chaosCurse" then
-        return prepareChaos(nil, entry.trait)
+        return prepareChaos(nil, entry.trait, nil, acquisition)
       end
       if entry.acquisitionMode == "seleneSpell" then
         local spellData = type(SpellData) == "table" and SpellData[entry.spellName] or nil
@@ -9544,7 +9635,7 @@ if __MacGamingTrainerV1 == nil then
         if findTargetOption(eligible, entry.trait) == nil then
           error("Selected boon is not currently eligible")
         end
-        return { mode = "hammerNative" }
+        return { mode = "hammerNative", acquisition = acquisition }
       end
       if entry.acquisitionMode == "seleneTalent" then
         local slotted = seleneModel.currentSpell()
@@ -9581,7 +9672,7 @@ if __MacGamingTrainerV1 == nil then
           end
           requireFunctions("exact costume acquisition", { "SetupCostume" })
         end
-        return { mode = entry.acquisitionMode }
+        return { mode = entry.acquisitionMode, acquisition = acquisition }
       end
       if entry.acquisitionMode ~= "ordinaryNative" then
         error("Exact boon acquisition strategy is unavailable")
@@ -9589,8 +9680,7 @@ if __MacGamingTrainerV1 == nil then
 
       requireFunctions("exact Olympian boon acquisition", {
         "DeepCopyTable", "GetReplacementTraits", "GetEligibleUpgrades",
-        "GetProcessedTraitData", "GetTraitCount", "GetTotalHeroTraitValue",
-        "RemoveWeaponTrait", "AddTraitToHero", "SetTraitsOnLoot",
+        "GetProcessedTraitData", "RemoveWeaponTrait", "AddTraitToHero",
       })
       local source = type(LootData) == "table" and LootData[entry.sourceId] or nil
       if type(source) ~= "table" then error("Exact boon source is unavailable") end
@@ -9598,50 +9688,41 @@ if __MacGamingTrainerV1 == nil then
       source.PriorityUpgrades = singleTargetList(source.PriorityUpgrades, entry.trait)
       source.WeaponUpgrades = singleTargetList(source.WeaponUpgrades, entry.trait)
       source.Traits = singleTargetList(source.Traits, entry.trait)
-      source.UpgradeOptions = nil
-      source.Rarity = nil
 
       local replacement = findTargetOption(GetReplacementTraits({ entry.trait }), entry.trait)
       if replacement and replacement.TraitToReplace then
-        return { mode = "ordinaryReplacement", source = source, option = replacement }
+        return {
+          mode = "ordinaryReplacement", source = source, option = replacement,
+          acquisition = acquisition,
+        }
       end
 
       local eligible = GetEligibleUpgrades({}, source, source)
       if findTargetOption(eligible, entry.trait) == nil then
         error("Selected boon is not currently eligible")
       end
-      return { mode = "ordinaryNative", source = source }
+      return { mode = "ordinaryNative", source = source, acquisition = acquisition }
     end
 
+    -- The selected trait is processed at the caller's rarity and level, never
+    -- through SetTraitsOnLoot: that native offer roll is where the Boon Rarity
+    -- panel and forced Legendary/Duo options act on naturally offered boons.
     local function addOrdinaryExact(entry, exactPlan)
       local source = exactPlan.source
-      local option
-      if exactPlan.mode == "ordinaryReplacement" then
-        option = exactPlan.option
-      else
-        SetTraitsOnLoot(source)
-        option = findTargetOption(source.UpgradeOptions, entry.trait)
-        if option == nil then error("Selected boon became unavailable before acquisition") end
-      end
-
-      local rarity = option.Rarity or "Common"
-      local stackNum = nil
-      if option.TraitToReplace then
-        local existingNum = GetTraitCount(CurrentRun.Hero, { Name = option.TraitToReplace })
-        stackNum = existingNum + GetTotalHeroTraitValue("ExchangeLevelBonus")
-      end
+      local replacement = exactPlan.option
       local processed = GetProcessedTraitData({
-        Unit = CurrentRun.Hero, TraitName = entry.trait, Rarity = rarity, StackNum = stackNum,
+        Unit = CurrentRun.Hero, TraitName = entry.trait,
+        Rarity = exactPlan.acquisition.rarity, StackNum = exactPlan.acquisition.level,
       })
       if type(processed) ~= "table" then error("Exact boon processing failed") end
-      if option.TraitToReplace then
-        processed.TraitToReplace = option.TraitToReplace
-        processed.OldRarity = option.OldRarity
-        RemoveWeaponTrait(option.TraitToReplace)
+      if replacement ~= nil then
+        processed.TraitToReplace = replacement.TraitToReplace
+        processed.OldRarity = replacement.OldRarity
+        RemoveWeaponTrait(replacement.TraitToReplace)
       end
       local added = AddTraitToHero({
         TraitData = processed,
-        PreProcessedForDisplay = option.TraitToReplace == nil,
+        PreProcessedForDisplay = replacement == nil,
         FromLoot = true,
       })
       if type(added) ~= "table" then error("Exact boon acquisition did not return a trait") end
@@ -9724,7 +9805,7 @@ if __MacGamingTrainerV1 == nil then
         return nil
       end
       if exactPlan and exactPlan.mode == "hammerNative" then
-        hammerModel.applyExact(entry.trait)
+        hammerModel.applyExact(entry.trait, exactPlan.acquisition.rarity)
         return nil
       end
       if exactPlan and exactPlan.mode == "echoLastRunExact" then
@@ -9737,6 +9818,14 @@ if __MacGamingTrainerV1 == nil then
       end
       if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
         return addOrdinaryExact(entry, exactPlan)
+      end
+      if exactPlan and exactPlan.mode == "direct" then
+        requireFunctions("special blessing", { "AddTraitToHero" })
+        AddTraitToHero({
+          TraitName = entry.trait, FromLoot = true,
+          Rarity = exactPlan.acquisition.rarity, StackNum = exactPlan.acquisition.level,
+        })
+        return nil
       end
       if entry.storeTrait then return addStoreTrait(entry) end
 
@@ -9900,7 +9989,11 @@ if __MacGamingTrainerV1 == nil then
             or type(params.curse) ~= "string" or params.curse == "" then
           error("Chaos exact acquisition is unavailable")
         end
-        return { chaosPlan = prepareChaos(params.blessing, params.curse, "exact Chaos pair acquisition") }
+        local acquisition = requestedAcquisition(
+          params, M.catalogProjection.acquisitionOptions("chaosBlessing", params.blessing))
+        return {
+          chaosPlan = prepareChaos(params.blessing, params.curse, "exact Chaos pair acquisition", acquisition),
+        }
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
 
@@ -9920,10 +10013,12 @@ if __MacGamingTrainerV1 == nil then
       if type(ScreenState) == "table" and ScreenState.InTransition then
         error("Cannot spawn a reward during a transition")
       end
+      -- Pickups and loot carry no acquisition options, so they accept neither.
+      local acquisition = requestedAcquisition(params, exactTrait and entry or noAcquisitionOptions)
       return {
         rewardId = rewardId,
         entry = entry,
-        exactPlan = prepareExactReward(entry),
+        exactPlan = prepareExactReward(entry, acquisition),
         ownerKeys = exactTrait
           and { "session", "run", "hero" }
           or { "session", "run", "hero", "room", "map" },

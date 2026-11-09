@@ -1,18 +1,11 @@
 import Foundation
 
-/// A bounded projection of current owner state, never a notification history.
-struct Hades2CurrentIssue: Identifiable, Equatable {
-    let id: String
-    let text: TrainerTextToken
-    let title: TrainerTextToken?
-}
-
 extension Hades2TrainerModel {
-    var currentIssues: [Hades2CurrentIssue] {
-        var issues: [Hades2CurrentIssue] = []
+    var currentIssues: [TrainerCurrentIssue] {
+        var issues: [TrainerCurrentIssue] = []
         func append(_ id: String, _ text: TrainerTextToken, title: TrainerTextToken? = nil) {
             guard !text.key.isEmpty else { return }
-            issues.append(Hades2CurrentIssue(id: id, text: text, title: title))
+            issues.append(TrainerCurrentIssue(id: id, text: text, title: title))
         }
         if let result = receivedActionResultText { append("result", result) }
         append("operation", errorText)
