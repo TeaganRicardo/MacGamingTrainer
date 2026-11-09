@@ -654,7 +654,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
             .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
-             .boonRarityEnabled,.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,.disableAll],
+             .boonRarityEnabled,.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
+             .acquireChaosPair,.acquireExactBoon,.disableAll],
               "shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
