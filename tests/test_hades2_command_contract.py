@@ -51,8 +51,8 @@ class ProbeAdapter:
     def set_boon_rarity_desired(self, config):
         return self._record("set_boon_rarity_desired", dict(config))
 
-    def set_next_room_reward_desired(self, reward):
-        return self._record("set_next_room_reward_desired", reward)
+    def set_next_room_reward_once(self, reward, request_id):
+        return self._record("set_next_room_reward_once", reward, request_id)
 
     def set_next_occurrence_desired(self, target):
         return self._record("set_next_occurrence_desired", target)
@@ -126,7 +126,7 @@ assert names == [
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "mature_garden", "set_stat", "set_element", "lock_element",
-    "set_boon_rarity_desired", "set_next_room_reward_desired", "set_next_occurrence_desired",
+    "set_boon_rarity_desired", "set_next_room_reward_once", "set_next_occurrence_desired",
     "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
@@ -437,11 +437,11 @@ contract.dispatch(
 assert probe.calls == [("set_chaos_gate_desired", 50.0)]
 probe.calls.clear()
 contract.dispatch(
-    "set_next_room_reward_desired",
+    "set_next_room_reward_once",
     {"reward": "WeaponUpgrade"},
-    "reward-desired",
+    "reward-once",
 )
-assert probe.calls == [("set_next_room_reward_desired", "WeaponUpgrade")]
+assert probe.calls == [("set_next_room_reward_once", "WeaponUpgrade", "reward-once")]
 probe.calls.clear()
 contract.dispatch(
     "set_next_occurrence_desired",
