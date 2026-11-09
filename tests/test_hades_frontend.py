@@ -995,7 +995,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                   $0.role=="AXPopUpButton" && $0.label==traitLabel && $0.valueText==primaryName
               }),
               let oldLevel=fields(in:host).first(where:{
-                  $0.accessibilityIdentifier()=="hades.catalog.level"
+                  $0.accessibilityIdentifier()=="hades.acquisition.level"
               }) else {
             fatalError("Hades I selected-catalog native inputs missing")
         }
@@ -1006,9 +1006,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let levelEditor=nativeEditor(oldLevel, "catalog level")
         levelEditor.selectAll(nil);levelEditor.insertText("7",replacementRange:levelEditor.selectedRange())
         // Native menu input can also begin through accessibility. Replacing
-        // selection while its field still edits must retire the old identity.
+        // selection while the shared level field edits must retire the old
+        // target-owned NSTextField and reset the new target's level.
         selectNativePicker(choices,in:window,moving:1,opening:.accessibility);pump()
-        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.catalog.level" }
+        let newLevel=fields(in:host).first { $0.accessibilityIdentifier()=="hades.acquisition.level" }
         let catalogOwnerPassed=namedNativeControl(host,role:"AXPopUpButton",name:traitLabel)?.valueText==secondaryName
               && oldLevel.currentEditor()==nil && newLevel?.stringValue=="1" && commands().count==beforeSelection
         if !catalogOwnerPassed {
