@@ -465,6 +465,7 @@ class Hades2DesiredStateReconciler:
         actions.extend(lock_releases)
         actions.extend(lock_updates)
 
+        diagnostics = _mapping(observed.get("runtimeDiagnostics"))
         wanted_occurrence = desired.get("nextOccurrenceTarget")
         wanted_occurrence_token = desired.get("nextOccurrenceToken")
         observed_occurrence = observed.get("nextOccurrenceTarget")
