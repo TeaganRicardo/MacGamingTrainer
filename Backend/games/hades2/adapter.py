@@ -4,6 +4,7 @@ import logging
 import math
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
@@ -19,7 +20,6 @@ from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
     Hades2PreferenceStore,
     canonicalize_damage,
-    next_room_reward_consumed,
     next_occurrence_consumed,
 )
 from .profile_service import Hades2ProfileService
@@ -68,6 +68,7 @@ def clear_active(state,preserve_desired=False):
         state['chaosGateProbability']=None
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
+    state['nextRoomReward']=None
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
@@ -85,6 +86,7 @@ def mark_disconnected(state):
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
+    state['nextRoomReward']=None
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
@@ -94,7 +96,7 @@ def mark_disconnected(state):
 
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
-    'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_next_occurrence', 'set_gathering_probabilities', 'set_chaos_gate_probability',
+    'set_feature', 'set_boon_rarity', 'set_next_occurrence', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
 class Hades2Adapter(GameAdapter):
     data_dir = DATA
@@ -210,8 +212,6 @@ class Hades2Adapter(GameAdapter):
     def load_profile(self,name):
         profile=self.profile_service.load(name)
         preferences=self._normalize_preferences(profile['desired'])
-        if preferences.get('nextRoomReward') is not None:
-            preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         if preferences.get('nextOccurrenceTarget') is not None:
             preferences['nextOccurrenceToken']='profile-occurrence-'+str(time.time_ns())
         observed_state=None
@@ -233,7 +233,6 @@ class Hades2Adapter(GameAdapter):
         for key,value in desired.items():self.state[key]=value
         for key in MULTIPLIERS:self.state[key]=self.preferences.get(key,defaults[key])
         self.state['boonRarity']=dict(self.preferences.get('boonRarity',{}))
-        self.state['nextRoomReward']=self.preferences.get('nextRoomReward')
         self.state['nextOccurrenceTarget']=self.preferences.get('nextOccurrenceTarget')
         self.state['gatheringProbabilities']=dict(self.preferences.get('gatheringProbabilities',{}))
         self.state['chaosGateProbability']=self.preferences.get('chaosGateProbability')
@@ -419,12 +418,6 @@ class Hades2Adapter(GameAdapter):
         if decoded.get('moneyLocked'):self.preferences['resourceLocks']['Money']=decoded.get('money',0)
         self.preferences['rerollsLock']=decoded.get('rerolls') if decoded.get('rerollsLocked') else None
         self.preferences['elementLocks']={str(item['id']):item.get('count',0) for item in decoded.get('elements',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
-        reward=decoded.get('nextRoomReward')
-        if reward is None or isinstance(reward,str):
-            self.preferences['nextRoomReward']=reward
-            diagnostics=decoded.get('runtimeDiagnostics')
-            token=diagnostics.get('nextRoomRewardToken') if isinstance(diagnostics,dict) else None
-            self.preferences['nextRoomRewardToken']=token if reward is not None and isinstance(token,str) and token else None
         occurrence=decoded.get('nextOccurrenceTarget')
         if occurrence is None or isinstance(occurrence,str):
             self.preferences['nextOccurrenceTarget']=occurrence
@@ -659,17 +652,19 @@ class Hades2Adapter(GameAdapter):
             return result
         return dict(self.state)
 
-    def set_next_room_reward_desired(self,reward):
+    def set_next_room_reward_once(self,reward):
+        """Arm/cancel one native next-generated-room override, never durable or replayed.
+
+        The resident consumes its own token at the next eligible room start.
+        An unknown transport outcome is intentionally not retried.
+        """
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
-        preferences=dict(self.preferences);preferences['nextRoomReward']=reward
-        preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
-        self._persist_preferences_candidate(preferences);self.preferences=preferences
-        self.preference_initialized=True
-        was_dirty=self.preference_dirty
-        self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
-            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
-        return dict(self.state)
+        if not self.runtime.has_attachment or not self.state.get('connected'):
+            raise AdapterError('disconnected','下一房奖励需要已连接的游戏会话。')
+        if (self.state.get('capabilities') or {}).get('setFeature') is not True:
+            raise AdapterError('waiting','当前场景无法设置下一房奖励。')
+        token=None if reward is None else 'one-shot-'+uuid.uuid4().hex
+        return self.execute('set_next_room_reward',{'reward':reward,'token':token})
 
     def set_next_occurrence_desired(self,target):
         if not is_valid_next_occurrence_target(target):raise ValueError('下一次遭遇目标无效。')
@@ -982,18 +977,11 @@ class Hades2Adapter(GameAdapter):
             # but Core-owned Process Time Warp remains observable Host state.
             if host_observation_only:self._project_time_warp()
             if not host_observation_only and command=='status':
-                consumed_one_shot=False
-                if next_room_reward_consumed(self.preferences,raw_decoded,self.preference_dirty):
-                    self.preferences['nextRoomReward']=None
-                    self.preferences['nextRoomRewardToken']=None
-                    self.state['nextRoomReward']=None
-                    consumed_one_shot=True
                 if next_occurrence_consumed(self.preferences,raw_decoded,self.preference_dirty):
                     self.preferences['nextOccurrenceTarget']=None
                     self.preferences['nextOccurrenceToken']=None
                     self.state['nextOccurrenceTarget']=None
-                    consumed_one_shot=True
-                if consumed_one_shot:self._save_preferences()
+                    self._save_preferences()
             # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
