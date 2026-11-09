@@ -1763,6 +1763,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
     func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
 
+    func resetShortcuts() {
+        shortcutStore.resetToDefaults()
+        installHotkeys()
+    }
+
     @discardableResult
     func setShortcut(action: ShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {
         if let conflict = shortcutStore.set(action, chord: chord) {
