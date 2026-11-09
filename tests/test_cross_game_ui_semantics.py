@@ -391,8 +391,13 @@ assert "if trait.hasContextualControls {" in hades_current_row
 assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
-assert 'TrainerIconLabel(' in hades_view and 'title: text("hades.catalog")' in hades_view
-assert 'TrainerIconLabel(' in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
+# Exact acquisition shares Core chrome, while each module supplies its
+# own title/icon and native target/rarity rules.
+acquisition_panel = (ROOT / "Sources/Core/UI/Components/TrainerAcquisitionPanel.swift").read_text()
+assert "TrainerIconLabel(" in acquisition_panel and "icon: icon" in acquisition_panel
+assert "TrainerAcquisitionPanel(" in hades_view and 'title: text("hades.catalog")' in hades_view
+assert "TrainerAcquisitionPanel(" in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
+assert "acquisitionSettingsRow" in hades_view and "acquisitionSettingsRow" in hades2_view
 assert "case .decreaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
 assert "case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale" in hades2_nav
 assert 'static let garden = "tree.fill"' in hades2_nav
