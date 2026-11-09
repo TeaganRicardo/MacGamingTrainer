@@ -131,7 +131,7 @@ class Hades2DesiredStateReconciler:
         if command in (
             "stage_desired_locks", "set_feature", "set_boon_rarity",
             "set_gathering_probabilities", "set_chaos_gate_probability",
-            "set_next_room_reward", "set_next_occurrence",
+            "set_next_occurrence",
         ):
             return cls._capability(observed, "setFeature")
         if command == "set_stat":
@@ -464,25 +464,6 @@ class Hades2DesiredStateReconciler:
         # first release every stale owner, then apply desired values/locks.
         actions.extend(lock_releases)
         actions.extend(lock_updates)
-
-        wanted_reward = desired.get("nextRoomReward")
-        wanted_token = desired.get("nextRoomRewardToken")
-        observed_reward = observed.get("nextRoomReward")
-        diagnostics = _mapping(observed.get("runtimeDiagnostics"))
-        reward_matches = observed_reward == wanted_reward
-        if wanted_reward is not None:
-            reward_matches = (
-                reward_matches
-                and diagnostics.get("nextRoomRewardToken") == wanted_token
-            )
-        if force_full or not reward_matches:
-            actions.append(
-                _Action(
-                    "set_next_room_reward",
-                    {"reward": wanted_reward, "token": wanted_token},
-                    "nextRoomReward",
-                )
-            )
 
         wanted_occurrence = desired.get("nextOccurrenceTarget")
         wanted_occurrence_token = desired.get("nextOccurrenceToken")
