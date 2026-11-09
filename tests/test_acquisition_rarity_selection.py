@@ -56,5 +56,5 @@ with tempfile.TemporaryDirectory(prefix="mgt-706-rarity-") as directory:
     harness = folder / "main.swift"
     output = folder / "smoke"
     harness.write_text(HARNESS, encoding="utf-8")
-    subprocess.run([SWIFTC, str(SOURCE), str(harness), "-o", str(output)], check=True, cwd=ROOT)
+    subprocess.run([SWIFTC, "-parse-as-library", str(SOURCE), str(harness), "-o", str(output)], check=True, cwd=ROOT)
     subprocess.run([str(output)], check=True, cwd=ROOT)
