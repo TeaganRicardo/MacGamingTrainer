@@ -515,7 +515,7 @@ def _chaos_gate_invoke(adapter, params):
 
 
 def _next_room_invoke(adapter, params):
-    return adapter.set_next_room_reward_once(params["reward"])
+    return adapter.set_next_room_reward_once(params["reward"],params["requestId"])
 
 
 def _next_occurrence_invoke(adapter, params):
