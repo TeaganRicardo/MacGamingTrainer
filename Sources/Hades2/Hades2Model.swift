@@ -165,6 +165,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var damageEnabled = false
     @Published var damageMultiplier = Hades2MultiplierKey.damageMultiplier.defaultValue
     @Published var gameSpeed = Hades2MultiplierKey.gameSpeed.defaultValue
+    /// Verified Process Time Warp observation; nil is unknown, not 1×.
+    @Published private(set) var appliedGameSpeed: Double?
     @Published var boonRarityTarget = "Heroic"
     // These wire keys now mean force one currently eligible special boon
     // into the native three-choice pool.
@@ -612,6 +614,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func resetAfterBackendTermination() {
         feedbackNotice = nil
         connected = false
+        appliedGameSpeed = nil
         scene = "unknown"
         capabilities = [:]
         activeFeatures = [:]
@@ -704,6 +707,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
+        // Preserve an unchanged process's last observation across sparse
+        // replies. Clear it on process loss/replacement, and only accept
+        // an actual value explicitly verified by the process-owned helper.
+        if let runtimeDiagnostics {
+            let reported = (runtimeDiagnostics["gameSpeedAppliedValue"] as? NSNumber)?.doubleValue
+            appliedGameSpeed = connected && (reported?.isFinite == true) ? reported : nil
+        } else if !connected || (patch.pid.isPresent && oldPID != pid) {
+            appliedGameSpeed = nil
+        }
         if let value = patch.version { version = value }
         if let value = patch.currentRunTraits { currentRunTraits = value }
         if let value = patch.currentRunTraitIdentityScope {
