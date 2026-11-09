@@ -48,7 +48,7 @@ def matching_observation(desired):
         "rerollsLocked": False,
         "rerolls": 0,
         "elements": [],
-        "nextRoomReward": desired["nextRoomReward"],
+        "nextRoomReward": None,
         "nextOccurrenceTarget": desired["nextOccurrenceTarget"],
         "runtimeDiagnostics": {},
     }
@@ -87,10 +87,6 @@ def matching_observation(desired):
             {"id": element, "locked": True, "count": amount}
         )
 
-    if desired["nextRoomReward"] is not None:
-        observation["runtimeDiagnostics"]["nextRoomRewardToken"] = desired[
-            "nextRoomRewardToken"
-        ]
     if desired["nextOccurrenceTarget"] is not None:
         observation["runtimeDiagnostics"]["nextOccurrenceToken"] = desired[
             "nextOccurrenceToken"
@@ -137,8 +133,6 @@ class ApplyingSession:
             return "gatheringProbabilities"
         if command == "set_chaos_gate_probability":
             return "chaosGateProbability"
-        if command == "set_next_room_reward":
-            return "nextRoomReward"
         if command == "set_next_occurrence":
             return "nextOccurrence"
         return command
@@ -260,14 +254,6 @@ class ApplyingSession:
                 self.observation["elements"].append(row)
             row["locked"] = bool(params["locked"])
             return
-        if command == "set_next_room_reward":
-            self.observation["nextRoomReward"] = params["reward"]
-            diagnostics = self.observation.setdefault("runtimeDiagnostics", {})
-            if params["reward"] is None:
-                diagnostics.pop("nextRoomRewardToken", None)
-            else:
-                diagnostics["nextRoomRewardToken"] = params.get("token")
-            return
         if command == "set_next_occurrence":
             self.observation["nextOccurrenceTarget"] = params["target"]
             diagnostics = self.observation.setdefault("runtimeDiagnostics", {})
@@ -298,8 +284,6 @@ desired.update(
     resourceLocks={"Money": 500, "MetaCurrency": 12},
     rerollsLock=3,
     elementLocks={"Fire": 7},
-    nextRoomReward="WeaponUpgrade",
-    nextRoomRewardToken="reward-token",
     nextOccurrenceTarget="npc:Nemesis",
     nextOccurrenceToken="occurrence-token",
     gatheringProbabilities={"flora": 25.0},
@@ -370,7 +354,6 @@ mismatch["rerolls"] = 0
 for row in mismatch["elements"]:
     if row["id"] == "Fire":
         row.update(locked=False, count=1)
-mismatch["nextRoomReward"] = None
 mismatch["nextOccurrenceTarget"] = None
 mismatch["runtimeDiagnostics"] = {}
 
@@ -407,7 +390,7 @@ assert any(command == "set_rerolls" for command, _ in batch)
 assert any(command == "lock_rerolls" for command, _ in batch)
 assert any(command == "set_element" for command, _ in batch)
 assert any(command == "lock_element" for command, _ in batch)
-assert any(command == "set_next_room_reward" for command, _ in batch)
+assert not any(command == "set_next_room_reward" for command, _ in batch)
 assert any(
     command == "set_next_occurrence"
     and params == {"target": "npc:Nemesis", "token": "occurrence-token"}
@@ -538,7 +521,7 @@ for key in MULTIPLIERS:
             for command, params in full_batch
         )
 assert any(command == "set_boon_rarity" for command, _ in full_batch)
-assert any(command == "set_next_room_reward" for command, _ in full_batch)
+assert not any(command == "set_next_room_reward" for command, _ in full_batch)
 
 
 # A semantically successful batch that does not converge is not confirmation.
@@ -560,18 +543,18 @@ assert len(partial_session.calls) == 1
 assert desired == before
 
 
-# Equal reward text with a different token is not equivalent durable one-shot
-# identity; reconciliation must re-arm the requested token.
+# Native one-shots are game-session observations, never part of durable
+# desired reconciliation, even in a forced full replay after reconnect.
 token_observed = matching_observation(desired)
-token_observed["runtimeDiagnostics"]["nextRoomRewardToken"] = "stale-token"
+token_observed["nextRoomReward"] = "WeaponUpgrade"
+token_observed["runtimeDiagnostics"]["nextRoomRewardToken"] = "native-one-shot"
 token_session = ApplyingSession(token_observed)
 token_outcome = Hades2DesiredStateReconciler(
     token_session, request_id_factory=deterministic_ids()
-).reconcile(desired, token_observed)
+).reconcile(desired, token_observed, force_full=True)
 assert token_outcome.confirmed is True
-assert any(
+assert not any(
     command == "set_next_room_reward"
-    and params.get("token") == "reward-token"
     for command, params in token_session.calls[0]
 )
 
