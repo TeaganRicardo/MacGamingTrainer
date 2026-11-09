@@ -19,14 +19,7 @@ struct HadesTrainerView: View {
     private enum EditField: Hashable {
         case value(HadesHeroValue)
         case feature(HadesFeature)
-        case resource
-    }
-
-    /// The selected resource and its observation, so a new selection replaces
-    /// the draft while an unfocused count refreshes it.
-    private struct ResourceObservation: Equatable {
-        let id: String
-        let value: Double?
+        case resource(String)
     }
 
     @ObservedObject var model: HadesTrainerModel
@@ -37,8 +30,6 @@ struct HadesTrainerView: View {
     @State private var gameSpeedEditing = false
     @State private var focusedField: EditField?
     @State private var drafts: [EditField: String] = [:]
-    @State private var resourceSearch = ""
-    @State private var selectedResource = ""
 
     private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
     private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
@@ -75,14 +66,6 @@ struct HadesTrainerView: View {
         .onChange(of: observedDrafts, initial: true) { _, observed in
             for (field, text) in observed where field != focusedField { drafts[field] = text }
         }
-        .onChange(of: filteredResources.map(\.id), initial: true) { _, ids in
-            if !ids.contains(selectedResource) { selectedResource = ids.first ?? "" }
-        }
-        .onChange(of: resourceObservation, initial: true) { old, new in
-            if old.id != new.id || focusedField != .resource {
-                drafts[.resource] = new.value.map(HadesTrainerModel.displayText) ?? ""
-            }
-        }
     }
 
     private var observedDrafts: [EditField: String] {
@@ -92,6 +75,9 @@ struct HadesTrainerView: View {
         }
         for feature in Self.multipliers {
             observed[.feature(feature)] = HadesTrainerModel.displayText(model.number(feature))
+        }
+        for resource in Self.permanentResourceFallbacks {
+            observed[.resource(resource.id)] = model.resources[resource.id].map(HadesTrainerModel.displayText) ?? ""
         }
         return observed
     }
@@ -328,54 +314,66 @@ struct HadesTrainerView: View {
         }
     }
 
+    /// Permanent resource identities and official bilingual labels, copied from
+    /// the supported Hades I catalog for the brief interval before it loads.
+    /// Once loaded, the catalog itself remains the terminology authority.
+    private static let permanentResourceFallbacks: [HadesResourceDefinition] = [
+        .init(id: "MetaPoints", names: ["zh-CN": "黑暗", "en": "Darkness"]),
+        .init(id: "Gems", names: ["zh-CN": "宝石", "en": "Gemstones"]),
+        .init(id: "LockKeys", names: ["zh-CN": "冥府钥匙", "en": "Chthonic Key"]),
+        .init(id: "GiftPoints", names: ["zh-CN": "蜜露", "en": "Nectar"]),
+        .init(id: "SuperGems", names: ["zh-CN": "钻石", "en": "Diamonds"]),
+        .init(id: "SuperGiftPoints", names: ["zh-CN": "仙酒", "en": "Ambrosia"]),
+        .init(id: "SuperLockKeys", names: ["zh-CN": "泰坦之血", "en": "Titan Blood"]),
+    ]
+
+    /// All seven native resources always have independently visible edit rows.
+    /// The catalog may arrive after the disconnected UI was first rendered.
+    private var permanentResources: [HadesResourceDefinition] {
+        let loaded = Dictionary(uniqueKeysWithValues: model.resourceCatalog.map { ($0.id, $0) })
+        return Self.permanentResourceFallbacks.map { loaded[$0.id] ?? $0 }
+    }
+
     private var resourcesSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.resources.titleKey),
                        icon: HadesWorkbenchSection.resources.icon) {
-            TrainerResourceEditor(
-                title: text("hades.resources"),
-                icon: TrainerSemanticIcon.Concept.item,
-                search: $resourceSearch,
-                selection: $selectedResource,
-                amount: draft(.resource),
-                sections: resourceSections,
-                enabled: model.canMutate,
-                lock: nil,
-                itemLabel: resourceLabel,
-                onEditingChanged: TrainerTextField.editingTracker($focusedField, equals: .resource),
-                onCommit: completing(.resource(selectedResource))
-            )
-            .trainerPanel()
+            VStack(spacing: 1) {
+                ForEach(permanentResources) { resource in
+                    TrainerLabeledControlRow(
+                        title: resourceLabel(resource),
+                        icon: HadesResourceIcon.systemName(for: resource.id),
+                        tint: model.canMutate ? theme.accent : theme.inactive,
+                        emphasized: model.canMutate
+                    ) {
+                        TrainerNumberField(
+                            text: draft(.resource(resource.id)),
+                            placeholder: "host.amount",
+                            accessibilityLabel: resourceLabel(resource),
+                            accessibilityIdentifier: "hades.resource.\\(resource.id)",
+                            width: 110,
+                            enabled: model.canMutate && !model.busy && model.resources[resource.id] != nil,
+                            alignment: .leading,
+                            onEditingChanged: TrainerTextField.editingTracker(
+                                $focusedField, equals: .resource(resource.id)
+                            ),
+                            onCommit: completing(.resource(resource.id))
+                        )
+                    }
+                }
+            }
+            .trainerGroupedRows()
+            // Hades I's resource-gain action remains game-owned and visible.
             HadesGatheringPanel(model: model)
         }
     }
 
-    private var filteredResources: [HadesResourceDefinition] {
-        let query = resourceSearch.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return model.resourceCatalog }
-        return model.resourceCatalog.filter { resource in
-            ([resource.id] + resource.names.values).contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
-
-    /// The catalog owns the resources and their order. Hades I's native data
-    /// gives them no categories, so they form one section.
-    private var resourceSections: [TrainerPickerSection<HadesResourceDefinition>] {
-        filteredResources.isEmpty ? [] : [
-            TrainerPickerSection(id: 0, title: text("hades.resource.section"), items: filteredResources),
-        ]
-    }
-
-    private var resourceObservation: ResourceObservation {
-        ResourceObservation(id: selectedResource, value: model.resources[selectedResource])
-    }
-
-    /// Both official names, current language first, then the observed amount.
+    /// The native catalog supplies both official terms, in the active language
+    /// first. Editing status lives in its Core number control, not the title.
     private func resourceLabel(_ resource: HadesResourceDefinition) -> String {
         let primary = resource.name(language: localization.language.rawValue)
         let other: TrainerPresentationLanguage = localization.language == .en ? .zhCN : .en
         let secondary = resource.names[other.rawValue] ?? ""
-        let name = secondary.isEmpty || secondary == primary ? primary : "\(primary) · \(secondary)"
-        return name + " · " + (model.resources[resource.id].map(HadesTrainerModel.displayText) ?? "—")
+        return secondary.isEmpty || secondary == primary ? primary : "\\(primary) · \\(secondary)"
     }
 
     private var managementSection: some View {
