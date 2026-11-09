@@ -764,12 +764,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons {
+            let oldAcquisitionCapabilities = boons.map {
+                [$0.id, $0.acquisitionMode, $0.rarities.joined(separator: ","), String($0.supportsLevel)]
+            }
+            let newAcquisitionCapabilities = value.map {
+                [$0.id, $0.acquisitionMode, $0.rarities.joined(separator: ","), String($0.supportsLevel)]
+            }
+            if oldAcquisitionCapabilities != newAcquisitionCapabilities {
+                resolvedAcquisitionSignature = nil
+            }
             boons = value
-            resolvedAcquisitionSignature = nil
         }
         if let value = patch.nativeRarityOrder {
+            if nativeRarityOrder != value { resolvedAcquisitionSignature = nil }
             nativeRarityOrder = value
-            resolvedAcquisitionSignature = nil
         }
         if let value = patch.statSupport { statSupport = value }
         if let value = patch.statAvailable { statAvailable = value }
