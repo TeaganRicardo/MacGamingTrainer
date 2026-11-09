@@ -381,6 +381,24 @@ struct Main {
         check(chaosParams["rarity"] as? String == "Epic", "Chaos pair lost selected rarity")
         check(chaosParams["level"] == nil, "nonstackable Chaos pair forwarded a level")
 
+        // The same Core level editor serves multiple native targets. A target
+        // change resets its draft; unchanged observations retain the draft.
+        try withModel(expectedNewCommands: 0) { model in
+            model.boons = [exact, chaosBlessing, chaosCurse]
+            model.selectedExactBoon = exact.id
+            check(model.activateAcquisition(.exact), "exact target could not activate")
+            model.acquisitionLevel = "7"
+            model.selectedChaosBlessing = chaosBlessing.id
+            model.selectedChaosCurse = chaosCurse.id
+            check(model.activateAcquisition(.chaos), "Chaos target could not activate")
+            check(model.acquisitionLevel == "1", "Hades II retained another target's draft level")
+            model.acquisitionLevel = "4"
+            check(model.activateAcquisition(.chaos), "unchanged Chaos target lost its selection")
+            check(model.acquisitionLevel == "4", "unchanged Chaos target reset the level draft")
+            check(model.activateAcquisition(.exact), "return to exact target refused")
+            check(model.acquisitionLevel == "1", "returning to exact reused the Chaos level draft")
+        }
+
         // The shipped model owns decoding and completion on this path. No
         // native view, field editor, window or foreground activation is used.
         let observation = worker.deletingPathExtension().appendingPathExtension("observation.json")
