@@ -330,7 +330,9 @@ struct HadesTrainerView: View {
     /// All seven native resources always have independently visible edit rows.
     /// The catalog may arrive after the disconnected UI was first rendered.
     private var permanentResources: [HadesResourceDefinition] {
-        let loaded = Dictionary(uniqueKeysWithValues: model.resourceCatalog.map { ($0.id, $0) })
+        let loaded = model.resourceCatalog.reduce(into: [String: HadesResourceDefinition]()) { result, entry in
+            result[entry.id] = entry
+        }
         return Self.permanentResourceFallbacks.map { loaded[$0.id] ?? $0 }
     }
 
@@ -349,7 +351,7 @@ struct HadesTrainerView: View {
                             text: draft(.resource(resource.id)),
                             placeholder: "host.amount",
                             accessibilityLabel: resourceLabel(resource),
-                            accessibilityIdentifier: "hades.resource.\\(resource.id)",
+                            accessibilityIdentifier: "hades.resource.\(resource.id)",
                             width: 110,
                             enabled: model.canMutate && !model.busy && model.resources[resource.id] != nil,
                             alignment: .leading,
@@ -373,7 +375,7 @@ struct HadesTrainerView: View {
         let primary = resource.name(language: localization.language.rawValue)
         let other: TrainerPresentationLanguage = localization.language == .en ? .zhCN : .en
         let secondary = resource.names[other.rawValue] ?? ""
-        return secondary.isEmpty || secondary == primary ? primary : "\\(primary) · \\(secondary)"
+        return secondary.isEmpty || secondary == primary ? primary : "\(primary) · \(secondary)"
     }
 
     private var managementSection: some View {
