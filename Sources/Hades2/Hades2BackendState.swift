@@ -75,6 +75,7 @@ struct Hades2StatePatch {
 
     let warningText: Hades2FieldPatch<String>
     let boons: [BoonOption]?
+    let nativeRarityOrder: [String]?
     let statSupport: [String: Bool]?
     let statAvailable: [String: Bool]?
     let stats: [String: Hades2StatSnapshot]?
@@ -175,6 +176,7 @@ struct Hades2StatePatch {
 
         let rewardRows = (payload["rewards"] as? [[String: Any]]) ?? (payload["boons"] as? [[String: Any]])
         boons = rewardRows?.compactMap(Self.decodeBoon)
+        nativeRarityOrder = payload["nativeRarityOrder"] as? [String]
         statSupport = Self.boolMap(payload["statSupport"])
         statAvailable = Self.boolMap(payload["statAvailable"])
         if let rows = payload["stats"] as? [String: Any] {
@@ -307,6 +309,8 @@ struct Hades2StatePatch {
             nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? "",
             nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? "",
             acquisitionMode: row["acquisitionMode"] as? String ?? "",
+            rarities: row["rarities"] as? [String] ?? [],
+            supportsLevel: row["supportsLevel"] as? Bool ?? false,
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max

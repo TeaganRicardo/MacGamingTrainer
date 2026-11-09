@@ -311,6 +311,14 @@ do
   eq(costume.acquisitionMode, "costume", "costume mode")
   eq(#costume.rarities, 0, "Arachne owns the outfit rarity")
   eq(costume.supportsLevel, false, "Arachne outfit does not stack")
+
+  -- The catalog also states the whole native rarity scale in that order, so
+  -- a frontend can order one rarity choice offered across several targets.
+  local catalog = M.dispatch("status", { includeCatalogs = true })
+  eq(list(catalog.nativeRarityOrder), "Common,Rare,Epic,Heroic,Duo,Legendary,Perfect",
+    "native rarity order")
+  local observation = M.dispatch("status", { includeCatalogs = false })
+  eq(observation.nativeRarityOrder, nil, "rarity order travels with the catalogs")
 end
 
 -- Ordinary add: source eligibility is resolved at operation time and the

@@ -1973,6 +1973,12 @@ if __MacGamingTrainerV1 == nil then
       end)
       return result
     end
+    -- The whole native rarity scale in the same order. A frontend offering one
+    -- rarity choice for several targets orders that choice by this list; the
+    -- per-target lists above are subsequences of it.
+    local function rarityOrder()
+      return orderedRarities(type(TraitRarityData) == "table" and TraitRarityData.RarityValues or nil)
+    end
     local function nativeStackable(definition)
       return type(definition) == "table" and not definition.BlockStacking
         and definition.RemainingUses == nil
@@ -2356,6 +2362,7 @@ if __MacGamingTrainerV1 == nil then
       boons = boons,
       orderedTraitIds = orderedTraitIds,
       acquisitionOptions = acquisitionOptions,
+      rarityOrder = rarityOrder,
       rewards = rewards,
     }
   end)()
@@ -7685,9 +7692,10 @@ if __MacGamingTrainerV1 == nil then
     local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
     local list
     if not retainResources then list = M.catalogProjection.resources() end
-    local boonList, rewardList, occurrenceList = nil, nil, nil
+    local boonList, rewardList, occurrenceList, rarityList = nil, nil, nil, nil
     if includeCatalogs ~= false then
       boonList, rewardList = M.catalogProjection.boons(), M.catalogProjection.rewards()
+      rarityList = M.catalogProjection.rarityOrder()
       occurrenceList = setmetatable({}, arrayMeta)
       if type(occurrenceTargets) == "table" and type(occurrenceTargetOrder) == "table" then
         for _, id in ipairs(occurrenceTargetOrder) do
@@ -7871,6 +7879,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
+      nativeRarityOrder = rarityList,
       occurrenceTargets = occurrenceList,
       lastAction = actionLedger.latestReceipt() or jsonNull,
       runtimeOutcomeUnknown = not not M.terminalActionUnknown,
