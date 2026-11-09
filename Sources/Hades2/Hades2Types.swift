@@ -67,6 +67,11 @@ extension Sequence where Element == BoonOption {
 
 /// The rarity and level one exact acquisition request carries. A nil rarity
 /// is omitted: the target takes none.
+enum Hades2AcquisitionTarget: String, Equatable {
+    case exact
+    case chaos
+}
+
 struct Hades2Acquisition: Equatable {
     let rarity: String?
     let level: Int
