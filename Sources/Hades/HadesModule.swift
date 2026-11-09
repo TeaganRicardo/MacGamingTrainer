@@ -44,6 +44,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var acquisitionTarget: HadesAcquisitionTarget = .exact
     @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
     private var resolvedAcquisitionSignature: String?
+    private var acquisitionLevelIdentity: String?
     @Published private(set) var traitNames: [String: [String: String]] = [:]
     @Published private(set) var target: HadesHeroTarget?
     @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
@@ -342,6 +343,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             target.rawValue, option.id, option.rarities.joined(separator: ","),
             target == .chaos ? selectedChaosCurse : ""
         ].joined(separator: "|")
+        // A number draft belongs to a particular acquisition target. A new
+        // catalog observation for the same target must not clear a focused
+        // edit; switching target identity must reset its level before Apply.
+        let levelIdentity = target.rawValue + "|" + option.id
+        if acquisitionLevelIdentity != levelIdentity {
+            if acquisitionLevelIdentity != nil { acquisitionLevel = "1" }
+            acquisitionLevelIdentity = levelIdentity
+        }
         let changed = previousTarget != target || resolvedAcquisitionSignature != signature
         let resolved = TrainerAcquisitionRarity.resolve(
             previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
