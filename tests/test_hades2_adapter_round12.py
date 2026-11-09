@@ -240,8 +240,14 @@ finally:
 # Offline desired profile semantics survived the module move.
 state = a.set_desired('infiniteMoney', True)
 assert state['infiniteMoney'] is True and a.preferences['infiniteMoney'] is True
-state = a.set_next_room_reward_desired('WeaponUpgrade')
-assert state['nextRoomReward'] == 'WeaponUpgrade'
+# A disconnected next-room action cannot become offline desired state.
+try:
+    a.set_next_room_reward_once('WeaponUpgrade', 'offline-attempt')
+except AdapterError as error:
+    assert error.code == 'disconnected'
+else:
+    raise AssertionError('disconnected next-room command was accepted')
+assert 'nextRoomReward' not in a.preferences
 
 saved = a.save_profile('模块化测试', {
     'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'},
