@@ -80,7 +80,7 @@ enum Hades2Request {
         case .setElement: return .setElement
         case .lockElement: return .lockElement
         case .setBoonRarity: return .setBoonRarityDesired
-        case .setNextRoomReward: return .setNextRoomRewardDesired
+        case .setNextRoomReward: return .setNextRoomRewardOnce
         case .setNextOccurrence: return .setNextOccurrenceDesired
         case .spawnReward, .acquireExactBoon: return .spawnReward
         case .acquireChaosPair: return .acquireChaosPair
@@ -279,7 +279,7 @@ final class Hades2API {
         if let saveDraftEntryIDs { params["draftEntryIds"] = saveDraftEntryIDs }
         let offlineIntent = !runtimeConnected && [
             .resetDesired, .setDesired, .setGatheringDesired, .setChaosGateDesired,
-            .setBoonRarityDesired, .setNextRoomRewardDesired, .setNextOccurrenceDesired, .loadProfile,
+            .setBoonRarityDesired, .setNextOccurrenceDesired, .loadProfile,
         ].contains(request.command)
         session.send(
             request.command.rawValue,
