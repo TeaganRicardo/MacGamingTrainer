@@ -663,7 +663,12 @@ class Hades2Adapter(GameAdapter):
             raise AdapterError('disconnected','下一房奖励需要已连接的游戏会话。')
         if (self.state.get('capabilities') or {}).get('setFeature') is not True:
             raise AdapterError('waiting','当前场景无法设置下一房奖励。')
-        token=None if reward is None else 'one-shot-'+uuid.uuid4().hex
+        # Same Host request ID means same resident action identity. There is
+        # no durable retry; identity only prevents accidental re-arm if the
+        # transport ever presents the same request twice.
+        if not isinstance(request_id,str) or not request_id:
+            raise ValueError('下一房奖励请求标识无效。')
+        token=None if reward is None else 'one-shot-'+uuid.uuid5(uuid.NAMESPACE_URL,request_id).hex
         return self.execute('set_next_room_reward',{'reward':reward,'token':token})
 
     def set_next_occurrence_desired(self,target):
