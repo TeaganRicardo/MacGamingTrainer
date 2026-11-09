@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import math
@@ -16,33 +15,18 @@ from .schema import (
     MAX_AMOUNT,
     MULTIPLIER_RULES,
     MULTIPLIERS,
-    NEXT_ROOM_REWARD_MAX_LENGTH,
     NEXT_OCCURRENCE_MAX_LENGTH,
     STAT_RULES,
     TOGGLES,
     default_boon_rarity,
     desired_feature_defaults,
-    is_valid_next_room_reward,
     is_valid_next_occurrence_target,
     normalize_desired_feature_value,
     normalize_gathering_probabilities,
     normalize_chaos_gate_probability,
 )
 
-NEXT_ROOM_REWARD_MIGRATIONS = {
-    # Pre-1.0 / early-access reward identifiers retained by older trainer profiles.
-    'RoomRewardMoney': 'RoomMoneyDrop',
-    'RoomRewardMetaPoint': 'MetaCardPointsCommonDrop',
-    'RoomRewardPsyche': 'MemPointsCommonDrop',
-    'RoomRewardMaxHealth': 'MaxHealthDrop',
-    'RoomRewardPom': 'StackUpgrade',
-    # There is no current room-door equivalent for the old direct fabric reward.
-    'RoomRewardMixerFabric': None,
-    'RoomRewardTrash': None,
-}
-
-
-DESIRED_STATE_SCHEMA_VERSION = 11
+DESIRED_STATE_SCHEMA_VERSION = 12
 
 
 def _finite_number(value):
@@ -131,24 +115,6 @@ def _desired_schema_version(raw):
     return value
 
 
-def _legacy_next_room_reward_token(reward):
-    digest=hashlib.sha256(reward.encode('utf-8')).hexdigest()[:24]
-    return 'legacy-'+digest
-
-
-def migrate_legacy_next_room_reward(raw):
-    if not isinstance(raw,dict):return raw
-    result=dict(raw)
-    reward=result.get('nextRoomReward')
-    if is_valid_next_room_reward(reward):
-        reward=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
-    else:
-        reward=None
-    result['nextRoomReward']=reward
-    result['nextRoomRewardToken']=_legacy_next_room_reward_token(reward) if isinstance(reward,str) and reward else None
-    return result
-
-
 def migrate_legacy_invincibility_identity(raw):
     """Rename the retired Trainer invulnerability key at persistence boundaries only."""
     if not isinstance(raw,dict):return raw
@@ -157,17 +123,6 @@ def migrate_legacy_invincibility_identity(raw):
         result['invincibility']=result['godMode']
     result.pop('godMode',None)
     return result
-
-
-def next_room_reward_consumed(preferences, decoded, preference_dirty):
-    if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
-    reward=preferences.get('nextRoomReward')
-    if reward is None or decoded.get('nextRoomReward') is not None:return False
-    if not preference_dirty:return True
-    token=preferences.get('nextRoomRewardToken')
-    diagnostics=decoded.get('runtimeDiagnostics')
-    consumed=diagnostics.get('lastConsumedNextRoomRewardToken') if isinstance(diagnostics,dict) else None
-    return isinstance(token,str) and bool(token) and consumed==token
 
 
 def next_occurrence_consumed(preferences, decoded, preference_dirty):
@@ -217,8 +172,6 @@ def normalize_persisted_desired(raw, schema_version):
     migrated=dict(raw) if isinstance(raw,dict) else raw
     if schema_version < 3:
         migrated=migrate_legacy_boon_semantics(migrated,schema_version)
-    if schema_version < 4:
-        migrated=migrate_legacy_next_room_reward(migrated)
     if schema_version < 5:
         migrated=migrate_legacy_invincibility_identity(migrated)
     if schema_version < 6 and isinstance(migrated,dict):
@@ -234,6 +187,11 @@ def normalize_persisted_desired(raw, schema_version):
     if schema_version < 10 and isinstance(migrated,dict):
         migrated.pop('infiniteMoney',None)
         migrated.pop('infiniteRerolls',None)
+    if schema_version < 12 and isinstance(migrated,dict):
+        # Retire the old replayable reward intent. Historical pending actions
+        # must never become fresh game mutations after an app upgrade.
+        migrated.pop('nextRoomReward',None)
+        migrated.pop('nextRoomRewardToken',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
@@ -248,7 +206,7 @@ class Hades2PreferenceStore:
         values=desired_feature_defaults()
         values.update(
             boonRarity=default_boon_rarity(),
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,nextOccurrenceTarget=None,nextOccurrenceToken=None,gatheringProbabilities={},chaosGateProbability=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextOccurrenceTarget=None,nextOccurrenceToken=None,gatheringProbabilities={},chaosGateProbability=None,
         )
         return values
 
@@ -279,12 +237,6 @@ class Hades2PreferenceStore:
         if value is not None:result['rerollsLock']=value
         if result.get('infiniteRerolls'):
             result['rerollsLock']=None
-        reward=raw.get('nextRoomReward')
-        if is_valid_next_room_reward(reward):
-            result['nextRoomReward']=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
-        token=raw.get('nextRoomRewardToken')
-        if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
-            result['nextRoomRewardToken']=token
         occurrence=raw.get('nextOccurrenceTarget')
         occurrence_token=raw.get('nextOccurrenceToken')
         occurrence_token_valid=(
@@ -365,6 +317,9 @@ class Hades2PreferenceStore:
             # the legacy veto belongs to reading an older document, not to
             # writing the current one.
             document=canonicalize_damage(preferences,legacy_toggle_veto=False)
+            # Defense in depth against legacy callers passing a stale dict.
+            document.pop('nextRoomReward',None)
+            document.pop('nextRoomRewardToken',None)
             document['schemaVersion']=DESIRED_STATE_SCHEMA_VERSION
             payload=json.dumps(document,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n'
             atomic_write_text(self.path,payload)
