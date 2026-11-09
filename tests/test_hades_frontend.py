@@ -1825,46 +1825,54 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(requests("set_feature").suffix(2).compactMap { ($0["params"] as? [String:Any])?["value"] as? Bool } == [true,false],
               "the native switch did not send one enable and one disable intent")
 
-        // Resources use the Core editor: search, the catalog's grouped picker
-        // with bilingual names and counts, and an amount for the captured hero.
-        recordPhase("recovery: Core resource editor")
-        let resourcesTitle=HadesPresentation.text("hades.resources",language:.en)
-        func resourcePicker() -> NativeAccessibilityControl? {
-            nativeAccessibilityControls(host).first {
-                $0.role=="AXPopUpButton" && nativePickerHasName($0,resourcesTitle) && ($0.valueText ?? "").contains(" · ")
+        // All seven permanent resources use independent Core numeric inputs.
+        // No search or popup may gate direct editing, including while detached.
+        recordPhase("recovery: directly visible Core permanent resource rows")
+        let permanentResourceNames:[(String,String,String)] = [
+            ("MetaPoints","Darkness","黑暗"), ("Gems","Gemstones","宝石"),
+            ("LockKeys","Chthonic Key","冥府钥匙"), ("GiftPoints","Nectar","蜜露"),
+            ("SuperGems","Diamonds","钻石"), ("SuperGiftPoints","Ambrosia","仙酒"),
+            ("SuperLockKeys","Titan Blood","泰坦之血")
+        ]
+        func resourceField(_ id:String) -> NSTextField? {
+            guard let resource=permanentResourceNames.first(where:{$0.0==id}) else { return nil }
+            let primary=localization.language == .en ? resource.1 : resource.2
+            let secondary=localization.language == .en ? resource.2 : resource.1
+            return fields(in:host).first { $0.accessibilityLabel()=="\(primary) · \(secondary)" }
+        }
+        func checkAllResourceRows(observed:Bool) {
+            host.layoutSubtreeIfNeeded();pump()
+            for (id,_,_) in permanentResourceNames {
+                let field=resourceField(id)
+                check(field != nil,"missing always-visible resource input: \(id)")
+                let expected=id=="Gems" && observed ? "12" : ""
+                check(field?.stringValue==expected,
+                      "unexpected resource observation: \(id), expected=\(expected)")
+                check(field?.isEnabled == (id=="Gems" && observed),
+                      "resource availability is inconsistent: \(id)")
             }
         }
-        let searchPlaceholder=localization.presentation("host.resource.searchPlaceholder")
-        let resourceSearch=requireNativeControl("Core resource search field",in:host) { view in
-            fields(in:view).first { $0.placeholderString==searchPlaceholder }
-        }
-        let amountTitle=localization.presentation("host.amount")
-        func resourceAmount() -> NSTextField? { fields(in:host).first { $0.accessibilityLabel()==amountTitle } }
-        check(resourcePicker()?.valueText=="Darkness · 黑暗 · —" && resourceAmount()?.stringValue=="",
-              "an unobserved catalog resource fabricated an amount")
-        let searchEditor=nativeEditor(resourceSearch,"Core resource search")
-        searchEditor.insertText("gem",replacementRange:searchEditor.selectedRange())
-        wait("resource search selects the first matching catalog resource") {
-            host.layoutSubtreeIfNeeded()
-            return resourcePicker()?.valueText=="Gemstones · 宝石 · 12" && resourceAmount()?.stringValue=="12"
-        }
-        window.makeFirstResponder(nil);pump()
+        checkAllResourceRows(observed:true)
         let resourceBaseline=requests("set_resource").count
-        nativeCommit(resourceAmount()!,"40")
-        wait("Core resource editor set_resource reply: 40 Gemstones observed") { !model.busy && model.resources["Gems"]==40 }
+        nativeCommit(resourceField("Gems")!,"40")
+        wait("Core resource row set_resource reply: 40 Gemstones observed") {
+            !model.busy && model.resources["Gems"]==40
+        }
         let resourceParams=requests("set_resource").last?["params"] as? [String:Any]
         check(requests("set_resource").count==resourceBaseline+1 && resourceParams?["resource"] as? String == "Gems"
               && resourceParams?["value"] as? Double == 40
               && (resourceParams?["target"] as? [String:String])?["heroId"]==liveHero,
               "Core resource commit lost its resource, amount or captured hero")
         host.layoutSubtreeIfNeeded();pump()
-        check(resourcePicker()?.valueText=="Gemstones · 宝石 · 40" && resourceAmount()?.stringValue=="40",
-              "the resource editor did not refresh its committed count")
+        check(resourceField("Gems")?.stringValue=="40","the Gems row did not refresh its committed count")
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
-        check(nativeAccessibilityControls(host).contains { $0.role=="AXPopUpButton" && $0.valueText=="宝石 · Gemstones · 40" },
+        check(resourceField("Gems")?.accessibilityLabel()=="宝石 · Gemstones",
               "the Chinese resource label was not 中文 · English")
+        for (id,_,_) in permanentResourceNames {
+            check(resourceField(id) != nil,"language change hid permanent resource: \(id)")
+        }
         localization.language = .en;host.layoutSubtreeIfNeeded();pump()
-        let amountField=resourceAmount()!
+        let amountField=resourceField("Gems")!
         let amountCoordinator=amountField.delegate as! TrainerTextField.Coordinator
         amountCoordinator.begin();amountField.stringValue="41"
         amountCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:amountField))
@@ -1876,12 +1884,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "a stale resource draft mutated the replacement hero or kept its draft")
         try updateState(hero:liveHero,health:model.health ?? 1)
         model.refreshFromHost();wait("resource editor hero restored") { !model.busy && model.target?.heroId==liveHero }
-        let clearingEditor=nativeEditor(resourceSearch,"Core resource search")
-        clearingEditor.selectAll(nil);clearingEditor.insertText("",replacementRange:clearingEditor.selectedRange())
-        window.makeFirstResponder(nil)
-        wait("cleared resource search keeps the selected resource") {
-            host.layoutSubtreeIfNeeded()
-            return resourcePicker()?.valueText=="Gemstones · 宝石 · 40"
+        for (id,_,_) in permanentResourceNames {
+            check(resourceField(id) != nil,"editing a row hid permanent resource: \(id)")
         }
 
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
@@ -1953,8 +1957,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
             let desiredDash=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.dashBonus",language:.en) }
             check(desiredDash?.stringValue=="3" && desiredDash?.isEnabled==true,
                   "the desired multiplier was hidden or gated by the missing hero (connected=\(connected))")
-            check(nativeAccessibilityControls(host).contains { $0.role=="AXPopUpButton" && $0.valueText=="Gemstones · 宝石 · —" },
-                  "the resource editor kept a count without an observation (connected=\(connected))")
+            for (id,_,_) in permanentResourceNames {
+                let field=resourceField(id)
+                check(field != nil && field?.stringValue=="" && field?.isEnabled==false,
+                      "an offline or unobserved permanent resource was hidden/editable: \(id), connected=\(connected)")
+            }
             model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
             let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
             model.performShortcut(HadesShortcutAction.disableAll.rawValue)
