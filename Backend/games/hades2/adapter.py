@@ -652,7 +652,7 @@ class Hades2Adapter(GameAdapter):
             return result
         return dict(self.state)
 
-    def set_next_room_reward_once(self,reward):
+    def set_next_room_reward_once(self,reward,request_id):
         """Arm/cancel one native next-generated-room override, never durable or replayed.
 
         The resident consumes its own token at the next eligible room start.
