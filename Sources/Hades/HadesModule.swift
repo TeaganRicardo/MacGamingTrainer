@@ -310,7 +310,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func acquisitionOption(_ target: HadesAcquisitionTarget) -> HadesCatalogEntry? {
         switch target {
         case .exact:
-            return catalog.first { $0.id == selectedExactTrait && $0.kind != "curse" }
+            return catalog.first { $0.id == selectedExactTrait && $0.kind != "curse" && $0.kind != "chaos" }
         case .chaos:
             return catalog.first { $0.id == selectedChaosBlessing && $0.kind == "chaos" }
         }
@@ -365,7 +365,6 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     private var selectedAcquisitionRarity: String? {
         let options = acquisitionRarityOptions
-        if options.isEmpty { return "Common" } // Hades I native requires Common for traits without RarityLevels.
         return options.contains(acquisitionRarity) ? acquisitionRarity : nil
     }
 

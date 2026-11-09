@@ -343,7 +343,7 @@ struct HadesTrainerView: View {
                 ForEach(permanentResources) { resource in
                     TrainerLabeledControlRow(
                         title: resourceLabel(resource),
-                        icon: HadesResourceIcon.systemName(for: resource.id),
+                        glyph: HadesResourceIcon.glyph(for: resource.id),
                         tint: model.canMutate ? theme.accent : theme.inactive,
                         emphasized: model.canMutate
                     ) {
@@ -400,7 +400,7 @@ private struct HadesCatalogView: View {
     }
 
     private var matches: [HadesCatalogEntry] {
-        model.catalog.filter { $0.kind != "curse" && $0.matches(query) }
+        model.catalog.filter { $0.kind != "curse" && $0.kind != "chaos" && $0.matches(query) }
     }
 
     private func sourceID(_ entry: HadesCatalogEntry) -> String {
@@ -410,7 +410,7 @@ private struct HadesCatalogView: View {
     }
 
     private var sourceGroups: [SourceGroup] {
-        let kinds = ["boon", "hammer", "chaos", "temporary", "special", "keepsake", "companion"]
+        let kinds = ["boon", "hammer", "temporary", "special", "keepsake", "companion"]
         return Dictionary(grouping: matches, by: sourceID).map { id, entries in
             SourceGroup(id: id, kind: entries[0].kind, entries: entries)
         }.sorted { lhs, rhs in
@@ -435,6 +435,14 @@ private struct HadesCatalogView: View {
     private var selectedChaosBlessing: HadesCatalogEntry? {
         chaosBlessings.first { $0.id == model.selectedChaosBlessing }
     }
+    /// Resolve native names once for both exact and Chaos acquisition rows.
+    private func itemTitle(_ entry: HadesCatalogEntry) -> String {
+        let primary = entry.name(language: localization.language.rawValue)
+        guard localization.language == .zhCN,
+              let english = entry.names["en"], !english.isEmpty, english != primary else { return primary }
+        return "\(primary) · \(english)"
+    }
+
     private func text(_ key: String) -> String {
         HadesPresentation.text(key, language: localization.language)
     }
@@ -542,7 +550,7 @@ private struct HadesCatalogView: View {
                     Picker(text("hades.chaosBlessing"), selection: $model.selectedChaosBlessing) {
                         if chaosBlessings.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                         ForEach(chaosBlessings) { entry in
-                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
+                            Text(itemTitle(entry)).tag(entry.id)
                         }
                     }
                     .labelsHidden()
@@ -554,7 +562,7 @@ private struct HadesCatalogView: View {
                     Picker(text("hades.chaosCurse"), selection: $model.selectedChaosCurse) {
                         if chaosCurses.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                         ForEach(chaosCurses) { entry in
-                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
+                            Text(itemTitle(entry)).tag(entry.id)
                         }
                     }
                     .labelsHidden()
@@ -596,7 +604,7 @@ private struct HadesCatalogView: View {
                     Picker(text("hades.selectTrait"), selection: $model.selectedExactTrait) {
                         if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                         ForEach(selectedEntries) { entry in
-                            Text(entry.name(language: localization.language.rawValue)).tag(entry.id)
+                            Text(itemTitle(entry)).tag(entry.id)
                         }
                     }
                     .labelsHidden()
@@ -612,22 +620,6 @@ private struct HadesCatalogView: View {
                     widthRole: .compactRow
                 ) {
                     _ = model.acquireSelectedTrait()
-                }
-            }
-            if let selected {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(selected.name(language: localization.language.rawValue))
-                        .font(.subheadline.weight(.semibold))
-                    if !selected.description(language: localization.language.rawValue).isEmpty {
-                        Text(selected.description(language: localization.language.rawValue))
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if selected.kind == "keepsake" || selected.kind == "companion" {
-                        Text(text("hades.equipmentAcquireHelp"))
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
             }
         }

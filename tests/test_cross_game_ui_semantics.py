@@ -437,3 +437,17 @@ for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryA
     assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))" in owner
 
 print("cross_game_ui_semantics_ok")
+
+# #706: one Chaos pair row and no duplicate direct Chaos acquisition,
+# with native Chinese/English names for each selected acquisition item.
+hades_catalog_view = hades_view.split("private struct HadesCatalogView:", 1)[1].split(
+    "private struct HadesCurrentTraitsPanel:", 1
+)[0]
+hades_model_source = (ROOT / "Sources/Hades/HadesModule.swift").read_text()
+assert 'model.catalog.filter { $0.kind != "curse" && $0.kind != "chaos" && $0.matches(query) }' in hades_catalog_view
+assert '["boon", "hammer", "temporary", "special", "keepsake", "companion"]' in hades_catalog_view
+assert 'catalog.first { $0.id == selectedExactTrait && $0.kind != "curse" && $0.kind != "chaos" }' in hades_model_source
+assert "private func itemTitle(_ entry: HadesCatalogEntry)" in hades_catalog_view
+assert 'let english = entry.names["en"]' in hades_catalog_view
+assert hades_catalog_view.count("Text(itemTitle(entry))") == 3
+assert 'if options.isEmpty { return "Common" }' not in hades_model_source
