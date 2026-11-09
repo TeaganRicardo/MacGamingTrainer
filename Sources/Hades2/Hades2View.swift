@@ -1405,6 +1405,7 @@ struct Hades2TrainerView: View {
                             return String(level)
                         }
                     )
+                    .id(model.acquisitionTarget.rawValue + "|" + model.acquisitionTargetDescription)
                 }
                 Spacer(minLength: 0)
                 Text(model.acquisitionTarget == .chaos
