@@ -1218,8 +1218,8 @@ struct Hades2TrainerView: View {
     private var nextRoomRewardPanel: some View {
         TrainerLabeledControlRow(
             title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
-            tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired,
+            tint: model.canSetNextRoomReward ? theme.accent : theme.inactive,
+            emphasized: model.canSetNextRoomReward,
             layout: .pickerAction
         ) {
             Picker(text("hades2.nextRoom.title"), selection: $model.selectedNextRoomReward) {
@@ -1239,12 +1239,12 @@ struct Hades2TrainerView: View {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }
-            .labelsHidden().trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)
+            .labelsHidden().trainerPicker(.rowAction, state: model.canSetNextRoomReward ? .interactive : .unavailable)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
-                enabled: model.canEditDesired
+                enabled: model.canSetNextRoomReward
             ) {
                 model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward)
             }
