@@ -269,6 +269,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var shuttingDown = false
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
+    // The next-room override is a live, single-delivery runtime command.
+    // Offline intent is deliberately unsupported; there is no replay owner.
+    var canSetNextRoomReward: Bool { canSetFeature && protocolCompatible && canAcceptRuntimeAction }
     var canEditDesired: Bool { backendAvailable && !exiting }
     func canSetVital(_ vital: String) -> Bool {
         let key: String
@@ -1393,8 +1396,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
 
     func setNextRoomReward(_ reward: String?, completion: ((Bool) -> Void)? = nil) {
-        guard canEditDesired else { return }
-        nextRoomReward = reward
+        guard canSetNextRoomReward else { completion?(false); return }
+        // Resident status, rather than an optimistic Host edit, owns the
+        // pending native one-shot. A lost reply must never trigger replay.
         send(.setNextRoomReward(reward),
              title: reward == nil ? "hades2.op.clearNextRoom" : "hades2.op.setNextRoom",
              completion: completion)
@@ -1879,9 +1883,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
         case .applyNextRoomReward:
-            // Applying this durable one-shot mints a consumption token.
-            // Key repeat must not replace an unacknowledged token.
-            guard canEditDesired && canAcceptRuntimeAction else {
+            // Applying a live one-shot arms the resident for one generated
+            // room; never queue it as offline desired state.
+            guard canSetNextRoomReward else {
                 rejectShortcut(action)
                 return
             }
