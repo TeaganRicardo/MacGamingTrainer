@@ -19,13 +19,24 @@ for resource_id, symbol in expected_symbols.items():
 assert len(set(expected_symbols.values())) == len(expected_symbols)
 assert "default: TrainerSemanticIcon.Concept.item" in icons  # unknown/future fallback only
 
-# Resource rows were replaced by Hades II's shared resource editor: one picker
-# fed by the game-owned catalog, with no per-row glyph or fabricated lock.
+# #706 keeps all seven native permanent resources directly visible, each
+# with its own Core number control, the native resource icon and no fake lock.
 view = (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 resources = view.split("private var resourcesSection:", 1)[1].split("private var managementSection:", 1)[0]
-assert "TrainerResourceEditor(" in resources
-assert "lock: nil" in resources
-assert "model.resourceCatalog" in resources
+fallbacks = view.split("private static let permanentResourceFallbacks:", 1)[1].split(
+    "private var resourcesSection:", 1
+)[0]
+assert all(f'.init(id: "{resource_id}"' in fallbacks for resource_id in expected_symbols)
+assert "ForEach(permanentResources)" in resources
+assert "TrainerLabeledControlRow(" in resources
+assert "TrainerNumberField(" in resources
+assert "HadesResourceIcon.systemName(for: resource.id)" in resources
+assert 'draft(.resource(resource.id))' in resources
+assert "model.resources[resource.id] != nil" in resources
+assert "enabled: model.canMutate" in resources
+assert "model.resourceCatalog" in fallbacks
+assert "TrainerResourceEditor(" not in resources
+assert "TrainerLockButton(" not in resources
 assert "HadesValueRow" not in view
 
 navigation = (ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift").read_text()
