@@ -1366,23 +1366,78 @@ struct Hades2TrainerView: View {
         }.trainerGroupedRows()
     }
 
-    private var boonAcquisitionPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                TrainerIconLabel(
-                    title: text("hades2.spawn.exactBoons"),
-                    icon: Hades2WorkbenchIcon.exactBoons,
-                    tint: theme.accent,
-                    emphasized: true
-                )
-                Spacer()
-                TrainerSearchField(
-                    text: $exactSearch,
-                    placeholder: text("hades2.spawn.search"),
-                    clearLabel: localization.localized("host.search.clear")
-                )
-                .frame(maxWidth: 280)
+    /// Session-only settings for the currently active acquisition target.
+    /// Neither the source nor the displayed rarity is the natural-offer policy.
+    private var acquisitionSettingsRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades2.acquisition.rarity"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker(text("hades2.acquisition.rarity"), selection: Binding(
+                        get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
+                        set: { model.selectAcquisitionRarity($0) }
+                    )) {
+                        if !model.acquisitionAllowsCallerRarity {
+                            Text(text("hades2.acquisition.gameControlled")).tag("")
+                        }
+                        ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
+                            Text(traitRarityLabel(rarity)).tag(rarity)
+                        }
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text("hades2.acquisition.level"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    TrainerNumberField(
+                        text: $model.acquisitionLevel,
+                        accessibilityLabel: text("hades2.acquisition.level"),
+                        accessibilityIdentifier: "hades2.acquisition.level",
+                        width: 76,
+                        enabled: model.acquisitionSupportsLevel,
+                        onCommit: { value in
+                            guard let level = Int(value.text), (1...999_999).contains(level) else {
+                                return value.rejected(message: text("hades2.acquisition.invalidLevel"))
+                            }
+                            return String(level)
+                        }
+                    )
+                }
+                Spacer(minLength: 0)
+                Text(model.acquisitionTarget == .chaos
+                     ? text("hades2.spawn.chaosPair") : text("hades2.spawn.exactBoons"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+            if model.acquisitionRarityAdjustment != .none {
+                let key = model.acquisitionAllowsCallerRarity
+                    ? "hades2.acquisition.adjustedRarity"
+                    : "hades2.acquisition.gameControlledHint"
+                Text(model.acquisitionAllowsCallerRarity
+                     ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
+                     : text(key))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("hades2.acquisition.adjustment")
+            }
+        }
+    }
+
+    private var boonAcquisitionPanel: some View {
+        TrainerAcquisitionPanel(
+            title: text("hades2.spawn.exactBoons"),
+            icon: Hades2WorkbenchIcon.exactBoons,
+            search: $exactSearch,
+            searchPlaceholder: text("hades2.spawn.search"),
+            clearLabel: localization.localized("host.search.clear")
+        ) {
+            acquisitionSettingsRow
+        } rows: {
+            VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(text("hades2.spawn.chaosPair"))
                     .font(.caption.weight(.medium))
@@ -1494,7 +1549,15 @@ struct Hades2TrainerView: View {
             .onAppear { repairExactSourceSelection() }
             .onChange(of: exactSearch) { _, _ in repairExactSourceSelection() }
             .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairExactSourceSelection() }
-        }.trainerPanel()
+            }
+        }
+        .onChange(of: model.selectedExactBoon) { _, _ in model.activateAcquisition(.exact) }
+        .onChange(of: model.selectedChaosBlessing) { _, _ in model.activateAcquisition(.chaos) }
+        .onChange(of: model.selectedChaosCurse) { _, _ in model.activateAcquisition(.chaos) }
+        .onChange(of: model.nativeRarityOrder) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
+        .onChange(of: model.exactBoonOptions.map { $0.id + ":" + $0.rarities.joined(separator: ",") }) { _, _ in
+            model.activateAcquisition(model.acquisitionTarget)
+        }
     }
 
     private var currentRunEffectsPanel: some View {
