@@ -34,6 +34,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var worldTerms: [String: [String: String]] = [:]
     @Published private(set) var catalog: [HadesCatalogEntry] = []
     @Published private(set) var resourceCatalog: [HadesResourceDefinition] = []
+    /// Exactly one session-scoped row controls acquisition rarity/level.
+    @Published var selectedExactTrait = ""
+    @Published var selectedChaosBlessing = ""
+    @Published var selectedChaosCurse = ""
+    @Published var acquisitionRarity = "Heroic"
+    @Published var acquisitionLevel = "1"
+    @Published var acquisitionEncounters = "3"
+    @Published private(set) var acquisitionTarget: HadesAcquisitionTarget = .exact
+    @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
+    private var resolvedAcquisitionSignature: String?
     @Published private(set) var traitNames: [String: [String: String]] = [:]
     @Published private(set) var target: HadesHeroTarget?
     @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
@@ -296,8 +306,98 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         return worldAction("spawn_reward", roomID: world?.roomId, params: ["reward": reward],
                            operation: "hades.spawnReward", completion: completion)
     }
+    private func acquisitionOption(_ target: HadesAcquisitionTarget) -> HadesCatalogEntry? {
+        switch target {
+        case .exact:
+            return catalog.first { $0.id == selectedExactTrait && $0.kind != "curse" }
+        case .chaos:
+            return catalog.first { $0.id == selectedChaosBlessing && $0.kind == "chaos" }
+        }
+    }
+
+    var acquisitionRarityOptions: [String] { acquisitionOption(acquisitionTarget)?.rarities ?? [] }
+    var acquisitionSupportsLevel: Bool {
+        acquisitionTarget == .exact && acquisitionOption(.exact)?.supportsLevel == true
+    }
+    var acquisitionAllowsCallerRarity: Bool { !acquisitionRarityOptions.isEmpty }
+
+    func selectAcquisitionRarity(_ rarity: String) {
+        guard acquisitionRarityOptions.contains(rarity) else { return }
+        acquisitionRarity = rarity
+        acquisitionRarityAdjustment = .none
+    }
+
+    /// Revalidate before applying, including a hotkey invoked from the other
+    /// action. An adjusted value must be visible before the next one-shot.
+    @discardableResult
+    func activateAcquisition(_ target: HadesAcquisitionTarget, confirmationRequired: Bool = false) -> Bool {
+        let previousTarget = acquisitionTarget
+        acquisitionTarget = target
+        guard let option = acquisitionOption(target) else {
+            acquisitionRarityAdjustment = .none
+            resolvedAcquisitionSignature = nil
+            return false
+        }
+        let signature = [
+            target.rawValue, option.id, option.rarities.joined(separator: ","),
+            target == .chaos ? selectedChaosCurse : ""
+        ].joined(separator: "|")
+        let changed = previousTarget != target || resolvedAcquisitionSignature != signature
+        let resolved = TrainerAcquisitionRarity.resolve(
+            previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
+            supported: option.rarities,
+            nativeOrder: ["Common", "Rare", "Epic", "Heroic", "Duo", "Legendary"]
+        )
+        if let rarity = resolved.rarity { acquisitionRarity = rarity }
+        if changed { acquisitionRarityAdjustment = resolved.adjustment }
+        resolvedAcquisitionSignature = signature
+        return !(confirmationRequired && changed && resolved.requiresVisibleConfirmation)
+    }
+
+    private var selectedAcquisitionRarity: String? {
+        let options = acquisitionRarityOptions
+        if options.isEmpty { return "Common" } // Hades I native requires Common for traits without RarityLevels.
+        return options.contains(acquisitionRarity) ? acquisitionRarity : nil
+    }
+
+    @discardableResult
+    func acquireSelectedTrait(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMutate && canAcceptRuntimeAction,
+              let trait = acquisitionOption(.exact), trait.acquirable != false,
+              activateAcquisition(.exact, confirmationRequired: true),
+              let rarity = selectedAcquisitionRarity else { return false }
+        let level: Int
+        if trait.supportsLevel {
+            guard let amount = Int(acquisitionLevel), (1...100).contains(amount) else { return false }
+            level = amount
+        } else {
+            level = 1
+        }
+        return sendToHero(
+            "add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level],
+            target: target, operation: "hades.acquire", completion: completion
+        )
+    }
+
+    @discardableResult
+    func acquireSelectedChaosPair(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMutate && canAcceptRuntimeAction,
+              let blessing = acquisitionOption(.chaos), blessing.acquirable != false,
+              catalog.contains(where: { $0.id == selectedChaosCurse && $0.kind == "curse" }),
+              activateAcquisition(.chaos, confirmationRequired: true),
+              let rarity = selectedAcquisitionRarity,
+              let encounters = Int(acquisitionEncounters), (1...100).contains(encounters) else { return false }
+        return sendToHero(
+            "add_chaos_pair",
+            params: ["blessing": blessing.id, "curse": selectedChaosCurse,
+                     "rarity": rarity, "encounters": encounters],
+            target: target, operation: "hades.chaosPair", completion: completion
+        )
+    }
+
     func addTrait(_ trait: HadesCatalogEntry, rarity: String, level: Int) {
-        sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level], target: target, operation: "hades.acquire")
+        sendToHero("add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level],
+                   target: target, operation: "hades.acquire")
     }
     func updateTrait(_ trait: HadesCurrentTrait, rarity: String, level: Int, target: HadesHeroTarget?) {
         sendToHero("update_trait", params: ["instanceId": trait.instanceId, "rarity": rarity, "level": level], target: target, operation: "hades.apply")
@@ -309,6 +409,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         sendToHero("add_chaos_pair", params: ["blessing": blessing.id, "curse": curse,
                    "rarity": rarity, "encounters": encounters], target: target, operation: "hades.chaosPair")
     }
+
     func setTraitUses(_ trait: HadesCurrentTrait, uses: Int, target: HadesHeroTarget?) {
         sendToHero("set_trait_uses", params: ["instanceId": trait.instanceId, "uses": uses],
                    target: target, operation: "hades.remainingUses")
@@ -583,6 +684,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             let decoded = try JSONDecoder().decode(HadesCatalogPayload.self, from: data)
             catalog = decoded.catalog
             resourceCatalog = decoded.resourceCatalog
+            resolvedAcquisitionSignature = nil
+            if !catalog.contains(where: { $0.id == selectedChaosBlessing && $0.kind == "chaos" }) {
+                selectedChaosBlessing = catalog.first { $0.kind == "chaos" }?.id ?? ""
+            }
+            if !catalog.contains(where: { $0.id == selectedChaosCurse && $0.kind == "curse" }) {
+                selectedChaosCurse = catalog.first { $0.kind == "curse" }?.id ?? ""
+            }
             traitNames = decoded.traitNames ?? [:]
             worldRewards = decoded.worldRewards ?? []
             worldTerms = decoded.worldTerms ?? [:]
