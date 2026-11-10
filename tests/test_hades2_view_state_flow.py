@@ -173,10 +173,10 @@ struct Main {
                     if commands(at: commandLog).count > oldCount && !sliderModel.busy { break }
                 }
                 guard commands(at: commandLog).count > oldCount && !sliderModel.busy else {
-                    fail("speed observation refresh did not complete: \\(mode)")
+                    fail("speed observation refresh did not complete: \(mode)")
                 }
                 guard sliderModel.appliedGameSpeed == expected else {
-                    fail("speed observation \\(mode): expected \\(String(describing: expected)), got \\(String(describing: sliderModel.appliedGameSpeed))")
+                    fail("speed observation \(mode): expected \(String(describing: expected)), got \(String(describing: sliderModel.appliedGameSpeed))")
                 }
             }
             try checkObservedSpeed("empty", nil)
