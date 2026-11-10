@@ -712,11 +712,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !connected || (patch.pid.isPresent && oldPID != pid) {
             appliedGameSpeed = nil
         }
-        if let runtimeDiagnostics, runtimeDiagnostics.keys.contains("gameSpeedAppliedValue") {
-            let reported = (runtimeDiagnostics["gameSpeedAppliedValue"] as? NSNumber)?.doubleValue
+        // A present diagnostics object is an authoritative snapshot for
+        // speed observation, including an empty dictionary or invalid value.
+        // Only an entirely absent field is a sparse reply to preserve.
+        if payload.keys.contains("runtimeDiagnostics") {
+            let reported = (runtimeDiagnostics?["gameSpeedAppliedValue"] as? NSNumber)?.doubleValue
             appliedGameSpeed = connected && (reported?.isFinite == true) ? reported : nil
-        } else if payload.keys.contains("runtimeDiagnostics") && runtimeDiagnostics == nil {
-            appliedGameSpeed = nil
         }
         if let value = patch.version { version = value }
         if let value = patch.currentRunTraits { currentRunTraits = value }

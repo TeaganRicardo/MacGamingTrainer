@@ -40,8 +40,17 @@ for raw in sys.stdin:
         speed=float(speed_path.read_text())
         if command=='set_desired' and params.get('feature')=='gameSpeed':
             speed=params['value'];speed_path.write_text(str(speed))
-        result.update(gameSpeed=speed, featureSupport={'gameSpeed':True},
-                      runtimeDiagnostics={'gameSpeedAppliedValue': speed})
+        result.update(gameSpeed=speed, featureSupport={'gameSpeed':True})
+        observation_mode_path=log_path.with_suffix('.speed_observation')
+        observation_mode=observation_mode_path.read_text() if observation_mode_path.exists() else 'valid'
+        if observation_mode=='empty':
+            result['runtimeDiagnostics']={}
+        elif observation_mode=='invalid':
+            result['runtimeDiagnostics']={'gameSpeedAppliedValue': 'unknown'}
+        elif observation_mode=='null':
+            result['runtimeDiagnostics']={'gameSpeedAppliedValue': None}
+        elif observation_mode!='omitted':
+            result['runtimeDiagnostics']={'gameSpeedAppliedValue': speed}
     disclosure_path=log_path.with_suffix('.disclosure')
     if disclosure_path.exists():
         result.update(gameSpeed=1.0,featureSupport={'gameSpeed':int(disclosure_path.read_text())>0})
@@ -151,6 +160,31 @@ struct Main {
             guard sliderModel.appliedGameSpeed == 1.0 else {
                 fail("Hades II speed caption did not receive the verified helper observation")
             }
+            // Exercise the real backend reply projection: an omitted field is
+            // sparse; an explicit empty/invalid diagnostic revokes an old value.
+            let observationModeURL = commandLog.deletingPathExtension().appendingPathExtension("speed_observation")
+            func checkObservedSpeed(_ mode: String, _ expected: Double?) throws {
+                try mode.write(to: observationModeURL, atomically: true, encoding: .utf8)
+                let oldCount = commands(at: commandLog).count
+                sliderModel.refreshFromHost()
+                let deadline = Date().addingTimeInterval(4)
+                while Date() < deadline {
+                    pump(0.02)
+                    if commands(at: commandLog).count > oldCount && !sliderModel.busy { break }
+                }
+                guard commands(at: commandLog).count > oldCount && !sliderModel.busy else {
+                    fail("speed observation refresh did not complete: \\(mode)")
+                }
+                guard sliderModel.appliedGameSpeed == expected else {
+                    fail("speed observation \\(mode): expected \\(String(describing: expected)), got \\(String(describing: sliderModel.appliedGameSpeed))")
+                }
+            }
+            try checkObservedSpeed("empty", nil)
+            try checkObservedSpeed("valid", 1.0)
+            try checkObservedSpeed("omitted", 1.0)
+            try checkObservedSpeed("invalid", nil)
+            try checkObservedSpeed("null", nil)
+            try checkObservedSpeed("valid", 1.0)
             let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
             localization.language = .en
             localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
