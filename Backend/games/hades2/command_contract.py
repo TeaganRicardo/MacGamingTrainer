@@ -334,14 +334,6 @@ def _boon_rarity(raw):
     return config
 
 
-def _next_room_reward(raw):
-    params = _params(raw)
-    reward = params.get("reward")
-    if not is_valid_next_room_reward(reward):
-        raise ValueError("下一房奖励无效。")
-    return {"reward": reward}
-
-
 def _next_occurrence(raw):
     params = _params(raw)
     target = params.get("target")
@@ -539,10 +531,6 @@ def _chaos_gate_invoke(adapter, params):
     return adapter.set_chaos_gate_desired(params["probability"])
 
 
-def _next_room_invoke(adapter, params):
-    return adapter.set_next_room_reward_once(params["reward"],params["requestId"])
-
-
 def _next_occurrence_invoke(adapter, params):
     return adapter.set_next_occurrence_once(params["target"],params["requestId"])
 
@@ -673,13 +661,6 @@ _COMMAND_SPECS = (
         "set_boon_rarity_desired",
         validate=_boon_rarity,
         invoke=_boon_rarity_invoke,
-        reply_kind="patch",
-    ),
-    _spec(
-        "set_next_room_reward_once",
-        request_id=True,
-        validate=_next_room_reward,
-        invoke=_next_room_invoke,
         reply_kind="patch",
     ),
     _spec(
