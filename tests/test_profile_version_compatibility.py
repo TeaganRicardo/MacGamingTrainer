@@ -76,11 +76,12 @@ assert v3_shortcuts["invincibility"] == {"keyCode": 18, "modifiers": 6144, "keyL
 assert v3_shortcuts["infiniteHealth"] == {"keyCode": 19, "modifiers": 6144, "keyLabel": "2"}
 assert v3_shortcuts["disableAll"] == {"keyCode": 29, "modifiers": 6144, "keyLabel": "0"}
 
-assert loaded_by_name["profile-v4-desired-v3"]["desired"]["nextRoomRewardToken"].startswith("legacy-")
-assert (
-    loaded_by_name["profile-v4-desired-v4"]["desired"]["nextRoomRewardToken"]
-    == "profile-existing-v4-token"
-)
+for profile_name in ("profile-v4-desired-v3", "profile-v4-desired-v4", "profile-v5-desired-v4"):
+    desired = loaded_by_name[profile_name]["desired"]
+    assert "nextRoomReward" not in desired
+    assert "nextRoomRewardToken" not in desired
+    assert "nextOccurrenceTarget" not in desired
+    assert "nextOccurrenceToken" not in desired
 assert loaded_by_name["profile-v5-desired-v4"]["desired"]["invincibility"] is True
 assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["desired"]
 assert loaded_by_name["profile-v5-desired-v4"]["shortcuts"]["invincibility"]["keyLabel"] == "X"
