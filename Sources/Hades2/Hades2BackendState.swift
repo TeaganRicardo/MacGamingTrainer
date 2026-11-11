@@ -70,8 +70,14 @@ struct Hades2WorldExit: Identifiable, Equatable {
     var id: String { doorToken }
 }
 
+struct Hades2WorldOccurrenceLease: Equatable {
+    let target: String
+    let leaseToken: String
+}
+
 struct Hades2WorldActionsSnapshot: Equatable {
     let exits: [Hades2WorldExit]
+    let occurrence: Hades2WorldOccurrenceLease?
 }
 
 /// Typed boundary between the untyped JSON transport envelope and Hades UI
@@ -97,7 +103,6 @@ struct Hades2StatePatch {
     let moneyMultiplier: Double?
     let resourceMultiplier: Double?
     let boonRarity: Hades2BoonRaritySnapshot?
-    let nextOccurrenceTarget: Hades2FieldPatch<String>
     let occurrenceTargets: [Hades2OccurrenceTarget]?
     let worldActions: Hades2FieldPatch<Hades2WorldActionsSnapshot>
     let rerolls: Hades2FieldPatch<Double>
@@ -165,7 +170,6 @@ struct Hades2StatePatch {
                 forceDuo: row["forceDuo"] as? Bool
             )
         } else { boonRarity = nil }
-        nextOccurrenceTarget = Self.field(payload, "nextOccurrenceTarget", String.self)
         if payload.keys.contains("worldActions") {
             worldActions = .present(Self.decodeWorldActions(payload["worldActions"]))
         } else {
@@ -386,7 +390,18 @@ struct Hades2StatePatch {
                 activeLease: lease
             )
         }
-        return Hades2WorldActionsSnapshot(exits: exits.sorted { $0.ordinal < $1.ordinal })
+        let occurrence: Hades2WorldOccurrenceLease?
+        if let value = row["occurrence"] as? [String: Any],
+           let target = value["target"] as? String, !target.isEmpty,
+           let token = value["leaseToken"] as? String, !token.isEmpty {
+            occurrence = Hades2WorldOccurrenceLease(target: target, leaseToken: token)
+        } else {
+            occurrence = nil
+        }
+        return Hades2WorldActionsSnapshot(
+            exits: exits.sorted { $0.ordinal < $1.ordinal },
+            occurrence: occurrence
+        )
     }
 
     private static func decodeProfile(_ row: [String: Any]) -> TrainerProfile? {
