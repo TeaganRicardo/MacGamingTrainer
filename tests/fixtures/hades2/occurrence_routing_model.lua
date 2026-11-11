@@ -198,6 +198,21 @@ DoUnlockRoomExits = function(run, room)
 end
 local nativeDoUnlockRoomExits = DoUnlockRoomExits
 
+-- Game-owned room admission. An exit being displayed in
+-- MapState.OfferedExitDoors is still a choice; entering it calls StartRoom.
+StartRoom = function(run, room)
+  assert(run == CurrentRun and type(room) == "table")
+  run.CurrentRoom = room
+  return room
+end
+local nativeStartRoom = StartRoom
+AttemptUseDoor = function(door)
+  if not door.ReadyToUse or door.SkipUnlock or not door.Room
+      or MapState.OfferedExitDoors[door.ObjectId] ~= door then return false end
+  return StartRoom(CurrentRun, door.Room)
+end
+local nativeAttemptUseDoor = AttemptUseDoor
+
 IsEncounterEligible = function(run, room, data, args)
   if type(data) ~= "table" then return false end
   if encounterEligible[data.Name] == false then return false end
