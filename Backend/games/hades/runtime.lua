@@ -1238,6 +1238,7 @@ end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
   local doorEpochs = setmetatable({}, { __mode = "k" })
+  local doorObservations = setmetatable({}, { __mode = "k" })
   local occurrenceRequest
   local occurrenceSelection
   local occurrenceGeneration
@@ -1295,12 +1296,20 @@ world = (function()
   end
   local activeEdit
   local function doorId(door)
-    -- Validate native identity *before* comparing a caller-supplied token.
-    -- A reroll can return reward fields to their previous values (ABA); its
-    -- revoked lease must advance the physical epoch first.
+    -- Native in-place mutation can return to an earlier reward signature (ABA)
+    -- even when no Trainer lease exists. Record every observed identity change,
+    -- while keeping a confirmed Trainer Apply/Cancel on its exact original token.
     local edit = activeEdit(door)
     if edit and edit.kind == "reward" then return edit.doorToken end
-    return physicalDoorId(door) .. ":" .. rewardSignature(door.Room)
+    local physical = physicalDoorId(door)
+    local signature = rewardSignature(door.Room)
+    local observed = doorObservations[door]
+    if observed and observed.physical == physical and observed.signature ~= signature then
+      doorEpochs[door] = (doorEpochs[door] or 0) + 1
+      physical = physicalDoorId(door)
+    end
+    doorObservations[door] = { physical = physical, signature = signature }
+    return physical .. ":" .. signature
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"

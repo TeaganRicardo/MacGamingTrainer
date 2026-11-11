@@ -264,6 +264,24 @@ assert(unassigned.Room.Name == "A_Combat02",
   "native first assignment failed for a door without a previous room")
 OfferedExitDoors[120] = nil
 originalRoom.OfferedRewards[120] = nil
+
+-- A native in-place reroll has no Trainer lease. Its observed reward history
+-- must still revoke the original token permanently, including a return to
+-- the exact original reward fields.
+local idleDoorToken = world().doors[1].doorToken
+local idleReward = firstRoom.ChosenRewardType
+firstRoom.ChosenRewardType = "Boon"; firstRoom.ForceLootName = "AthenaUpgrade"
+local changedIdleToken = world().doors[1].doorToken
+assert(changedIdleToken ~= idleDoorToken,
+  "native unleased reroll retained an earlier exact exit token")
+firstRoom.ChosenRewardType = idleReward; firstRoom.ForceLootName = nil
+assert(world().doors[1].doorToken ~= idleDoorToken,
+  "native unleased reward ABA revived the old exact exit token")
+fails("staleDoor", function()
+  runtime.apply_world_exit({ roomId = originalRoomId, doorToken = idleDoorToken,
+    kind = "reward", targetID = "AthenaUpgrade", requestId = "idle-native-aba" })
+end)
+
 local function hasTarget(door, kind, id)
   for _, target in ipairs(door.targets or {}) do
     if target.kind == kind and target.id == id then return true end
