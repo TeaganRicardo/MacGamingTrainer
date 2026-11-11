@@ -1374,22 +1374,54 @@ world = (function()
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
-  local function couldBeForced(room)
-    local randomChance = RandomChance
-    -- Status must not redraw native force chances. Protect every possible force.
-    RandomChance = function(chance) return chance > 0 end
-    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, {})
-    RandomChance = randomChance
+  local function couldBeForced(room, args)
+    local randomChance, randomValue = RandomChance, GetRandomValue
+    local randomInt, randomFloat = RandomInt, RandomFloat
+    local usedRandom = false
+    -- A read-only route probe must never advance the game's RNG. A positive
+    -- native chance is treated as forced; any other random API use fails closed.
+    RandomChance = function(chance)
+      if type(chance) == "number" and chance > 0 then
+        usedRandom = true
+        return true
+      end
+      return false
+    end
+    GetRandomValue = function(values, ...)
+      usedRandom = true
+      if type(values) == "table" then return values[1] end
+      return values
+    end
+    if type(randomInt) == "function" then
+      RandomInt = function(minimum) usedRandom = true; return minimum end
+    end
+    if type(randomFloat) == "function" then
+      RandomFloat = function(minimum) usedRandom = true; return minimum end
+    end
+    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, args or {})
+    RandomChance, GetRandomValue = randomChance, randomValue
+    if type(randomInt) == "function" then RandomInt = randomInt end
+    if type(randomFloat) == "function" then RandomFloat = randomFloat end
     if not ok then error(result, 0) end
-    return result
+    return usedRandom or result
   end
-  local function routeRooms(room)
+  local function routeRooms(room, door)
     local result = {}
+    local args = type(door) == "table" and door.ChooseRoomArgs or {}
+    if type(args) ~= "table" then return end
     if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
-        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return end
-    for name, data in pairs(RoomSetData[room.RoomSetName or "Tartarus"] or {}) do
-      if IsRoomEligible(CurrentRun, room, data, {}) then
-        if couldBeForced(data) then return end
+        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel
+        or room.ForceNextRoom or room.ForceNextRoomSet
+        or args.RoomDataSet or args.NextRoomSet or args.NextRoomSetNoGenerate
+        or args.UsePreviousRoomSet or args.ForceNextRoom or args.ForceNextRoomSet
+        or (type(door) == "table" and (door.ForceRoomName or door.ReturnToPreviousRoom
+          or door.ReturnToPreviousRoomName or door.UsePreviousRoomSet)) then return end
+    local roomSetName = args.RoomSetName or room.RoomSetName or "Tartarus"
+    local roomSet = RoomSetData[roomSetName]
+    if type(roomSet) ~= "table" then return end
+    for name, data in pairs(roomSet) do
+      if IsRoomEligible(CurrentRun, room, data, args) then
+        if couldBeForced(data, args) then return end
         local kind = routeKind(name)
         if kind then
           result[kind] = result[kind] or {}
