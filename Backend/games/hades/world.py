@@ -10,7 +10,7 @@ from .schema import RESOURCE_IDS, WORLD_COMMANDS, invalid_value, number
 _DATA = json.loads(Path(__file__).with_name('world_catalog.json').read_text())
 REWARDS = _DATA['rewards']
 ROUTES = frozenset(('combat', 'story', 'shop', 'reprieve', 'miniboss'))
-OCCURRENCES = frozenset(('thanatos',))
+OCCURRENCES = frozenset(('sisyphus', 'eurydice', 'patroclus', 'thanatos', 'charon'))
 # Names and Generate-row grouping are presentation only; the resident never
 # reads them, so they stay outside its definitions identity.
 _PRESENTATION_FIELDS = frozenset(('names', 'group', 'section', 'sectionNames'))
