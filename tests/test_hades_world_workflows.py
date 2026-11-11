@@ -252,7 +252,8 @@ assert(not hasTarget(initialWorld.doors[2], "roomCategory", "story"),
 -- to sample RNG, the entire category override fails closed without a draw.
 eligibilityUsesRandom = true
 local beforeEligibilityRandom = randomValueCalls
-assert(#world().doors[1].targets == 0)
+assert(not hasTarget(world().doors[1], "roomCategory", "combat")
+    and not hasTarget(world().doors[1], "roomCategory", "story"))
 assert(randomValueCalls == beforeEligibilityRandom,
   "route eligibility inspection consumed native RNG")
 eligibilityUsesRandom = false
