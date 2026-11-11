@@ -51,6 +51,50 @@ assert(seen["npc:Nemesis"].sourceId == "Nemesis" and seen["npc:Nemesis"].kind ==
 assert(seen["shop:Charon"].sourceId == "Charon" and seen["shop:Charon"].kind == "shop")
 print("occurrence_routing_ok")
 """,
+    "named_room_request_cannot_steer_multiple_ready_exits": r"""
+setRoomSet("F")
+-- Model a repeatable native room candidate. One Trainer occurrence lease
+-- must select only one exit even if native MaxCreationsThisRun does not bail us out.
+RoomData.F_Story01.MaxCreationsThisRun = nil
+setOccurrence("npc:Arachne", "one-room-on-two-exits")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local selected, claimed
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.ReadyToUse and door.Room.Name == "F_Story01" then
+    selected = (selected or 0) + 1
+    claimed = door
+  end
+end
+assert(selected == 1,
+  "one named occurrence request forced multiple generated native exits")
+assert(M.nextOccurrenceToken == "one-room-on-two-exits"
+    and M.lastConsumedNextOccurrenceToken == nil,
+  "offering one requested exit consumed the run-scoped request")
+AttemptUseDoor(claimed)
+assert(M.nextOccurrenceTarget == nil
+    and M.lastConsumedNextOccurrenceToken == "one-room-on-two-exits",
+  "named room one-shot did not consume on selected native admission")
+print("occurrence_routing_ok")
+""",
+    "replaced_named_room_exit_releases_its_selection_claim": r"""
+setRoomSet("F")
+RoomData.F_Story01.MaxCreationsThisRun = nil
+setOccurrence("npc:Arachne", "replace-before-entry")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local first
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.Room.Name == "F_Story01" then first = door end
+end
+assert(first, "named story room was not offered")
+AssignRoomToExitDoor(first, CreateRoom(RoomData.F_Combat01, {}))
+assert(M.nextOccurrenceTarget == "npc:Arachne",
+  "native replacement consumed an unentered room request")
+MapState.OfferedExitDoors[3] = { ObjectId = 3, ChooseRoomArgs = {} }
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[3].Room.Name == "F_Story01",
+  "replaced native room kept the named occurrence trapped in its old door")
+print("occurrence_routing_ok")
+""",
     "room_target_waits_for_native_eligibility_and_commits_on_start": r"""
 setRoomSet("F")
 roomEligible.F_Story01 = false
