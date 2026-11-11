@@ -199,6 +199,7 @@ local function fails(key, fn)
   local ok, err = pcall(fn); assert(not ok and tostring(err):find(key, 1, true), tostring(err))
 end
 local initialWorld = world()
+local originalRoomId = initialWorld.roomId
 assert(initialWorld.canFish and initialWorld.canChaos and #initialWorld.doors == 1)
 assert(originalRoom.FishingPointChanceSuccess == nil and originalRoom.SecretChanceSuccess == nil)
 runtime.gain_resource({ resource = "MetaPoints", amount = 7 })
