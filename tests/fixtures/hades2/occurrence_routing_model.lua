@@ -267,6 +267,10 @@ local nativeChooseEncounter = ChooseEncounter
 
 RecordEncounter = function(run, encounter)
   assert(run == CurrentRun and type(encounter) == "table" and type(encounter.Name) == "string")
+  run.EncountersOccurredCache = run.EncountersOccurredCache or {}
+  run.EncountersOccurredBiomeCache = run.EncountersOccurredBiomeCache or {}
+  run.EncountersDepthCache = run.EncountersDepthCache or {}
+  GameState.EncountersOccurredCache = GameState.EncountersOccurredCache or {}
   run.EncountersOccurredCache[encounter.Name] = (run.EncountersOccurredCache[encounter.Name] or 0) + 1
   GameState.EncountersOccurredCache[encounter.Name] =
     (GameState.EncountersOccurredCache[encounter.Name] or 0) + 1
