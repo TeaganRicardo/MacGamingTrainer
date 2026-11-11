@@ -22,7 +22,8 @@ enum Hades2Request {
     case setElement(element: String, amount: Int)
     case lockElement(element: String, locked: Bool)
     case setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool)
-    case setNextOccurrence(String?)
+    case applyWorldOccurrence(target: String)
+    case cancelWorldOccurrence(leaseToken: String)
     case applyWorldExit(doorToken: String, kind: String, target: String)
     case cancelWorldExit(doorToken: String, leaseToken: String)
     case spawnReward(String)
@@ -81,7 +82,8 @@ enum Hades2Request {
         case .setElement: return .setElement
         case .lockElement: return .lockElement
         case .setBoonRarity: return .setBoonRarityDesired
-        case .setNextOccurrence: return .setNextOccurrenceOnce
+        case .applyWorldOccurrence: return .applyWorldOccurrence
+        case .cancelWorldOccurrence: return .cancelWorldOccurrence
         case .applyWorldExit: return .applyWorldExit
         case .cancelWorldExit: return .cancelWorldExit
         case .spawnReward, .acquireExactBoon: return .spawnReward
@@ -174,8 +176,10 @@ enum Hades2Request {
         case .setBoonRarity(let target, let forceLegendary, let forceDuo):
             // Keep the v17 payload shape; the retired probability value is neutral.
             return ["target": target, "multiplier": 100, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
-        case .setNextOccurrence(let target):
-            return ["target": target ?? NSNull()]
+        case .applyWorldOccurrence(let target):
+            return ["target": target]
+        case .cancelWorldOccurrence(let leaseToken):
+            return ["leaseToken": leaseToken]
         case .applyWorldExit(let doorToken, let kind, let target):
             return ["doorToken": doorToken, "kind": kind, "target": target]
         case .cancelWorldExit(let doorToken, let leaseToken):
