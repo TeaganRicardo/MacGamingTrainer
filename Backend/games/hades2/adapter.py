@@ -33,7 +33,6 @@ from .schema import (
     default_boon_rarity,
     desired_feature_defaults,
     disconnected_capabilities,
-    is_valid_next_room_reward,
     is_valid_next_occurrence_target,
     normalize_gathering_probabilities,
     validate_gathering_desired,
