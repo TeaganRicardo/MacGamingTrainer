@@ -47,21 +47,26 @@ class AdapterProbe:
         self.runtime = RuntimeProbe()
         self.calls = []
 
-    def set_next_room_reward_once(self, reward, request_id):
-        self.calls.append(("reward", reward, request_id))
-        return {"nextRoomReward": reward}
+    def execute(self, command, params):
+        self.calls.append((command, dict(params)))
+        return {"worldActions": {"exits": []}}
 
     def set_next_occurrence_once(self, target, request_id):
-        self.calls.append(("occurrence", target, request_id))
+        self.calls.append(("set_next_occurrence_once", target, request_id))
         return {"nextOccurrenceTarget": target}
 
 probe = AdapterProbe()
 contract = Hades2CommandContract(probe)
 
 contract.dispatch(
-    "set_next_room_reward_once",
-    {"reward": "WeaponUpgrade"},
-    "world-reward-request",
+    "apply_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "kind": "reward", "target": "WeaponUpgrade"},
+    "world-exit-apply",
+)
+contract.dispatch(
+    "cancel_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1"},
+    "world-exit-cancel",
 )
 contract.dispatch(
     "set_next_occurrence_once",
@@ -69,11 +74,21 @@ contract.dispatch(
     "world-occurrence-request",
 )
 assert probe.calls == [
-    ("reward", "WeaponUpgrade", "world-reward-request"),
-    ("occurrence", "npc:Nemesis", "world-occurrence-request"),
+    ("apply_world_exit", {
+        "doorToken": "exit:1:2:3:4:5", "kind": "reward",
+        "target": "WeaponUpgrade", "requestId": "world-exit-apply",
+    }),
+    ("cancel_world_exit", {
+        "doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1",
+        "requestId": "world-exit-cancel",
+    }),
+    ("set_next_occurrence_once", "npc:Nemesis", "world-occurrence-request"),
 ]
 
-for retired in ("set_next_room_reward_desired", "set_next_occurrence_desired"):
+for retired in (
+    "set_next_room_reward_desired", "set_next_room_reward_once",
+    "set_next_occurrence_desired",
+):
     try:
         contract.dispatch(retired, {}, "retired-request")
     except Exception:
@@ -85,9 +100,8 @@ runtime = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="
 replay = runtime[runtime.index("runtimeConfig.preferenceReplayCommands = {"):runtime.index(
     "function M.dispatchBatch", runtime.index("runtimeConfig.preferenceReplayCommands = {")
 )]
-assert "set_next_room_reward" not in replay
+assert "set_next_room_reward" not in runtime
 assert "set_next_occurrence" not in replay
-assert "Next room reward cannot be preference-replayed" in runtime
 assert "Next occurrence cannot be preference-replayed" in runtime
 
 print("hades2_world_actions_not_durable_ok")
