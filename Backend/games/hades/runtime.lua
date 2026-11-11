@@ -1687,39 +1687,58 @@ world = (function()
       end
     end)
   end
-  function api.clearPending() encounters = setmetatable({}, { __mode = "k" }) end
+  function api.clearPending()
+    local source = currentRoom()
+    for door, lease in pairs(exitLeases) do
+      if lease.sourceRoom == source and lease.kind == "reward" then
+        restoreRewardLease(door, lease)
+      end
+      exitLeases[door] = nil
+    end
+    occurrenceLease = nil
+    selectedOccurrences = setmetatable({}, { __mode = "k" })
+  end
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
-    for target, intent in pairs(encounters) do
-      if intent.run ~= CurrentRun or intent.hero ~= hero() or intent.sourceRoom ~= room then encounters[target] = nil end
-    end
     local routes, doors = routeRooms(room), array()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
-        local options = array()
+        local targets = rewardTargets(door)
         if routes and canModify(door.Room) then
           for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
-            if routes[kind] then options[#options + 1] = kind end
+            if routes[kind] then targets[#targets + 1] = { kind = "roomCategory", id = kind } end
           end
-          if thanatos(door.Room) then options[#options + 1] = "thanatos" end
         end
-        local edit, encounter = edits[door], encounters[door.Room]
-        doors[#doors + 1] = { id = doorId(door), number = door.ObjectId,
+        local lease = activeExitLease(door)
+        doors[#doors + 1] = {
+          doorToken = doorToken(door), number = door.ObjectId,
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
-          canReward = canModify(door.Room),
-          routes = options, canRestore = edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door),
-          pendingEncounter = encounter ~= nil }
+          targets = targets,
+          activeLease = lease and {
+            kind = lease.kind, target = lease.target, leaseToken = lease.leaseToken,
+          } or nil,
+        }
       end
     end
     table.sort(doors, function(a, b) return a.number < b.number end)
+    local occurrenceTargets = array()
+    if occurrenceSupported() then occurrenceTargets[#occurrenceTargets + 1] = "thanatos" end
+    local pending = activeOccurrence()
     local objects = array()
     if type(HandleSecretSpawns) == "function" then
       for _, kind in ipairs({ "trove", "well", "purge" }) do
         if canGenerate(room, kind) then objects[#objects + 1] = kind end
       end
     end
-    return { roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room), objects = objects }
+    return {
+      roomId = roomId(room), doors = doors,
+      occurrenceTargets = occurrenceTargets,
+      occurrence = pending and {
+        target = pending.target, leaseToken = pending.leaseToken,
+      } or nil,
+      canFish = canFish(room), canChaos = canChaos(room), objects = objects,
+    }
   end
   function runtime.gain_resource(params)
     requireHero()
