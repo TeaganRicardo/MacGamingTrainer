@@ -1487,9 +1487,9 @@ world = (function()
     end
     return chanceEligible(room, owner.chance, callback)
   end
-  local function canModify(room)
+  local function canModify(room, args)
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
-      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
+      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room, args)
   end
   local function clearDoorPreview(door)
     local ids, seen = {}, {}
@@ -1565,20 +1565,22 @@ world = (function()
     assert(candidate, "hades.error.worldUnavailable")
     local proxy = DeepCopyTable(door.Room)
     proxy.Name = candidate.Name or proxy.Name
-    if candidate.ForcedReward ~= nil then
-      proxy.ChosenRewardType = candidate.ForcedReward
-      proxy.ForceLootName = nil
-    end
+    proxy.Reward = nil
+    proxy.ChosenRewardType = candidate.ChosenRewardType or candidate.ForcedReward
+    proxy.ForceLootName = candidate.ForceLootName
+    proxy.RewardStoreName = candidate.RewardStoreName or candidate.IndividualRewardStore
+      or candidate.ForcedRewardStore
+    proxy.OriginalChosenRewardType = nil
+    proxy.OriginalForceLootName = nil
     proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
     proxy.RewardPreviewFx = candidate.RewardPreviewFx
-    if candidate.RewardOverrides ~= nil then
-      proxy.RewardOverrides = DeepCopyTable(candidate.RewardOverrides)
-    end
+    proxy.RewardOverrides = type(candidate.RewardOverrides) == "table"
+      and DeepCopyTable(candidate.RewardOverrides) or nil
     return proxy
   end
   local function reserveRoute(door, route, leaseToken)
     assert(activeEdit(door) == nil, "hades.error.staleDoor")
-    local routes = routeRooms(currentRoom())
+    local routes = routeRooms(currentRoom(), door)
     local candidates = routes and routes[route]
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
     -- CreateDoorRewardPreview owns the game's real exit presentation. Give it a
@@ -1614,7 +1616,7 @@ world = (function()
   end
   local function applyRewardEdit(door, rewardId, leaseToken)
     local data = definition(rewardId)
-    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
+    assert(data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
     local reward, store = doorReward(door.Room, data)
     assert(reward, "hades.error.worldUnavailable")
     local room = DeepCopyTable(door.Room)
@@ -1629,7 +1631,7 @@ world = (function()
   end
   local function materializeRoute(door, edit)
     assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
-    local routes = routeRooms(edit.sourceRoom)
+    local routes = routeRooms(edit.sourceRoom, door)
     local candidates = routes and routes[edit.route]
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
     local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
@@ -1733,15 +1735,17 @@ world = (function()
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
-    local routes, doors = routeRooms(room), array()
+    local doors = array()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
+        local routes = routeRooms(room, door)
         local edit = activeEdit(door)
         local targets = array()
-        if routes and canModify(door.Room) then
+        if routes and canModify(door.Room, door.ChooseRoomArgs) then
           local rewardIds = {}
           for rewardId, data in pairs(runtime.worldDefinitions or {}) do
-            if data.doorAllowed and doorReward(door.Room, data) then rewardIds[#rewardIds + 1] = rewardId end
+            if data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs)
+              and doorReward(door.Room, data) then rewardIds[#rewardIds + 1] = rewardId end
           end
           table.sort(rewardIds)
           for _, rewardId in ipairs(rewardIds) do
@@ -1893,7 +1897,7 @@ world = (function()
       applyRewardEdit(door, params.targetID, leaseToken)
     elseif params.kind == "roomCategory" then
       assert(canModify(door.Room), "hades.error.worldUnavailable")
-      local routes = routeRooms(CurrentRun.CurrentRoom)
+      local routes = routeRooms(CurrentRun.CurrentRoom, door)
       local candidates = routes and routes[params.targetID]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
       reserveRoute(door, params.targetID, leaseToken)
