@@ -333,12 +333,20 @@ def _boon_rarity(raw):
     return config
 
 
-def _next_occurrence(raw):
+def _world_occurrence_apply(raw):
     params = _params(raw)
     target = params.get("target")
-    if not is_valid_next_occurrence_target(target):
+    if not isinstance(target, str) or not target or not is_valid_next_occurrence_target(target):
         raise ValueError("下一次遭遇目标无效。")
     return {"target": target}
+
+
+def _world_occurrence_cancel(raw):
+    params = _params(raw)
+    token = params.get("leaseToken")
+    if not isinstance(token, str) or not token or len(token) > 768:
+        raise ValueError("World occurrence lease is invalid or stale")
+    return {"leaseToken": token}
 
 
 def _world_exit_apply(raw):
@@ -530,10 +538,6 @@ def _chaos_gate_invoke(adapter, params):
     return adapter.set_chaos_gate_desired(params["probability"])
 
 
-def _next_occurrence_invoke(adapter, params):
-    return adapter.set_next_occurrence_once(params["target"],params["requestId"])
-
-
 def _list_profiles(adapter, params):
     return {"profiles": adapter.list_profiles()}
 
@@ -662,13 +666,8 @@ _COMMAND_SPECS = (
         invoke=_boon_rarity_invoke,
         reply_kind="patch",
     ),
-    _spec(
-        "set_next_occurrence_once",
-        request_id=True,
-        validate=_next_occurrence,
-        invoke=_next_occurrence_invoke,
-        reply_kind="patch",
-    ),
+    _spec("apply_world_occurrence", request_id=True, validate=_world_occurrence_apply),
+    _spec("cancel_world_occurrence", request_id=True, validate=_world_occurrence_cancel),
     _spec("apply_world_exit", request_id=True, validate=_world_exit_apply),
     _spec("cancel_world_exit", request_id=True, validate=_world_exit_cancel),
     _spec("spawn_reward", request_id=True, validate=_spawn_reward),
