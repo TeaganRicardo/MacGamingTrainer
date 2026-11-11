@@ -289,7 +289,11 @@ assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRo
 setOccurrence("npc:Arachne", "room-again")
 assert(StartRoom ~= nativeStartRoom and ChooseEncounter == nativeChooseEncounter
     and RecordEncounter == nativeRecordEncounter)
-M.dispatch("set_next_occurrence", { target = nil, includeCatalogs = false })
+M.dispatch("cancel_world_occurrence", {
+  leaseToken = M.nextOccurrenceToken,
+  requestId = "cancel-room-again",
+  includeCatalogs = false,
+})
 assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
     and RecordEncounter == nativeRecordEncounter and GetRandomValue == nativeGetRandomValue,
   "cancellation retained native selection or admission owners")
