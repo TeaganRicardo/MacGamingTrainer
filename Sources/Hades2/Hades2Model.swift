@@ -1487,7 +1487,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return false
         }
         send(
-            .applyWorldExit(doorToken: exit.doorToken, kind: target.kind, target: target.id),
+            .applyNextRoomReward(doorToken: exit.doorToken, kind: target.kind, target: target.id),
             title: "hades2.worldActions.modifyExit",
             completion: completion
         )
@@ -1988,7 +1988,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             ) { [weak self] success in
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
-        case .applyWorldExit:
+        case .applyNextRoomReward:
             guard toggleSelectedWorldExit(completion: { success in
                 TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
             }) else {
