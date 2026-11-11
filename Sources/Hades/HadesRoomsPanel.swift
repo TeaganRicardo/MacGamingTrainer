@@ -89,7 +89,11 @@ struct HadesRoomsPanel: View {
     }
     private func occurrenceName(_ identifier: String) -> String {
         switch identifier {
+        case "sisyphus": text("hades.worldActions.occurrence.sisyphus")
+        case "eurydice": text("hades.worldActions.occurrence.eurydice")
+        case "patroclus": text("hades.worldActions.occurrence.patroclus")
         case "thanatos": text("hades.worldActions.occurrence.thanatos")
+        case "charon": text("hades.worldActions.occurrence.charon")
         default: identifier
         }
     }
