@@ -329,13 +329,17 @@ runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = rewardDoor.doorToken,
   kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-1",
 })
-assert(firstDoor.Room.ChosenRewardType == "Boon" and firstDoor.Room.ForceLootName == "AthenaUpgrade")
+assert(firstDoor.Room == firstRoom and firstDoor.Room.ChosenRewardType == "Boon"
+    and firstDoor.Room.ForceLootName == "AthenaUpgrade",
+  "reward Apply replaced the physical target room instead of editing in place")
 assert(firstDoor.CanBeRerolled == true,
   "reward Apply disabled the game's native reroll path")
 local rewardObserved = world().doors[1]
 assert(originalRoom.OfferedRewards[100].ForceLootName == "AthenaUpgrade"
+    and rewardObserved.doorToken == rewardDoor.doorToken
     and rewardObserved.activeLease
-    and rewardObserved.activeLease.leaseToken == "exit:athena-reward-1")
+    and rewardObserved.activeLease.leaseToken == "exit:athena-reward-1",
+  "reward Apply changed stable exact-exit identity or lease feedback")
 fails("staleDoor", function()
   runtime.apply_world_exit({
     roomId = originalRoomId, doorToken = rewardObserved.doorToken,
@@ -365,6 +369,8 @@ runtime.apply_world_exit({
 local beforeNativeReroll = world().doors[1]
 firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"; firstDoor.Room.ForceLootName = nil
 assert(world().doors[1].activeLease == nil, "a native in-place reroll retained stale lease authority")
+assert(world().doors[1].doorToken ~= beforeNativeReroll.doorToken,
+  "native in-place reroll did not invalidate the prior exact-exit token")
 fails("staleDoor", function()
   runtime.cancel_world_exit({
     roomId = originalRoomId, doorToken = beforeNativeReroll.doorToken,

@@ -1273,11 +1273,33 @@ world = (function()
     assert(room and roomId(room) == params.roomId, "hades.error.staleRoom")
     return room
   end
-  local function doorId(door)
-    local room = door.Room
+  -- Physical owner and mutable reward fields have separate identities.
+  -- A Trainer reward Apply preserves the original observed token; a native
+  -- reroll or target-room replacement invalidates that token and its lease.
+  local function physicalDoorId(door)
+    return table.concat({
+      runtime.generationId, instanceId(CurrentRun), instanceId(currentRoom()),
+      instanceId(door), tostring(door.ObjectId), instanceId(door.Room),
+    }, ":")
+  end
+  local function rewardSignature(room)
     local overrides = type(room.RewardOverrides) == "table" and instanceId(room.RewardOverrides) or ""
-    return instanceId(door) .. ":" .. instanceId(room) .. ":" .. tostring(room.ChosenRewardType)
-      .. ":" .. tostring(room.ForceLootName) .. ":" .. overrides
+    local reward = type(room.Reward) == "table" and instanceId(room.Reward) or ""
+    return table.concat({
+      tostring(room.ChosenRewardType), tostring(room.ForceLootName), overrides, reward,
+    }, ":")
+  end
+  local function doorId(door)
+    local physical = physicalDoorId(door)
+    local edit = edits[door]
+    if type(edit) == "table" and edit.kind == "reward"
+        and edit.run == CurrentRun and edit.hero == hero()
+        and edit.sourceRoom == currentRoom() and edit.applied == door.Room
+        and edit.physicalToken == physical
+        and edit.appliedSignature == rewardSignature(door.Room) then
+      return edit.doorToken
+    end
+    return physical .. ":" .. rewardSignature(door.Room)
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"
@@ -1574,7 +1596,9 @@ world = (function()
         return nil
       end
     elseif edit.kind == "reward" then
-      if edit.applied ~= door.Room or edit.signature ~= doorId(door) then
+      if edit.applied ~= door.Room or edit.physicalToken ~= physicalDoorId(door)
+          or edit.appliedSignature ~= rewardSignature(door.Room)
+          or edit.doorToken ~= doorId(door) then
         edits[door] = nil
         return nil
       end
@@ -1584,28 +1608,36 @@ world = (function()
     end
     return edit
   end
-  local function applyDoor(door, room, target, leaseToken)
-    local edit = activeEdit(door)
-    if not edit or edit.kind ~= "reward" then
-      local source = currentRoom()
-      local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
-      edit = {
-        kind = "reward", original = door.Room,
-        originalCanBeRerolled = door.CanBeRerolled,
-        originalOfferedRewardsPresent = offered ~= nil,
-        originalOfferedReward = offered and offered[door.ObjectId] or nil,
-        run = CurrentRun, hero = hero(), sourceRoom = source,
-      }
+  local rewardFields = {
+    "Reward", "ChosenRewardType", "ForceLootName", "RewardStoreName",
+    "RewardOverrides", "Encounter", "OriginalChosenRewardType", "OriginalForceLootName",
+  }
+  local function snapshotReward(door, target, leaseToken)
+    local source = currentRoom()
+    local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
+    local room = door.Room
+    local edit = {
+      kind = "reward", original = room, applied = room, target = target,
+      leaseToken = leaseToken, doorToken = doorId(door),
+      physicalToken = physicalDoorId(door),
+      originalCanBeRerolled = door.CanBeRerolled,
+      originalOfferedRewardsPresent = offered ~= nil,
+      originalOfferedReward = offered and offered[door.ObjectId] or nil,
+      fields = {}, run = CurrentRun, hero = hero(), sourceRoom = source,
+    }
+    for _, field in ipairs(rewardFields) do
+      edit.fields[field] = { value = room[field] }
     end
-    edit.target = target
-    edit.leaseToken = leaseToken
-    edit.applied = room; edits[door] = edit
-    refreshDoor(door, room)
-    edit.signature = doorId(door)
+    return edit
   end
   local function restoreReward(door, edit)
-    refreshDoor(door, edit.original)
+    local room = door.Room
+    for _, field in ipairs(rewardFields) do
+      room[field] = edit.fields[field].value
+    end
+    refreshDoor(door, room)
     door.CanBeRerolled = edit.originalCanBeRerolled
+    if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
     local source = edit.sourceRoom
     local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
     if edit.originalOfferedRewardsPresent and not offered then
@@ -1692,15 +1724,22 @@ world = (function()
     assert(data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
     local reward, store = doorReward(door.Room, data)
     assert(reward, "hades.error.worldUnavailable")
-    local room = DeepCopyTable(door.Room)
-    room.ChosenRewardType = data.rewardType
-    room.ForceLootName = data.rewardType == "Boon" and rewardId or nil
-    room.RewardStoreName = store
-    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
-    room.Encounter = nil
-    room.OriginalChosenRewardType = nil; room.OriginalForceLootName = nil
-    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
-    applyDoor(door, room, rewardId, leaseToken)
+    -- Prepare the native reward on a descriptor clone first. Committing the
+    -- reward fields in-place preserves the exact physical target-room owner.
+    local room = door.Room
+    local prepared = DeepCopyTable(room)
+    prepared.ChosenRewardType = data.rewardType
+    prepared.ForceLootName = data.rewardType == "Boon" and rewardId or nil
+    prepared.RewardStoreName = store
+    prepared.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
+    prepared.Encounter = nil
+    prepared.OriginalChosenRewardType = nil; prepared.OriginalForceLootName = nil
+    SetupRoomReward(CurrentRun, prepared, nil, { IgnoreForceLootName = true })
+    local edit = snapshotReward(door, rewardId, leaseToken)
+    for _, field in ipairs(rewardFields) do room[field] = prepared[field] end
+    edit.appliedSignature = rewardSignature(room)
+    edits[door] = edit
+    refreshDoor(door, room)
   end
   local function materializeRoute(door, edit)
     assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
