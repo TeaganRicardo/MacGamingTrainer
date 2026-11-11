@@ -11,6 +11,9 @@ _DATA = json.loads(Path(__file__).with_name('world_catalog.json').read_text())
 REWARDS = _DATA['rewards']
 ROUTES = frozenset(('combat', 'story', 'shop', 'reprieve', 'miniboss', 'thanatos'))
 GENERIC_ROUTES = ROUTES - {'thanatos'}
+OCCURRENCE_TARGETS = frozenset((
+    'npc:Sisyphus', 'npc:Eurydice', 'npc:Patroclus', 'npc:Thanatos', 'shop:Charon',
+))
 # Names and Generate-row grouping are presentation only; the resident never
 # reads them, so they stay outside its definitions identity.
 _PRESENTATION_FIELDS = frozenset(('names', 'group', 'section', 'sectionNames'))
@@ -58,6 +61,11 @@ def mutation_params(command, params):
             raise invalid_value()
         result['doorToken'] = door_token
         result['requestId'] = request_id
+    if command in ('apply_world_occurrence', 'cancel_world_occurrence'):
+        request_id = params.get('requestId')
+        if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
+            raise invalid_value()
+        result['requestId'] = request_id
     if command in ('spawn_reward', 'set_door_reward'):
         reward = params.get('reward')
         if not isinstance(reward, str) or reward not in REWARDS:
@@ -83,6 +91,16 @@ def mutation_params(command, params):
         lease_token = params.get('leaseToken')
         if not isinstance(lease_token, str) or not 1 <= len(lease_token) <= 384:
             raise AdapterError('stale_door', 'hades.error.staleDoor')
+        result['leaseToken'] = lease_token
+    if command == 'apply_world_occurrence':
+        target_id = params.get('targetID')
+        if target_id not in OCCURRENCE_TARGETS:
+            raise invalid_value()
+        result['targetID'] = target_id
+    if command == 'cancel_world_occurrence':
+        lease_token = params.get('leaseToken')
+        if not isinstance(lease_token, str) or not 1 <= len(lease_token) <= 384:
+            raise AdapterError('stale_target', 'hades.error.staleTarget')
         result['leaseToken'] = lease_token
     if command == 'generate_chamber_object':
         kind = params.get('object')
