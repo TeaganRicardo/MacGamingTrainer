@@ -175,6 +175,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var nextRoomReward: String?
     @Published var nextOccurrenceTarget: String?
     @Published var occurrenceTargets: [Hades2OccurrenceTarget] = []
+    @Published private(set) var worldActionExits: [Hades2WorldExit] = []
+    @Published var selectedWorldExitToken = ""
+    @Published var selectedWorldExitTarget = ""
     @Published var health: Double?
     @Published var maxHealth: Double?
     @Published var healthLocked = false
@@ -275,6 +278,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         connected && capabilities["setFeature"] == true && canAcceptRuntimeAction
             && !exiting && protocolCompatible
     }
+    var canApplyWorldExit: Bool {
+        connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
+            && !exiting && protocolCompatible && selectedWorldExit != nil
+    }
+    var selectedWorldExit: Hades2WorldExit? {
+        worldActionExits.first { $0.doorToken == selectedWorldExitToken }
+    }
+    var selectedWorldExitLease: Hades2WorldActionLease? { selectedWorldExit?.activeLease }
+    var selectedWorldExitTargetLocked: Bool { selectedWorldExitLease != nil }
     var canEditDesired: Bool { backendAvailable && !exiting }
     func canSetVital(_ vital: String) -> Bool {
         let key: String
@@ -633,6 +645,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // The next payload repopulates it; until then an empty list means
         // "not observed yet" rather than the previous run's traits.
         currentRunTraits = []
+        worldActionExits = []
+        selectedWorldExitToken = ""
+        selectedWorldExitTarget = ""
         activationGraceWorkItems.values.forEach { $0.cancel() }
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
@@ -773,8 +788,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             applyBoonRarity(rarity)
         }
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
-        if patch.nextOccurrenceTarget.isPresent { nextOccurrenceTarget = patch.nextOccurrenceTarget.value }
-        if let value = patch.occurrenceTargets { occurrenceTargets = value }
+        if patch.nextOccurrenceTarget.isPresent {
+            nextOccurrenceTarget = patch.nextOccurrenceTarget.value
+            if let active = patch.nextOccurrenceTarget.value {
+                selectedNextOccurrenceTarget = active
+            }
+        }
+        if let value = patch.occurrenceTargets {
+            occurrenceTargets = value
+            repairOccurrenceSelection()
+        }
+        if patch.worldActions.isPresent {
+            worldActionExits = patch.worldActions.value?.exits ?? []
+            repairWorldActionSelection()
+        }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
@@ -1411,6 +1438,53 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
 
+    func repairWorldActionSelection() {
+        if !worldActionExits.contains(where: { $0.doorToken == selectedWorldExitToken }) {
+            selectedWorldExitToken = worldActionExits.first?.doorToken ?? ""
+        }
+        guard let exit = selectedWorldExit else {
+            selectedWorldExitTarget = ""
+            return
+        }
+        if let lease = exit.activeLease {
+            selectedWorldExitTarget = lease.kind + ":" + lease.target
+            return
+        }
+        if !exit.targets.contains(where: { $0.stableID == selectedWorldExitTarget }) {
+            selectedWorldExitTarget = exit.targets.first?.stableID ?? ""
+        }
+    }
+
+    private func repairOccurrenceSelection() {
+        if let active = nextOccurrenceTarget {
+            selectedNextOccurrenceTarget = active
+        } else if !occurrenceTargets.contains(where: { $0.id == selectedNextOccurrenceTarget }) {
+            selectedNextOccurrenceTarget = occurrenceTargets.first?.id ?? ""
+        }
+    }
+
+    @discardableResult
+    func toggleSelectedWorldExit(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canApplyWorldExit, let exit = selectedWorldExit else { return false }
+        if let lease = exit.activeLease {
+            send(
+                .cancelWorldExit(doorToken: exit.doorToken, leaseToken: lease.leaseToken),
+                title: "hades2.worldActions.modifyExit",
+                completion: completion
+            )
+            return true
+        }
+        guard let target = exit.targets.first(where: { $0.stableID == selectedWorldExitTarget }) else {
+            return false
+        }
+        send(
+            .applyWorldExit(doorToken: exit.doorToken, kind: target.kind, target: target.id),
+            title: "hades2.worldActions.modifyExit",
+            completion: completion
+        )
+        return true
+    }
+
     @discardableResult
     func setNextRoomReward(_ reward: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canApplyWorldAction else { return false }
@@ -1429,6 +1503,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             completion: completion
         )
         return true
+    }
+
+    @discardableResult
+    func toggleNextOccurrence(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canApplyWorldAction else { return false }
+        if nextOccurrenceTarget != nil {
+            return setNextOccurrence(nil, completion: completion)
+        }
+        guard !selectedNextOccurrenceTarget.isEmpty,
+              occurrenceTargets.contains(where: { $0.id == selectedNextOccurrenceTarget }) else { return false }
+        return setNextOccurrence(selectedNextOccurrenceTarget, completion: completion)
     }
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
