@@ -32,9 +32,9 @@ CurrentRun.RewardStores = {
 }
 
 RoomData = {
-  F_Combat01 = { Name = "F_Combat01", RoomSetName = "F" },
+  F_Combat01 = { Name = "F_Combat01", RoomSetName = "F", ChosenRewardType = "RoomMoneyDrop" },
   F_Forced01 = { Name = "F_Forced01", RoomSetName = "F" },
-  F_Story01 = { Name = "F_Story01", RoomSetName = "F", MaxCreationsThisRun = 1 },
+  F_Story01 = { Name = "F_Story01", RoomSetName = "F", ForcedReward = "Story", MaxCreationsThisRun = 1 },
   F_Shop01 = { Name = "F_Shop01", RoomSetName = "F", MaxCreationsThisRun = 1 },
   G_Combat01 = { Name = "G_Combat01", RoomSetName = "G" },
   G_Story01 = { Name = "G_Story01", RoomSetName = "G", MaxCreationsThisRun = 1 },
@@ -107,7 +107,10 @@ GetRandomValue = function(pool)
 end
 local nativeGetRandomValue = GetRandomValue
 
+probeEligibilityUsesRandom = false
+probeForceUsesRandom = false
 IsRoomEligible = function(run, currentRoom, nextRoomData, args)
+  if probeEligibilityUsesRandom then GetRandomValue({ true, false }) end
   if type(nextRoomData) ~= "table" then return false end
   if roomEligible[nextRoomData.Name] == false then return false end
   if nextRoomData.MaxCreationsThisRun ~= nil
@@ -118,6 +121,9 @@ IsRoomEligible = function(run, currentRoom, nextRoomData, args)
 end
 
 IsRoomForced = function(run, currentRoom, nextRoomData, args, otherDoors)
+  if probeForceUsesRandom and nextRoomData.RandomForced then
+    return GetRandomValue({ false, true })
+  end
   return nativeRoomForced[nextRoomData.Name] == true
 end
 local nativeIsRoomForced = IsRoomForced
@@ -173,6 +179,7 @@ previewCalls = 0
 CreateDoorRewardPreview = function(door)
   previewCalls = previewCalls + 1
   door.PreviewCreated = true
+  door.PreviewRoomName = door.Room and door.Room.Name or ""
   door.PreviewReward = door.Room and (
     door.Room.ForceLootName or door.Room.ChosenRewardType or ""
   ) or ""
