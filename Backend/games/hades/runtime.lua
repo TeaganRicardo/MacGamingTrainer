@@ -1318,6 +1318,12 @@ world = (function()
     if type(lease) ~= "table" then return nil end
     if lease.run ~= CurrentRun or lease.hero ~= hero() then
       occurrenceLease = nil
+      if pendingOccurrenceRoom and pendingOccurrenceRoom.leaseToken == lease.leaseToken then
+        pendingOccurrenceRoom = nil
+      end
+      for room, selection in pairs(selectedRoomOccurrences) do
+        if selection.leaseToken == lease.leaseToken then selectedRoomOccurrences[room] = nil end
+      end
       return nil
     end
     return lease
