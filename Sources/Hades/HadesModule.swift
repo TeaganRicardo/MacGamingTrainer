@@ -290,6 +290,68 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         payload["roomId"] = roomID
         return sendToHero(command, params: payload, target: target, operation: operation, completion: completion)
     }
+    @discardableResult
+    func toggleWorldExit(
+        door: HadesWorldDoor,
+        target selectedTarget: HadesWorldActionTarget?,
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
+        guard canMutate, let observed = world,
+              let current = observed.doors.first(where: { $0.doorToken == door.doorToken })
+        else {
+            presentFeedback(TrainerTextToken(key: "hades.error.staleDoor"), tone: .warning)
+            return false
+        }
+        if let lease = current.activeLease {
+            return worldAction(
+                "cancel_world_exit",
+                roomID: observed.roomId,
+                params: ["doorToken": current.doorToken, "leaseToken": lease.leaseToken],
+                operation: "hades.worldActions.modifyExit",
+                completion: completion
+            )
+        }
+        guard let selectedTarget,
+              current.targets.contains(where: { $0.stableID == selectedTarget.stableID })
+        else { return false }
+        return worldAction(
+            "apply_world_exit",
+            roomID: observed.roomId,
+            params: [
+                "doorToken": current.doorToken,
+                "kind": selectedTarget.kind,
+                "actionTarget": selectedTarget.id,
+            ],
+            operation: "hades.worldActions.modifyExit",
+            completion: completion
+        )
+    }
+
+    @discardableResult
+    func toggleWorldOccurrence(
+        target selectedTarget: String,
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
+        guard canMutate, let observed = world else { return false }
+        if let lease = observed.occurrence {
+            return sendToHero(
+                "cancel_world_occurrence",
+                params: ["leaseToken": lease.leaseToken],
+                target: target,
+                operation: "hades.worldActions.specifyOccurrence",
+                completion: completion
+            )
+        }
+        guard observed.occurrenceTargets.contains(selectedTarget) else { return false }
+        return sendToHero(
+            "apply_world_occurrence",
+            params: ["actionTarget": selectedTarget],
+            target: target,
+            operation: "hades.worldActions.specifyOccurrence",
+            completion: completion
+        )
+    }
+
     func generateFishing(completion: ((Bool) -> Void)? = nil) {
         worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
     }
@@ -640,9 +702,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 let noticeKey: String
                 if pendingCleanup { noticeKey = "hades.disableAllPending" }
                 else if pendingProfile { noticeKey = "hades.profile.pending" }
-                else if command == "set_door_route" && params["route"] as? String == "thanatos" {
-                    noticeKey = "hades.routeScheduled"
-                } else { noticeKey = "host.backend.notice.completed" }
+                else { noticeKey = "host.backend.notice.completed" }
                 self.presentFeedback(TrainerTextToken(key: noticeKey),
                                      tone: pendingCleanup || pendingProfile ? .warning : .success)
             }
