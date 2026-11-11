@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 11 then error("hades.error.restartRequired") end
+  if existing.revision ~= 12 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 11,
+  version = 1, revision = 12,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1237,7 +1237,21 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
 end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
-  local encounters = setmetatable({}, { __mode = "k" })
+  local occurrenceRequest
+  local occurrenceSelection
+  local occurrenceTargetOrder = {
+    "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
+  }
+  local occurrenceTargets = {
+    ["npc:Sisyphus"] = { kind = "character", sourceId = "Sisyphus", rooms = { A_Story01 = true } },
+    ["npc:Eurydice"] = { kind = "character", sourceId = "Eurydice", rooms = { B_Story01 = true } },
+    ["npc:Patroclus"] = { kind = "character", sourceId = "Patroclus", rooms = { C_Story01 = true } },
+    ["npc:Thanatos"] = { kind = "character", sourceId = "Thanatos", encounterSet = "ThanatosEncounters" },
+    ["shop:Charon"] = { kind = "shop", sourceId = "Charon", rooms = {
+      A_Shop01 = true, B_Shop01 = true, C_Shop01 = true,
+      A_PreBoss01 = true, B_PreBoss01 = true, C_PreBoss01 = true, D_Hub = true,
+    } },
+  }
   local spawnContext
   local objectOwners = {
     trove = { field = "ChallengeSwitch", chance = "ChallengeChanceSuccess", query = "IsChallengeSwitchEligible" },
@@ -1269,10 +1283,89 @@ world = (function()
   end
   local function requireDoor(params)
     requireRoom(params)
+    local token = params.doorToken or params.doorId
     for _, door in pairs(OfferedExitDoors or {}) do
-      if ordinaryDoor(door) and doorId(door) == params.doorId then return door end
+      if ordinaryDoor(door) and doorId(door) == token then return door end
     end
     error("hades.error.staleDoor")
+  end
+  local function validOccurrence()
+    local request = occurrenceRequest
+    if type(request) ~= "table" or request.run ~= CurrentRun or request.hero ~= hero()
+        or occurrenceTargets[request.target] == nil then
+      occurrenceRequest = nil
+      return nil
+    end
+    return request
+  end
+  local function occurrenceRoomMatches(definition, room)
+    return type(definition) == "table" and type(definition.rooms) == "table"
+      and type(room) == "table" and definition.rooms[room.Name] == true
+  end
+  local function occurrenceEncounterMatches(definition, encounter)
+    if type(definition) ~= "table" or type(encounter) ~= "table" then return false end
+    if type(definition.encounters) == "table" and definition.encounters[encounter.Name] then return true end
+    local set = definition.encounterSet and type(EncounterSets) == "table"
+      and EncounterSets[definition.encounterSet] or nil
+    for _, name in pairs(set or {}) do if name == encounter.Name then return true end end
+    return false
+  end
+  local function consumeOccurrence(target, token)
+    local request = validOccurrence()
+    if not request or request.target ~= target or request.leaseToken ~= token then return false end
+    occurrenceRequest = nil
+    return true
+  end
+  local function occurrenceChoose(kind, original, ...)
+    local request = validOccurrence()
+    local definition = request and occurrenceTargets[request.target] or nil
+    local hasTarget = kind == "room" and type(definition and definition.rooms) == "table"
+      or kind == "encounter" and definition ~= nil
+        and (type(definition.encounters) == "table" or definition.encounterSet ~= nil)
+    if not hasTarget then return original(...) end
+    local previous = occurrenceSelection
+    occurrenceSelection = {
+      kind = kind, target = request.target, leaseToken = request.leaseToken,
+      eligible = {}, nativeForced = false,
+    }
+    local packed = table.pack(pcall(original, ...))
+    occurrenceSelection = previous
+    if not packed[1] then error(packed[2], 0) end
+    return table.unpack(packed, 2, packed.n)
+  end
+  local function occurrenceObserveForced(kind, original, run, room, candidate, ...)
+    local native = original(run, room, candidate, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and selection.kind == kind
+        and selection.target == request.target and selection.leaseToken == request.leaseToken then
+      if native then selection.nativeForced = true end
+      if type(candidate) == "table" then selection.eligible[candidate] = true end
+    end
+    return native
+  end
+  local function occurrenceRandom(original, pool, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and not selection.nativeForced
+        and selection.target == request.target and selection.leaseToken == request.leaseToken
+        and type(pool) == "table" then
+      local definition = occurrenceTargets[selection.target]
+      local choices = {}
+      for _, candidate in pairs(pool) do
+        local data = candidate
+        if selection.kind == "room" and type(candidate) == "string" then
+          data = type(RoomData) == "table" and RoomData[candidate] or nil
+        end
+        if selection.eligible[data] then
+          local matched = selection.kind == "room" and occurrenceRoomMatches(definition, data)
+            or selection.kind == "encounter" and occurrenceEncounterMatches(definition, data)
+          if matched then choices[#choices + 1] = candidate end
+        end
+      end
+      if #choices > 0 then return original(choices, ...) end
+    end
+    return original(pool, ...)
   end
   local function routeKind(name)
     if name:find("_Story", 1, true) then return "story" end
@@ -1305,12 +1398,6 @@ world = (function()
       end
     end
     return result
-  end
-  local function thanatos(room)
-    for _, name in ipairs(EncounterSets.ThanatosEncounters or {}) do
-      local data = EncounterData[name]
-      if data and IsEncounterEligible(CurrentRun, room, data) then return data end
-    end
   end
   local function chanceEligible(room, key, callback)
     local previous = room[key]
@@ -1372,7 +1459,7 @@ world = (function()
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
       and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
-  local function refreshDoor(door, room)
+  local function clearDoorPreview(door)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1382,17 +1469,99 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
+  end
+  local function drawDoorPreview(door, room)
+    local actual = door.Room
+    clearDoorPreview(door)
+    door.Room = room
+    local ok, result = pcall(CreateDoorRewardPreview, door)
+    door.Room = actual
+    if not ok then
+      clearDoorPreview(door)
+      pcall(CreateDoorRewardPreview, door)
+      error(result, 0)
+    end
+  end
+  local function refreshDoor(door, room)
+    clearDoorPreview(door)
     door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
   end
-  local function applyDoor(door, room)
+  local function activeEdit(door)
     local edit = edits[door]
-    if not edit or edit.applied ~= door.Room or edit.signature ~= doorId(door) then edit = { original = door.Room } end
-    encounters[door.Room] = nil
+    if type(edit) ~= "table" or edit.run ~= CurrentRun or edit.hero ~= hero()
+        or edit.sourceRoom ~= currentRoom() then
+      edits[door] = nil
+      return nil
+    end
+    if edit.kind == "route" then
+      if edit.original ~= door.Room or edit.signature ~= doorId(door) then
+        edits[door] = nil
+        return nil
+      end
+    elseif edit.kind == "reward" then
+      if edit.applied ~= door.Room or edit.signature ~= doorId(door) then
+        edits[door] = nil
+        return nil
+      end
+    else
+      edits[door] = nil
+      return nil
+    end
+    return edit
+  end
+  local function applyDoor(door, room, target, leaseToken)
+    local edit = activeEdit(door)
+    if not edit or edit.kind ~= "reward" then
+      edit = {
+        kind = "reward", original = door.Room, run = CurrentRun,
+        hero = hero(), sourceRoom = currentRoom(),
+      }
+    end
+    edit.target = target
+    edit.leaseToken = leaseToken
     edit.applied = room; edits[door] = edit
     refreshDoor(door, room)
     edit.signature = doorId(door)
+  end
+  local function routePreviewDescriptor(door, candidates)
+    local candidate
+    for _, value in ipairs(candidates or {}) do
+      if candidate == nil or tostring(value.Name) < tostring(candidate.Name) then candidate = value end
+    end
+    assert(candidate, "hades.error.worldUnavailable")
+    local proxy = DeepCopyTable(door.Room)
+    proxy.Name = candidate.Name or proxy.Name
+    if candidate.ForcedReward ~= nil then
+      proxy.ChosenRewardType = candidate.ForcedReward
+      proxy.ForceLootName = nil
+    end
+    proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
+    proxy.RewardPreviewFx = candidate.RewardPreviewFx
+    if candidate.RewardOverrides ~= nil then
+      proxy.RewardOverrides = DeepCopyTable(candidate.RewardOverrides)
+    end
+    return proxy
+  end
+  local function reserveRoute(door, route, leaseToken)
+    assert(activeEdit(door) == nil, "hades.error.staleDoor")
+    local routes = routeRooms(currentRoom())
+    local candidates = routes and routes[route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    -- CreateDoorRewardPreview owns the game's real exit presentation. Give it a
+    -- read-only eligible RoomData proxy for this call, then restore door.Room.
+    drawDoorPreview(door, routePreviewDescriptor(door, candidates))
+    edits[door] = {
+      kind = "route", route = route, target = route, leaseToken = leaseToken,
+      original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+      signature = doorId(door),
+    }
+  end
+  local function clearSourceEdits(source)
+    for door, edit in pairs(edits) do
+      if type(edit) == "table" and edit.sourceRoom == source then edits[door] = nil end
+    end
   end
   local function definition(name)
     local data = runtime.worldDefinitions and runtime.worldDefinitions[name]
@@ -1410,6 +1579,32 @@ world = (function()
             and IsRoomRewardEligible(CurrentRun, room, reward, nil, {}) then return reward, name end
       end
     end
+  end
+  local function applyRewardEdit(door, rewardId, leaseToken)
+    local data = definition(rewardId)
+    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
+    local reward, store = doorReward(door.Room, data)
+    assert(reward, "hades.error.worldUnavailable")
+    local room = DeepCopyTable(door.Room)
+    room.ChosenRewardType = data.rewardType
+    room.ForceLootName = data.rewardType == "Boon" and rewardId or nil
+    room.RewardStoreName = store
+    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
+    room.Encounter = nil
+    room.OriginalChosenRewardType = nil; room.OriginalForceLootName = nil
+    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
+    applyDoor(door, room, rewardId, leaseToken)
+  end
+  local function materializeRoute(door, edit)
+    assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
+    local routes = routeRooms(edit.sourceRoom)
+    local candidates = routes and routes[edit.route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
+    assert(type(room) == "table", "hades.error.unsupportedRuntime")
+    edits[door] = nil
+    AssignRoomToExitDoor(door, room)
+    return room
   end
   local api = {}
   function api.install()
@@ -1436,41 +1631,106 @@ world = (function()
         return ids
       end
     end)
+    hook("ChooseNextRoomData", function(original)
+      return function(...)
+        return occurrenceChoose("room", original, ...)
+      end
+    end)
+    hook("IsRoomForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("room", original, ...)
+      end
+    end)
     hook("ChooseEncounter", function(original)
       return function(run, room, ...)
-        local intent = encounters[room]
-        encounters[room] = nil
-        if intent and run == intent.run and hero() == intent.hero and run.CurrentRoom == intent.sourceRoom
-            and IsEncounterEligible(run, room, EncounterData[intent.name]) then
-          return SetupEncounter(EncounterData[intent.name], room)
+        return occurrenceChoose("encounter", original, run, room, ...)
+      end
+    end)
+    hook("IsEncounterForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("encounter", original, ...)
+      end
+    end)
+    hook("GetRandomValue", function(original)
+      return function(...)
+        return occurrenceRandom(original, ...)
+      end
+    end)
+    hook("RecordEncounter", function(original)
+      return function(run, encounter, ...)
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
+        local result = table.pack(original(run, encounter, ...))
+        if run == CurrentRun and token and occurrenceEncounterMatches(definition, encounter) then
+          consumeOccurrence(target, token)
         end
-        return original(run, room, ...)
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+    hook("LeaveRoom", function(original)
+      return function(run, door, ...)
+        local source = currentRoom()
+        local edit = activeEdit(door)
+        if edit and edit.kind == "route" then
+          assert(run == CurrentRun and edit.run == run and edit.sourceRoom == source,
+            "hades.error.staleDoor")
+          materializeRoute(door, edit)
+        end
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
+        local result = table.pack(original(run, door, ...))
+        if run == CurrentRun and token and occurrenceRoomMatches(definition, door.Room) then
+          consumeOccurrence(target, token)
+        end
+        clearSourceEdits(source)
+        return table.unpack(result, 1, result.n)
       end
     end)
   end
-  function api.clearPending() encounters = setmetatable({}, { __mode = "k" }) end
+  function api.clearPending()
+    occurrenceRequest = nil
+    occurrenceSelection = nil
+    for door, edit in pairs(edits) do
+      if type(edit) == "table" and edit.kind == "route" then edits[door] = nil end
+    end
+  end
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
-    for target, intent in pairs(encounters) do
-      if intent.run ~= CurrentRun or intent.hero ~= hero() or intent.sourceRoom ~= room then encounters[target] = nil end
-    end
     local routes, doors = routeRooms(room), array()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
-        local options = array()
+        local edit = activeEdit(door)
+        local targets = array()
         if routes and canModify(door.Room) then
-          for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
-            if routes[kind] then options[#options + 1] = kind end
+          local rewardIds = {}
+          for rewardId, data in pairs(runtime.worldDefinitions or {}) do
+            if data.doorAllowed and doorReward(door.Room, data) then rewardIds[#rewardIds + 1] = rewardId end
           end
-          if thanatos(door.Room) then options[#options + 1] = "thanatos" end
+          table.sort(rewardIds)
+          for _, rewardId in ipairs(rewardIds) do
+            targets[#targets + 1] = { kind = "reward", id = rewardId }
+          end
+          for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
+            if routes[kind] then targets[#targets + 1] = { kind = "roomCategory", id = kind } end
+          end
         end
-        local edit, encounter = edits[door], encounters[door.Room]
-        doors[#doors + 1] = { id = doorId(door), number = door.ObjectId,
+        local lease
+        if edit and edit.leaseToken then
+          lease = {
+            kind = edit.kind == "route" and "roomCategory" or "reward",
+            target = edit.target,
+            leaseToken = edit.leaseToken,
+          }
+        end
+        doors[#doors + 1] = { id = doorId(door), doorToken = doorId(door), number = door.ObjectId,
+          roomName = door.Room.Name or "",
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
-          canReward = canModify(door.Room),
-          routes = options, canRestore = edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door),
-          pendingEncounter = encounter ~= nil }
+          targets = targets, activeLease = lease }
       end
     end
     table.sort(doors, function(a, b) return a.number < b.number end)
@@ -1480,7 +1740,21 @@ world = (function()
         if canGenerate(room, kind) then objects[#objects + 1] = kind end
       end
     end
-    return { roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room), objects = objects }
+    local occurrenceList = array()
+    for _, id in ipairs(occurrenceTargetOrder) do
+      local definition = occurrenceTargets[id]
+      occurrenceList[#occurrenceList + 1] = {
+        id = id, kind = definition.kind, sourceId = definition.sourceId,
+      }
+    end
+    local request = validOccurrence()
+    local occurrence = request and {
+      target = request.target, leaseToken = request.leaseToken,
+    } or nil
+    return {
+      roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room),
+      objects = objects, occurrenceTargets = occurrenceList, occurrence = occurrence,
+    }
   end
   function runtime.gain_resource(params)
     requireHero()
@@ -1578,54 +1852,59 @@ world = (function()
     end
     return runtime.status()
   end
-  function runtime.set_door_reward(params)
+  function runtime.apply_world_exit(params)
     local door = requireDoor(params)
-    local data = definition(params.reward)
-    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
-    local reward, store = doorReward(door.Room, data)
-    assert(reward, "hades.error.worldUnavailable")
-    local room = DeepCopyTable(door.Room)
-    local encounter = encounters[door.Room]
-    room.ChosenRewardType = data.rewardType
-    room.ForceLootName = data.rewardType == "Boon" and params.reward or nil
-    room.RewardStoreName = store
-    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
-    room.Encounter = nil
-    room.OriginalChosenRewardType = nil; room.OriginalForceLootName = nil
-    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
-    encounters[room] = encounter
-    applyDoor(door, room)
-    return runtime.status()
-  end
-  function runtime.set_door_route(params)
-    local door = requireDoor(params)
-    assert(canModify(door.Room), "hades.error.worldUnavailable")
-    local routes = routeRooms(CurrentRun.CurrentRoom)
-    assert(routes, "hades.error.worldUnavailable")
-    if params.route == "thanatos" then
-      local data = thanatos(door.Room)
-      assert(data, "hades.error.worldUnavailable")
-      local room = DeepCopyTable(door.Room)
-      room.Encounter = nil
-      encounters[room] = { run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom, name = data.Name }
-      applyDoor(door, room)
-    else
-      local candidates = routes[params.route]
+    assert(activeEdit(door) == nil and type(params.requestId) == "string",
+      "hades.error.staleDoor")
+    local leaseToken = "exit:" .. params.requestId
+    if params.kind == "reward" then
+      applyRewardEdit(door, params.targetID, leaseToken)
+    elseif params.kind == "roomCategory" then
+      assert(canModify(door.Room), "hades.error.worldUnavailable")
+      local routes = routeRooms(CurrentRun.CurrentRoom)
+      local candidates = routes and routes[params.targetID]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-      applyDoor(door, room)
+      reserveRoute(door, params.targetID, leaseToken)
+    else
+      error("hades.error.invalidValue")
     end
     return runtime.status()
   end
-  function runtime.restore_door(params)
+  function runtime.cancel_world_exit(params)
     local door = requireDoor(params)
-    local edit = edits[door]
-    assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
-    encounters[door.Room] = nil
-    refreshDoor(door, edit.original)
+    local edit = activeEdit(door)
+    assert(edit and edit.leaseToken == params.leaseToken, "hades.error.staleDoor")
+    if edit.kind == "reward" then
+      refreshDoor(door, edit.original)
+    elseif edit.kind == "route" then
+      drawDoorPreview(door, door.Room)
+    end
     edits[door] = nil
     return runtime.status()
   end
+  function runtime.apply_world_occurrence(params)
+    requireRoom(params)
+    assert(type(params.targetID) == "string" and occurrenceTargets[params.targetID],
+      "hades.error.invalidValue")
+    assert(validOccurrence() == nil and type(params.requestId) == "string",
+      "hades.error.worldUnavailable")
+    occurrenceRequest = {
+      target = params.targetID,
+      leaseToken = "occurrence:" .. params.requestId,
+      run = CurrentRun,
+      hero = requireHero(),
+    }
+    return runtime.status()
+  end
+  function runtime.cancel_world_occurrence(params)
+    requireRoom(params)
+    local request = validOccurrence()
+    assert(request and request.leaseToken == params.leaseToken, "hades.error.staleTarget")
+    occurrenceRequest = nil
+    occurrenceSelection = nil
+    return runtime.status()
+  end
+
   return api
 end)()
 
