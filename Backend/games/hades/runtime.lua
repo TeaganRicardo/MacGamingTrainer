@@ -1836,52 +1836,41 @@ world = (function()
     end
     return runtime.status()
   end
-  function runtime.set_door_reward(params)
+  function runtime.apply_world_exit(params)
     local door = requireDoor(params)
-    local data = definition(params.reward)
-    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
-    local reward, store = doorReward(door.Room, data)
-    assert(reward, "hades.error.worldUnavailable")
-    local room = DeepCopyTable(door.Room)
-    local encounter = encounters[door.Room]
-    room.ChosenRewardType = data.rewardType
-    room.ForceLootName = data.rewardType == "Boon" and params.reward or nil
-    room.RewardStoreName = store
-    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
-    room.Encounter = nil
-    room.OriginalChosenRewardType = nil; room.OriginalForceLootName = nil
-    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
-    encounters[room] = encounter
-    applyDoor(door, room)
-    return runtime.status()
-  end
-  function runtime.set_door_route(params)
-    local door = requireDoor(params)
-    assert(canModify(door.Room), "hades.error.worldUnavailable")
-    local routes = routeRooms(CurrentRun.CurrentRoom)
-    assert(routes, "hades.error.worldUnavailable")
-    if params.route == "thanatos" then
-      local data = thanatos(door.Room)
-      assert(data, "hades.error.worldUnavailable")
-      local room = DeepCopyTable(door.Room)
-      room.Encounter = nil
-      encounters[room] = { run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom, name = data.Name }
-      applyDoor(door, room)
+    assert(activeExitLease(door) == nil, "hades.error.worldUnavailable")
+    if params.kind == "reward" then
+      assert(type(params.target) == "string", "hades.error.invalidValue")
+      applyRewardLease(door, params.target)
+    elseif params.kind == "roomCategory" then
+      assert(type(params.target) == "string", "hades.error.invalidValue")
+      applyRouteLease(door, params.target)
     else
-      local candidates = routes[params.route]
-      assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-      applyDoor(door, room)
+      error("hades.error.invalidValue")
     end
     return runtime.status()
   end
-  function runtime.restore_door(params)
+  function runtime.cancel_world_exit(params)
     local door = requireDoor(params)
-    local edit = edits[door]
-    assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
-    encounters[door.Room] = nil
-    refreshDoor(door, edit.original)
-    edits[door] = nil
+    local lease = activeExitLease(door)
+    assert(lease and lease.leaseToken == params.leaseToken, "hades.error.staleDoor")
+    if lease.kind == "reward" then
+      assert(restoreRewardLease(door, lease), "hades.error.staleDoor")
+      exitLeases[door] = nil
+    else
+      exitLeases[door] = nil
+      CreateDoorRewardPreview(door)
+    end
+    return runtime.status()
+  end
+  function runtime.apply_world_occurrence(params)
+    requireHero()
+    applyOccurrenceLease(params.target)
+    return runtime.status()
+  end
+  function runtime.cancel_world_occurrence(params)
+    requireHero()
+    cancelOccurrenceLease(params.leaseToken)
     return runtime.status()
   end
   return api
