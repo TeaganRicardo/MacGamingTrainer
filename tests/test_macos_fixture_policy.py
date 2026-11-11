@@ -28,7 +28,7 @@ HOSTED = {"GITHUB_ACTIONS": "true", PROFILE_VARIABLE: HOSTED_PROFILE, "RUNNER_AR
 # Every native fixture that launches a bounded worker, and the journeys it owns.
 CONSUMERS = {
     "test_hades_frontend.py": (
-        "hades.save_editor", "hades.recovery", "hades.management",
+        "hades.save_editor", "hades.recovery", "hades.interlock", "hades.management",
         "hades.slider", "hades.hierarchy", "hades.disclosure", "hades.search",
     ),
     "test_hades2_view_state_flow.py": (
