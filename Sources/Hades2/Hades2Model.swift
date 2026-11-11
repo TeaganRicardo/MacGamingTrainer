@@ -271,6 +271,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var shuttingDown = false
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
+    var canApplyWorldAction: Bool {
+        connected && capabilities["setFeature"] == true && canAcceptRuntimeAction
+            && !exiting && protocolCompatible
+    }
     var canEditDesired: Bool { backendAvailable && !exiting }
     func canSetVital(_ vital: String) -> Bool {
         let key: String
@@ -1407,18 +1411,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
 
-    func setNextRoomReward(_ reward: String?, completion: ((Bool) -> Void)? = nil) {
-        guard canEditDesired else { return }
-        nextRoomReward = reward
+    @discardableResult
+    func setNextRoomReward(_ reward: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canApplyWorldAction else { return false }
         send(.setNextRoomReward(reward),
              title: reward == nil ? "hades2.op.clearNextRoom" : "hades2.op.setNextRoom",
              completion: completion)
+        return true
     }
 
     @discardableResult
     func setNextOccurrence(_ target: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
-        guard canEditDesired else { return false }
-        nextOccurrenceTarget = target
+        guard canApplyWorldAction else { return false }
         send(
             .setNextOccurrence(target),
             title: target == nil ? "hades2.op.clearNextOccurrence" : "hades2.op.setNextOccurrence",
@@ -1899,14 +1903,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
         case .applyNextRoomReward:
-            // Applying this durable one-shot mints a consumption token.
-            // Key repeat must not replace an unacknowledged token.
-            guard canEditDesired && canAcceptRuntimeAction else {
+            guard setNextRoomReward(
+                selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward,
+                completion: { success in
+                    TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
+                }
+            ) else {
                 rejectShortcut(action)
                 return
-            }
-            setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward) { success in
-                TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
             }
         case .generateFlora, .generateMining, .generateDigging, .generateShades, .generateFishing:
             guard let family = action.gatheringFamily,
@@ -1969,8 +1973,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 return
             }
         case .applyNextOccurrence:
-            guard canEditDesired && canAcceptRuntimeAction,
-                  setNextOccurrence(
+            guard setNextOccurrence(
                     selectedNextOccurrenceTarget.isEmpty ? nil : selectedNextOccurrenceTarget,
                     completion: { success in
                         TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
