@@ -65,6 +65,26 @@ assert(targetExists(first, "reward", "MaxHealthDrop"),
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
+-- Native eligibility and force predicates are probed without advancing the
+-- game's RNG. Random-dependent predicates fail closed for generic categories.
+probeEligibilityUsesRandom = true
+local beforeEligibilityProbe = nativeRandomCalls
+assert(not targetExists(exitByObject(1), "roomCategory", "combat"))
+assert(nativeRandomCalls == beforeEligibilityProbe,
+  "IsRoomEligible inspection consumed native RNG")
+probeEligibilityUsesRandom = false
+assert(targetExists(exitByObject(1), "roomCategory", "combat"))
+RoomData.F_Forced01.RandomForced = true
+probeForceUsesRandom = true
+local beforeForceProbe = nativeRandomCalls
+assert(not targetExists(exitByObject(1), "roomCategory", "combat"),
+  "random-dependent native force logic exposed a generic route")
+assert(nativeRandomCalls == beforeForceProbe,
+  "IsRoomForced inspection consumed native RNG")
+probeForceUsesRandom = false
+RoomData.F_Forced01.RandomForced = nil
+assert(targetExists(exitByObject(1), "roomCategory", "combat"))
+
 -- Reward edits mutate only the selected native exit and retain the same
 -- physical-door/target identity. Cancel restores the exact original descriptor.
 local originalRoom1, originalRoom2 = door1.Room, door2.Room
@@ -100,6 +120,9 @@ assert(CurrentRun.CurrentRoom.OfferedRewards[1].Type == originalOffered1.Type
 assert(CurrentRun.CurrentRoom.OfferedRewards[2].Type == originalOffered2.Type
     and CurrentRun.CurrentRoom.OfferedRewards[2].ForceLootName == originalOffered2.ForceLootName)
 assert(exitByObject(1).activeLease == nil)
+assert(door1.PreviewRoomName == originalRoom1.Name
+    and door1.PreviewReward == originalRoom1.ChosenRewardType,
+  "route cancellation did not restore the native preview descriptor")
 
 -- A generic category Apply is a reservation only: no candidate sampling,
 -- CreateRoom, actual door target, ExitDoorRooms or OfferedRewards mutation.
@@ -129,6 +152,9 @@ assert(door1.Room == originalRoom1 and sourceRoom.ExitDoorRooms[1] == sourceExit
 assert(sourceRoom.OfferedRewards[1].Type == offeredBefore1.Type
     and sourceRoom.OfferedRewards[1].ForceLootName == offeredBefore1.ForceLootName)
 assert(previewCalls > previewsBefore, "reservation did not refresh native exit presentation")
+assert(door1.PreviewRoomName == "F_Combat01"
+    and door1.PreviewReward == "RoomMoneyDrop",
+  "reservation preview did not show the selected native-eligible room descriptor")
 
 M.dispatch("cancel_world_exit", {
   doorToken = first.doorToken,
@@ -178,6 +204,10 @@ assert(door1.Room == entered, "native door still points at the pre-plan destinat
 -- CurrentRun.CurrentRoom. Both source-room leases are consumed/invalidated.
 assert(sourceRoom.ExitDoorRooms[1] == entered.Name,
   "late commit failed to update the native source-room exit map")
+assert(door2.Room == originalRoom2
+    and door2.PreviewRoomName == originalRoom2.Name
+    and exitByObject(2).activeLease == nil,
+  "committing one route left a sibling route preview or lease behind")
 
 -- Exact-exit route ownership has deterministic precedence over a pending
 -- room-based named occurrence. The route commits one room; the incompatible
@@ -211,6 +241,44 @@ M.dispatch("cancel_world_occurrence", {
   requestId = "cancel-precedence-occurrence",
   includeCatalogs = false,
 })
+
+-- Leaving through one exit restores an unused reward lease on its sibling.
+-- Native random selection otherwise offers a forced story room in slot 2;
+-- construct an ordinary native-generated combat exit for the reward lease.
+setRoomSet("F")
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {} },
+  [2] = { ObjectId = 2, ChooseRoomArgs = {}, ForceRoomName = "F_Combat01" },
+}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local cleanupDoor1, cleanupDoor2 = MapState.OfferedExitDoors[1], MapState.OfferedExitDoors[2]
+local cleanupRoom2 = cleanupDoor2.Room
+local cleanupExit2 = exitByObject(2)
+assert(cleanupDoor2.Room.Name == "F_Combat01"
+    and targetExists(cleanupExit2, "reward", "MaxHealthDrop"),
+  "fixture must generate a genuinely native-eligible ordinary sibling")
+local rewardLeaseReply = M.dispatch("apply_world_exit", {
+  doorToken = cleanupExit2.doorToken,
+  kind = "reward",
+  target = "MaxHealthDrop",
+  requestId = "sibling-reward-lease",
+  includeCatalogs = true,
+})
+assert(cleanupDoor2.Room.ChosenRewardType == "MaxHealthDrop")
+local routeExit1 = exitByObject(1)
+M.dispatch("apply_world_exit", {
+  doorToken = routeExit1.doorToken,
+  kind = "roomCategory",
+  target = "combat",
+  requestId = "commit-other-exit",
+  includeCatalogs = true,
+})
+local siblingCommitted = AttemptUseDoor(cleanupDoor1)
+assert(type(siblingCommitted) == "table" and siblingCommitted.Name == "F_Combat01")
+assert(cleanupDoor2.Room == cleanupRoom2
+    and cleanupDoor2.Room.ChosenRewardType == "RoomMoneyDrop"
+    and exitByObject(2).activeLease == nil,
+  "committing another exit left an unused reward modification behind")
 
 -- Re-enter a fresh source fixture to prove external native replacement changes
 -- exact target identity and invalidates stale lease authority.

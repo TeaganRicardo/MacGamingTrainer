@@ -8839,18 +8839,44 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
-    local function couldBeForced(data, args, otherDoors)
-      if type(IsRoomForced) ~= "function" then return true end
-      local nativeRandomChance = RandomChance
-      if type(nativeRandomChance) == "function" then
-        RandomChance = function(chance)
-          return type(chance) == "number" and chance > 0
+    local function nativeProbeWithoutRNG(callback, ...)
+      local originals = {}
+      local usedRandom = false
+      local function replace(name, replacement)
+        local original = _G[name]
+        if type(original) == "function" then
+          originals[name] = original
+          _G[name] = replacement
         end
       end
-      local ok, result = pcall(IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors)
-      if type(nativeRandomChance) == "function" then RandomChance = nativeRandomChance end
-      if not ok then error(result, 0) end
-      return not not result
+      replace("RandomChance", function(chance)
+        if type(chance) == "number" and chance > 0 then
+          usedRandom = true
+          return true
+        end
+        return false
+      end)
+      replace("GetRandomValue", function(values, ...)
+        usedRandom = true
+        if type(values) == "table" then return values[1] end
+        return values
+      end)
+      replace("RandomInt", function(minimum) usedRandom = true; return minimum end)
+      replace("RandomFloat", function(minimum) usedRandom = true; return minimum end)
+      local result = table.pack(pcall(callback, ...))
+      for name, original in pairs(originals) do _G[name] = original end
+      if not result[1] then error(result[2], 0) end
+      return result[2], usedRandom
+    end
+
+    local function couldBeForced(data, args, otherDoors)
+      if type(IsRoomForced) ~= "function" then return true end
+      local result, usedRandom = nativeProbeWithoutRNG(
+        IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors
+      )
+      -- Any random-dependent native force decision is opaque at observation
+      -- time. Refuse the generic route catalog rather than consume or guess RNG.
+      return usedRandom or not not result
     end
 
     local function routeCandidates(door)
@@ -8876,8 +8902,10 @@ if __MacGamingTrainerV1 == nil then
           -- build. Probe a shallow descriptor copy so observation stays read-only.
           local probe = {}
           for key, value in pairs(data) do probe[key] = value end
-          local ok, eligible = pcall(IsRoomEligible, CurrentRun, source, probe, args)
-          if not ok then error(eligible, 0) end
+          local eligible, usedRandom = nativeProbeWithoutRNG(
+            IsRoomEligible, CurrentRun, source, probe, args
+          )
+          if usedRandom then return nil end
           if eligible then
             if couldBeForced(probe, args, otherDoors) then return nil end
             local kind = routeKind(data.Name)
@@ -8887,6 +8915,11 @@ if __MacGamingTrainerV1 == nil then
             end
           end
         end
+      end
+      for _, candidates in pairs(result) do
+        table.sort(candidates, function(a, b)
+          return tostring(a.Name) < tostring(b.Name)
+        end)
       end
       return result
     end
@@ -8928,19 +8961,31 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function previewRoom(door, route)
+    local function previewRoom(door, route, candidate)
       local proxy = {}
       for key, value in pairs(door.Room) do proxy[key] = value end
+      candidate = type(candidate) == "table" and candidate or {}
+      proxy.Name = candidate.Name or proxy.Name
       proxy.Reward = nil
-      proxy.RewardOverrides = nil
-      proxy.RewardPreviewOverride = nil
-      proxy.ForceLootName = nil
-      proxy.Encounter = nil
-      proxy.ChosenRewardType = nil
-      proxy.NextRoomSet = { "MacGamingTrainerPending:" .. route }
-      if route == "shop" then proxy.ChosenRewardType = "Shop"
-      elseif route == "story" then proxy.ChosenRewardType = "Story"
-      elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
+      proxy.RewardOverrides = type(candidate.RewardOverrides) == "table"
+        and DeepCopyTable(candidate.RewardOverrides) or nil
+      proxy.RewardPreviewOverride = candidate.RewardPreviewOverride
+      proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
+      proxy.RewardPreviewFx = candidate.RewardPreviewFx
+      proxy.ForceLootName = candidate.ForceLootName
+      proxy.RewardStoreName = candidate.RewardStoreName or candidate.IndividualRewardStore
+        or candidate.ForcedRewardStore
+      proxy.Encounter = type(candidate.Encounter) == "table"
+        and DeepCopyTable(candidate.Encounter) or nil
+      proxy.ChosenRewardType = candidate.ChosenRewardType or candidate.ForcedReward
+      proxy.NextRoomSet = type(candidate.NextRoomSet) == "table"
+        and DeepCopyTable(candidate.NextRoomSet) or nil
+      proxy.NextRoomSetNoGenerate = candidate.NextRoomSetNoGenerate
+      if proxy.ChosenRewardType == nil then
+        if route == "shop" then proxy.ChosenRewardType = "Shop"
+        elseif route == "story" then proxy.ChosenRewardType = "Story"
+        elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
+      end
       return proxy
     end
 
@@ -8958,9 +9003,22 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
-    local function clearSource(source)
+    local restoreReward
+    local function clearSource(source, committedDoor)
       for door, lease in pairs(leases) do
-        if lease.sourceRoom == source then leases[door] = nil end
+        if lease.sourceRoom == source then
+          if door ~= committedDoor then
+            if lease.kind == "reward" and activeLease(door) == lease then
+              restoreReward(door, lease)
+            elseif lease.kind == "roomCategory" and activeLease(door) == lease then
+              leases[door] = nil
+              refreshPreview(door)
+            end
+          end
+          -- The selected door's reward is committed by native LeaveRoom. Every
+          -- sibling lease is restored before the source room is left.
+          leases[door] = nil
+        end
       end
       releaseRouteHooksIfUnused()
     end
@@ -9023,7 +9081,7 @@ if __MacGamingTrainerV1 == nil then
       end
       AssignRoomToExitDoor(door, target)
       leases[door] = nil
-      clearSource(source)
+      clearSource(source, door)
       return target
     end
 
@@ -9039,7 +9097,7 @@ if __MacGamingTrainerV1 == nil then
             return original(door, ...)
           end
           local actual = door.Room
-          door.Room = previewRoom(door, lease.target)
+          door.Room = previewRoom(door, lease.target, lease.previewData)
           local reply = table.pack(pcall(original, door, ...))
           door.Room = actual
           if not reply[1] then error(reply[2], 0) end
@@ -9056,7 +9114,7 @@ if __MacGamingTrainerV1 == nil then
             end
             materializeRoute(run, door, lease)
           else
-            clearSource(source)
+            clearSource(source, door)
           end
           return original(run, door, ...)
         end)
@@ -9081,7 +9139,7 @@ if __MacGamingTrainerV1 == nil then
       return snapshot
     end
 
-    local function restoreReward(door, lease)
+    restoreReward = function(door, lease)
       local room, source = door.Room, lease.sourceRoom
       for _, key in ipairs(rewardFields) do restoreField(room, key, lease.snapshot.fields[key]) end
       restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
@@ -9131,6 +9189,7 @@ if __MacGamingTrainerV1 == nil then
         kind = "roomCategory", target = target, doorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         originalRoom = door.Room, signature = routeSignature(door),
+        previewData = routes[target][1],
       }
       lease.leaseToken = leaseToken(doorToken, lease.kind, target)
       leases[door] = lease
