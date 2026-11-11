@@ -31,7 +31,6 @@ from .schema import (
     STAT_RULES,
     VITALS,
     is_known_element,
-    is_valid_next_room_reward,
     is_valid_next_occurrence_target,
     validate_desired_feature_value,
     validate_gathering_desired,
