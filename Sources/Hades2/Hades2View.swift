@@ -1332,7 +1332,7 @@ struct Hades2TrainerView: View {
     private var nextOccurrencePanel: some View {
         let characters = model.occurrenceTargets.filter { $0.kind == "character" }
         let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
-        let pending = model.nextOccurrenceTarget != nil
+        let pending = model.activeWorldOccurrenceTarget != nil
         return TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"),
             icon: Hades2WorkbenchIcon.occurrence,
