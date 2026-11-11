@@ -218,7 +218,7 @@
     "hades2.occurrence.characters": "角色",
     "hades2.occurrence.noRequest": "不指定",
     "hades2.occurrence.shop": "商店",
-    "hades2.occurrence.title": "下一次合资格遭遇",
+    "hades2.occurrence.title": "指定遭遇",
     "hades2.occurrence.target.Arachne": "{term:officialSourceNames.Arachne}",
     "hades2.occurrence.target.Artemis": "{term:officialSourceNames.Artemis}",
     "hades2.occurrence.target.Athena": "{term:officialSourceNames.Athena}",
@@ -604,7 +604,20 @@
     "hades2.saveEditor.advanced.removed": "字段已移除",
     "hades2.saveEditor.advanced.restore": "恢复字段值",
     "hades2.saveEditor.advanced.editValue": "编辑类型或结构",
-    "hades2.error.worldActionUnavailable": "当前场景无法应用世界操作。"
+    "hades2.error.worldActionUnavailable": "当前场景无法应用世界操作。",
+    "hades2.worldActions.modifyExit": "修改出口",
+    "hades2.worldActions.exit": "当前出口",
+    "hades2.worldActions.target": "目标",
+    "hades2.worldActions.noExit": "暂无可编辑出口",
+    "hades2.worldActions.noTarget": "暂无可用目标",
+    "hades2.worldActions.unknownTarget": "当前目标",
+    "hades2.worldActions.rewards": "奖励",
+    "hades2.worldActions.routes": "房间类别",
+    "hades2.worldActions.route.combat": "战斗",
+    "hades2.worldActions.route.story": "剧情",
+    "hades2.worldActions.route.shop": "商店",
+    "hades2.worldActions.route.reprieve": "休整",
+    "hades2.worldActions.route.miniboss": "精英战"
   },
   "language": "zh-CN"
 }
