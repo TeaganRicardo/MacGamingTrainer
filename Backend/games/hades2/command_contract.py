@@ -515,11 +515,11 @@ def _chaos_gate_invoke(adapter, params):
 
 
 def _next_room_invoke(adapter, params):
-    return adapter.set_next_room_reward_desired(params["reward"])
+    return adapter.set_next_room_reward_once(params["reward"],params["requestId"])
 
 
 def _next_occurrence_invoke(adapter, params):
-    return adapter.set_next_occurrence_desired(params["target"])
+    return adapter.set_next_occurrence_once(params["target"],params["requestId"])
 
 
 def _list_profiles(adapter, params):
@@ -651,13 +651,15 @@ _COMMAND_SPECS = (
         reply_kind="patch",
     ),
     _spec(
-        "set_next_room_reward_desired",
+        "set_next_room_reward_once",
+        request_id=True,
         validate=_next_room_reward,
         invoke=_next_room_invoke,
         reply_kind="patch",
     ),
     _spec(
-        "set_next_occurrence_desired",
+        "set_next_occurrence_once",
+        request_id=True,
         validate=_next_occurrence,
         invoke=_next_occurrence_invoke,
         reply_kind="patch",
