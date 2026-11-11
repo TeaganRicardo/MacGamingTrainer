@@ -24,6 +24,8 @@ enum Hades2Request {
     case setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool)
     case setNextRoomReward(String?)
     case setNextOccurrence(String?)
+    case applyWorldExit(doorToken: String, kind: String, target: String)
+    case cancelWorldExit(doorToken: String, leaseToken: String)
     case spawnReward(String)
     case acquireExactBoon(reward: String, rarity: String?, level: Int?)
     case acquireChaosPair(blessing: String, curse: String, rarity: String?, level: Int?)
@@ -82,6 +84,8 @@ enum Hades2Request {
         case .setBoonRarity: return .setBoonRarityDesired
         case .setNextRoomReward: return .setNextRoomRewardOnce
         case .setNextOccurrence: return .setNextOccurrenceOnce
+        case .applyWorldExit: return .applyWorldExit
+        case .cancelWorldExit: return .cancelWorldExit
         case .spawnReward, .acquireExactBoon: return .spawnReward
         case .acquireChaosPair: return .acquireChaosPair
         case .openSellTraits: return .openSellTraits
@@ -176,6 +180,10 @@ enum Hades2Request {
             return ["reward": reward ?? NSNull()]
         case .setNextOccurrence(let target):
             return ["target": target ?? NSNull()]
+        case .applyWorldExit(let doorToken, let kind, let target):
+            return ["doorToken": doorToken, "kind": kind, "target": target]
+        case .cancelWorldExit(let doorToken, let leaseToken):
+            return ["doorToken": doorToken, "leaseToken": leaseToken]
         case .spawnReward(let reward):
             return ["reward": reward]
         case .acquireExactBoon(let reward, let rarity, let level):
