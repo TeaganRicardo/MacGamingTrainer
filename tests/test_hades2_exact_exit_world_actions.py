@@ -179,6 +179,39 @@ assert(door1.Room == entered, "native door still points at the pre-plan destinat
 assert(sourceRoom.ExitDoorRooms[1] == entered.Name,
   "late commit failed to update the native source-room exit map")
 
+-- Exact-exit route ownership has deterministic precedence over a pending
+-- room-based named occurrence. The route commits one room; the incompatible
+-- occurrence stays armed for a later native-eligible opportunity instead of
+-- overwriting the selected door or generating a second room.
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local precedenceDoor = MapState.OfferedExitDoors[1]
+precedenceDoor.Room.ChosenRewardType = "RoomMoneyDrop"
+AssignRoomToExitDoor(precedenceDoor, precedenceDoor.Room)
+local precedenceExit = exitByObject(1)
+setOccurrence("npc:Arachne", "occurrence-after-exits")
+local precedenceCreations = CurrentRun.RoomCreations.F_Combat01 or 0
+local precedenceReply = M.dispatch("apply_world_exit", {
+  doorToken = precedenceExit.doorToken,
+  kind = "roomCategory",
+  target = "combat",
+  requestId = "route-with-room-occurrence",
+  includeCatalogs = true,
+})
+assert(precedenceReply.worldActions.exits[1].activeLease ~= nil)
+local precedenceEntered = AttemptUseDoor(precedenceDoor)
+assert(type(precedenceEntered) == "table" and precedenceEntered.Name == "F_Combat01")
+assert((CurrentRun.RoomCreations.F_Combat01 or 0) == precedenceCreations + 1,
+  "route/occurrence interaction generated more than one destination")
+assert(M.nextOccurrenceTarget == "npc:Arachne"
+    and M.nextOccurrenceToken == "occurrence-after-exits",
+  "exact exit route silently consumed or replaced an incompatible room occurrence")
+M.dispatch("cancel_world_occurrence", {
+  leaseToken = M.nextOccurrenceToken,
+  requestId = "cancel-precedence-occurrence",
+  includeCatalogs = false,
+})
+
 -- Re-enter a fresh source fixture to prove external native replacement changes
 -- exact target identity and invalidates stale lease authority.
 setRoomSet("F")
