@@ -65,6 +65,26 @@ assert(targetExists(first, "reward", "MaxHealthDrop"),
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
+-- Native eligibility and force predicates are probed without advancing the
+-- game's RNG. Random-dependent predicates fail closed for generic categories.
+probeEligibilityUsesRandom = true
+local beforeEligibilityProbe = nativeRandomCalls
+assert(not targetExists(exitByObject(1), "roomCategory", "combat"))
+assert(nativeRandomCalls == beforeEligibilityProbe,
+  "IsRoomEligible inspection consumed native RNG")
+probeEligibilityUsesRandom = false
+assert(targetExists(exitByObject(1), "roomCategory", "combat"))
+RoomData.F_Forced01.RandomForced = true
+probeForceUsesRandom = true
+local beforeForceProbe = nativeRandomCalls
+assert(not targetExists(exitByObject(1), "roomCategory", "combat"),
+  "random-dependent native force logic exposed a generic route")
+assert(nativeRandomCalls == beforeForceProbe,
+  "IsRoomForced inspection consumed native RNG")
+probeForceUsesRandom = false
+RoomData.F_Forced01.RandomForced = nil
+assert(targetExists(exitByObject(1), "roomCategory", "combat"))
+
 -- Reward edits mutate only the selected native exit and retain the same
 -- physical-door/target identity. Cancel restores the exact original descriptor.
 local originalRoom1, originalRoom2 = door1.Room, door2.Room
@@ -100,6 +120,9 @@ assert(CurrentRun.CurrentRoom.OfferedRewards[1].Type == originalOffered1.Type
 assert(CurrentRun.CurrentRoom.OfferedRewards[2].Type == originalOffered2.Type
     and CurrentRun.CurrentRoom.OfferedRewards[2].ForceLootName == originalOffered2.ForceLootName)
 assert(exitByObject(1).activeLease == nil)
+assert(door1.PreviewRoomName == originalRoom1.Name
+    and door1.PreviewReward == originalRoom1.ChosenRewardType,
+  "route cancellation did not restore the native preview descriptor")
 
 -- A generic category Apply is a reservation only: no candidate sampling,
 -- CreateRoom, actual door target, ExitDoorRooms or OfferedRewards mutation.
@@ -129,6 +152,9 @@ assert(door1.Room == originalRoom1 and sourceRoom.ExitDoorRooms[1] == sourceExit
 assert(sourceRoom.OfferedRewards[1].Type == offeredBefore1.Type
     and sourceRoom.OfferedRewards[1].ForceLootName == offeredBefore1.ForceLootName)
 assert(previewCalls > previewsBefore, "reservation did not refresh native exit presentation")
+assert(door1.PreviewRoomName == "F_Combat01"
+    and door1.PreviewReward == "RoomMoneyDrop",
+  "reservation preview did not show the selected native-eligible room descriptor")
 
 M.dispatch("cancel_world_exit", {
   doorToken = first.doorToken,
