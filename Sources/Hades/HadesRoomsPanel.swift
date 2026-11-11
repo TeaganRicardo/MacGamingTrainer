@@ -59,8 +59,8 @@ struct HadesRoomsPanel: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @State private var doorID = ""
-    @State private var doorReward = "ZeusUpgrade"
-    @State private var route = "combat"
+    @State private var doorTarget = ""
+    @State private var occurrenceTarget = ""
     @State private var chamberObject = "trove"
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
@@ -73,6 +73,41 @@ struct HadesRoomsPanel: View {
     private func rewardName(_ identifier: String) -> String {
         model.worldRewards.first { $0.id == identifier }?.name(language: localization.language)
             ?? text("hades.currentReward")
+    }
+    private func routeName(_ identifier: String) -> String {
+        switch identifier {
+        case "combat": text("hades.route.combat")
+        case "story": text("hades.route.story")
+        case "shop": text("hades.route.shop")
+        case "reprieve": text("hades.route.reprieve")
+        case "miniboss": text("hades.route.miniboss")
+        default: identifier
+        }
+    }
+    private func worldTargetName(_ target: HadesWorldActionTarget) -> String {
+        target.kind == "reward" ? rewardName(target.id) : routeName(target.id)
+    }
+    private func occurrenceName(_ identifier: String) -> String {
+        switch identifier {
+        case "thanatos": text("hades.worldActions.occurrence.thanatos")
+        default: identifier
+        }
+    }
+    private func repairDoorTarget() {
+        guard let door else { doorTarget = ""; return }
+        if let lease = door.activeLease {
+            doorTarget = lease.kind + ":" + lease.target
+        } else if !door.targets.contains(where: { $0.stableID == doorTarget }) {
+            doorTarget = door.targets.first?.stableID ?? ""
+        }
+    }
+    private func repairOccurrenceTarget() {
+        let targets = model.world?.occurrenceTargets ?? []
+        if let active = model.world?.occurrence {
+            occurrenceTarget = active.target
+        } else if !targets.contains(occurrenceTarget) {
+            occurrenceTarget = targets.first ?? ""
+        }
     }
     private func action(_ command: String, operation: String, params: [String: Any] = [:]) {
         model.worldAction(command, roomID: model.world?.roomId, params: params, operation: operation)
@@ -152,64 +187,125 @@ struct HadesRoomsPanel: View {
                 Text(text("hades.noReadyDoors")).font(.caption).foregroundStyle(.secondary)
             }
             VStack(spacing: 0) {
-                TrainerLabeledControlRow(title: text("hades.exitDoor"), icon: TrainerSemanticIcon.Context.doorway, tint: theme.accent, emphasized: false, layout: .pickerAction) {
-                    Picker(text("hades.exitDoor"), selection: $doorID) {
-                        if doors.isEmpty { Text(text("hades.noReadyDoors")).tag("") }
-                        ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
-                            Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
-                        }
-                    }
-                    .labelsHidden().trainerPicker(.rowAction, state: doors.isEmpty ? .unavailable : .interactive)
-                }
-                TrainerLabeledControlRow(title: text("hades.doorReward"), icon: TrainerSemanticIcon.Context.reward, tint: theme.accent, emphasized: false, layout: .pickerAction) {
-                    Picker(text("hades.reward"), selection: $doorReward) {
-                        ForEach(model.worldRewards.filter(\.doorAllowed)) { row in
-                            Text(row.name(language: localization.language)).tag(row.id)
-                        }
-                    }
-                    .labelsHidden().trainerPicker(.rowAction, state: door?.canReward == true ? .interactive : .unavailable)
-                    TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
-                                                 enabled: model.canMutate && door?.canReward == true) {
-                        guard let door, door.canReward else { return }
-                        action("set_door_reward", operation: "hades.doorReward", params: ["doorId": door.id, "reward": doorReward])
-                    }
-                }
-                TrainerLabeledControlRow(title: text("hades.doorRoute"), icon: HadesWorkbenchIcon.route, tint: theme.accent, emphasized: false, layout: .pickerAction) {
-                    Picker(text("hades.doorRoute"), selection: $route) {
-                        ForEach(door?.routes ?? [], id: \.self) { item in
-                            Text(text("hades.route.\(item)")).tag(item)
-                        }
-                    }
-                    .labelsHidden().trainerPicker(.rowAction, state: door?.routes.isEmpty == false ? .interactive : .unavailable)
-                    TrainerSecondaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply,
-                                                 enabled: model.canMutate && door?.routes.isEmpty == false) {
-                        guard let door, !door.routes.isEmpty else { return }
-                        action("set_door_route", operation: "hades.doorRoute", params: ["doorId": door.id, "route": route])
-                    }
-                }
-                if door?.pendingEncounter == true {
-                    Text(text("hades.thanatosPending")).font(.caption).foregroundStyle(.secondary).padding(10)
-                }
-                TrainerLabeledControlRow(title: text("hades.restoreDoor"), icon: TrainerSemanticIcon.Action.restore, tint: theme.accent, emphasized: false) {
-                    TrainerSecondaryActionButton(title: text("hades.restore"), systemImage: TrainerSemanticIcon.Action.restore,
-                                                 enabled: model.canMutate && door?.canRestore == true) {
-                        guard let door, door.canRestore else { return }
-                        action("restore_door", operation: "hades.restoreDoor", params: ["doorId": door.id])
-                    }
-                }
+                worldExitRow
+                worldOccurrenceRow
             }
             .trainerGroupedRows()
             .help(text("hades.doorHelp"))
         }
         .onChange(of: doors, initial: true) { _, values in
             if !values.contains(where: { $0.id == doorID }) { doorID = values.first?.id ?? "" }
-            if let door, !door.routes.contains(route) { route = door.routes.first ?? "combat" }
+            repairDoorTarget()
         }
         .onChange(of: model.world?.objects, initial: true) { _, values in
             if let values, !values.contains(chamberObject) { chamberObject = values.first ?? "trove" }
         }
-        .onChange(of: doorID) { _, _ in
-            if let door, !door.routes.contains(route) { route = door.routes.first ?? "combat" }
+        .onChange(of: doorID) { _, _ in repairDoorTarget() }
+        .onChange(of: model.world?.occurrenceTargets, initial: true) { _, _ in repairOccurrenceTarget() }
+        .onChange(of: model.world?.occurrence) { _, _ in repairOccurrenceTarget() }
+    }
+
+    private var worldExitRow: some View {
+        let selectedDoor = door
+        let rewards = selectedDoor?.targets.filter { $0.kind == "reward" } ?? []
+        let routes = selectedDoor?.targets.filter { $0.kind == "roomCategory" } ?? []
+        let activeSelection = selectedDoor?.activeLease.map { $0.kind + ":" + $0.target }
+        let selectedTarget = selectedDoor?.targets.first { $0.stableID == doorTarget }
+        let canAct = model.canMutate && selectedDoor != nil
+            && (selectedDoor?.activeLease != nil || selectedTarget != nil)
+        return TrainerLabeledControlRow(
+            title: text("hades.worldActions.modifyExit"),
+            icon: TrainerSemanticIcon.Context.doorway,
+            tint: model.canMutate && !doors.isEmpty ? theme.accent : theme.inactive,
+            emphasized: selectedDoor?.activeLease != nil,
+            layout: .pickerAction
+        ) {
+            HStack(spacing: 8) {
+                Picker(text("hades.exitDoor"), selection: $doorID) {
+                    if doors.isEmpty { Text(text("hades.noReadyDoors")).tag("") }
+                    ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
+                        Text("\(index + 1) · \(rewardName(row.reward))").tag(row.id)
+                    }
+                }
+                .labelsHidden()
+                .trainerPicker(.expanding, state: doors.isEmpty ? .unavailable : .interactive)
+
+                Picker(text("hades.worldActions.target"), selection: $doorTarget) {
+                    if let lease = selectedDoor?.activeLease,
+                       !((selectedDoor?.targets ?? []).contains { $0.stableID == (activeSelection ?? "") }) {
+                        Text(worldTargetName(.init(kind: lease.kind, id: lease.target)))
+                            .tag(lease.kind + ":" + lease.target)
+                    }
+                    if !rewards.isEmpty {
+                        Section(text("hades.worldActions.rewards")) {
+                            ForEach(rewards, id: \.stableID) { target in
+                                Text(worldTargetName(target)).tag(target.stableID)
+                            }
+                        }
+                    }
+                    if !routes.isEmpty {
+                        Section(text("hades.worldActions.routes")) {
+                            ForEach(routes, id: \.stableID) { target in
+                                Text(worldTargetName(target)).tag(target.stableID)
+                            }
+                        }
+                    }
+                    if selectedDoor != nil && rewards.isEmpty && routes.isEmpty
+                        && selectedDoor?.activeLease == nil {
+                        Text(text("hades.worldActions.noTarget")).tag("")
+                    }
+                }
+                .labelsHidden()
+                .trainerPicker(
+                    .expanding,
+                    state: model.canMutate && selectedDoor?.activeLease == nil
+                        && (!rewards.isEmpty || !routes.isEmpty) ? .interactive : .unavailable
+                )
+            }
+
+            TrainerSecondaryActionButton(
+                title: text("hades.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
+                enabled: canAct,
+                latched: selectedDoor?.activeLease != nil
+            ) {
+                guard let selectedDoor else { return }
+                _ = model.toggleWorldExit(door: selectedDoor, target: selectedTarget)
+            }
+        }
+    }
+
+    private var worldOccurrenceRow: some View {
+        let targets = model.world?.occurrenceTargets ?? []
+        let active = model.world?.occurrence
+        let canAct = model.canMutate && (active != nil || targets.contains(occurrenceTarget))
+        return TrainerLabeledControlRow(
+            title: text("hades.worldActions.specifyOccurrence"),
+            icon: HadesWorkbenchIcon.route,
+            tint: model.canMutate ? theme.accent : theme.inactive,
+            emphasized: active != nil,
+            layout: .pickerAction
+        ) {
+            Picker(text("hades.worldActions.specifyOccurrence"), selection: $occurrenceTarget) {
+                if targets.isEmpty { Text(text("hades.worldActions.noOccurrence")).tag("") }
+                ForEach(targets, id: \.self) { target in
+                    Text(occurrenceName(target)).tag(target)
+                }
+            }
+            .labelsHidden()
+            .trainerPicker(
+                .rowAction,
+                state: model.canMutate && active == nil && !targets.isEmpty
+                    ? .interactive : .unavailable
+            )
+            TrainerSecondaryActionButton(
+                title: text("hades.apply"),
+                systemImage: TrainerSemanticIcon.Action.apply,
+                enabled: canAct,
+                latched: model.world?.occurrence != nil
+            ) {
+                _ = model.toggleWorldOccurrence(target: occurrenceTarget)
+            }
         }
     }
 }
