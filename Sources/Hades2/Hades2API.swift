@@ -80,8 +80,8 @@ enum Hades2Request {
         case .setElement: return .setElement
         case .lockElement: return .lockElement
         case .setBoonRarity: return .setBoonRarityDesired
-        case .setNextRoomReward: return .setNextRoomRewardDesired
-        case .setNextOccurrence: return .setNextOccurrenceDesired
+        case .setNextRoomReward: return .setNextRoomRewardOnce
+        case .setNextOccurrence: return .setNextOccurrenceOnce
         case .spawnReward, .acquireExactBoon: return .spawnReward
         case .acquireChaosPair: return .acquireChaosPair
         case .openSellTraits: return .openSellTraits
