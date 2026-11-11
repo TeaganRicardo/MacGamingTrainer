@@ -1467,6 +1467,151 @@ world = (function()
       end
     end
   end
+  local function rewardTargets(door)
+    local result = array()
+    if not canModify(door.Room) then return result end
+    for id, data in pairs(runtime.worldDefinitions or {}) do
+      if data.doorAllowed then
+        local reward = doorReward(door.Room, data)
+        if reward then result[#result + 1] = { kind = "reward", id = id } end
+      end
+    end
+    table.sort(result, function(a, b) return a.id < b.id end)
+    return result
+  end
+  local function leaseToken(prefix, door)
+    nextLease = nextLease + 1
+    return table.concat({
+      prefix, runtime.generationId, instanceId(CurrentRun),
+      door and instanceId(door) or "", tostring(nextLease),
+    }, ":")
+  end
+  local function snapshotRewardLease(door)
+    local room, source = door.Room, currentRoom()
+    local snapshot = {
+      fields = {}, canBeRerolled = snapshotField(door, "CanBeRerolled"),
+      source = source, hadOfferedRewards = source.OfferedRewards ~= nil,
+    }
+    for _, key in ipairs(rewardFields) do snapshot.fields[key] = snapshotField(room, key) end
+    if source.OfferedRewards ~= nil then
+      snapshot.offered = snapshotField(source.OfferedRewards, door.ObjectId)
+    end
+    return snapshot
+  end
+  local function restoreRewardLease(door, lease)
+    if type(lease) ~= "table" or lease.kind ~= "reward"
+        or lease.run ~= CurrentRun or lease.hero ~= hero()
+        or lease.sourceRoom ~= currentRoom() or lease.doorToken ~= doorToken(door)
+        or rewardSignature(door.Room) ~= lease.appliedSignature then return false end
+    local room, snapshot = door.Room, lease.snapshot
+    for _, key in ipairs(rewardFields) do restoreField(room, key, snapshot.fields[key]) end
+    local nativeReroll = snapshot.canBeRerolled.present and snapshot.canBeRerolled.value or nil
+    refreshDoor(door, room, nativeReroll)
+    if snapshot.hadOfferedRewards then
+      snapshot.source.OfferedRewards = snapshot.source.OfferedRewards or {}
+      restoreField(snapshot.source.OfferedRewards, door.ObjectId, snapshot.offered)
+    else
+      snapshot.source.OfferedRewards = nil
+    end
+    return true
+  end
+  local function applyRewardLease(door, target)
+    local data = definition(target)
+    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
+    local reward, store = doorReward(door.Room, data)
+    assert(reward, "hades.error.worldUnavailable")
+    local room = door.Room
+    local lease = {
+      kind = "reward", target = target, doorToken = doorToken(door),
+      run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+      snapshot = snapshotRewardLease(door),
+    }
+    lease.leaseToken = leaseToken("exit", door)
+    room.ChosenRewardType = data.rewardType
+    room.ForceLootName = data.rewardType == "Boon" and target or nil
+    room.RewardStoreName = store
+    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
+    room.Reward = nil
+    room.Encounter = nil
+    room.OriginalChosenRewardType = nil
+    room.OriginalForceLootName = nil
+    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
+    refreshDoor(door, room)
+    lease.appliedSignature = rewardSignature(room)
+    exitLeases[door] = lease
+    return lease
+  end
+  local function routePreviewRoom(door, kind)
+    local proxy = {}
+    for key, value in pairs(door.Room) do proxy[key] = value end
+    proxy.ForceLootName, proxy.Reward, proxy.RewardOverrides, proxy.Encounter = nil, nil, nil, nil
+    if kind == "story" then proxy.ChosenRewardType = "Story"
+    elseif kind == "shop" then proxy.ChosenRewardType = "Shop"
+    elseif kind == "reprieve" then proxy.ChosenRewardType = "RoomRewardHealDrop"
+    end
+    return proxy
+  end
+  local function applyRouteLease(door, target)
+    assert(canModify(door.Room), "hades.error.worldUnavailable")
+    local routes = routeRooms(currentRoom())
+    local candidates = routes and routes[target]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    local lease = {
+      kind = "roomCategory", target = target, doorToken = doorToken(door),
+      run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+      originalSignature = rewardSignature(door.Room),
+    }
+    lease.leaseToken = leaseToken("exit", door)
+    exitLeases[door] = lease
+    -- Preview rendering may run native UI code, but it sees only a temporary
+    -- descriptor; the actual door target, room counts and RNG remain untouched.
+    local originalRoom = door.Room
+    door.Room = routePreviewRoom(door, target)
+    local ok, failure = pcall(CreateDoorRewardPreview, door)
+    door.Room = originalRoom
+    if not ok then exitLeases[door] = nil; error(failure, 0) end
+    return lease
+  end
+  local function materializeRoute(door, lease)
+    local routes = routeRooms(lease.sourceRoom)
+    local candidates = routes and routes[lease.target]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    local data = GetRandomValue(candidates)
+    assert(type(data) == "table", "hades.error.worldUnavailable")
+    local room = CreateRoom(data, { SkipChooseEncounter = true })
+    assert(type(room) == "table", "hades.error.worldUnavailable")
+    AssignRoomToExitDoor(door, room)
+    return room
+  end
+  local function clearSourceExitLeases(source, selectedDoor)
+    for door, lease in pairs(exitLeases) do
+      if lease.sourceRoom == source then
+        if door ~= selectedDoor and lease.kind == "reward" then
+          restoreRewardLease(door, lease)
+        end
+        exitLeases[door] = nil
+      end
+    end
+  end
+  local function occurrenceSupported()
+    return type(EncounterSets) == "table"
+      and type(EncounterSets.ThanatosEncounters) == "table"
+      and next(EncounterSets.ThanatosEncounters) ~= nil
+  end
+  local function applyOccurrenceLease(target)
+    assert(target == "thanatos" and occurrenceSupported() and activeOccurrence() == nil,
+      "hades.error.worldUnavailable")
+    occurrenceLease = {
+      target = target, leaseToken = leaseToken("occurrence"),
+      run = CurrentRun, hero = hero(),
+    }
+    return occurrenceLease
+  end
+  local function cancelOccurrenceLease(token)
+    local lease = activeOccurrence()
+    assert(lease and lease.leaseToken == token, "hades.error.staleDoor")
+    occurrenceLease = nil
+  end
   local api = {}
   function api.install()
     for _, name in ipairs({ "IsSecretDoorEligible", "IsShrinePointDoorEligible", "IsChallengeSwitchEligible",
