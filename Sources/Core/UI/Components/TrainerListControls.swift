@@ -162,11 +162,13 @@ struct TrainerPrimaryActionButton: View {
 }
 
 struct TrainerSecondaryActionButton: View {
+    @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let systemImage: String?
     let enabled: Bool
+    let latched: Bool
     let widthRole: TrainerActionWidthRole
     let helpText: String?
     let accessibilityLabel: String?
@@ -176,6 +178,7 @@ struct TrainerSecondaryActionButton: View {
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
+        latched: Bool = false,
         widthRole: TrainerActionWidthRole = .automatic,
         helpText: String? = nil,
         accessibilityLabel: String? = nil,
@@ -184,24 +187,43 @@ struct TrainerSecondaryActionButton: View {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
+        self.latched = latched
         self.widthRole = widthRole
         self.helpText = helpText
         self.accessibilityLabel = accessibilityLabel
         self.action = action
     }
 
-    var body: some View {
+    private var button: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
+            TrainerActionButtonLabel(
+                title: title,
+                fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil)
+            )
         }
-        .buttonStyle(.bordered)
-        .disabled(!enabled)
-        .transaction { transaction in
-            TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+    }
+
+    @ViewBuilder
+    private var styledButton: some View {
+        if latched {
+            button
+                .buttonStyle(.borderedProminent)
+                .tint(theme.accent)
+        } else {
+            button.buttonStyle(.bordered)
         }
-        .help(helpText ?? "")
-        .accessibilityLabel(accessibilityLabel ?? title)
-        .modifier(TrainerActionWidthModifier(role: widthRole))
+    }
+
+    var body: some View {
+        styledButton
+            .disabled(!enabled)
+            .transaction { transaction in
+                TrainerMotion.nativeControlTransaction(&transaction, reduceMotion: reduceMotion)
+            }
+            .help(helpText ?? "")
+            .accessibilityLabel(accessibilityLabel ?? title)
+            .accessibilityAddTraits(latched ? .isSelected : [])
+            .modifier(TrainerActionWidthModifier(role: widthRole))
     }
 }
 
