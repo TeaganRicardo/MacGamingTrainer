@@ -279,7 +279,7 @@ final class Hades2API {
         if let saveDraftEntryIDs { params["draftEntryIds"] = saveDraftEntryIDs }
         let offlineIntent = !runtimeConnected && [
             .resetDesired, .setDesired, .setGatheringDesired, .setChaosGateDesired,
-            .setBoonRarityDesired, .setNextRoomRewardDesired, .setNextOccurrenceDesired, .loadProfile,
+            .setBoonRarityDesired, .loadProfile,
         ].contains(request.command)
         session.send(
             request.command.rawValue,
