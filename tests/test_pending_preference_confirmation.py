@@ -21,7 +21,7 @@ class PendingResidentSession(FakeResidentSession):
         state = {
             'status': 'ready',
             'scene': 'run',
-            'capabilities': {'setFeature': True, 'setStats': True},
+            'capabilities': {'setFeature': True, 'setStats': True, 'worldActions': True},
             'statAvailable': {'enemyHealth': True},
             'desiredFeatures': {key: False for key in TOGGLES},
             'activeFeatures': {key: False for key in TOGGLES},
@@ -31,7 +31,16 @@ class PendingResidentSession(FakeResidentSession):
             'moneyMultiplier': 2.0,
             'resourceMultiplier': 2.0,
             'boonRarity': default_boon_rarity(),
-            'nextRoomReward': None,
+            'worldActions': {
+                'exits': [{
+                    'doorToken': 'exit:test:1',
+                    'objectId': 1,
+                    'ordinal': 1,
+                    'roomName': 'F_Combat01',
+                    'reward': 'RoomMoneyDrop',
+                    'targets': [{'kind': 'reward', 'id': 'WeaponUpgrade'}],
+                }],
+            },
             'runtimeDiagnostics': {},
             'healthLocked': False,
             'health': 100.0,
@@ -113,15 +122,18 @@ class PendingResidentSession(FakeResidentSession):
                 'forceDuo': bool(params.get('forceDuo')),
             }
             return
-        if command == 'set_next_room_reward':
-            reward = params.get('reward')
-            self.state['nextRoomReward'] = reward
-            if reward is None:
-                self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
-            else:
-                token = params.get('token')
-                if token is not None:
-                    self.state['runtimeDiagnostics']['nextRoomRewardToken'] = token
+        if command == 'apply_world_exit':
+            assert params['doorToken'] == 'exit:test:1'
+            assert params['kind'] == 'reward'
+            assert params['target'] == 'WeaponUpgrade'
+            self.state['worldActions']['exits'][0]['activeLease'] = {
+                'kind': 'reward',
+                'target': 'WeaponUpgrade',
+                'leaseToken': 'lease:test:1',
+            }
+            return
+        if command == 'cancel_world_exit':
+            self.state['worldActions']['exits'][0].pop('activeLease', None)
             return
         if command == 'set_vital' and params.get('vital') == 'health':
             field = params.get('field')
@@ -277,27 +289,34 @@ assert adapter_rarity.preference_dirty is False
 print('pending_preference_confirmation_rarity_ok')
 
 
-# A live world one-shot may run while another durable field remains pending,
+# A live exact-exit action may run while another durable field remains pending,
 # but it must neither persist itself nor confirm that unrelated durable intent.
 base_reward, transport_reward, adapter_reward = make_pending_adapter(
-    'mgt-pending-confirmation-next-room-'
+    'mgt-pending-confirmation-world-exit-'
 )
 
 adapter_reward.dispatch(
     'set_desired',
     {'feature': 'invincibility', 'value': True},
-    'desired-a-reward',
+    'desired-a-world-exit',
 )
 assert adapter_reward.preference_dirty is True
 
 adapter_reward.dispatch(
-    'set_next_room_reward_once',
-    {'reward': 'WeaponUpgrade'},
-    'world-reward',
+    'apply_world_exit',
+    {
+        'doorToken': 'exit:test:1',
+        'kind': 'reward',
+        'target': 'WeaponUpgrade',
+    },
+    'world-exit-apply',
 )
-armed_token = transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken']
-assert isinstance(armed_token, str) and armed_token.startswith('one-shot-')
-assert transport_reward.state['nextRoomReward'] == 'WeaponUpgrade'
+lease = transport_reward.state['worldActions']['exits'][0]['activeLease']
+assert lease == {
+    'kind': 'reward',
+    'target': 'WeaponUpgrade',
+    'leaseToken': 'lease:test:1',
+}
 assert adapter_reward.preferences['invincibility'] is True
 assert adapter_reward.preference_dirty is True, (
     'successful live world action must not confirm failed durable feature A'
@@ -309,19 +328,12 @@ assert 'nextRoomReward' not in persisted_reward
 assert 'nextRoomRewardToken' not in persisted_reward
 assert persisted_reward['invincibility'] is True
 
-# Simulate native consumption before the next status. The receipt remains
-# runtime evidence only; the status may reconcile the older durable feature.
-transport_reward.state['nextRoomReward'] = None
-transport_reward.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
-transport_reward.state['runtimeDiagnostics'][
-    'lastConsumedNextRoomRewardToken'
-] = armed_token
-
-adapter_reward.dispatch('status', {}, 'status-reward')
+# Native use consumes the lease. A later status may reconcile the older durable
+# feature, but it may only observe the now-empty world-action lease.
+transport_reward.state['worldActions']['exits'][0].pop('activeLease', None)
+adapter_reward.dispatch('status', {}, 'status-world-exit')
 assert transport_reward.state['desiredFeatures']['invincibility'] is True
-assert transport_reward.state['nextRoomReward'] is None
-assert 'nextRoomReward' not in adapter_reward.preferences
-assert 'nextRoomRewardToken' not in adapter_reward.preferences
+assert 'activeLease' not in transport_reward.state['worldActions']['exits'][0]
 assert adapter_reward.preference_dirty is False
 persisted_reward = json.loads(
     (base_reward / 'desired-state.json').read_text(encoding='utf-8')
@@ -330,7 +342,7 @@ assert 'nextRoomReward' not in persisted_reward
 assert 'nextRoomRewardToken' not in persisted_reward
 assert persisted_reward['invincibility'] is True
 
-print('pending_preference_confirmation_next_room_ok')
+print('pending_preference_confirmation_world_exit_ok')
 
 
 # Reconciliation confirmation never rewrites durable desired state. The value
