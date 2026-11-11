@@ -29,11 +29,33 @@ RoomSetData = { Tartarus = {
   A_Shop01 = { Name = "A_Shop01", ForcedReward = "Shop", eligible = false },
 }, Secrets = { { Name = "RoomSecret01" } } }
 EncounterSets = { ThanatosEncounters = { "ThanatosTartarus" } }
-EncounterData = { ThanatosTartarus = { Name = "ThanatosTartarus" } }
-local encounterCalls = 0
-function ChooseEncounter(run, room) encounterCalls = encounterCalls + 1; return { Name = "NativeDefault" } end
+EncounterData = {
+  NativeDefault = { Name = "NativeDefault" },
+  ThanatosTartarus = { Name = "ThanatosTartarus" },
+}
+local encounterCalls, recordedEncounter = 0, nil
 function SetupEncounter(data, room) return clone(data) end
-function IsEncounterEligible(run, room, data) return room.blockThanatos ~= true end
+function IsEncounterEligible(run, room, data)
+  return data.Name == "NativeDefault" or room.blockThanatos ~= true
+end
+function IsEncounterForced(run, room, data) return data.forced == true end
+function ChooseEncounter(run, room)
+  encounterCalls = encounterCalls + 1
+  local eligible, forced = {}, {}
+  for _, data in pairs(EncounterData) do
+    if IsEncounterEligible(run, room, data) then
+      eligible[#eligible + 1] = data
+      if IsEncounterForced(run, room, data) then forced[#forced + 1] = data end
+    end
+  end
+  table.sort(eligible, function(a, b) return a.Name < b.Name end)
+  table.sort(forced, function(a, b) return a.Name < b.Name end)
+  return SetupEncounter(GetRandomValue(#forced > 0 and forced or eligible), room)
+end
+function RecordEncounter(run, encounter)
+  assert(run == CurrentRun)
+  recordedEncounter = encounter.Name
+end
 function IsRoomEligible(run, room, data, args)
   assert(type(args) == "table")
   return data.eligible ~= false and data.Name ~= room.Name
@@ -290,6 +312,72 @@ assert(leaveCalls == 1
 CurrentRun.CurrentRoom = originalRoom
 firstDoor.Room = firstRoom
 OfferedExitDoors[100] = firstDoor
+
+local occurrenceSnapshot = world()
+assert(#occurrenceSnapshot.occurrenceTargets == 5 and occurrenceSnapshot.occurrence == nil,
+  "Hades I named occurrence catalog was not projected")
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "npc:Sisyphus",
+  requestId = "sisyphus-once",
+})
+assert(world().occurrence.target == "npc:Sisyphus"
+    and world().occurrence.leaseToken == "occurrence:sisyphus-once",
+  "named room occurrence did not arm an authoritative run-scoped lease")
+local selectedStory = ChooseNextRoomData(CurrentRun, {})
+assert(selectedStory == RoomSetData.Tartarus.A_Story01,
+  "named room occurrence was not selected from the native eligible pool")
+assert(world().occurrence ~= nil, "merely offering the named room consumed the request")
+local storyRoom = CreateRoom(selectedStory, { SkipChooseEncounter = true })
+storyRoom.RoomSetName = "Tartarus"
+AssignRoomToExitDoor(firstDoor, storyRoom)
+local storyEntered = AttemptUseDoor(firstDoor)
+assert(storyEntered == storyRoom and world().occurrence == nil,
+  "named room occurrence did not consume at native LeaveRoom commitment")
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+OfferedExitDoors[100] = firstDoor
+
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "shop:Charon",
+  requestId = "charon-cancel",
+})
+local charonLease = world().occurrence.leaseToken
+runtime.cancel_world_occurrence({
+  roomId = originalRoomId,
+  leaseToken = charonLease,
+  requestId = "charon-cancel-request",
+})
+assert(world().occurrence == nil, "explicit named occurrence cancellation left a lease")
+
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "npc:Thanatos",
+  requestId = "thanatos-once",
+})
+local namedThanatos = ChooseEncounter(CurrentRun, firstDoor.Room)
+assert(namedThanatos.Name == "ThanatosTartarus" and world().occurrence ~= nil,
+  "named encounter was not selected or was consumed before native bookkeeping")
+RecordEncounter(CurrentRun, namedThanatos)
+assert(recordedEncounter == "ThanatosTartarus" and world().occurrence == nil,
+  "named encounter did not consume at RecordEncounter commitment")
+
+EncounterData.NativeDefault.forced = true
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "npc:Thanatos",
+  requestId = "thanatos-native-force",
+})
+local forcedEncounter = ChooseEncounter(CurrentRun, firstDoor.Room)
+assert(forcedEncounter.Name == "NativeDefault" and world().occurrence ~= nil,
+  "named occurrence overrode a natively forced encounter")
+runtime.cancel_world_occurrence({
+  roomId = originalRoomId,
+  leaseToken = world().occurrence.leaseToken,
+  requestId = "thanatos-force-cancel",
+})
+EncounterData.NativeDefault.forced = nil
 local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
   ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
 RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
