@@ -22,11 +22,22 @@ assert 'Timer.scheduledTimer' not in save_model
 # across every offered door, and is consumed only when the player enters a room.
 assert 'requireFunctions("next room reward", { "ChooseRoomReward", "StartRoom" })' in lua
 assert 'type(args.Door) ~= "table"' in lua
-consume_block = lua[lua.index('if not owns("StartRoom")'):lua.index('local patchRoom', lua.index('if not owns("StartRoom")'))]
-assert consume_block.index('M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken') < consume_block.index('M.nextRoomReward = nil')
+# The two world one-shots share the native StartRoom owner. The selected
+# room must start successfully and still hold the pre-call request token before
+# the legacy reward receipt is acknowledged or its desired value is cleared.
+start = lua.index('local function installRoomAdmission()')
+consume_block = lua[start:lua.index('M.occurrenceRouting.available = function()', start)]
+assert consume_block.index('local result = table.pack(original(run, room, ...))') < consume_block.index(
+    'M.lastConsumedNextRoomRewardToken = rewardToken'
+)
+assert consume_block.index('M.nextRoomRewardToken == rewardToken') < consume_block.index(
+    'M.lastConsumedNextRoomRewardToken = rewardToken'
+)
+assert consume_block.index('M.lastConsumedNextRoomRewardToken = rewardToken') < consume_block.index('M.nextRoomReward = nil')
 assert consume_block.index('M.nextRoomReward = nil') < consume_block.index('M.nextRoomRewardToken = nil')
 assert consume_block.index('M.nextRoomRewardToken = nil') < consume_block.index('releaseNextRoomReward()')
-choose_block = lua[lua.index('installHook("ChooseRoomReward"'):lua.index('if not owns("StartRoom")')]
+choose_start = lua.index('installHook("ChooseRoomReward"')
+choose_block = lua[choose_start:lua.index('    installRoomAdmission()', choose_start)]
 assert 'M.nextRoomReward = nil' not in choose_block
 assert 'patchOfferedNextRoomDoors()' in lua
 assert 'CurrentRun.CurrentRoom.OfferedRewards[doorId]' in lua
