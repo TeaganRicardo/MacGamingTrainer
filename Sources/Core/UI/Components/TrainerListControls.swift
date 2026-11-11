@@ -196,10 +196,7 @@ struct TrainerSecondaryActionButton: View {
 
     private var button: some View {
         Button(action: action) {
-            TrainerActionButtonLabel(
-                title: title,
-                fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil)
-            )
+            TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
     }
 
