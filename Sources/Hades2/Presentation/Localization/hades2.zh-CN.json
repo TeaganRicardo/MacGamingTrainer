@@ -618,7 +618,8 @@
     "hades2.worldActions.route.shop": "商店",
     "hades2.worldActions.route.reprieve": "休整",
     "hades2.worldActions.route.miniboss": "精英战",
-    "hades2.shortcut.applyWorldExit": "修改出口"
+    "hades2.shortcut.applyWorldExit": "修改出口",
+    "hades2.worldActions.specifyOccurrence": "指定遭遇"
   },
   "language": "zh-CN"
 }
