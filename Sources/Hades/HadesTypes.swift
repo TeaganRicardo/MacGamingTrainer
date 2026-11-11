@@ -195,12 +195,6 @@ struct HadesWorldDoor: Decodable, Identifiable, Equatable {
     let reward: String
     let targets: [HadesWorldActionTarget]?
     let activeLease: HadesWorldActionLease?
-    // Transitional legacy fields remain optional until the old Hades I command
-    // surface is removed after the two-row World Actions view lands.
-    let canReward: Bool
-    let routes: [String]
-    let canRestore: Bool
-    let pendingEncounter: Bool
 
     var effectiveDoorToken: String { doorToken ?? id }
     var worldActionTargets: [HadesWorldActionTarget] { targets ?? [] }
