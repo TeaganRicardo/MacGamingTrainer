@@ -44,7 +44,11 @@ local cancelled = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(cancelled.Name == "NemesisCombatF"
     and M.nextOccurrenceTarget == "npc:Nemesis"
     and M.lastConsumedNextOccurrenceToken == "record-commit")
-M.dispatch("set_next_occurrence", { target = nil, includeCatalogs = false })
+M.dispatch("cancel_world_occurrence", {
+  leaseToken = M.nextOccurrenceToken,
+  requestId = "cancel-before-record-action",
+  includeCatalogs = false,
+})
 RecordEncounter(CurrentRun, cancelled)
 assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil
     and M.lastConsumedNextOccurrenceToken == "record-commit",
