@@ -617,7 +617,8 @@
     "hades2.worldActions.route.story": "Story",
     "hades2.worldActions.route.shop": "Shop",
     "hades2.worldActions.route.reprieve": "Reprieve",
-    "hades2.worldActions.route.miniboss": "Miniboss"
+    "hades2.worldActions.route.miniboss": "Miniboss",
+    "hades2.shortcut.applyWorldExit": "Modify Exit"
   },
   "language": "en"
 }
