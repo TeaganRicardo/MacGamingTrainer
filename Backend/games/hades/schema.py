@@ -38,7 +38,8 @@ LOCK_FIELDS = (('healthLocked', 'healthLock'), ('moneyLocked', 'moneyLock'), ('r
 WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object',
                             'set_door_reward', 'set_door_route', 'restore_door',
-                            'apply_world_exit', 'cancel_world_exit'))
+                            'apply_world_exit', 'cancel_world_exit',
+                            'apply_world_occurrence', 'cancel_world_occurrence'))
 ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
                                                'update_trait', 'remove_trait', 'add_chaos_pair',
                                                'set_trait_uses', 'expire_trait', 'refresh_trait'))
