@@ -187,7 +187,7 @@ for language in ("en", "zh-CN"):
     assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
 
 for key in (
-    'case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"',
+    'case .applyNextRoomReward: return "hades2.shortcut.applyWorldExit"',
     'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"',
     'case .spawnPickup: return "hades2.shortcut.spawnPickup"',
     'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"',
