@@ -1542,7 +1542,6 @@ world = (function()
   end
   local function refreshDoor(door, room)
     clearDoorPreview(door)
-    door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
   end
@@ -1573,8 +1572,9 @@ world = (function()
     local edit = activeEdit(door)
     if not edit or edit.kind ~= "reward" then
       edit = {
-        kind = "reward", original = door.Room, run = CurrentRun,
-        hero = hero(), sourceRoom = currentRoom(),
+        kind = "reward", original = door.Room,
+        originalCanBeRerolled = door.CanBeRerolled,
+        run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
       }
     end
     edit.target = target
@@ -1958,6 +1958,9 @@ world = (function()
     assert(edit and edit.leaseToken == params.leaseToken, "hades.error.staleDoor")
     if edit.kind == "reward" then
       refreshDoor(door, edit.original)
+      if edit.originalCanBeRerolled ~= nil then
+        door.CanBeRerolled = edit.originalCanBeRerolled
+      end
     elseif edit.kind == "route" then
       drawDoorPreview(door, door.Room)
     end
