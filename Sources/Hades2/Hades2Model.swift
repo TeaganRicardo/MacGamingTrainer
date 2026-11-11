@@ -276,7 +276,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
             && !exiting && protocolCompatible
     }
-    var nextOccurrenceTarget: String? { worldOccurrence?.target }
+    var activeWorldOccurrenceTarget: String? { worldOccurrence?.target }
     var canApplyWorldExit: Bool {
         connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
             && !exiting && protocolCompatible && selectedWorldExit != nil
@@ -297,7 +297,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var occurrenceActionAvailable: Bool {
         guard canApplyWorldAction else { return false }
-        if nextOccurrenceTarget != nil { return true }
+        if activeWorldOccurrenceTarget != nil { return true }
         return occurrenceTargets.contains { $0.id == selectedNextOccurrenceTarget }
     }
     var canEditDesired: Bool { backendAvailable && !exiting }
@@ -1465,7 +1465,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func repairOccurrenceSelection() {
-        if let active = nextOccurrenceTarget {
+        if let active = activeWorldOccurrenceTarget {
             selectedNextOccurrenceTarget = active
         } else if !occurrenceTargets.contains(where: { $0.id == selectedNextOccurrenceTarget }) {
             selectedNextOccurrenceTarget = occurrenceTargets.first?.id ?? ""
