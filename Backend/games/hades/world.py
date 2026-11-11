@@ -10,6 +10,7 @@ from .schema import RESOURCE_IDS, WORLD_COMMANDS, invalid_value, number
 _DATA = json.loads(Path(__file__).with_name('world_catalog.json').read_text())
 REWARDS = _DATA['rewards']
 ROUTES = frozenset(('combat', 'story', 'shop', 'reprieve', 'miniboss', 'thanatos'))
+GENERIC_ROUTES = ROUTES - {'thanatos'}
 # Names and Generate-row grouping are presentation only; the resident never
 # reads them, so they stay outside its definitions identity.
 _PRESENTATION_FIELDS = frozenset(('names', 'group', 'section', 'sectionNames'))
@@ -48,6 +49,15 @@ def mutation_params(command, params):
         if not isinstance(door_id, str) or not door_id:
             raise AdapterError('stale_door', 'hades.error.staleDoor')
         result['doorId'] = door_id
+    if command in ('apply_world_exit', 'cancel_world_exit'):
+        door_token = params.get('doorToken')
+        if not isinstance(door_token, str) or not door_token:
+            raise AdapterError('stale_door', 'hades.error.staleDoor')
+        request_id = params.get('requestId')
+        if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
+            raise invalid_value()
+        result['doorToken'] = door_token
+        result['requestId'] = request_id
     if command in ('spawn_reward', 'set_door_reward'):
         reward = params.get('reward')
         if not isinstance(reward, str) or reward not in REWARDS:
@@ -55,6 +65,25 @@ def mutation_params(command, params):
         if command == 'set_door_reward' and not REWARDS[reward]['doorAllowed']:
             raise invalid_value()
         result['reward'] = reward
+    if command == 'apply_world_exit':
+        kind = params.get('kind')
+        target_id = params.get('targetID')
+        if kind == 'reward':
+            if (not isinstance(target_id, str) or target_id not in REWARDS
+                    or not REWARDS[target_id]['doorAllowed']):
+                raise invalid_value()
+        elif kind == 'roomCategory':
+            if target_id not in GENERIC_ROUTES:
+                raise invalid_value()
+        else:
+            raise invalid_value()
+        result['kind'] = kind
+        result['targetID'] = target_id
+    if command == 'cancel_world_exit':
+        lease_token = params.get('leaseToken')
+        if not isinstance(lease_token, str) or not 1 <= len(lease_token) <= 384:
+            raise AdapterError('stale_door', 'hades.error.staleDoor')
+        result['leaseToken'] = lease_token
     if command == 'generate_chamber_object':
         kind = params.get('object')
         if not isinstance(kind, str) or kind not in ('trove', 'well', 'purge'):
