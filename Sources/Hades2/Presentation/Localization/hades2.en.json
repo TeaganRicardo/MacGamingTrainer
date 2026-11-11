@@ -618,7 +618,8 @@
     "hades2.worldActions.route.shop": "Shop",
     "hades2.worldActions.route.reprieve": "Reprieve",
     "hades2.worldActions.route.miniboss": "Miniboss",
-    "hades2.shortcut.applyWorldExit": "Modify Exit"
+    "hades2.shortcut.applyWorldExit": "Modify Exit",
+    "hades2.worldActions.specifyOccurrence": "Specify Encounter"
   },
   "language": "en"
 }
