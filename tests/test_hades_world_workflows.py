@@ -247,6 +247,64 @@ assert(hasTarget(initialWorld.doors[1], "roomCategory", "story"))
 assert(hasTarget(initialWorld.doors[2], "roomCategory", "combat"))
 assert(not hasTarget(initialWorld.doors[2], "roomCategory", "story"),
   "door-specific RoomSetName leaked the other door's route catalog")
+
+-- Native eligibility/force probes are read-only. If either native query tries
+-- to sample RNG, the entire category override fails closed without a draw.
+eligibilityUsesRandom = true
+local beforeEligibilityRandom = randomValueCalls
+assert(#world().doors[1].targets == 0)
+assert(randomValueCalls == beforeEligibilityRandom,
+  "route eligibility inspection consumed native RNG")
+eligibilityUsesRandom = false
+assert(#world().doors[1].targets > 0)
+RoomSetData.Tartarus.A_ForcedRandom = {
+  Name = "A_ForcedRandom", RandomForced = true,
+}
+forcedUsesRandom = true
+local beforeForcedRandomProbe = randomValueCalls
+assert(#world().doors[1].targets == 0,
+  "a random-dependent native force query exposed generic routes")
+assert(randomValueCalls == beforeForcedRandomProbe,
+  "native force inspection consumed GetRandomValue")
+forcedUsesRandom = false
+RoomSetData.Tartarus.A_ForcedRandom = nil
+assert(#world().doors[1].targets > 0)
+
+-- Two generated exits own independent leases. Native denial must not commit
+-- either route; cancelling one exit must leave the other reservation intact.
+local firstPlanDoor, secondPlanDoor = world().doors[1], world().doors[2]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = firstPlanDoor.doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "parallel-exit-a",
+})
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = secondPlanDoor.doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "parallel-exit-b",
+})
+local firstPlanLease = world().doors[1].activeLease
+local secondPlanLease = world().doors[2].activeLease
+assert(firstPlanLease and secondPlanLease
+    and firstPlanLease.leaseToken ~= secondPlanLease.leaseToken)
+local deniedDraws, deniedCreations, deniedLeaves =
+  randomValueCalls, roomGenerationCalls, leaveCalls
+firstDoor.ReadyToUse = false
+assert(AttemptUseDoor(firstDoor) == false)
+assert(randomValueCalls == deniedDraws and roomGenerationCalls == deniedCreations
+    and leaveCalls == deniedLeaves,
+  "native door denial committed a reserved route")
+firstDoor.ReadyToUse = true
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[2].doorToken,
+  leaseToken = secondPlanLease.leaseToken, requestId = "parallel-exit-b-cancel",
+})
+assert(world().doors[1].activeLease.leaseToken == firstPlanLease.leaseToken
+    and world().doors[2].activeLease == nil,
+  "cancelling one exit disturbed the competing exit lease")
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = firstPlanLease.leaseToken, requestId = "parallel-exit-a-cancel",
+})
+assert(world().doors[1].activeLease == nil and world().doors[2].activeLease == nil)
 assert(originalRoom.FishingPointChanceSuccess == nil and originalRoom.SecretChanceSuccess == nil)
 runtime.gain_resource({ resource = "MetaPoints", amount = 7 })
 assert(GameState.Resources.MetaPoints == 17 and GameState.LifetimeResourcesGained.MetaPoints == 27)
@@ -267,6 +325,8 @@ runtime.apply_world_exit({
   kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-1",
 })
 assert(firstDoor.Room.ChosenRewardType == "Boon" and firstDoor.Room.ForceLootName == "AthenaUpgrade")
+assert(firstDoor.CanBeRerolled == true,
+  "reward Apply disabled the game's native reroll path")
 local rewardObserved = world().doors[1]
 assert(originalRoom.OfferedRewards[100].ForceLootName == "AthenaUpgrade"
     and rewardObserved.activeLease
@@ -282,6 +342,8 @@ runtime.cancel_world_exit({
   leaseToken = rewardObserved.activeLease.leaseToken, requestId = "athena-reward-cancel",
 })
 assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil)
+assert(firstDoor.CanBeRerolled == true,
+  "reward Cancel did not restore native rerollability")
 local nativeGatedDoor = world().doors[1]
 fails("worldUnavailable", function()
   runtime.apply_world_exit({
@@ -524,6 +586,27 @@ runtime.apply_world_occurrence({
 runtime.disable_all()
 assert(world().occurrence == nil)
 assert(ChooseEncounter(CurrentRun, firstDoor.Room).Name == "NativeDefault")
+
+-- Disable All releases both route-preview and reward leases without leaving
+-- a synthetic preview or a modified native reward behind.
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  kind = "roomCategory", targetID = "story", requestId = "disable-all-route",
+})
+assert(firstDoor.PreviewRoomName == "A_Story01" and world().doors[1].activeLease)
+runtime.disable_all()
+assert(firstDoor.Room == firstRoom and firstDoor.PreviewRoomName == "A_Combat02"
+    and world().doors[1].activeLease == nil,
+  "Disable All left a synthetic route preview or route lease")
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  kind = "reward", targetID = "AthenaUpgrade", requestId = "disable-all-reward",
+})
+assert(firstDoor.Room.ForceLootName == "AthenaUpgrade" and world().doors[1].activeLease)
+runtime.disable_all()
+assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil
+    and firstDoor.CanBeRerolled == true,
+  "Disable All left a modified reward or stale lease")
 runtime.generate_fishing(params())
 assert(activated == 501 and originalRoom.FishingPointId == 501 and CurrentRun.LastFishingPointDepth == 8)
 assert(not world().canFish)
