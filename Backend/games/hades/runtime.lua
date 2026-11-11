@@ -1754,6 +1754,7 @@ world = (function()
   function api.clearPending()
     occurrenceRequest = nil
     occurrenceSelection = nil
+    encounters = setmetatable({}, { __mode = "k" })
     local source = currentRoom()
     local unit = hero()
     local failure
