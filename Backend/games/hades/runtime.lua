@@ -1247,9 +1247,9 @@ world = (function()
     "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
   }
   local occurrenceTargets = {
-    ["npc:Sisyphus"] = { kind = "character", sourceId = "Sisyphus", rooms = { A_Story01 = true } },
-    ["npc:Eurydice"] = { kind = "character", sourceId = "Eurydice", rooms = { B_Story01 = true } },
-    ["npc:Patroclus"] = { kind = "character", sourceId = "Patroclus", rooms = { C_Story01 = true } },
+    ["npc:Sisyphus"] = { kind = "character", sourceId = "Sisyphus", nativeEncounter = "Story_Sisyphus_01", rooms = { A_Story01 = true } },
+    ["npc:Eurydice"] = { kind = "character", sourceId = "Eurydice", nativeEncounter = "Story_Eurydice_01", rooms = { B_Story01 = true } },
+    ["npc:Patroclus"] = { kind = "character", sourceId = "Patroclus", nativeEncounter = "Story_Patroclus_01", rooms = { C_Story01 = true } },
     ["npc:Thanatos"] = { kind = "character", sourceId = "Thanatos", encounterSet = "ThanatosEncounters" },
     ["shop:Charon"] = { kind = "shop", sourceId = "Charon", rooms = {
       A_Shop01 = true, B_Shop01 = true, C_Shop01 = true,
@@ -1343,8 +1343,41 @@ world = (function()
     return request
   end
   local function occurrenceRoomMatches(definition, room)
-    return type(definition) == "table" and type(definition.rooms) == "table"
-      and type(room) == "table" and definition.rooms[room.Name] == true
+    if type(definition) ~= "table" or type(definition.rooms) ~= "table"
+        or type(room) ~= "table" or definition.rooms[room.Name] ~= true then return false end
+    local native = definition.nativeEncounter
+    if type(native) == "string" then
+      -- Story room eligibility alone does not prove the named NPC's presence.
+      local legal = false
+      for _, name in pairs(type(room.LegalEncounters) == "table" and room.LegalEncounters or {}) do
+        if name == native then legal = true; break end
+      end
+      if not legal then return false end
+      if type(room.Encounter) == "table" and room.Encounter.Name ~= native then return false end
+    end
+    return true
+  end
+  local function occurrenceRoomCandidateEligible(definition, room)
+    if not occurrenceRoomMatches(definition, room) then return false end
+    local name = definition.nativeEncounter
+    if type(name) ~= "string" then return true end
+    local encounter = type(EncounterData) == "table" and EncounterData[name] or nil
+    if type(encounter) ~= "table" or type(IsEncounterEligible) ~= "function" then return false end
+    -- Native predicate is given a shallow copy so normalization cannot mutate
+    -- its source RoomData owner during this non-destructive selection probe.
+    local probe = {}
+    for key, value in pairs(room) do probe[key] = value end
+    if type(room.LegalEncounters) == "table" then
+      probe.LegalEncountersDictionary = {}
+      for _, id in pairs(room.LegalEncounters) do probe.LegalEncountersDictionary[id] = true end
+    end
+    if type(room.IllegalEncounters) == "table" then
+      probe.IllegalEncountersDictionary = {}
+      for _, id in pairs(room.IllegalEncounters) do probe.IllegalEncountersDictionary[id] = true end
+    end
+    local ok, eligible = pcall(IsEncounterEligible, CurrentRun, probe, encounter)
+    if not ok then error(eligible, 0) end
+    return eligible == true
   end
   local function occurrenceEncounterMatches(definition, encounter)
     if type(definition) ~= "table" or type(encounter) ~= "table" then return false end
@@ -1426,7 +1459,7 @@ world = (function()
           data = type(RoomData) == "table" and RoomData[candidate] or nil
         end
         if selection.eligible[data] then
-          local matched = selection.kind == "room" and occurrenceRoomMatches(definition, data)
+          local matched = selection.kind == "room" and occurrenceRoomCandidateEligible(definition, data)
             or selection.kind == "encounter" and occurrenceEncounterMatches(definition, data)
           if matched then choices[#choices + 1] = candidate end
         end

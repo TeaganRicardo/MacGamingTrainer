@@ -25,20 +25,36 @@ CurrentRun = { Hero = { ObjectId = 10, Health = 50, MaxHealth = 50, Traits = {} 
 local originalRoom = CurrentRun.CurrentRoom
 RoomSetData = { Tartarus = {
   A_Combat02 = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" },
-  A_Story01 = { Name = "A_Story01", ForcedReward = "Story", eligible = true },
+  A_Story01 = { Name = "A_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Sisyphus_01" }, eligible = true },
   A_Shop01 = { Name = "A_Shop01", ForcedReward = "Shop", eligible = false },
 }, Alternate = {
   B_Combat01 = { Name = "B_Combat01", ChosenRewardType = "RoomRewardMoneyDrop" },
   B_Shop01 = { Name = "B_Shop01", ForcedReward = "Shop", eligible = false },
+}, Asphodel = {
+  B_Combat01 = { Name = "B_Combat01", ChosenRewardType = "RoomRewardMoneyDrop" },
+  B_Story01 = { Name = "B_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Eurydice_01" }, eligible = true },
+}, Elysium = {
+  C_Combat01 = { Name = "C_Combat01", ChosenRewardType = "RoomRewardMoneyDrop" },
+  C_Story01 = { Name = "C_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Patroclus_01" }, eligible = true },
 }, Secrets = { { Name = "RoomSecret01" } } }
 EncounterSets = { ThanatosEncounters = { "ThanatosTartarus" } }
 EncounterData = {
   NativeDefault = { Name = "NativeDefault" },
   ThanatosTartarus = { Name = "ThanatosTartarus" },
+  Story_Sisyphus_01 = { Name = "Story_Sisyphus_01" },
+  Story_Eurydice_01 = { Name = "Story_Eurydice_01" },
+  Story_Patroclus_01 = { Name = "Story_Patroclus_01" },
 }
 local encounterCalls, recordedEncounter = 0, nil
 function SetupEncounter(data, room) return clone(data) end
 function IsEncounterEligible(run, room, data)
+  if data.Name:find("Story_", 1, true) == 1 then
+    if data.blocked then return false end
+    for _, legal in ipairs(room.LegalEncounters or {}) do
+      if legal == data.Name then return true end
+    end
+    return false
+  end
   return data.Name == "NativeDefault" or room.blockThanatos ~= true
 end
 function IsEncounterForced(run, room, data) return data.forced == true end
@@ -85,7 +101,7 @@ local roomGenerationCalls, randomValueCalls = 0, 0
 function CreateRoom(data, args)
   roomGenerationCalls = roomGenerationCalls + 1
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
-  local result = clone(data); result.RoomSetName = "Tartarus"
+  local result = clone(data); result.RoomSetName = CurrentRun.CurrentRoom.RoomSetName or "Tartarus"
   if args and args.ChooseEncounterForTest then
     result.Encounter = ChooseEncounter(CurrentRun, result)
   end
@@ -193,7 +209,7 @@ function IsSecretDoorEligible(run, room) return room.SecretChanceSuccess and roo
 function ChooseNextRoomData(run, args)
   if args.RoomDataSet == RoomSetData.Secrets then return args.RoomDataSet[1] end
   local eligible, forced = {}, {}
-  for _, data in pairs(RoomSetData.Tartarus) do
+  for _, data in pairs(RoomSetData[run.CurrentRoom.RoomSetName or "Tartarus"] or {}) do
     if IsRoomEligible(run, run.CurrentRoom, data, args) then
       eligible[#eligible + 1] = data
       if IsRoomForced(run, run.CurrentRoom, data, args) then forced[#forced + 1] = data end
@@ -498,6 +514,46 @@ assert(storyEntered == storyRoom and world().occurrence == nil,
 CurrentRun.CurrentRoom = originalRoom
 firstDoor.Room = firstRoom
 OfferedExitDoors[100] = firstDoor
+
+-- A legal room cannot impersonate an exhausted or unsupported named NPC.
+EncounterData.Story_Sisyphus_01.blocked = true
+runtime.apply_world_occurrence({ roomId = originalRoomId,
+  targetID = "npc:Sisyphus", requestId = "sisyphus-unavailable" })
+assert(ChooseNextRoomData(CurrentRun, {}) ~= RoomSetData.Tartarus.A_Story01
+    and world().occurrence.target == "npc:Sisyphus",
+  "named story request bypassed native IsEncounterEligible")
+runtime.cancel_world_occurrence({ roomId = originalRoomId,
+  leaseToken = world().occurrence.leaseToken, requestId = "sisyphus-ineligible-cancel" })
+EncounterData.Story_Sisyphus_01.blocked = nil
+local legalSisyphus = RoomSetData.Tartarus.A_Story01.LegalEncounters
+RoomSetData.Tartarus.A_Story01.LegalEncounters = { "OtherStory" }
+runtime.apply_world_occurrence({ roomId = originalRoomId,
+  targetID = "npc:Sisyphus", requestId = "sisyphus-illegal-room" })
+assert(ChooseNextRoomData(CurrentRun, {}) ~= RoomSetData.Tartarus.A_Story01,
+  "named story request ignored native LegalEncounters")
+runtime.cancel_world_occurrence({ roomId = originalRoomId,
+  leaseToken = world().occurrence.leaseToken, requestId = "sisyphus-illegal-cancel" })
+RoomSetData.Tartarus.A_Story01.LegalEncounters = legalSisyphus
+
+-- Each named story request uses its native biome and selected Room owner.
+local function testNativeStory(targetID, biome, sourceName, storyName)
+  CurrentRun.CurrentRoom = { Name = sourceName, RoomSetName = biome }
+  OfferedExitDoors = { [100] = firstDoor }
+  runtime.apply_world_occurrence({ roomId = world().roomId,
+    targetID = targetID, requestId = "story-native-" .. biome })
+  local choice = ChooseNextRoomData(CurrentRun, {})
+  assert(choice.Name == storyName, "native named story selected an incorrect biome")
+  local generated = CreateRoom(choice, { SkipChooseEncounter = true })
+  assert(world().occurrence ~= nil, "named story was consumed when only generated")
+  AssignRoomToExitDoor(firstDoor, generated)
+  assert(AttemptUseDoor(firstDoor) == generated and world().occurrence == nil,
+    "named story was not consumed on exact native admission")
+  CurrentRun.CurrentRoom = originalRoom
+  firstDoor.Room = firstRoom
+  OfferedExitDoors = { [100] = firstDoor, [101] = secondDoor }
+end
+testNativeStory("npc:Eurydice", "Asphodel", "B_Combat00", "B_Story01")
+testNativeStory("npc:Patroclus", "Elysium", "C_Combat00", "C_Story01")
 
 runtime.apply_world_occurrence({
   roomId = originalRoomId,
