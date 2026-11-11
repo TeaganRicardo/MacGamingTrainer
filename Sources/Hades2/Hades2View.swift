@@ -908,7 +908,6 @@ struct Hades2TrainerView: View {
 
     private var configSnapshot: Hades2ViewConfigSnapshot {
         Hades2ViewConfigSnapshot(
-            nextOccurrenceTarget: model.nextOccurrenceTarget,
             elements: model.elements,
             damageMultiplier: model.damageMultiplier,
             moneyMultiplier: model.moneyMultiplier,
@@ -1041,7 +1040,6 @@ struct Hades2TrainerView: View {
     }
 
     private func syncConfigSnapshot(_ snapshot: Hades2ViewConfigSnapshot) {
-        if let value = snapshot.nextOccurrenceTarget { model.selectedNextOccurrenceTarget = value }
         syncElementInputs(snapshot.elements)
         if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
         if focusedField != .moneyMultiplier { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
