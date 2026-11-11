@@ -8916,6 +8916,11 @@ if __MacGamingTrainerV1 == nil then
           end
         end
       end
+      for _, candidates in pairs(result) do
+        table.sort(candidates, function(a, b)
+          return tostring(a.Name) < tostring(b.Name)
+        end)
+      end
       return result
     end
 
@@ -8956,19 +8961,31 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function previewRoom(door, route)
+    local function previewRoom(door, route, candidate)
       local proxy = {}
       for key, value in pairs(door.Room) do proxy[key] = value end
+      candidate = type(candidate) == "table" and candidate or {}
+      proxy.Name = candidate.Name or proxy.Name
       proxy.Reward = nil
-      proxy.RewardOverrides = nil
-      proxy.RewardPreviewOverride = nil
-      proxy.ForceLootName = nil
-      proxy.Encounter = nil
-      proxy.ChosenRewardType = nil
-      proxy.NextRoomSet = { "MacGamingTrainerPending:" .. route }
-      if route == "shop" then proxy.ChosenRewardType = "Shop"
-      elseif route == "story" then proxy.ChosenRewardType = "Story"
-      elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
+      proxy.RewardOverrides = type(candidate.RewardOverrides) == "table"
+        and DeepCopyTable(candidate.RewardOverrides) or nil
+      proxy.RewardPreviewOverride = candidate.RewardPreviewOverride
+      proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
+      proxy.RewardPreviewFx = candidate.RewardPreviewFx
+      proxy.ForceLootName = candidate.ForceLootName
+      proxy.RewardStoreName = candidate.RewardStoreName or candidate.IndividualRewardStore
+        or candidate.ForcedRewardStore
+      proxy.Encounter = type(candidate.Encounter) == "table"
+        and DeepCopyTable(candidate.Encounter) or nil
+      proxy.ChosenRewardType = candidate.ChosenRewardType or candidate.ForcedReward
+      proxy.NextRoomSet = type(candidate.NextRoomSet) == "table"
+        and DeepCopyTable(candidate.NextRoomSet) or nil
+      proxy.NextRoomSetNoGenerate = candidate.NextRoomSetNoGenerate
+      if proxy.ChosenRewardType == nil then
+        if route == "shop" then proxy.ChosenRewardType = "Shop"
+        elseif route == "story" then proxy.ChosenRewardType = "Story"
+        elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
+      end
       return proxy
     end
 
@@ -9067,7 +9084,7 @@ if __MacGamingTrainerV1 == nil then
             return original(door, ...)
           end
           local actual = door.Room
-          door.Room = previewRoom(door, lease.target)
+          door.Room = previewRoom(door, lease.target, lease.previewData)
           local reply = table.pack(pcall(original, door, ...))
           door.Room = actual
           if not reply[1] then error(reply[2], 0) end
@@ -9159,6 +9176,7 @@ if __MacGamingTrainerV1 == nil then
         kind = "roomCategory", target = target, doorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         originalRoom = door.Room, signature = routeSignature(door),
+        previewData = routes[target][1],
       }
       lease.leaseToken = leaseToken(doorToken, lease.kind, target)
       leases[door] = lease
