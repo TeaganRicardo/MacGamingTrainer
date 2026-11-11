@@ -350,9 +350,9 @@ dofile(assert(arg[2]))
 local M = assert(__MacGamingTrainerV1)
 
 local function setOccurrence(target, token)
-  return M.dispatch("set_next_occurrence", {
+  return M.dispatch("apply_world_occurrence", {
     target = target,
-    token = token,
+    requestId = token,
     includeCatalogs = false,
   })
 end
