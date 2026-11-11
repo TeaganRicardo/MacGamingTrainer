@@ -43,10 +43,10 @@ def mutation_params(command, params):
 
     if command in ('apply_world_occurrence', 'cancel_world_occurrence'):
         if command == 'apply_world_occurrence':
-            target = params.get('target')
+            target = params.get('actionTarget')
             if target not in OCCURRENCES:
                 raise invalid_value()
-            return {'target': target}
+            return {'actionTarget': target}
         token = params.get('leaseToken')
         if not isinstance(token, str) or not token or len(token) > 768:
             raise AdapterError('stale_door', 'hades.error.staleDoor')
@@ -65,7 +65,7 @@ def mutation_params(command, params):
 
     if command == 'apply_world_exit':
         kind = params.get('kind')
-        target = params.get('target')
+        target = params.get('actionTarget')
         if kind not in ('reward', 'roomCategory') or not isinstance(target, str) or not target:
             raise invalid_value()
         if kind == 'reward':
@@ -74,7 +74,7 @@ def mutation_params(command, params):
                 raise invalid_value()
         elif target not in ROUTES:
             raise invalid_value()
-        result.update({'kind': kind, 'target': target})
+        result.update({'kind': kind, 'actionTarget': target})
         return result
 
     if command == 'cancel_world_exit':
