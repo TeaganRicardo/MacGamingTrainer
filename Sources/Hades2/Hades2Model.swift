@@ -2001,13 +2001,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             ) { [weak self] success in
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
-        case .applyNextRoomReward:
-            guard setNextRoomReward(
-                selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward,
-                completion: { success in
-                    TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
-                }
-            ) else {
+        case .applyWorldExit:
+            guard toggleSelectedWorldExit(completion: { success in
+                TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
+            }) else {
                 rejectShortcut(action)
                 return
             }
@@ -2072,8 +2069,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 return
             }
         case .applyNextOccurrence:
-            guard setNextOccurrence(
-                    selectedNextOccurrenceTarget.isEmpty ? nil : selectedNextOccurrenceTarget,
+            guard toggleNextOccurrence(
                     completion: { success in
                         TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
                     }
