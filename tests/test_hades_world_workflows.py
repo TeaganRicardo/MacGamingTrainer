@@ -427,7 +427,7 @@ end)
 assert(firstDoor.Room == forcedTarget and assigned == beforeForcedAssignments)
 firstDoor.Room = firstRoom
 assert(#world().doors[1].routes == 0, "a forced room outside route categories was ignored")
-assert(not world().doors[1].worldActionTargets,
+assert(#world().doors[1].targets == 0,
   "forced exit unexpectedly exposed World Actions targets")
 CurrentRun.BiomeDepthCache = 8
 RoomSetData.Tartarus.A_PreBoss01 = nil
