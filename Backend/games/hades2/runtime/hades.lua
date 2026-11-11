@@ -37,8 +37,6 @@ if __MacGamingTrainerV1 == nil then
     -- END GENERATED DURABLE FEATURE STATE
     -- true means force one currently eligible special boon into the native pool.
     boonRarityTarget = "Heroic", boonForceLegendary = false, boonForceDuo = false,
-    nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
-    nextRoomRewardRoutedRooms = {}, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
     -- BEGIN GENERATED DURABLE DESIRED FEATURES
     desiredFeatures = {
@@ -1104,23 +1102,10 @@ if __MacGamingTrainerV1 == nil then
     M.boonRarityEnabled = false
     releaseHook("SetTraitsOnLoot")
   end
-  -- One native StartRoom owner serves all pending world one-shots. Releasing
-  -- one intent may not discard the other one's room-commit listener.
+  -- Named room occurrences own StartRoom only while their native room selector
+  -- is installed. Exact-exit World Actions commit separately at LeaveRoom.
   local function releaseRoomAdmissionIfUnused()
-    -- The StartRoom hook is shared only while one of its two native selection
-    -- owners is actually installed. A pending desired value is insufficient:
-    -- failed installations and explicit cancellation must release orphan hooks.
-    if not owns("ChooseRoomReward") and not owns("ChooseNextRoomData") then
-      releaseHook("StartRoom")
-    end
-  end
-  local function releaseNextRoomReward()
-    releaseHook("ChooseRoomReward")
-    releaseRoomAdmissionIfUnused()
-    M.nextRoomRewardRoutedRooms = {}
-    M.nextRoomRewardPatchedDoors = 0
-    M.nextRoomRewardPatchedValue = nil
-    M.nextRoomRewardPatchRoom = nil
+    if not owns("ChooseNextRoomData") then releaseHook("StartRoom") end
   end
   local function releaseOccurrenceRouting()
     releaseHook("ChooseNextRoomData")
@@ -1502,7 +1487,6 @@ if __MacGamingTrainerV1 == nil then
     releaseBoonRarity()
     if runtimeState.forceRerolls ~= nil then runtimeState.forceRerolls.release() end
     M.forceEnableRerolls = false
-    releaseNextRoomReward()
     releaseOccurrenceRouting()
     if worldActions ~= nil then worldActions.release() end
     -- Full deactivation retires every native hook even if durable legacy
@@ -1521,8 +1505,6 @@ if __MacGamingTrainerV1 == nil then
     M.elementLocks = {}
     M.rerollsLock = nil
     M.statTargets = {}
-    M.nextRoomReward = nil
-    M.nextRoomRewardToken = nil
     M.nextOccurrenceTarget = nil
     M.nextOccurrenceToken = nil
   end
@@ -1535,7 +1517,7 @@ if __MacGamingTrainerV1 == nil then
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
     return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
-      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or M.nextOccurrenceTarget ~= nil
+      or next(M.statTargets) ~= nil or M.nextOccurrenceTarget ~= nil
       or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
   end
   local function anyRuntimeActive()
@@ -7873,7 +7855,6 @@ if __MacGamingTrainerV1 == nil then
       currentRunTraitIdentityPersistent = false,
       currentRunTraitsReason = traitListReason == nil and jsonNull or traitListReason,
       worldActions = worldActions ~= nil and worldActions.observe(includeCatalogs ~= false) or jsonNull,
-      nextRoomReward = M.nextRoomReward == nil and jsonNull or M.nextRoomReward,
       nextOccurrenceTarget = M.nextOccurrenceTarget == nil and jsonNull or M.nextOccurrenceTarget,
       damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
@@ -7910,10 +7891,6 @@ if __MacGamingTrainerV1 == nil then
         hexRuntime = M.hexRuntime or jsonNull,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
         boonRarityHooks = { options = owns("SetTraitsOnLoot") },
-        nextRoomRewardHook = owns("ChooseRoomReward") and owns("StartRoom"),
-        nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors or jsonNull,
-        nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
-        lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken or jsonNull,
         nextOccurrenceHooks = {
           room = owns("ChooseNextRoomData") and owns("IsRoomForced")
             and owns("StartRoom") and owns("GetRandomValue"),
@@ -8617,27 +8594,14 @@ if __MacGamingTrainerV1 == nil then
     return original(pool, ...)
   end
 
-  -- Room strategies fulfill a one-shot only when StartRoom admits the exact
-  -- native destination. Offering a target door is merely an opportunity:
-  -- players may choose another door, or a native reroll may replace it.
-  -- Share the same StartRoom owner with the legacy next-room reward action.
+  -- Room strategies fulfill a named one-shot only when StartRoom admits the
+  -- exact native destination. Merely offering a door is still reversible.
   local function installRoomAdmission()
     if owns("StartRoom") then return end
     requireFunctions("native world room admission", { "StartRoom" })
     installHook("StartRoom", function(original, run, room, ...)
-      local rewardToken = M.nextRoomRewardToken
       local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
-      -- Native room startup can yield. Never wrap it in pcall or claim success
-      -- until the native owner actually returns.
       local result = table.pack(original(run, room, ...))
-      if run == CurrentRun and rewardToken ~= nil
-          and M.nextRoomRewardToken == rewardToken and M.nextRoomReward ~= nil
-          and type(room) == "table" and M.nextRoomRewardRoutedRooms[room] == rewardToken then
-        M.lastConsumedNextRoomRewardToken = rewardToken
-        M.nextRoomReward = nil
-        M.nextRoomRewardToken = nil
-        releaseNextRoomReward()
-      end
       if run == CurrentRun and token ~= nil and M.nextOccurrenceTarget == target
           and M.nextOccurrenceToken == token
           and occurrenceRoomMatches(occurrenceTargets[target], room) then
@@ -8732,43 +8696,6 @@ if __MacGamingTrainerV1 == nil then
     else
       releaseHook("GetRandomValue")
     end
-  end
-
-  runtimeConfig.nextRoomDirectRewards = {
-    RoomMoneyDrop=true, MetaCurrencyDrop=true, MetaCardPointsCommonDrop=true, MemPointsCommonDrop=true,
-    MaxHealthDrop=true, MaxManaDrop=true, StackUpgrade=true, WeaponUpgrade=true, HermesUpgrade=true,
-  }
-
-  local function nextRoomRewardSpec(wanted)
-    if type(wanted) ~= "string" then return nil, nil end
-    if runtimeConfig.nextRoomDirectRewards[wanted] then return wanted, nil end
-    if type(LootData) == "table" and type(LootData[wanted]) == "table" then return "Boon", wanted end
-    return nil, nil
-  end
-
-  local function ordinaryDoorReward(room, native)
-    if type(room) ~= "table" or type(native) ~= "string" then return false end
-    if room.NoReward or room.DeferReward then return false end
-    if native == "Story" or native == "Shop" or native == "Empty" or native == "Devotion" then return false end
-    if type(room.Encounter) == "table" and type(room.Encounter.Name) == "string"
-        and string.find(room.Encounter.Name, "Boss", 1, true) then return false end
-    return native == "Boon" or runtimeConfig.nextRoomDirectRewards[native] == true
-      or (type(ConsumableData) == "table" and type(ConsumableData[native]) == "table")
-      or (type(LootData) == "table" and type(LootData[native]) == "table")
-  end
-
-  local function forceNextRoomReward(room, wanted)
-    local rewardType, forceLoot = nextRoomRewardSpec(wanted)
-    if rewardType == nil or type(room) ~= "table" then return nil, nil end
-    room.Reward = { Name = rewardType }
-    room.ChosenRewardType = rewardType
-    if forceLoot ~= nil then
-      room.Reward.ForceLootName = forceLoot
-      room.ForceLootName = forceLoot
-    else
-      room.ForceLootName = nil
-    end
-    return rewardType, forceLoot
   end
 
   worldActions = (function()
@@ -9322,81 +9249,6 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
-  local function patchOfferedNextRoomDoors()
-    local wanted = M.nextRoomReward
-    if wanted == nil or type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table" then
-      M.nextRoomRewardPatchedDoors = 0
-      return 0
-    end
-    local patched = 0
-    for doorId, door in pairs(MapState.OfferedExitDoors) do
-      local room = type(door) == "table" and door.Room or nil
-      local native = type(room) == "table" and room.ChosenRewardType or nil
-      if ordinaryDoorReward(room, native) then
-        local rewardType, forceLoot = forceNextRoomReward(room, wanted)
-        if rewardType ~= nil then
-          M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken
-          patched = patched + 1
-          if type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table" then
-            CurrentRun.CurrentRoom.OfferedRewards = CurrentRun.CurrentRoom.OfferedRewards or {}
-            CurrentRun.CurrentRoom.OfferedRewards[doorId] = { Type = rewardType, ForceLootName = forceLoot }
-          end
-          -- Existing previews were already materialized before the trainer command.
-          -- Reuse those world-UI objects instead of spawning duplicate icons.
-          if type(CreateDoorRewardPreview) == "function" and type(door.RewardPreviewIconIds) == "table"
-              and next(door.RewardPreviewIconIds) ~= nil then
-            pcall(CreateDoorRewardPreview, door, rewardType, forceLoot, nil, { ReUseIds = true })
-          end
-          if type(RefreshUseButton) == "function" and door.ObjectId ~= nil then
-            pcall(RefreshUseButton, door.ObjectId, door)
-          end
-        end
-      end
-    end
-    M.nextRoomRewardPatchedDoors = patched
-    return patched
-  end
-
-  M.nextRoomRewardSupported = function()
-    local reward = M.nextRoomReward
-    if reward == nil then return false end
-    if reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
-        or reward == "MemPointsCommonDrop" or reward == "MaxHealthDrop" or reward == "MaxManaDrop"
-        or reward == "StackUpgrade" or reward == "WeaponUpgrade" or reward == "HermesUpgrade" then
-      return true
-    end
-    return type(LootData) == "table" and type(LootData[reward]) == "table"
-  end
-
-  M.nextRoomRewardRoutingAvailable = function()
-    return M.nextRoomRewardSupported()
-      and M.nativeFunctionsAvailable({ "ChooseRoomReward", "StartRoom" })
-  end
-
-  local function installNextRoomReward()
-    requireFunctions("next room reward", { "ChooseRoomReward", "StartRoom" })
-    if not owns("ChooseRoomReward") then
-      installHook("ChooseRoomReward", function(original, run, room, rewardStoreName, previouslyChosenRewards, args, ...)
-        local native = original(run, room, rewardStoreName, previouslyChosenRewards, args, ...)
-        local wanted = M.nextRoomReward
-        -- The game chooses each offered exit independently. Keep the one-shot
-        -- armed across every door so the player's actual selection is forced.
-        if wanted == nil or type(args) ~= "table" or type(args.Door) ~= "table"
-            or not ordinaryDoorReward(room, native) then return native end
-        local rewardType = forceNextRoomReward(room, wanted)
-        if rewardType ~= nil then M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken end
-        return rewardType or native
-      end)
-    end
-    installRoomAdmission()
-    local patchRoom = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
-    if M.nextRoomRewardPatchedValue ~= M.nextRoomReward or M.nextRoomRewardPatchRoom ~= patchRoom then
-      patchOfferedNextRoomDoors()
-      M.nextRoomRewardPatchedValue = M.nextRoomReward
-      M.nextRoomRewardPatchRoom = patchRoom
-    end
-  end
-
   local function installMana()
     requireFunctions("infinite mana", { "ManaDelta", "GetHeroMaxAvailableMana", "UpdateWeaponMana", "UpdateManaMeterUI" })
     if M.infiniteMana then return end
@@ -9813,13 +9665,6 @@ if __MacGamingTrainerV1 == nil then
         if not featureAttempt("rerolls", true, M.rerollCurrency.install, releaseRerollsRuntime, raiseOnError) then allOk = false end
       else
         releaseRerollsRuntime(); M.featureErrors.rerolls = nil
-      end
-    end
-    if onlyKey == nil or onlyKey == "nextRoomReward" then
-      if M.nextRoomReward ~= nil and M.nextRoomRewardRoutingAvailable() then
-        if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
-      else
-        releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
       end
     end
     if onlyKey == nil or onlyKey == "nextOccurrence" then
@@ -10851,46 +10696,6 @@ if __MacGamingTrainerV1 == nil then
         function() worldActions.cancel(params); return nil, "completed" end,
         function() worldActions.preflightCancel(params); return nil end
       )
-    end
-    if command == "set_next_room_reward" then
-      if runtimeState.preferenceReplayDepth ~= 0 then
-        error("Next room reward cannot be preference-replayed")
-      end
-      local reward, token = params.reward, params.token
-      if reward ~= nil and type(reward) ~= "string" then error("Next room reward must be a string or nil") end
-      if reward == "" then reward = nil end
-      if reward ~= nil then
-        if type(token) ~= "string" or #token == 0 or #token > 128 then error("Next room reward token is invalid") end
-        local validDirect = reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
-          or reward == "MemPointsCommonDrop" or reward == "MaxHealthDrop" or reward == "MaxManaDrop"
-          or reward == "StackUpgrade" or reward == "WeaponUpgrade" or reward == "HermesUpgrade"
-        local lootCatalogLoaded = type(LootData) == "table"
-        local validLoot = lootCatalogLoaded and type(LootData[reward]) == "table"
-        -- A not-yet-loaded LootData catalog is an absent validation owner, not
-        -- evidence that durable intent is invalid. Validate once the catalog exists.
-        if not validDirect and lootCatalogLoaded and not validLoot then
-          error("Unsupported next room reward")
-        end
-        if M.nextRoomReward ~= reward or M.nextRoomRewardToken ~= token then
-          M.nextRoomRewardRoutedRooms = {}
-          M.nextRoomRewardPatchedDoors = 0
-          M.nextRoomRewardPatchedValue = nil
-          M.nextRoomRewardPatchRoom = nil
-        end
-        M.nextRoomReward = reward
-        M.nextRoomRewardToken = token
-      else
-        M.nextRoomReward = nil
-        M.nextRoomRewardToken = nil
-        M.nextRoomRewardRoutedRooms = {}
-        M.nextRoomRewardPatchedDoors = 0
-        M.nextRoomRewardPatchedValue = nil
-        M.nextRoomRewardPatchRoom = nil
-      end
-      M.featureErrors.nextRoomReward = nil
-      reconcileDesired(true, "nextRoomReward")
-      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
-      return state(params.includeCatalogs)
     end
     if command == "set_next_occurrence" then
       if runtimeState.preferenceReplayDepth ~= 0 then
