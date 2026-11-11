@@ -1840,11 +1840,11 @@ world = (function()
     local door = requireDoor(params)
     assert(activeExitLease(door) == nil, "hades.error.worldUnavailable")
     if params.kind == "reward" then
-      assert(type(params.target) == "string", "hades.error.invalidValue")
-      applyRewardLease(door, params.target)
+      assert(type(params.actionTarget) == "string", "hades.error.invalidValue")
+      applyRewardLease(door, params.actionTarget)
     elseif params.kind == "roomCategory" then
-      assert(type(params.target) == "string", "hades.error.invalidValue")
-      applyRouteLease(door, params.target)
+      assert(type(params.actionTarget) == "string", "hades.error.invalidValue")
+      applyRouteLease(door, params.actionTarget)
     else
       error("hades.error.invalidValue")
     end
@@ -1865,7 +1865,7 @@ world = (function()
   end
   function runtime.apply_world_occurrence(params)
     requireHero()
-    applyOccurrenceLease(params.target)
+    applyOccurrenceLease(params.actionTarget)
     return runtime.status()
   end
   function runtime.cancel_world_occurrence(params)
