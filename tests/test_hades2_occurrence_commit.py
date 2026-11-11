@@ -67,6 +67,59 @@ local receipt = M.lastConsumedNextOccurrenceToken
 assert(AttemptUseDoor(shop).Name == "F_Shop01")
 assert(M.nextOccurrenceTarget == nil and M.lastConsumedNextOccurrenceToken == receipt,
   "cancelled next occurrence request was rearmed or consumed on entry")
+
+-- The legacy reward and occurrence requests both use StartRoom. They must
+-- compose under one native hook, irrespective of which feature was armed first.
+setRoomSet("F")
+setOccurrence("npc:Arachne", "occurrence-first")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local combat
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.ReadyToUse and door.Room.Name == "F_Combat01" then combat = door end
+end
+assert(combat)
+combat.Room.ChosenRewardType = "RoomMoneyDrop"
+M.dispatch("set_next_room_reward", {
+  reward = "MaxHealthDrop", token = "reward-after-occurrence", includeCatalogs = false,
+})
+assert(M.nextRoomRewardRoutedRooms[combat.Room] == "reward-after-occurrence")
+assert(AttemptUseDoor(combat).Name == "F_Combat01")
+assert(M.lastConsumedNextRoomRewardToken == "reward-after-occurrence"
+    and M.nextRoomReward == nil
+    and M.nextOccurrenceTarget == "npc:Arachne"
+    and StartRoom ~= nativeStartRoom,
+  "reward consumption detached a pending named encounter's native StartRoom hook")
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local pendingStory
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.ReadyToUse and door.Room.Name == "F_Story01" then pendingStory = door end
+end
+assert(pendingStory)
+AttemptUseDoor(pendingStory)
+assert(M.lastConsumedNextOccurrenceToken == "occurrence-first"
+    and StartRoom == nativeStartRoom,
+  "named room commit failed to release the last shared native hook")
+
+setRoomSet("F")
+M.dispatch("set_next_room_reward", {
+  reward = "MaxHealthDrop", token = "reward-first", includeCatalogs = false,
+})
+setOccurrence("npc:Arachne", "occurrence-after-reward")
+M.dispatch("set_next_room_reward", { reward = nil, includeCatalogs = false })
+assert(M.nextRoomReward == nil and M.nextOccurrenceTarget == "npc:Arachne"
+    and StartRoom ~= nativeStartRoom,
+  "reward cancellation wrongly detached the remaining occurrence owner")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local laterStory
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.ReadyToUse and door.Room.Name == "F_Story01" then laterStory = door end
+end
+assert(laterStory)
+AttemptUseDoor(laterStory)
+assert(M.lastConsumedNextOccurrenceToken == "occurrence-after-reward"
+    and StartRoom == nativeStartRoom,
+  "later occurrence did not use and retire the shared room owner")
 print("hades2_occurrence_commit_ok")
 """
 
