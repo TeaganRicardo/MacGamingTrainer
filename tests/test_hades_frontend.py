@@ -332,7 +332,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enableNativeAccessibility()
         guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
         let journey = CommandLine.arguments[3]
-        guard ["frontend", "recovery", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        guard ["frontend", "recovery", "interlock", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         if journey == "hierarchy" {
             exerciseVisualHierarchy(descriptor: HadesGameModule.descriptor, presentation: HadesGameModule.presentation)
             exerciseRoomPickerAlignment()
@@ -450,6 +450,65 @@ func pump(_ seconds: TimeInterval = 0.1) {
         recordPhase("start: " + journey)
         wait("startup status/catalog replies: connected, catalog populated, trainer idle") { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
+        if journey == "interlock" {
+            // Start with a live, explicitly observed replacement hero. The
+            // prior UI scenario originally reached this same live identity
+            // after multiple unrelated AX/control exercises, and the shared
+            // 45s watchdog expired before reconnect could be observed.
+            try updateState(hero:"run:hero:2",health:50)
+            model.refreshFromHost()
+            wait("interlock setup: current hero observed") {
+                !model.busy && model.canMutate && model.target?.heroId=="run:hero:2"
+            }
+        for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
+                           ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
+                           ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
+                           ("host.timeWarp.error.restartRequired","restart_required")] {
+            try setFixtureError(key,code:code)
+            model.refreshFromHost();wait("unsafe status error reply: \(key), trainer idle") { !model.busy && model.backendStatus.error==key }
+            check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
+                "unsafe runtime error retained mutation authority: \(key)")
+            let afterFailure=commands().count
+            if code == "outcome_unknown" {
+                try setFixtureError(nil)
+                try setConnection(false, heroReady: false)
+                model.setFeature(.invincibility, value: true)
+                wait("detached desired intent after unknown outcome") {
+                    !model.busy && commands().count == afterFailure + 1 && model.isEnabled(.invincibility)
+                }
+                check(session.currentStatus.requiresTargetRestart,
+                      "detached desired edit released unresolved runtime trust")
+                let afterOfflineEdit = commands().count
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count == afterOfflineEdit, "offline intent enabled a live mutation")
+                session.targetLifetimeChanged()
+                try setConnection(true, heroReady: true)
+            } else {
+                model.setFeature(.invincibility,value:true)
+                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
+                check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
+            }
+            try setFixtureError(nil)
+            model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
+            check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")
+        }
+        var malformed=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        malformed.removeValue(forKey:"heroReady")
+        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
+        model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
+        check(!model.canMutate && model.currentIssues.contains { $0.id=="observation" && $0.text.key=="hades.error.protocol" }
+              && model.feedback?.text.key=="hades.error.protocol",
+              "malformed observation retained mutation authority or lacked its current issue")
+        malformed["heroReady"]=true
+        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("well-formed status resolves the protocol issue") {
+            !model.busy && model.connected && !model.currentIssues.contains { $0.id=="observation" }
+        }
+            stopBackend()
+            print("hades_runtime_interlock_journey_ok")
+            return
+        }
         model.listProfiles()
         wait("list_profiles reply: one profile, trainer idle") { !model.busy && model.profiles.count == 1 }
         check(model.connected && model.health==50,"profile inventory erased runtime state")
@@ -2086,51 +2145,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         sidebarWindow.contentView=nil;sidebarWindow.close()
         feedbackWindow.contentView = nil; feedbackWindow.close()
-        for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
-                           ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
-                           ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
-                           ("host.timeWarp.error.restartRequired","restart_required")] {
-            try setFixtureError(key,code:code)
-            model.refreshFromHost();wait("unsafe status error reply: \(key), trainer idle") { !model.busy && model.backendStatus.error==key }
-            check(!model.connected && !model.heroReady && model.target==nil && !model.canMutate,
-                "unsafe runtime error retained mutation authority: \(key)")
-            let afterFailure=commands().count
-            if code == "outcome_unknown" {
-                try setFixtureError(nil)
-                try setConnection(false, heroReady: false)
-                model.setFeature(.invincibility, value: true)
-                wait("detached desired intent after unknown outcome") {
-                    !model.busy && commands().count == afterFailure + 1 && model.isEnabled(.invincibility)
-                }
-                check(session.currentStatus.requiresTargetRestart,
-                      "detached desired edit released unresolved runtime trust")
-                let afterOfflineEdit = commands().count
-                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
-                check(commands().count == afterOfflineEdit, "offline intent enabled a live mutation")
-                session.targetLifetimeChanged()
-                try setConnection(true, heroReady: true)
-            } else {
-                model.setFeature(.invincibility,value:true)
-                model.setValue("health",value:100,target:HadesHeroTarget(heroId:"run:hero:2"));pump()
-                check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
-            }
-            try setFixtureError(nil)
-            model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
-            check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")
-        }
-        var malformed=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
-        malformed.removeValue(forKey:"heroReady")
-        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
-        model.refreshFromHost();wait("malformed status reply: trainer idle and disconnected") { !model.busy && !model.connected }
-        check(!model.canMutate && model.currentIssues.contains { $0.id=="observation" && $0.text.key=="hades.error.protocol" }
-              && model.feedback?.text.key=="hades.error.protocol",
-              "malformed observation retained mutation authority or lacked its current issue")
-        malformed["heroReady"]=true
-        try JSONSerialization.data(withJSONObject:malformed).write(to:stateURL,options:.atomic)
-        model.refreshFromHost()
-        wait("well-formed status resolves the protocol issue") {
-            !model.busy && model.connected && !model.currentIssues.contains { $0.id=="observation" }
-        }
+        // The independent interlock journey below owns each unsafe status
+        // reply, explicit reconnect and malformed-observation assertion.
+        // This UI/AX journey retains its own controls and issue-detail gates.
         stopBackend()
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")
@@ -2178,6 +2195,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     JOURNEY_IDS = {
         'frontend': 'hades.save_editor',
         'recovery': 'hades.recovery',
+        'interlock': 'hades.interlock',
         'management': 'hades.management',
         'slider': 'hades.slider',
         'hierarchy': 'hades.hierarchy',
@@ -2187,6 +2205,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     for journey, completion_marker in (
         ('frontend', 'hades_save_editor_native_control_journeys_ok'),
         ('recovery', 'hades_frontend_native_drafts_and_target_ownership_ok'),
+        ('interlock', 'hades_runtime_interlock_journey_ok'),
         ('management', 'hades_management_native_workflows_ok'),
         ('slider', 'hades_slider_module_journey_ok'),
         ('hierarchy', 'hades_visual_hierarchy_ok'),

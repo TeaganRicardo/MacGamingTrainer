@@ -47,6 +47,9 @@ JOURNEY_BUDGETS: dict[str, float] = {
     # Five hosted runs on macos-26/ARM64 span 19.0s to 29.6s. The earlier 30s
     # gate left 0.4s of headroom on a passing run, which is not containment.
     "hades.recovery": 45.0,
+    # Same native connection-fault assertions as recovery, now isolated from
+    # unrelated AX/control work. Retain the established 45s outer watchdog.
+    "hades.interlock": 45.0,
     "hades.management": 30.0,
     "hades.slider": 20.0,
     "hades.hierarchy": 20.0,
