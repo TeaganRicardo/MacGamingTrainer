@@ -82,7 +82,11 @@ lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 assert runtime_revision(lua) >= 42
 assert 'nextRoomRewardToken = nil' in lua
 assert 'lastConsumedNextRoomRewardToken = nil' in lua
-assert 'M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken' in lua
+# StartRoom captures the token before the yielding native call and checks
+# it still owns the same request at commit; a later replacement cannot consume
+# the previous request's receipt.
+assert 'M.nextRoomRewardToken == rewardToken' in lua
+assert 'M.lastConsumedNextRoomRewardToken = rewardToken' in lua
 assert 'M.nextRoomRewardToken = nil' in lua
 assert 'lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken' in lua
 assert 'nextRoomRewardToken = M.nextRoomRewardToken' in lua
