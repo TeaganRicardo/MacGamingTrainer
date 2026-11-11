@@ -39,7 +39,7 @@ class FakeTransport:
             'capabilities':{},
             'desiredFeatures':{'invincibility':False},
             'activeFeatures':{'invincibility':False},
-            'nextRoomReward':None,
+            'nextRoomReward':'WeaponUpgrade',
         })
     def detach(self): pass
     def close(self): pass
@@ -52,7 +52,6 @@ pref_path = preparation.DATA/'desired-state.json'
 store = Hades2PreferenceStore(pref_path)
 prefs = store.defaults()
 prefs['invincibility'] = True
-prefs['nextRoomReward'] = 'WeaponUpgrade'
 store.save(prefs)
 file_before = pref_path.read_bytes()
 
@@ -70,13 +69,14 @@ assert adapter.preference_dirty is True
 assert adapter.preferences == preferences_before
 assert pref_path.read_bytes() == file_before
 
-# Even when desired state is otherwise clean, diagnostics must not consume the
-# persisted one-shot next-room request merely because runtime status reports it
-# absent.
+# Even when desired state is otherwise clean, diagnostics may observe a resident
+# world one-shot but must never promote it into durable desired state.
 adapter.preference_dirty = False
 adapter.observe_runtime()
 assert transport.calls == 2
-assert adapter.preferences['nextRoomReward'] == 'WeaponUpgrade'
+assert adapter.state['nextRoomReward'] == 'WeaponUpgrade'
+assert 'nextRoomReward' not in adapter.preferences
+assert 'nextRoomRewardToken' not in adapter.preferences
 assert pref_path.read_bytes() == file_before
 
 # With no durable desired-state at all, a diagnostics/status read must not adopt
