@@ -22,7 +22,7 @@ sources = [
 ]
 assert "struct Hades2OccurrenceTarget: Identifiable, Equatable" in types
 assert 'case setNextOccurrence(String?)' in api
-assert 'return .setNextOccurrenceDesired' in api
+assert 'return .setNextOccurrenceOnce' in api
 assert 'return ["target": target ?? NSNull()]' in api
 assert "let nextOccurrenceTarget: Hades2FieldPatch<String>" in state
 assert "let occurrenceTargets: [Hades2OccurrenceTarget]?" in state
@@ -57,8 +57,7 @@ assert terms["officialSourceNames"]["Heracles"]["id"] == "NPC_Heracles_01"
 assert terms["officialSourceNames"]["Charon"]["id"] == "NPC_Charon_01"
 assert en["hades2.occurrence.title"] == "Next Eligible Encounter"
 assert zh["hades2.occurrence.title"] == "下一次合资格遭遇"
-assert en["hades2.occurrence.pending"] == "Pending"
-assert zh["hades2.occurrence.pending"] == "待触发"
+assert 'hades2.occurrence.pending' not in view
 
 print("hades2_occurrence_frontend_ok")
 
