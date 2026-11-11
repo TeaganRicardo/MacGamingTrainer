@@ -1107,7 +1107,10 @@ if __MacGamingTrainerV1 == nil then
   -- One native StartRoom owner serves all pending world one-shots. Releasing
   -- one intent may not discard the other one's room-commit listener.
   local function releaseRoomAdmissionIfUnused()
-    if M.nextRoomReward == nil and M.nextOccurrenceTarget == nil then releaseHook("StartRoom") end
+    -- Gate by the actual installed room route owner. An encounter-only target,
+    -- a failed install, or a newly cancelled room request has no reason to
+    -- retain StartRoom. The legacy reward owner can independently retain it.
+    if M.nextRoomReward == nil and not owns("ChooseNextRoomData") then releaseHook("StartRoom") end
   end
   local function releaseNextRoomReward()
     releaseHook("ChooseRoomReward")
