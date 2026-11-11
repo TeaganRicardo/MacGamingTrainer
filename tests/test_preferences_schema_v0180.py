@@ -55,7 +55,7 @@ assert normalized['vitalLocks'] == {
 assert normalized['resourceLocks'] == {'Money': 999, 'MetaCurrency': 12}
 assert normalized['rerollsLock'] == 7
 assert normalized['elementLocks'] == {'Fire': 8, 'Aether': 3}
-assert normalized['nextRoomReward'] == 'WeaponUpgrade'
+assert 'nextRoomReward' not in normalized and 'nextRoomRewardToken' not in normalized
 
 partial_vitals = Hades2PreferenceStore.normalize({
     'vitalLocks': {
@@ -84,7 +84,7 @@ assert invalid['vitalLocks'] == {}
 assert invalid['resourceLocks'] == {}
 assert invalid['rerollsLock'] is None
 assert invalid['elementLocks'] == {}
-assert invalid['nextRoomReward'] is None
+assert 'nextRoomReward' not in invalid and 'nextRoomRewardToken' not in invalid
 
 # The exact historical failure must now be sanitized on disk load.
 base = Path(tempfile.mkdtemp(prefix='mgt-preference-schema-'))
