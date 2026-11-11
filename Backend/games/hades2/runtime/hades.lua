@@ -8611,8 +8611,8 @@ if __MacGamingTrainerV1 == nil then
     end)
   end
 
-  M.occurrenceRouting.available = function()
-    local definition = occurrenceDefinition()
+  M.occurrenceRouting.availableFor = function(target)
+    local definition = type(target) == "string" and occurrenceTargets[target] or nil
     if definition == nil then return false end
     local hasRooms = type(definition.rooms) == "table" and next(definition.rooms) ~= nil
     local hasEncounters = type(definition.encounters) == "table" and next(definition.encounters) ~= nil
@@ -8623,6 +8623,10 @@ if __MacGamingTrainerV1 == nil then
         "ChooseEncounter", "IsEncounterForced", "RecordEncounter", "GetRandomValue",
       }) then return false end
     return hasRooms or hasEncounters
+  end
+
+  M.occurrenceRouting.available = function()
+    return M.occurrenceRouting.availableFor(M.nextOccurrenceTarget)
   end
 
   local function installOccurrenceRouting()
