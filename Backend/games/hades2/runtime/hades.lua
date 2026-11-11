@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 126 then
+if previousModule and previousModule.revision ~= 127 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 126 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 126,
+    version = 1, revision = 127,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -1488,6 +1488,7 @@ if __MacGamingTrainerV1 == nil then
     if M.guardWrapper and UpdateTimers == M.guardWrapper then UpdateTimers = M.originalUpdateTimers end
     M.guardWrapper, M.originalUpdateTimers = nil, nil
   end
+  local worldActions
   local function deactivateRuntime()
     if runtimeState.roomGeneration ~= nil then runtimeState.roomGeneration.release() end
     releaseInvincibility()
@@ -1503,6 +1504,7 @@ if __MacGamingTrainerV1 == nil then
     M.forceEnableRerolls = false
     releaseNextRoomReward()
     releaseOccurrenceRouting()
+    if worldActions ~= nil then worldActions.release() end
     -- Full deactivation retires every native hook even if durable legacy
     -- intents were staged when deactivation started.
     releaseHook("StartRoom")
@@ -1547,6 +1549,7 @@ if __MacGamingTrainerV1 == nil then
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
       or owns("ChooseNextRoomData") or owns("IsRoomForced") or owns("StartRoom")
       or owns("IsEncounterForced") or owns("ChooseEncounter") or owns("RecordEncounter") or owns("GetRandomValue")
+      or owns("LeaveRoom") or owns("CreateDoorRewardPreview")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
@@ -7827,7 +7830,9 @@ if __MacGamingTrainerV1 == nil then
         matureGarden = gardenScopeToken ~= nil,
         setResource = resourceReady(),
         spawnReward = rewardOwner ~= nil, setStats = anyAvailableStat(statAvailable),
-        setElements = M.runtimeOwners.elementsAvailable(), hotBackup = true, hotRestore = false,
+        setElements = M.runtimeOwners.elementsAvailable(),
+        worldActions = worldActions ~= nil and worldActions.available(),
+        hotBackup = true, hotRestore = false,
       },
       featureSupport = featureSupportMap,
       gardenScopeToken = gardenScopeToken or jsonNull,
@@ -7867,6 +7872,7 @@ if __MacGamingTrainerV1 == nil then
       currentRunTraitIdentityScope = "currentRunInstance",
       currentRunTraitIdentityPersistent = false,
       currentRunTraitsReason = traitListReason == nil and jsonNull or traitListReason,
+      worldActions = worldActions ~= nil and worldActions.observe(includeCatalogs ~= false) or jsonNull,
       nextRoomReward = M.nextRoomReward == nil and jsonNull or M.nextRoomReward,
       nextOccurrenceTarget = M.nextOccurrenceTarget == nil and jsonNull or M.nextOccurrenceTarget,
       damageMultiplier = M.damageMultiplier,
@@ -8765,6 +8771,557 @@ if __MacGamingTrainerV1 == nil then
     return rewardType, forceLoot
   end
 
+  worldActions = (function()
+    local leases = setmetatable({}, { __mode = "k" })
+    local identities = setmetatable({}, { __mode = "k" })
+    local nextIdentity, nextLease = 0, 0
+    local routeOrder = { "combat", "story", "shop", "reprieve", "miniboss" }
+    local rewardFields = {
+      "Reward", "ChosenRewardType", "ForceLootName", "RewardOverrides",
+      "RewardPreviewOverride", "ForcedReward", "RewardStoreName", "NeedsReward",
+    }
+
+    local function identity(value)
+      if type(value) ~= "table" then return tostring(value) end
+      local valueId = identities[value]
+      if valueId == nil then
+        nextIdentity = nextIdentity + 1
+        valueId = nextIdentity
+        identities[value] = valueId
+      end
+      return tostring(valueId)
+    end
+
+    local function currentSource()
+      return type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table"
+        and CurrentRun.CurrentRoom or nil
+    end
+
+    local function currentHero()
+      return type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
+        and CurrentRun.Hero or nil
+    end
+
+    local function tokenFor(door)
+      local source = currentSource()
+      if type(door) ~= "table" or type(door.Room) ~= "table"
+          or type(source) ~= "table" or type(CurrentRun) ~= "table" then return nil end
+      return table.concat({
+        "exit", identity(CurrentRun), identity(source), identity(door),
+        tostring(door.ObjectId), identity(door.Room),
+      }, ":")
+    end
+
+    local function routeSignature(door)
+      local room = type(door) == "table" and door.Room or nil
+      if type(room) ~= "table" then return "" end
+      return table.concat({
+        identity(room), tostring(room.Name), tostring(room.ChosenRewardType),
+        tostring(room.ForceLootName), identity(room.RewardOverrides),
+        identity(room.Reward), identity(room.Encounter),
+      }, ":")
+    end
+
+    local function editableDoor(door)
+      if type(door) ~= "table" or type(door.Room) ~= "table"
+          or door.ObjectId == nil or door.ReadyToUse ~= true or door.SkipUnlock then return false end
+      if door.ReturnToPreviousRoom or door.ReturnToPreviousRoomName then return false end
+      return type(MapState) == "table" and type(MapState.OfferedExitDoors) == "table"
+        and MapState.OfferedExitDoors[door.ObjectId] == door
+    end
+
+    local function activeLease(door)
+      local lease = leases[door]
+      if type(lease) ~= "table" then return nil end
+      if lease.run ~= CurrentRun or lease.hero ~= currentHero()
+          or lease.sourceRoom ~= currentSource() or lease.doorToken ~= tokenFor(door) then
+        leases[door] = nil
+        return nil
+      end
+      if lease.kind == "roomCategory" then
+        if lease.signature ~= routeSignature(door) then
+          leases[door] = nil
+          return nil
+        end
+      elseif lease.kind == "reward" then
+        local room = door.Room
+        if room.ChosenRewardType ~= lease.appliedRewardType
+            or room.ForceLootName ~= lease.appliedForceLoot
+            or room.Reward ~= lease.appliedReward then
+          leases[door] = nil
+          return nil
+        end
+      end
+      return lease
+    end
+
+    local function findDoor(doorToken)
+      if type(doorToken) ~= "string" or doorToken == "" then
+        error("World exit token is invalid or stale")
+      end
+      for _, door in pairs(type(MapState) == "table" and MapState.OfferedExitDoors or {}) do
+        if editableDoor(door) and tokenFor(door) == doorToken then return door end
+      end
+      error("World exit token is invalid or stale")
+    end
+
+    local function snapshotField(owner, key)
+      return { present = rawget(owner, key) ~= nil, value = owner[key] }
+    end
+
+    local function restoreField(owner, key, snapshot)
+      if snapshot.present then owner[key] = snapshot.value else owner[key] = nil end
+    end
+
+    local function refreshPreview(door)
+      if type(CreateDoorRewardPreview) ~= "function" then return end
+      local reuse = type(door.RewardPreviewIconIds) == "table" and next(door.RewardPreviewIconIds) ~= nil
+      if reuse then CreateDoorRewardPreview(door, nil, nil, nil, { ReUseIds = true })
+      else CreateDoorRewardPreview(door) end
+    end
+
+    local function routeKind(name)
+      if type(name) ~= "string" then return nil end
+      if string.find(name, "MiniBoss", 1, true) then return "miniboss" end
+      if string.find(name, "_Story", 1, true) then return "story" end
+      if string.find(name, "_Shop", 1, true) then return "shop" end
+      if string.find(name, "_Reprieve", 1, true) then return "reprieve" end
+      if string.find(name, "_Combat", 1, true) then return "combat" end
+      return nil
+    end
+
+    local function routeSourceSafe(door)
+      local source = currentSource()
+      if type(source) ~= "table" or type(door) ~= "table" then return false end
+      local sourceData = type(RoomData) == "table" and RoomData[source.Name] or nil
+      sourceData = type(sourceData) == "table" and sourceData or source
+      local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+      if ForceNextRoom ~= nil or door.ForceRoomName ~= nil
+          or args.ForceNextRoom ~= nil or args.ForceNextRoomSet ~= nil
+          or source.ForceNextRoomSet ~= nil or source.NextRoomSet ~= nil or source.UsePreviousRoomSet
+          or sourceData.ForceNextRoomSet ~= nil or sourceData.NextRoomSet ~= nil or sourceData.UsePreviousRoomSet
+          or sourceData.LinkedRoom ~= nil or sourceData.LinkedRooms ~= nil
+          or source.LinkedRoom ~= nil or source.LinkedRooms ~= nil
+          or source.PersistentRoomForDoors or sourceData.PersistentRoomForDoors
+          or door.ReturnToPreviousRoom or door.ReturnToPreviousRoomName then return false end
+      if type(sourceData.PredeterminedDoorRooms) == "table"
+          and sourceData.PredeterminedDoorRooms[door.ObjectId] ~= nil then return false end
+      return true
+    end
+
+    local function couldBeForced(data, args, otherDoors)
+      if type(IsRoomForced) ~= "function" then return true end
+      local nativeRandomChance = RandomChance
+      if type(nativeRandomChance) == "function" then
+        RandomChance = function(chance)
+          return type(chance) == "number" and chance > 0
+        end
+      end
+      local ok, result = pcall(IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors)
+      if type(nativeRandomChance) == "function" then RandomChance = nativeRandomChance end
+      if not ok then error(result, 0) end
+      return not not result
+    end
+
+    local function routeCandidates(door)
+      if not editableDoor(door) or not routeSourceSafe(door)
+          or type(RoomSets) ~= "table" or type(RoomData) ~= "table"
+          or type(IsRoomEligible) ~= "function" then return nil end
+      local source = currentSource()
+      local sourceData = type(RoomData[source.Name]) == "table" and RoomData[source.Name] or source
+      local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+      local roomSetName = args.RoomSetName or source.RoomSetName or sourceData.RoomSetName or "F"
+      local roomSet = RoomSets[roomSetName]
+      if type(roomSet) ~= "table" then return nil end
+      local otherDoors = {}
+      for _, offered in pairs(MapState.OfferedExitDoors or {}) do
+        if type(offered) == "table" then otherDoors[#otherDoors + 1] = offered end
+      end
+      table.sort(otherDoors, function(a,b) return number(a.ObjectId) < number(b.ObjectId) end)
+      local result = {}
+      for _, roomName in ipairs(roomSet) do
+        local data = type(roomName) == "table" and roomName or RoomData[roomName]
+        if type(data) == "table" then
+          local ok, eligible = pcall(IsRoomEligible, CurrentRun, source, data, args)
+          if not ok then error(eligible, 0) end
+          if eligible then
+            if couldBeForced(data, args, otherDoors) then return nil end
+            local kind = routeKind(data.Name)
+            if kind ~= nil then
+              result[kind] = result[kind] or {}
+              result[kind][#result[kind] + 1] = data
+            end
+          end
+        end
+      end
+      return result
+    end
+
+    local function rewardCandidates(door)
+      local room = editableDoor(door) and door.Room or nil
+      if type(room) ~= "table" or room.NoReward or room.DeferReward
+          or room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil then return {} end
+      if room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
+          or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion" then return {} end
+      local storeName = room.RewardStoreName
+      local stores = type(CurrentRun) == "table" and CurrentRun.RewardStores or nil
+      local store = type(stores) == "table" and stores[storeName] or nil
+      if type(store) ~= "table" or type(IsRoomRewardEligible) ~= "function" then return {} end
+      local result, seen = {}, {}
+      for _, reward in ipairs(store) do
+        if type(reward) == "table" and type(reward.Name) == "string"
+            and reward.Name ~= "Story" and reward.Name ~= "Shop"
+            and reward.Name ~= "Empty" and reward.Name ~= "Devotion" then
+          local ok, eligible = pcall(IsRoomRewardEligible, CurrentRun, room, reward, {}, { Door = door })
+          if not ok then error(eligible, 0) end
+          local target = reward.ForceLootName or reward.Name
+          if eligible and type(target) == "string" and not seen[target] then
+            seen[target] = true
+            result[#result + 1] = {
+              id = target, rewardType = reward.Name,
+              forceLoot = reward.ForceLootName, reward = reward,
+            }
+          end
+        end
+      end
+      return result
+    end
+
+    local function rewardCandidate(door, target)
+      for _, candidate in ipairs(rewardCandidates(door)) do
+        if candidate.id == target then return candidate end
+      end
+      return nil
+    end
+
+    local function previewRoom(door, route)
+      local proxy = {}
+      for key, value in pairs(door.Room) do proxy[key] = value end
+      proxy.Reward = nil
+      proxy.RewardOverrides = nil
+      proxy.RewardPreviewOverride = nil
+      proxy.ForceLootName = nil
+      proxy.Encounter = nil
+      proxy.ChosenRewardType = nil
+      proxy.NextRoomSet = { "MacGamingTrainerPending:" .. route }
+      if route == "shop" then proxy.ChosenRewardType = "Shop"
+      elseif route == "story" then proxy.ChosenRewardType = "Story"
+      elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
+      return proxy
+    end
+
+    local function hasRouteLease()
+      for door, lease in pairs(leases) do
+        if lease.kind == "roomCategory" and activeLease(door) ~= nil then return true end
+      end
+      return false
+    end
+
+    local function releaseRouteHooksIfUnused()
+      if not hasRouteLease() then
+        releaseHook("CreateDoorRewardPreview")
+        releaseHook("LeaveRoom")
+      end
+    end
+
+    local function clearSource(source)
+      for door, lease in pairs(leases) do
+        if lease.sourceRoom == source then leases[door] = nil end
+      end
+      releaseRouteHooksIfUnused()
+    end
+
+    local function contains(list, wanted)
+      if type(list) ~= "table" then return false end
+      for _, value in pairs(list) do if value == wanted then return true end end
+      return false
+    end
+
+    local function materializeRoute(run, door, lease)
+      local routes = routeCandidates(door)
+      local candidates = type(routes) == "table" and routes[lease.target] or nil
+      if type(candidates) ~= "table" or #candidates == 0 then
+        error("World exit route is no longer native-eligible")
+      end
+      local data = GetRandomValue(candidates)
+      if type(data) ~= "table" then error("World exit route has no native destination") end
+      local source = lease.sourceRoom
+      local roomOverrides = type(source) == "table" and source.NextRoomOverrides or nil
+      local target = CreateRoom(data, {
+        SkipChooseReward = true, SkipChooseEncounter = true, RoomOverrides = roomOverrides,
+      })
+      if type(target) ~= "table" then error("World exit route creation failed") end
+      target.NeedsReward = true
+      local originalRoom = door.Room
+      local storeName = target.IndividualRewardStore
+      local invalidOverrides = type(RewardStoreData) == "table" and RewardStoreData.InvalidOverrides or nil
+      if storeName == nil and target.ForcedRewardStore ~= nil
+          and not contains(invalidOverrides, target.ForcedRewardStore) then
+        storeName = target.ForcedRewardStore
+      end
+      storeName = storeName or originalRoom.RewardStoreName or run.NextRewardStoreName
+      if storeName == nil and type(ChooseNextRewardStore) == "function" then
+        storeName = ChooseNextRewardStore(run)
+      end
+      target.RewardStoreName = storeName
+      local previously = {}
+      for objectId, offered in pairs(type(source) == "table" and source.OfferedRewards or {}) do
+        if objectId ~= door.ObjectId and type(offered) == "table" and offered.Type ~= nil then
+          previously[#previously + 1] = {
+            RewardType = offered.Type, ForceLootName = offered.ForceLootName,
+          }
+        end
+      end
+      if not target.NoReward and not target.DeferReward and type(ChooseRoomReward) == "function" then
+        if type(storeName) ~= "string" then error("World exit reward store is unavailable") end
+        target.ChosenRewardType = ChooseRoomReward(
+          run, target, storeName, previously, { Door = door }
+        )
+        if target.ChosenRewardType ~= nil and type(SetupRoomReward) == "function" then
+          SetupRoomReward(run, target, previously, {
+            Door = door, IgnoreForceLootName = target.IgnoreForceLootName,
+          })
+        end
+      end
+      target.NeedsReward = false
+      if target.UseOptionalOverrides and type(target.OptionalOverrides) == "table" then
+        for key, value in pairs(target.OptionalOverrides) do target[key] = value end
+      end
+      AssignRoomToExitDoor(door, target)
+      leases[door] = nil
+      clearSource(source)
+      return target
+    end
+
+    local function installRouteHooks()
+      requireFunctions("exact world exit route", {
+        "CreateDoorRewardPreview", "LeaveRoom", "CreateRoom", "AssignRoomToExitDoor",
+        "GetRandomValue", "IsRoomEligible", "IsRoomForced",
+      })
+      if not owns("CreateDoorRewardPreview") then
+        installHook("CreateDoorRewardPreview", function(original, door, ...)
+          local lease = activeLease(door)
+          if type(lease) ~= "table" or lease.kind ~= "roomCategory" then
+            return original(door, ...)
+          end
+          local actual = door.Room
+          door.Room = previewRoom(door, lease.target)
+          local reply = table.pack(pcall(original, door, ...))
+          door.Room = actual
+          if not reply[1] then error(reply[2], 0) end
+          return table.unpack(reply, 2, reply.n)
+        end)
+      end
+      if not owns("LeaveRoom") then
+        installHook("LeaveRoom", function(original, run, door, ...)
+          local source = currentSource()
+          local lease = activeLease(door)
+          if type(lease) == "table" and lease.kind == "roomCategory" then
+            if run ~= CurrentRun or lease.run ~= run or lease.sourceRoom ~= source then
+              error("World exit route lost its native owner")
+            end
+            materializeRoute(run, door, lease)
+          else
+            clearSource(source)
+          end
+          return original(run, door, ...)
+        end)
+      end
+    end
+
+    local function leaseToken(doorToken, kind, target)
+      nextLease = nextLease + 1
+      return table.concat({ doorToken, kind, target, tostring(nextLease) }, ":")
+    end
+
+    local function snapshotReward(door)
+      local room, source = door.Room, currentSource()
+      local snapshot = { fields = {}, door = {}, source = source }
+      for _, key in ipairs(rewardFields) do snapshot.fields[key] = snapshotField(room, key) end
+      snapshot.door.AllowReroll = snapshotField(door, "AllowReroll")
+      snapshot.door.CanBeRerolled = snapshotField(door, "CanBeRerolled")
+      source.OfferedRewards = source.OfferedRewards or {}
+      source.ExitDoorRooms = source.ExitDoorRooms or {}
+      snapshot.offered = snapshotField(source.OfferedRewards, door.ObjectId)
+      snapshot.exitRoom = snapshotField(source.ExitDoorRooms, door.ObjectId)
+      return snapshot
+    end
+
+    local function restoreReward(door, lease)
+      local room, source = door.Room, lease.sourceRoom
+      for _, key in ipairs(rewardFields) do restoreField(room, key, lease.snapshot.fields[key]) end
+      restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
+      restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
+      source.OfferedRewards = source.OfferedRewards or {}
+      source.ExitDoorRooms = source.ExitDoorRooms or {}
+      restoreField(source.OfferedRewards, door.ObjectId, lease.snapshot.offered)
+      restoreField(source.ExitDoorRooms, door.ObjectId, lease.snapshot.exitRoom)
+      if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+      refreshPreview(door)
+    end
+
+    local function applyReward(door, target, doorToken)
+      local candidate = rewardCandidate(door, target)
+      if candidate == nil then error("World exit reward is not native-eligible") end
+      local lease = {
+        kind = "reward", target = target, doorToken = doorToken,
+        run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
+        snapshot = snapshotReward(door),
+      }
+      lease.leaseToken = leaseToken(doorToken, lease.kind, target)
+      local room = door.Room
+      local reward = type(DeepCopyTable) == "function"
+        and DeepCopyTable(candidate.reward) or candidate.reward
+      room.Reward = reward
+      room.ChosenRewardType = candidate.rewardType
+      room.ForceLootName = candidate.forceLoot
+      room.RewardOverrides = type(reward) == "table" and reward.Overrides or nil
+      if type(SetupRoomReward) == "function" then
+        SetupRoomReward(CurrentRun, room, {}, { Door = door })
+      end
+      AssignRoomToExitDoor(door, room)
+      lease.appliedRewardType = room.ChosenRewardType
+      lease.appliedForceLoot = room.ForceLootName
+      lease.appliedReward = room.Reward
+      leases[door] = lease
+      refreshPreview(door)
+      return lease
+    end
+
+    local function applyRoute(door, target, doorToken)
+      local routes = routeCandidates(door)
+      if type(routes) ~= "table" or type(routes[target]) ~= "table"
+          or #routes[target] == 0 then error("World exit route is not native-eligible") end
+      installRouteHooks()
+      local lease = {
+        kind = "roomCategory", target = target, doorToken = doorToken,
+        run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
+        originalRoom = door.Room, signature = routeSignature(door),
+      }
+      lease.leaseToken = leaseToken(doorToken, lease.kind, target)
+      leases[door] = lease
+      local ok, failure = pcall(refreshPreview, door)
+      if not ok then
+        leases[door] = nil
+        releaseRouteHooksIfUnused()
+        error(failure, 0)
+      end
+      return lease
+    end
+
+    local function preflightApply(params)
+      local door = findDoor(params.doorToken)
+      if activeLease(door) ~= nil then error("World exit already has an active lease") end
+      if params.kind == "reward" then
+        if type(params.target) ~= "string" or rewardCandidate(door, params.target) == nil then
+          error("World exit reward is not native-eligible")
+        end
+      elseif params.kind == "roomCategory" then
+        local routes = routeCandidates(door)
+        if type(params.target) ~= "string" or type(routes) ~= "table"
+            or type(routes[params.target]) ~= "table" or #routes[params.target] == 0 then
+          error("World exit route is not native-eligible")
+        end
+      else
+        error("World exit target kind is invalid")
+      end
+      return door
+    end
+
+    local function apply(params)
+      local door = preflightApply(params)
+      local doorToken = tokenFor(door)
+      if params.kind == "reward" then applyReward(door, params.target, doorToken)
+      else applyRoute(door, params.target, doorToken) end
+    end
+
+    local function preflightCancel(params)
+      local door = findDoor(params.doorToken)
+      local lease = activeLease(door)
+      if type(lease) ~= "table" or type(params.leaseToken) ~= "string"
+          or lease.leaseToken ~= params.leaseToken then
+        error("World exit lease is invalid or stale")
+      end
+      return door, lease
+    end
+
+    local function cancel(params)
+      local door, lease = preflightCancel(params)
+      leases[door] = nil
+      if lease.kind == "reward" then restoreReward(door, lease)
+      else refreshPreview(door) end
+      releaseRouteHooksIfUnused()
+    end
+
+    local function observe(includeTargets)
+      local exits = setmetatable({}, arrayMeta)
+      if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table"
+          or currentSource() == nil or currentHero() == nil then return { exits = exits } end
+      for _, door in pairs(MapState.OfferedExitDoors) do
+        if editableDoor(door) then
+          local lease = activeLease(door)
+          local row = {
+            doorToken = tokenFor(door), objectId = door.ObjectId,
+            roomName = door.Room.Name,
+            reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
+            activeLease = type(lease) == "table" and {
+              kind = lease.kind, target = lease.target, leaseToken = lease.leaseToken,
+            } or jsonNull,
+          }
+          if includeTargets then
+            local targets = setmetatable({}, arrayMeta)
+            for _, candidate in ipairs(rewardCandidates(door)) do
+              targets[#targets + 1] = { kind = "reward", id = candidate.id }
+            end
+            local routes = routeCandidates(door)
+            if type(routes) == "table" then
+              for _, kind in ipairs(routeOrder) do
+                if type(routes[kind]) == "table" and #routes[kind] > 0 then
+                  targets[#targets + 1] = { kind = "roomCategory", id = kind }
+                end
+              end
+            end
+            row.targets = targets
+          end
+          exits[#exits + 1] = row
+        end
+      end
+      table.sort(exits, function(a,b) return number(a.objectId) < number(b.objectId) end)
+      for index, row in ipairs(exits) do row.ordinal = index end
+      return { exits = exits }
+    end
+
+    local function release()
+      for door, lease in pairs(leases) do
+        if type(lease) == "table" and lease.run == CurrentRun
+            and lease.sourceRoom == currentSource() and lease.doorToken == tokenFor(door) then
+          if lease.kind == "reward" then pcall(restoreReward, door, lease)
+          elseif lease.kind == "roomCategory" then
+            leases[door] = nil
+            pcall(refreshPreview, door)
+          end
+        end
+        leases[door] = nil
+      end
+      releaseHook("CreateDoorRewardPreview")
+      releaseHook("LeaveRoom")
+    end
+
+    local function available()
+      return currentSource() ~= nil and currentHero() ~= nil
+        and M.nativeFunctionsAvailable({
+          "AssignRoomToExitDoor", "CreateDoorRewardPreview", "LeaveRoom",
+          "CreateRoom", "GetRandomValue", "IsRoomEligible", "IsRoomForced",
+        })
+    end
+
+    return {
+      observe = observe, available = available, release = release,
+      apply = apply, cancel = cancel,
+      preflightApply = preflightApply, preflightCancel = preflightCancel,
+    }
+  end)()
+
   local function patchOfferedNextRoomDoors()
     local wanted = M.nextRoomReward
     if wanted == nil or type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table" then
@@ -9333,6 +9890,8 @@ if __MacGamingTrainerV1 == nil then
         return type(context) == "table" and context.ownerKeys
           or { "session", "run", "hero", "room", "map" }
       end,
+      apply_world_exit = { "session", "run", "hero", "room", "map" },
+      cancel_world_exit = { "session", "run", "hero", "room", "map" },
     }
     local actionSemanticKeys = {
       set_resource = { "resource", "amount" },
@@ -9349,6 +9908,8 @@ if __MacGamingTrainerV1 == nil then
       mature_garden = { "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
       spawn_reward = { "reward", "rarity", "level" },
+      apply_world_exit = { "doorToken", "kind", "target" },
+      cancel_world_exit = { "doorToken", "leaseToken" },
     }
     local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
     local function actionFingerprint(command, params)
@@ -10276,6 +10837,20 @@ if __MacGamingTrainerV1 == nil then
       reconcileDesired(true, "stat:" .. stat)
       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
+    end
+    if command == "apply_world_exit" then
+      return actionLedger.run(
+        command, params,
+        function() worldActions.apply(params); return nil, "completed" end,
+        function() worldActions.preflightApply(params); return nil end
+      )
+    end
+    if command == "cancel_world_exit" then
+      return actionLedger.run(
+        command, params,
+        function() worldActions.cancel(params); return nil, "completed" end,
+        function() worldActions.preflightCancel(params); return nil end
+      )
     end
     if command == "set_next_room_reward" then
       if runtimeState.preferenceReplayDepth ~= 0 then
