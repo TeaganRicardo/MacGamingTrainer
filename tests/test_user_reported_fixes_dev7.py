@@ -28,7 +28,7 @@ def main():
     assert 'boonChoiceCount' not in Hades2PreferenceStore.defaults()
     assert Hades2PreferenceStore.defaults()['boonRarity']['forceLegendary'] is False
     assert Hades2PreferenceStore.defaults()['boonRarity']['forceDuo'] is False
-    assert DESIRED_STATE_SCHEMA_VERSION == 11
+    assert DESIRED_STATE_SCHEMA_VERSION == 12
     assert PROFILE_SCHEMA_VERSION == 6
 
     # Legacy allow=true must not silently turn into a force action after upgrade.
