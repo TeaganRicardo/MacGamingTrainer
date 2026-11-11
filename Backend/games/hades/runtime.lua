@@ -1375,7 +1375,7 @@ world = (function()
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
       and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
-  local function refreshPreviewOnly(door)
+  local function clearDoorPreview(door)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1385,12 +1385,18 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
+  end
+  local function refreshPreviewOnly(door)
+    clearDoorPreview(door)
     CreateDoorRewardPreview(door)
   end
   local function refreshDoor(door, room)
+    -- Preserve the pre-existing native mutation order for immediate rewards:
+    -- retire the old icons before reassigning the actual door/OfferedRewards.
+    clearDoorPreview(door)
     door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
-    refreshPreviewOnly(door)
+    CreateDoorRewardPreview(door)
   end
   local function applyDoor(door, room)
     local edit = edits[door]
@@ -1420,6 +1426,7 @@ world = (function()
     preview.Encounter = nil
     preview.RewardOverrides = nil
     preview.RewardPreviewIcon = nil
+    preview.RewardPreviewFx = nil
     preview.ForceLootName = nil
     preview.RewardStoreName = nil
     preview.NextRoomSet = nil
