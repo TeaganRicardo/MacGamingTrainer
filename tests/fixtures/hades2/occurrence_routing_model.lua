@@ -265,6 +265,18 @@ ChooseEncounter = function(run, room, args)
 end
 local nativeChooseEncounter = ChooseEncounter
 
+RecordEncounter = function(run, encounter)
+  assert(run == CurrentRun and type(encounter) == "table" and type(encounter.Name) == "string")
+  run.EncountersOccurredCache[encounter.Name] = (run.EncountersOccurredCache[encounter.Name] or 0) + 1
+  GameState.EncountersOccurredCache[encounter.Name] =
+    (GameState.EncountersOccurredCache[encounter.Name] or 0) + 1
+  run.EncountersOccurredBiomeCache[encounter.Name] =
+    (run.EncountersOccurredBiomeCache[encounter.Name] or 0) + 1
+  run.EncountersDepthCache[encounter.Name] = run.RunDepthCache
+  return encounter
+end
+local nativeRecordEncounter = RecordEncounter
+
 local function setRoomSet(name)
   CurrentRun.CurrentRoom = {
     Name = name .. "_Start",
