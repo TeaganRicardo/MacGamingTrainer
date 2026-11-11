@@ -7855,7 +7855,6 @@ if __MacGamingTrainerV1 == nil then
       currentRunTraitIdentityPersistent = false,
       currentRunTraitsReason = traitListReason == nil and jsonNull or traitListReason,
       worldActions = worldActions ~= nil and worldActions.observe(includeCatalogs ~= false) or jsonNull,
-      nextOccurrenceTarget = M.nextOccurrenceTarget == nil and jsonNull or M.nextOccurrenceTarget,
       damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
       resourceMultiplier = M.resourceMultiplier, resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
@@ -9188,10 +9187,63 @@ if __MacGamingTrainerV1 == nil then
       releaseRouteHooksIfUnused()
     end
 
+    local function preflightOccurrenceApply(params)
+      if type(params.target) ~= "string" or occurrenceTargets[params.target] == nil
+          or CurrentRun == nil or currentHero() == nil then
+        error("World occurrence target is unavailable")
+      end
+      if M.nextOccurrenceTarget ~= nil or M.nextOccurrenceToken ~= nil then
+        error("World occurrence already has an active lease")
+      end
+      if not M.occurrenceRouting.availableFor(params.target) then
+        error("World occurrence target is unavailable")
+      end
+      return params.target
+    end
+
+    local function applyOccurrence(params)
+      local target = preflightOccurrenceApply(params)
+      nextLease = nextLease + 1
+      local token = table.concat({
+        "occurrence", identity(CurrentRun), identity(currentHero()),
+        target, tostring(nextLease),
+      }, ":")
+      M.nextOccurrenceTarget = target
+      M.nextOccurrenceToken = token
+      M.featureErrors.nextOccurrence = nil
+      reconcileDesired(true, "nextOccurrence")
+      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+      return token
+    end
+
+    local function preflightOccurrenceCancel(params)
+      if type(params.leaseToken) ~= "string" or params.leaseToken == ""
+          or M.nextOccurrenceTarget == nil or M.nextOccurrenceToken ~= params.leaseToken then
+        error("World occurrence lease is invalid or stale")
+      end
+      return M.nextOccurrenceTarget
+    end
+
+    local function cancelOccurrence(params)
+      preflightOccurrenceCancel(params)
+      M.nextOccurrenceTarget = nil
+      M.nextOccurrenceToken = nil
+      M.featureErrors.nextOccurrence = nil
+      reconcileDesired(true, "nextOccurrence")
+      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+    end
+
     local function observe(includeTargets)
       local exits = setmetatable({}, arrayMeta)
+      local result = { exits = exits }
+      if M.nextOccurrenceTarget ~= nil and M.nextOccurrenceToken ~= nil then
+        result.occurrence = {
+          target = M.nextOccurrenceTarget,
+          leaseToken = M.nextOccurrenceToken,
+        }
+      end
       if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table"
-          or currentSource() == nil or currentHero() == nil then return { exits = exits } end
+          or currentSource() == nil or currentHero() == nil then return result end
       for _, door in pairs(MapState.OfferedExitDoors) do
         if editableDoor(door) then
           local lease = activeLease(door)
@@ -9223,7 +9275,7 @@ if __MacGamingTrainerV1 == nil then
       end
       table.sort(exits, function(a,b) return number(a.objectId) < number(b.objectId) end)
       for index, row in ipairs(exits) do row.ordinal = index end
-      return { exits = exits }
+      return result
     end
 
     local function release()
@@ -9254,6 +9306,9 @@ if __MacGamingTrainerV1 == nil then
       observe = observe, available = available, release = release,
       apply = apply, cancel = cancel,
       preflightApply = preflightApply, preflightCancel = preflightCancel,
+      applyOccurrence = applyOccurrence, cancelOccurrence = cancelOccurrence,
+      preflightOccurrenceApply = preflightOccurrenceApply,
+      preflightOccurrenceCancel = preflightOccurrenceCancel,
     }
   end)()
 
@@ -9745,6 +9800,8 @@ if __MacGamingTrainerV1 == nil then
       end,
       apply_world_exit = { "session", "run", "hero", "room", "map" },
       cancel_world_exit = { "session", "run", "hero", "room", "map" },
+      apply_world_occurrence = { "session", "run", "hero" },
+      cancel_world_occurrence = { "session", "run", "hero" },
     }
     local actionSemanticKeys = {
       set_resource = { "resource", "amount" },
@@ -9763,6 +9820,8 @@ if __MacGamingTrainerV1 == nil then
       spawn_reward = { "reward", "rarity", "level" },
       apply_world_exit = { "doorToken", "kind", "target" },
       cancel_world_exit = { "doorToken", "leaseToken" },
+      apply_world_occurrence = { "target" },
+      cancel_world_occurrence = { "leaseToken" },
     }
     local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
     local function actionFingerprint(command, params)
@@ -10705,25 +10764,19 @@ if __MacGamingTrainerV1 == nil then
         function() worldActions.preflightCancel(params); return nil end
       )
     end
-    if command == "set_next_occurrence" then
-      if runtimeState.preferenceReplayDepth ~= 0 then
-        error("Next occurrence cannot be preference-replayed")
-      end
-      local target, token = params.target, params.token
-      if target ~= nil and type(target) ~= "string" then error("Next occurrence target must be a string or nil") end
-      if target ~= nil then
-        if occurrenceTargets[target] == nil then error("Unsupported next occurrence target") end
-        if type(token) ~= "string" or #token == 0 or #token > 128 then error("Next occurrence token is invalid") end
-        M.nextOccurrenceTarget = target
-        M.nextOccurrenceToken = token
-      else
-        M.nextOccurrenceTarget = nil
-        M.nextOccurrenceToken = nil
-      end
-      M.featureErrors.nextOccurrence = nil
-      reconcileDesired(true, "nextOccurrence")
-      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
-      return state(params.includeCatalogs)
+    if command == "apply_world_occurrence" then
+      return actionLedger.run(
+        command, params,
+        function() worldActions.applyOccurrence(params); return nil, "completed" end,
+        function() worldActions.preflightOccurrenceApply(params); return nil end
+      )
+    end
+    if command == "cancel_world_occurrence" then
+      return actionLedger.run(
+        command, params,
+        function() worldActions.cancelOccurrence(params); return nil, "completed" end,
+        function() worldActions.preflightOccurrenceCancel(params); return nil end
+      )
     end
     if command == "set_boon_rarity" then
       local target = params.target or M.boonRarityTarget
