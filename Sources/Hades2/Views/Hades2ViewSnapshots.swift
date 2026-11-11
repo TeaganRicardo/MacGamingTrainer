@@ -30,7 +30,6 @@ struct Hades2ViewStatSnapshot: Equatable {
 }
 
 struct Hades2ViewConfigSnapshot: Equatable {
-    let nextOccurrenceTarget: String?
     let elements: [ElementCount]
     let damageMultiplier: Double
     let moneyMultiplier: Double
