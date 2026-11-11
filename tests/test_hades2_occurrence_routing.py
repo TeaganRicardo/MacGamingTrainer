@@ -268,6 +268,22 @@ assert(M.lastConsumedNextOccurrenceToken == "skip-unlock-token",
   "native StartRoom did not generate the consumption receipt")
 print("occurrence_routing_ok")
 """,
+    "switching_to_encounter_retires_room_admission_owner": r"""
+setRoomSet("F")
+setOccurrence("npc:Arachne", "room-first")
+assert(StartRoom ~= nativeStartRoom and ChooseNextRoomData ~= nativeChooseNextRoomData)
+setOccurrence("npc:Nemesis", "encounter-next")
+assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
+    and ChooseEncounter ~= nativeChooseEncounter,
+  "switching from named room to encounter left an unused room admission hook")
+setOccurrence("npc:Arachne", "room-again")
+assert(StartRoom ~= nativeStartRoom and ChooseEncounter == nativeChooseEncounter)
+M.dispatch("set_next_occurrence", { target = nil, includeCatalogs = false })
+assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
+    and GetRandomValue == nativeGetRandomValue,
+  "cancellation retained native selection or admission owners")
+print("occurrence_routing_ok")
+""",
     "cleanup_restores_native_routing_owners": r"""
 setRoomSet("F")
 setOccurrence("npc:Arachne", "cleanup-token")
