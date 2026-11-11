@@ -14,8 +14,9 @@ assert WORLD_COMMANDS.isdisjoint(DEFAULT_PREFERENCES)
 for row in reward_catalog():
     assert row['names']['zh-CN'] and row['names']['en']
     assert runtime_definitions()[row['id']]['kind'] in ('loot', 'consumable')
-valid = {'roomId': 'runtime:run:room', 'doorId': 'door:room', 'reward': 'AthenaUpgrade'}
-assert HadesAdapter._mutation_params('set_door_reward', valid) == valid
+valid = {'roomId': 'runtime:run:room', 'reward': 'AthenaUpgrade'}
+for retired in ('set_door_reward', 'set_door_route', 'restore_door'):
+    assert retired not in WORLD_COMMANDS
 assert mutation_params('gain_resource', {'resource': 'Gems', 'amount': 20}) == {'resource': 'Gems', 'amount': 20}
 apply_exit = {
     'roomId': 'runtime:run:room',
@@ -47,11 +48,8 @@ cancel_occurrence = {
 }
 assert mutation_params('cancel_world_occurrence', cancel_occurrence) == cancel_occurrence
 for command, payload, expected in (
-    ('set_door_reward', {**valid, 'roomId': ''}, 'stale_room'),
-    ('set_door_reward', {**valid, 'doorId': ''}, 'stale_door'),
-    ('set_door_reward', {**valid, 'reward': 'TrialUpgrade'}, 'invalid_value'),
+    ('apply_world_exit', {**apply_exit, 'roomId': ''}, 'stale_room'),
     ('spawn_reward', {**valid, 'reward': 'ArbitraryLua'}, 'invalid_value'),
-    ('set_door_route', {**valid, 'route': 'arbitraryMap'}, 'invalid_value'),
     ('apply_world_exit', {**apply_exit, 'doorToken': ''}, 'stale_door'),
     ('apply_world_exit', {**apply_exit, 'requestId': ''}, 'invalid_value'),
     ('apply_world_exit', {**apply_exit, 'kind': 'roomCategory', 'targetID': 'thanatos'}, 'invalid_value'),
