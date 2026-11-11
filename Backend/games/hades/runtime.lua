@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 11 then error("hades.error.restartRequired") end
+  if existing.revision ~= 12 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 11,
+  version = 1, revision = 12,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1239,6 +1239,9 @@ world = (function()
   local edits = setmetatable({}, { __mode = "k" })
   local encounters = setmetatable({}, { __mode = "k" })
   local spawnContext
+  -- Per-coroutine native door-use authority. LeaveRoom may yield, so no
+  -- protected call may wrap that native transition.
+  local useFrames = setmetatable({}, { __mode = "k" })
   local objectOwners = {
     trove = { field = "ChallengeSwitch", chance = "ChallengeChanceSuccess", query = "IsChallengeSwitchEligible" },
     well = { field = "WellShop", chance = "WellShopChanceSuccess", query = "IsWellShopEligible" },
@@ -1372,7 +1375,7 @@ world = (function()
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
       and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
-  local function refreshDoor(door, room)
+  local function refreshPreviewOnly(door)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1382,9 +1385,12 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
+    CreateDoorRewardPreview(door)
+  end
+  local function refreshDoor(door, room)
     door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
-    CreateDoorRewardPreview(door)
+    refreshPreviewOnly(door)
   end
   local function applyDoor(door, room)
     local edit = edits[door]
@@ -1393,6 +1399,41 @@ world = (function()
     edit.applied = room; edits[door] = edit
     refreshDoor(door, room)
     edit.signature = doorId(door)
+  end
+  -- A room-category edit owns only a reversible preview until the *selected*
+  -- native door is actually used. The original door.Room stays authoritative.
+  local function activeRoutePlan(door)
+    if type(door) ~= "table" then return nil end
+    local edit = edits[door]
+    if not edit or edit.kind ~= "route" then return nil end
+    if edit.original == door.Room and edit.signature == doorId(door)
+        and edit.run == CurrentRun and edit.sourceRoom == CurrentRun.CurrentRoom
+        and edit.hero == hero() then return edit end
+    edits[door] = nil
+    return nil
+  end
+  local function previewForRoute(door, route)
+    -- The game preview is an honest category/generic icon. It must not show
+    -- speculative native loot, an NPC, or a concrete ungenerated destination.
+    local preview = {}
+    for key, value in pairs(door.Room) do preview[key] = value end
+    preview.Encounter = nil
+    preview.RewardOverrides = nil
+    preview.RewardPreviewIcon = nil
+    preview.ForceLootName = nil
+    preview.RewardStoreName = nil
+    preview.NextRoomSet = nil
+    if route == "shop" then
+      preview.ChosenRewardType = "Shop"
+    elseif route == "story" then
+      preview.ChosenRewardType = nil
+    else
+      preview.ChosenRewardType = nil
+      -- CreateDoorRewardPreview natively uses ExitPreview for unknown next
+      -- destinations. This is a transient render-only descriptor.
+      preview.NextRoomSet = { "category-pending" }
+    end
+    return preview
   end
   local function definition(name)
     local data = runtime.worldDefinitions and runtime.worldDefinitions[name]
@@ -1447,8 +1488,82 @@ world = (function()
         return original(run, room, ...)
       end
     end)
+    hook("CreateDoorRewardPreview", function(original)
+      return function(door, ...)
+        local plan = activeRoutePlan(door)
+        if not plan then return original(door, ...) end
+        local actual = door.Room
+        door.Room = previewForRoute(door, plan.route)
+        -- This native render owner is synchronous; restore the true room even
+        -- when preview rendering fails. Never wrap yielding LeaveRoom this way.
+        local reply = table.pack(pcall(original, door, ...))
+        door.Room = actual
+        if not reply[1] then error(reply[2], 0) end
+        return table.unpack(reply, 2, reply.n)
+      end
+    end)
+    hook("AttemptUseDoor", function(original)
+      return function(door, ...)
+        local plan = activeRoutePlan(door)
+        if not plan then return original(door, ...) end
+        local routes = routeRooms(CurrentRun.CurrentRoom)
+        if not canModify(door.Room) or not routes or not routes[plan.route] then
+          -- A stale plan cannot spend a native door cost or silently use the
+          -- old destination. Abort before original AttemptUseDoor authorizes it.
+          edits[door] = nil
+          refreshPreviewOnly(door)
+          return false
+        end
+        local key = coroutine.running() or mainThread
+        local previous = useFrames[key]
+        useFrames[key] = { door = door, run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom }
+        local reply = table.pack(original(door, ...))
+        useFrames[key] = previous
+        return table.unpack(reply, 1, reply.n)
+      end
+    end)
+    hook("LeaveRoom", function(original)
+      return function(run, door, ...)
+        local key = coroutine.running() or mainThread
+        local frame = useFrames[key]
+        local plan = activeRoutePlan(door)
+        if plan then
+          -- The native AttemptUseDoor guard/cost/presentation path has reached
+          -- LeaveRoom. Only this exact authorized door may now create a room.
+          assert(frame and frame.door == door and frame.run == run
+            and frame.hero == hero() and frame.sourceRoom == run.CurrentRoom,
+            "hades.error.worldUnavailable")
+          local routes = routeRooms(run.CurrentRoom)
+          local candidates = routes and routes[plan.route]
+          assert(candidates and #candidates > 0 and canModify(door.Room), "hades.error.worldUnavailable")
+          local data = GetRandomValue(candidates)
+          assert(data, "hades.error.worldUnavailable")
+          local target = CreateRoom(data, { SkipChooseEncounter = true })
+          AssignRoomToExitDoor(door, target)
+          edits[door] = nil
+        end
+        -- Departing this source room also discards plans on *other* exits.
+        -- Keep encounter intents alive: native LeaveRoom may ChooseEncounter.
+        for sibling, edit in pairs(edits) do
+          if edit.kind == "route" and edit.run == run and edit.sourceRoom == run.CurrentRoom then
+            edits[sibling] = nil
+          end
+        end
+        useFrames[key] = nil
+        return original(run, door, ...)
+      end
+    end)
   end
-  function api.clearPending() encounters = setmetatable({}, { __mode = "k" }) end
+  function api.clearPending()
+    encounters = setmetatable({}, { __mode = "k" })
+    for door, edit in pairs(edits) do
+      if edit.kind == "route" then
+        edits[door] = nil
+        if edit.run == CurrentRun and edit.sourceRoom == CurrentRun.CurrentRoom
+            and edit.original == door.Room then pcall(refreshPreviewOnly, door) end
+      end
+    end
+  end
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
@@ -1465,11 +1580,14 @@ world = (function()
           end
           if thanatos(door.Room) then options[#options + 1] = "thanatos" end
         end
+        local routePlan = activeRoutePlan(door)
         local edit, encounter = edits[door], encounters[door.Room]
         doors[#doors + 1] = { id = doorId(door), number = door.ObjectId,
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
           canReward = canModify(door.Room),
-          routes = options, canRestore = edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door),
+          routes = options, canRestore = routePlan ~= nil
+            or (edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door)),
+          pendingRoute = routePlan and routePlan.route or nil,
           pendingEncounter = encounter ~= nil }
       end
     end
@@ -1611,19 +1729,35 @@ world = (function()
       applyDoor(door, room)
     else
       local candidates = routes[params.route]
-      assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-      applyDoor(door, room)
+      assert(candidates and #candidates > 0 and not activeRoutePlan(door), "hades.error.worldUnavailable")
+      edits[door] = {
+        kind = "route", route = params.route, original = door.Room, signature = doorId(door),
+        run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom,
+      }
+      -- Rebuild only the reversible visual preview; don't sample a room, call
+      -- CreateRoom or mutate the actual native door/OfferedRewards graph.
+      local ok, failure = pcall(refreshPreviewOnly, door)
+      if not ok then
+        edits[door] = nil
+        pcall(refreshPreviewOnly, door)
+        error(failure, 0)
+      end
     end
     return runtime.status()
   end
   function runtime.restore_door(params)
     local door = requireDoor(params)
     local edit = edits[door]
-    assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
-    encounters[door.Room] = nil
-    refreshDoor(door, edit.original)
-    edits[door] = nil
+    if edit and edit.kind == "route" then
+      assert(activeRoutePlan(door), "hades.error.staleDoor")
+      edits[door] = nil
+      refreshPreviewOnly(door)
+    else
+      assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
+      encounters[door.Room] = nil
+      refreshDoor(door, edit.original)
+      edits[door] = nil
+    end
     return runtime.status()
   end
   return api
