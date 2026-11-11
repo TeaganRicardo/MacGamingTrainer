@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 124 then
+if previousModule and previousModule.revision ~= 125 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 124 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 124,
+    version = 1, revision = 125,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -1127,6 +1127,7 @@ if __MacGamingTrainerV1 == nil then
     releaseHook("IsRoomForced")
     releaseHook("IsEncounterForced")
     releaseHook("ChooseEncounter")
+    releaseHook("RecordEncounter")
     releaseHook("GetRandomValue")
     releaseRoomAdmissionIfUnused()
   end
@@ -1545,7 +1546,7 @@ if __MacGamingTrainerV1 == nil then
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
       or owns("ChooseNextRoomData") or owns("IsRoomForced") or owns("StartRoom")
-      or owns("IsEncounterForced") or owns("ChooseEncounter") or owns("GetRandomValue")
+      or owns("IsEncounterForced") or owns("ChooseEncounter") or owns("RecordEncounter") or owns("GetRandomValue")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
@@ -8648,7 +8649,7 @@ if __MacGamingTrainerV1 == nil then
         "ChooseNextRoomData", "IsRoomForced", "GetRandomValue", "StartRoom",
       }) then return false end
     if hasEncounters and not M.nativeFunctionsAvailable({
-        "ChooseEncounter", "IsEncounterForced", "GetRandomValue",
+        "ChooseEncounter", "IsEncounterForced", "RecordEncounter", "GetRandomValue",
       }) then return false end
     return hasRooms or hasEncounters
   end
@@ -8681,17 +8682,27 @@ if __MacGamingTrainerV1 == nil then
 
     if hasEncounters then
       requireFunctions("next occurrence encounter routing",
-        { "ChooseEncounter", "IsEncounterForced", "GetRandomValue" })
+        { "ChooseEncounter", "IsEncounterForced", "RecordEncounter", "GetRandomValue" })
       if not owns("ChooseEncounter") then
         installHook("ChooseEncounter", function(original, ...)
+          -- Selection is reversible: room generation, reward cages and other
+          -- native callers may choose an encounter that the player never enters.
+          return M.occurrenceRouting.choose("encounter", original, ...)
+        end)
+      end
+      if not owns("RecordEncounter") then
+        installHook("RecordEncounter", function(original, run, encounter, ...)
           local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
           local definitionAtStart = occurrenceTargets[target]
-          local packed = table.pack(M.occurrenceRouting.choose("encounter", original, ...))
-          if M.nextOccurrenceTarget == target and M.nextOccurrenceToken == token
-              and occurrenceEncounterMatches(definitionAtStart, packed[1]) then
+          -- Native occurrence bookkeeping is the commitment owner. Preserve its
+          -- error/yield semantics and acknowledge only after it succeeds.
+          local result = table.pack(original(run, encounter, ...))
+          if run == CurrentRun and token ~= nil
+              and M.nextOccurrenceTarget == target and M.nextOccurrenceToken == token
+              and occurrenceEncounterMatches(definitionAtStart, encounter) then
             consumeNextOccurrence(target, token)
           end
-          return table.unpack(packed, 1, packed.n)
+          return table.unpack(result, 1, result.n)
         end)
       end
       if not owns("IsEncounterForced") then
@@ -8701,6 +8712,7 @@ if __MacGamingTrainerV1 == nil then
       end
     else
       releaseHook("ChooseEncounter")
+      releaseHook("RecordEncounter")
       releaseHook("IsEncounterForced")
     end
 

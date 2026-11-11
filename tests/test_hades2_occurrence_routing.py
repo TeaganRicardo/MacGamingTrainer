@@ -115,7 +115,7 @@ for _, door in pairs(MapState.OfferedExitDoors) do
 end
 print("occurrence_routing_ok")
 """,
-    "field_encounter_waits_for_eligibility_and_consumes_on_selection": r"""
+    "field_encounter_waits_for_eligibility_and_commits_on_record": r"""
 setRoomSet("F")
 CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
 encounterEligible.NemesisCombatF = false
@@ -126,6 +126,10 @@ assert(first.Name == "CombatNormal" and M.nextOccurrenceTarget == "npc:Nemesis",
 encounterEligible.NemesisCombatF = true
 local second = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(second.Name == "NemesisCombatF", "eligible field NPC was not selected")
+assert(M.nextOccurrenceTarget == "npc:Nemesis" and M.nextOccurrenceToken == "encounter-token"
+    and M.lastConsumedNextOccurrenceToken == nil,
+  "encounter selection consumed before native occurrence bookkeeping")
+RecordEncounter(CurrentRun, second)
 assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil)
 assert(M.lastConsumedNextOccurrenceToken == "encounter-token")
 print("occurrence_routing_ok")
@@ -141,6 +145,8 @@ assert(first.Name == "CombatNormal" and M.nextOccurrenceTarget == "npc:Nemesis",
 nativeEncounterForced.CombatNormal = nil
 local second = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(second.Name == "NemesisCombatF")
+assert(M.nextOccurrenceTarget == "npc:Nemesis" and M.lastConsumedNextOccurrenceToken == nil)
+RecordEncounter(CurrentRun, second)
 assert(M.lastConsumedNextOccurrenceToken == "encounter-forced")
 print("occurrence_routing_ok")
 """,
@@ -154,11 +160,15 @@ CurrentRun.CurrentRoom.LegalEncounters = {
 setOccurrence("npc:Echo", "echo-token")
 local echo = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(echo.Name == "Story_Echo_01")
+assert(M.nextOccurrenceTarget == "npc:Echo" and M.lastConsumedNextOccurrenceToken == nil)
+RecordEncounter(CurrentRun, echo)
 assert(M.lastConsumedNextOccurrenceToken == "echo-token")
 
 setOccurrence("shop:Charon", "shop-token")
 local shop = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(shop.Name == "BridgeShop", "Charon bridge target selected a different Story encounter")
+assert(M.nextOccurrenceTarget == "shop:Charon" and M.lastConsumedNextOccurrenceToken == "echo-token")
+RecordEncounter(CurrentRun, shop)
 assert(M.lastConsumedNextOccurrenceToken == "shop-token")
 print("occurrence_routing_ok")
 """,
@@ -274,13 +284,14 @@ setOccurrence("npc:Arachne", "room-first")
 assert(StartRoom ~= nativeStartRoom and ChooseNextRoomData ~= nativeChooseNextRoomData)
 setOccurrence("npc:Nemesis", "encounter-next")
 assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
-    and ChooseEncounter ~= nativeChooseEncounter,
+    and ChooseEncounter ~= nativeChooseEncounter and RecordEncounter ~= nativeRecordEncounter,
   "switching from named room to encounter left an unused room admission hook")
 setOccurrence("npc:Arachne", "room-again")
-assert(StartRoom ~= nativeStartRoom and ChooseEncounter == nativeChooseEncounter)
+assert(StartRoom ~= nativeStartRoom and ChooseEncounter == nativeChooseEncounter
+    and RecordEncounter == nativeRecordEncounter)
 M.dispatch("set_next_occurrence", { target = nil, includeCatalogs = false })
 assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
-    and GetRandomValue == nativeGetRandomValue,
+    and RecordEncounter == nativeRecordEncounter and GetRandomValue == nativeGetRandomValue,
   "cancellation retained native selection or admission owners")
 print("occurrence_routing_ok")
 """,
@@ -294,7 +305,8 @@ M.dispatch("cleanup", { includeCatalogs = false })
 assert(IsRoomForced == nativeIsRoomForced and DoUnlockRoomExits == nativeDoUnlockRoomExits)
 assert(ChooseNextRoomData == nativeChooseNextRoomData and GetRandomValue == nativeGetRandomValue)
 assert(CreateDoorRewardPreview == nativeCreateDoorRewardPreview and StartRoom == nativeStartRoom)
-assert(IsEncounterForced == nativeIsEncounterForced and ChooseEncounter == nativeChooseEncounter)
+assert(IsEncounterForced == nativeIsEncounterForced and ChooseEncounter == nativeChooseEncounter
+    and RecordEncounter == nativeRecordEncounter)
 assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil)
 print("occurrence_routing_ok")
 """,
