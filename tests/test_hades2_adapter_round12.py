@@ -241,11 +241,15 @@ finally:
 state = a.set_desired('infiniteMoney', True)
 assert state['infiniteMoney'] is True and a.preferences['infiniteMoney'] is True
 try:
-    a.set_next_room_reward_once('WeaponUpgrade', 'offline-attempt')
-except AdapterError as error:
-    assert error.code == 'disconnected'
+    a.dispatch(
+        'apply_world_exit',
+        {'doorToken':'exit:test:1','kind':'reward','target':'WeaponUpgrade'},
+        'offline-attempt',
+    )
+except Hades2PresentationError as error:
+    assert error.presentation.startswith('hades2.error.'), error.presentation
 else:
-    raise AssertionError('disconnected next-room command was accepted')
+    raise AssertionError('disconnected exact-exit command was accepted')
 assert 'nextRoomReward' not in a.preferences
 
 saved = a.save_profile('模块化测试', {
