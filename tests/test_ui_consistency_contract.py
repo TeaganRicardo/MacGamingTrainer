@@ -276,7 +276,10 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
             f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
 assert ".trainerPicker(.rowAction" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
-assert ".trainerPicker(.rowAction" in view
+world_actions = view[view.index("private var worldExitPanel"):view.index("private var resourcePanel")]
+assert world_actions.count(".trainerPicker(") >= 3
+assert world_actions.count(".expanding,") >= 2
+assert ".rowAction," in world_actions
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in resource_controls
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
