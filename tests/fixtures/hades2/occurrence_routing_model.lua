@@ -175,7 +175,7 @@ AssignRoomToExitDoor = function(door, chosen)
     CurrentRun.CurrentRoom.ExitDoorRooms or {}
   CurrentRun.CurrentRoom.OfferedRewards =
     CurrentRun.CurrentRoom.OfferedRewards or {}
-  CurrentRun.CurrentRoom.ExitDoorRooms[door.ObjectId] = chosen
+  CurrentRun.CurrentRoom.ExitDoorRooms[door.ObjectId] = chosen.Name
   CurrentRun.CurrentRoom.OfferedRewards[door.ObjectId] = {
     Type = chosen.ChosenRewardType,
     ForceLootName = chosen.ForceLootName,
@@ -226,6 +226,16 @@ local nativeStartRoom = StartRoom
 -- shared StartRoom-hook ownership can be tested in both installation orders.
 ChooseRoomReward = function(run, room, storeName, previously, args)
   return room.ChosenRewardType or "RoomMoneyDrop"
+end
+ChooseNextRewardStore = function(run)
+  assert(run == CurrentRun)
+  return "RunProgress"
+end
+SetupRoomReward = function(run, room, previously, args)
+  assert(run == CurrentRun and type(room) == "table")
+  room.Reward = room.Reward or { Name = room.ChosenRewardType }
+  if room.ForceLootName ~= nil then room.Reward.ForceLootName = room.ForceLootName end
+  return room
 end
 nativeLeaveCalls = 0
 LeaveRoom = function(run, door)
