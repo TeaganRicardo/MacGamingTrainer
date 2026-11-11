@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 125 then
+if previousModule and previousModule.revision ~= 126 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 125 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 125,
+    version = 1, revision = 126,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -7909,9 +7909,10 @@ if __MacGamingTrainerV1 == nil then
         nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
         lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken or jsonNull,
         nextOccurrenceHooks = {
-          room = owns("ChooseNextRoomData") and owns("IsRoomForced") and owns("DoUnlockRoomExits")
-            and owns("CreateDoorRewardPreview") and owns("GetRandomValue"),
-          encounter = owns("ChooseEncounter") and owns("IsEncounterForced") and owns("GetRandomValue"),
+          room = owns("ChooseNextRoomData") and owns("IsRoomForced")
+            and owns("StartRoom") and owns("GetRandomValue"),
+          encounter = owns("ChooseEncounter") and owns("IsEncounterForced")
+            and owns("RecordEncounter") and owns("GetRandomValue"),
         },
         nextOccurrenceToken = M.nextOccurrenceToken or jsonNull,
         lastConsumedNextOccurrenceToken = M.lastConsumedNextOccurrenceToken or jsonNull,
@@ -10277,6 +10278,9 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_next_room_reward" then
+      if runtimeState.preferenceReplayDepth ~= 0 then
+        error("Next room reward cannot be preference-replayed")
+      end
       local reward, token = params.reward, params.token
       if reward ~= nil and type(reward) ~= "string" then error("Next room reward must be a string or nil") end
       if reward == "" then reward = nil end
@@ -10314,6 +10318,9 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_next_occurrence" then
+      if runtimeState.preferenceReplayDepth ~= 0 then
+        error("Next occurrence cannot be preference-replayed")
+      end
       local target, token = params.target, params.token
       if target ~= nil and type(target) ~= "string" then error("Next occurrence target must be a string or nil") end
       if target ~= nil then
@@ -10634,8 +10641,6 @@ if __MacGamingTrainerV1 == nil then
     lock_rerolls = true,
     set_element = true,
     lock_element = true,
-    set_next_room_reward = true,
-    set_next_occurrence = true,
   }
   function M.dispatchBatch(calls, includeCatalogs)
     if type(calls) ~= "table" then error("Preference replay batch must be a table") end
