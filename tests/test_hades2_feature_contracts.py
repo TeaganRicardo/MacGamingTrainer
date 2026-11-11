@@ -35,27 +35,21 @@ assert 'let primaryName = localization.language == .en && !resource.englishName.
 assert 'let secondaryName = localization.language == .en ? resource.name : resource.englishName' in view
 assert 'secondaryName.isEmpty || secondaryName == primaryName' in view
 assert '"\\(primaryName) · \\(secondaryName)"' in view
-# Next-room reward labels resolve through the shipped bilingual table, so the
-# view names a key per reward id instead of embedding either language.
-for reward in (
-    'RoomMoneyDrop',
-    'MetaCurrencyDrop',
-    'MetaCardPointsCommonDrop',
-    'MemPointsCommonDrop',
-    'MaxHealthDrop',
-    'MaxManaDrop',
-    'StackUpgrade',
-    'WeaponUpgrade',
-    'SpellDrop',
-):
-    assert f'rewardLabel("{reward}")' in view
+# World Actions reward labels resolve through the same shipped bilingual
+# table, while the target list itself is resident-projected from each exact
+# door's native RewardStore eligibility.
+assert "let localized = rewardLabel(id)" in view
+assert "local function rewardCandidates(door)" in lua
+assert "IsRoomRewardEligible" in lua
+assert 'targets[#targets + 1] = { kind = "reward", id = candidate.id }' in lua
+assert 'kind = "roomCategory"' in lua
+assert 'installHook("LeaveRoom"' in lua
+assert 'command == "set_next_room_reward"' not in lua
 for retired in (
     'RoomRewardMoney', 'RoomRewardMetaPoint', 'RoomRewardPsyche',
     'RoomRewardMixerFabric', 'RoomRewardMaxHealth', 'RoomRewardPom',
 ):
     assert retired not in view, retired
-assert 'room.ChosenRewardType = rewardType' in lua
-assert 'return "Boon", wanted' in lua
 
 # Selene catalog identity keeps SpellDrop (Hex choice) distinct from TalentDrop
 # (Path of Stars points). Runtime spawning semantics are exercised through
