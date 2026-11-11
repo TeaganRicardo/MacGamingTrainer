@@ -38,7 +38,12 @@ assert '"\\(primaryName) · \\(secondaryName)"' in view
 # World Actions reward labels resolve through the same shipped bilingual
 # table, while the target list itself is resident-projected from each exact
 # door's native RewardStore eligibility.
-assert "let localized = rewardLabel(id)" in view
+for reward_id in (
+    "RoomMoneyDrop", "MetaCardPointsCommonDrop", "MemPointsCommonDrop",
+    "MetaCurrencyDrop", "MaxHealthDrop", "MaxManaDrop",
+    "StackUpgrade", "WeaponUpgrade", "SpellDrop",
+):
+    assert f'rewardLabel("{reward_id}")' in view
 assert "local function rewardCandidates(door)" in lua
 assert "IsRoomRewardEligible" in lua
 assert 'targets[#targets + 1] = { kind = "reward", id = candidate.id }' in lua
@@ -138,7 +143,7 @@ parts = [
     source_section(view, "private var boonAcquisitionPanel: some View {", "private var currentRunEffectsPanel:"),
     source_section(view, "private var resourcePanel: some View {", "private var rewardSpawningPanel:"),
     source_section(view, "private var resourceSection: some View {", "private var roomsSection:"),
-    source_section(view, "private var nextRoomRewardPanel: some View {", "private var resourcePanel:"),
+    source_section(view, "private var worldExitPanel: some View {", "private var resourcePanel:"),
     source_section(view, "private var rewardSpawningPanel: some View {", "private var boonAcquisitionPanel:"),
     source_section(view, "private var management: some View {", "private func featureRow("),
     management.split("struct Hades2ManagementUtilities: View {", 1)[1],
