@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 11,
+  version = 1, revision = 12,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1386,13 +1386,57 @@ world = (function()
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
   end
-  local function applyDoor(door, room)
+  local function activeEdit(door)
     local edit = edits[door]
-    if not edit or edit.applied ~= door.Room or edit.signature ~= doorId(door) then edit = { original = door.Room } end
+    if type(edit) ~= "table" or edit.run ~= CurrentRun or edit.hero ~= hero()
+        or edit.sourceRoom ~= currentRoom() then
+      edits[door] = nil
+      return nil
+    end
+    if edit.kind == "route" then
+      if edit.original ~= door.Room or edit.signature ~= doorId(door) then
+        edits[door] = nil
+        return nil
+      end
+    elseif edit.kind == "reward" then
+      if edit.applied ~= door.Room or edit.signature ~= doorId(door) then
+        edits[door] = nil
+        return nil
+      end
+    else
+      edits[door] = nil
+      return nil
+    end
+    return edit
+  end
+  local function applyDoor(door, room)
+    local edit = activeEdit(door)
+    if not edit or edit.kind ~= "reward" then
+      edit = {
+        kind = "reward", original = door.Room, run = CurrentRun,
+        hero = hero(), sourceRoom = currentRoom(),
+      }
+    end
     encounters[door.Room] = nil
     edit.applied = room; edits[door] = edit
     refreshDoor(door, room)
     edit.signature = doorId(door)
+  end
+  local function reserveRoute(door, route)
+    assert(activeEdit(door) == nil, "hades.error.staleDoor")
+    edits[door] = {
+      kind = "route", route = route, original = door.Room,
+      run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+      signature = doorId(door),
+    }
+  end
+  local function clearSourceEdits(source)
+    for door, edit in pairs(edits) do
+      if type(edit) == "table" and edit.sourceRoom == source then edits[door] = nil end
+    end
+    for room, intent in pairs(encounters) do
+      if type(intent) == "table" and intent.sourceRoom == source then encounters[room] = nil end
+    end
   end
   local function definition(name)
     local data = runtime.worldDefinitions and runtime.worldDefinitions[name]
@@ -1410,6 +1454,17 @@ world = (function()
             and IsRoomRewardEligible(CurrentRun, room, reward, nil, {}) then return reward, name end
       end
     end
+  end
+  local function materializeRoute(door, edit)
+    assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
+    local routes = routeRooms(edit.sourceRoom)
+    local candidates = routes and routes[edit.route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
+    assert(type(room) == "table", "hades.error.unsupportedRuntime")
+    edits[door] = nil
+    AssignRoomToExitDoor(door, room)
+    return room
   end
   local api = {}
   function api.install()
@@ -1447,8 +1502,27 @@ world = (function()
         return original(run, room, ...)
       end
     end)
+    hook("LeaveRoom", function(original)
+      return function(run, door, ...)
+        local source = currentRoom()
+        local edit = activeEdit(door)
+        if edit and edit.kind == "route" then
+          assert(run == CurrentRun and edit.run == run and edit.sourceRoom == source,
+            "hades.error.staleDoor")
+          materializeRoute(door, edit)
+        end
+        local result = table.pack(original(run, door, ...))
+        clearSourceEdits(source)
+        return table.unpack(result, 1, result.n)
+      end
+    end)
   end
-  function api.clearPending() encounters = setmetatable({}, { __mode = "k" }) end
+  function api.clearPending()
+    encounters = setmetatable({}, { __mode = "k" })
+    for door, edit in pairs(edits) do
+      if type(edit) == "table" and edit.kind == "route" then edits[door] = nil end
+    end
+  end
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
@@ -1465,11 +1539,11 @@ world = (function()
           end
           if thanatos(door.Room) then options[#options + 1] = "thanatos" end
         end
-        local edit, encounter = edits[door], encounters[door.Room]
+        local edit, encounter = activeEdit(door), encounters[door.Room]
         doors[#doors + 1] = { id = doorId(door), number = door.ObjectId,
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
           canReward = canModify(door.Room),
-          routes = options, canRestore = edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door),
+          routes = options, canRestore = edit ~= nil,
           pendingEncounter = encounter ~= nil }
       end
     end
@@ -1612,17 +1686,18 @@ world = (function()
     else
       local candidates = routes[params.route]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-      applyDoor(door, room)
+      reserveRoute(door, params.route)
     end
     return runtime.status()
   end
   function runtime.restore_door(params)
     local door = requireDoor(params)
-    local edit = edits[door]
-    assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
-    encounters[door.Room] = nil
-    refreshDoor(door, edit.original)
+    local edit = activeEdit(door)
+    assert(edit, "hades.error.staleDoor")
+    if edit.kind == "reward" then
+      encounters[door.Room] = nil
+      refreshDoor(door, edit.original)
+    end
     edits[door] = nil
     return runtime.status()
   end
