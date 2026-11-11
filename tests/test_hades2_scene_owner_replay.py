@@ -52,8 +52,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
         statLocks={"moveSpeed": 150},
         vitalLocks={"health": {"current": 40, "max": 100}},
         rerollsLock=2,
-        nextRoomReward="WeaponUpgrade",
-        nextRoomRewardToken="room-owner-token",
     )
     adapter.preference_initialized = True
     adapter.preference_dirty = True
@@ -98,9 +96,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
         "set_chaos_gate_probability",
     ], f"waiting session owner was blocked by presentation readiness: {direct!r}"
 
-    # The same resident later enters an owned run: pending locks and the
-    # unconsumed one-shot may now cross the resident boundary, without a new
-    # click or a second copy of the user's stored intent.
+    # The same resident later enters an owned run: pending durable locks may
+    # cross the resident boundary without a new click. World one-shots are
+    # intentionally absent because reconnect must never re-arm them.
     resident.payload.update({
         "status": "ready",
         "scene": "run",
@@ -118,11 +116,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     assert len(batches) == 2, "owner recovery did not attempt deferred replay"
     available_commands = {command for command, _ in batches[-1]}
     required = {"set_stat", "set_vital", "lock_vital", "set_rerolls",
-                "lock_rerolls", "set_next_room_reward"}
+                "lock_rerolls"}
     assert required <= available_commands, (
         f"missing {sorted(required - available_commands)} from recovery batch "
         f"{batches[-1]!r}; observation {adapter.state!r}"
     )
-    assert adapter.preferences["nextRoomRewardToken"] == "room-owner-token"
 
 print("hades2_scene_owner_replay_ok")
