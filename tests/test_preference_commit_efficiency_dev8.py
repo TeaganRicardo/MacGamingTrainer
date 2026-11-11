@@ -47,7 +47,11 @@ assert save_count == 1, save_count
 assert json.loads((base/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
 
 save_count = 0
-adapter.set_next_room_reward_once('WeaponUpgrade', 'reward-once')
+adapter.dispatch(
+    'apply_world_exit',
+    {'doorToken':'exit:test:1','kind':'reward','target':'WeaponUpgrade'},
+    'world-exit-once',
+)
 assert save_count == 0, save_count
 persisted = json.loads((base/'desired-state.json').read_text())
 assert 'nextRoomReward' not in persisted and 'nextRoomRewardToken' not in persisted
