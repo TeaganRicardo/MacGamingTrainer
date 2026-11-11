@@ -1241,6 +1241,8 @@ world = (function()
   local occurrenceRequest
   local occurrenceSelection
   local occurrenceGeneration
+  local occurrencePendingRoom
+  local occurrenceSelectedRooms = setmetatable({}, { __mode = "k" })
   local occurrenceTargetOrder = {
     "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
   }
@@ -1326,11 +1328,16 @@ world = (function()
     end
     error("hades.error.staleDoor")
   end
+  local function clearOccurrenceRoomSelections()
+    occurrencePendingRoom = nil
+    occurrenceSelectedRooms = setmetatable({}, { __mode = "k" })
+  end
   local function validOccurrence()
     local request = occurrenceRequest
     if type(request) ~= "table" or request.run ~= CurrentRun or request.hero ~= hero()
         or occurrenceTargets[request.target] == nil then
       occurrenceRequest = nil
+      clearOccurrenceRoomSelections()
       return nil
     end
     return request
@@ -1351,7 +1358,28 @@ world = (function()
     local request = validOccurrence()
     if not request or request.target ~= target or request.leaseToken ~= token then return false end
     occurrenceRequest = nil
+    clearOccurrenceRoomSelections()
     return true
+  end
+  local function occurrenceRoomReserved(request)
+    local pending = occurrencePendingRoom
+    if pending and (pending.leaseToken ~= request.leaseToken
+        or pending.run ~= CurrentRun or pending.hero ~= hero()
+        or pending.sourceRoom ~= currentRoom()) then
+      occurrencePendingRoom = nil
+      pending = nil
+    end
+    if pending then return true end
+    for room, selected in pairs(occurrenceSelectedRooms) do
+      if selected.leaseToken ~= request.leaseToken or selected.run ~= CurrentRun
+          or selected.hero ~= hero() or selected.sourceRoom ~= currentRoom()
+          or (selected.door and selected.door.Room ~= room) then
+        occurrenceSelectedRooms[room] = nil
+      else
+        return true
+      end
+    end
+    return false
   end
   local function occurrenceChoose(kind, original, ...)
     local request = validOccurrence()
@@ -1360,6 +1388,9 @@ world = (function()
       or kind == "encounter" and definition ~= nil
         and (type(definition.encounters) == "table" or definition.encounterSet ~= nil)
     if not hasTarget then return original(...) end
+    if kind == "room" and (select(1, ...) ~= CurrentRun or occurrenceRoomReserved(request)) then
+      return original(...)
+    end
     local previous = occurrenceSelection
     occurrenceSelection = {
       kind = kind, target = request.target, leaseToken = request.leaseToken,
@@ -1400,7 +1431,16 @@ world = (function()
           if matched then choices[#choices + 1] = candidate end
         end
       end
-      if #choices > 0 then return original(choices, ...) end
+      if #choices > 0 then
+        local chosen = original(choices, ...)
+        if selection.kind == "room" then
+          occurrencePendingRoom = {
+            run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+            leaseToken = request.leaseToken, chosen = chosen,
+          }
+        end
+        return chosen
+      end
     end
     return original(pool, ...)
   end
@@ -1780,6 +1820,12 @@ world = (function()
     end)
     hook("CreateRoom", function(original)
       return function(data, ...)
+        local pending = occurrencePendingRoom
+        local matching = pending and pending.run == CurrentRun and pending.hero == hero()
+          and pending.sourceRoom == currentRoom()
+          and (pending.chosen == data or type(pending.chosen) == "string"
+            and type(data) == "table" and pending.chosen == data.Name)
+        if matching then occurrencePendingRoom = nil end
         local previous = occurrenceGeneration
         occurrenceGeneration = {
           run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
@@ -1788,7 +1834,23 @@ world = (function()
         local result = table.pack(pcall(original, data, ...))
         occurrenceGeneration = previous
         if not result[1] then error(result[2], 0) end
+        if matching and type(result[2]) == "table" then
+          occurrenceSelectedRooms[result[2]] = {
+            run = pending.run, hero = pending.hero, sourceRoom = pending.sourceRoom,
+            leaseToken = pending.leaseToken,
+          }
+        end
         return table.unpack(result, 2, result.n)
+      end
+    end)
+    hook("AssignRoomToExitDoor", function(original)
+      return function(door, room, ...)
+        local previous = type(door) == "table" and door.Room or nil
+        local result = table.pack(original(door, room, ...))
+        if previous ~= room then occurrenceSelectedRooms[previous] = nil end
+        local selected = occurrenceSelectedRooms[room]
+        if selected then selected.door = door end
+        return table.unpack(result, 1, result.n)
       end
     end)
     hook("ChooseNextRoomData", function(original)
@@ -1848,6 +1910,12 @@ world = (function()
         if run == CurrentRun and token and occurrenceRoomMatches(definition, door.Room) then
           consumeOccurrence(target, token)
         end
+        if occurrencePendingRoom and occurrencePendingRoom.sourceRoom == source then
+          occurrencePendingRoom = nil
+        end
+        for room, selected in pairs(occurrenceSelectedRooms) do
+          if selected.sourceRoom == source then occurrenceSelectedRooms[room] = nil end
+        end
         return table.unpack(result, 1, result.n)
       end
     end)
@@ -1856,6 +1924,7 @@ world = (function()
     occurrenceRequest = nil
     occurrenceSelection = nil
     occurrenceGeneration = nil
+    clearOccurrenceRoomSelections()
     local source = currentRoom()
     local unit = hero()
     local failure
@@ -2083,6 +2152,7 @@ world = (function()
     assert(request and request.leaseToken == params.leaseToken, "hades.error.staleTarget")
     occurrenceRequest = nil
     occurrenceSelection = nil
+    clearOccurrenceRoomSelections()
     return runtime.status()
   end
 
