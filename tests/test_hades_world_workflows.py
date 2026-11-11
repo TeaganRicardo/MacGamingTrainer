@@ -76,6 +76,9 @@ end
 function CreateDoorRewardPreview(door)
   previews = previews + 1
   door.PreviewReward = door.Room and (door.Room.ForceLootName or door.Room.ChosenRewardType or "") or ""
+  door.PreviewRoomName = door.Room and door.Room.Name or ""
+  door.PreviewIcon = door.Room and door.Room.RewardPreviewIcon or nil
+  door.PreviewFx = door.Room and door.Room.RewardPreviewFx or nil
 end
 local leaveCalls = 0
 function LeaveRoom(run, door)
@@ -244,6 +247,8 @@ assert(firstDoor.Room == firstRoom,
 assert((CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
     and roomGenerationCalls == storyGenerationBefore,
   "route Apply created a room or advanced room-generation state")
+assert(firstDoor.PreviewRoomName == "A_Story01" and firstDoor.PreviewReward == "Story",
+  "route reservation did not pass the eligible native story descriptor through CreateDoorRewardPreview")
 local storyObserved = world().doors[1]
 assert(storyObserved.activeLease
     and storyObserved.activeLease.kind == "roomCategory"
@@ -260,6 +265,9 @@ assert(firstDoor.Room == firstRoom
     and (CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
     and roomGenerationCalls == storyGenerationBefore,
   "route cancellation left irreversible room-generation residue")
+assert(firstDoor.PreviewRoomName == "A_Combat02"
+    and firstDoor.PreviewReward == "RoomRewardMoneyDrop",
+  "route cancellation did not restore the native exit preview")
 assert(world().doors[1].activeLease == nil, "cancelled route lease remained active")
 
 local combatDoor = world().doors[1]
