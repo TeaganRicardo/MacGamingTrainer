@@ -97,7 +97,6 @@ struct Hades2StatePatch {
     let moneyMultiplier: Double?
     let resourceMultiplier: Double?
     let boonRarity: Hades2BoonRaritySnapshot?
-    let nextRoomReward: Hades2FieldPatch<String>
     let nextOccurrenceTarget: Hades2FieldPatch<String>
     let occurrenceTargets: [Hades2OccurrenceTarget]?
     let worldActions: Hades2FieldPatch<Hades2WorldActionsSnapshot>
@@ -166,7 +165,6 @@ struct Hades2StatePatch {
                 forceDuo: row["forceDuo"] as? Bool
             )
         } else { boonRarity = nil }
-        nextRoomReward = Self.field(payload, "nextRoomReward", String.self)
         nextOccurrenceTarget = Self.field(payload, "nextOccurrenceTarget", String.self)
         if payload.keys.contains("worldActions") {
             worldActions = .present(Self.decodeWorldActions(payload["worldActions"]))
