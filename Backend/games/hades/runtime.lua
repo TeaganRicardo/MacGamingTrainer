@@ -1410,7 +1410,17 @@ world = (function()
         if not eligible and type(EncounterData) == "table"
             and type(EncounterData[strategy.encounter]) == "table"
             and type(IsEncounterEligible) == "function" then
-          local ok, value = pcall(IsEncounterEligible, CurrentRun, data, EncounterData[strategy.encounter])
+          local probe = {}
+          for key, value in pairs(data) do probe[key] = value end
+          if type(probe.LegalEncounters) == "table" then
+            probe.LegalEncountersDictionary = {}
+            for _, name in ipairs(probe.LegalEncounters) do probe.LegalEncountersDictionary[name] = true end
+          end
+          if type(probe.IllegalEncounters) == "table" then
+            probe.IllegalEncountersDictionary = {}
+            for _, name in ipairs(probe.IllegalEncounters) do probe.IllegalEncountersDictionary[name] = true end
+          end
+          local ok, value = pcall(IsEncounterEligible, CurrentRun, probe, EncounterData[strategy.encounter])
           if not ok then error(value, 0) end
           eligible = value == true
         end
