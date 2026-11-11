@@ -732,9 +732,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 let noticeKey: String
                 if pendingCleanup { noticeKey = "hades.disableAllPending" }
                 else if pendingProfile { noticeKey = "hades.profile.pending" }
-                else if command == "set_door_route" && params["route"] as? String == "thanatos" {
-                    noticeKey = "hades.routeScheduled"
-                } else { noticeKey = "host.backend.notice.completed" }
+                else { noticeKey = "host.backend.notice.completed" }
                 self.presentFeedback(TrainerTextToken(key: noticeKey),
                                      tone: pendingCleanup || pendingProfile ? .warning : .success)
             }
