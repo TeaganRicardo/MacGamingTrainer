@@ -206,6 +206,11 @@ StartRoom = function(run, room)
   return room
 end
 local nativeStartRoom = StartRoom
+-- Preserve the old next-room reward's separate native selection path so
+-- shared StartRoom-hook ownership can be tested in both installation orders.
+ChooseRoomReward = function(run, room, storeName, previously, args)
+  return room.ChosenRewardType or "RoomMoneyDrop"
+end
 AttemptUseDoor = function(door)
   if not door.ReadyToUse or door.SkipUnlock or not door.Room
       or MapState.OfferedExitDoors[door.ObjectId] ~= door then return false end
