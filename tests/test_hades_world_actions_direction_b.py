@@ -33,12 +33,12 @@ assert mutation_params("apply_world_exit", {
     "roomId": "room:1",
     "doorToken": "exit:1",
     "kind": "reward",
-    "target": "AthenaUpgrade",
+    "actionTarget": "AthenaUpgrade",
 }) == {
     "roomId": "room:1",
     "doorToken": "exit:1",
     "kind": "reward",
-    "target": "AthenaUpgrade",
+    "actionTarget": "AthenaUpgrade",
 }
 assert mutation_params("cancel_world_exit", {
     "roomId": "room:1",
@@ -49,8 +49,8 @@ assert mutation_params("cancel_world_exit", {
     "doorToken": "exit:1",
     "leaseToken": "lease:1",
 }
-assert mutation_params("apply_world_occurrence", {"target": "thanatos"}) == {
-    "target": "thanatos",
+assert mutation_params("apply_world_occurrence", {"actionTarget": "thanatos"}) == {
+    "actionTarget": "thanatos",
 }
 assert mutation_params("cancel_world_occurrence", {"leaseToken": "occurrence:1"}) == {
     "leaseToken": "occurrence:1",
