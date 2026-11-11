@@ -1405,13 +1405,39 @@ world = (function()
     if not ok then error(result, 0) end
     return usedRandom or result
   end
+  local function eligibleWithoutRandom(room, data, args)
+    local randomChance, randomValue = RandomChance, GetRandomValue
+    local randomInt, randomFloat = RandomInt, RandomFloat
+    local usedRandom = false
+    RandomChance = function(chance)
+      if type(chance) == "number" and chance > 0 then usedRandom = true end
+      return false
+    end
+    GetRandomValue = function(values, ...)
+      usedRandom = true
+      if type(values) == "table" then return values[1] end
+      return values
+    end
+    if type(randomInt) == "function" then
+      RandomInt = function(minimum) usedRandom = true; return minimum end
+    end
+    if type(randomFloat) == "function" then
+      RandomFloat = function(minimum) usedRandom = true; return minimum end
+    end
+    local ok, result = pcall(IsRoomEligible, CurrentRun, room, data, args or {})
+    RandomChance, GetRandomValue = randomChance, randomValue
+    if type(randomInt) == "function" then RandomInt = randomInt end
+    if type(randomFloat) == "function" then RandomFloat = randomFloat end
+    if not ok then error(result, 0) end
+    return not usedRandom and result
+  end
   local function routeRooms(room, door)
     local result = {}
     local args = type(door) == "table" and door.ChooseRoomArgs or {}
     if type(args) ~= "table" then return end
     if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
         or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel
-        or room.ForceNextRoom or room.ForceNextRoomSet
+        or room.ForceNextRoom or room.ForceNextRoomSet or room.NextRoomSetName
         or args.RoomDataSet or args.NextRoomSet or args.NextRoomSetNoGenerate
         or args.UsePreviousRoomSet or args.ForceNextRoom or args.ForceNextRoomSet
         or (type(door) == "table" and (door.ForceRoomName or door.ReturnToPreviousRoom
@@ -1420,7 +1446,7 @@ world = (function()
     local roomSet = RoomSetData[roomSetName]
     if type(roomSet) ~= "table" then return end
     for name, data in pairs(roomSet) do
-      if IsRoomEligible(CurrentRun, room, data, args) then
+      if eligibleWithoutRandom(room, data, args) then
         if couldBeForced(data, args) then return end
         local kind = routeKind(name)
         if kind then
@@ -1728,9 +1754,29 @@ world = (function()
   function api.clearPending()
     occurrenceRequest = nil
     occurrenceSelection = nil
+    local source = currentRoom()
+    local unit = hero()
+    local failure
     for door, edit in pairs(edits) do
-      if type(edit) == "table" and edit.kind == "route" then edits[door] = nil end
+      local owned = type(edit) == "table" and edit.run == CurrentRun
+        and edit.hero == unit and edit.sourceRoom == source
+      local valid = owned and activeEdit(door) == edit
+      if valid then
+        local ok, err = pcall(function()
+          if edit.kind == "reward" then
+            refreshDoor(door, edit.original)
+            if edit.originalCanBeRerolled ~= nil then
+              door.CanBeRerolled = edit.originalCanBeRerolled
+            end
+          elseif edit.kind == "route" then
+            drawDoorPreview(door, door.Room)
+          end
+        end)
+        if not ok and failure == nil then failure = err end
+      end
+      edits[door] = nil
     end
+    if failure ~= nil then error(failure, 0) end
   end
   function api.observation()
     local room = currentRoom()
@@ -1896,7 +1942,7 @@ world = (function()
     if params.kind == "reward" then
       applyRewardEdit(door, params.targetID, leaseToken)
     elseif params.kind == "roomCategory" then
-      assert(canModify(door.Room), "hades.error.worldUnavailable")
+      assert(canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
       local routes = routeRooms(CurrentRun.CurrentRoom, door)
       local candidates = routes and routes[params.targetID]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
