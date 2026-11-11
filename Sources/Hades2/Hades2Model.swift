@@ -1487,7 +1487,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return false
         }
         send(
-            .applyNextRoomReward(doorToken: exit.doorToken, kind: target.kind, target: target.id),
+            .applyWorldExit(doorToken: exit.doorToken, kind: target.kind, target: target.id),
             title: "hades2.worldActions.modifyExit",
             completion: completion
         )
