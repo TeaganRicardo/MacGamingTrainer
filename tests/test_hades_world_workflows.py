@@ -27,6 +27,9 @@ RoomSetData = { Tartarus = {
   A_Combat02 = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" },
   A_Story01 = { Name = "A_Story01", ForcedReward = "Story", eligible = true },
   A_Shop01 = { Name = "A_Shop01", ForcedReward = "Shop", eligible = false },
+}, Alternate = {
+  B_Combat01 = { Name = "B_Combat01", ChosenRewardType = "RoomRewardMoneyDrop" },
+  B_Shop01 = { Name = "B_Shop01", ForcedReward = "Shop", eligible = false },
 }, Secrets = { { Name = "RoomSecret01" } } }
 EncounterSets = { ThanatosEncounters = { "ThanatosTartarus" } }
 EncounterData = {
@@ -56,17 +59,20 @@ function RecordEncounter(run, encounter)
   assert(run == CurrentRun)
   recordedEncounter = encounter.Name
 end
+local eligibilityUsesRandom = false
 function IsRoomEligible(run, room, data, args)
   assert(type(args) == "table")
+  if eligibilityUsesRandom then GetRandomValue({ true, false }) end
   return data.eligible ~= false and data.Name ~= room.Name
     and (not data.ForceAtBiomeDepthMin or run.BiomeDepthCache >= data.ForceAtBiomeDepthMin)
 end
-local randomDraws, forceError = 0, false
+local randomDraws, forceError, forcedUsesRandom = 0, false, false
 function RandomChance(chance) randomDraws = randomDraws + 1; return false end
 local nativeRandomChance = RandomChance
 function IsRoomForced(run, room, data, args)
   assert(run == CurrentRun and room == run.CurrentRoom and type(args) == "table")
   if forceError then RandomChance(0.5); error("injected native force failure") end
+  if forcedUsesRandom and data.RandomForced then return GetRandomValue({ false, true }) end
   if data.AlwaysForce then return true end
   local depth = run.BiomeDepthCache + (args.RoomsSkipped or 0)
   if data.ForceAtBiomeDepthMin and depth >= data.ForceAtBiomeDepthMin then
@@ -75,7 +81,7 @@ function IsRoomForced(run, room, data, args)
   end
   return false
 end
-local roomGenerationCalls = 0
+local roomGenerationCalls, randomValueCalls = 0, 0
 function CreateRoom(data, args)
   roomGenerationCalls = roomGenerationCalls + 1
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
@@ -87,8 +93,15 @@ function IsGameStateEligible(run, source) return source ~= nil and not source.lo
 LootData = { ZeusUpgrade = {}, AthenaUpgrade = {}, WeaponUpgrade = {}, StackUpgrade = {}, HermesUpgrade = { locked = true } }
 RewardStoreData = { RunProgress = { { Name = "Boon" }, { Name = "StackUpgrade", locked = true } } }
 local firstRoom = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" }
-local firstDoor = { Name = "ExitDoor", ObjectId = 100, ReadyToUse = true, Room = firstRoom }
-OfferedExitDoors = { [100] = firstDoor }
+local firstDoor = {
+  Name = "ExitDoor", ObjectId = 100, ReadyToUse = true, CanBeRerolled = true, Room = firstRoom,
+}
+local secondRoom = { Name = "B_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" }
+local secondDoor = {
+  Name = "ExitDoor", ObjectId = 101, ReadyToUse = true, Room = secondRoom,
+  ChooseRoomArgs = { RoomSetName = "Alternate" },
+}
+OfferedExitDoors = { [100] = firstDoor, [101] = secondDoor }
 local assigned, previews, destroyed = 0, 0, 0
 function AssignRoomToExitDoor(door, room)
   assigned = assigned + 1; door.Room = room; OfferedExitDoors[door.ObjectId] = door
@@ -104,7 +117,7 @@ function CreateDoorRewardPreview(door)
 end
 local leaveCalls = 0
 function LeaveRoom(run, door)
-  assert(run == CurrentRun and door == firstDoor and door.Room)
+  assert(run == CurrentRun and (door == firstDoor or door == secondDoor) and door.Room)
   leaveCalls = leaveCalls + 1
   run.CurrentRoom = door.Room
   return door.Room
@@ -156,7 +169,10 @@ function GetIdsByType(args)
   if args.Name == "ChallengeSwitchBase" then return pedestalIds end
   assert(args.Name == "SecretPoint"); return secretPoints
 end
-function GetRandomValue(values) return values[1] end
+function GetRandomValue(values)
+  randomValueCalls = randomValueCalls + 1
+  return values[1]
+end
 function GetRunDepth(run) return 8 end
 local activated = 0
 function Activate(args) activated = args.Id; inactivePoints = {} end
@@ -220,7 +236,17 @@ local function fails(key, fn)
 end
 local initialWorld = world()
 local originalRoomId = initialWorld.roomId
-assert(initialWorld.canFish and initialWorld.canChaos and #initialWorld.doors == 1)
+assert(initialWorld.canFish and initialWorld.canChaos and #initialWorld.doors == 2)
+local function hasTarget(door, kind, id)
+  for _, target in ipairs(door.targets or {}) do
+    if target.kind == kind and target.id == id then return true end
+  end
+  return false
+end
+assert(hasTarget(initialWorld.doors[1], "roomCategory", "story"))
+assert(hasTarget(initialWorld.doors[2], "roomCategory", "combat"))
+assert(not hasTarget(initialWorld.doors[2], "roomCategory", "story"),
+  "door-specific RoomSetName leaked the other door's route catalog")
 assert(originalRoom.FishingPointChanceSuccess == nil and originalRoom.SecretChanceSuccess == nil)
 runtime.gain_resource({ resource = "MetaPoints", amount = 7 })
 assert(GameState.Resources.MetaPoints == 17 and GameState.LifetimeResourcesGained.MetaPoints == 27)
