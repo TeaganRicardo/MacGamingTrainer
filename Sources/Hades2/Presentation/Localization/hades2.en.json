@@ -218,7 +218,7 @@
     "hades2.occurrence.characters": "Characters",
     "hades2.occurrence.noRequest": "No Request",
     "hades2.occurrence.shop": "Shop",
-    "hades2.occurrence.title": "Next Eligible Encounter",
+    "hades2.occurrence.title": "Specify Encounter",
     "hades2.occurrence.target.Arachne": "{term:officialSourceNames.Arachne}",
     "hades2.occurrence.target.Artemis": "{term:officialSourceNames.Artemis}",
     "hades2.occurrence.target.Athena": "{term:officialSourceNames.Athena}",
@@ -604,7 +604,20 @@
     "hades2.saveEditor.advanced.removed": "Field removed",
     "hades2.saveEditor.advanced.restore": "Restore field value",
     "hades2.saveEditor.advanced.editValue": "Edit type or structure",
-    "hades2.error.worldActionUnavailable": "World actions are unavailable in the current scene."
+    "hades2.error.worldActionUnavailable": "World actions are unavailable in the current scene.",
+    "hades2.worldActions.modifyExit": "Modify Exit",
+    "hades2.worldActions.exit": "Current Exit",
+    "hades2.worldActions.target": "Target",
+    "hades2.worldActions.noExit": "No Editable Exit",
+    "hades2.worldActions.noTarget": "No Available Target",
+    "hades2.worldActions.unknownTarget": "Current Target",
+    "hades2.worldActions.rewards": "Rewards",
+    "hades2.worldActions.routes": "Room Categories",
+    "hades2.worldActions.route.combat": "Combat",
+    "hades2.worldActions.route.story": "Story",
+    "hades2.worldActions.route.shop": "Shop",
+    "hades2.worldActions.route.reprieve": "Reprieve",
+    "hades2.worldActions.route.miniboss": "Miniboss"
   },
   "language": "en"
 }
