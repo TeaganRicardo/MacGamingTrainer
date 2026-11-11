@@ -124,7 +124,7 @@ extension ShortcutAction {
         case .generateShades: Hades2WorkbenchIcon.shades
         case .generateFishing: TrainerSemanticIcon.Context.fishing
         case .matureGarden: Hades2WorkbenchIcon.garden
-        case .applyWorldExit: TrainerSemanticIcon.Context.doorway
+        case .applyNextRoomReward: TrainerSemanticIcon.Context.doorway
         case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
@@ -209,7 +209,7 @@ enum Hades2WorkbenchCatalog {
         .generateShades,
         .generateFishing,
         .matureGarden,
-        .applyWorldExit,
+        .applyNextRoomReward,
         .applyNextOccurrence,
         .spawnOlympian,
         .spawnPickup,
@@ -271,7 +271,7 @@ enum Hades2WorkbenchCatalog {
         case .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources
-        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence: .rooms
+        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyNextRoomReward, .applyNextOccurrence: .rooms
         case .disableAll: .management
         }
     }
