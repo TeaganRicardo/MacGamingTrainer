@@ -8654,12 +8654,16 @@ if __MacGamingTrainerV1 == nil then
     requireFunctions("native world room admission", { "StartRoom" })
     installHook("StartRoom", function(original, run, room, ...)
       local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
+      -- Native StartRoom changes CurrentRun.CurrentRoom. Capture the source
+      -- reservation before entering the destination, then acknowledge only
+      -- after the native admission returns successfully.
+      local claim = run == CurrentRun and M.occurrenceRouting.claim() or nil
       local result = table.pack(original(run, room, ...))
       if run == CurrentRun and token ~= nil and M.nextOccurrenceTarget == target
           and M.nextOccurrenceToken == token
-          and occurrenceRoomMatches(occurrenceTargets[target], room) then
-        local claim = M.occurrenceRouting.claim()
-        if claim and claim.room == room then consumeNextOccurrence(target, token) end
+          and occurrenceRoomMatches(occurrenceTargets[target], room)
+          and claim and claim.room == room then
+        consumeNextOccurrence(target, token)
       end
       return table.unpack(result, 1, result.n)
     end)
