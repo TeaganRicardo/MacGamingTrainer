@@ -8704,6 +8704,7 @@ if __MacGamingTrainerV1 == nil then
   worldActions = (function()
     local leases = setmetatable({}, { __mode = "k" })
     local identities = setmetatable({}, { __mode = "k" })
+    local doorObservations = setmetatable({}, { __mode = "k" })
     local nextIdentity, nextLease = 0, 0
     local routeOrder = { "combat", "story", "shop", "reprieve", "miniboss" }
     local rewardFields = {
@@ -8732,16 +8733,6 @@ if __MacGamingTrainerV1 == nil then
         and CurrentRun.Hero or nil
     end
 
-    local function tokenFor(door)
-      local source = currentSource()
-      if type(door) ~= "table" or type(door.Room) ~= "table"
-          or type(source) ~= "table" or type(CurrentRun) ~= "table" then return nil end
-      return table.concat({
-        "exit", identity(CurrentRun), identity(source), identity(door),
-        tostring(door.ObjectId), identity(door.Room),
-      }, ":")
-    end
-
     local function routeSignature(door)
       local room = type(door) == "table" and door.Room or nil
       if type(room) ~= "table" then return "" end
@@ -8750,6 +8741,42 @@ if __MacGamingTrainerV1 == nil then
         tostring(room.ForceLootName), identity(room.RewardOverrides),
         identity(room.Reward), identity(room.Encounter),
       }, ":")
+    end
+
+    local function physicalTokenFor(door)
+      local source = currentSource()
+      if type(door) ~= "table" or type(door.Room) ~= "table"
+          or type(source) ~= "table" or type(CurrentRun) ~= "table" then return nil end
+      return table.concat({
+        "exit", identity(CurrentRun), identity(currentHero()), identity(source),
+        identity(door), tostring(door.ObjectId), identity(door.Room),
+      }, ":")
+    end
+
+    local function tokenFor(door)
+      local physical = physicalTokenFor(door)
+      if physical == nil then return nil end
+      local signature = routeSignature(door)
+      local observation = doorObservations[door]
+      local lease = leases[door]
+      local locallyApplied = type(lease) == "table" and lease.kind == "reward"
+        and lease.run == CurrentRun and lease.hero == currentHero()
+        and lease.sourceRoom == currentSource()
+        and lease.appliedSignature == signature
+      if not observation then
+        observation = { physical = physical, signature = signature, epoch = 0 }
+        doorObservations[door] = observation
+      elseif observation.physical ~= physical or observation.signature ~= signature then
+        -- The native room/door can return to exactly the old reward after a
+        -- reroll (ABA). A monotonic observed epoch prevents stale Apply and
+        -- Cancel tokens from becoming authoritative again.
+        if observation.physical ~= physical or not locallyApplied then
+          observation.epoch = observation.epoch + 1
+        end
+        observation.physical = physical
+        observation.signature = signature
+      end
+      return physical .. ":" .. tostring(observation.epoch)
     end
 
     local function editableDoor(door)
@@ -8777,7 +8804,8 @@ if __MacGamingTrainerV1 == nil then
         local room = door.Room
         if room.ChosenRewardType ~= lease.appliedRewardType
             or room.ForceLootName ~= lease.appliedForceLoot
-            or room.Reward ~= lease.appliedReward then
+            or room.Reward ~= lease.appliedReward
+            or routeSignature(door) ~= lease.appliedSignature then
           leases[door] = nil
           return nil
         end
@@ -9149,6 +9177,12 @@ if __MacGamingTrainerV1 == nil then
       restoreField(source.OfferedRewards, door.ObjectId, lease.snapshot.offered)
       restoreField(source.ExitDoorRooms, door.ObjectId, lease.snapshot.exitRoom)
       if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+      -- Explicit Trainer Cancel/unused-sibling cleanup restores the native
+      -- snapshot; it is not an external reroll of this physical exit.
+      local observed = doorObservations[door]
+      if observed and observed.physical == physicalTokenFor(door) then
+        observed.signature = routeSignature(door)
+      end
       refreshPreview(door)
     end
 
@@ -9175,6 +9209,7 @@ if __MacGamingTrainerV1 == nil then
       lease.appliedRewardType = room.ChosenRewardType
       lease.appliedForceLoot = room.ForceLootName
       lease.appliedReward = room.Reward
+      lease.appliedSignature = routeSignature(door)
       leases[door] = lease
       refreshPreview(door)
       return lease

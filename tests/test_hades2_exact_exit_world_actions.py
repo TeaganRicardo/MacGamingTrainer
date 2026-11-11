@@ -310,6 +310,29 @@ local ok = pcall(function()
 end)
 assert(not ok, "stale lease cancelled a replacement native target")
 
+-- An in-place native reroll keeps the physical Room table, but revokes its
+-- formerly observed token. Returning to the same descriptor must not revive
+-- the old token (ABA).
+local beforeNativeInPlace = exitByObject(1).doorToken
+local nativeType = rerollDoor.Room.ChosenRewardType
+local nativeReward = rerollDoor.Room.Reward
+rerollDoor.Room.ChosenRewardType = "RoomMoneyDrop"
+rerollDoor.Room.Reward = { Name = "RoomMoneyDrop" }
+local afterNativeInPlace = exitByObject(1).doorToken
+assert(afterNativeInPlace ~= beforeNativeInPlace,
+  "native in-place reward reroll retained an obsolete door token")
+rerollDoor.Room.ChosenRewardType = nativeType
+rerollDoor.Room.Reward = nativeReward
+assert(exitByObject(1).doorToken ~= beforeNativeInPlace,
+  "native reward ABA restored the obsolete exact-exit token")
+local obsoleteApply = pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = beforeNativeInPlace, kind = "reward", target = "MaxHealthDrop",
+    requestId = "obsolete-aba-apply", includeCatalogs = true,
+  })
+end)
+assert(not obsoleteApply, "obsolete native reward token re-applied a world edit")
+
 -- Linked/critical source routing remains native-owned and cannot be overridden
 -- by a generic category reservation.
 CurrentRun.CurrentRoom.LinkedRoom = "F_Combat01"
