@@ -51,10 +51,6 @@ class AdapterProbe:
         self.calls.append((command, dict(params)))
         return {"worldActions": {"exits": []}}
 
-    def set_next_occurrence_once(self, target, request_id):
-        self.calls.append(("set_next_occurrence_once", target, request_id))
-        return {"nextOccurrenceTarget": target}
-
 probe = AdapterProbe()
 contract = Hades2CommandContract(probe)
 
@@ -69,9 +65,14 @@ contract.dispatch(
     "world-exit-cancel",
 )
 contract.dispatch(
-    "set_next_occurrence_once",
+    "apply_world_occurrence",
     {"target": "npc:Nemesis"},
     "world-occurrence-request",
+)
+contract.dispatch(
+    "cancel_world_occurrence",
+    {"leaseToken": "world-occurrence-request"},
+    "world-occurrence-cancel",
 )
 assert probe.calls == [
     ("apply_world_exit", {
@@ -82,12 +83,18 @@ assert probe.calls == [
         "doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1",
         "requestId": "world-exit-cancel",
     }),
-    ("set_next_occurrence_once", "npc:Nemesis", "world-occurrence-request"),
+    ("apply_world_occurrence", {
+        "target": "npc:Nemesis", "requestId": "world-occurrence-request",
+    }),
+    ("cancel_world_occurrence", {
+        "leaseToken": "world-occurrence-request",
+        "requestId": "world-occurrence-cancel",
+    }),
 ]
 
 for retired in (
     "set_next_room_reward_desired", "set_next_room_reward_once",
-    "set_next_occurrence_desired",
+    "set_next_occurrence_desired", "set_next_occurrence_once",
 ):
     try:
         contract.dispatch(retired, {}, "retired-request")
@@ -101,7 +108,7 @@ replay = runtime[runtime.index("runtimeConfig.preferenceReplayCommands = {"):run
     "function M.dispatchBatch", runtime.index("runtimeConfig.preferenceReplayCommands = {")
 )]
 assert "set_next_room_reward" not in runtime
+assert 'command == "set_next_occurrence"' not in runtime
 assert "set_next_occurrence" not in replay
-assert "Next occurrence cannot be preference-replayed" in runtime
 
 print("hades2_world_actions_not_durable_ok")
