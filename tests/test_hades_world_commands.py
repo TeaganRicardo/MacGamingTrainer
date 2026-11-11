@@ -34,6 +34,18 @@ cancel_exit = {
     'leaseToken': 'exit:apply-exit-1',
 }
 assert mutation_params('cancel_world_exit', cancel_exit) == cancel_exit
+apply_occurrence = {
+    'roomId': 'runtime:run:room',
+    'requestId': 'apply-occurrence-1',
+    'targetID': 'npc:Sisyphus',
+}
+assert mutation_params('apply_world_occurrence', apply_occurrence) == apply_occurrence
+cancel_occurrence = {
+    'roomId': 'runtime:run:room',
+    'requestId': 'cancel-occurrence-1',
+    'leaseToken': 'occurrence:apply-occurrence-1',
+}
+assert mutation_params('cancel_world_occurrence', cancel_occurrence) == cancel_occurrence
 for command, payload, expected in (
     ('set_door_reward', {**valid, 'roomId': ''}, 'stale_room'),
     ('set_door_reward', {**valid, 'doorId': ''}, 'stale_door'),
@@ -45,6 +57,9 @@ for command, payload, expected in (
     ('apply_world_exit', {**apply_exit, 'kind': 'roomCategory', 'targetID': 'thanatos'}, 'invalid_value'),
     ('apply_world_exit', {**apply_exit, 'kind': 'reward', 'targetID': 'TrialUpgrade'}, 'invalid_value'),
     ('cancel_world_exit', {**cancel_exit, 'leaseToken': ''}, 'stale_door'),
+    ('apply_world_occurrence', {**apply_occurrence, 'targetID': 'npc:Hades'}, 'invalid_value'),
+    ('apply_world_occurrence', {**apply_occurrence, 'requestId': ''}, 'invalid_value'),
+    ('cancel_world_occurrence', {**cancel_occurrence, 'leaseToken': ''}, 'stale_target'),
     ('generate_chamber_object', {**valid, 'object': 'arbitraryObject'}, 'invalid_value'),
     ('gain_resource', {'resource': 'Gems', 'amount': True}, 'invalid_value'),
     ('gain_resource', {'resource': 'Gems', 'amount': 1.5}, 'invalid_value'),
