@@ -46,7 +46,10 @@ RoomData = {
   B_Shop01 = RoomSetData.Asphodel.B_Shop01,
   C_Story01 = RoomSetData.Elysium.C_Story01,
   C_Shop01 = RoomSetData.Elysium.C_Shop01,
+  D_Hub = { Name = "D_Hub", ForcedReward = "Shop", StoreDataName = "D_WorldShop",
+    LegalEncounters = { "Shop" }, eligible = true },
 }
+RoomSetData.Styx = { D_Hub = RoomData.D_Hub }
 EncounterSets = { ThanatosEncounters = { "ThanatosTartarus" } }
 EncounterData = {
   ThanatosTartarus = { Name = "ThanatosTartarus" },
@@ -194,6 +197,7 @@ function ChooseNextRoomData(run, args)
   args = args or {}
   if args.RoomDataSet == RoomSetData.Secrets then return args.RoomDataSet[1] end
   if ForceNextRoom ~= nil and RoomData[ForceNextRoom] ~= nil then return RoomData[ForceNextRoom] end
+  if run.CurrentRoom.LinkedRoom ~= nil then return RoomData[run.CurrentRoom.LinkedRoom] end
   local setName = args.ForceNextRoomSet or run.CurrentRoom.RoomSetName or "Tartarus"
   local eligible, forced = {}, {}
   for _, data in pairs(RoomSetData[setName] or {}) do
@@ -480,6 +484,21 @@ routeOccurrence("sisyphus", "Tartarus", "A_Combat01", "A_Story01", "Story_Sisyph
 routeOccurrence("eurydice", "Asphodel", "B_Combat01", "B_Story01", "Story_Eurydice_01", 202)
 routeOccurrence("patroclus", "Elysium", "C_Combat01", "C_Story01", "Story_Patroclus_01", 203)
 routeOccurrence("charon", "Asphodel", "B_Combat01", "B_Shop01", "Shop", 204)
+
+-- The Styx Charon hub is a native linked room, not a generic _Shop route.
+-- Observe and consume it without replacing the linked destination.
+CurrentRun.CurrentRoom = { Name = "D_Intro", RoomSetName = "Styx", LinkedRoom = "D_Hub" }
+OfferedExitDoors = {}
+runtime.apply_world_occurrence({ actionTarget = "charon" })
+local hubData = ChooseNextRoomData(CurrentRun, {})
+assert(hubData.Name == "D_Hub")
+local hubRoom = CreateRoom(hubData, { SkipChooseEncounter = true })
+local hubDoor = { Name = "ExitDoor", ObjectId = 207, ReadyToUse = true, Room = hubRoom }
+AssignRoomToExitDoor(hubDoor, hubRoom)
+local hubLease = assert(world().occurrence)
+assert(AttemptUseDoor(hubDoor).Name == "D_Hub" and world().occurrence == nil
+  and CurrentRun.LastRecordedEncounter == "Shop",
+  "native linked Charon hub did not satisfy the run-scoped occurrence")
 
 -- A named occurrence remains pending when the current biome has no matching
 -- native room, and native forced rooms keep priority over the request.
