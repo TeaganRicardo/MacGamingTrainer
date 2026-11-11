@@ -8,6 +8,8 @@ CurrentRun.CurrentRoom = {
   RoomCreations = {},
   ChosenRewardType = "RoomMoneyDrop",
   LegalEncounters = { "CombatNormal" },
+  OfferedRewards = {},
+  ExitDoorRooms = {},
 }
 CurrentRun.RoomCreations = {}
 CurrentRun.RoomCountCache = {}
@@ -157,13 +159,27 @@ CreateRoom = function(roomData, args)
   return room
 end
 
+previewCalls = 0
 CreateDoorRewardPreview = function(door)
+  previewCalls = previewCalls + 1
   door.PreviewCreated = true
+  door.PreviewReward = door.Room and (
+    door.Room.ForceLootName or door.Room.ChosenRewardType or ""
+  ) or ""
 end
 local nativeCreateDoorRewardPreview = CreateDoorRewardPreview
 AssignRoomToExitDoor = function(door, chosen)
   door.Room = chosen
   MapState.OfferedExitDoors[door.ObjectId] = door
+  CurrentRun.CurrentRoom.ExitDoorRooms =
+    CurrentRun.CurrentRoom.ExitDoorRooms or {}
+  CurrentRun.CurrentRoom.OfferedRewards =
+    CurrentRun.CurrentRoom.OfferedRewards or {}
+  CurrentRun.CurrentRoom.ExitDoorRooms[door.ObjectId] = chosen
+  CurrentRun.CurrentRoom.OfferedRewards[door.ObjectId] = {
+    Type = chosen.ChosenRewardType,
+    ForceLootName = chosen.ForceLootName,
+  }
 end
 
 DoUnlockRoomExits = function(run, room)
@@ -211,10 +227,18 @@ local nativeStartRoom = StartRoom
 ChooseRoomReward = function(run, room, storeName, previously, args)
   return room.ChosenRewardType or "RoomMoneyDrop"
 end
+nativeLeaveCalls = 0
+LeaveRoom = function(run, door)
+  assert(run == CurrentRun and type(door) == "table" and door.Room)
+  nativeLeaveCalls = nativeLeaveCalls + 1
+  return StartRoom(run, door.Room)
+end
+local nativeLeaveRoom = LeaveRoom
+
 AttemptUseDoor = function(door)
-  if not door.ReadyToUse or door.SkipUnlock or not door.Room
+  if not door.ReadyToUse or door.SkipUnlock or door.Blocked or not door.Room
       or MapState.OfferedExitDoors[door.ObjectId] ~= door then return false end
-  return StartRoom(CurrentRun, door.Room)
+  return LeaveRoom(CurrentRun, door)
 end
 local nativeAttemptUseDoor = AttemptUseDoor
 
