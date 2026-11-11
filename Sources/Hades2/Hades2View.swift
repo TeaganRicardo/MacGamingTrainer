@@ -908,7 +908,6 @@ struct Hades2TrainerView: View {
 
     private var configSnapshot: Hades2ViewConfigSnapshot {
         Hades2ViewConfigSnapshot(
-            nextRoomReward: model.nextRoomReward,
             nextOccurrenceTarget: model.nextOccurrenceTarget,
             elements: model.elements,
             damageMultiplier: model.damageMultiplier,
@@ -1042,7 +1041,6 @@ struct Hades2TrainerView: View {
     }
 
     private func syncConfigSnapshot(_ snapshot: Hades2ViewConfigSnapshot) {
-        if let value = snapshot.nextRoomReward { model.selectedNextRoomReward = value }
         if let value = snapshot.nextOccurrenceTarget { model.selectedNextOccurrenceTarget = value }
         syncElementInputs(snapshot.elements)
         if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
@@ -1231,9 +1229,20 @@ struct Hades2TrainerView: View {
             default: return id
             }
         }
-        let localized = rewardLabel(id)
-        let key = "hades2.reward.\(id)"
-        if localized != key { return localized }
+        let localized: String?
+        switch id {
+        case "RoomMoneyDrop": localized = rewardLabel("RoomMoneyDrop")
+        case "MetaCardPointsCommonDrop": localized = rewardLabel("MetaCardPointsCommonDrop")
+        case "MemPointsCommonDrop": localized = rewardLabel("MemPointsCommonDrop")
+        case "MetaCurrencyDrop": localized = rewardLabel("MetaCurrencyDrop")
+        case "MaxHealthDrop": localized = rewardLabel("MaxHealthDrop")
+        case "MaxManaDrop": localized = rewardLabel("MaxManaDrop")
+        case "StackUpgrade": localized = rewardLabel("StackUpgrade")
+        case "WeaponUpgrade": localized = rewardLabel("WeaponUpgrade")
+        case "SpellDrop": localized = rewardLabel("SpellDrop")
+        default: localized = nil
+        }
+        if let localized { return localized }
         if let option = model.boons.first(where: { $0.id == id }) {
             if localization.language == .en {
                 return option.englishName.isEmpty ? option.name : option.englishName
@@ -1324,7 +1333,7 @@ struct Hades2TrainerView: View {
                 )
             }
 
-            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
