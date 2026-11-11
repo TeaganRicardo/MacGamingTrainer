@@ -1,6 +1,6 @@
 import re
 
-_PREVIOUS = re.compile(r'previousModule\.revision\s*~=\s*(\d+)')
+_PREVIOUS = re.compile(r'(?:previousModule|existing)\.revision\s*~=\s*(\d+)')
 _MODULE = re.compile(r'version\s*=\s*1\s*,\s*revision\s*=\s*(\d+)')
 
 
