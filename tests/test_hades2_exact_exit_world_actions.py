@@ -173,7 +173,7 @@ assert(door1.Room == entered, "native door still points at the pre-plan destinat
 
 -- Observe against the source room object because StartRoom has changed
 -- CurrentRun.CurrentRoom. Both source-room leases are consumed/invalidated.
-assert(sourceRoom.ExitDoorRooms[1] == entered,
+assert(sourceRoom.ExitDoorRooms[1] == entered.Name,
   "late commit failed to update the native source-room exit map")
 
 -- Re-enter a fresh source fixture to prove external native replacement changes
