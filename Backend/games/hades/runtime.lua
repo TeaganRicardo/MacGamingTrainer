@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 11 then error("hades.error.restartRequired") end
+  if existing.revision ~= 12 then error("hades.error.restartRequired") end
   return existing
 end
 
