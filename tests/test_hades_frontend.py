@@ -27,6 +27,9 @@ WORKER = r'''
 import argparse,json,pathlib,sys,time
 parser=argparse.ArgumentParser();parser.add_argument('--game');args=parser.parse_args()
 folder=pathlib.Path(__file__).parent
+def progress(stage):
+    with (folder/'worker-progress.log').open('a') as stream:
+        stream.write(stage+'\\n')
 workspaces={};next_workspace=0
 profiles=[{"name":"Fixture","updatedAt":"Today"}]
 files=[{'rootId':'fixture','relativePath':f'Profile{n}.sav','profile':f'Profile{n}','variant':''} for n in (1,2)]
@@ -145,8 +148,10 @@ def save_command(command,params,state):
 
 for raw in sys.stdin:
     request=json.loads(raw)
+    progress('received '+request.get('command','unknown')+' '+request.get('id',''))
     with (folder/'commands.jsonl').open('a') as stream:stream.write(json.dumps({**request,'fixtureGame':args.game})+'\n')
     state=json.loads((folder/'state.json').read_text())
+    progress('state-loaded '+request.get('command','unknown'))
     command=request['command'];params=request.get('params',{})
     if command=='save_profile' and params.get('name')=='Closing while saving':time.sleep(.2)
     if command.startswith('save_editor_'):
@@ -226,7 +231,9 @@ for raw in sys.stdin:
     if command=='status' and state.get('fixtureError'):
         reply.update(ok=False,error={'code':state.get('fixtureErrorCode','fixture'),'presentation':state['fixtureError']},state=state)
         reply.pop('result')
+    progress('before-emit '+command)
     emit(reply)
+    progress('emitted '+command)
 '''
 
 HARNESS = r'''
@@ -417,6 +424,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
             }.joined(separator:"\n")
             let log=(try? String(contentsOf:folder.appendingPathComponent("trainer.log"),encoding:.utf8)) ?? ""
             return "backend/trainer:\n"+json(runtime)+"\ndocuments:\n"+json(documents)+"\nfixture state:\n"+state
+                + "\nworker progress:\n"+((try? String(contentsOf:folder.appendingPathComponent("worker-progress.log"),encoding:.utf8)) ?? "no progress file")
                 + "\nworker received without emitted reply:\n"+json(received.filter { !emittedIDs.contains($0["id"] as? String ?? "") })
                 + "\nlast 12 worker requests:\n"+json(Array(received.suffix(12)))+"\nlast 12 emitted replies:\n"+json(Array(emitted.suffix(12)))
                 + "\nwindows:\n"+windows+"\ntrainer log tail:\n"+log.split(separator:"\n").suffix(12).joined(separator:"\n")
