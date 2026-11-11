@@ -67,6 +67,7 @@ def clear_active(state,preserve_desired=False):
         state['chaosGateProbability']=None
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
+    state['worldActions']={'exits':[]}
     state['nextRoomReward']=None
     state['nextOccurrenceTarget']=None
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
@@ -143,7 +144,7 @@ class Hades2Adapter(GameAdapter):
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
                     **desired_defaults,
-                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'worldActions':{'exits':[]}, 'nextRoomReward':None, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
