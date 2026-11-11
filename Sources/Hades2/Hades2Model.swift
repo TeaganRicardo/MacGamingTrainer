@@ -172,7 +172,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // into the native three-choice pool.
     @Published var boonForceLegendary = false
     @Published var boonForceDuo = false
-    @Published var nextRoomReward: String?
     @Published var nextOccurrenceTarget: String?
     @Published var occurrenceTargets: [Hades2OccurrenceTarget] = []
     @Published private(set) var worldActionExits: [Hades2WorldExit] = []
@@ -218,7 +217,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var nativeRarityOrder: [String] = []
     private var resolvedAcquisitionSignature: String?
     private var acquisitionLevelIdentity: String?
-    @Published var selectedNextRoomReward = ""
     @Published var selectedNextOccurrenceTarget = ""
     @Published var statSupport: [String: Bool] = [:]
     @Published var statAvailable: [String: Bool] = [:]
@@ -801,7 +799,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil {
             applyBoonRarity(rarity)
         }
-        if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
         if patch.nextOccurrenceTarget.isPresent {
             nextOccurrenceTarget = patch.nextOccurrenceTarget.value
             if let active = patch.nextOccurrenceTarget.value {
@@ -1496,15 +1493,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             title: "hades2.worldActions.modifyExit",
             completion: completion
         )
-        return true
-    }
-
-    @discardableResult
-    func setNextRoomReward(_ reward: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
-        guard canApplyWorldAction else { return false }
-        send(.setNextRoomReward(reward),
-             title: reward == nil ? "hades2.op.clearNextRoom" : "hades2.op.setNextRoom",
-             completion: completion)
         return true
     }
 
