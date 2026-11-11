@@ -172,9 +172,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // into the native three-choice pool.
     @Published var boonForceLegendary = false
     @Published var boonForceDuo = false
-    @Published var nextOccurrenceTarget: String?
     @Published var occurrenceTargets: [Hades2OccurrenceTarget] = []
     @Published private(set) var worldActionExits: [Hades2WorldExit] = []
+    @Published private(set) var worldOccurrence: Hades2WorldOccurrenceLease?
     @Published var selectedWorldExitToken = ""
     @Published var selectedWorldExitTarget = ""
     @Published var health: Double?
@@ -273,9 +273,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     var canApplyWorldAction: Bool {
-        connected && capabilities["setFeature"] == true && canAcceptRuntimeAction
+        connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
             && !exiting && protocolCompatible
     }
+    var nextOccurrenceTarget: String? { worldOccurrence?.target }
     var canApplyWorldExit: Bool {
         connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
             && !exiting && protocolCompatible && selectedWorldExit != nil
@@ -658,6 +659,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // "not observed yet" rather than the previous run's traits.
         currentRunTraits = []
         worldActionExits = []
+        worldOccurrence = nil
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""
         activationGraceWorkItems.values.forEach { $0.cancel() }
@@ -799,19 +801,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil {
             applyBoonRarity(rarity)
         }
-        if patch.nextOccurrenceTarget.isPresent {
-            nextOccurrenceTarget = patch.nextOccurrenceTarget.value
-            if let active = patch.nextOccurrenceTarget.value {
-                selectedNextOccurrenceTarget = active
-            }
-        }
         if let value = patch.occurrenceTargets {
             occurrenceTargets = value
             repairOccurrenceSelection()
         }
         if patch.worldActions.isPresent {
             worldActionExits = patch.worldActions.value?.exits ?? []
+            worldOccurrence = patch.worldActions.value?.occurrence
             repairWorldActionSelection()
+            repairOccurrenceSelection()
         }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
@@ -1497,25 +1495,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     @discardableResult
-    func setNextOccurrence(_ target: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
+    func toggleNextOccurrence(completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canApplyWorldAction else { return false }
+        if let active = worldOccurrence {
+            send(
+                .cancelWorldOccurrence(leaseToken: active.leaseToken),
+                title: "hades2.worldActions.specifyOccurrence",
+                completion: completion
+            )
+            return true
+        }
+        guard !selectedNextOccurrenceTarget.isEmpty,
+              occurrenceTargets.contains(where: { $0.id == selectedNextOccurrenceTarget }) else {
+            return false
+        }
         send(
-            .setNextOccurrence(target),
-            title: target == nil ? "hades2.op.clearNextOccurrence" : "hades2.op.setNextOccurrence",
+            .applyWorldOccurrence(target: selectedNextOccurrenceTarget),
+            title: "hades2.worldActions.specifyOccurrence",
             completion: completion
         )
         return true
-    }
-
-    @discardableResult
-    func toggleNextOccurrence(completion: ((Bool) -> Void)? = nil) -> Bool {
-        guard canApplyWorldAction else { return false }
-        if nextOccurrenceTarget != nil {
-            return setNextOccurrence(nil, completion: completion)
-        }
-        guard !selectedNextOccurrenceTarget.isEmpty,
-              occurrenceTargets.contains(where: { $0.id == selectedNextOccurrenceTarget }) else { return false }
-        return setNextOccurrence(selectedNextOccurrenceTarget, completion: completion)
     }
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
