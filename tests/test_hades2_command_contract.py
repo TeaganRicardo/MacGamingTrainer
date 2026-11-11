@@ -51,9 +51,6 @@ class ProbeAdapter:
     def set_boon_rarity_desired(self, config):
         return self._record("set_boon_rarity_desired", dict(config))
 
-    def set_next_room_reward_once(self, reward, request_id):
-        return self._record("set_next_room_reward_once", reward, request_id)
-
     def set_next_occurrence_once(self, target, request_id):
         return self._record("set_next_occurrence_once", target, request_id)
 
@@ -126,8 +123,8 @@ assert names == [
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "mature_garden", "set_stat", "set_element", "lock_element",
-    "set_boon_rarity_desired", "set_next_room_reward_once", "set_next_occurrence_once",
-    "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
+    "set_boon_rarity_desired", "set_next_occurrence_once",
+    "apply_world_exit", "cancel_world_exit", "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
     "open_special_choice", "save_editor_inventory", "save_editor_open", "save_editor_target", "save_editor_query",
@@ -436,12 +433,32 @@ contract.dispatch(
 )
 assert probe.calls == [("set_chaos_gate_desired", 50.0)]
 probe.calls.clear()
-contract.dispatch(
-    "set_next_room_reward_once",
-    {"reward": "WeaponUpgrade"},
-    "reward-once",
+_, world_apply = dispatch_runtime(
+    "apply_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "kind": "reward", "target": "WeaponUpgrade"},
+    "world-exit-apply",
 )
-assert probe.calls == [("set_next_room_reward_once", "WeaponUpgrade", "reward-once")]
+assert world_apply == {
+    "doorToken": "exit:1:2:3:4:5",
+    "kind": "reward",
+    "target": "WeaponUpgrade",
+    "requestId": "world-exit-apply",
+}
+_, world_cancel = dispatch_runtime(
+    "cancel_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1"},
+    "world-exit-cancel",
+)
+assert world_cancel == {
+    "doorToken": "exit:1:2:3:4:5",
+    "leaseToken": "lease-1",
+    "requestId": "world-exit-cancel",
+}
+expect_error(
+    "apply_world_exit",
+    {"doorToken": "", "kind": "reward", "target": "WeaponUpgrade"},
+    "World exit token is invalid or stale",
+)
 probe.calls.clear()
 contract.dispatch(
     "set_next_occurrence_once",
