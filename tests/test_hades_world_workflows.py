@@ -377,6 +377,12 @@ fails("staleDoor", function()
     leaseToken = beforeNativeReroll.activeLease.leaseToken, requestId = "stale-reroll-cancel",
   })
 end)
+fails("staleDoor", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = beforeNativeReroll.doorToken,
+    kind = "reward", targetID = "AthenaUpgrade", requestId = "stale-reroll-reapply",
+  })
+end)
 firstDoor.Room = firstRoom
 local storyCreationsBefore = CurrentRun.RoomCreations.A_Story01 or 0
 local storyGenerationBefore = roomGenerationCalls

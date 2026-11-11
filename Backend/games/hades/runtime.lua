@@ -1237,6 +1237,7 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
 end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
+  local doorEpochs = setmetatable({}, { __mode = "k" })
   local occurrenceRequest
   local occurrenceSelection
   local occurrenceGeneration
@@ -1280,6 +1281,7 @@ world = (function()
     return table.concat({
       runtime.generationId, instanceId(CurrentRun), instanceId(currentRoom()),
       instanceId(door), tostring(door.ObjectId), instanceId(door.Room),
+      tostring(doorEpochs[door] or 0),
     }, ":")
   end
   local function rewardSignature(room)
@@ -1289,17 +1291,14 @@ world = (function()
       tostring(room.ChosenRewardType), tostring(room.ForceLootName), overrides, reward,
     }, ":")
   end
+  local activeEdit
   local function doorId(door)
-    local physical = physicalDoorId(door)
-    local edit = edits[door]
-    if type(edit) == "table" and edit.kind == "reward"
-        and edit.run == CurrentRun and edit.hero == hero()
-        and edit.sourceRoom == currentRoom() and edit.applied == door.Room
-        and edit.physicalToken == physical
-        and edit.appliedSignature == rewardSignature(door.Room) then
-      return edit.doorToken
-    end
-    return physical .. ":" .. rewardSignature(door.Room)
+    -- Validate native identity *before* comparing a caller-supplied token.
+    -- A reroll can return reward fields to their previous values (ABA); its
+    -- revoked lease must advance the physical epoch first.
+    local edit = activeEdit(door)
+    if edit and edit.kind == "reward" then return edit.doorToken end
+    return physicalDoorId(door) .. ":" .. rewardSignature(door.Room)
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"
@@ -1583,27 +1582,29 @@ world = (function()
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
   end
-  local function activeEdit(door)
+  activeEdit = function(door)
     local edit = edits[door]
-    if type(edit) ~= "table" or edit.run ~= CurrentRun or edit.hero ~= hero()
+    if type(edit) ~= "table" then return nil end
+    if edit.run ~= CurrentRun or edit.hero ~= hero()
         or edit.sourceRoom ~= currentRoom() then
       edits[door] = nil
       return nil
     end
+    local identityChanged = edit.physicalToken ~= physicalDoorId(door)
+    local rewardChanged = edit.signature ~= rewardSignature(door.Room)
     if edit.kind == "route" then
-      if edit.original ~= door.Room or edit.signature ~= doorId(door) then
-        edits[door] = nil
-        return nil
-      end
+      identityChanged = identityChanged or edit.original ~= door.Room
     elseif edit.kind == "reward" then
-      if edit.applied ~= door.Room or edit.physicalToken ~= physicalDoorId(door)
-          or edit.appliedSignature ~= rewardSignature(door.Room)
-          or edit.doorToken ~= doorId(door) then
-        edits[door] = nil
-        return nil
-      end
+      identityChanged = identityChanged or edit.applied ~= door.Room
+      rewardChanged = edit.appliedSignature ~= rewardSignature(door.Room)
     else
+      identityChanged = true
+    end
+    if identityChanged or rewardChanged then
       edits[door] = nil
+      -- A native mutation can restore the exact old reward fields. Never
+      -- allow its previously issued token to become valid again.
+      doorEpochs[door] = (doorEpochs[door] or 0) + 1
       return nil
     end
     return edit
@@ -1683,7 +1684,7 @@ world = (function()
     edits[door] = {
       kind = "route", route = route, target = route, leaseToken = leaseToken,
       original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
-      signature = doorId(door),
+      physicalToken = physicalDoorId(door), signature = rewardSignature(door.Room),
     }
   end
   local function clearSourceEdits(source, selectedDoor)
