@@ -287,6 +287,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var selectedWorldExitLease: Hades2WorldActionLease? { selectedWorldExit?.activeLease }
     var selectedWorldExitTargetLocked: Bool { selectedWorldExitLease != nil }
+    var canSelectWorldExit: Bool {
+        connected && capabilities["worldActions"] == true && !exiting && protocolCompatible
+            && !worldActionExits.isEmpty
+    }
+    var selectedWorldExitActionAvailable: Bool {
+        guard canApplyWorldExit, let exit = selectedWorldExit else { return false }
+        if exit.activeLease != nil { return true }
+        return exit.targets.contains { $0.stableID == selectedWorldExitTarget }
+    }
+    var occurrenceActionAvailable: Bool {
+        guard canApplyWorldAction else { return false }
+        if nextOccurrenceTarget != nil { return true }
+        return occurrenceTargets.contains { $0.id == selectedNextOccurrenceTarget }
+    }
     var canEditDesired: Bool { backendAvailable && !exiting }
     func canSetVital(_ vital: String) -> Bool {
         let key: String
