@@ -1373,7 +1373,7 @@ world = (function()
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
       and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
-  local function refreshDoor(door, room)
+  local function clearDoorPreview(door)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1383,6 +1383,21 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
+  end
+  local function drawDoorPreview(door, room)
+    local actual = door.Room
+    clearDoorPreview(door)
+    door.Room = room
+    local ok, result = pcall(CreateDoorRewardPreview, door)
+    door.Room = actual
+    if not ok then
+      clearDoorPreview(door)
+      pcall(CreateDoorRewardPreview, door)
+      error(result, 0)
+    end
+  end
+  local function refreshDoor(door, room)
+    clearDoorPreview(door)
     door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
@@ -1425,8 +1440,33 @@ world = (function()
     refreshDoor(door, room)
     edit.signature = doorId(door)
   end
+  local function routePreviewDescriptor(door, candidates)
+    local candidate
+    for _, value in ipairs(candidates or {}) do
+      if candidate == nil or tostring(value.Name) < tostring(candidate.Name) then candidate = value end
+    end
+    assert(candidate, "hades.error.worldUnavailable")
+    local proxy = DeepCopyTable(door.Room)
+    proxy.Name = candidate.Name or proxy.Name
+    if candidate.ForcedReward ~= nil then
+      proxy.ChosenRewardType = candidate.ForcedReward
+      proxy.ForceLootName = nil
+    end
+    proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
+    proxy.RewardPreviewFx = candidate.RewardPreviewFx
+    if candidate.RewardOverrides ~= nil then
+      proxy.RewardOverrides = DeepCopyTable(candidate.RewardOverrides)
+    end
+    return proxy
+  end
   local function reserveRoute(door, route, leaseToken)
     assert(activeEdit(door) == nil, "hades.error.staleDoor")
+    local routes = routeRooms(currentRoom())
+    local candidates = routes and routes[route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    -- CreateDoorRewardPreview owns the game's real exit presentation. Give it a
+    -- read-only eligible RoomData proxy for this call, then restore door.Room.
+    drawDoorPreview(door, routePreviewDescriptor(door, candidates))
     edits[door] = {
       kind = "route", route = route, target = route, leaseToken = leaseToken,
       original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
@@ -1727,6 +1767,8 @@ world = (function()
     if edit.kind == "reward" then
       encounters[door.Room] = nil
       refreshDoor(door, edit.original)
+    elseif edit.kind == "route" then
+      drawDoorPreview(door, door.Room)
     end
     edits[door] = nil
     return runtime.status()
@@ -1756,6 +1798,8 @@ world = (function()
     if edit.kind == "reward" then
       encounters[door.Room] = nil
       refreshDoor(door, edit.original)
+    elseif edit.kind == "route" then
+      drawDoorPreview(door, door.Room)
     end
     edits[door] = nil
     return runtime.status()
