@@ -801,6 +801,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "numeric search did not target expanded run metrics")
         check(searchFunctions("fishing").contains { $0.section == .resources }, "native fishing missing from discovery")
         check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
+        check(searchFunctions("出口").contains { $0.id == "hades.worldActions.modifyExit" },
+            "World Actions exit control was absent from bilingual discovery")
+        for target in ("Sisyphus", "Eurydice", "Patroclus", "Thanatos", "Charon") {
+            check(searchFunctions(target).contains {
+                $0.id == "hades.worldActions.occurrence." + target.lowercased()
+                    && $0.section == .rooms
+            }, "named occurrence target missing from bilingual discovery: " + target)
+        }
         check(searchFunctions("角色奖励").contains { $0.id == "shortcut.spawnSpecial" && $0.section == .rooms }
               && searchFunctions("standard drops").contains { $0.id == "hades.spawn.pickupRewards" && $0.section == .rooms },
               "Generate reward rows missing from bilingual discovery")
