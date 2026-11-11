@@ -410,7 +410,7 @@ CurrentRun.BiomeDepthCache = 11
 assert(ChooseNextRoomData(CurrentRun, {}) == forcedRoom, "native depth-11 selection did not force its pre-boss")
 firstDoor.Room = clone(forcedRoom)
 local forcedTarget, beforeForcedAssignments = firstDoor.Room, assigned
-assert(not world().doors[1].canReward and #world().doors[1].routes == 0)
+assert(#world().doors[1].targets == 0)
 local forcedDoor = world().doors[1]
 fails("worldUnavailable", function()
   runtime.apply_world_exit({
@@ -426,18 +426,18 @@ fails("worldUnavailable", function()
 end)
 assert(firstDoor.Room == forcedTarget and assigned == beforeForcedAssignments)
 firstDoor.Room = firstRoom
-assert(#world().doors[1].routes == 0, "a forced room outside route categories was ignored")
+assert(#world().doors[1].targets == 0, "a forced room outside World Actions was exposed")
 assert(#world().doors[1].targets == 0,
   "forced exit unexpectedly exposed World Actions targets")
 CurrentRun.BiomeDepthCache = 8
 RoomSetData.Tartarus.A_PreBoss01 = nil
-assert(#world().doors[1].routes > 0)
+assert(#world().doors[1].targets > 0)
 RoomSetData.Tartarus.A_PreBossChance = { Name = "A_PreBossChance", ForceAtBiomeDepthMin = 8, ForceAtBiomeDepthMax = 12 }
 local beforeForceDraws = randomDraws
 assert(ChooseNextRoomData(CurrentRun, {}) ~= RoomSetData.Tartarus.A_PreBossChance)
 assert(randomDraws == beforeForceDraws + 1, "the native selector lost its original chance draw")
 local beforeInspection = randomDraws
-assert(#world().doors[1].routes == 0, "potentially forced route was exposed as an override")
+assert(#world().doors[1].targets == 0, "potentially forced route was exposed as an override")
 runtime.disable_all()
 assert(randomDraws == beforeInspection and RandomChance == nativeRandomChance,
   "status or disabled inspection consumed native force RNG")
