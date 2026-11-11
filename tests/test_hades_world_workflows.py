@@ -313,6 +313,27 @@ assert(roomSelectionDraws == beforeUnauthorized and
     (CurrentRun.RoomCreations.A_Story01 or 0) == beforeUnauthorizedCreations,
   "a direct/unowned LeaveRoom bypassed native use authorization")
 runtime.restore_door(doorParams())
+
+-- An existing reward-edit lease and a new route plan cannot both own the
+-- selected door; whichever is already acknowledged retains its exact original
+-- snapshot until explicitly cancelled.
+runtime.set_door_route(doorParams({ route = "story" }))
+fails("worldUnavailable", function()
+  runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" }))
+end)
+assert(firstDoor.Room == firstRoom and world().doors[1].pendingRoute == "story",
+  "reward edit replaced an acknowledged category reservation")
+runtime.restore_door(doorParams())
+runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" }))
+local activeReward = firstDoor.Room
+fails("worldUnavailable", function()
+  runtime.set_door_route(doorParams({ route = "story" }))
+end)
+assert(firstDoor.Room == activeReward and world().doors[1].canRestore,
+  "category reservation discarded an acknowledged native reward edit")
+runtime.restore_door(doorParams())
+assert(firstDoor.Room == firstRoom and not world().doors[1].canRestore)
+
 local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
   ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
 RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
