@@ -276,9 +276,10 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
             f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
 hades1_rooms = (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+hades1_world_start = hades1_rooms.index("private var worldExitRow")
 hades1_world_actions = hades1_rooms[
-    hades1_rooms.index("private var worldExitRow"):
-    hades1_rooms.index("var body: some View")
+    hades1_world_start:
+    hades1_rooms.index("var body: some View", hades1_world_start)
 ]
 assert hades1_world_actions.count(".trainerPicker(") >= 3
 assert hades1_world_actions.count(".expanding,") >= 2
