@@ -51,7 +51,10 @@ AssignRoomToExitDoor(door2, door2.Room)
 CreateDoorRewardPreview(door1)
 CreateDoorRewardPreview(door2)
 
+assert(RoomData.F_Combat01.Tags == nil, "fixture started with normalized candidate Tags")
 local first, second = exitByObject(1), exitByObject(2)
+assert(RoomData.F_Combat01.Tags == nil,
+  "World Actions catalog probing mutated native RoomData")
 assert(type(first.doorToken) == "string" and first.doorToken ~= "")
 assert(type(second.doorToken) == "string" and second.doorToken ~= ""
     and first.doorToken ~= second.doorToken,
