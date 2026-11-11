@@ -204,6 +204,10 @@ assert(door1.Room == entered, "native door still points at the pre-plan destinat
 -- CurrentRun.CurrentRoom. Both source-room leases are consumed/invalidated.
 assert(sourceRoom.ExitDoorRooms[1] == entered.Name,
   "late commit failed to update the native source-room exit map")
+assert(door2.Room == originalRoom2
+    and door2.PreviewRoomName == originalRoom2.Name
+    and exitByObject(2).activeLease == nil,
+  "committing one route left a sibling route preview or lease behind")
 
 -- Exact-exit route ownership has deterministic precedence over a pending
 -- room-based named occurrence. The route commits one room; the incompatible
@@ -237,6 +241,35 @@ M.dispatch("cancel_world_occurrence", {
   requestId = "cancel-precedence-occurrence",
   includeCatalogs = false,
 })
+
+-- Leaving through one exit restores an unused reward lease on its sibling.
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local cleanupDoor1, cleanupDoor2 = MapState.OfferedExitDoors[1], MapState.OfferedExitDoors[2]
+local cleanupRoom2 = cleanupDoor2.Room
+local cleanupExit2 = exitByObject(2)
+local rewardLeaseReply = M.dispatch("apply_world_exit", {
+  doorToken = cleanupExit2.doorToken,
+  kind = "reward",
+  target = "MaxHealthDrop",
+  requestId = "sibling-reward-lease",
+  includeCatalogs = true,
+})
+assert(cleanupDoor2.Room.ChosenRewardType == "MaxHealthDrop")
+local routeExit1 = exitByObject(1)
+M.dispatch("apply_world_exit", {
+  doorToken = routeExit1.doorToken,
+  kind = "roomCategory",
+  target = "combat",
+  requestId = "commit-other-exit",
+  includeCatalogs = true,
+})
+local siblingCommitted = AttemptUseDoor(cleanupDoor1)
+assert(type(siblingCommitted) == "table" and siblingCommitted.Name == "F_Combat01")
+assert(cleanupDoor2.Room == cleanupRoom2
+    and cleanupDoor2.Room.ChosenRewardType == "RoomMoneyDrop"
+    and exitByObject(2).activeLease == nil,
+  "committing another exit left an unused reward modification behind")
 
 -- Re-enter a fresh source fixture to prove external native replacement changes
 -- exact target identity and invalidates stale lease authority.
