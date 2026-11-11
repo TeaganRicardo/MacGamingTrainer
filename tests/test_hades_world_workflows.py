@@ -476,7 +476,13 @@ local selectedStory = ChooseNextRoomData(CurrentRun, {})
 assert(selectedStory == RoomSetData.Tartarus.A_Story01,
   "named room occurrence was not selected from the native eligible pool")
 assert(world().occurrence ~= nil, "merely offering the named room consumed the request")
+local nextDoorBeforeCreation = ChooseNextRoomData(CurrentRun, {})
+assert(nextDoorBeforeCreation ~= selectedStory,
+  "one run-scoped named occurrence replaced multiple exits before native room creation")
 local storyRoom = CreateRoom(selectedStory, { SkipChooseEncounter = true })
+local nextDoorAfterCreation = ChooseNextRoomData(CurrentRun, {})
+assert(nextDoorAfterCreation ~= selectedStory,
+  "one run-scoped named occurrence replaced multiple generated exits")
 storyRoom.RoomSetName = "Tartarus"
 AssignRoomToExitDoor(firstDoor, storyRoom)
 local storyEntered = AttemptUseDoor(firstDoor)
