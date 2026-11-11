@@ -20,6 +20,16 @@ CurrentRun.EncountersDepthCache = {}
 CurrentRun.BlockedEncounters = {}
 CurrentRun.RunDepthCache = 1
 CurrentRun.BiomeDepthCache = 1
+CurrentRun.RewardPriorities = {}
+CurrentRun.RewardStores = {
+  RunProgress = {
+    { Name = "RoomMoneyDrop", AllowDuplicates = true },
+    { Name = "MaxHealthDrop", AllowDuplicates = true },
+    { Name = "MaxManaDrop", AllowDuplicates = true },
+    { Name = "StackUpgrade", AllowDuplicates = true },
+    { Name = "WeaponUpgrade", AllowDuplicates = true },
+  },
+}
 
 RoomData = {
   F_Combat01 = { Name = "F_Combat01", RoomSetName = "F" },
@@ -203,6 +213,11 @@ DoUnlockRoomExits = function(run, room)
       door.Room.NeedsReward = true
     end
     if door.Room.NeedsReward then
+      door.Room.RewardStoreName = door.Room.RewardStoreName or "RunProgress"
+      door.Room.ChosenRewardType = ChooseRoomReward(
+        run, door.Room, door.Room.RewardStoreName, {}, { Door = door }
+      )
+      SetupRoomReward(run, door.Room, {}, { Door = door })
       AssignRoomToExitDoor(door, door.Room)
       door.Room.NeedsReward = false
     end
@@ -224,6 +239,9 @@ end
 local nativeStartRoom = StartRoom
 -- Preserve the old next-room reward's separate native selection path so
 -- shared StartRoom-hook ownership can be tested in both installation orders.
+IsRoomRewardEligible = function(run, room, reward, previously, args)
+  return type(reward) == "table" and type(reward.Name) == "string"
+end
 ChooseRoomReward = function(run, room, storeName, previously, args)
   return room.ChosenRewardType or "RoomMoneyDrop"
 end
