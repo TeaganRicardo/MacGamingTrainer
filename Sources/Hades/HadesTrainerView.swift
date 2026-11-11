@@ -1043,7 +1043,7 @@ private struct HadesShortcutSettingsView: View {
                 )
             },
             registrationFailure: model.shortcutRegistrationFailure,
-            resetTitle: localization.string("hades.reset"),
+            resetTitle: localization.localized("host.hotkeys.resetDefaults"),
             onReset: model.resetShortcuts,
             onAssign: { actionID, chord in
                 guard let action = HadesShortcutAction(rawValue: actionID) else {

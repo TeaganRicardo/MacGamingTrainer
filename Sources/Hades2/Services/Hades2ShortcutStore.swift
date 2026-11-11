@@ -56,6 +56,14 @@ struct Hades2ShortcutStore {
         chords[action] ?? Self.defaultLayout()[action]!
     }
 
+    /// Reset explicit user overrides, then derive the current visible action
+    /// order again. Keep the fixed Disable All chord and schema migrations.
+    mutating func resetToDefaults() {
+        overrides.removeAll()
+        rebuildResolvedLayout()
+        persistOverrides()
+    }
+
     /// Profile payloads persist user overrides, not derived defaults. The format
     /// marker lets older full-layout Profiles migrate without mistaking a new
     /// intentional shortcut for a chord that used to be a default.

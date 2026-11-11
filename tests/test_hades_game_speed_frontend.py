@@ -56,6 +56,12 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-swift-') as temp:
 view = (ROOT / 'Sources/Hades/HadesTrainerView.swift').read_text()
 nav = (ROOT / 'Sources/Hades/HadesWorkbenchNavigation.swift').read_text()
 assert 'TrainerMappedSlider(' in view and 'model.setFeature(.gameSpeed' in view
+hades2_view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
+hades2_model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
+# The native Hades II view-state-flow journey covers observed/empty/omitted/invalid diagnostics.
+assert 'appliedGameSpeed = nil' in hades2_model
+assert 'if let actual = model.appliedGameSpeed' in hades2_view
+assert '"host.timeWarp.actual" : "host.timeWarp.pending"' in hades2_view
 assert '(.common, ["hades.gameSpeed"])' in nav
 # Both modules title the same control identically; each owns its own pair.
 presentation = (ROOT / 'Sources/Hades/HadesPresentation.swift').read_text()

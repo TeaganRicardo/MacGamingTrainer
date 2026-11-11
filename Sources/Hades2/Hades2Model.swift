@@ -165,6 +165,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var damageEnabled = false
     @Published var damageMultiplier = Hades2MultiplierKey.damageMultiplier.defaultValue
     @Published var gameSpeed = Hades2MultiplierKey.gameSpeed.defaultValue
+    /// Verified Process Time Warp observation; nil is unknown, not 1×.
+    @Published private(set) var appliedGameSpeed: Double?
     @Published var boonRarityTarget = "Heroic"
     // These wire keys now mean force one currently eligible special boon
     // into the native three-choice pool.
@@ -612,6 +614,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func resetAfterBackendTermination() {
         feedbackNotice = nil
         connected = false
+        appliedGameSpeed = nil
         scene = "unknown"
         capabilities = [:]
         activeFeatures = [:]
@@ -704,6 +707,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
+        // Preserve a same-process observation across sparse replies. An
+        // explicit null (unlike an absent diagnostics field) invalidates it.
+        if !connected || (patch.pid.isPresent && oldPID != pid) {
+            appliedGameSpeed = nil
+        }
+        // A present diagnostics object is an authoritative snapshot for
+        // speed observation, including an empty dictionary or invalid value.
+        // Only an entirely absent field is a sparse reply to preserve.
+        if payload.keys.contains("runtimeDiagnostics") {
+            let reported = (runtimeDiagnostics?["gameSpeedAppliedValue"] as? NSNumber)?.doubleValue
+            appliedGameSpeed = connected && (reported?.isFinite == true) ? reported : nil
+        }
         if let value = patch.version { version = value }
         if let value = patch.currentRunTraits { currentRunTraits = value }
         if let value = patch.currentRunTraitIdentityScope {
@@ -1762,6 +1777,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
     func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
+
+    func resetShortcuts() {
+        shortcutStore.resetToDefaults()
+        installHotkeys()
+    }
 
     @discardableResult
     func setShortcut(action: ShortcutAction, chord: HotkeyChord) -> TrainerShortcutAssignmentResult {

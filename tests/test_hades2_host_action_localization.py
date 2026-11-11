@@ -35,6 +35,7 @@ required = {
     "host.hotkeys.listenerFailed",
     "host.hotkeys.registrationFailed",
     "host.hotkeys.conflict",
+    "host.hotkeys.resetDefaults",
     "host.save.error.rollbackFailed",
     "host.save.error.recoveryUnresolved",
     "host.feature.enable",
@@ -119,8 +120,11 @@ for token in (
 for token in (
     'TrainerShortcutSettingsView(',
     'TrainerManagementGroups(',
+    'resetTitle: localization.localized("host.hotkeys.resetDefaults")',
+    'onReset: model.resetShortcuts',
 ):
     assert token in management, token
+assert "func resetShortcuts()" in model
 
 for key in ("host.refreshStatus", "host.disableAll", "host.shortcutSettings", "host.viewLog", "host.saveManagement"):
     assert f'"{key}"' in core_management

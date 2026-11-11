@@ -814,43 +814,48 @@ struct Hades2TrainerView: View {
         String(format: "%.1f", value)
     }
 
-    @ViewBuilder
     private var gameSpeedPanel: some View {
-        // This is a fixed workbench feature. Lack of a current runtime
-        // capability disables edits but must never remove the row.
-        TrainerLabeledControlRow(
-            title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
-            tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired
-        ) {
-            TrainerNumberField(
-                text: gameSpeedInputBinding,
-                placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
-                accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                width: 62,
-                enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
-                onEditingChanged: tracking(.gameSpeed),
-                onCommit: completing(.gameSpeed)
-            )
-            Text("×").foregroundStyle(.secondary)
-            TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
-            TrainerGamePageVisibilityGate { pageVisible in
-                TrainerMappedSlider(
-                    value: gameSpeedSliderValue,
-                    mapping: gameSpeedMapping,
+        VStack(alignment: .leading, spacing: 4) {
+            TrainerLabeledControlRow(
+                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
+                tint: model.canEditDesired ? theme.accent : theme.inactive,
+                emphasized: model.canEditDesired
+            ) {
+                TrainerNumberField(
+                    text: gameSpeedInputBinding,
+                    placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                    accessibilityHint: text("hades2.gameSpeed.hint"),
-                    enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
-                    onPreviewValue: { preview in
-                        gameSpeedPreview = preview.map(speedNumber)
-                        if preview == nil && focusedField != .gameSpeed {
-                            gameSpeedInput = speedNumber(model.gameSpeed)
-                        }
-                    }
+                    width: 62,
+                    enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
+                    onEditingChanged: tracking(.gameSpeed),
+                    onCommit: completing(.gameSpeed)
                 )
-                .frame(width: 200)
+                Text("×").foregroundStyle(.secondary)
+                TrainerShortcutBadge(text: model.shortcutText(.decreaseGameSpeed))
+                TrainerGamePageVisibilityGate { pageVisible in
+                    TrainerMappedSlider(
+                        value: gameSpeedSliderValue,
+                        mapping: gameSpeedMapping,
+                        accessibilityLabel: text("hades2.gameSpeed.a11y"),
+                        accessibilityHint: text("hades2.gameSpeed.hint"),
+                        enabled: model.canEditDesired && pageVisible && model.featureSupport["gameSpeed"] == true,
+                        onPreviewValue: { preview in
+                            gameSpeedPreview = preview.map(speedNumber)
+                            if preview == nil && focusedField != .gameSpeed {
+                                gameSpeedInput = speedNumber(model.gameSpeed)
+                            }
+                        }
+                    )
+                    .frame(width: 200)
+                }
+                TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
             }
-            TrainerShortcutBadge(text: model.shortcutText(.increaseGameSpeed))
+            if let actual = model.appliedGameSpeed {
+                let key = abs(actual - model.gameSpeed) < 0.000001
+                    ? "host.timeWarp.actual" : "host.timeWarp.pending"
+                Text(localization.presentation(key, arguments: [speedNumber(actual)]))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .trainerGroupedRows()
     }
