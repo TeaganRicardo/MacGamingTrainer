@@ -117,8 +117,13 @@ enum HadesWorkbenchIcon {
         case "hades.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
         case "hades.spawn.characterRewards": return TrainerSemanticIcon.Context.characterReward
         case "hades.doorReward": return TrainerSemanticIcon.Context.reward
-        case "hades.doorRoute", "hades.route.thanatos": return route
-        case "hades.restoreDoor": return TrainerSemanticIcon.Action.restore
+        case "hades.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
+        case "hades.worldActions.specifyOccurrence",
+             "hades.worldActions.occurrence.sisyphus",
+             "hades.worldActions.occurrence.eurydice",
+             "hades.worldActions.occurrence.patroclus",
+             "hades.worldActions.occurrence.thanatos",
+             "hades.worldActions.occurrence.charon": return TrainerSemanticIcon.Context.characterReward
         case "hades.chamberObject": return chamberObject
         case "host.refreshStatus": return refreshStatus
         case "hades.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor
@@ -212,7 +217,10 @@ enum HadesWorkbenchCatalog {
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
             (.rooms, ["hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards",
-                      "hades.doorReward", "hades.doorRoute", "hades.restoreDoor", "hades.route.thanatos", "hades.chamberObject"]),
+                      "hades.worldActions.modifyExit", "hades.worldActions.specifyOccurrence",
+                      "hades.worldActions.occurrence.sisyphus", "hades.worldActions.occurrence.eurydice",
+                      "hades.worldActions.occurrence.patroclus", "hades.worldActions.occurrence.thanatos",
+                      "hades.worldActions.occurrence.charon", "hades.chamberObject"]),
             (.management, ["host.refreshStatus", "hades.saveEditor.title", "host.saveManagement", "host.shortcutSettings",
                            "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
                            "host.viewLogHistory", "host.clearCompletedLogs"]),
