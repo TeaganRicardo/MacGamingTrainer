@@ -1222,10 +1222,17 @@ struct Hades2TrainerView: View {
 
     private func worldActionTargetLabel(kind: String, id: String) -> String {
         if kind == "roomCategory" {
-            return text("hades2.worldActions.route.\(id)")
+            switch id {
+            case "combat": return text("hades2.worldActions.route.combat")
+            case "story": return text("hades2.worldActions.route.story")
+            case "shop": return text("hades2.worldActions.route.shop")
+            case "reprieve": return text("hades2.worldActions.route.reprieve")
+            case "miniboss": return text("hades2.worldActions.route.miniboss")
+            default: return id
+            }
         }
+        let localized = rewardLabel(id)
         let key = "hades2.reward.\(id)"
-        let localized = text(key)
         if localized != key { return localized }
         if let option = model.boons.first(where: { $0.id == id }) {
             if localization.language == .en {
@@ -1317,6 +1324,7 @@ struct Hades2TrainerView: View {
                 )
             }
 
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
