@@ -94,11 +94,13 @@ for path in ("Sources/Hades/HadesWorkbenchNavigation.swift", "Sources/Hades2/Vie
 # Room/reward Pickers in both modules share the Core row-action role regardless
 # of option-title lengths. Non-inline picker groups remain expanding editors.
 hades2 = source("Sources/Hades2/Hades2View.swift")
-next_room = region(hades2, "private var nextRoomRewardPanel", "private var nextOccurrencePanel")
+world_exit = region(hades2, "private var worldExitPanel", "private var nextOccurrencePanel")
 next_occurrence = region(hades2, "private var nextOccurrencePanel", "private var resourcePanel")
-for block in (next_room, next_occurrence):
+for block in (world_exit, next_occurrence):
     assert "TrainerLabeledControlRow(" in block
-    assert ".trainerPicker(.rowAction, state: model.canApplyWorldAction ? .interactive : .unavailable)" in block
+    assert "layout: .pickerAction" in block
+assert "latched: model.selectedWorldExitLease != nil" in world_exit
+assert "latched: pending" in next_occurrence
 grouped = region(source("Sources/Core/UI/Components/TrainerResourceControls.swift"),
                  "struct TrainerGroupedOptionPicker")
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in grouped
