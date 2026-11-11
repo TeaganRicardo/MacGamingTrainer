@@ -1705,6 +1705,9 @@ world = (function()
   end
   function runtime.set_door_reward(params)
     local door = requireDoor(params)
+    -- A pending category reservation owns this exact door until cancellation
+    -- or native use. Ordinary reward-to-reward edits retain their old behavior.
+    assert(not activeRoutePlan(door), "hades.error.worldUnavailable")
     local data = definition(params.reward)
     assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
     local reward, store = doorReward(door.Room, data)
@@ -1736,7 +1739,11 @@ world = (function()
       applyDoor(door, room)
     else
       local candidates = routes[params.route]
-      assert(candidates and #candidates > 0 and not activeRoutePlan(door), "hades.error.worldUnavailable")
+      local existingEdit = edits[door]
+      local liveRewardEdit = existingEdit and existingEdit.kind ~= "route"
+        and existingEdit.applied == door.Room and existingEdit.signature == doorId(door)
+      assert(candidates and #candidates > 0 and not liveRewardEdit
+        and not activeRoutePlan(door), "hades.error.worldUnavailable")
       edits[door] = {
         kind = "route", route = params.route, original = door.Room, signature = doorId(door),
         run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom,
