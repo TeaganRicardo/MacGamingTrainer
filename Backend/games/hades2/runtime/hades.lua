@@ -8839,18 +8839,44 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
-    local function couldBeForced(data, args, otherDoors)
-      if type(IsRoomForced) ~= "function" then return true end
-      local nativeRandomChance = RandomChance
-      if type(nativeRandomChance) == "function" then
-        RandomChance = function(chance)
-          return type(chance) == "number" and chance > 0
+    local function nativeProbeWithoutRNG(callback, ...)
+      local originals = {}
+      local usedRandom = false
+      local function replace(name, replacement)
+        local original = _G[name]
+        if type(original) == "function" then
+          originals[name] = original
+          _G[name] = replacement
         end
       end
-      local ok, result = pcall(IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors)
-      if type(nativeRandomChance) == "function" then RandomChance = nativeRandomChance end
-      if not ok then error(result, 0) end
-      return not not result
+      replace("RandomChance", function(chance)
+        if type(chance) == "number" and chance > 0 then
+          usedRandom = true
+          return true
+        end
+        return false
+      end)
+      replace("GetRandomValue", function(values, ...)
+        usedRandom = true
+        if type(values) == "table" then return values[1] end
+        return values
+      end)
+      replace("RandomInt", function(minimum) usedRandom = true; return minimum end)
+      replace("RandomFloat", function(minimum) usedRandom = true; return minimum end)
+      local result = table.pack(pcall(callback, ...))
+      for name, original in pairs(originals) do _G[name] = original end
+      if not result[1] then error(result[2], 0) end
+      return result[2], usedRandom
+    end
+
+    local function couldBeForced(data, args, otherDoors)
+      if type(IsRoomForced) ~= "function" then return true end
+      local result, usedRandom = nativeProbeWithoutRNG(
+        IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors
+      )
+      -- Any random-dependent native force decision is opaque at observation
+      -- time. Refuse the generic route catalog rather than consume or guess RNG.
+      return usedRandom or not not result
     end
 
     local function routeCandidates(door)
@@ -8876,8 +8902,10 @@ if __MacGamingTrainerV1 == nil then
           -- build. Probe a shallow descriptor copy so observation stays read-only.
           local probe = {}
           for key, value in pairs(data) do probe[key] = value end
-          local ok, eligible = pcall(IsRoomEligible, CurrentRun, source, probe, args)
-          if not ok then error(eligible, 0) end
+          local eligible, usedRandom = nativeProbeWithoutRNG(
+            IsRoomEligible, CurrentRun, source, probe, args
+          )
+          if usedRandom then return nil end
           if eligible then
             if couldBeForced(probe, args, otherDoors) then return nil end
             local kind = routeKind(data.Name)
