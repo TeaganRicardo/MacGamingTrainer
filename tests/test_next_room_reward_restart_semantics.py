@@ -1,3 +1,9 @@
+"""Regression contract: Hades II reward overrides are live one-shots.
+
+An old persisted reward must never be re-armed by restart, Profile load,
+reconciliation or an unknown-outcome transport failure.
+"""
+import copy
 import json
 import sys
 import tempfile
@@ -6,234 +12,210 @@ from pathlib import Path
 from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'Backend'))
-sys.path.insert(0, str(ROOT / 'tests'))
+sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "tests"))
 
+from core.adapter import AdapterError
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
-from games.hades2.resident_session import ResidentMetrics, ResidentReply
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
     Hades2PreferenceStore,
-    next_room_reward_consumed,
+    normalize_persisted_desired,
 )
+from games.hades2.profile_service import Hades2ProfileService
+from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
-assert DESIRED_STATE_SCHEMA_VERSION == 11
+assert DESIRED_STATE_SCHEMA_VERSION == 12
+for old_version in (3, 4, 11, 12):
+    legacy = {
+        "schemaVersion": old_version,
+        "nextRoomReward": "WeaponUpgrade",
+        "nextRoomRewardToken": "legacy-pending-token",
+        "nextOccurrenceTarget": "npc:Nemesis",
+        "nextOccurrenceToken": "occurrence-token",
+    }
+    normalized = normalize_persisted_desired(legacy, old_version)
+    assert "nextRoomReward" not in normalized, old_version
+    assert "nextRoomRewardToken" not in normalized, old_version
+    assert "nextOccurrenceTarget" not in normalized, old_version
+    assert "nextOccurrenceToken" not in normalized, old_version
 
-# Early-access reward ids migrate to current identities or are retired.
-for old, expected in (
-    ('RoomRewardMoney', 'RoomMoneyDrop'),
-    ('RoomRewardPom', 'StackUpgrade'),
-    ('RoomRewardMixerFabric', None),
-):
-    assert Hades2PreferenceStore.normalize({'nextRoomReward': old})['nextRoomReward'] == expected
-
-# Schema-3 desired state has no token. Migration must derive a stable token so
-# repeated backend restarts can correlate a resident consumption with the same
-# persisted one-shot instead of minting a new identity every time.
-base = Path(tempfile.mkdtemp(prefix='mgt-next-room-restart-'))
-legacy_path = base / 'desired-state.json'
-legacy_path.write_text(json.dumps({
-    'schemaVersion': 3,
-    'nextRoomReward': 'WeaponUpgrade',
-}), encoding='utf-8')
-legacy_store = Hades2PreferenceStore(legacy_path)
-legacy, initialized = legacy_store.load()
-assert initialized is True
-assert legacy['nextRoomReward'] == 'WeaponUpgrade'
-assert isinstance(legacy['nextRoomRewardToken'], str)
-assert legacy['nextRoomRewardToken'].startswith('legacy-')
-assert len(legacy['nextRoomRewardToken']) <= 128
-assert Hades2PreferenceStore(legacy_path).load()[0]['nextRoomRewardToken'] == legacy['nextRoomRewardToken']
-
-preferences = Hades2PreferenceStore.defaults()
-preferences['nextRoomReward'] = 'WeaponUpgrade'
-preferences['nextRoomRewardToken'] = 'one-shot-token'
-
-# The resident module explicitly proves this exact one-shot was consumed.
-consumed = {
-    'nextRoomReward': None,
-    'runtimeDiagnostics': {
-        'lastConsumedNextRoomRewardToken': 'one-shot-token',
-    },
-}
-assert next_room_reward_consumed(preferences, consumed, preference_dirty=True) is True
-
-# A missing/different receipt means the durable desired value may simply never
-# have reached Lua before the old backend died. It must remain replayable.
-not_delivered = {
-    'nextRoomReward': None,
-    'runtimeDiagnostics': {
-        'lastConsumedNextRoomRewardToken': None,
-    },
-}
-assert next_room_reward_consumed(preferences, not_delivered, preference_dirty=True) is False
-
-# Existing same-backend behavior remains: once a clean status sees the armed
-# runtime value disappear after a previously successful set, consumption is
-# confirmed even before a restart.
-assert next_room_reward_consumed(preferences, not_delivered, preference_dirty=False) is True
-
-lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
-
-# The resident runtime owns the durable one-shot receipt identity.
+lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 assert runtime_revision(lua) >= 42
-assert 'nextRoomRewardToken = nil' in lua
-assert 'lastConsumedNextRoomRewardToken = nil' in lua
-# StartRoom captures the token before the yielding native call and checks
-# it still owns the same request at commit; a later replacement cannot consume
-# the previous request's receipt.
-assert 'M.nextRoomRewardToken == rewardToken' in lua
-assert 'M.lastConsumedNextRoomRewardToken = rewardToken' in lua
-assert 'M.nextRoomRewardToken = nil' in lua
-assert 'lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken' in lua
-assert 'nextRoomRewardToken = M.nextRoomRewardToken' in lua
-assert 'params.token' in lua
+assert "M.nextRoomRewardToken == rewardToken" in lua
+assert "M.lastConsumedNextRoomRewardToken = rewardToken" in lua
+assert "M.nextRoomReward = nil" in lua
+assert "M.nextRoomRewardToken = nil" in lua
+assert "params.token" in lua
 
 
-def status_payload(*, reward=None, token=None, consumed_token=None):
+def status_payload(reward=None, token=None, consumed_token=None):
     defaults = Hades2PreferenceStore.defaults()
     payload = {
-        'status': 'ready',
-        'scene': 'run',
-        'capabilities': {'setFeature': True},
-        'desiredFeatures': {key: bool(defaults[key]) for key in TOGGLES},
-        'activeFeatures': {key: False for key in TOGGLES},
-        'dormantFeatures': {},
-        'featureErrors': {},
-        'boonRarity': default_boon_rarity(),
-        'gatheringProbabilities': {},
-        'chaosGateProbability': None,
-        'stats': {},
-        'resources': [],
-        'elements': [],
-        'healthLocked': False,
-        'manaLocked': False,
-        'armorLocked': False,
-        'moneyLocked': False,
-        'rerollsLocked': False,
-        'nextRoomReward': reward,
-        'runtimeDiagnostics': {
-            'nextRoomRewardToken': token,
-            'lastConsumedNextRoomRewardToken': consumed_token,
+        "status": "ready",
+        "scene": "run",
+        "capabilities": {"setFeature": True},
+        "desiredFeatures": {key: bool(defaults[key]) for key in TOGGLES},
+        "activeFeatures": {key: False for key in TOGGLES},
+        "dormantFeatures": {},
+        "featureErrors": {},
+        "boonRarity": default_boon_rarity(),
+        "gatheringProbabilities": {},
+        "chaosGateProbability": None,
+        "stats": {},
+        "resources": [],
+        "elements": [],
+        "healthLocked": False,
+        "manaLocked": False,
+        "armorLocked": False,
+        "moneyLocked": False,
+        "rerollsLocked": False,
+        "nextRoomReward": reward,
+        "nextOccurrenceTarget": None,
+        "runtimeDiagnostics": {
+            "nextRoomRewardToken": token,
+            "lastConsumedNextRoomRewardToken": consumed_token,
         },
     }
     for key in MULTIPLIERS:
-        if key != 'gameSpeed':
+        if key != "gameSpeed":
             payload[key] = defaults[key]
     return payload
 
 
-class RewardSession(FakeResidentSession):
-    def __init__(self, payload):
-        super().__init__(payload, pid=4242)
-        self.state = self.payload
-
-    def status(self, params=None):
-        self.calls.append({
-            'kind': 'status',
-            'command': 'status',
-            'params': dict(params or {}),
-            'batch': None,
-        })
-        return ResidentReply(
-            payload=json.loads(json.dumps(self.state)),
-            metrics=ResidentMetrics(boundary_duration=0.001),
+def handle_reward(resident, record):
+    if record["kind"] == "reconcile":
+        assert all(command != "set_next_room_reward" for command, _ in record["batch"]), (
+            "a runtime one-shot leaked into desired replay"
         )
-
-    def reconcile(self, calls):
-        calls = list(calls)
-        self.calls.append({
-            'kind': 'reconcile',
-            'command': 'replay_preferences',
-            'params': {},
-            'batch': json.loads(json.dumps(calls)),
-        })
-        for command, params in calls:
-            if command == 'set_next_room_reward':
-                self.state['nextRoomReward'] = params.get('reward')
-                diagnostics = self.state.setdefault('runtimeDiagnostics', {})
-                if params.get('reward') is None:
-                    diagnostics.pop('nextRoomRewardToken', None)
-                else:
-                    diagnostics['nextRoomRewardToken'] = params.get('token')
-            else:
-                raise AssertionError('unexpected reconciliation during reward test: ' + command)
-        return ResidentReply(
-            payload=json.loads(json.dumps(self.state)),
-            metrics=ResidentMetrics(boundary_duration=0.001),
-        )
+    if record["kind"] == "mutate" and record["command"] == "set_next_room_reward":
+        reward = record["params"]["reward"]
+        token = record["params"]["token"]
+        assert token is None or isinstance(token, str) and token.startswith("one-shot-")
+        resident.payload["nextRoomReward"] = reward
+        resident.payload["runtimeDiagnostics"]["nextRoomRewardToken"] = token
+    return copy.deepcopy(resident.payload)
 
 
 old_data = preparation.DATA
 try:
-    # A matching consumption receipt must clear durable intent before any
-    # reconciliation plan is built. Otherwise the just-consumed reward would be
-    # immediately resurrected after reconnect.
-    preparation.DATA = Path(tempfile.mkdtemp(prefix='mgt-next-room-consumed-'))
-    consumed_session = RewardSession(status_payload(
-        reward=None,
-        consumed_token='one-shot-token',
-    ))
-    consumed_adapter = Hades2Adapter(
-        resident_session=consumed_session,
-        time_warp_controller=FakeTimeWarpController(),
-    )
-    consumed_adapter.preferences = consumed_adapter._default_preferences()
-    consumed_adapter.preferences['nextRoomReward'] = 'MaxHealthDrop'
-    consumed_adapter.preferences['nextRoomRewardToken'] = 'one-shot-token'
-    consumed_adapter.preference_store.save(consumed_adapter.preferences)
-    consumed_adapter.preference_initialized = True
-    consumed_adapter.preference_dirty = True
-    state = consumed_adapter.execute('status', {})
-    assert consumed_adapter.preferences['nextRoomReward'] is None
-    assert consumed_adapter.preferences['nextRoomRewardToken'] is None
-    assert state['nextRoomReward'] is None
-    assert [call['kind'] for call in consumed_session.calls] == ['status']
-    persisted = json.loads(
-        (preparation.DATA / 'desired-state.json').read_text(encoding='utf-8')
-    )
-    assert persisted['nextRoomReward'] is None
-    assert persisted['nextRoomRewardToken'] is None
+    preparation.DATA = Path(tempfile.mkdtemp(prefix="mgt-next-room-one-shot-"))
+    path = preparation.DATA / "desired-state.json"
+    path.write_text(json.dumps({
+        "schemaVersion": 11,
+        "nextRoomReward": "WeaponUpgrade",
+        "nextRoomRewardToken": "stale-durable-reward",
+    }), encoding="utf-8")
 
-    # Without a matching receipt, a missing runtime value is only evidence that
-    # the old backend may not have delivered the durable one-shot. The status
-    # reconciliation must re-arm the exact existing token, once.
-    preparation.DATA = Path(tempfile.mkdtemp(prefix='mgt-next-room-redeliver-'))
-    pending_session = RewardSession(status_payload(
-        reward=None,
-        consumed_token=None,
-    ))
-    pending_adapter = Hades2Adapter(
-        resident_session=pending_session,
-        time_warp_controller=FakeTimeWarpController(),
+    resident = FakeResidentSession(status_payload(), handler=handle_reward, pid=4242)
+    adapter = Hades2Adapter(
+        resident_session=resident, time_warp_controller=FakeTimeWarpController()
     )
-    pending_adapter.preferences = pending_adapter._default_preferences()
-    pending_adapter.preferences['nextRoomReward'] = 'WeaponUpgrade'
-    pending_adapter.preferences['nextRoomRewardToken'] = 'one-shot-token'
-    pending_adapter.preference_store.save(pending_adapter.preferences)
-    pending_adapter.preference_initialized = True
-    pending_adapter.preference_dirty = True
-    state = pending_adapter.execute('status', {})
-    assert [call['kind'] for call in pending_session.calls] == ['status', 'reconcile']
-    reward_calls = [
-        params
-        for command, params in pending_session.calls[-1]['batch']
-        if command == 'set_next_room_reward'
-    ]
-    assert reward_calls == [{
-        'reward': 'WeaponUpgrade',
-        'token': 'one-shot-token',
-    }]
-    assert pending_session.state['nextRoomReward'] == 'WeaponUpgrade'
-    assert pending_session.state['runtimeDiagnostics']['nextRoomRewardToken'] == 'one-shot-token'
-    assert pending_adapter.preferences['nextRoomReward'] == 'WeaponUpgrade'
-    assert pending_adapter.preferences['nextRoomRewardToken'] == 'one-shot-token'
-    assert pending_adapter.preference_dirty is False
-    assert state['nextRoomReward'] == 'WeaponUpgrade'
+    assert adapter.preference_initialized
+    assert "nextRoomReward" not in adapter.preferences
+    assert "nextRoomRewardToken" not in adapter.preferences
+    adapter.state.update(connected=True, pid=4242, capabilities={"setFeature": True})
+
+    # Status and forced durable-state reconciliation must never re-arm
+    # the retired reward, regardless of the old on-disk desired state.
+    observed = adapter.execute("status", {})
+    assert observed["nextRoomReward"] is None
+    assert not any(call["command"] == "set_next_room_reward" for call in resident.calls)
+    assert not any(
+        command == "set_next_room_reward"
+        for call in resident.calls if call["kind"] == "reconcile"
+        for command, params in call["batch"]
+    )
+
+    # Explicit live commands arm the native owner once and keep the
+    # selected reward out of the durable preferences and Profile schema.
+    adapter.preference_dirty = False
+    armed = adapter.dispatch("set_next_room_reward_once", {"reward": "WeaponUpgrade"}, "request-1")
+    assert armed["nextRoomReward"] == "WeaponUpgrade"
+    mutate_calls = [call for call in resident.calls if call["kind"] == "mutate"]
+    assert len(mutate_calls) == 1
+    first_token = mutate_calls[-1]["params"]["token"]
+    assert "nextRoomReward" not in adapter.preferences
+    assert "nextRoomRewardToken" not in adapter.preferences
+    adapter.preference_store.save(dict(adapter.preferences, nextRoomReward="WeaponUpgrade",
+                                       nextRoomRewardToken="unwanted-legacy-value"))
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["schemaVersion"] == 12
+    assert "nextRoomReward" not in persisted and "nextRoomRewardToken" not in persisted
+
+    # A duplicate Host request retains one native action identity; a new
+    # deliberate request creates a new token.
+    adapter.set_next_room_reward_once("WeaponUpgrade", "request-1")
+    assert resident.calls[-1]["params"]["token"] == first_token
+    adapter.set_next_room_reward_once("WeaponUpgrade", "request-2")
+    assert resident.calls[-1]["params"]["token"] != first_token
+
+    # Native room-start consumption is observed without making Host state
+    # replayable. A later status/worker restart must stay disarmed.
+    resident.payload["nextRoomReward"] = None
+    resident.payload["runtimeDiagnostics"]["lastConsumedNextRoomRewardToken"] = (
+        resident.payload["runtimeDiagnostics"]["nextRoomRewardToken"]
+    )
+    resident.payload["runtimeDiagnostics"]["nextRoomRewardToken"] = None
+    state = adapter.execute("status", {})
+    assert state["nextRoomReward"] is None
+    assert "nextRoomReward" not in adapter.preferences
+
+    adapter.set_next_room_reward_once("MaxHealthDrop", "request-3")
+    adapter.set_next_room_reward_once(None, "cancel-request-1")
+    assert resident.payload["nextRoomReward"] is None
+    assert resident.payload["runtimeDiagnostics"]["nextRoomRewardToken"] is None
+
+    # Historical Profiles and newly saved Profiles both omit the retired fields.
+    profile_service = Hades2ProfileService(preparation.DATA / "profiles")
+    profile_service.save("current", dict(adapter.preferences, nextRoomReward="MaxHealthDrop"))
+    assert "nextRoomReward" not in profile_service.load("current")["desired"]
+    legacy_profile = profile_service.path("legacy")
+    legacy_profile.write_text(json.dumps({
+        "schemaVersion": 6, "desiredSchemaVersion": 11,
+        "name": "legacy", "updatedAt": "2026-11-09T00:00:00Z",
+        "desired": dict(Hades2PreferenceStore.defaults(),
+                        nextRoomReward="WeaponUpgrade", nextRoomRewardToken="old"),
+    }), encoding="utf-8")
+    assert "nextRoomReward" not in profile_service.load("legacy")["desired"]
+    adapter.load_profile("legacy")
+    assert not any(
+        command == "set_next_room_reward"
+        for call in resident.calls if call["kind"] == "reconcile"
+        for command, params in call["batch"]
+    )
+
+    # Reconstructed backend against the same resident must not re-arm a
+    # vanished one-shot or reinterpret the legacy token as new intent.
+    restarted = Hades2Adapter(
+        resident_session=resident, time_warp_controller=FakeTimeWarpController()
+    )
+    restarted.state.update(connected=True, pid=4242, capabilities={"setFeature": True})
+    restarted.execute("status", {})
+    assert resident.payload["nextRoomReward"] is None
+    assert "nextRoomReward" not in restarted.preferences
+
+    # On a transport unknown outcome, no durable state is installed and
+    # later process/status observations can only read the resident.
+    def unknown_handler(session, record):
+        if record["command"] == "set_next_room_reward":
+            return AdapterError("outcome_unknown", "uncertain one-shot")
+        return handle_reward(session, record)
+
+    resident.handler = unknown_handler
+    try:
+        restarted.set_next_room_reward_once("WeaponUpgrade", "unknown-request")
+    except AdapterError as error:
+        assert error.code == "outcome_unknown"
+    else:
+        raise AssertionError("one-shot transport ambiguity was treated as success")
+    assert "nextRoomReward" not in restarted.preferences
+    resident.handler = handle_reward
+    restarted.execute("status", {})
+    assert resident.payload["nextRoomReward"] is None
 finally:
     preparation.DATA = old_data
 
-print('next_room_reward_restart_semantics_ok')
+print("next_room_reward_one_shot_semantics_ok")
