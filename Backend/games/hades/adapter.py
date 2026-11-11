@@ -304,7 +304,13 @@ class HadesAdapter(GameAdapter):
             target = params.get('target')
             if not isinstance(target, dict) or not isinstance(target.get('heroId'), str) or not target['heroId']:
                 raise AdapterError('stale_target', 'hades.error.staleTarget')
-            values = self._mutation_params(command, params)
+            mutation_input = dict(params)
+            if command in (
+                'apply_world_exit', 'cancel_world_exit',
+                'apply_world_occurrence', 'cancel_world_occurrence',
+            ):
+                mutation_input['requestId'] = request_id
+            values = self._mutation_params(command, mutation_input)
             values['target'] = target
             previous = dict(self.features)
             state = self.runtime.command(command, values)
