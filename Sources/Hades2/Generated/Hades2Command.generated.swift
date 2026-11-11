@@ -26,7 +26,6 @@ enum Hades2Command: String {
     case setElement = "set_element"
     case lockElement = "lock_element"
     case setBoonRarityDesired = "set_boon_rarity_desired"
-    case setNextRoomRewardOnce = "set_next_room_reward_once"
     case setNextOccurrenceOnce = "set_next_occurrence_once"
     case applyWorldExit = "apply_world_exit"
     case cancelWorldExit = "cancel_world_exit"
