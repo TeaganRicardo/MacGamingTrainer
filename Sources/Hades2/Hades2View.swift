@@ -1284,7 +1284,7 @@ struct Hades2TrainerView: View {
                     selection: $model.selectedWorldExitTarget
                 ) {
                     if let lease = exit?.activeLease,
-                       !((exit?.targets ?? []).contains { $0.stableID == leaseSelection }) {
+                       !((exit?.targets ?? []).contains { $0.stableID == (leaseSelection ?? "") }) {
                         Text(worldActionTargetLabel(kind: lease.kind, id: lease.target))
                             .tag(lease.kind + ":" + lease.target)
                     }
