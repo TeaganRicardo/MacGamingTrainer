@@ -23,17 +23,55 @@ GameState = { Resources = { MetaPoints = 10 }, LifetimeResourcesGained = { MetaP
 CurrentRun = { Hero = { ObjectId = 10, Health = 50, MaxHealth = 50, Traits = {} }, Money = 5,
   BiomeDepthCache = 8, RoomCreations = {}, CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" } }
 local originalRoom = CurrentRun.CurrentRoom
-RoomSetData = { Tartarus = {
-  A_Combat02 = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" },
-  A_Story01 = { Name = "A_Story01", ForcedReward = "Story", eligible = true },
-  A_Shop01 = { Name = "A_Shop01", ForcedReward = "Shop", eligible = false },
-}, Secrets = { { Name = "RoomSecret01" } } }
+RoomSetData = {
+  Tartarus = {
+    A_Combat02 = { Name = "A_Combat02", ChosenRewardType = "RoomRewardMoneyDrop" },
+    A_Story01 = { Name = "A_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Sisyphus_01" }, eligible = true },
+    A_Shop01 = { Name = "A_Shop01", ForcedReward = "Shop", LegalEncounters = { "Shop" }, eligible = false },
+  },
+  Asphodel = {
+    B_Story01 = { Name = "B_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Eurydice_01" }, eligible = true },
+    B_Shop01 = { Name = "B_Shop01", ForcedReward = "Shop", LegalEncounters = { "Shop" }, eligible = true },
+    B_Forced01 = { Name = "B_Forced01", AlwaysForce = true, eligible = true },
+  },
+  Elysium = {
+    C_Story01 = { Name = "C_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Patroclus_01" }, eligible = true },
+    C_Shop01 = { Name = "C_Shop01", ForcedReward = "Shop", LegalEncounters = { "Shop" }, eligible = true },
+  },
+  Secrets = { { Name = "RoomSecret01" } },
+}
+RoomData = {
+  A_Story01 = RoomSetData.Tartarus.A_Story01,
+  A_Shop01 = RoomSetData.Tartarus.A_Shop01,
+  B_Story01 = RoomSetData.Asphodel.B_Story01,
+  B_Shop01 = RoomSetData.Asphodel.B_Shop01,
+  C_Story01 = RoomSetData.Elysium.C_Story01,
+  C_Shop01 = RoomSetData.Elysium.C_Shop01,
+}
 EncounterSets = { ThanatosEncounters = { "ThanatosTartarus" } }
-EncounterData = { ThanatosTartarus = { Name = "ThanatosTartarus" } }
+EncounterData = {
+  ThanatosTartarus = { Name = "ThanatosTartarus" },
+  Story_Sisyphus_01 = { Name = "Story_Sisyphus_01" },
+  Story_Eurydice_01 = { Name = "Story_Eurydice_01" },
+  Story_Patroclus_01 = { Name = "Story_Patroclus_01" },
+}
 local encounterCalls = 0
-function ChooseEncounter(run, room) encounterCalls = encounterCalls + 1; return { Name = "NativeDefault" } end
+function ChooseEncounter(run, room)
+  encounterCalls = encounterCalls + 1
+  if type(room.LegalEncounters) == "table" and room.LegalEncounters[1] then
+    return { Name = room.LegalEncounters[1] }
+  end
+  return { Name = "NativeDefault" }
+end
 function SetupEncounter(data, room) return clone(data) end
-function IsEncounterEligible(run, room, data) return room.blockThanatos ~= true end
+function IsEncounterEligible(run, room, data)
+  if type(room.LegalEncounters) == "table" then
+    local legal = false
+    for _, name in ipairs(room.LegalEncounters) do if name == data.Name then legal = true end end
+    if not legal then return false end
+  end
+  return room.blockThanatos ~= true
+end
 function IsRoomEligible(run, room, data, args)
   assert(type(args) == "table")
   return data.eligible ~= false and data.Name ~= room.Name
@@ -55,7 +93,7 @@ function IsRoomForced(run, room, data, args)
 end
 function CreateRoom(data, args)
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
-  local result = clone(data); result.RoomSetName = "Tartarus"; return result
+  local result = clone(data); result.RoomSetName = CurrentRun.CurrentRoom.RoomSetName or "Tartarus"; return result
 end
 function SetupRoomReward(run, room) if room.ChosenRewardType == "Boon" then assert(room.ForceLootName) end end
 function IsRoomRewardEligible(run, room, reward) return reward.Name ~= room.blockReward and not reward.locked end
@@ -154,9 +192,12 @@ function IsFishingEligible(run, room)
 end
 function IsSecretDoorEligible(run, room) return room.SecretChanceSuccess and room.chaosUnlocked ~= false end
 function ChooseNextRoomData(run, args)
+  args = args or {}
   if args.RoomDataSet == RoomSetData.Secrets then return args.RoomDataSet[1] end
+  if ForceNextRoom ~= nil and RoomData[ForceNextRoom] ~= nil then return RoomData[ForceNextRoom] end
+  local setName = args.ForceNextRoomSet or run.CurrentRoom.RoomSetName or "Tartarus"
   local eligible, forced = {}, {}
-  for _, data in pairs(RoomSetData.Tartarus) do
+  for _, data in pairs(RoomSetData[setName] or {}) do
     if IsRoomEligible(run, run.CurrentRoom, data, args) then
       eligible[#eligible + 1] = data
       if IsRoomForced(run, run.CurrentRoom, data, args) then forced[#forced + 1] = data end
@@ -409,6 +450,81 @@ assert(occurrenceRoom == firstRoom and recordCalls == beforeRecordCalls + 1)
 assert(CurrentRun.LastRecordedEncounter == "ThanatosTartarus")
 assert(world().occurrence == nil,
   "matching native RecordEncounter did not consume the occurrence lease")
+
+-- Native story-room and shop occurrences use the ordinary room selector.
+-- They are selected only in the matching biome, remain armed while merely
+-- offered, and are consumed only when the selected native exit is entered.
+assert(#world().occurrenceTargets == 5)
+local function routeOccurrence(target, biome, sourceName, expectedRoom, expectedEncounter, doorId)
+  CurrentRun.CurrentRoom = { Name = sourceName, RoomSetName = biome }
+  OfferedExitDoors = {}
+  runtime.apply_world_occurrence({ actionTarget = target })
+  local lease = assert(world().occurrence)
+  local selectedData = ChooseNextRoomData(CurrentRun, {})
+  assert(selectedData.Name == expectedRoom,
+    target .. " did not route to its native-eligible room")
+  local selectedRoom = CreateRoom(selectedData, { SkipChooseEncounter = true })
+  local door = {
+    Name = "ExitDoor", ObjectId = doorId, ReadyToUse = true, Room = selectedRoom,
+  }
+  AssignRoomToExitDoor(door, selectedRoom)
+  assert(world().occurrence and world().occurrence.leaseToken == lease.leaseToken,
+    target .. " was consumed when the room was only offered")
+  local entered = AttemptUseDoor(door)
+  assert(entered.Name == expectedRoom and world().occurrence == nil,
+    target .. " did not consume at native room admission")
+  assert(CurrentRun.LastRecordedEncounter == expectedEncounter,
+    target .. " did not preserve the room's native encounter")
+end
+
+routeOccurrence("sisyphus", "Tartarus", "A_Combat01", "A_Story01", "Story_Sisyphus_01", 201)
+routeOccurrence("eurydice", "Asphodel", "B_Combat01", "B_Story01", "Story_Eurydice_01", 202)
+routeOccurrence("patroclus", "Elysium", "C_Combat01", "C_Story01", "Story_Patroclus_01", 203)
+routeOccurrence("charon", "Asphodel", "B_Combat01", "B_Shop01", "Shop", 204)
+
+-- A named occurrence remains pending when the current biome has no matching
+-- native room, and native forced rooms keep priority over the request.
+CurrentRun.CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" }
+OfferedExitDoors = {}
+runtime.apply_world_occurrence({ actionTarget = "eurydice" })
+local eurydiceLease = assert(world().occurrence).leaseToken
+local tartarusChoice = ChooseNextRoomData(CurrentRun, {})
+assert(tartarusChoice.Name ~= "B_Story01" and world().occurrence.leaseToken == eurydiceLease)
+CurrentRun.CurrentRoom = { Name = "B_Combat01", RoomSetName = "Asphodel" }
+OfferedExitDoors = {}
+local forcedChoice = ChooseNextRoomData(CurrentRun, {})
+assert(forcedChoice.Name == "B_Forced01" and world().occurrence.leaseToken == eurydiceLease,
+  "a named room occurrence displaced a native forced destination")
+RoomSetData.Asphodel.B_Forced01 = nil
+local eurydiceData = ChooseNextRoomData(CurrentRun, {})
+assert(eurydiceData.Name == "B_Story01" and world().occurrence.leaseToken == eurydiceLease)
+local eurydiceRoom = CreateRoom(eurydiceData, { SkipChooseEncounter = true })
+local eurydiceDoor = { Name = "ExitDoor", ObjectId = 205, ReadyToUse = true, Room = eurydiceRoom }
+AssignRoomToExitDoor(eurydiceDoor, eurydiceRoom)
+assert(AttemptUseDoor(eurydiceDoor).Name == "B_Story01" and world().occurrence == nil)
+
+-- Row 1's exact-exit route has precedence over a pending named room occurrence.
+-- It creates one destination and leaves the incompatible Row 2 request armed.
+CurrentRun.CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" }
+OfferedExitDoors = {}
+runtime.apply_world_occurrence({ actionTarget = "sisyphus" })
+local sisyphusLease = assert(world().occurrence).leaseToken
+local sisyphusData = ChooseNextRoomData(CurrentRun, {})
+local sisyphusRoom = CreateRoom(sisyphusData, { SkipChooseEncounter = true })
+local precedenceDoor = { Name = "ExitDoor", ObjectId = 206, ReadyToUse = true, Room = sisyphusRoom }
+AssignRoomToExitDoor(precedenceDoor, sisyphusRoom)
+local beforePrecedenceCreation = CurrentRun.RoomCreations.A_Combat02 or 0
+local precedenceRow = world().doors[1]
+runtime.apply_world_exit({
+  roomId = world().roomId, doorToken = precedenceRow.doorToken,
+  kind = "roomCategory", actionTarget = "combat",
+})
+local precedenceEntered = AttemptUseDoor(precedenceDoor)
+assert(precedenceEntered.Name == "A_Combat02"
+  and (CurrentRun.RoomCreations.A_Combat02 or 0) == beforePrecedenceCreation + 1
+  and world().occurrence and world().occurrence.leaseToken == sisyphusLease,
+  "exact-exit route and named occurrence competed or double-generated a room")
+runtime.cancel_world_occurrence({ leaseToken = sisyphusLease })
 
 -- Run-scoped occurrence survives source-room change and is consumed at the next
 -- eligible recorded encounter; Disable All explicitly cancels it.
