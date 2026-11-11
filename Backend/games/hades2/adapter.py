@@ -68,7 +68,6 @@ def clear_active(state,preserve_desired=False):
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
     state['worldActions']={'exits':[]}
-    state['nextRoomReward']=None
     state['nextOccurrenceTarget']=None
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
@@ -87,7 +86,6 @@ def mark_disconnected(state):
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
-    state['nextRoomReward']=None
     state['nextOccurrenceTarget']=None
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
@@ -144,7 +142,7 @@ class Hades2Adapter(GameAdapter):
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
                     **desired_defaults,
-                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'worldActions':{'exits':[]}, 'nextRoomReward':None, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'worldActions':{'exits':[]}, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
@@ -657,12 +655,6 @@ class Hades2Adapter(GameAdapter):
             raise AdapterError('disconnected','请先连接游戏。')
         if (self.state.get('capabilities') or {}).get('setFeature') is not True:
             raise AdapterError('waiting','World action is unavailable in the current scene')
-
-    def set_next_room_reward_once(self,reward,request_id):
-        if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
-        self._require_live_world_action()
-        token=None if reward is None else self._world_action_token('next-room-reward',request_id)
-        return self.execute('set_next_room_reward',{'reward':reward,'token':token})
 
     def set_next_occurrence_once(self,target,request_id):
         if not is_valid_next_occurrence_target(target):raise ValueError('下一次遭遇目标无效。')
