@@ -1042,8 +1042,8 @@ struct Hades2TrainerView: View {
     }
 
     private func syncConfigSnapshot(_ snapshot: Hades2ViewConfigSnapshot) {
-        model.selectedNextRoomReward = snapshot.nextRoomReward ?? ""
-        model.selectedNextOccurrenceTarget = snapshot.nextOccurrenceTarget ?? ""
+        if let value = snapshot.nextRoomReward { model.selectedNextRoomReward = value }
+        if let value = snapshot.nextOccurrenceTarget { model.selectedNextOccurrenceTarget = value }
         syncElementInputs(snapshot.elements)
         if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
         if focusedField != .moneyMultiplier { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
@@ -1223,8 +1223,8 @@ struct Hades2TrainerView: View {
     private var nextRoomRewardPanel: some View {
         TrainerLabeledControlRow(
             title: text("hades2.nextRoom.title"), icon: TrainerSemanticIcon.Context.doorway,
-            tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired,
+            tint: model.canApplyWorldAction ? theme.accent : theme.inactive,
+            emphasized: model.canApplyWorldAction,
             layout: .pickerAction
         ) {
             Picker(text("hades2.nextRoom.title"), selection: $model.selectedNextRoomReward) {
@@ -1244,12 +1244,12 @@ struct Hades2TrainerView: View {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }
-            .labelsHidden().trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)
+            .labelsHidden().trainerPicker(.rowAction, state: model.canApplyWorldAction ? .interactive : .unavailable)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
-                enabled: model.canEditDesired
+                enabled: model.canApplyWorldAction
             ) {
                 model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward)
             }
@@ -1262,8 +1262,8 @@ struct Hades2TrainerView: View {
         return VStack(alignment: .leading, spacing: 0) {
             TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"), icon: Hades2WorkbenchIcon.occurrence,
-            tint: model.canEditDesired ? theme.accent : theme.inactive,
-            emphasized: model.canEditDesired,
+            tint: model.canApplyWorldAction ? theme.accent : theme.inactive,
+            emphasized: model.canApplyWorldAction,
             layout: .pickerAction
         ) {
             Picker(text("hades2.occurrence.title"), selection: $model.selectedNextOccurrenceTarget) {
@@ -1284,12 +1284,12 @@ struct Hades2TrainerView: View {
                 }
             }
             .labelsHidden()
-            .trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)
+            .trainerPicker(.rowAction, state: model.canApplyWorldAction ? .interactive : .unavailable)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
-                enabled: model.canEditDesired
+                enabled: model.canApplyWorldAction
             ) {
                 _ = model.setNextOccurrence(
                     model.selectedNextOccurrenceTarget.isEmpty
@@ -1297,16 +1297,6 @@ struct Hades2TrainerView: View {
                         : model.selectedNextOccurrenceTarget
                 )
             }
-            }
-            // Pending status is secondary text below the control row. Keeping
-            // it inside the HStack would push all action columns out of
-            // alignment only while an encounter override is active.
-            if model.nextOccurrenceTarget != nil {
-                Text(text("hades2.occurrence.pending"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, theme.rowHorizontalPadding + 54)
-                    .padding(.bottom, 10)
             }
         }
         .trainerGroupedRows()
