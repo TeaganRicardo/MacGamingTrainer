@@ -4,7 +4,6 @@ import logging
 import math
 import subprocess
 import time
-import uuid
 from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
@@ -33,7 +32,6 @@ from .schema import (
     default_boon_rarity,
     desired_feature_defaults,
     disconnected_capabilities,
-    is_valid_next_occurrence_target,
     normalize_gathering_probabilities,
     validate_gathering_desired,
     normalize_chaos_gate_probability,
@@ -641,25 +639,6 @@ class Hades2Adapter(GameAdapter):
             self.preference_dirty=was_dirty
             return result
         return dict(self.state)
-
-    @staticmethod
-    def _world_action_token(kind,request_id):
-        if not isinstance(request_id,str) or not request_id:
-            raise ValueError('Action requires a requestId of 1..128 characters')
-        seed='hades2:'+kind+':'+request_id
-        return 'one-shot-'+uuid.uuid5(uuid.NAMESPACE_URL,seed).hex
-
-    def _require_live_world_action(self):
-        if not self.runtime.has_attachment or not self.state.get('connected'):
-            raise AdapterError('disconnected','请先连接游戏。')
-        if (self.state.get('capabilities') or {}).get('setFeature') is not True:
-            raise AdapterError('waiting','World action is unavailable in the current scene')
-
-    def set_next_occurrence_once(self,target,request_id):
-        if not is_valid_next_occurrence_target(target):raise ValueError('下一次遭遇目标无效。')
-        self._require_live_world_action()
-        token=None if target is None else self._world_action_token('next-occurrence',request_id)
-        return self.execute('set_next_occurrence',{'target':target,'token':token})
 
     def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.has_attachment:return dict(self.state)
