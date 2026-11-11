@@ -9203,11 +9203,7 @@ if __MacGamingTrainerV1 == nil then
 
     local function applyOccurrence(params)
       local target = preflightOccurrenceApply(params)
-      nextLease = nextLease + 1
-      local token = table.concat({
-        "occurrence", identity(CurrentRun), identity(currentHero()),
-        target, tostring(nextLease),
-      }, ":")
+      local token = params.requestId
       M.nextOccurrenceTarget = target
       M.nextOccurrenceToken = token
       M.featureErrors.nextOccurrence = nil
