@@ -1397,6 +1397,14 @@ world = (function()
     end
     return false
   end
+  local function matchesOccurrenceRoom(data, target)
+    local strategy = occurrenceStrategies[target]
+    if type(strategy) ~= "table" or strategy.kind ~= "room" or type(data) ~= "table"
+        or not listContains(data.LegalEncounters, strategy.encounter) then return false end
+    if strategy.category == "story" then return routeKind(data.Name) == "story" end
+    return strategy.category == "shop"
+      and (routeKind(data.Name) == "shop" or data.ForcedReward == "Shop" or data.StoreDataName ~= nil)
+  end
   local function occurrenceRoomCandidates(room, target, args)
     local strategy = occurrenceStrategies[target]
     if type(strategy) ~= "table" or strategy.kind ~= "room" then return nil end
@@ -1405,7 +1413,7 @@ world = (function()
     if type(candidates) ~= "table" then return nil end
     local result = {}
     for _, data in ipairs(candidates) do
-      if listContains(data.LegalEncounters, strategy.encounter) then
+      if matchesOccurrenceRoom(data, target) then
         local eligible = strategy.encounter == "Shop"
         if not eligible and type(EncounterData) == "table"
             and type(EncounterData[strategy.encounter]) == "table"
@@ -1747,6 +1755,16 @@ world = (function()
               return data
             end
           end
+          -- If native forced/linked/explicit routing selected the requested
+          -- room itself, observe that native choice without replacing it.
+          local nativeData = original(run, args, ...)
+          if matchesOccurrenceRoom(nativeData, lease.target) then
+            pendingOccurrenceRoom = {
+              data = nativeData, run = run, sourceRoom = currentRoom(),
+              leaseToken = lease.leaseToken,
+            }
+          end
+          return nativeData
         end
         return original(run, args, ...)
       end
@@ -1754,13 +1772,24 @@ world = (function()
     hook("CreateRoom", function(original)
       return function(data, ...)
         local pending = pendingOccurrenceRoom
-        if pending and data == pending.data and pending.run == CurrentRun
-            and pending.sourceRoom == currentRoom() then
+        local lease = activeOccurrence()
+        local strategy = lease and occurrenceStrategies[lease.target]
+        local selection = pending and data == pending.data and pending.run == CurrentRun
+            and pending.sourceRoom == currentRoom() and pending or nil
+        if pending and not selection then pendingOccurrenceRoom = nil end
+        if not selection and lease and strategy and strategy.kind == "room"
+            and not hasSelectedOccurrenceRoom(lease.leaseToken)
+            and matchesOccurrenceRoom(data, lease.target) then
+          selection = {
+            run = CurrentRun, sourceRoom = currentRoom(), leaseToken = lease.leaseToken,
+          }
+        end
+        if selection then
           pendingOccurrenceRoom = nil
           local room = original(data, ...)
           if type(room) == "table" then
             selectedRoomOccurrences[room] = {
-              leaseToken = pending.leaseToken, sourceRoom = pending.sourceRoom,
+              leaseToken = selection.leaseToken, sourceRoom = selection.sourceRoom,
             }
           end
           return room
