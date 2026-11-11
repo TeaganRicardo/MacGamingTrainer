@@ -72,18 +72,21 @@ assert(M.nextOccurrenceTarget == nil and M.lastConsumedNextOccurrenceToken == re
 -- compose under one native hook, irrespective of which feature was armed first.
 setRoomSet("F")
 setOccurrence("npc:Arachne", "occurrence-first")
+-- Keep the competing exit in the ordinary native room family; the game's
+-- random selector may choose any eligible combat variant, not a fixed slot.
+roomEligible.F_Shop01 = false
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 local combat
 for _, door in pairs(MapState.OfferedExitDoors) do
-  if door.ReadyToUse and door.Room.Name == "F_Combat01" then combat = door end
+  if door.ReadyToUse and door.Room.Name ~= "F_Story01" then combat = door end
 end
-assert(combat)
+assert(combat and combat.Room.RoomSetName == "F")
 combat.Room.ChosenRewardType = "RoomMoneyDrop"
 M.dispatch("set_next_room_reward", {
   reward = "MaxHealthDrop", token = "reward-after-occurrence", includeCatalogs = false,
 })
 assert(M.nextRoomRewardRoutedRooms[combat.Room] == "reward-after-occurrence")
-assert(AttemptUseDoor(combat).Name == "F_Combat01")
+assert(AttemptUseDoor(combat).Name == combat.Room.Name)
 assert(M.lastConsumedNextRoomRewardToken == "reward-after-occurrence"
     and M.nextRoomReward == nil
     and M.nextOccurrenceTarget == "npc:Arachne"
