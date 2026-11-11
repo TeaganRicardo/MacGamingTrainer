@@ -8869,10 +8869,14 @@ if __MacGamingTrainerV1 == nil then
       for _, roomName in ipairs(roomSet) do
         local data = type(roomName) == "table" and roomName or RoomData[roomName]
         if type(data) == "table" then
-          local ok, eligible = pcall(IsRoomEligible, CurrentRun, source, data, args)
+          -- IsRoomEligible normalizes missing Tags in-place in the supported
+          -- build. Probe a shallow descriptor copy so observation stays read-only.
+          local probe = {}
+          for key, value in pairs(data) do probe[key] = value end
+          local ok, eligible = pcall(IsRoomEligible, CurrentRun, source, probe, args)
           if not ok then error(eligible, 0) end
           if eligible then
-            if couldBeForced(data, args, otherDoors) then return nil end
+            if couldBeForced(probe, args, otherDoors) then return nil end
             local kind = routeKind(data.Name)
             if kind ~= nil then
               result[kind] = result[kind] or {}
