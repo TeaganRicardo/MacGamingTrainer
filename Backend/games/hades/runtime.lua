@@ -1239,6 +1239,7 @@ world = (function()
   local edits = setmetatable({}, { __mode = "k" })
   local occurrenceRequest
   local occurrenceSelection
+  local occurrenceGeneration
   local occurrenceTargetOrder = {
     "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
   }
@@ -1280,6 +1281,21 @@ world = (function()
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"
+  end
+  -- A run-scoped occurrence survives a normal room transition, but only a
+  -- live room or a room being built by native CreateRoom may select it.
+  -- Stale retained Room tables must never consume a future occurrence.
+  local function liveEncounterRoom(run, room)
+    if run ~= CurrentRun or type(room) ~= "table" then return false end
+    if room == currentRoom() then return true end
+    local generation = occurrenceGeneration
+    if generation and generation.run == run and generation.hero == hero()
+        and generation.sourceRoom ~= nil and generation.sourceRoom == currentRoom()
+        and generation.roomName == room.Name then return true end
+    for _, door in pairs(OfferedExitDoors or {}) do
+      if ordinaryDoor(door) and door.Room == room then return true end
+    end
+    return false
   end
   local function requireDoor(params)
     requireRoom(params)
@@ -1571,10 +1587,14 @@ world = (function()
   local function applyDoor(door, room, target, leaseToken)
     local edit = activeEdit(door)
     if not edit or edit.kind ~= "reward" then
+      local source = currentRoom()
+      local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
       edit = {
         kind = "reward", original = door.Room,
         originalCanBeRerolled = door.CanBeRerolled,
-        run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+        originalOfferedRewardsPresent = offered ~= nil,
+        originalOfferedReward = offered and offered[door.ObjectId] or nil,
+        run = CurrentRun, hero = hero(), sourceRoom = source,
       }
     end
     edit.target = target
@@ -1582,6 +1602,22 @@ world = (function()
     edit.applied = room; edits[door] = edit
     refreshDoor(door, room)
     edit.signature = doorId(door)
+  end
+  local function restoreReward(door, edit)
+    refreshDoor(door, edit.original)
+    door.CanBeRerolled = edit.originalCanBeRerolled
+    local source = edit.sourceRoom
+    local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
+    if edit.originalOfferedRewardsPresent and not offered then
+      offered = {}
+      source.OfferedRewards = offered
+    end
+    if offered then
+      offered[door.ObjectId] = edit.originalOfferedReward
+      if not edit.originalOfferedRewardsPresent and next(offered) == nil then
+        source.OfferedRewards = nil
+      end
+    end
   end
   local function routePreviewDescriptor(door, candidates)
     local candidate
@@ -1618,9 +1654,20 @@ world = (function()
       signature = doorId(door),
     }
   end
-  local function clearSourceEdits(source)
+  local function clearSourceEdits(source, selectedDoor)
     for door, edit in pairs(edits) do
-      if type(edit) == "table" and edit.sourceRoom == source then edits[door] = nil end
+      if type(edit) == "table" and edit.sourceRoom == source then
+        -- Unused sibling edits cannot leak into native departure/save state.
+        -- The selected door's reward/route has already been committed.
+        if door ~= selectedDoor and activeEdit(door) == edit then
+          if edit.kind == "reward" then
+            restoreReward(door, edit)
+          elseif edit.kind == "route" then
+            drawDoorPreview(door, door.Room)
+          end
+        end
+        edits[door] = nil
+      end
     end
   end
   local function definition(name)
@@ -1691,6 +1738,19 @@ world = (function()
         return ids
       end
     end)
+    hook("CreateRoom", function(original)
+      return function(data, ...)
+        local previous = occurrenceGeneration
+        occurrenceGeneration = {
+          run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+          roomName = type(data) == "table" and data.Name or nil,
+        }
+        local result = table.pack(pcall(original, data, ...))
+        occurrenceGeneration = previous
+        if not result[1] then error(result[2], 0) end
+        return table.unpack(result, 2, result.n)
+      end
+    end)
     hook("ChooseNextRoomData", function(original)
       return function(...)
         return occurrenceChoose("room", original, ...)
@@ -1703,6 +1763,7 @@ world = (function()
     end)
     hook("ChooseEncounter", function(original)
       return function(run, room, ...)
+        if not liveEncounterRoom(run, room) then return original(run, room, ...) end
         return occurrenceChoose("encounter", original, run, room, ...)
       end
     end)
@@ -1738,6 +1799,7 @@ world = (function()
             "hades.error.staleDoor")
           materializeRoute(door, edit)
         end
+        clearSourceEdits(source, door)
         local request = validOccurrence()
         local target = request and request.target
         local token = request and request.leaseToken
@@ -1746,7 +1808,6 @@ world = (function()
         if run == CurrentRun and token and occurrenceRoomMatches(definition, door.Room) then
           consumeOccurrence(target, token)
         end
-        clearSourceEdits(source)
         return table.unpack(result, 1, result.n)
       end
     end)
@@ -1754,7 +1815,7 @@ world = (function()
   function api.clearPending()
     occurrenceRequest = nil
     occurrenceSelection = nil
-    encounters = setmetatable({}, { __mode = "k" })
+    occurrenceGeneration = nil
     local source = currentRoom()
     local unit = hero()
     local failure
@@ -1765,10 +1826,7 @@ world = (function()
       if valid then
         local ok, err = pcall(function()
           if edit.kind == "reward" then
-            refreshDoor(door, edit.original)
-            if edit.originalCanBeRerolled ~= nil then
-              door.CanBeRerolled = edit.originalCanBeRerolled
-            end
+            restoreReward(door, edit)
           elseif edit.kind == "route" then
             drawDoorPreview(door, door.Room)
           end
@@ -1958,10 +2016,7 @@ world = (function()
     local edit = activeEdit(door)
     assert(edit and edit.leaseToken == params.leaseToken, "hades.error.staleDoor")
     if edit.kind == "reward" then
-      refreshDoor(door, edit.original)
-      if edit.originalCanBeRerolled ~= nil then
-        door.CanBeRerolled = edit.originalCanBeRerolled
-      end
+      restoreReward(door, edit)
     elseif edit.kind == "route" then
       drawDoorPreview(door, door.Room)
     end

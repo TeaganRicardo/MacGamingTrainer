@@ -85,7 +85,11 @@ local roomGenerationCalls, randomValueCalls = 0, 0
 function CreateRoom(data, args)
   roomGenerationCalls = roomGenerationCalls + 1
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
-  local result = clone(data); result.RoomSetName = "Tartarus"; return result
+  local result = clone(data); result.RoomSetName = "Tartarus"
+  if args and args.ChooseEncounterForTest then
+    result.Encounter = ChooseEncounter(CurrentRun, result)
+  end
+  return result
 end
 function SetupRoomReward(run, room) if room.ChosenRewardType == "Boon" then assert(room.ForceLootName) end end
 function IsRoomRewardEligible(run, room, reward) return reward.Name ~= room.blockReward and not reward.locked end
@@ -427,6 +431,24 @@ CurrentRun.CurrentRoom = originalRoom
 firstDoor.Room = firstRoom
 OfferedExitDoors[100] = firstDoor
 
+-- Departing through one exit must retire an independent unused reward edit
+-- before native LeaveRoom records the room. The exact old offered entry,
+-- including its absence, is restored.
+local siblingRewardDoor = world().doors[2]
+local originalSiblingOffer = originalRoom.OfferedRewards and originalRoom.OfferedRewards[101]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = siblingRewardDoor.doorToken,
+  kind = "reward", targetID = "AthenaUpgrade", requestId = "unused-sibling-reward",
+})
+assert(secondDoor.Room.ForceLootName == "AthenaUpgrade" and world().doors[2].activeLease)
+local siblingDeparture = AttemptUseDoor(firstDoor)
+assert(siblingDeparture == firstRoom and secondDoor.Room == secondRoom
+    and (originalRoom.OfferedRewards and originalRoom.OfferedRewards[101]) == originalSiblingOffer,
+  "unused sibling reward leaked into the native departure state")
+CurrentRun.CurrentRoom = originalRoom
+OfferedExitDoors[100] = firstDoor
+assert(world().doors[2].activeLease == nil, "departed sibling lease retained authority")
+
 local occurrenceSnapshot = world()
 assert(#occurrenceSnapshot.occurrenceTargets == 5 and occurrenceSnapshot.occurrence == nil,
   "Hades I named occurrence catalog was not projected")
@@ -661,7 +683,27 @@ fails("staleRoom", function() runtime.spawn_reward(old) end)
 fails("staleRoom", function() runtime.generate_chaos_gate(oldGate) end)
 assert(spawned == beforeStaleGateSpawns, "old-room gate generation reached native creation")
 assert(#loot == count and not world().canFish and not world().canChaos)
-assert(ChooseEncounter(CurrentRun, abandoned).Name == "NativeDefault", "old source-room intent survived")
+local pendingAcrossRooms = world().occurrence
+assert(pendingAcrossRooms and pendingAcrossRooms.leaseToken == "occurrence:abandoned-thanatos")
+assert(ChooseEncounter(CurrentRun, abandoned).Name == "NativeDefault",
+  "stale source-room object selected a run-scoped encounter")
+assert(ChooseEncounter({ Hero = CurrentRun.Hero }, CurrentRun.CurrentRoom).Name == "NativeDefault",
+  "foreign run selected a local encounter")
+assert(world().occurrence and world().occurrence.leaseToken == pendingAcrossRooms.leaseToken,
+  "a stale/foreign encounter attempt consumed the pending run-scoped request")
+local nextGeneratedRoom = CreateRoom(RoomSetData.Tartarus.A_Combat02, {
+  ChooseEncounterForTest = true,
+})
+assert(nextGeneratedRoom.Encounter.Name == "ThanatosTartarus" and world().occurrence,
+  "native room generation did not preserve the valid cross-room occurrence request")
+RecordEncounter(CurrentRun, nextGeneratedRoom.Encounter)
+assert(world().occurrence == nil, "next native commitment did not consume one-shot occurrence")
+runtime.apply_world_occurrence({
+  roomId = world().roomId, targetID = "npc:Thanatos", requestId = "hero-replaced",
+})
+CurrentRun.Hero = clone(CurrentRun.Hero)
+assert(world().occurrence == nil and ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom).Name == "NativeDefault",
+  "hero identity replacement retained the previous run-scoped occurrence")
 assert(assigned > 0 and previews > 0)
 print("hades_world_native_shaped_journeys_ok")
 '''

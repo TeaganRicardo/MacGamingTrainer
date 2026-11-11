@@ -284,7 +284,12 @@ hades1_world_actions = hades1_rooms[
 assert hades1_world_actions.count(".trainerPicker(") >= 3
 assert hades1_world_actions.count(".expanding,") >= 2
 assert ".rowAction," in hades1_world_actions
-assert ".trainerPicker(.rowAction" in hades1_world_actions
+hades1_occurrence_controls = hades1_world_actions[
+    hades1_world_actions.index("private var worldOccurrenceRow"):
+]
+assert re.search(r"\.trainerPicker\(\s*\.rowAction\s*,\s*state:", hades1_occurrence_controls)
+assert "!pending && !targets.isEmpty" in hades1_occurrence_controls
+assert "latched: pending" in hades1_occurrence_controls
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in resource_controls
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
