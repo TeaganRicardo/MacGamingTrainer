@@ -86,17 +86,17 @@ assert "enabled: model.canEditDesired && pageVisible" in speed_panel
 # Missing room data must disable controls, not remove entire rows.
 room_body = rooms.split("struct HadesRoomsPanel: View {", 1)[1].split(".onChange(of: doors, initial: true)", 1)[0]
 assert "TrainerDisclosure(isExpanded: !(model.world?.objects.isEmpty ?? true))" not in room_body
-for key in ("hades.chamberObject", "hades.exitDoor", "hades.doorReward",
-            "hades.doorRoute", "hades.restoreDoor"):
-    assert 'TrainerLabeledControlRow(title: text("' + key + '")' in room_body, key
+for key in ("hades.chamberObject", "hades.worldActions.modifyExit", "hades.occurrence.title"):
+    assert 'title: text("' + key + '")' in room_body, key
 assert "if let door {" not in room_body
 assert "if door.canReward {" not in room_body
 assert "if door.canRestore {" not in room_body
 assert "if !door.routes.isEmpty {" not in room_body
-assert ".trainerPicker(.rowAction, state: doors.isEmpty ? .unavailable : .interactive)" in room_body
-assert "door?.canReward == true" in room_body
-assert "door?.canRestore == true" in room_body
-assert "door?.routes.isEmpty == false" in room_body
+assert "state: model.canSelectWorldExit ? .interactive : .unavailable" in room_body
+assert "model.selectedWorldExitTargetLocked" in room_body
+assert "model.worldOccurrenceLease != nil" in room_body
+assert "latched: model.selectedWorldExitLease != nil" in room_body
+assert "latched: pending" in room_body
 assert "model.canMutate" in room_body
 
 for lang in ("en", "zh-CN"):
