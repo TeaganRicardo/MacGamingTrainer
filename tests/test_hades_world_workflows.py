@@ -230,20 +230,45 @@ fails("staleDoor", function() runtime.restore_door(beforeNativeReroll) end)
 firstDoor.Room = firstRoom
 local storyCreationsBefore = CurrentRun.RoomCreations.A_Story01 or 0
 local storyGenerationBefore = roomGenerationCalls
-runtime.set_door_route(doorParams({ route = "story" }))
+local storyDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId,
+  doorToken = storyDoor.doorToken,
+  kind = "roomCategory",
+  targetID = "story",
+  requestId = "story-route-apply",
+})
 assert(firstDoor.Room == firstRoom,
   "route Apply replaced the native exit before the player used it")
 assert((CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
     and roomGenerationCalls == storyGenerationBefore,
   "route Apply created a room or advanced room-generation state")
-assert(world().doors[1].canRestore, "route reservation was not observable as an active lease")
-runtime.restore_door(doorParams())
+local storyObserved = world().doors[1]
+assert(storyObserved.activeLease
+    and storyObserved.activeLease.kind == "roomCategory"
+    and storyObserved.activeLease.target == "story"
+    and storyObserved.activeLease.leaseToken == "exit:story-route-apply",
+  "route reservation was not projected as the authoritative active lease")
+runtime.cancel_world_exit({
+  roomId = originalRoomId,
+  doorToken = storyObserved.doorToken,
+  leaseToken = storyObserved.activeLease.leaseToken,
+  requestId = "story-route-cancel",
+})
 assert(firstDoor.Room == firstRoom
     and (CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
     and roomGenerationCalls == storyGenerationBefore,
   "route cancellation left irreversible room-generation residue")
+assert(world().doors[1].activeLease == nil, "cancelled route lease remained active")
 
-runtime.set_door_route(doorParams({ route = "combat" }))
+local combatDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId,
+  doorToken = combatDoor.doorToken,
+  kind = "roomCategory",
+  targetID = "combat",
+  requestId = "combat-route-apply",
+})
 local combatCreationsBefore = CurrentRun.RoomCreations.A_Combat02 or 0
 local commitGenerationBefore = roomGenerationCalls
 local entered = AttemptUseDoor(firstDoor)
