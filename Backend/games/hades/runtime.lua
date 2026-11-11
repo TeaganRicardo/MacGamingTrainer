@@ -1290,6 +1290,36 @@ world = (function()
     end
     error("hades.error.staleDoor")
   end
+  local function activeExitLease(door)
+    local lease = exitLeases[door]
+    if type(lease) ~= "table" then return nil end
+    if lease.run ~= CurrentRun or lease.hero ~= hero()
+        or lease.sourceRoom ~= currentRoom() or lease.doorToken ~= doorToken(door) then
+      exitLeases[door] = nil
+      return nil
+    end
+    if lease.kind == "reward" then
+      if rewardSignature(door.Room) ~= lease.appliedSignature then
+        exitLeases[door] = nil
+        return nil
+      end
+    elseif lease.kind == "roomCategory" then
+      if rewardSignature(door.Room) ~= lease.originalSignature then
+        exitLeases[door] = nil
+        return nil
+      end
+    end
+    return lease
+  end
+  local function activeOccurrence()
+    local lease = occurrenceLease
+    if type(lease) ~= "table" then return nil end
+    if lease.run ~= CurrentRun or lease.hero ~= hero() then
+      occurrenceLease = nil
+      return nil
+    end
+    return lease
+  end
   local function routeKind(name)
     if name:find("_Story", 1, true) then return "story" end
     if name:find("_Shop", 1, true) then return "shop" end
@@ -1311,8 +1341,12 @@ world = (function()
     if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
         or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return end
     for name, data in pairs(RoomSetData[room.RoomSetName or "Tartarus"] or {}) do
-      if IsRoomEligible(CurrentRun, room, data, {}) then
-        if couldBeForced(data) then return end
+      -- Keep availability observation read-only even if native eligibility
+      -- normalizes fields on the descriptor it receives.
+      local probe = {}
+      for key, value in pairs(data) do probe[key] = value end
+      if IsRoomEligible(CurrentRun, room, probe, {}) then
+        if couldBeForced(probe) then return end
         local kind = routeKind(name)
         if kind then
           result[kind] = result[kind] or {}
@@ -1388,7 +1422,7 @@ world = (function()
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
       and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
   end
-  local function refreshDoor(door, room)
+  local function refreshDoor(door, room, restoreReroll)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1398,18 +1432,24 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
-    door.CanBeRerolled = false
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
+    if restoreReroll ~= nil then
+      door.CanBeRerolled = restoreReroll
+      RefreshUseButton(door.ObjectId, door)
+    end
   end
-  local function applyDoor(door, room)
-    local edit = edits[door]
-    if not edit or edit.applied ~= door.Room or edit.signature ~= doorId(door) then edit = { original = door.Room } end
-    encounters[door.Room] = nil
-    edit.applied = room; edits[door] = edit
-    refreshDoor(door, room)
-    edit.signature = doorId(door)
+  local function snapshotField(owner, key)
+    return { present = rawget(owner, key) ~= nil, value = owner[key] }
   end
+  local function restoreField(owner, key, snapshot)
+    if snapshot.present then owner[key] = snapshot.value else owner[key] = nil end
+  end
+  local rewardFields = {
+    "Reward", "ChosenRewardType", "ForceLootName", "RewardStoreName",
+    "RewardOverrides", "Encounter", "OriginalChosenRewardType", "OriginalForceLootName",
+  }
+
   local function definition(name)
     local data = runtime.worldDefinitions and runtime.worldDefinitions[name]
     assert(data, "hades.error.invalidValue")
