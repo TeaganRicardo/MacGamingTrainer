@@ -2145,7 +2145,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'healthLocked': False, 'healthLock': None,
         'moneyLocked': False, 'moneyLock': None, 'rerollsLocked': False, 'rerollsLock': None,
         'features': {'invincibility': True, 'damageMultiplier': 2}, 'resources': {'Gems': 12}, 'traits': [],
-        'world': {'roomId': 'run:room:1', 'doors': [], 'canFish': True, 'canChaos': True, 'objects': []}}
+        'world': {'roomId': 'run:room:1', 'doors': [], 'occurrenceTargets': [],
+                  'canFish': True, 'canChaos': True, 'objects': []}}
     data = json.loads((ROOT / 'Backend/games/hades/catalog.json').read_text())
     selected = next(row for row in data['entries'] if row['id'] == 'AmmoBoltTrait')
     picker_entries = [next(row for row in data['entries'] if row['id'] == name)
