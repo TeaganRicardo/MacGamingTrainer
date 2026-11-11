@@ -9266,7 +9266,7 @@ if __MacGamingTrainerV1 == nil then
             reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
             activeLease = type(lease) == "table" and {
               kind = lease.kind, target = lease.target, leaseToken = lease.leaseToken,
-            } or jsonNull,
+            } or nil,
           }
           if includeTargets then
             local targets = setmetatable({}, arrayMeta)
