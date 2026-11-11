@@ -163,19 +163,39 @@ struct HadesWorldReward: Decodable, Identifiable {
     }
 }
 
-struct HadesWorldDoor: Decodable, Identifiable, Equatable {
+struct HadesWorldActionTarget: Decodable, Identifiable, Equatable {
+    let kind: String
     let id: String
+
+    var stableID: String { kind + ":" + id }
+}
+
+struct HadesWorldActionLease: Decodable, Equatable {
+    let kind: String
+    let target: String
+    let leaseToken: String
+}
+
+struct HadesWorldOccurrenceLease: Decodable, Equatable {
+    let target: String
+    let leaseToken: String
+}
+
+struct HadesWorldDoor: Decodable, Identifiable, Equatable {
+    let doorToken: String
     let number: Int
     let reward: String
-    let canReward: Bool
-    let routes: [String]
-    let canRestore: Bool
-    let pendingEncounter: Bool
+    let targets: [HadesWorldActionTarget]
+    let activeLease: HadesWorldActionLease?
+
+    var id: String { doorToken }
 }
 
 struct HadesWorldObservation: Decodable, Equatable {
     let roomId: String
     let doors: [HadesWorldDoor]
+    let occurrenceTargets: [String]
+    let occurrence: HadesWorldOccurrenceLease?
     let canFish: Bool
     let canChaos: Bool
     let objects: [String]
