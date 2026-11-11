@@ -9003,9 +9003,22 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
-    local function clearSource(source)
+    local restoreReward
+    local function clearSource(source, committedDoor)
       for door, lease in pairs(leases) do
-        if lease.sourceRoom == source then leases[door] = nil end
+        if lease.sourceRoom == source then
+          if door ~= committedDoor then
+            if lease.kind == "reward" and activeLease(door) == lease then
+              restoreReward(door, lease)
+            elseif lease.kind == "roomCategory" and activeLease(door) == lease then
+              leases[door] = nil
+              refreshPreview(door)
+            end
+          end
+          -- The selected door's reward is committed by native LeaveRoom. Every
+          -- sibling lease is restored before the source room is left.
+          leases[door] = nil
+        end
       end
       releaseRouteHooksIfUnused()
     end
@@ -9068,7 +9081,7 @@ if __MacGamingTrainerV1 == nil then
       end
       AssignRoomToExitDoor(door, target)
       leases[door] = nil
-      clearSource(source)
+      clearSource(source, door)
       return target
     end
 
@@ -9101,7 +9114,7 @@ if __MacGamingTrainerV1 == nil then
             end
             materializeRoute(run, door, lease)
           else
-            clearSource(source)
+            clearSource(source, door)
           end
           return original(run, door, ...)
         end)
@@ -9126,7 +9139,7 @@ if __MacGamingTrainerV1 == nil then
       return snapshot
     end
 
-    local function restoreReward(door, lease)
+    restoreReward = function(door, lease)
       local room, source = door.Room, lease.sourceRoom
       for _, key in ipairs(rewardFields) do restoreField(room, key, lease.snapshot.fields[key]) end
       restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
