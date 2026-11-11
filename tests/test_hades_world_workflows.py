@@ -53,7 +53,9 @@ function IsRoomForced(run, room, data, args)
   end
   return false
 end
+local roomGenerationCalls = 0
 function CreateRoom(data, args)
+  roomGenerationCalls = roomGenerationCalls + 1
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
   local result = clone(data); result.RoomSetName = "Tartarus"; return result
 end
@@ -71,7 +73,21 @@ function AssignRoomToExitDoor(door, room)
   CurrentRun.CurrentRoom.OfferedRewards = CurrentRun.CurrentRoom.OfferedRewards or {}
   CurrentRun.CurrentRoom.OfferedRewards[door.ObjectId] = { Type = room.ChosenRewardType, ForceLootName = room.ForceLootName }
 end
-function CreateDoorRewardPreview(door) previews = previews + 1 end
+function CreateDoorRewardPreview(door)
+  previews = previews + 1
+  door.PreviewReward = door.Room and (door.Room.ForceLootName or door.Room.ChosenRewardType or "") or ""
+end
+local leaveCalls = 0
+function LeaveRoom(run, door)
+  assert(run == CurrentRun and door == firstDoor and door.Room)
+  leaveCalls = leaveCalls + 1
+  run.CurrentRoom = door.Room
+  return door.Room
+end
+function AttemptUseDoor(door)
+  if not door.ReadyToUse or door.Room == nil or OfferedExitDoors[door.ObjectId] ~= door then return false end
+  return LeaveRoom(CurrentRun, door)
+end
 function Destroy(args) destroyed = destroyed + #args.Ids end
 local inactivePoints = { 501 }
 local pedestalIds = { 801, 802, 803 }
@@ -212,9 +228,34 @@ firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"; firstDoor.Room.ForceLoo
 assert(not world().doors[1].canRestore, "a native in-place reroll retained stale restore authority")
 fails("staleDoor", function() runtime.restore_door(beforeNativeReroll) end)
 firstDoor.Room = firstRoom
+local storyCreationsBefore = CurrentRun.RoomCreations.A_Story01 or 0
+local storyGenerationBefore = roomGenerationCalls
 runtime.set_door_route(doorParams({ route = "story" }))
-assert(firstDoor.Room.Name == "A_Story01" and CurrentRun.RoomCreations.A_Story01 == 1)
-runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom)
+assert(firstDoor.Room == firstRoom,
+  "route Apply replaced the native exit before the player used it")
+assert((CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
+    and roomGenerationCalls == storyGenerationBefore,
+  "route Apply created a room or advanced room-generation state")
+assert(world().doors[1].canRestore, "route reservation was not observable as an active lease")
+runtime.restore_door(doorParams())
+assert(firstDoor.Room == firstRoom
+    and (CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
+    and roomGenerationCalls == storyGenerationBefore,
+  "route cancellation left irreversible room-generation residue")
+
+runtime.set_door_route(doorParams({ route = "combat" }))
+local combatCreationsBefore = CurrentRun.RoomCreations.A_Combat02 or 0
+local commitGenerationBefore = roomGenerationCalls
+local entered = AttemptUseDoor(firstDoor)
+assert(type(entered) == "table" and entered.Name == "A_Combat02",
+  "native door use did not late-commit the reserved route")
+assert(leaveCalls == 1
+    and (CurrentRun.RoomCreations.A_Combat02 or 0) == combatCreationsBefore + 1
+    and roomGenerationCalls == commitGenerationBefore + 1,
+  "native door use did not materialize exactly one destination")
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+OfferedExitDoors[100] = firstDoor
 local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
   ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
 RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
