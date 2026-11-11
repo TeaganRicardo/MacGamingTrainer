@@ -1397,13 +1397,34 @@ world = (function()
     end
     return false
   end
+  local function nativeEncounterEligibleInRoom(data, strategy)
+    if strategy.encounter == "Shop" then return true end
+    if type(EncounterData) ~= "table" or type(EncounterData[strategy.encounter]) ~= "table"
+        or type(IsEncounterEligible) ~= "function" then return false end
+    local probe = {}
+    for key, value in pairs(data) do probe[key] = value end
+    if type(probe.LegalEncounters) == "table" then
+      probe.LegalEncountersDictionary = {}
+      for _, name in ipairs(probe.LegalEncounters) do probe.LegalEncountersDictionary[name] = true end
+    end
+    if type(probe.IllegalEncounters) == "table" then
+      probe.IllegalEncountersDictionary = {}
+      for _, name in ipairs(probe.IllegalEncounters) do probe.IllegalEncountersDictionary[name] = true end
+    end
+    local ok, eligible = pcall(IsEncounterEligible, CurrentRun, probe, EncounterData[strategy.encounter])
+    if not ok then error(eligible, 0) end
+    return eligible == true
+  end
   local function matchesOccurrenceRoom(data, target)
     local strategy = occurrenceStrategies[target]
     if type(strategy) ~= "table" or strategy.kind ~= "room" or type(data) ~= "table"
         or not listContains(data.LegalEncounters, strategy.encounter) then return false end
-    if strategy.category == "story" then return routeKind(data.Name) == "story" end
-    return strategy.category == "shop"
-      and (routeKind(data.Name) == "shop" or data.ForcedReward == "Shop" or data.StoreDataName ~= nil)
+    if strategy.category == "story" and routeKind(data.Name) ~= "story" then return false end
+    if strategy.category == "shop"
+        and routeKind(data.Name) ~= "shop" and data.ForcedReward ~= "Shop" and data.StoreDataName == nil then
+      return false
+    end
+    return nativeEncounterEligibleInRoom(data, strategy)
   end
   local function occurrenceRoomCandidates(room, target, args)
     local strategy = occurrenceStrategies[target]
@@ -1413,27 +1434,7 @@ world = (function()
     if type(candidates) ~= "table" then return nil end
     local result = {}
     for _, data in ipairs(candidates) do
-      if matchesOccurrenceRoom(data, target) then
-        local eligible = strategy.encounter == "Shop"
-        if not eligible and type(EncounterData) == "table"
-            and type(EncounterData[strategy.encounter]) == "table"
-            and type(IsEncounterEligible) == "function" then
-          local probe = {}
-          for key, value in pairs(data) do probe[key] = value end
-          if type(probe.LegalEncounters) == "table" then
-            probe.LegalEncountersDictionary = {}
-            for _, name in ipairs(probe.LegalEncounters) do probe.LegalEncountersDictionary[name] = true end
-          end
-          if type(probe.IllegalEncounters) == "table" then
-            probe.IllegalEncountersDictionary = {}
-            for _, name in ipairs(probe.IllegalEncounters) do probe.IllegalEncountersDictionary[name] = true end
-          end
-          local ok, value = pcall(IsEncounterEligible, CurrentRun, probe, EncounterData[strategy.encounter])
-          if not ok then error(value, 0) end
-          eligible = value == true
-        end
-        if eligible then result[#result + 1] = data end
-      end
+      if matchesOccurrenceRoom(data, target) then result[#result + 1] = data end
     end
     return result
   end
@@ -1758,7 +1759,7 @@ world = (function()
           -- If native forced/linked/explicit routing selected the requested
           -- room itself, observe that native choice without replacing it.
           local nativeData = original(run, args, ...)
-          if matchesOccurrenceRoom(nativeData, lease.target) then
+          if args.RoomDataSet == nil and matchesOccurrenceRoom(nativeData, lease.target) then
             pendingOccurrenceRoom = {
               data = nativeData, run = run, sourceRoom = currentRoom(),
               leaseToken = lease.leaseToken,
