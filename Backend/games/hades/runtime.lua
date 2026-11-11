@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 11 then error("hades.error.restartRequired") end
+  if existing.revision ~= 12 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 11,
+  version = 1, revision = 12,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1236,8 +1236,10 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
   return runtime.status()
 end
 world = (function()
-  local edits = setmetatable({}, { __mode = "k" })
-  local encounters = setmetatable({}, { __mode = "k" })
+  local exitLeases = setmetatable({}, { __mode = "k" })
+  local occurrenceLease
+  local selectedOccurrences = setmetatable({}, { __mode = "k" })
+  local nextLease = 0
   local spawnContext
   local objectOwners = {
     trove = { field = "ChallengeSwitch", chance = "ChallengeChanceSuccess", query = "IsChallengeSwitchEligible" },
@@ -1258,11 +1260,25 @@ world = (function()
     assert(room and roomId(room) == params.roomId, "hades.error.staleRoom")
     return room
   end
-  local function doorId(door)
-    local room = door.Room
-    local overrides = type(room.RewardOverrides) == "table" and instanceId(room.RewardOverrides) or ""
-    return instanceId(door) .. ":" .. instanceId(room) .. ":" .. tostring(room.ChosenRewardType)
-      .. ":" .. tostring(room.ForceLootName) .. ":" .. overrides
+  local function doorToken(door)
+    local source, room = currentRoom(), type(door) == "table" and door.Room or nil
+    if type(source) ~= "table" or type(room) ~= "table" then return nil end
+    return table.concat({
+      runtime.generationId, instanceId(CurrentRun), instanceId(source),
+      instanceId(door), tostring(door.ObjectId), instanceId(room),
+    }, ":")
+  end
+  local function rewardSignature(room)
+    local overrides = type(room) == "table" and type(room.RewardOverrides) == "table"
+      and instanceId(room.RewardOverrides) or ""
+    local reward = type(room) == "table" and type(room.Reward) == "table"
+      and instanceId(room.Reward) or ""
+    return table.concat({
+      type(room) == "table" and instanceId(room) or "",
+      tostring(type(room) == "table" and room.ChosenRewardType or nil),
+      tostring(type(room) == "table" and room.ForceLootName or nil),
+      overrides, reward,
+    }, ":")
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"
@@ -1270,7 +1286,7 @@ world = (function()
   local function requireDoor(params)
     requireRoom(params)
     for _, door in pairs(OfferedExitDoors or {}) do
-      if ordinaryDoor(door) and doorId(door) == params.doorId then return door end
+      if ordinaryDoor(door) and doorToken(door) == params.doorToken then return door end
     end
     error("hades.error.staleDoor")
   end
