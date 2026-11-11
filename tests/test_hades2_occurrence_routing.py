@@ -51,7 +51,7 @@ assert(seen["npc:Nemesis"].sourceId == "Nemesis" and seen["npc:Nemesis"].kind ==
 assert(seen["shop:Charon"].sourceId == "Charon" and seen["shop:Charon"].kind == "shop")
 print("occurrence_routing_ok")
 """,
-    "room_target_waits_for_native_eligibility_and_consumes_on_offer": r"""
+    "room_target_waits_for_native_eligibility_and_commits_on_start": r"""
 setRoomSet("F")
 roomEligible.F_Story01 = false
 setOccurrence("npc:Arachne", "room-token")
@@ -71,13 +71,16 @@ for _, door in pairs(MapState.OfferedExitDoors) do
   if door.Room.Name == "F_Story01" then offered = offered + 1 end
 end
 assert(offered == 1, "Story target was not offered exactly once")
-assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil,
-  "offered room did not consume the one-shot")
-assert(M.lastConsumedNextOccurrenceToken == "room-token",
-  "room consumption receipt was not recorded")
--- The player has not entered any offered room. Consumption at this point proves
--- option A semantics rather than guarantee-until-entered behavior.
+assert(M.nextOccurrenceTarget == "npc:Arachne" and M.nextOccurrenceToken == "room-token"
+    and M.lastConsumedNextOccurrenceToken == nil,
+  "offered but unentered room consumed the one-shot")
 assert(CurrentRun.CurrentRoom.Name == "F_Start", "fixture unexpectedly entered the offered room")
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.Room.Name == "F_Story01" then AttemptUseDoor(door) end
+end
+assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil
+    and M.lastConsumedNextOccurrenceToken == "room-token",
+  "matching room's native StartRoom did not consume the one-shot")
 print("occurrence_routing_ok")
 """,
     "native_forced_room_competitor_is_preserved": r"""
@@ -94,8 +97,12 @@ MapState.OfferedExitDoors = {}
 CurrentRun.RoomCreations = {}
 CurrentRun.CurrentRoom.RoomCreations = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
-assert(M.nextOccurrenceTarget == nil
-  and M.lastConsumedNextOccurrenceToken == "forced-competitor")
+assert(M.nextOccurrenceTarget == "npc:Arachne" and M.lastConsumedNextOccurrenceToken == nil,
+  "later offering consumed without entering")
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.Room.Name == "F_Story01" then AttemptUseDoor(door) end
+end
+assert(M.nextOccurrenceTarget == nil and M.lastConsumedNextOccurrenceToken == "forced-competitor")
 print("occurrence_routing_ok")
 """,
     "room_target_does_not_cross_native_room_set": r"""
@@ -159,11 +166,13 @@ print("occurrence_routing_ok")
 setRoomSet("F")
 setOccurrence("shop:Charon", "charon-room")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
-local found = false
+local selected
 for _, door in pairs(MapState.OfferedExitDoors) do
-  if door.Room.Name == "F_Shop01" then found = true end
+  if door.Room.Name == "F_Shop01" then selected = door end
 end
-assert(found and M.lastConsumedNextOccurrenceToken == "charon-room")
+assert(selected and M.nextOccurrenceTarget == "shop:Charon" and M.lastConsumedNextOccurrenceToken == nil)
+AttemptUseDoor(selected)
+assert(M.lastConsumedNextOccurrenceToken == "charon-room")
 
 setOccurrence("npc:Nemesis", "native-force")
 CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
@@ -186,6 +195,8 @@ nativeRoomForced.F_Forced01 = nil
 MapState.OfferedExitDoors = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 assert(MapState.OfferedExitDoors[1].Room.Name == "F_Story01")
+assert(M.lastConsumedNextOccurrenceToken == nil)
+AttemptUseDoor(MapState.OfferedExitDoors[1])
 assert(M.lastConsumedNextOccurrenceToken == "linked-room-token")
 print("occurrence_routing_ok")
 """,
@@ -200,6 +211,10 @@ assert(M.nextOccurrenceTarget == "npc:Arachne",
 ForceNextRoom = nil
 MapState.OfferedExitDoors = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(M.lastConsumedNextOccurrenceToken == nil)
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.Room.Name == "F_Story01" then AttemptUseDoor(door) end
+end
 assert(M.lastConsumedNextOccurrenceToken == "explicit-force-token")
 print("occurrence_routing_ok")
 """,
@@ -219,8 +234,13 @@ assert(not MapState.OfferedExitDoors[1].PreviewCreated and not MapState.OfferedE
 CurrentRun.CurrentRoom.UnavailableDoorIds = nil
 MapState.OfferedExitDoors = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(M.lastConsumedNextOccurrenceToken == nil,
+  "subsequently offered target room consumed before use")
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.ReadyToUse and door.Room.Name == "F_Story01" then AttemptUseDoor(door) end
+end
 assert(M.lastConsumedNextOccurrenceToken == "unavailable-door-token",
-  "subsequently genuinely offered target room did not consume")
+  "subsequent native StartRoom did not consume")
 print("occurrence_routing_ok")
 """,
     "skip_unlock_target_door_waits_until_actually_offered": r"""
@@ -241,20 +261,23 @@ MapState.OfferedExitDoors[1].SkipUnlock = false
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 assert(MapState.OfferedExitDoors[1].PreviewCreated
   and MapState.OfferedExitDoors[1].ReadyToUse)
+assert(M.lastConsumedNextOccurrenceToken == nil,
+  "genuinely unlocked but unentered door consumed the request")
+AttemptUseDoor(MapState.OfferedExitDoors[1])
 assert(M.lastConsumedNextOccurrenceToken == "skip-unlock-token",
-  "genuinely unlocked door did not generate consumption receipt")
+  "native StartRoom did not generate the consumption receipt")
 print("occurrence_routing_ok")
 """,
     "cleanup_restores_native_routing_owners": r"""
 setRoomSet("F")
 setOccurrence("npc:Arachne", "cleanup-token")
-assert(IsRoomForced ~= nativeIsRoomForced and DoUnlockRoomExits ~= nativeDoUnlockRoomExits)
+assert(IsRoomForced ~= nativeIsRoomForced and DoUnlockRoomExits == nativeDoUnlockRoomExits)
 assert(ChooseNextRoomData ~= nativeChooseNextRoomData and GetRandomValue ~= nativeGetRandomValue)
-assert(CreateDoorRewardPreview ~= nativeCreateDoorRewardPreview)
+assert(CreateDoorRewardPreview == nativeCreateDoorRewardPreview and StartRoom ~= nativeStartRoom)
 M.dispatch("cleanup", { includeCatalogs = false })
 assert(IsRoomForced == nativeIsRoomForced and DoUnlockRoomExits == nativeDoUnlockRoomExits)
 assert(ChooseNextRoomData == nativeChooseNextRoomData and GetRandomValue == nativeGetRandomValue)
-assert(CreateDoorRewardPreview == nativeCreateDoorRewardPreview)
+assert(CreateDoorRewardPreview == nativeCreateDoorRewardPreview and StartRoom == nativeStartRoom)
 assert(IsEncounterForced == nativeIsEncounterForced and ChooseEncounter == nativeChooseEncounter)
 assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil)
 print("occurrence_routing_ok")
