@@ -1238,6 +1238,21 @@ end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
   local encounters = setmetatable({}, { __mode = "k" })
+  local occurrenceRequest
+  local occurrenceSelection
+  local occurrenceTargetOrder = {
+    "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
+  }
+  local occurrenceTargets = {
+    ["npc:Sisyphus"] = { kind = "character", sourceId = "Sisyphus", rooms = { A_Story01 = true } },
+    ["npc:Eurydice"] = { kind = "character", sourceId = "Eurydice", rooms = { B_Story01 = true } },
+    ["npc:Patroclus"] = { kind = "character", sourceId = "Patroclus", rooms = { C_Story01 = true } },
+    ["npc:Thanatos"] = { kind = "character", sourceId = "Thanatos", encounterSet = "ThanatosEncounters" },
+    ["shop:Charon"] = { kind = "shop", sourceId = "Charon", rooms = {
+      A_Shop01 = true, B_Shop01 = true, C_Shop01 = true,
+      A_PreBoss01 = true, B_PreBoss01 = true, C_PreBoss01 = true, D_Hub = true,
+    } },
+  }
   local spawnContext
   local objectOwners = {
     trove = { field = "ChallengeSwitch", chance = "ChallengeChanceSuccess", query = "IsChallengeSwitchEligible" },
@@ -1274,6 +1289,84 @@ world = (function()
       if ordinaryDoor(door) and doorId(door) == token then return door end
     end
     error("hades.error.staleDoor")
+  end
+  local function validOccurrence()
+    local request = occurrenceRequest
+    if type(request) ~= "table" or request.run ~= CurrentRun or request.hero ~= hero()
+        or occurrenceTargets[request.target] == nil then
+      occurrenceRequest = nil
+      return nil
+    end
+    return request
+  end
+  local function occurrenceRoomMatches(definition, room)
+    return type(definition) == "table" and type(definition.rooms) == "table"
+      and type(room) == "table" and definition.rooms[room.Name] == true
+  end
+  local function occurrenceEncounterMatches(definition, encounter)
+    if type(definition) ~= "table" or type(encounter) ~= "table" then return false end
+    if type(definition.encounters) == "table" and definition.encounters[encounter.Name] then return true end
+    local set = definition.encounterSet and type(EncounterSets) == "table"
+      and EncounterSets[definition.encounterSet] or nil
+    for _, name in pairs(set or {}) do if name == encounter.Name then return true end end
+    return false
+  end
+  local function consumeOccurrence(target, token)
+    local request = validOccurrence()
+    if not request or request.target ~= target or request.leaseToken ~= token then return false end
+    occurrenceRequest = nil
+    return true
+  end
+  local function occurrenceChoose(kind, original, ...)
+    local request = validOccurrence()
+    local definition = request and occurrenceTargets[request.target] or nil
+    local hasTarget = kind == "room" and type(definition and definition.rooms) == "table"
+      or kind == "encounter" and definition ~= nil
+        and (type(definition.encounters) == "table" or definition.encounterSet ~= nil)
+    if not hasTarget then return original(...) end
+    local previous = occurrenceSelection
+    occurrenceSelection = {
+      kind = kind, target = request.target, leaseToken = request.leaseToken,
+      eligible = {}, nativeForced = false,
+    }
+    local packed = table.pack(pcall(original, ...))
+    occurrenceSelection = previous
+    if not packed[1] then error(packed[2], 0) end
+    return table.unpack(packed, 2, packed.n)
+  end
+  local function occurrenceObserveForced(kind, original, run, room, candidate, ...)
+    local native = original(run, room, candidate, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and selection.kind == kind
+        and selection.target == request.target and selection.leaseToken == request.leaseToken then
+      if native then selection.nativeForced = true end
+      if type(candidate) == "table" then selection.eligible[candidate] = true end
+    end
+    return native
+  end
+  local function occurrenceRandom(original, pool, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and not selection.nativeForced
+        and selection.target == request.target and selection.leaseToken == request.leaseToken
+        and type(pool) == "table" then
+      local definition = occurrenceTargets[selection.target]
+      local choices = {}
+      for _, candidate in pairs(pool) do
+        local data = candidate
+        if selection.kind == "room" and type(candidate) == "string" then
+          data = type(RoomData) == "table" and RoomData[candidate] or nil
+        end
+        if selection.eligible[data] then
+          local matched = selection.kind == "room" and occurrenceRoomMatches(definition, data)
+            or selection.kind == "encounter" and occurrenceEncounterMatches(definition, data)
+          if matched then choices[#choices + 1] = candidate end
+        end
+      end
+      if #choices > 0 then return original(choices, ...) end
+    end
+    return original(pool, ...)
   end
   local function routeKind(name)
     if name:find("_Story", 1, true) then return "story" end
@@ -1551,6 +1644,16 @@ world = (function()
         return ids
       end
     end)
+    hook("ChooseNextRoomData", function(original)
+      return function(...)
+        return occurrenceChoose("room", original, ...)
+      end
+    end)
+    hook("IsRoomForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("room", original, ...)
+      end
+    end)
     hook("ChooseEncounter", function(original)
       return function(run, room, ...)
         local intent = encounters[room]
@@ -1559,7 +1662,30 @@ world = (function()
             and IsEncounterEligible(run, room, EncounterData[intent.name]) then
           return SetupEncounter(EncounterData[intent.name], room)
         end
-        return original(run, room, ...)
+        return occurrenceChoose("encounter", original, run, room, ...)
+      end
+    end)
+    hook("IsEncounterForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("encounter", original, ...)
+      end
+    end)
+    hook("GetRandomValue", function(original)
+      return function(...)
+        return occurrenceRandom(original, ...)
+      end
+    end)
+    hook("RecordEncounter", function(original)
+      return function(run, encounter, ...)
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
+        local result = table.pack(original(run, encounter, ...))
+        if run == CurrentRun and token and occurrenceEncounterMatches(definition, encounter) then
+          consumeOccurrence(target, token)
+        end
+        return table.unpack(result, 1, result.n)
       end
     end)
     hook("LeaveRoom", function(original)
@@ -1571,7 +1697,14 @@ world = (function()
             "hades.error.staleDoor")
           materializeRoute(door, edit)
         end
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
         local result = table.pack(original(run, door, ...))
+        if run == CurrentRun and token and occurrenceRoomMatches(definition, door.Room) then
+          consumeOccurrence(target, token)
+        end
         clearSourceEdits(source)
         return table.unpack(result, 1, result.n)
       end
@@ -1579,6 +1712,8 @@ world = (function()
   end
   function api.clearPending()
     encounters = setmetatable({}, { __mode = "k" })
+    occurrenceRequest = nil
+    occurrenceSelection = nil
     for door, edit in pairs(edits) do
       if type(edit) == "table" and edit.kind == "route" then edits[door] = nil end
     end
@@ -1638,7 +1773,21 @@ world = (function()
         if canGenerate(room, kind) then objects[#objects + 1] = kind end
       end
     end
-    return { roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room), objects = objects }
+    local occurrenceList = array()
+    for _, id in ipairs(occurrenceTargetOrder) do
+      local definition = occurrenceTargets[id]
+      occurrenceList[#occurrenceList + 1] = {
+        id = id, kind = definition.kind, sourceId = definition.sourceId,
+      }
+    end
+    local request = validOccurrence()
+    local occurrence = request and {
+      target = request.target, leaseToken = request.leaseToken,
+    } or nil
+    return {
+      roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room),
+      objects = objects, occurrenceTargets = occurrenceList, occurrence = occurrence,
+    }
   end
   function runtime.gain_resource(params)
     requireHero()
@@ -1802,6 +1951,28 @@ world = (function()
       drawDoorPreview(door, door.Room)
     end
     edits[door] = nil
+    return runtime.status()
+  end
+  function runtime.apply_world_occurrence(params)
+    requireRoom(params)
+    assert(type(params.targetID) == "string" and occurrenceTargets[params.targetID],
+      "hades.error.invalidValue")
+    assert(validOccurrence() == nil and type(params.requestId) == "string",
+      "hades.error.worldUnavailable")
+    occurrenceRequest = {
+      target = params.targetID,
+      leaseToken = "occurrence:" .. params.requestId,
+      run = CurrentRun,
+      hero = requireHero(),
+    }
+    return runtime.status()
+  end
+  function runtime.cancel_world_occurrence(params)
+    requireRoom(params)
+    local request = validOccurrence()
+    assert(request and request.leaseToken == params.leaseToken, "hades.error.staleTarget")
+    occurrenceRequest = nil
+    occurrenceSelection = nil
     return runtime.status()
   end
 
