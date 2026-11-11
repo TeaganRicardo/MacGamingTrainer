@@ -803,7 +803,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(searchFunctions("出口").contains { $0.section == .rooms }, "native exit actions missing from bilingual discovery")
         check(searchFunctions("出口").contains { $0.id == "hades.worldActions.modifyExit" },
             "World Actions exit control was absent from bilingual discovery")
-        for target in ("Sisyphus", "Eurydice", "Patroclus", "Thanatos", "Charon") {
+        for target in ["Sisyphus", "Eurydice", "Patroclus", "Thanatos", "Charon"] {
             check(searchFunctions(target).contains {
                 $0.id == "hades.worldActions.occurrence." + target.lowercased()
                     && $0.section == .rooms
