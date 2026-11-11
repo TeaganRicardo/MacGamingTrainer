@@ -98,7 +98,7 @@ next_room = region(hades2, "private var nextRoomRewardPanel", "private var nextO
 next_occurrence = region(hades2, "private var nextOccurrencePanel", "private var resourcePanel")
 for block in (next_room, next_occurrence):
     assert "TrainerLabeledControlRow(" in block
-    assert ".trainerPicker(.rowAction, state: model.canEditDesired ? .interactive : .unavailable)" in block
+    assert ".trainerPicker(.rowAction, state: model.canApplyWorldAction ? .interactive : .unavailable)" in block
 grouped = region(source("Sources/Core/UI/Components/TrainerResourceControls.swift"),
                  "struct TrainerGroupedOptionPicker")
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in grouped
