@@ -350,6 +350,31 @@ def _next_occurrence(raw):
     return {"target": target}
 
 
+def _world_exit_apply(raw):
+    params = _params(raw)
+    door_token = params.get("doorToken")
+    kind = params.get("kind")
+    target = params.get("target")
+    if not isinstance(door_token, str) or not door_token or len(door_token) > 512:
+        raise ValueError("World exit token is invalid or stale")
+    if kind not in ("reward", "roomCategory"):
+        raise ValueError("World exit target kind is invalid")
+    if not isinstance(target, str) or not target or len(target) > 256:
+        raise ValueError("World exit target is invalid")
+    return {"doorToken": door_token, "kind": kind, "target": target}
+
+
+def _world_exit_cancel(raw):
+    params = _params(raw)
+    door_token = params.get("doorToken")
+    lease_token = params.get("leaseToken")
+    if not isinstance(door_token, str) or not door_token or len(door_token) > 512:
+        raise ValueError("World exit token is invalid or stale")
+    if not isinstance(lease_token, str) or not lease_token or len(lease_token) > 768:
+        raise ValueError("World exit lease is invalid or stale")
+    return {"doorToken": door_token, "leaseToken": lease_token}
+
+
 def _save_editor_selection(raw):
     params = _params(raw)
     result = {}
@@ -664,6 +689,8 @@ _COMMAND_SPECS = (
         invoke=_next_occurrence_invoke,
         reply_kind="patch",
     ),
+    _spec("apply_world_exit", request_id=True, validate=_world_exit_apply),
+    _spec("cancel_world_exit", request_id=True, validate=_world_exit_cancel),
     _spec("spawn_reward", request_id=True, validate=_spawn_reward),
     _spec("acquire_chaos_pair", request_id=True, validate=_chaos_pair),
     _spec("open_sell_traits", request_id=True),
