@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 12 then error("hades.error.restartRequired") end
+  if existing.revision ~= 13 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 12,
+  version = 1, revision = 13,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1239,6 +1239,8 @@ world = (function()
   local exitLeases = setmetatable({}, { __mode = "k" })
   local occurrenceLease
   local selectedOccurrences = setmetatable({}, { __mode = "k" })
+  local selectedRoomOccurrences = setmetatable({}, { __mode = "k" })
+  local pendingOccurrenceRoom
   local nextLease = 0
   local spawnContext
   local objectOwners = {
@@ -1327,26 +1329,31 @@ world = (function()
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
-  local function couldBeForced(room)
+  local function couldBeForced(room, args)
     local randomChance = RandomChance
     -- Status must not redraw native force chances. Protect every possible force.
     RandomChance = function(chance) return chance > 0 end
-    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, {})
+    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, args or {})
     RandomChance = randomChance
     if not ok then error(result, 0) end
     return result
   end
-  local function routeRooms(room)
+  local function routeRooms(room, args)
+    args = type(args) == "table" and args or {}
+    if ForceNextRoom ~= nil or args.ForceNextRoom ~= nil or args.ForceNextRoomSet ~= nil
+        or args.RoomDataSet ~= nil or room.NextRoomSet or room.NextRoomSetNoGenerate
+        or room.UsePreviousRoomSet or room.LinkedRoom or room.LinkedRooms
+        or room.LinkedRoomByPactLevel then return end
     local result = {}
-    if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
-        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return end
     for name, data in pairs(RoomSetData[room.RoomSetName or "Tartarus"] or {}) do
       -- Keep availability observation read-only even if native eligibility
       -- normalizes fields on the descriptor it receives.
       local probe = {}
       for key, value in pairs(data) do probe[key] = value end
-      if IsRoomEligible(CurrentRun, room, probe, {}) then
-        if couldBeForced(probe) then return end
+      local ok, eligible = pcall(IsRoomEligible, CurrentRun, room, probe, args)
+      if not ok then error(eligible, 0) end
+      if eligible then
+        if couldBeForced(probe, args) then return end
         local kind = routeKind(name)
         if kind then
           result[kind] = result[kind] or {}
@@ -1361,6 +1368,69 @@ world = (function()
       local data = EncounterData[name]
       if data and IsEncounterEligible(CurrentRun, room, data) then return data end
     end
+  end
+  local occurrenceStrategies = {
+    sisyphus = { kind = "room", category = "story", encounter = "Story_Sisyphus_01" },
+    eurydice = { kind = "room", category = "story", encounter = "Story_Eurydice_01" },
+    patroclus = { kind = "room", category = "story", encounter = "Story_Patroclus_01" },
+    thanatos = { kind = "encounter" },
+    charon = { kind = "room", category = "shop", encounter = "Shop" },
+  }
+  local function listContains(values, wanted)
+    if type(values) ~= "table" then return false end
+    for _, value in ipairs(values) do if value == wanted then return true end end
+    return false
+  end
+  local function occurrenceSupported(target)
+    local strategy = occurrenceStrategies[target]
+    if type(strategy) ~= "table" then return false end
+    if strategy.kind == "encounter" then
+      for _, name in ipairs(type(EncounterSets) == "table" and EncounterSets.ThanatosEncounters or {}) do
+        if type(EncounterData) == "table" and type(EncounterData[name]) == "table" then return true end
+      end
+      return false
+    end
+    if type(RoomData) ~= "table" then return false end
+    for name, data in pairs(RoomData) do
+      if type(data) == "table" and routeKind(name) == strategy.category
+          and listContains(data.LegalEncounters, strategy.encounter) then return true end
+    end
+    return false
+  end
+  local function occurrenceRoomCandidates(room, target, args)
+    local strategy = occurrenceStrategies[target]
+    if type(strategy) ~= "table" or strategy.kind ~= "room" then return nil end
+    local routes = routeRooms(room, args)
+    local candidates = type(routes) == "table" and routes[strategy.category] or nil
+    if type(candidates) ~= "table" then return nil end
+    local result = {}
+    for _, data in ipairs(candidates) do
+      if listContains(data.LegalEncounters, strategy.encounter) then
+        local eligible = strategy.encounter == "Shop"
+        if not eligible and type(EncounterData) == "table"
+            and type(EncounterData[strategy.encounter]) == "table"
+            and type(IsEncounterEligible) == "function" then
+          local ok, value = pcall(IsEncounterEligible, CurrentRun, data, EncounterData[strategy.encounter])
+          if not ok then error(value, 0) end
+          eligible = value == true
+        end
+        if eligible then result[#result + 1] = data end
+      end
+    end
+    return result
+  end
+  local function hasSelectedOccurrenceRoom(token)
+    local found = false
+    for room, selection in pairs(selectedRoomOccurrences) do
+      if selection.leaseToken == token then
+        local offered = false
+        for _, door in pairs(OfferedExitDoors or {}) do
+          if door.Room == room then offered = true; break end
+        end
+        if offered then found = true else selectedRoomOccurrences[room] = nil end
+      end
+    end
+    return found
   end
   local function chanceEligible(room, key, callback)
     local previous = room[key]
@@ -1590,16 +1660,12 @@ world = (function()
       end
     end
   end
-  local function occurrenceSupported()
-    return type(EncounterSets) == "table"
-      and type(EncounterSets.ThanatosEncounters) == "table"
-      and next(EncounterSets.ThanatosEncounters) ~= nil
-  end
   local function applyOccurrenceLease(target)
-    assert(target == "thanatos" and occurrenceSupported() and activeOccurrence() == nil,
+    assert(occurrenceSupported(target) and activeOccurrence() == nil,
       "hades.error.worldUnavailable")
     occurrenceLease = {
-      target = target, leaseToken = leaseToken("occurrence"),
+      target = target, kind = occurrenceStrategies[target].kind,
+      leaseToken = leaseToken("occurrence"),
       run = CurrentRun, hero = hero(),
     }
     return occurrenceLease
@@ -1608,6 +1674,12 @@ world = (function()
     local lease = activeOccurrence()
     assert(lease and lease.leaseToken == token, "hades.error.staleDoor")
     occurrenceLease = nil
+    if pendingOccurrenceRoom and pendingOccurrenceRoom.leaseToken == token then
+      pendingOccurrenceRoom = nil
+    end
+    for room, selection in pairs(selectedRoomOccurrences) do
+      if selection.leaseToken == token then selectedRoomOccurrences[room] = nil end
+    end
   end
   local api = {}
   function api.install()
@@ -1646,15 +1718,67 @@ world = (function()
         return table.unpack(result, 2, result.n)
       end
     end)
+    hook("ChooseNextRoomData", function(original)
+      return function(run, args, ...)
+        pendingOccurrenceRoom = nil
+        local lease = activeOccurrence()
+        local strategy = lease and occurrenceStrategies[lease.target]
+        args = type(args) == "table" and args or {}
+        if run == CurrentRun and strategy and strategy.kind == "room"
+            and not hasSelectedOccurrenceRoom(lease.leaseToken) then
+          local candidates = occurrenceRoomCandidates(currentRoom(), lease.target, args)
+          if type(candidates) == "table" and #candidates > 0 then
+            local data = GetRandomValue(candidates)
+            if type(data) == "table" then
+              pendingOccurrenceRoom = {
+                data = data, run = run, sourceRoom = currentRoom(),
+                leaseToken = lease.leaseToken,
+              }
+              return data
+            end
+          end
+        end
+        return original(run, args, ...)
+      end
+    end)
+    hook("CreateRoom", function(original)
+      return function(data, ...)
+        local pending = pendingOccurrenceRoom
+        if pending and data == pending.data and pending.run == CurrentRun
+            and pending.sourceRoom == currentRoom() then
+          pendingOccurrenceRoom = nil
+          local room = original(data, ...)
+          if type(room) == "table" then
+            selectedRoomOccurrences[room] = {
+              leaseToken = pending.leaseToken, sourceRoom = pending.sourceRoom,
+            }
+          end
+          return room
+        end
+        return original(data, ...)
+      end
+    end)
     hook("LeaveRoom", function(original)
       return function(run, door, ...)
         local source = currentRoom()
-        local lease = activeExitLease(door)
-        if lease and lease.kind == "roomCategory" then
-          assert(run == CurrentRun and lease.sourceRoom == source, "hades.error.staleDoor")
-          materializeRoute(door, lease)
+        local selected = type(door) == "table" and selectedRoomOccurrences[door.Room] or nil
+        local occurrence = activeOccurrence()
+        local routeLease = activeExitLease(door)
+        if routeLease and routeLease.kind == "roomCategory" then
+          assert(run == CurrentRun and routeLease.sourceRoom == source, "hades.error.staleDoor")
+          materializeRoute(door, routeLease)
+        elseif selected and occurrence and selected.leaseToken == occurrence.leaseToken then
+          -- Native LeaveRoom is the room-admission commit. Consume before
+          -- entering its yielding transition so an unknown outcome is not replayed.
+          occurrenceLease = nil
         end
         clearSourceExitLeases(source, door)
+        for room, selection in pairs(selectedRoomOccurrences) do
+          if selection.sourceRoom == source then selectedRoomOccurrences[room] = nil end
+        end
+        if pendingOccurrenceRoom and pendingOccurrenceRoom.sourceRoom == source then
+          pendingOccurrenceRoom = nil
+        end
         -- LeaveRoom owns history, encounter recording, save/checkpoint and map
         -- transition. Never pcall or synthesize those side effects here.
         return original(run, door, ...)
@@ -1696,7 +1820,9 @@ world = (function()
       exitLeases[door] = nil
     end
     occurrenceLease = nil
+    pendingOccurrenceRoom = nil
     selectedOccurrences = setmetatable({}, { __mode = "k" })
+    selectedRoomOccurrences = setmetatable({}, { __mode = "k" })
   end
   function api.observation()
     local room = currentRoom()
@@ -1723,7 +1849,9 @@ world = (function()
     end
     table.sort(doors, function(a, b) return a.number < b.number end)
     local occurrenceTargets = array()
-    if occurrenceSupported() then occurrenceTargets[#occurrenceTargets + 1] = "thanatos" end
+    for _, target in ipairs({ "sisyphus", "eurydice", "patroclus", "thanatos", "charon" }) do
+      if occurrenceSupported(target) then occurrenceTargets[#occurrenceTargets + 1] = target end
+    end
     local pending = activeOccurrence()
     local objects = array()
     if type(HandleSecretSpawns) == "function" then
