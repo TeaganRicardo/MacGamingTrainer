@@ -32,7 +32,6 @@ RoomSetData = {
   Asphodel = {
     B_Story01 = { Name = "B_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Eurydice_01" }, eligible = true },
     B_Shop01 = { Name = "B_Shop01", ForcedReward = "Shop", LegalEncounters = { "Shop" }, eligible = true },
-    B_Forced01 = { Name = "B_Forced01", AlwaysForce = true, eligible = true },
   },
   Elysium = {
     C_Story01 = { Name = "C_Story01", ForcedReward = "Story", LegalEncounters = { "Story_Patroclus_01" }, eligible = true },
@@ -488,6 +487,7 @@ CurrentRun.CurrentRoom = { Name = "A_Combat01", RoomSetName = "Tartarus" }
 OfferedExitDoors = {}
 runtime.apply_world_occurrence({ actionTarget = "eurydice" })
 local eurydiceLease = assert(world().occurrence).leaseToken
+RoomSetData.Asphodel.B_Forced01 = { Name = "B_Forced01", AlwaysForce = true, eligible = true }
 local tartarusChoice = ChooseNextRoomData(CurrentRun, {})
 assert(tartarusChoice.Name ~= "B_Story01" and world().occurrence.leaseToken == eurydiceLease)
 CurrentRun.CurrentRoom = { Name = "B_Combat01", RoomSetName = "Asphodel" }
