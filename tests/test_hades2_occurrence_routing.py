@@ -278,25 +278,39 @@ assert(M.lastConsumedNextOccurrenceToken == "skip-unlock-token",
   "native StartRoom did not generate the consumption receipt")
 print("occurrence_routing_ok")
 """,
-    "switching_to_encounter_retires_room_admission_owner": r"""
+    "active_target_is_locked_until_cancel_then_owner_can_change": r"""
 setRoomSet("F")
 setOccurrence("npc:Arachne", "room-first")
 assert(StartRoom ~= nativeStartRoom and ChooseNextRoomData ~= nativeChooseNextRoomData)
+
+local switched = pcall(function()
+  setOccurrence("npc:Nemesis", "encounter-while-armed")
+end)
+assert(not switched and M.nextOccurrenceTarget == "npc:Arachne"
+    and M.nextOccurrenceToken == "room-first",
+  "a second Apply replaced an active occurrence lease")
+
+M.dispatch("cancel_world_occurrence", {
+  leaseToken = M.nextOccurrenceToken,
+  requestId = "cancel-room-first",
+  includeCatalogs = false,
+})
+assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData)
+
 setOccurrence("npc:Nemesis", "encounter-next")
 assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
     and ChooseEncounter ~= nativeChooseEncounter and RecordEncounter ~= nativeRecordEncounter,
-  "switching from named room to encounter left an unused room admission hook")
-setOccurrence("npc:Arachne", "room-again")
-assert(StartRoom ~= nativeStartRoom and ChooseEncounter == nativeChooseEncounter
-    and RecordEncounter == nativeRecordEncounter)
+  "cancel then Apply did not move ownership to the encounter seam")
+
 M.dispatch("cancel_world_occurrence", {
   leaseToken = M.nextOccurrenceToken,
-  requestId = "cancel-room-again",
+  requestId = "cancel-encounter-next",
   includeCatalogs = false,
 })
 assert(StartRoom == nativeStartRoom and ChooseNextRoomData == nativeChooseNextRoomData
-    and RecordEncounter == nativeRecordEncounter and GetRandomValue == nativeGetRandomValue,
-  "cancellation retained native selection or admission owners")
+    and ChooseEncounter == nativeChooseEncounter and RecordEncounter == nativeRecordEncounter
+    and GetRandomValue == nativeGetRandomValue,
+  "cancellation retained native selection or commit owners")
 print("occurrence_routing_ok")
 """,
     "cleanup_restores_native_routing_owners": r"""
