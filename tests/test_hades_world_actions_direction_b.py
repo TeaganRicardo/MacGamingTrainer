@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades.schema import WORLD_COMMANDS
-from games.hades.world import mutation_params
+from games.hades.world import OCCURRENCES, mutation_params
 from runtime_revision_support import runtime_revision
 
 manifest = json.loads((ROOT / "Backend/games/hades/module.json").read_text(encoding="utf-8"))
@@ -18,7 +18,7 @@ view = (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text(encoding="utf-8"
 core = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text(encoding="utf-8")
 
 assert manifest["protocolVersion"] >= 3
-assert runtime_revision(runtime) >= 12
+assert runtime_revision(runtime) >= 13
 
 required = {
     "apply_world_exit", "cancel_world_exit",
@@ -52,6 +52,13 @@ assert mutation_params("cancel_world_exit", {
 assert mutation_params("apply_world_occurrence", {"actionTarget": "thanatos"}) == {
     "actionTarget": "thanatos",
 }
+assert OCCURRENCES == frozenset(("sisyphus", "eurydice", "patroclus", "thanatos", "charon"))
+for target in OCCURRENCES:
+    assert mutation_params("apply_world_occurrence", {"actionTarget": target}) == {
+        "actionTarget": target,
+    }
+for target in ("sisyphus", "eurydice", "patroclus", "thanatos", "charon"):
+    assert f'case "{target}":' in view or f'"hades.worldActions.occurrence.{target}"' in view
 assert mutation_params("cancel_world_occurrence", {"leaseToken": "occurrence:1"}) == {
     "leaseToken": "occurrence:1",
 }
