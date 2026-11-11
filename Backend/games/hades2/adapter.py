@@ -647,15 +647,15 @@ class Hades2Adapter(GameAdapter):
     @staticmethod
     def _world_action_token(kind,request_id):
         if not isinstance(request_id,str) or not request_id:
-            raise ValueError('世界操作请求标识无效。')
+            raise ValueError('Action requires a requestId of 1..128 characters')
         seed='hades2:'+kind+':'+request_id
         return 'one-shot-'+uuid.uuid5(uuid.NAMESPACE_URL,seed).hex
 
     def _require_live_world_action(self):
         if not self.runtime.has_attachment or not self.state.get('connected'):
-            raise AdapterError('disconnected','世界操作需要已连接的游戏会话。')
+            raise AdapterError('disconnected','请先连接游戏。')
         if (self.state.get('capabilities') or {}).get('setFeature') is not True:
-            raise AdapterError('waiting','当前场景无法应用世界操作。')
+            raise AdapterError('waiting','World action is unavailable in the current scene')
 
     def set_next_room_reward_once(self,reward,request_id):
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
