@@ -76,6 +76,12 @@ assert 'operationToken: model.operation' not in host[host.index('TrainerConnecti
 assert "struct TrainerSecondaryActionButton" in primary_button
 assert ".help(helpText ?? \"\")" in primary_button
 assert ".accessibilityLabel(accessibilityLabel ?? title)" in primary_button
+assert "let latched: Bool" in primary_button
+assert "latched: Bool = false" in primary_button
+assert "if latched {" in primary_button
+assert ".buttonStyle(.borderedProminent)" in primary_button
+assert "button.buttonStyle(.bordered)" in primary_button
+assert ".accessibilityAddTraits(latched ? .isSelected : [])" in primary_button
 assert "helpText: generateHelp" in occurrence
 assert 'accessibilityLabel: title + " " + generateLabel' in occurrence
 # Core owns the same compact, text-only labeled action geometry for every
