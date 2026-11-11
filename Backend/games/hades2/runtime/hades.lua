@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 123 then
+if previousModule and previousModule.revision ~= 124 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 123 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 123,
+    version = 1, revision = 124,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -1104,9 +1104,14 @@ if __MacGamingTrainerV1 == nil then
     M.boonRarityEnabled = false
     releaseHook("SetTraitsOnLoot")
   end
+  -- One native StartRoom owner serves all pending world one-shots. Releasing
+  -- one intent may not discard the other one's room-commit listener.
+  local function releaseRoomAdmissionIfUnused()
+    if M.nextRoomReward == nil and M.nextOccurrenceTarget == nil then releaseHook("StartRoom") end
+  end
   local function releaseNextRoomReward()
     releaseHook("ChooseRoomReward")
-    releaseHook("StartRoom")
+    releaseRoomAdmissionIfUnused()
     M.nextRoomRewardRoutedRooms = {}
     M.nextRoomRewardPatchedDoors = 0
     M.nextRoomRewardPatchedValue = nil
@@ -1115,11 +1120,10 @@ if __MacGamingTrainerV1 == nil then
   local function releaseOccurrenceRouting()
     releaseHook("ChooseNextRoomData")
     releaseHook("IsRoomForced")
-    releaseHook("DoUnlockRoomExits")
-    releaseHook("CreateDoorRewardPreview")
     releaseHook("IsEncounterForced")
     releaseHook("ChooseEncounter")
     releaseHook("GetRandomValue")
+    releaseRoomAdmissionIfUnused()
   end
   local function releaseEconomyRuntime()
     M.infiniteMoney, M.moneyMultiplierEnabled, M.resourceMultiplierEnabled = false, false, false
@@ -1493,6 +1497,9 @@ if __MacGamingTrainerV1 == nil then
     M.forceEnableRerolls = false
     releaseNextRoomReward()
     releaseOccurrenceRouting()
+    -- Full deactivation retires every native hook even if durable legacy
+    -- intents were staged when deactivation started.
+    releaseHook("StartRoom")
     releaseEconomyRuntime()
     releaseRerollsRuntime()
     releaseStatsRuntime()
@@ -1532,7 +1539,7 @@ if __MacGamingTrainerV1 == nil then
       or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
-      or owns("ChooseNextRoomData") or owns("IsRoomForced") or owns("DoUnlockRoomExits") or owns("CreateDoorRewardPreview")
+      or owns("ChooseNextRoomData") or owns("IsRoomForced") or owns("StartRoom")
       or owns("IsEncounterForced") or owns("ChooseEncounter") or owns("GetRandomValue")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
@@ -8541,7 +8548,7 @@ if __MacGamingTrainerV1 == nil then
   -- predicates unchanged, and choose the requested target only from the native
   -- eligible pool when *no* candidate was natively forced. This preserves
   -- linked-room, explicit-force, priority, eligibility and SetupEncounter owners.
-  M.occurrenceRouting = { selection = nil, offering = nil }
+  M.occurrenceRouting = { selection = nil }
 
   function M.occurrenceRouting.choose(kind, original, ...)
     local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
@@ -8597,44 +8604,34 @@ if __MacGamingTrainerV1 == nil then
     return original(pool, ...)
   end
 
-  function M.occurrenceRouting.preview(original, door, ...)
-    local packed = table.pack(original(door, ...))
-    -- Called only for doors the native unlock loop really processes and does
-    -- not skip. Global OfferedExitDoors can also hold unavailable/persistent
-    -- rooms which have not been offered in this invocation.
-    if M.occurrenceRouting.offering ~= nil and type(door) == "table" then
-      local offering = M.occurrenceRouting.offering
-      if M.nextOccurrenceTarget == offering.target and M.nextOccurrenceToken == offering.token then
-        offering.doors[#offering.doors + 1] = door
+  -- Room strategies fulfill a one-shot only when StartRoom admits the exact
+  -- native destination. Offering a target door is merely an opportunity:
+  -- players may choose another door, or a native reroll may replace it.
+  -- Share the same StartRoom owner with the legacy next-room reward action.
+  local function installRoomAdmission()
+    if owns("StartRoom") then return end
+    requireFunctions("native world room admission", { "StartRoom" })
+    installHook("StartRoom", function(original, run, room, ...)
+      local rewardToken = M.nextRoomRewardToken
+      local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
+      -- Native room startup can yield. Never wrap it in pcall or claim success
+      -- until the native owner actually returns.
+      local result = table.pack(original(run, room, ...))
+      if run == CurrentRun and rewardToken ~= nil
+          and M.nextRoomRewardToken == rewardToken and M.nextRoomReward ~= nil
+          and type(room) == "table" and M.nextRoomRewardRoutedRooms[room] == rewardToken then
+        M.lastConsumedNextRoomRewardToken = rewardToken
+        M.nextRoomReward = nil
+        M.nextRoomRewardToken = nil
+        releaseNextRoomReward()
       end
-    end
-    return table.unpack(packed, 1, packed.n)
-  end
-
-  function M.occurrenceRouting.unlock(original, run, room, ...)
-    local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
-    local definition = occurrenceTargets[target]
-    if token == nil or type(definition) ~= "table" or type(definition.rooms) ~= "table" then
-      return original(run, room, ...)
-    end
-    local previous = M.occurrenceRouting.offering
-    local offering = { target = target, token = token, doors = {} }
-    M.occurrenceRouting.offering = offering
-    local packed = table.pack(pcall(original, run, room, ...))
-    M.occurrenceRouting.offering = previous
-    if not packed[1] then error(packed[2]) end
-    if M.nextOccurrenceTarget == target and M.nextOccurrenceToken == token then
-      for _, door in ipairs(offering.doors) do
-        if door.ReadyToUse == true and not door.SkipUnlock and door.ObjectId ~= nil
-            and type(MapState) == "table" and type(MapState.OfferedExitDoors) == "table"
-            and MapState.OfferedExitDoors[door.ObjectId] == door
-            and occurrenceRoomMatches(definition, door.Room) then
-          consumeNextOccurrence(target, token)
-          break
-        end
+      if run == CurrentRun and token ~= nil and M.nextOccurrenceTarget == target
+          and M.nextOccurrenceToken == token
+          and occurrenceRoomMatches(occurrenceTargets[target], room) then
+        consumeNextOccurrence(target, token)
       end
-    end
-    return table.unpack(packed, 2, packed.n)
+      return table.unpack(result, 1, result.n)
+    end)
   end
 
   M.occurrenceRouting.available = function()
@@ -8643,8 +8640,7 @@ if __MacGamingTrainerV1 == nil then
     local hasRooms = type(definition.rooms) == "table" and next(definition.rooms) ~= nil
     local hasEncounters = type(definition.encounters) == "table" and next(definition.encounters) ~= nil
     if hasRooms and not M.nativeFunctionsAvailable({
-        "ChooseNextRoomData", "IsRoomForced", "DoUnlockRoomExits",
-        "CreateDoorRewardPreview", "GetRandomValue",
+        "ChooseNextRoomData", "IsRoomForced", "GetRandomValue", "StartRoom",
       }) then return false end
     if hasEncounters and not M.nativeFunctionsAvailable({
         "ChooseEncounter", "IsEncounterForced", "GetRandomValue",
@@ -8660,7 +8656,8 @@ if __MacGamingTrainerV1 == nil then
 
     if hasRooms then
       requireFunctions("next occurrence room routing",
-        { "ChooseNextRoomData", "IsRoomForced", "DoUnlockRoomExits", "CreateDoorRewardPreview", "GetRandomValue" })
+        { "ChooseNextRoomData", "IsRoomForced", "GetRandomValue", "StartRoom" })
+      installRoomAdmission()
       if not owns("ChooseNextRoomData") then
         installHook("ChooseNextRoomData", function(original, ...)
           return M.occurrenceRouting.choose("room", original, ...)
@@ -8671,21 +8668,10 @@ if __MacGamingTrainerV1 == nil then
           return M.occurrenceRouting.observeForced("room", original, ...)
         end)
       end
-      if not owns("CreateDoorRewardPreview") then
-        installHook("CreateDoorRewardPreview", function(original, ...)
-          return M.occurrenceRouting.preview(original, ...)
-        end)
-      end
-      if not owns("DoUnlockRoomExits") then
-        installHook("DoUnlockRoomExits", function(original, ...)
-          return M.occurrenceRouting.unlock(original, ...)
-        end)
-      end
     else
       releaseHook("ChooseNextRoomData")
       releaseHook("IsRoomForced")
-      releaseHook("DoUnlockRoomExits")
-      releaseHook("CreateDoorRewardPreview")
+      releaseRoomAdmissionIfUnused()
     end
 
     if hasEncounters then
@@ -8827,19 +8813,7 @@ if __MacGamingTrainerV1 == nil then
         return rewardType or native
       end)
     end
-    if not owns("StartRoom") then
-      installHook("StartRoom", function(original, currentRun, currentRoom, ...)
-        local result = original(currentRun, currentRoom, ...)
-        if M.nextRoomReward ~= nil and type(currentRoom) == "table"
-            and M.nextRoomRewardRoutedRooms[currentRoom] == M.nextRoomRewardToken then
-          M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken
-          M.nextRoomReward = nil
-          M.nextRoomRewardToken = nil
-          releaseNextRoomReward()
-        end
-        return result
-      end)
-    end
+    installRoomAdmission()
     local patchRoom = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
     if M.nextRoomRewardPatchedValue ~= M.nextRoomReward or M.nextRoomRewardPatchRoom ~= patchRoom then
       patchOfferedNextRoomDoors()
