@@ -82,7 +82,6 @@ def mark_disconnected(state):
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
-    state['nextOccurrenceTarget']=None
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
