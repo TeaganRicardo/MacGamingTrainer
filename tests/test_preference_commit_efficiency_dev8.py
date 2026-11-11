@@ -34,8 +34,8 @@ def counted_save(preferences):
     return original_save(preferences)
 adapter.preference_store.save = counted_save
 
-# These three commands are internal applications of already-durable desired
-# state. Each user edit must fsync exactly once before it crosses the Lua boundary.
+# Durable preference edits fsync exactly once before crossing the Lua boundary.
+# A world one-shot is session-only and must cross with zero preference writes.
 save_count = 0
 adapter.set_desired('invincibility', True)
 assert save_count == 1, save_count
@@ -47,9 +47,10 @@ assert save_count == 1, save_count
 assert json.loads((base/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
 
 save_count = 0
-adapter.set_next_room_reward_desired('WeaponUpgrade')
-assert save_count == 1, save_count
-assert json.loads((base/'desired-state.json').read_text())['nextRoomReward'] == 'WeaponUpgrade'
+adapter.set_next_room_reward_once('WeaponUpgrade', 'reward-once')
+assert save_count == 0, save_count
+persisted = json.loads((base/'desired-state.json').read_text())
+assert 'nextRoomReward' not in persisted and 'nextRoomRewardToken' not in persisted
 
 # Programming/schema failures after the durable commit are surfaced instead of
 # being misreported as a normal deferred transport application.
