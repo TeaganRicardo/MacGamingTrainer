@@ -163,14 +163,47 @@ struct HadesWorldReward: Decodable, Identifiable {
     }
 }
 
+struct HadesWorldActionTarget: Decodable, Equatable {
+    let kind: String
+    let id: String
+
+    var stableID: String { kind + ":" + id }
+}
+
+struct HadesWorldActionLease: Decodable, Equatable {
+    let kind: String
+    let target: String
+    let leaseToken: String
+}
+
+struct HadesWorldOccurrenceTarget: Decodable, Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let sourceId: String
+}
+
+struct HadesWorldOccurrenceLease: Decodable, Equatable {
+    let target: String
+    let leaseToken: String
+}
+
 struct HadesWorldDoor: Decodable, Identifiable, Equatable {
     let id: String
+    let doorToken: String?
     let number: Int
+    let roomName: String?
     let reward: String
+    let targets: [HadesWorldActionTarget]?
+    let activeLease: HadesWorldActionLease?
+    // Transitional legacy fields remain optional until the old Hades I command
+    // surface is removed after the two-row World Actions view lands.
     let canReward: Bool
     let routes: [String]
     let canRestore: Bool
     let pendingEncounter: Bool
+
+    var effectiveDoorToken: String { doorToken ?? id }
+    var worldActionTargets: [HadesWorldActionTarget] { targets ?? [] }
 }
 
 struct HadesWorldObservation: Decodable, Equatable {
@@ -179,6 +212,10 @@ struct HadesWorldObservation: Decodable, Equatable {
     let canFish: Bool
     let canChaos: Bool
     let objects: [String]
+    let occurrenceTargets: [HadesWorldOccurrenceTarget]?
+    let occurrence: HadesWorldOccurrenceLease?
+
+    var worldOccurrenceTargets: [HadesWorldOccurrenceTarget] { occurrenceTargets ?? [] }
 }
 
 struct HadesObservation: Decodable {
