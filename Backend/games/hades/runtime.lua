@@ -1563,12 +1563,9 @@ world = (function()
     }
     lease.leaseToken = leaseToken("exit", door)
     exitLeases[door] = lease
-    -- Preview rendering may run native UI code, but it sees only a temporary
-    -- descriptor; the actual door target, room counts and RNG remain untouched.
-    local originalRoom = door.Room
-    door.Room = routePreviewRoom(door, target)
+    -- The installed preview hook projects the category through a temporary
+    -- descriptor; the actual door target, room counts and RNG stay untouched.
     local ok, failure = pcall(CreateDoorRewardPreview, door)
-    door.Room = originalRoom
     if not ok then exitLeases[door] = nil; error(failure, 0) end
     return lease
   end
@@ -1637,15 +1634,56 @@ world = (function()
         return ids
       end
     end)
+    hook("CreateDoorRewardPreview", function(original)
+      return function(door, ...)
+        local lease = activeExitLease(door)
+        if not lease or lease.kind ~= "roomCategory" then return original(door, ...) end
+        local actual = door.Room
+        door.Room = routePreviewRoom(door, lease.target)
+        local result = table.pack(pcall(original, door, ...))
+        door.Room = actual
+        if not result[1] then error(result[2], 0) end
+        return table.unpack(result, 2, result.n)
+      end
+    end)
+    hook("LeaveRoom", function(original)
+      return function(run, door, ...)
+        local source = currentRoom()
+        local lease = activeExitLease(door)
+        if lease and lease.kind == "roomCategory" then
+          assert(run == CurrentRun and lease.sourceRoom == source, "hades.error.staleDoor")
+          materializeRoute(door, lease)
+        end
+        clearSourceExitLeases(source, door)
+        -- LeaveRoom owns history, encounter recording, save/checkpoint and map
+        -- transition. Never pcall or synthesize those side effects here.
+        return original(run, door, ...)
+      end
+    end)
     hook("ChooseEncounter", function(original)
       return function(run, room, ...)
-        local intent = encounters[room]
-        encounters[room] = nil
-        if intent and run == intent.run and hero() == intent.hero and run.CurrentRoom == intent.sourceRoom
-            and IsEncounterEligible(run, room, EncounterData[intent.name]) then
-          return SetupEncounter(EncounterData[intent.name], room)
+        local lease = activeOccurrence()
+        if lease and lease.target == "thanatos" and run == CurrentRun then
+          local data = thanatos(room)
+          if data then
+            local encounter = SetupEncounter(data, room)
+            selectedOccurrences[encounter] = lease.leaseToken
+            return encounter
+          end
         end
         return original(run, room, ...)
+      end
+    end)
+    hook("RecordEncounter", function(original)
+      return function(run, encounter, ...)
+        local token = type(encounter) == "table" and selectedOccurrences[encounter] or nil
+        local result = table.pack(original(run, encounter, ...))
+        local lease = activeOccurrence()
+        if run == CurrentRun and lease and token == lease.leaseToken then
+          occurrenceLease = nil
+        end
+        if type(encounter) == "table" then selectedOccurrences[encounter] = nil end
+        return table.unpack(result, 1, result.n)
       end
     end)
   end
