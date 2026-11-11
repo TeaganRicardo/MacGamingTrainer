@@ -215,11 +215,6 @@ local function params(extra)
   for k, v in pairs(extra or {}) do result[k] = v end
   return result
 end
-local function doorParams(extra)
-  local result = params({ doorId = world().doors[1].id })
-  for k, v in pairs(extra or {}) do result[k] = v end
-  return result
-end
 local function fails(key, fn)
   local ok, err = pcall(fn); assert(not ok and tostring(err):find(key, 1, true), tostring(err))
 end
@@ -240,19 +235,49 @@ assert(#loot == 3, "native source gating was bypassed")
 runtime.spawn_reward(params({ reward = "GemDrop" }))
 assert(consumable.Cost == 0 and consumable.multiplied and consumable.extracted == 10)
 assert(ActivatedObjects[consumable.ObjectId] == consumable)
-local oldDoor = doorParams({ reward = "AthenaUpgrade" })
-runtime.set_door_reward(oldDoor)
+local rewardDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = rewardDoor.doorToken,
+  kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-1",
+})
 assert(firstDoor.Room.ChosenRewardType == "Boon" and firstDoor.Room.ForceLootName == "AthenaUpgrade")
-assert(originalRoom.OfferedRewards[100].ForceLootName == "AthenaUpgrade" and world().doors[1].canRestore)
-fails("staleDoor", function() runtime.set_door_reward(oldDoor) end)
-runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom and not world().doors[1].canRestore)
-fails("worldUnavailable", function() runtime.set_door_reward(doorParams({ reward = "StackUpgrade" })) end)
+local rewardObserved = world().doors[1]
+assert(originalRoom.OfferedRewards[100].ForceLootName == "AthenaUpgrade"
+    and rewardObserved.activeLease
+    and rewardObserved.activeLease.leaseToken == "exit:athena-reward-1")
+fails("staleDoor", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = rewardObserved.doorToken,
+    kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-duplicate",
+  })
+end)
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = rewardObserved.doorToken,
+  leaseToken = rewardObserved.activeLease.leaseToken, requestId = "athena-reward-cancel",
+})
+assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil)
+local nativeGatedDoor = world().doors[1]
+fails("worldUnavailable", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = nativeGatedDoor.doorToken,
+    kind = "reward", targetID = "StackUpgrade", requestId = "gated-reward",
+  })
+end)
 assert(firstDoor.Room == firstRoom, "native reward-store gating was bypassed")
-runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" }))
-local beforeNativeReroll = doorParams()
+local rerollDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = rerollDoor.doorToken,
+  kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reroll",
+})
+local beforeNativeReroll = world().doors[1]
 firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"; firstDoor.Room.ForceLootName = nil
-assert(not world().doors[1].canRestore, "a native in-place reroll retained stale restore authority")
-fails("staleDoor", function() runtime.restore_door(beforeNativeReroll) end)
+assert(world().doors[1].activeLease == nil, "a native in-place reroll retained stale lease authority")
+fails("staleDoor", function()
+  runtime.cancel_world_exit({
+    roomId = originalRoomId, doorToken = beforeNativeReroll.doorToken,
+    leaseToken = beforeNativeReroll.activeLease.leaseToken, requestId = "stale-reroll-cancel",
+  })
+end)
 firstDoor.Room = firstRoom
 local storyCreationsBefore = CurrentRun.RoomCreations.A_Story01 or 0
 local storyGenerationBefore = roomGenerationCalls
@@ -386,12 +411,24 @@ assert(ChooseNextRoomData(CurrentRun, {}) == forcedRoom, "native depth-11 select
 firstDoor.Room = clone(forcedRoom)
 local forcedTarget, beforeForcedAssignments = firstDoor.Room, assigned
 assert(not world().doors[1].canReward and #world().doors[1].routes == 0)
-fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "combat" })) end)
-fails("worldUnavailable", function() runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" })) end)
+local forcedDoor = world().doors[1]
+fails("worldUnavailable", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = forcedDoor.doorToken,
+    kind = "roomCategory", targetID = "combat", requestId = "forced-combat",
+  })
+end)
+fails("worldUnavailable", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = forcedDoor.doorToken,
+    kind = "reward", targetID = "AthenaUpgrade", requestId = "forced-reward",
+  })
+end)
 assert(firstDoor.Room == forcedTarget and assigned == beforeForcedAssignments)
 firstDoor.Room = firstRoom
 assert(#world().doors[1].routes == 0, "a forced room outside route categories was ignored")
-fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "thanatos" })) end)
+assert(not world().doors[1].worldActionTargets,
+  "forced exit unexpectedly exposed World Actions targets")
 CurrentRun.BiomeDepthCache = 8
 RoomSetData.Tartarus.A_PreBoss01 = nil
 assert(#world().doors[1].routes > 0)
@@ -413,24 +450,54 @@ assert(RandomChance == nativeRandomChance and randomDraws == beforeForceError,
   "native force-query failure leaked its callback or consumed RNG")
 forceError = false
 RoomSetData.Tartarus.A_PreBossChance = nil
-runtime.set_door_route(doorParams({ route = "combat" }))
-runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom)
+local cancelRouteDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = cancelRouteDoor.doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "cancel-combat-route",
+})
+local cancelRouteLease = world().doors[1].activeLease
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = cancelRouteLease.leaseToken, requestId = "cancel-combat-route-request",
+})
+assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil)
 local beforeAssignments = assigned
-fails("worldUnavailable", function() runtime.set_door_route(doorParams({ route = "shop" })) end)
+local shopDoor = world().doors[1]
+fails("worldUnavailable", function()
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = shopDoor.doorToken,
+    kind = "roomCategory", targetID = "shop", requestId = "unavailable-shop",
+  })
+end)
 assert(assigned == beforeAssignments)
-runtime.set_door_route(doorParams({ route = "thanatos" }))
-assert(world().doors[1].pendingEncounter)
-runtime.set_door_reward(doorParams({ reward = "AthenaUpgrade" }))
-assert(world().doors[1].pendingEncounter and firstDoor.Room.ForceLootName == "AthenaUpgrade")
-local scheduled = firstDoor.Room
-local encounter = ChooseEncounter(CurrentRun, scheduled)
-assert(encounter.Name == "ThanatosTartarus" and encounterCalls == 0)
-assert(ChooseEncounter(CurrentRun, scheduled).Name == "NativeDefault" and encounterCalls == 1)
-runtime.restore_door(doorParams())
-runtime.set_door_route(doorParams({ route = "thanatos" })); runtime.disable_all()
-assert(not world().doors[1].pendingEncounter)
+
+runtime.apply_world_occurrence({
+  roomId = originalRoomId, targetID = "npc:Thanatos", requestId = "thanatos-with-reward",
+})
+local composedDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = composedDoor.doorToken,
+  kind = "reward", targetID = "AthenaUpgrade", requestId = "reward-with-thanatos",
+})
+assert(world().occurrence and world().doors[1].activeLease
+    and firstDoor.Room.ForceLootName == "AthenaUpgrade",
+  "exit reward edit displaced the independent named occurrence lease")
+local composedEncounter = ChooseEncounter(CurrentRun, firstDoor.Room)
+assert(composedEncounter.Name == "ThanatosTartarus" and world().occurrence ~= nil)
+RecordEncounter(CurrentRun, composedEncounter)
+assert(world().occurrence == nil, "named occurrence did not commit independently of reward lease")
+local composedLease = world().doors[1].activeLease
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = composedLease.leaseToken, requestId = "cancel-composed-reward",
+})
+
+runtime.apply_world_occurrence({
+  roomId = originalRoomId, targetID = "npc:Thanatos", requestId = "thanatos-disable-all",
+})
+runtime.disable_all()
+assert(world().occurrence == nil)
 assert(ChooseEncounter(CurrentRun, firstDoor.Room).Name == "NativeDefault")
-runtime.restore_door(doorParams())
 runtime.generate_fishing(params())
 assert(activated == 501 and originalRoom.FishingPointId == 501 and CurrentRun.LastFishingPointDepth == 8)
 assert(not world().canFish)
@@ -471,7 +538,9 @@ runtime.generate_chamber_object(params({ object = "trove" }))
 assert(originalRoom.ChallengeSwitch.ObjectId == 803 and originalRoom.ChallengeSwitch.ReadyToUse)
 assert(#world().objects == 0 and IsShrinePointDoorEligible(CurrentRun, originalRoom))
 fails("worldUnavailable", function() runtime.generate_chamber_object(params({ object = "well" })) end)
-runtime.set_door_route(doorParams({ route = "thanatos" }))
+runtime.apply_world_occurrence({
+  roomId = originalRoomId, targetID = "npc:Thanatos", requestId = "abandoned-thanatos",
+})
 local abandoned = firstDoor.Room
 local old = params({ reward = "ZeusUpgrade" })
 local oldGate = params()
