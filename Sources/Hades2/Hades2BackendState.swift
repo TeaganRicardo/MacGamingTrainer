@@ -40,6 +40,40 @@ struct Hades2PresentationReference: Equatable {
     let arguments: [String]
 }
 
+struct Hades2WorldActionTarget: Identifiable, Equatable {
+    let kind: String
+    let id: String
+
+    var identity: String { kind + ":" + id }
+    var idValue: String { identity }
+}
+
+extension Hades2WorldActionTarget {
+    var stableID: String { identity }
+}
+
+struct Hades2WorldActionLease: Equatable {
+    let kind: String
+    let target: String
+    let leaseToken: String
+}
+
+struct Hades2WorldExit: Identifiable, Equatable {
+    let doorToken: String
+    let objectID: Int
+    let ordinal: Int
+    let roomName: String
+    let reward: String
+    let targets: [Hades2WorldActionTarget]
+    let activeLease: Hades2WorldActionLease?
+
+    var id: String { doorToken }
+}
+
+struct Hades2WorldActionsSnapshot: Equatable {
+    let exits: [Hades2WorldExit]
+}
+
 /// Typed boundary between the untyped JSON transport envelope and Hades UI
 /// state. All backend field names are centralized here instead of being spread
 /// through the ObservableObject and Views.
@@ -66,6 +100,7 @@ struct Hades2StatePatch {
     let nextRoomReward: Hades2FieldPatch<String>
     let nextOccurrenceTarget: Hades2FieldPatch<String>
     let occurrenceTargets: [Hades2OccurrenceTarget]?
+    let worldActions: Hades2FieldPatch<Hades2WorldActionsSnapshot>
     let rerolls: Hades2FieldPatch<Double>
     let rerollsLocked: Bool?
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
@@ -133,6 +168,11 @@ struct Hades2StatePatch {
         } else { boonRarity = nil }
         nextRoomReward = Self.field(payload, "nextRoomReward", String.self)
         nextOccurrenceTarget = Self.field(payload, "nextOccurrenceTarget", String.self)
+        if payload.keys.contains("worldActions") {
+            worldActions = .present(Self.decodeWorldActions(payload["worldActions"]))
+        } else {
+            worldActions = .absent
+        }
         occurrenceTargets = (payload["occurrenceTargets"] as? [[String: Any]])?.compactMap { row in
             guard let id = row["id"] as? String, !id.isEmpty,
                   let kind = row["kind"] as? String, !kind.isEmpty,
@@ -315,6 +355,40 @@ struct Hades2StatePatch {
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max
         )
+    }
+
+    private static func decodeWorldActions(_ raw: Any?) -> Hades2WorldActionsSnapshot? {
+        guard let row = raw as? [String: Any],
+              let rawExits = row["exits"] as? [[String: Any]] else { return nil }
+        let exits = rawExits.compactMap { exit -> Hades2WorldExit? in
+            guard let doorToken = exit["doorToken"] as? String, !doorToken.isEmpty,
+                  let objectID = number(exit["objectId"]).map(Int.init),
+                  let ordinal = number(exit["ordinal"]).map(Int.init) else { return nil }
+            let targets = (exit["targets"] as? [[String: Any]] ?? []).compactMap { target -> Hades2WorldActionTarget? in
+                guard let kind = target["kind"] as? String, !kind.isEmpty,
+                      let id = target["id"] as? String, !id.isEmpty else { return nil }
+                return Hades2WorldActionTarget(kind: kind, id: id)
+            }
+            let lease: Hades2WorldActionLease?
+            if let value = exit["activeLease"] as? [String: Any],
+               let kind = value["kind"] as? String, !kind.isEmpty,
+               let target = value["target"] as? String, !target.isEmpty,
+               let token = value["leaseToken"] as? String, !token.isEmpty {
+                lease = Hades2WorldActionLease(kind: kind, target: target, leaseToken: token)
+            } else {
+                lease = nil
+            }
+            return Hades2WorldExit(
+                doorToken: doorToken,
+                objectID: objectID,
+                ordinal: ordinal,
+                roomName: exit["roomName"] as? String ?? "",
+                reward: exit["reward"] as? String ?? "",
+                targets: targets,
+                activeLease: lease
+            )
+        }
+        return Hades2WorldActionsSnapshot(exits: exits.sorted { $0.ordinal < $1.ordinal })
     }
 
     private static func decodeProfile(_ row: [String: Any]) -> TrainerProfile? {
