@@ -71,7 +71,12 @@ function AssignRoomToExitDoor(door, room)
   CurrentRun.CurrentRoom.OfferedRewards = CurrentRun.CurrentRoom.OfferedRewards or {}
   CurrentRun.CurrentRoom.OfferedRewards[door.ObjectId] = { Type = room.ChosenRewardType, ForceLootName = room.ForceLootName }
 end
-function CreateDoorRewardPreview(door) previews = previews + 1 end
+local previewCategories = {}
+function CreateDoorRewardPreview(door)
+  previews = previews + 1
+  previewCategories[door.ObjectId] = door.Room.NextRoomSet and "generic"
+    or (door.Room.ChosenRewardType or "story")
+end
 function Destroy(args) destroyed = destroyed + #args.Ids end
 local inactivePoints = { 501 }
 local pedestalIds = { 801, 802, 803 }
@@ -115,13 +120,31 @@ function GetIdsByType(args)
   if args.Name == "ChallengeSwitchBase" then return pedestalIds end
   assert(args.Name == "SecretPoint"); return secretPoints
 end
-function GetRandomValue(values) return values[1] end
+local roomSelectionDraws = 0
+function GetRandomValue(values)
+  roomSelectionDraws = roomSelectionDraws + 1
+  return values[1]
+end
 function GetRunDepth(run) return 8 end
 local activated = 0
 function Activate(args) activated = args.Id; inactivePoints = {} end
 local traitUses = 0
 function UseHeroTraitsWithValue() traitUses = traitUses + 1 end
 function CheckRoomExitsReady(room) return true end
+-- Native-shaped authorization/commit seam: AttemptUseDoor guards the player
+-- interaction; LeaveRoom reads door.Room only after that authorization.
+local nativeLeaveCalls = 0
+function AttemptUseDoor(door)
+  if not door.ReadyToUse or door.blocked or not CheckRoomExitsReady(CurrentRun.CurrentRoom) then
+    return false
+  end
+  return LeaveRoom(CurrentRun, door)
+end
+function LeaveRoom(run, door)
+  assert(run == CurrentRun)
+  nativeLeaveCalls = nativeLeaveCalls + 1
+  return door.Room
+end
 function thread(fn, ...) return fn(...) end
 function FishingPointAvailablePresentation(room) assert(room.FishingPointId == 501) end
 function IsFishingEligible(run, room)
@@ -212,9 +235,40 @@ firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"; firstDoor.Room.ForceLoo
 assert(not world().doors[1].canRestore, "a native in-place reroll retained stale restore authority")
 fails("staleDoor", function() runtime.restore_door(beforeNativeReroll) end)
 firstDoor.Room = firstRoom
+local beforeRouteSelections, beforeRouteAssignments = roomSelectionDraws, assigned
+local beforeRouteCreations = CurrentRun.RoomCreations.A_Story01 or 0
 runtime.set_door_route(doorParams({ route = "story" }))
-assert(firstDoor.Room.Name == "A_Story01" and CurrentRun.RoomCreations.A_Story01 == 1)
-runtime.restore_door(doorParams()); assert(firstDoor.Room == firstRoom)
+assert(firstDoor.Room == firstRoom and assigned == beforeRouteAssignments,
+  "reserving a route mutated the native destination or offered-reward graph")
+assert(previewCategories[100] == "story" and world().doors[1].pendingRoute == "story"
+    and world().doors[1].canRestore,
+  "selected story plan lacked truthful native preview and confirmed lease")
+assert((CurrentRun.RoomCreations.A_Story01 or 0) == beforeRouteCreations
+    and roomSelectionDraws == beforeRouteSelections,
+  "Apply prematurely created a room or sampled the native route")
+runtime.restore_door(doorParams())
+assert(firstDoor.Room == firstRoom and not world().doors[1].canRestore
+    and previewCategories[100] == firstRoom.ChosenRewardType,
+  "cancel did not restore both actual native preview and per-door lease")
+assert((CurrentRun.RoomCreations.A_Story01 or 0) == beforeRouteCreations
+    and roomSelectionDraws == beforeRouteSelections,
+  "cancelling a route left room-creation or RNG residue")
+-- The native attempted use must pass its own door checks before the late
+-- LeaveRoom owner may commit a new room.
+runtime.set_door_route(doorParams({ route = "story" }))
+firstDoor.blocked = true
+assert(AttemptUseDoor(firstDoor) == false and nativeLeaveCalls == 0
+  and (CurrentRun.RoomCreations.A_Story01 or 0) == beforeRouteCreations
+  and roomSelectionDraws == beforeRouteSelections,
+  "a denied native door use committed a reserved room")
+firstDoor.blocked = nil
+local committedStory = AttemptUseDoor(firstDoor)
+assert(committedStory.Name == "A_Story01"
+  and CurrentRun.RoomCreations.A_Story01 == beforeRouteCreations + 1
+  and roomSelectionDraws == beforeRouteSelections + 1
+  and not world().doors[1].canRestore,
+  "authorized native LeaveRoom did not commit exactly one selected target")
+firstDoor.Room = firstRoom
 local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
   ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
 RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
