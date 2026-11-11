@@ -1847,7 +1847,9 @@ world = (function()
       return function(door, room, ...)
         local previous = type(door) == "table" and door.Room or nil
         local result = table.pack(original(door, room, ...))
-        if previous ~= room then occurrenceSelectedRooms[previous] = nil end
+        if type(previous) == "table" and previous ~= room then
+          occurrenceSelectedRooms[previous] = nil
+        end
         local selected = occurrenceSelectedRooms[room]
         if selected then selected.door = door end
         return table.unpack(result, 1, result.n)

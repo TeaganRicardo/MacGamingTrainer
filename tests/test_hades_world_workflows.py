@@ -241,6 +241,13 @@ end
 local initialWorld = world()
 local originalRoomId = initialWorld.roomId
 assert(initialWorld.canFish and initialWorld.canChaos and #initialWorld.doors == 2)
+-- Native-generated doors can be assigned before they own any Room reference.
+local unassigned = { Name = "ExitDoor", ObjectId = 120, ReadyToUse = true }
+AssignRoomToExitDoor(unassigned, clone(firstRoom))
+assert(unassigned.Room.Name == "A_Combat02",
+  "native first assignment failed for a door without a previous room")
+OfferedExitDoors[120] = nil
+originalRoom.OfferedRewards[120] = nil
 local function hasTarget(door, kind, id)
   for _, target in ipairs(door.targets or {}) do
     if target.kind == kind and target.id == id then return true end
