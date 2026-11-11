@@ -269,6 +269,50 @@ assert(committedStory.Name == "A_Story01"
   and not world().doors[1].canRestore,
   "authorized native LeaveRoom did not commit exactly one selected target")
 firstDoor.Room = firstRoom
+-- Two independent native exits: only the one the player actually enters
+-- materializes its reservation; leaving the source invalidates the sibling.
+local secondRoom = { Name = "A_Combat03", ChosenRewardType = "RoomRewardMoneyDrop" }
+local secondDoor = { Name = "ExitDoor", ObjectId = 101, ReadyToUse = true, Room = secondRoom }
+OfferedExitDoors[101] = secondDoor
+runtime.set_door_route(doorParams({ route = "combat" }))
+local observedBoth = world()
+assert(#observedBoth.doors == 2 and observedBoth.doors[1].pendingRoute == "combat")
+runtime.set_door_route({ roomId = observedBoth.roomId, doorId = observedBoth.doors[2].id, route = "story" })
+assert(firstDoor.Room == firstRoom and secondDoor.Room == secondRoom
+  and world().doors[2].pendingRoute == "story", "one plan overwrote another door's native authority")
+local beforeSiblingStory = CurrentRun.RoomCreations.A_Story01 or 0
+local previousDraws = roomSelectionDraws
+local chosenRoom = AttemptUseDoor(firstDoor)
+assert(chosenRoom.Name == "A_Combat02" and firstDoor.Room == chosenRoom
+  and secondDoor.Room == secondRoom and world().doors[2].pendingRoute == nil
+  and (CurrentRun.RoomCreations.A_Story01 or 0) == beforeSiblingStory
+  and roomSelectionDraws == previousDraws + 1,
+  "leaving one exact door consumed, created or preserved the sibling plan")
+OfferedExitDoors[101] = nil
+firstDoor.Room = firstRoom
+
+-- An in-place native reroll invalidates the lease and restores native preview
+-- authority on the next actual preview call. A stale cancel token cannot
+-- claim a different target.
+runtime.set_door_route(doorParams({ route = "story" }))
+local beforeRerollToken = doorParams()
+firstDoor.Room.ChosenRewardType = "Boon"
+CreateDoorRewardPreview(firstDoor)
+assert(not world().doors[1].canRestore and world().doors[1].pendingRoute == nil
+    and previewCategories[100] == "Boon",
+  "a native in-place reroll kept stale per-door ownership")
+fails("staleDoor", function() runtime.restore_door(beforeRerollToken) end)
+firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"
+
+-- Only the native AttemptUseDoor -> LeaveRoom invocation grants a commit.
+runtime.set_door_route(doorParams({ route = "story" }))
+local beforeUnauthorized = roomSelectionDraws
+local beforeUnauthorizedCreations = CurrentRun.RoomCreations.A_Story01 or 0
+fails("worldUnavailable", function() LeaveRoom(CurrentRun, firstDoor) end)
+assert(roomSelectionDraws == beforeUnauthorized and
+    (CurrentRun.RoomCreations.A_Story01 or 0) == beforeUnauthorizedCreations,
+  "a direct/unowned LeaveRoom bypassed native use authorization")
+runtime.restore_door(doorParams())
 local forcedRoom = { Name = "A_PreBoss01", ForceAtBiomeDepthMin = 11, ForceAtBiomeDepthMax = 11,
   ForcedFirstReward = "Shop", ChosenRewardType = "Shop" }
 RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
