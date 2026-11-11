@@ -277,10 +277,8 @@ assert adapter_rarity.preference_dirty is False
 print('pending_preference_confirmation_rarity_ok')
 
 
-# nextRoomReward is a durable one-shot with an identity token. Arming it while
-# another field is pending must preserve that older pending work. Once the
-# resident reports consumption of this exact token, later reconciliation must
-# not resurrect the one-shot.
+# A live world one-shot may run while another durable field remains pending,
+# but it must neither persist itself nor confirm that unrelated durable intent.
 base_reward, transport_reward, adapter_reward = make_pending_adapter(
     'mgt-pending-confirmation-next-room-'
 )
@@ -293,27 +291,26 @@ adapter_reward.dispatch(
 assert adapter_reward.preference_dirty is True
 
 adapter_reward.dispatch(
-    'set_next_room_reward_desired',
+    'set_next_room_reward_once',
     {'reward': 'WeaponUpgrade'},
-    'desired-reward',
+    'world-reward',
 )
-armed_token = adapter_reward.preferences['nextRoomRewardToken']
-assert isinstance(armed_token, str) and armed_token
+armed_token = transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken']
+assert isinstance(armed_token, str) and armed_token.startswith('one-shot-')
 assert transport_reward.state['nextRoomReward'] == 'WeaponUpgrade'
-assert transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken'] == armed_token
 assert adapter_reward.preferences['invincibility'] is True
 assert adapter_reward.preference_dirty is True, (
-    'successful next-room arm must not confirm failed feature A'
+    'successful live world action must not confirm failed durable feature A'
 )
 persisted_reward = json.loads(
     (base_reward / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_reward['nextRoomReward'] == 'WeaponUpgrade'
-assert persisted_reward['nextRoomRewardToken'] == armed_token
+assert 'nextRoomReward' not in persisted_reward
+assert 'nextRoomRewardToken' not in persisted_reward
 assert persisted_reward['invincibility'] is True
 
-# Simulate resident consumption before the next status. The exact receipt proves
-# that this one-shot ran even though another durable field remains pending.
+# Simulate native consumption before the next status. The receipt remains
+# runtime evidence only; the status may reconcile the older durable feature.
 transport_reward.state['nextRoomReward'] = None
 transport_reward.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
 transport_reward.state['runtimeDiagnostics'][
@@ -323,14 +320,14 @@ transport_reward.state['runtimeDiagnostics'][
 adapter_reward.dispatch('status', {}, 'status-reward')
 assert transport_reward.state['desiredFeatures']['invincibility'] is True
 assert transport_reward.state['nextRoomReward'] is None
-assert adapter_reward.preferences['nextRoomReward'] is None
-assert adapter_reward.preferences['nextRoomRewardToken'] is None
+assert 'nextRoomReward' not in adapter_reward.preferences
+assert 'nextRoomRewardToken' not in adapter_reward.preferences
 assert adapter_reward.preference_dirty is False
 persisted_reward = json.loads(
     (base_reward / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_reward['nextRoomReward'] is None
-assert persisted_reward['nextRoomRewardToken'] is None
+assert 'nextRoomReward' not in persisted_reward
+assert 'nextRoomRewardToken' not in persisted_reward
 assert persisted_reward['invincibility'] is True
 
 print('pending_preference_confirmation_next_room_ok')
