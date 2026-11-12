@@ -580,5 +580,217 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.close()
         }
     }
+    exerciseAcquisitionLayoutGeometry()
 }
+
+
+private struct ExactBoonAcquisitionGeometryFixture: View {
+    let language: TrainerPresentationLanguage
+    let gameID: String
+    @State private var search = ""
+    @State private var level = "2"
+    @State private var encounters = "3"
+    @State private var rarity = "Heroic"
+    @State private var blessing = "blessing"
+    @State private var curse = "curse"
+    @State private var source = "source"
+    @State private var target = "target"
+
+    private func label(_ english: String, _ chinese: String) -> String {
+        language == .en ? english : chinese
+    }
+
+    var body: some View {
+        TrainerAcquisitionPanel(
+            title: label("Exact Boons", "指定祝福"),
+            icon: "sparkles",
+            search: $search,
+            searchPlaceholder: label("Search", "搜索"),
+            clearLabel: label("Clear", "清除")
+        ) {
+            HStack(spacing: 8) {
+                Text(label("Level", "等级")).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("acquisition.level.label")
+                TextField("", text: $level)
+                    .frame(width: 64)
+                    .accessibilityIdentifier("acquisition.level")
+                Text(label("Rarity", "稀有度")).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("acquisition.rarity.label")
+                Picker(label("Rarity", "稀有度"), selection: $rarity) {
+                    Text("Heroic").tag("Heroic")
+                    Text("Epic").tag("Epic")
+                }
+                .labelsHidden()
+                .trainerPicker(.compactValue, state: .interactive)
+                .accessibilityIdentifier("acquisition.rarity")
+                if gameID == "hades" {
+                    Text(label("Encounters", "遭遇次数")).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("acquisition.encounters.label")
+                    TextField("", text: $encounters)
+                        .frame(width: 64)
+                        .accessibilityIdentifier("acquisition.encounters")
+                }
+                Text(label("Game-controlled", "游戏控制"))
+                    .font(.caption2).lineLimit(1)
+                    .frame(maxWidth: 96, alignment: .leading)
+                    .accessibilityIdentifier("acquisition.adjustment")
+            }
+        } rows: {
+            VStack(alignment: .leading, spacing: 12) {
+                TrainerDualInlinePickerLayout(
+                    minimumPickerWidth: 144,
+                    maximumPickerWidth: TrainerTheme.standard.pickerActionMaxWidth,
+                    minimumShortcutWidth: TrainerTheme.standard.shortcutBadgeMinimumWidth,
+                    minimumActionWidth: TrainerTheme.standard.compactActionWidth
+                ) {
+                    Text(label("Blessing", "祝福")).font(.caption).fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("acquisition.chaos.blessing.label")
+                    Picker(label("Chaos blessing", "卡俄斯祝福"), selection: $blessing) {
+                        Text("Fixture blessing").tag("blessing")
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: .interactive)
+                    .accessibilityIdentifier("acquisition.chaos.blessing")
+                    Text(label("Curse", "诅咒")).font(.caption).fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("acquisition.chaos.curse.label")
+                    Picker(label("Chaos curse", "卡俄斯诅咒"), selection: $curse) {
+                        Text("Fixture curse").tag("curse")
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: .interactive)
+                    .accessibilityIdentifier("acquisition.chaos.curse")
+                    TrainerShortcutBadgeSlot(text: "⌃⌥G")
+                    TrainerSecondaryActionButton(title: label("Apply", "应用"),
+                        systemImage: TrainerSemanticIcon.Action.acquire, enabled: true,
+                        widthRole: .compactRow) {}
+                }
+                TrainerDualInlinePickerLayout(
+                    minimumPickerWidth: 144,
+                    maximumPickerWidth: TrainerTheme.standard.pickerActionMaxWidth,
+                    minimumShortcutWidth: TrainerTheme.standard.shortcutBadgeMinimumWidth,
+                    minimumActionWidth: TrainerTheme.standard.compactActionWidth
+                ) {
+                    Text(label("Source", "来源")).font(.caption).fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("acquisition.exact.source.label")
+                    Picker(label("Source", "来源"), selection: $source) {
+                        Text("Fixture source").tag("source")
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: .interactive)
+                    .accessibilityIdentifier("acquisition.exact.source")
+                    Text(label("Target", "目标")).font(.caption).fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("acquisition.exact.target.label")
+                    Picker(label("Target", "目标祝福"), selection: $target) {
+                        Text("Fixture target").tag("target")
+                    }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: .interactive)
+                    .accessibilityIdentifier("acquisition.exact.target")
+                    TrainerShortcutBadgeSlot(text: "⌃⌥E")
+                    TrainerSecondaryActionButton(title: label("Apply", "应用"),
+                        systemImage: TrainerSemanticIcon.Action.acquire, enabled: true,
+                        widthRole: .compactRow) {}
+                }
+            }
+        }
+    }
+}
+
+@MainActor
+private func exerciseAcquisitionLayoutGeometry() {
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        for gameID in ["hades", "hades2"] {
+            for width in [CGFloat(817), CGFloat(1050), CGFloat(1600)] {
+                let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+                localization.language = language
+                let host = NSHostingView(rootView:
+                    ExactBoonAcquisitionGeometryFixture(language: language, gameID: gameID)
+                        .frame(width: width, height: 300, alignment: .topLeading)
+                        .preferredColorScheme(.dark)
+                        .trainerTheme(.standard)
+                        .environmentObject(localization)
+                )
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 300),
+                    styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.appearance = NSAppearance(named: .darkAqua)
+                window.contentView = host
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+
+                func control(_ identifier: String) -> NativeAccessibilityControl? {
+                    nativeAccessibilityControls(host).first { $0.identifier == identifier }
+                }
+                let searchLabel = language == .en ? "Search" : "搜索"
+                func searchField() -> NativeAccessibilityControl? {
+                    nativeAccessibilityControls(host).first {
+                        $0.role == "AXTextField" && $0.label == searchLabel
+                    }
+                }
+                hierarchyWait(host) {
+                    control("acquisition.level") != nil
+                        && control("acquisition.rarity") != nil
+                        && control("acquisition.chaos.blessing") != nil
+                        && control("acquisition.chaos.curse") != nil
+                        && control("acquisition.exact.source") != nil
+                        && control("acquisition.exact.target") != nil
+                        && searchField() != nil
+                }
+                let level = control("acquisition.level")!.frame
+                let rarityLabel = control("acquisition.rarity.label")!.frame
+                let rarity = control("acquisition.rarity")!.frame
+                let search = searchField()!.frame
+                let adjustment = control("acquisition.adjustment")!.frame
+                hierarchyCheck(level.maxX <= rarityLabel.minX + 2
+                               && rarityLabel.maxX <= rarity.minX + 2
+                               && rarity.maxX <= adjustment.minX + 2
+                               && adjustment.maxX <= search.minX + 2
+                               && abs(level.midY - rarity.midY) < 4
+                               && abs(rarity.midY - search.midY) < 4,
+                               "acquisition header controls are not inline/in order: game=\(gameID) language=\(language.rawValue) width=\(width)")
+                if gameID == "hades" {
+                    let countLabel = control("acquisition.encounters.label")!.frame
+                    let count = control("acquisition.encounters")!.frame
+                    hierarchyCheck(adjustment.minX >= count.maxX - 2
+                                   && countLabel.maxX <= count.minX + 2
+                                   && abs(count.midY - level.midY) < 4,
+                                   "Hades I conditional Chaos count left the inline header")
+                } else {
+                    hierarchyCheck(control("acquisition.encounters") == nil,
+                                   "Hades II unexpectedly rendered Hades I Chaos count")
+                }
+
+                for pair in [
+                    ("acquisition.chaos.blessing.label", "acquisition.chaos.blessing"),
+                    ("acquisition.chaos.curse.label", "acquisition.chaos.curse"),
+                    ("acquisition.exact.source.label", "acquisition.exact.source"),
+                    ("acquisition.exact.target.label", "acquisition.exact.target"),
+                ] {
+                    let labelFrame = control(pair.0)!.frame
+                    let pickerFrame = control(pair.1)!.frame
+                    hierarchyCheck(labelFrame.maxX <= pickerFrame.minX + 2
+                                   && abs(labelFrame.midY - pickerFrame.midY) < 4,
+                                   "acquisition label is above/overlapping its Picker: game=\(gameID) language=\(language.rawValue) width=\(width) id=\(pair.0)")
+                }
+                let chaosBlessing = control("acquisition.chaos.blessing")!.frame
+                let chaosCurse = control("acquisition.chaos.curse")!.frame
+                let exactSource = control("acquisition.exact.source")!.frame
+                let exactTarget = control("acquisition.exact.target")!.frame
+                hierarchyCheck(chaosBlessing.maxX <= chaosCurse.minX + 2
+                               && exactSource.maxX <= exactTarget.minX + 2
+                               && abs(chaosBlessing.midY - chaosCurse.midY) < 4
+                               && abs(exactSource.midY - exactTarget.midY) < 4,
+                               "acquisition dual-picker columns overlap or wrap unexpectedly")
+                print("acquisition_inline_geometry game=\(gameID) language=\(language.rawValue) width=\(width)")
+                window.contentView = nil
+                window.close()
+            }
+        }
+    }
+    print("acquisition_inline_native_geometry_ok")
+}
+
 '''
