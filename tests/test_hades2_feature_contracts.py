@@ -72,7 +72,7 @@ def source_section(source, start, end):
 def enum_cases(source, start, end):
     body = source_section(source, start, end).split("var id:", 1)[0]
     declarations = re.findall(r"^\s*case\s+([^\n]+)$", body, re.M)
-    return [name for declaration in declarations for name in re.findall(r"[A-Za-z]\w*", declaration)]
+    return [name for declaration in declarations for name in re.findall(r"[A-Za-z]\w*", declaration.split("=", 1)[0])]
 
 def shortcut_references(source):
     pattern = re.compile(
@@ -134,6 +134,8 @@ assert common_order == [
     "forceEnableRerolls", "instantCastCooldown", "hexAlwaysReady", "infiniteAmmo", "autoMiniGames",
 ]
 assert action_order[:10] == common_order
+# The legacy raw shortcut/Profile key does not declare a second action.
+assert 'case applyWorldExit = "applyNextRoomReward"' in types
 parts = [
     common,
     source_section(view, "private var gameSpeedPanel: some View {", "private var presentedContent:"),
