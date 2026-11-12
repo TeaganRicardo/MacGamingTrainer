@@ -335,3 +335,8 @@ assert "specialSearch" not in view
 
 assert 'let lines = busy' in sidebar
 assert 'return lines.joined(separator: "\\n")' in sidebar
+
+workbench_shell = (ROOT / "Sources/Core/UI/TrainerShell.swift").read_text()
+assert "struct TrainerWorkbenchContentFrame: ViewModifier" in workbench_shell
+assert "content.frame(minWidth: theme.contentMinWidth, maxWidth: .infinity" in workbench_shell
+assert ".trainerWorkbenchContentFrame()" in host and "pageMaxWidth" not in host
