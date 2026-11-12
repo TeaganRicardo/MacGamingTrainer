@@ -65,6 +65,37 @@ assert(targetExists(first, "reward", "MaxHealthDrop"),
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
+-- IsRoomRewardEligible calls native game-state requirements, which may count
+-- checks and sample ChanceToPlay. Catalog inspection must do neither and must
+-- hide rewards whose eligibility depends on native RNG.
+local previousSession, nativeRewardEligible = SessionMapState, IsRoomRewardEligible
+local rewardUsesRandom = false
+SessionMapState = { RequirementChecksThisFrame = 17 }
+local observedSession = SessionMapState
+IsRoomRewardEligible = function(run, room, reward, previously, args)
+  SessionMapState.RequirementChecksThisFrame =
+    SessionMapState.RequirementChecksThisFrame + 1
+  if rewardUsesRandom and reward.Name == "MaxHealthDrop" then
+    return GetRandomValue({ true, false })
+  end
+  return nativeRewardEligible(run, room, reward, previously, args)
+end
+local beforeRewardProbeRNG = nativeRandomCalls
+assert(targetExists(exitByObject(1), "reward", "MaxHealthDrop"))
+assert(SessionMapState == observedSession
+    and SessionMapState.RequirementChecksThisFrame == 17
+    and nativeRandomCalls == beforeRewardProbeRNG,
+  "reward catalog inspection mutated native frame counters or RNG")
+rewardUsesRandom = true
+assert(not targetExists(exitByObject(1), "reward", "MaxHealthDrop"),
+  "random-dependent native reward eligibility was presented as guaranteed")
+assert(SessionMapState == observedSession
+    and SessionMapState.RequirementChecksThisFrame == 17
+    and nativeRandomCalls == beforeRewardProbeRNG,
+  "random-dependent reward probe leaked native RNG or frame counter state")
+IsRoomRewardEligible = nativeRewardEligible
+SessionMapState = previousSession
+
 -- Native eligibility and force predicates are probed without advancing the
 -- game's RNG. Random-dependent predicates fail closed for generic categories.
 probeEligibilityUsesRandom = true
