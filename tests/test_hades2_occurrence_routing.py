@@ -243,6 +243,30 @@ assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil)
 assert(M.lastConsumedNextOccurrenceToken == "encounter-token")
 print("occurrence_routing_ok")
 """,
+    "departed_source_releases_encounter_claim_even_with_stale_exit_map": r"""
+setRoomSet("F")
+CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
+setOccurrence("npc:Nemesis", "source-departure")
+local selected = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+assert(selected.Name == "NemesisCombatF" and M.occurrenceRouting.encounterClaim,
+  "fixture did not establish the original encounter claim")
+local oldSource = CurrentRun.CurrentRoom
+CurrentRun.CurrentRoom = DeepCopyTable(RoomData.G_Combat01)
+CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatG" }
+MapState.OfferedExitDoors = {
+  [99] = { ObjectId = 99, ReadyToUse = true, Room = oldSource },
+}
+local nextSelected = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+assert(nextSelected.Name == "NemesisCombatG",
+  "stale OfferedExitDoors kept a departed source encounter claim authoritative")
+assert(M.occurrenceRouting.encounterClaim
+    and M.occurrenceRouting.encounterClaim.room == CurrentRun.CurrentRoom,
+  "new native opportunity did not replace the abandoned encounter claim")
+RecordEncounter(CurrentRun, nextSelected)
+assert(M.lastConsumedNextOccurrenceToken == "source-departure",
+  "replacement native encounter did not consume the original run-scoped request")
+print("occurrence_routing_ok")
+""",
     "native_forced_encounter_competitor_is_preserved": r"""
 setRoomSet("F")
 CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
