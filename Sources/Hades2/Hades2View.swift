@@ -1333,7 +1333,7 @@ struct Hades2TrainerView: View {
 
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
             TrainerSecondaryActionButton(
-                title: text("hades2.nextRoom.apply"),
+                title: text("hades2.worldActions.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.selectedWorldExitActionAvailable,
                 latched: model.selectedWorldExitLease != nil
@@ -1382,7 +1382,7 @@ struct Hades2TrainerView: View {
             )
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
-                title: text("hades2.occurrence.apply"),
+                title: text("hades2.worldActions.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.occurrenceActionAvailable,
                 latched: pending
