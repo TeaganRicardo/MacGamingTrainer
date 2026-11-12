@@ -618,6 +618,9 @@ runtime.cancel_world_occurrence({
   requestId = "charon-cancel-request",
 })
 assert(world().occurrence == nil, "explicit named occurrence cancellation left a lease")
+-- Restore the native availability fixture after the Charon-only eligibility case;
+-- subsequent generic shop targets must remain genuinely unavailable.
+RoomSetData.Tartarus.A_Shop01.eligible = false
 
 runtime.apply_world_occurrence({
   roomId = originalRoomId,
