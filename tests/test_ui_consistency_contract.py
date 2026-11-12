@@ -158,7 +158,10 @@ presentation_cases = dict(re.findall(
     presentation_block,
 ))
 assert len(actions) == len(set(actions)), "duplicate shortcut action declaration"
-assert 'case applyWorldExit = "applyNextRoomReward"' in shortcut_declarations, "World Exit source identity must retain only the released storage raw value"\nassert presentation_cases.get("disableAll") == "host.disableAll"
+assert 'case applyWorldExit = "applyNextRoomReward"' in shortcut_declarations, (
+    "World Exit source identity must retain only the released storage raw value"
+)
+assert presentation_cases.get("disableAll") == "host.disableAll"
 assert set(presentation_cases) == set(actions), (
     "every registered shortcut action must have one presentation label"
 )
