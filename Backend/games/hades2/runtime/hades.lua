@@ -8721,8 +8721,10 @@ if __MacGamingTrainerV1 == nil then
       local result = table.pack(original(run, room, ...))
       if run == CurrentRun and token ~= nil and M.nextOccurrenceTarget == target
           and M.nextOccurrenceToken == token
-          and occurrenceRoomMatches(occurrenceTargets[target], room)
-          and roomClaim and roomClaim.room == room then
+          and occurrenceRoomMatches(occurrenceTargets[target], room) then
+        -- The request names the occurrence, not the strategy that happened to
+        -- be selected first. A naturally admitted matching story/shop room
+        -- fulfills the same one-shot and prevents a later duplicate delivery.
         consumeNextOccurrence(target, token)
       else
         -- Taking another native exit abandons this source-room opportunity but

@@ -224,6 +224,24 @@ assert(M.nextOccurrenceTarget == nil
   "claimed Arachne combat path did not consume exactly once")
 print("occurrence_routing_ok")
 """,
+    "natural_matching_room_consumes_pending_multi_strategy_target": r"""
+setRoomSet("F")
+CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "ArachneCombatF" }
+setOccurrence("npc:Arachne", "arachne-natural-story")
+local selectedCombat = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+assert(selectedCombat.Name == "ArachneCombatF"
+    and M.occurrenceRouting.encounterClaim,
+  "fixture did not establish the competing Arachne combat claim")
+local naturalStory = CreateRoom(RoomData.F_Story01, {})
+StartRoom(CurrentRun, naturalStory)
+assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil
+    and M.lastConsumedNextOccurrenceToken == "arachne-natural-story",
+  "naturally admitted matching story room did not fulfill the named request")
+RecordEncounter(CurrentRun, selectedCombat)
+assert(M.lastConsumedNextOccurrenceToken == "arachne-natural-story",
+  "later recording of the abandoned strategy duplicated the consumed request")
+print("occurrence_routing_ok")
+""",
     "field_encounter_waits_for_eligibility_and_commits_on_record": r"""
 setRoomSet("F")
 CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
