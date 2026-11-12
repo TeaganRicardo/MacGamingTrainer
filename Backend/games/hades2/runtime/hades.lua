@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 129 then
+if previousModule and previousModule.revision ~= 130 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 129 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 129,
+    version = 1, revision = 130,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -9042,7 +9042,17 @@ if __MacGamingTrainerV1 == nil then
       end)
       replace("RandomInt", function(minimum) usedRandom = true; return minimum end)
       replace("RandomFloat", function(minimum) usedRandom = true; return minimum end)
+      -- Native requirement checks increment a per-frame SessionMapState
+      -- counter. Observe eligibility against a detached top-level frame so
+      -- catalog reads neither advance that counter nor consume native RNG.
+      local originalSession = SessionMapState
+      if type(originalSession) == "table" then
+        local probeSession = {}
+        for key, value in pairs(originalSession) do probeSession[key] = value end
+        SessionMapState = probeSession
+      end
       local result = table.pack(pcall(callback, ...))
+      SessionMapState = originalSession
       for name, original in pairs(originals) do _G[name] = original end
       if not result[1] then error(result[2], 0) end
       return result[2], usedRandom
@@ -9118,10 +9128,13 @@ if __MacGamingTrainerV1 == nil then
         if type(reward) == "table" and type(reward.Name) == "string"
             and reward.Name ~= "Story" and reward.Name ~= "Shop"
             and reward.Name ~= "Empty" and reward.Name ~= "Devotion" then
-          local ok, eligible = pcall(IsRoomRewardEligible, CurrentRun, room, reward, {}, { Door = door })
-          if not ok then error(eligible, 0) end
+          local probeReward = {}
+          for key, value in pairs(reward) do probeReward[key] = value end
+          local eligible, usesRandom = nativeProbeWithoutRNG(
+            IsRoomRewardEligible, CurrentRun, room, probeReward, {}, { Door = door }
+          )
           local target = reward.ForceLootName or reward.Name
-          if eligible and type(target) == "string" and not seen[target] then
+          if eligible and not usesRandom and type(target) == "string" and not seen[target] then
             seen[target] = true
             result[#result + 1] = {
               id = target, rewardType = reward.Name,
