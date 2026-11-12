@@ -831,6 +831,54 @@ runtime.disable_all()
 assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil
     and firstDoor.CanBeRerolled == true,
   "Disable All left a modified reward or stale lease")
+
+-- Native AttemptUseDoor has already spent applicable costs before LeaveRoom.
+-- If CreateRoom or AssignRoomToExitDoor fails, the original room must still be
+-- entered once with the original native door identity and lease released.
+local realCreateRoom, realAssignRoom = CreateRoom, AssignRoomToExitDoor
+for _, injected in ipairs({ "create", "assign" }) do
+  firstDoor.Room = firstRoom
+  CurrentRun.CurrentRoom = originalRoom
+  OfferedExitDoors[100] = firstDoor
+  local originalDestination = firstDoor.Room
+  local originalOffered = originalRoom.OfferedRewards and originalRoom.OfferedRewards[100]
+  local previousGenerations, previousLeaves = roomGenerationCalls, leaveCalls
+  runtime.apply_world_exit({
+    roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+    kind = "roomCategory", targetID = "combat", requestId = "failing-route-" .. injected,
+  })
+  if injected == "create" then
+    CreateRoom = function(data, args)
+      realCreateRoom(data, args)
+      error("injected native room setup error")
+    end
+  else
+    AssignRoomToExitDoor = function(door, room, ...)
+      local result = realAssignRoom(door, room, ...)
+      if door == firstDoor and room ~= originalDestination then
+        error("injected native assignment error")
+      end
+      return result
+    end
+  end
+  local enteredOnFailure = AttemptUseDoor(firstDoor)
+  CreateRoom, AssignRoomToExitDoor = realCreateRoom, realAssignRoom
+  assert(enteredOnFailure == originalDestination
+      and CurrentRun.CurrentRoom == originalDestination
+      and leaveCalls == previousLeaves + 1,
+    "failed Hades I late commit stranded native door transition")
+  assert(firstDoor.Room == originalDestination
+      and (originalRoom.OfferedRewards and originalRoom.OfferedRewards[100]) == originalOffered,
+    "failed Hades I late commit changed native original destination")
+  assert(roomGenerationCalls == previousGenerations + 1,
+    "test incorrectly rewound an irreversible native room-creation attempt")
+  CurrentRun.CurrentRoom = originalRoom
+  assert(world().doors[1].activeLease == nil
+      and type(runtime.worldRouteFailure) == "string",
+    "failed Hades I route retained a stale lease or hid native error")
+end
+firstDoor.Room = firstRoom
+CurrentRun.CurrentRoom = originalRoom
 runtime.generate_fishing(params())
 assert(activated == 501 and originalRoom.FishingPointId == 501 and CurrentRun.LastFishingPointDepth == 8)
 assert(not world().canFish)
