@@ -573,6 +573,23 @@ end
 testNativeStory("npc:Eurydice", "Asphodel", "B_Combat00", "B_Story01")
 testNativeStory("npc:Patroclus", "Elysium", "C_Combat00", "C_Story01")
 
+RoomSetData.Tartarus.A_Shop01.eligible = true
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "shop:Charon",
+  requestId = "charon-enter",
+})
+local charonData = ChooseNextRoomData(CurrentRun, {})
+assert(charonData == RoomSetData.Tartarus.A_Shop01 and world().occurrence ~= nil,
+  "Charon native shop room was not selected or consumed before admission")
+local charonRoom = CreateRoom(charonData, { SkipChooseEncounter = true })
+AssignRoomToExitDoor(firstDoor, charonRoom)
+assert(AttemptUseDoor(firstDoor) == charonRoom and world().occurrence == nil,
+  "Charon shop occurrence did not consume on exact native room admission")
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+OfferedExitDoors = { [100] = firstDoor, [101] = secondDoor }
+
 runtime.apply_world_occurrence({
   roomId = originalRoomId,
   targetID = "shop:Charon",
