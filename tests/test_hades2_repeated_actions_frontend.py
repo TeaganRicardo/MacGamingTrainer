@@ -35,7 +35,22 @@ for line in sys.stdin:
         time.sleep(0.45)
     elif request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
         time.sleep(0.16)
-    observed = {"connected": True}
+    observed = {
+        "connected": True,
+        "capabilities": {
+            "spawnReward": True, "specialChoice": True, "worldActions": True,
+        },
+        "worldActions": {
+            "exits": [{
+                "doorToken": "fixture-exit:1",
+                "objectId": 1,
+                "ordinal": 1,
+                "roomName": "F_Combat01",
+                "reward": "RoomMoneyDrop",
+                "targets": [{"kind": "reward", "id": "MaxManaDropBig"}],
+            }],
+        },
+    }
     success = True
     if request["command"] == "set_desired":
         feature = request["params"]["feature"]
@@ -114,6 +129,7 @@ func makeReward(_ id: String, group: String = "pickup") -> BoonOption {
         sourceName: "Pickup", sourceEnglishName: "Pickup",
         nativeChoice: false, nativeChoiceTitle: "",
         nativeChoiceEnglishTitle: "", acquisitionMode: "",
+        rarities: [], supportsLevel: false,
         sortSection: 1, sortGroup: 1, sortOrder: 1
     )
 }
@@ -153,7 +169,7 @@ struct Main {
         model.connected = true
         model.status = "ready"
         model.scene = "run"
-        model.capabilities = ["spawnReward": true, "specialChoice": true]
+        model.capabilities = ["spawnReward": true, "specialChoice": true, "worldActions": true]
         let reward = makeReward("MaxManaDropBig")
         model.boons = [reward]
         model.selectedPickupReward = reward.id
@@ -265,17 +281,19 @@ struct Main {
               && abs(speedValues[1] - 1.2) < 0.0001 && abs(speedValues[2] - 1.1) < 0.0001,
               "speed keys did not preserve the ordered desired values: \(speedValues)")
 
-        // Applying a next-room reward mints a consumption identity. A double
-        // shortcut press must not mint a second token while the first is pending.
-        model.selectedNextRoomReward = reward.id
+        // Row 1 now owns one exact generated exit. Rapid shortcut repetition
+        // must not create a second lease while the first Apply is in flight.
+        check(model.selectedWorldExit?.doorToken == "fixture-exit:1"
+              && model.selectedWorldExitTarget == "reward:" + reward.id,
+              "fixture did not project the exact-exit World Action selection")
         model.performShortcut(.applyNextRoomReward)
         model.performShortcut(.applyNextRoomReward)
-        waitForIdle(model, logURL: logURL, phase: "next-room token update")
-        let nextRoomRequests = loggedCommands(at: logURL).filter {
-            ($0["command"] as? String) == "set_next_room_reward_desired"
+        waitForIdle(model, logURL: logURL, phase: "exact-exit world action")
+        let worldExitRequests = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "apply_world_exit"
         }
-        check(nextRoomRequests.count == 1,
-              "rapid hotkey duplicated a next-room consumption token: \(nextRoomRequests.count)")
+        check(worldExitRequests.count == 1,
+              "rapid hotkey duplicated an exact-exit World Action: \(worldExitRequests.count)")
 
         // Route the normal special-reward shortcut through the actual typed
         // backend boundary. A source-string assertion cannot prove dispatch.
