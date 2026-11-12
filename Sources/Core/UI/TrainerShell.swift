@@ -57,6 +57,20 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
 
 /// Each retained page keeps its own scroll viewport. The shared sidebar sends
 /// requests to this owner instead of storing a proxy from a disappearing page.
+struct TrainerWorkbenchContentFrame: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
+
+    func body(content: Content) -> some View {
+        content.frame(minWidth: theme.contentMinWidth, maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
+extension View {
+    func trainerWorkbenchContentFrame() -> some View {
+        modifier(TrainerWorkbenchContentFrame())
+    }
+}
+
 struct TrainerWorkbenchViewport<Content: View, Feedback: View>: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerGamePageVisibility) private var pageVisibility
