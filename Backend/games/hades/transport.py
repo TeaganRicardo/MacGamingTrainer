@@ -239,7 +239,7 @@ class HadesLuaTransport:
             if result.GetValueAsSigned() != 0:
                 if 'hades.error.restartRequired' in text:
                     raise failure('restart_required', 'restartRequired', text)
-                for key in ('heroNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
+                for key in ('heroNotReady', 'runtimeNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
                             'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied',
                             'staleRoom', 'staleDoor', 'worldUnavailable'):
                     if 'hades.error.' + key in text:
