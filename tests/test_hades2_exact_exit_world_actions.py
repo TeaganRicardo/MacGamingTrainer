@@ -124,6 +124,48 @@ assert(door1.PreviewRoomName == originalRoom1.Name
     and door1.PreviewReward == originalRoom1.ChosenRewardType,
   "route cancellation did not restore the native preview descriptor")
 
+-- Native map tables may be absent or be populated by another exit while a
+-- lease is active. Snapshot must be read-only and Cancel must remove only the
+-- selected exit's changes, preserving both original absence and sibling work.
+local function exerciseMissingNativeMaps(withSibling)
+  local source = CurrentRun.CurrentRoom
+  local savedOffered, savedExitRooms = source.OfferedRewards, source.ExitDoorRooms
+  source.OfferedRewards = nil
+  source.ExitDoorRooms = nil
+  local exit = exitByObject(1)
+  local receipt = M.dispatch("apply_world_exit", {
+    doorToken = exit.doorToken, kind = "reward", target = "MaxHealthDrop",
+    requestId = "missing-maps-" .. tostring(withSibling), includeCatalogs = true,
+  })
+  local applied = receipt.worldActions.exits[1].activeLease
+  assert(applied ~= nil and type(source.OfferedRewards) == "table"
+      and type(source.ExitDoorRooms) == "table",
+    "native reward assignment failed with initially absent source maps")
+  if withSibling then
+    source.OfferedRewards[2] = { Type = "MaxManaDrop" }
+    source.ExitDoorRooms[2] = "F_IndependentRoom"
+  end
+  M.dispatch("cancel_world_exit", {
+    doorToken = exit.doorToken, leaseToken = applied.leaseToken,
+    requestId = "cancel-missing-maps-" .. tostring(withSibling),
+    includeCatalogs = true,
+  })
+  if withSibling then
+    assert(source.OfferedRewards[1] == nil and source.OfferedRewards[2].Type == "MaxManaDrop"
+        and source.ExitDoorRooms[1] == nil and source.ExitDoorRooms[2] == "F_IndependentRoom",
+      "cancelling one native reward overwrote a sibling map update")
+  else
+    assert(source.OfferedRewards == nil and source.ExitDoorRooms == nil,
+      "cancelling a native reward did not restore absent map fields")
+  end
+  source.OfferedRewards, source.ExitDoorRooms = savedOffered, savedExitRooms
+  assert(exitByObject(1).activeLease == nil
+      and door1.Room.ChosenRewardType == "RoomMoneyDrop",
+    "missing-map reward cancellation left a stale lease or room value")
+end
+exerciseMissingNativeMaps(false)
+exerciseMissingNativeMaps(true)
+
 -- A generic category Apply is a reservation only: no candidate sampling,
 -- CreateRoom, actual door target, ExitDoorRooms or OfferedRewards mutation.
 local drawsBefore = nativeRandomCalls

@@ -8959,6 +8959,29 @@ if __MacGamingTrainerV1 == nil then
       if snapshot.present then owner[key] = snapshot.value else owner[key] = nil end
     end
 
+    -- Snapshot an exit's native map entry without creating tables merely by
+    -- observing it. Native AssignRoomToExitDoor may create a missing map;
+    -- cancellation must restore its absence without deleting another exit's
+    -- independently written entries.
+    local function snapshotDoorMap(source, field, doorId)
+      local collection = type(source[field]) == "table" and source[field] or nil
+      return {
+        existed = collection ~= nil, original = collection,
+        entry = collection and snapshotField(collection, doorId) or { present = false },
+      }
+    end
+
+    local function restoreDoorMap(source, field, doorId, snapshot)
+      local collection = type(source[field]) == "table" and source[field] or nil
+      if collection == nil then
+        if not snapshot.existed then return end
+        collection = snapshot.original
+        source[field] = collection
+      end
+      restoreField(collection, doorId, snapshot.entry)
+      if not snapshot.existed and next(collection) == nil then source[field] = nil end
+    end
+
     local function refreshPreview(door)
       if type(CreateDoorRewardPreview) ~= "function" then return end
       local reuse = type(door.RewardPreviewIconIds) == "table" and next(door.RewardPreviewIconIds) ~= nil
@@ -9288,10 +9311,8 @@ if __MacGamingTrainerV1 == nil then
       for _, key in ipairs(rewardFields) do snapshot.fields[key] = snapshotField(room, key) end
       snapshot.door.AllowReroll = snapshotField(door, "AllowReroll")
       snapshot.door.CanBeRerolled = snapshotField(door, "CanBeRerolled")
-      source.OfferedRewards = source.OfferedRewards or {}
-      source.ExitDoorRooms = source.ExitDoorRooms or {}
-      snapshot.offered = snapshotField(source.OfferedRewards, door.ObjectId)
-      snapshot.exitRoom = snapshotField(source.ExitDoorRooms, door.ObjectId)
+      snapshot.offered = snapshotDoorMap(source, "OfferedRewards", door.ObjectId)
+      snapshot.exitRoom = snapshotDoorMap(source, "ExitDoorRooms", door.ObjectId)
       return snapshot
     end
 
@@ -9300,10 +9321,8 @@ if __MacGamingTrainerV1 == nil then
       for _, key in ipairs(rewardFields) do restoreField(room, key, lease.snapshot.fields[key]) end
       restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
       restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
-      source.OfferedRewards = source.OfferedRewards or {}
-      source.ExitDoorRooms = source.ExitDoorRooms or {}
-      restoreField(source.OfferedRewards, door.ObjectId, lease.snapshot.offered)
-      restoreField(source.ExitDoorRooms, door.ObjectId, lease.snapshot.exitRoom)
+      restoreDoorMap(source, "OfferedRewards", door.ObjectId, lease.snapshot.offered)
+      restoreDoorMap(source, "ExitDoorRooms", door.ObjectId, lease.snapshot.exitRoom)
       if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
       -- Explicit Trainer Cancel/unused-sibling cleanup restores the native
       -- snapshot; it is not an external reroll of this physical exit.
@@ -9333,6 +9352,9 @@ if __MacGamingTrainerV1 == nil then
       if type(SetupRoomReward) == "function" then
         SetupRoomReward(CurrentRun, room, {}, { Door = door })
       end
+      -- The installed native AssignRoomToExitDoor assumes ExitDoorRooms exists.
+      -- Create it only at mutation time; the lease restores prior absence.
+      lease.sourceRoom.ExitDoorRooms = lease.sourceRoom.ExitDoorRooms or {}
       AssignRoomToExitDoor(door, room)
       lease.appliedRewardType = room.ChosenRewardType
       lease.appliedForceLoot = room.ForceLootName
