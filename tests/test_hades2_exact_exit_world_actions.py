@@ -425,6 +425,55 @@ local linkedOk = pcall(function()
 end)
 assert(not linkedOk, "linked native source accepted a generic category override")
 
+-- A native CreateRoom/Assign failure occurs after AttemptUseDoor has passed its
+-- eligibility/cost boundary. World Actions must fall back to the already
+-- generated original door, restore graph entries and leave via native once.
+local originalCreateRoom, originalAssign = CreateRoom, AssignRoomToExitDoor
+for _, injected in ipairs({ "create", "assign" }) do
+  setRoomSet("F")
+  DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+  local faultDoor = MapState.OfferedExitDoors[1]
+  local originalDestination = faultDoor.Room
+  local faultSource = CurrentRun.CurrentRoom
+  local offeredBefore = DeepCopyTable(faultSource.OfferedRewards[1])
+  local exitBefore = faultSource.ExitDoorRooms[1]
+  local prevLeave = nativeLeaveCalls
+  local previousCreated = CurrentRun.RoomCreations.F_Combat01 or 0
+  local seen = exitByObject(1)
+  M.dispatch("apply_world_exit", {
+    doorToken = seen.doorToken, kind = "roomCategory", target = "combat",
+    requestId = "fault-" .. injected, includeCatalogs = true,
+  })
+  if injected == "create" then
+    CreateRoom = function(data, args)
+      originalCreateRoom(data, args)
+      error("injected post-create failure")
+    end
+  else
+    AssignRoomToExitDoor = function(door, room)
+      originalAssign(door, room)
+      if door == faultDoor and room ~= originalDestination then
+        error("injected post-assign failure")
+      end
+    end
+  end
+  local enteredOnFailure = AttemptUseDoor(faultDoor)
+  CreateRoom, AssignRoomToExitDoor = originalCreateRoom, originalAssign
+  assert(enteredOnFailure == originalDestination
+      and CurrentRun.CurrentRoom == originalDestination
+      and nativeLeaveCalls == prevLeave + 1,
+    "failed late commit stranded the player instead of using native original destination")
+  assert(faultDoor.Room == originalDestination
+      and faultSource.ExitDoorRooms[1] == exitBefore
+      and faultSource.OfferedRewards[1].Type == offeredBefore.Type
+      and faultSource.OfferedRewards[1].ForceLootName == offeredBefore.ForceLootName,
+    "failed late commit corrupted the native selected exit graph")
+  assert((CurrentRun.RoomCreations.F_Combat01 or 0) == previousCreated + 1,
+    "test incorrectly pretended a partially created native room could be rolled back")
+  assert(M.featureErrors.worldActions == "hades2.error.worldActionUnavailable",
+    "failed native route did not retain an observable error")
+end
+
 print("hades2_exact_exit_world_actions_ok")
 """
 
