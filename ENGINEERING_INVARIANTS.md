@@ -55,7 +55,7 @@ Selecting a different game only changes presentation. It never disconnects anoth
 | Host target/backend lifecycle | `TrainerTargetProcessMonitor`, `TrainerConnectionPolicy`, `TrainerBackendSession` | process presence, pending bounded reconnect/restart intent, worker health | event-driven only |
 | Hades I durable desired state | `HadesPreferenceStore` / `HadesProfileStore`, projected by `HadesAdapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
 | Hades II durable desired state | `Hades2PreferenceStore` / `Hades2ProfileService`, projected by `Hades2Adapter` | user intent that should survive detach/backend restart when safe | replay when a verified compatible runtime is ready |
-| Hades I observable runtime state | game-owned `runtime.lua` and Process Time Warp projection, decoded by `HadesModel` | what is actually active/available now | never infer active from desired alone |
+| Hades I observable runtime state | game-owned `runtime.lua` plus the game-native `AdjustSimulationSpeed` multiplier projection, decoded by `HadesModel` | what is actually active/available now | never infer active from desired alone |
 | Hades II observable runtime state | game-owned resident Lua + Process Time Warp, decoded through `Hades2StatePatch` | what is actually active/available now | never infer active from desired alone |
 | Hades I / Hades II dormant state | resident status projection (`dormantFeatures`), passed through by each adapter | desired but currently not active because its native environment is unavailable in the observed runtime/scene | may become active after a valid lifecycle transition |
 | Feature phase presentation | `TrainerFeaturePresentation` (Core), fed each game's observations | unsupported/off/active/pending/waiting/detached/mismatch with per-phase help | presentation only; never runtime truth |
@@ -100,7 +100,8 @@ Classify an operation before adding retry/recovery behavior.
 | scan/metadata | no | may be re-issued by a new explicit lifecycle action | still subject to process-query failure semantics |
 | status | no | a later status may be issued | Hades status is not a pure snapshot: resident `synchronize()` maintenance can run |
 | durable feature/multiplier/lock intent | yes | yes, after verified runtime readiness | adapter preference replay owns this |
-| Process Time Warp desired speed | yes (Hades preference) | yes after transport/runtime identity is re-established | generic mechanism is Core; game-specific desired meaning is Hades-owned |
+| Hades I game-native simulation multiplier | yes (Hades preference) | yes after the exact supported Lua runtime is re-established | Hades owns the multiplier wrapper; it composes with native `AdjustSimulationSpeed` calls and resets to 1× before detach |
+| Hades II Process Time Warp desired speed | yes (Hades II preference) | yes after transport/runtime identity is re-established | generic clock-hook mechanics are Core; Hades II owns its process-time meaning |
 | direct absolute resource/stat/vital edits | generally no unless represented by a durable lock | never replay an outcome-unknown in-flight request | successful lock state may later enter durable preferences |
 | reward spawn | no | no | request/action ledger prevents duplicate same-request execution where applicable |
 | native sell/special-choice UI | no | no | one-shot native modal; never preference-replayed |
