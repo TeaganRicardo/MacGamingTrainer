@@ -1734,25 +1734,29 @@ world = (function()
       end
     end
   end
-  local function routePreviewDescriptor(door, candidates)
-    local candidate
-    for _, value in ipairs(candidates or {}) do
-      if candidate == nil or tostring(value.Name) < tostring(candidate.Name) then candidate = value end
-    end
-    assert(candidate, "hades.error.worldUnavailable")
+  -- A reserved category has no concrete room/reward until native door use.
+  -- Render a supported generic native preview without selecting a candidate,
+  -- leaking an NPC/boon icon, or mutating the actual door.Room identity.
+  local function routePreviewDescriptor(door, route)
     local proxy = DeepCopyTable(door.Room)
-    proxy.Name = candidate.Name or proxy.Name
     proxy.Reward = nil
-    proxy.ChosenRewardType = candidate.ChosenRewardType or candidate.ForcedReward
-    proxy.ForceLootName = candidate.ForceLootName
-    proxy.RewardStoreName = candidate.RewardStoreName or candidate.IndividualRewardStore
-      or candidate.ForcedRewardStore
+    proxy.ChosenRewardType = nil
+    proxy.ForceLootName = nil
+    proxy.RewardStoreName = nil
+    proxy.RewardOverrides = nil
+    proxy.RewardPreviewIcon = nil
+    proxy.RewardPreviewFx = nil
+    proxy.Encounter = nil
     proxy.OriginalChosenRewardType = nil
     proxy.OriginalForceLootName = nil
-    proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
-    proxy.RewardPreviewFx = candidate.RewardPreviewFx
-    proxy.RewardOverrides = type(candidate.RewardOverrides) == "table"
-      and DeepCopyTable(candidate.RewardOverrides) or nil
+    proxy.NextRoomSet = nil
+    if route == "shop" then
+      proxy.ChosenRewardType = "Shop"
+    elseif route ~= "story" then
+      -- The native preview treats a truthy NextRoomSet as a neutral ExitPreview.
+      -- This is a presentation-only proxy, never written to the exit graph.
+      proxy.NextRoomSet = {}
+    end
     return proxy
   end
   local function reserveRoute(door, route, leaseToken)
@@ -1760,9 +1764,9 @@ world = (function()
     local routes = routeRooms(currentRoom(), door)
     local candidates = routes and routes[route]
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-    -- CreateDoorRewardPreview owns the game's real exit presentation. Give it a
-    -- read-only eligible RoomData proxy for this call, then restore door.Room.
-    drawDoorPreview(door, routePreviewDescriptor(door, candidates))
+    -- Only present the native generic category icon; candidate selection,
+    -- room generation and RNG are reserved for authorized native departure.
+    drawDoorPreview(door, routePreviewDescriptor(door, route))
     edits[door] = {
       kind = "route", route = route, target = route, leaseToken = leaseToken,
       original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
