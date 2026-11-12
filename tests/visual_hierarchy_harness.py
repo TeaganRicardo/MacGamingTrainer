@@ -580,5 +580,76 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.close()
         }
     }
+    exerciseWorkbenchContentWidthGeometry()
 }
+
+
+private struct WorkbenchViewportWidthFixture: View {
+    let gameID: String
+    let language: TrainerPresentationLanguage
+
+    var body: some View {
+        TrainerWorkbenchContentFrame {
+            HStack {
+                Text(gameID + (language == .en ? " workbench" : " 工作台"))
+                Spacer(minLength: 0)
+                Text(language == .en ? "Trailing edge" : "内容右边缘")
+                    .accessibilityIdentifier("workbench.trailing")
+            }
+        }
+    }
+}
+
+@MainActor
+private func exerciseWorkbenchContentWidthGeometry() {
+    let theme = TrainerTheme.standard
+    let widths = [theme.contentMinWidth + 56, CGFloat(1000), CGFloat(1400), CGFloat(1600)]
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        for gameID in ["hades", "hades2"] {
+            var previousTrailingMaxX: CGFloat?
+            var previousHostMaxX: CGFloat?
+            for width in widths {
+                let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+                localization.language = language
+                let host = NSHostingView(rootView:
+                    WorkbenchViewportWidthFixture(gameID: gameID, language: language)
+                        .frame(width: width, height: 160, alignment: .topLeading)
+                        .preferredColorScheme(.dark)
+                        .trainerTheme(theme)
+                        .environmentObject(localization)
+                )
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 160),
+                    styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.appearance = NSAppearance(named: .darkAqua)
+                window.contentView = host
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+
+                func trailing() -> NativeAccessibilityControl? {
+                    nativeAccessibilityControls(host).first {
+                        $0.identifier == "workbench.trailing" && $0.role == "AXStaticText"
+                    }
+                }
+                hierarchyWait(host) { trailing() != nil }
+                let trailingFrame = trailing()!.frame
+                let hostFrame = window.convertToScreen(host.convert(host.bounds, to: nil))
+                hierarchyCheck(abs(hostFrame.maxX - trailingFrame.maxX) < 4,
+                    "workbench content did not reach the viewport's trailing edge: game=\(gameID) language=\(language.rawValue) width=\(width) host=\(hostFrame) trailing=\(trailingFrame)")
+                if let previousTrailingMaxX, let previousHostMaxX {
+                    hierarchyCheck(abs((trailingFrame.maxX - previousTrailingMaxX)
+                                        - (hostFrame.maxX - previousHostMaxX)) < 3,
+                        "workbench content stopped expanding with the viewport: game=\(gameID) language=\(language.rawValue) width=\(width)")
+                }
+                previousTrailingMaxX = trailingFrame.maxX
+                previousHostMaxX = hostFrame.maxX
+                print("workbench_viewport_width game=\(gameID) language=\(language.rawValue) width=\(width) contentRight=\(trailingFrame.maxX)")
+                window.contentView = nil
+                window.close()
+            }
+        }
+    }
+    print("workbench_viewport_native_geometry_ok")
+}
+
 '''
