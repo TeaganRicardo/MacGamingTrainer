@@ -463,6 +463,12 @@ assert(firstDoor.PreviewRoomName == "A_Combat02"
   "route cancellation did not restore the native exit preview")
 assert(world().doors[1].activeLease == nil, "cancelled route lease remained active")
 
+runtime.apply_world_occurrence({
+  roomId = originalRoomId,
+  targetID = "npc:Sisyphus",
+  requestId = "precedence-sisyphus",
+})
+local precedenceOccurrenceToken = world().occurrence.leaseToken
 local combatDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId,
@@ -480,9 +486,19 @@ assert(leaveCalls == 1
     and (CurrentRun.RoomCreations.A_Combat02 or 0) == combatCreationsBefore + 1
     and roomGenerationCalls == commitGenerationBefore + 1,
   "native door use did not materialize exactly one destination")
+assert(world().occurrence and world().occurrence.target == "npc:Sisyphus"
+    and world().occurrence.leaseToken == precedenceOccurrenceToken,
+  "exact-exit combat route consumed or overwrote an incompatible named occurrence")
 CurrentRun.CurrentRoom = originalRoom
 firstDoor.Room = firstRoom
 OfferedExitDoors[100] = firstDoor
+runtime.cancel_world_occurrence({
+  roomId = originalRoomId,
+  leaseToken = precedenceOccurrenceToken,
+  requestId = "precedence-sisyphus-cancel",
+})
+assert(world().occurrence == nil,
+  "precedence regression left its independent named occurrence armed")
 
 -- Departing through one exit must retire an independent unused reward edit
 -- before native LeaveRoom records the room. The exact old offered entry,
