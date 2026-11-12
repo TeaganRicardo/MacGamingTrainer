@@ -61,7 +61,7 @@ enum Hades2WorkbenchIcon {
         case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
         case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
         case "hades2.chaosGate.probability": return chaosProbability
-        case "hades2.nextRoom.title": return TrainerSemanticIcon.Context.doorway
+        case "hades2.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
         case "hades2.occurrence.title": return occurrence
         case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
