@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 128 then
+if previousModule and previousModule.revision ~= 129 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 128 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 128,
+    version = 1, revision = 129,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -9140,31 +9140,28 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function previewRoom(door, route, candidate)
+    -- A category reservation has not selected a concrete room or reward yet.
+    -- Project only a native generic category icon; never display the first
+    -- eligible candidate's name, boon, NPC icon or reward as a false promise.
+    local function previewRoom(door, route)
       local proxy = {}
       for key, value in pairs(door.Room) do proxy[key] = value end
-      candidate = type(candidate) == "table" and candidate or {}
-      proxy.Name = candidate.Name or proxy.Name
       proxy.Reward = nil
-      proxy.RewardOverrides = type(candidate.RewardOverrides) == "table"
-        and DeepCopyTable(candidate.RewardOverrides) or nil
-      proxy.RewardPreviewOverride = candidate.RewardPreviewOverride
-      proxy.RewardPreviewIcon = candidate.RewardPreviewIcon
-      proxy.RewardPreviewFx = candidate.RewardPreviewFx
-      proxy.ForceLootName = candidate.ForceLootName
-      proxy.RewardStoreName = candidate.RewardStoreName or candidate.IndividualRewardStore
-        or candidate.ForcedRewardStore
-      proxy.Encounter = type(candidate.Encounter) == "table"
-        and DeepCopyTable(candidate.Encounter) or nil
-      proxy.ChosenRewardType = candidate.ChosenRewardType or candidate.ForcedReward
-      proxy.NextRoomSet = type(candidate.NextRoomSet) == "table"
-        and DeepCopyTable(candidate.NextRoomSet) or nil
-      proxy.NextRoomSetNoGenerate = candidate.NextRoomSetNoGenerate
-      if proxy.ChosenRewardType == nil then
-        if route == "shop" then proxy.ChosenRewardType = "Shop"
-        elseif route == "story" then proxy.ChosenRewardType = "Story"
-        elseif route == "reprieve" then proxy.ChosenRewardType = "Empty" end
-      end
+      proxy.CageRewards = nil
+      proxy.ChosenRewardType = nil
+      proxy.ForceLootName = nil
+      proxy.ForceBoonChosenTrait = nil
+      proxy.RewardStoreName = nil
+      proxy.RewardOverrides = nil
+      proxy.RewardPreviewIcon = nil
+      proxy.RewardPreviewFx = nil
+      proxy.Encounter = nil
+      proxy.NextRoomSet = nil
+      proxy.NextRoomSetNoGenerate = nil
+      -- These three animation names are owned by the supported game's
+      -- CreateDoorRewardPreview/RewardPresentation native renderer.
+      proxy.RewardPreviewOverride = route == "shop" and "ShopPreview"
+        or (route == "story" and "StoryPreview" or "ExitPreview")
       return proxy
     end
 
@@ -9276,7 +9273,7 @@ if __MacGamingTrainerV1 == nil then
             return original(door, ...)
           end
           local actual = door.Room
-          door.Room = previewRoom(door, lease.target, lease.previewData)
+          door.Room = previewRoom(door, lease.target)
           local reply = table.pack(pcall(original, door, ...))
           door.Room = actual
           if not reply[1] then error(reply[2], 0) end
@@ -9374,7 +9371,6 @@ if __MacGamingTrainerV1 == nil then
         kind = "roomCategory", target = target, doorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         originalRoom = door.Room, signature = routeSignature(door),
-        previewData = routes[target][1],
       }
       lease.leaseToken = leaseToken(doorToken, lease.kind, target)
       leases[door] = lease

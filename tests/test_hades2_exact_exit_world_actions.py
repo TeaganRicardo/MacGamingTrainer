@@ -194,9 +194,10 @@ assert(door1.Room == originalRoom1 and sourceRoom.ExitDoorRooms[1] == sourceExit
 assert(sourceRoom.OfferedRewards[1].Type == offeredBefore1.Type
     and sourceRoom.OfferedRewards[1].ForceLootName == offeredBefore1.ForceLootName)
 assert(previewCalls > previewsBefore, "reservation did not refresh native exit presentation")
-assert(door1.PreviewRoomName == "F_Combat01"
-    and door1.PreviewReward == "RoomMoneyDrop",
-  "reservation preview did not show the selected native-eligible room descriptor")
+assert(door1.PreviewRoomName == originalRoom1.Name
+    and door1.PreviewReward == ""
+    and door1.PreviewOverride == "ExitPreview",
+  "generic reservation preview claimed an uncommitted concrete room or reward")
 
 M.dispatch("cancel_world_exit", {
   doorToken = first.doorToken,
@@ -208,6 +209,10 @@ assert(nativeRandomCalls == drawsBefore
     and (CurrentRun.RoomCreations.F_Combat01 or 0) == combatCreationsBefore,
   "category Cancel left RNG or room-creation residue")
 assert(door1.Room == originalRoom1 and sourceRoom.ExitDoorRooms[1] == sourceExitRoom1)
+assert(door1.PreviewRoomName == originalRoom1.Name
+    and door1.PreviewReward == originalRoom1.ChosenRewardType
+    and door1.PreviewOverride == originalRoom1.RewardPreviewOverride,
+  "cancel did not restore the original native door preview")
 assert(exitByObject(1).activeLease == nil)
 
 -- Two doors may hold independent plans. Native denial commits neither. The

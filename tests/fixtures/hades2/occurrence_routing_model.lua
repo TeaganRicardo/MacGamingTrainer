@@ -183,6 +183,7 @@ CreateDoorRewardPreview = function(door)
   previewCalls = previewCalls + 1
   door.PreviewCreated = true
   door.PreviewRoomName = door.Room and door.Room.Name or ""
+  door.PreviewOverride = door.Room and door.Room.RewardPreviewOverride or nil
   door.PreviewReward = door.Room and (
     door.Room.ForceLootName or door.Room.ChosenRewardType or ""
   ) or ""
