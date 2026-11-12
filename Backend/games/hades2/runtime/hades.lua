@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 131 then
+if previousModule and previousModule.revision ~= 132 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 131 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 131,
+    version = 1, revision = 132,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -9194,22 +9194,28 @@ if __MacGamingTrainerV1 == nil then
 
     local restoreReward
     local function clearSource(source, committedDoor)
+      local cleanupFailed = false
       for door, lease in pairs(leases) do
         if lease.sourceRoom == source then
-          if door ~= committedDoor then
-            if lease.kind == "reward" and activeLease(door) == lease then
-              restoreReward(door, lease)
-            elseif lease.kind == "roomCategory" and activeLease(door) == lease then
-              leases[door] = nil
-              refreshPreview(door)
-            end
-          end
-          -- The selected door's reward is committed by native LeaveRoom. Every
-          -- sibling lease is restored before the source room is left.
+          local restore = door ~= committedDoor and activeLease(door) == lease
+          -- Revoke every source-room lease before presentation cleanup: a
+          -- broken native icon callback cannot prevent the paid door transit.
           leases[door] = nil
+          if restore then
+            local ok
+            if lease.kind == "reward" then
+              ok = pcall(restoreReward, door, lease)
+            elseif lease.kind == "roomCategory" then
+              ok = pcall(refreshPreview, door)
+            else
+              ok = false
+            end
+            if not ok then cleanupFailed = true end
+          end
         end
       end
       releaseRouteHooksIfUnused()
+      if cleanupFailed then M.featureErrors.worldActions = "hades2.error.worldActionUnavailable" end
     end
 
     local function contains(list, wanted)

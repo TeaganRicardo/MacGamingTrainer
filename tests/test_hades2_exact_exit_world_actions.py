@@ -474,6 +474,33 @@ for _, injected in ipairs({ "create", "assign" }) do
     "failed native route did not retain an observable error")
 end
 
+-- The selected exit may commit successfully while a sibling preview is
+-- broken. That cleanup failure must not abort LeaveRoom after door costs.
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local cleanupFirst, cleanupSecond = MapState.OfferedExitDoors[1], MapState.OfferedExitDoors[2]
+M.dispatch("apply_world_exit", {
+  doorToken = exitByObject(1).doorToken, kind = "roomCategory", target = "combat",
+  requestId = "cleanup-first", includeCatalogs = true,
+})
+M.dispatch("apply_world_exit", {
+  doorToken = exitByObject(2).doorToken, kind = "roomCategory", target = "combat",
+  requestId = "cleanup-second", includeCatalogs = true,
+})
+local nativePreview = CreateDoorRewardPreview
+CreateDoorRewardPreview = function(door, ...)
+  if door == cleanupSecond then error("injected sibling native preview failure") end
+  return nativePreview(door, ...)
+end
+local previousLeaves = nativeLeaveCalls
+local safelyEntered = AttemptUseDoor(cleanupFirst)
+CreateDoorRewardPreview = nativePreview
+assert(type(safelyEntered) == "table" and safelyEntered.Name == "F_Combat01"
+    and nativeLeaveCalls == previousLeaves + 1
+    and M.featureErrors.worldActions == "hades2.error.worldActionUnavailable",
+  "sibling preview cleanup failure aborted accepted native door use")
+assert(M.dispatch("status", { includeCatalogs = false }).worldActions.occurrence == nil)
+
 print("hades2_exact_exit_world_actions_ok")
 """
 
