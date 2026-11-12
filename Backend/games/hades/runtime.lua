@@ -1493,16 +1493,24 @@ world = (function()
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
-  local function couldBeForced(room, args)
+  -- Native eligibility/force/reward requirements may draw RNG or count
+  -- attempts in SessionMapState. Query them through one non-advancing gate.
+  -- A stochastic predicate fails closed: a catalog is never a promise about
+  -- an outcome that depends on the native game's next random sample.
+  local function nativeEligibilityProbe(callback, positiveChanceMeansForced, ...)
     local randomChance, randomValue = RandomChance, GetRandomValue
     local randomInt, randomFloat = RandomInt, RandomFloat
+    local sourceSession = SessionMapState
     local usedRandom = false
-    -- A read-only route probe must never advance the game's RNG. A positive
-    -- native chance is treated as forced; any other random API use fails closed.
+    if type(sourceSession) == "table" then
+      local probeSession = {}
+      for key, value in pairs(sourceSession) do probeSession[key] = value end
+      SessionMapState = probeSession
+    end
     RandomChance = function(chance)
       if type(chance) == "number" and chance > 0 then
         usedRandom = true
-        return true
+        return positiveChanceMeansForced
       end
       return false
     end
@@ -1517,38 +1525,25 @@ world = (function()
     if type(randomFloat) == "function" then
       RandomFloat = function(minimum) usedRandom = true; return minimum end
     end
-    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, args or {})
+    local ok, result = pcall(callback, ...)
+    SessionMapState = sourceSession
     RandomChance, GetRandomValue = randomChance, randomValue
     if type(randomInt) == "function" then RandomInt = randomInt end
     if type(randomFloat) == "function" then RandomFloat = randomFloat end
     if not ok then error(result, 0) end
-    return usedRandom or result
+    return result, usedRandom
+  end
+  local function couldBeForced(room, args)
+    local forced, stochastic = nativeEligibilityProbe(
+      IsRoomForced, true, CurrentRun, CurrentRun.CurrentRoom, room, args or {}
+    )
+    return stochastic or forced
   end
   local function eligibleWithoutRandom(room, data, args)
-    local randomChance, randomValue = RandomChance, GetRandomValue
-    local randomInt, randomFloat = RandomInt, RandomFloat
-    local usedRandom = false
-    RandomChance = function(chance)
-      if type(chance) == "number" and chance > 0 then usedRandom = true end
-      return false
-    end
-    GetRandomValue = function(values, ...)
-      usedRandom = true
-      if type(values) == "table" then return values[1] end
-      return values
-    end
-    if type(randomInt) == "function" then
-      RandomInt = function(minimum) usedRandom = true; return minimum end
-    end
-    if type(randomFloat) == "function" then
-      RandomFloat = function(minimum) usedRandom = true; return minimum end
-    end
-    local ok, result = pcall(IsRoomEligible, CurrentRun, room, data, args or {})
-    RandomChance, GetRandomValue = randomChance, randomValue
-    if type(randomInt) == "function" then RandomInt = randomInt end
-    if type(randomFloat) == "function" then RandomFloat = randomFloat end
-    if not ok then error(result, 0) end
-    return not usedRandom and result
+    local eligible, stochastic = nativeEligibilityProbe(
+      IsRoomEligible, false, CurrentRun, room, data, args or {}
+    )
+    return not stochastic and eligible
   end
   local function routeRooms(room, door)
     local result = {}
@@ -1801,8 +1796,15 @@ world = (function()
     if not rewardSourceEligible(data) then return end
     for name, store in pairs(RewardStoreData) do
       for _, reward in ipairs(store) do
-        if type(reward) == "table" and reward.Name == data.rewardType
-            and IsRoomRewardEligible(CurrentRun, room, reward, nil, {}) then return reward, name end
+        if type(reward) == "table" and reward.Name == data.rewardType then
+          local roomProbe, rewardProbe = {}, {}
+          for key, value in pairs(room) do roomProbe[key] = value end
+          for key, value in pairs(reward) do rewardProbe[key] = value end
+          local eligible, stochastic = nativeEligibilityProbe(
+            IsRoomRewardEligible, false, CurrentRun, roomProbe, rewardProbe, nil, {}
+          )
+          if eligible and not stochastic then return reward, name end
+        end
       end
     end
   end
