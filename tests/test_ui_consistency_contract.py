@@ -148,7 +148,7 @@ shortcut_end = types.index("struct ElementCount", shortcut_start)
 shortcut_block = types[shortcut_start:shortcut_end]
 shortcut_declarations = shortcut_block.split("var id:", 1)[0]
 actions = [
-    action.strip().lstrip(".")
+    action.strip().lstrip(".").split("=", 1)[0].strip()
     for declaration in re.findall(r"^\s*case\s+([^\n]+)$", shortcut_declarations, re.M)
     for action in declaration.split(",")
 ]
