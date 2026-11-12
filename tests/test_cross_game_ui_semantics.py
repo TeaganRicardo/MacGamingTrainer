@@ -311,8 +311,7 @@ for key in (
     "hades.remove", "hades.chaosPair", "hades.remainingUses", "hades.activateBlessing",
     "hades.expireEffect", "hades.refreshEffect", "hades.resources", "hades.gainResource",
     "hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards",
-    "hades.doorReward", "hades.doorRoute", "hades.restoreDoor",
-    "hades.route.thanatos", "hades.chamberObject", "host.refreshStatus", "hades.saveEditor.title",
+    "hades.worldActions.modifyExit", "hades.occurrence.title", "hades.chamberObject", "host.refreshStatus", "hades.saveEditor.title",
     "host.saveManagement", "host.shortcutSettings", "hades.manage.profiles",
     "hades.manage.diagnostics", "host.viewLog", "host.viewLogHistory", "host.clearCompletedLogs",
 ):

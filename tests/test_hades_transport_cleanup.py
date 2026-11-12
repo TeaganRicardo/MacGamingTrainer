@@ -199,10 +199,26 @@ worker.dispatch('add_trait', {'target': target, 'trait': longest['id'],
                             'rarity': max(longest['rarities'], key=len),
                             'level': 100 if longest.get('supportsLevel', True) else 1})
 reward = max((row for row in reward_catalog() if row['doorAllowed']), key=lambda row: len(row['id']))['id']
-worker.dispatch('set_door_reward', {'target': target, 'roomId': 'a' * 32 + ':1:room:3',
-                                  'doorId': '4:5:' + reward + ':nil:6', 'reward': reward})
-worker.dispatch('set_door_route', {'target': target, 'roomId': 'a' * 32 + ':1:room:3',
-                                 'doorId': '4:5:' + reward + ':nil:6', 'route': 'reprieve'})
+worker.dispatch('apply_world_exit', {
+    'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+    'doorToken': '4:5:' + reward + ':nil:6',
+    'kind': 'reward', 'targetID': reward, 'requestId': 'cleanup-reward-apply',
+})
+worker.dispatch('cancel_world_exit', {
+    'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+    'doorToken': '4:5:' + reward + ':nil:6',
+    'leaseToken': 'lease-cleanup-reward', 'requestId': 'cleanup-reward-cancel',
+})
+worker.dispatch('apply_world_exit', {
+    'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+    'doorToken': '4:5:' + reward + ':nil:6',
+    'kind': 'roomCategory', 'targetID': 'reprieve', 'requestId': 'cleanup-route-apply',
+})
+worker.dispatch('cancel_world_exit', {
+    'target': target, 'roomId': 'a' * 32 + ':1:room:3',
+    'doorToken': '4:5:' + reward + ':nil:6',
+    'leaseToken': 'lease-cleanup-route', 'requestId': 'cleanup-route-cancel',
+})
 leveled = max((row for row in catalog_data()['entries'] if row['kind'] == 'boon' and row['supportsLevel']),
               key=lambda row: len(row['id']))
 group_id = 'trait:' + leveled['id'] + ':' + ','.join(map(str, range(1_000_000, 1_000_100)))

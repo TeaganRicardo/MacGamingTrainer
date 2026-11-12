@@ -254,8 +254,11 @@ assert(not runtime.status().features.fullHealth and not runtime.status().feature
 print("hades_combat_parity_journeys_ok")
 '''
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
-result = subprocess.run([require_lua52('Hades combat parity'), '-e',
-                         'local SOURCE=' + json.dumps(source) + '\n' + fixture + journey],
+# The whole resident Lua grows as game-owned features are integrated.
+# -e passes it through execve's bounded argv; stdin runs the same fixture
+# without conflating script length with a native contract failure.
+result = subprocess.run([require_lua52('Hades combat parity'), '-'],
+                        input='local SOURCE=' + json.dumps(source) + '\n' + fixture + journey,
                         capture_output=True, text=True)
 assert result.returncode == 0, result.stdout + '\n' + result.stderr
 print(result.stdout.strip())

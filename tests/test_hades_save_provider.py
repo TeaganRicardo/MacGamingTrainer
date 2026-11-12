@@ -15,7 +15,7 @@ from games.hades.save_provider import HadesSaveProvider
 
 
 manifest = GameModuleManifest.load(ROOT / 'Backend/games/hades/module.json')
-assert manifest.module_protocol_version == 2
+assert manifest.module_protocol_version == 3
 assert manifest.save_management.provider == 'games.hades.save_provider:HadesSaveProvider'
 assert manifest.save_management.restore_policy == 'stoppedOnly'
 assert manifest.save_management.staged_restore

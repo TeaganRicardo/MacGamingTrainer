@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 11 then error("hades.error.restartRequired") end
+  if existing.revision ~= 16 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 11,
+  version = 1, revision = 16,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1237,7 +1237,26 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
 end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
-  local encounters = setmetatable({}, { __mode = "k" })
+  local doorEpochs = setmetatable({}, { __mode = "k" })
+  local doorObservations = setmetatable({}, { __mode = "k" })
+  local occurrenceRequest
+  local occurrenceSelection
+  local occurrenceGeneration
+  local occurrencePendingRoom
+  local occurrenceSelectedRooms = setmetatable({}, { __mode = "k" })
+  local occurrenceTargetOrder = {
+    "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
+  }
+  local occurrenceTargets = {
+    ["npc:Sisyphus"] = { kind = "character", sourceId = "Sisyphus", nativeEncounter = "Story_Sisyphus_01", rooms = { A_Story01 = true } },
+    ["npc:Eurydice"] = { kind = "character", sourceId = "Eurydice", nativeEncounter = "Story_Eurydice_01", rooms = { B_Story01 = true } },
+    ["npc:Patroclus"] = { kind = "character", sourceId = "Patroclus", nativeEncounter = "Story_Patroclus_01", rooms = { C_Story01 = true } },
+    ["npc:Thanatos"] = { kind = "character", sourceId = "Thanatos", encounterSet = "ThanatosEncounters" },
+    ["shop:Charon"] = { kind = "shop", sourceId = "Charon", rooms = {
+      A_Shop01 = true, B_Shop01 = true, C_Shop01 = true,
+      A_PreBoss01 = true, B_PreBoss01 = true, C_PreBoss01 = true, D_Hub = true,
+    } },
+  }
   local spawnContext
   local objectOwners = {
     trove = { field = "ChallengeSwitch", chance = "ChallengeChanceSuccess", query = "IsChallengeSwitchEligible" },
@@ -1258,21 +1277,214 @@ world = (function()
     assert(room and roomId(room) == params.roomId, "hades.error.staleRoom")
     return room
   end
-  local function doorId(door)
-    local room = door.Room
+  -- Physical owner and mutable reward fields have separate identities.
+  -- A Trainer reward Apply preserves the original observed token; a native
+  -- reroll or target-room replacement invalidates that token and its lease.
+  local function physicalDoorId(door)
+    return table.concat({
+      runtime.generationId, instanceId(CurrentRun), instanceId(currentRoom()),
+      instanceId(door), tostring(door.ObjectId), instanceId(door.Room),
+      tostring(doorEpochs[door] or 0),
+    }, ":")
+  end
+  local function rewardSignature(room)
     local overrides = type(room.RewardOverrides) == "table" and instanceId(room.RewardOverrides) or ""
-    return instanceId(door) .. ":" .. instanceId(room) .. ":" .. tostring(room.ChosenRewardType)
-      .. ":" .. tostring(room.ForceLootName) .. ":" .. overrides
+    local reward = type(room.Reward) == "table" and instanceId(room.Reward) or ""
+    return table.concat({
+      tostring(room.ChosenRewardType), tostring(room.ForceLootName), overrides, reward,
+    }, ":")
+  end
+  local activeEdit
+  local function doorId(door)
+    -- Native in-place mutation can return to an earlier reward signature (ABA)
+    -- even when no Trainer lease exists. Record every observed identity change,
+    -- while keeping a confirmed Trainer Apply/Cancel on its exact original token.
+    local edit = activeEdit(door)
+    if edit and edit.kind == "reward" then return edit.doorToken end
+    local physical = physicalDoorId(door)
+    local signature = rewardSignature(door.Room)
+    local observed = doorObservations[door]
+    if observed and observed.physical == physical and observed.signature ~= signature then
+      doorEpochs[door] = (doorEpochs[door] or 0) + 1
+      physical = physicalDoorId(door)
+    end
+    doorObservations[door] = { physical = physical, signature = signature }
+    return physical .. ":" .. signature
   end
   local function ordinaryDoor(door)
     return door.Room and door.ReadyToUse and door.Name ~= "SecretDoor" and door.Name ~= "ShrinePointDoor"
   end
+  -- A run-scoped occurrence survives a normal room transition, but only a
+  -- live room or a room being built by native CreateRoom may select it.
+  -- Stale retained Room tables must never consume a future occurrence.
+  local function liveEncounterRoom(run, room)
+    if run ~= CurrentRun or type(room) ~= "table" then return false end
+    if room == currentRoom() then return true end
+    local generation = occurrenceGeneration
+    if generation and generation.run == run and generation.hero == hero()
+        and generation.sourceRoom ~= nil and generation.sourceRoom == currentRoom()
+        and generation.roomName == room.Name then return true end
+    for _, door in pairs(OfferedExitDoors or {}) do
+      if ordinaryDoor(door) and door.Room == room then return true end
+    end
+    return false
+  end
   local function requireDoor(params)
     requireRoom(params)
+    local token = params.doorToken or params.doorId
     for _, door in pairs(OfferedExitDoors or {}) do
-      if ordinaryDoor(door) and doorId(door) == params.doorId then return door end
+      if ordinaryDoor(door) and doorId(door) == token then return door end
     end
     error("hades.error.staleDoor")
+  end
+  local function clearOccurrenceRoomSelections()
+    occurrencePendingRoom = nil
+    occurrenceSelectedRooms = setmetatable({}, { __mode = "k" })
+  end
+  local function validOccurrence()
+    local request = occurrenceRequest
+    if type(request) ~= "table" or request.run ~= CurrentRun or request.hero ~= hero()
+        or occurrenceTargets[request.target] == nil then
+      occurrenceRequest = nil
+      clearOccurrenceRoomSelections()
+      return nil
+    end
+    return request
+  end
+  local function occurrenceRoomMatches(definition, room)
+    if type(definition) ~= "table" or type(definition.rooms) ~= "table"
+        or type(room) ~= "table" or definition.rooms[room.Name] ~= true then return false end
+    local native = definition.nativeEncounter
+    if type(native) == "string" then
+      -- Story room eligibility alone does not prove the named NPC's presence.
+      local legal = false
+      for _, name in pairs(type(room.LegalEncounters) == "table" and room.LegalEncounters or {}) do
+        if name == native then legal = true; break end
+      end
+      if not legal then return false end
+      if type(room.Encounter) == "table" and room.Encounter.Name ~= native then return false end
+    end
+    return true
+  end
+  local function occurrenceRoomCandidateEligible(definition, room)
+    if not occurrenceRoomMatches(definition, room) then return false end
+    local name = definition.nativeEncounter
+    if type(name) ~= "string" then return true end
+    local encounter = type(EncounterData) == "table" and EncounterData[name] or nil
+    if type(encounter) ~= "table" or type(IsEncounterEligible) ~= "function" then return false end
+    -- Native predicate is given a shallow copy so normalization cannot mutate
+    -- its source RoomData owner during this non-destructive selection probe.
+    local probe = {}
+    for key, value in pairs(room) do probe[key] = value end
+    if type(room.LegalEncounters) == "table" then
+      probe.LegalEncountersDictionary = {}
+      for _, id in pairs(room.LegalEncounters) do probe.LegalEncountersDictionary[id] = true end
+    end
+    if type(room.IllegalEncounters) == "table" then
+      probe.IllegalEncountersDictionary = {}
+      for _, id in pairs(room.IllegalEncounters) do probe.IllegalEncountersDictionary[id] = true end
+    end
+    local ok, eligible = pcall(IsEncounterEligible, CurrentRun, probe, encounter)
+    if not ok then error(eligible, 0) end
+    return eligible == true
+  end
+  local function occurrenceEncounterMatches(definition, encounter)
+    if type(definition) ~= "table" or type(encounter) ~= "table" then return false end
+    if type(definition.encounters) == "table" and definition.encounters[encounter.Name] then return true end
+    local set = definition.encounterSet and type(EncounterSets) == "table"
+      and EncounterSets[definition.encounterSet] or nil
+    for _, name in pairs(set or {}) do if name == encounter.Name then return true end end
+    return false
+  end
+  local function consumeOccurrence(target, token)
+    local request = validOccurrence()
+    if not request or request.target ~= target or request.leaseToken ~= token then return false end
+    occurrenceRequest = nil
+    clearOccurrenceRoomSelections()
+    return true
+  end
+  local function occurrenceRoomReserved(request)
+    local pending = occurrencePendingRoom
+    if pending and (pending.leaseToken ~= request.leaseToken
+        or pending.run ~= CurrentRun or pending.hero ~= hero()
+        or pending.sourceRoom ~= currentRoom()) then
+      occurrencePendingRoom = nil
+      pending = nil
+    end
+    if pending then return true end
+    for room, selected in pairs(occurrenceSelectedRooms) do
+      if selected.leaseToken ~= request.leaseToken or selected.run ~= CurrentRun
+          or selected.hero ~= hero() or selected.sourceRoom ~= currentRoom()
+          or (selected.door and selected.door.Room ~= room) then
+        occurrenceSelectedRooms[room] = nil
+      else
+        return true
+      end
+    end
+    return false
+  end
+  local function occurrenceChoose(kind, original, ...)
+    local request = validOccurrence()
+    local definition = request and occurrenceTargets[request.target] or nil
+    local hasTarget = kind == "room" and type(definition and definition.rooms) == "table"
+      or kind == "encounter" and definition ~= nil
+        and (type(definition.encounters) == "table" or definition.encounterSet ~= nil)
+    if not hasTarget then return original(...) end
+    if kind == "room" and (select(1, ...) ~= CurrentRun or occurrenceRoomReserved(request)) then
+      return original(...)
+    end
+    local previous = occurrenceSelection
+    occurrenceSelection = {
+      kind = kind, target = request.target, leaseToken = request.leaseToken,
+      eligible = {}, nativeForced = false,
+    }
+    local packed = table.pack(pcall(original, ...))
+    occurrenceSelection = previous
+    if not packed[1] then error(packed[2], 0) end
+    return table.unpack(packed, 2, packed.n)
+  end
+  local function occurrenceObserveForced(kind, original, run, room, candidate, ...)
+    local native = original(run, room, candidate, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and selection.kind == kind
+        and selection.target == request.target and selection.leaseToken == request.leaseToken then
+      if native then selection.nativeForced = true end
+      if type(candidate) == "table" then selection.eligible[candidate] = true end
+    end
+    return native
+  end
+  local function occurrenceRandom(original, pool, ...)
+    local selection = occurrenceSelection
+    local request = validOccurrence()
+    if selection and request and not selection.nativeForced
+        and selection.target == request.target and selection.leaseToken == request.leaseToken
+        and type(pool) == "table" then
+      local definition = occurrenceTargets[selection.target]
+      local choices = {}
+      for _, candidate in pairs(pool) do
+        local data = candidate
+        if selection.kind == "room" and type(candidate) == "string" then
+          data = type(RoomData) == "table" and RoomData[candidate] or nil
+        end
+        if selection.eligible[data] then
+          local matched = selection.kind == "room" and occurrenceRoomCandidateEligible(definition, data)
+            or selection.kind == "encounter" and occurrenceEncounterMatches(definition, data)
+          if matched then choices[#choices + 1] = candidate end
+        end
+      end
+      if #choices > 0 then
+        local chosen = original(choices, ...)
+        if selection.kind == "room" then
+          occurrencePendingRoom = {
+            run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+            leaseToken = request.leaseToken, chosen = chosen,
+          }
+        end
+        return chosen
+      end
+    end
+    return original(pool, ...)
   end
   local function routeKind(name)
     if name:find("_Story", 1, true) then return "story" end
@@ -1281,22 +1493,75 @@ world = (function()
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
-  local function couldBeForced(room)
-    local randomChance = RandomChance
-    -- Status must not redraw native force chances. Protect every possible force.
-    RandomChance = function(chance) return chance > 0 end
-    local ok, result = pcall(IsRoomForced, CurrentRun, CurrentRun.CurrentRoom, room, {})
-    RandomChance = randomChance
+  -- Native eligibility/force/reward requirements may draw RNG or count
+  -- attempts in SessionMapState. Query them through one non-advancing gate.
+  -- A stochastic predicate fails closed: a catalog is never a promise about
+  -- an outcome that depends on the native game's next random sample.
+  local function nativeEligibilityProbe(callback, positiveChanceMeansForced, ...)
+    local randomChance, randomValue = RandomChance, GetRandomValue
+    local randomInt, randomFloat = RandomInt, RandomFloat
+    local sourceSession = SessionMapState
+    local usedRandom = false
+    if type(sourceSession) == "table" then
+      local probeSession = {}
+      for key, value in pairs(sourceSession) do probeSession[key] = value end
+      SessionMapState = probeSession
+    end
+    RandomChance = function(chance)
+      if type(chance) == "number" and chance > 0 then
+        usedRandom = true
+        return positiveChanceMeansForced
+      end
+      return false
+    end
+    GetRandomValue = function(values, ...)
+      usedRandom = true
+      if type(values) == "table" then return values[1] end
+      return values
+    end
+    if type(randomInt) == "function" then
+      RandomInt = function(minimum) usedRandom = true; return minimum end
+    end
+    if type(randomFloat) == "function" then
+      RandomFloat = function(minimum) usedRandom = true; return minimum end
+    end
+    local ok, result = pcall(callback, ...)
+    SessionMapState = sourceSession
+    RandomChance, GetRandomValue = randomChance, randomValue
+    if type(randomInt) == "function" then RandomInt = randomInt end
+    if type(randomFloat) == "function" then RandomFloat = randomFloat end
     if not ok then error(result, 0) end
-    return result
+    return result, usedRandom
   end
-  local function routeRooms(room)
+  local function couldBeForced(room, args)
+    local forced, stochastic = nativeEligibilityProbe(
+      IsRoomForced, true, CurrentRun, CurrentRun.CurrentRoom, room, args or {}
+    )
+    return stochastic or forced
+  end
+  local function eligibleWithoutRandom(room, data, args)
+    local eligible, stochastic = nativeEligibilityProbe(
+      IsRoomEligible, false, CurrentRun, room, data, args or {}
+    )
+    return not stochastic and eligible
+  end
+  local function routeRooms(room, door)
     local result = {}
+    local args = type(door) == "table" and door.ChooseRoomArgs or {}
+    if type(args) ~= "table" then return end
     if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
-        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel then return end
-    for name, data in pairs(RoomSetData[room.RoomSetName or "Tartarus"] or {}) do
-      if IsRoomEligible(CurrentRun, room, data, {}) then
-        if couldBeForced(data) then return end
+        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel
+        or room.ForceNextRoom or room.ForceNextRoomSet or room.NextRoomSetName
+        or args.RoomDataSet or args.NextRoomSet or args.NextRoomSetNoGenerate
+        or args.UsePreviousRoomSet or args.ForceNextRoom or args.ForceNextRoomSet
+        or (type(door) == "table" and (door.ForceRoomName or door.ReturnToPreviousRoom
+          or door.ReturnToPreviousRoomName or door.UsePreviousRoomSet)) then return end
+    local roomSetName = args.RoomSetName or room.RoomSetName or "Tartarus"
+    local roomSet = RoomSetData[roomSetName]
+    if type(roomSet) ~= "table" then return end
+    for name, data in pairs(roomSet) do
+      if eligibleWithoutRandom(room, data, args) then
+        if couldBeForced(data, args) then return end
         local kind = routeKind(name)
         if kind then
           result[kind] = result[kind] or {}
@@ -1305,12 +1570,6 @@ world = (function()
       end
     end
     return result
-  end
-  local function thanatos(room)
-    for _, name in ipairs(EncounterSets.ThanatosEncounters or {}) do
-      local data = EncounterData[name]
-      if data and IsEncounterEligible(CurrentRun, room, data) then return data end
-    end
   end
   local function chanceEligible(room, key, callback)
     local previous = room[key]
@@ -1368,11 +1627,11 @@ world = (function()
     end
     return chanceEligible(room, owner.chance, callback)
   end
-  local function canModify(room)
+  local function canModify(room, args)
     return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
-      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room)
+      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room, args)
   end
-  local function refreshDoor(door, room)
+  local function clearDoorPreview(door)
     local ids, seen = {}, {}
     local function include(id)
       if id and not seen[id] then ids[#ids + 1] = id; seen[id] = true end
@@ -1382,17 +1641,153 @@ world = (function()
     for _, id in pairs(door.AdditionalAttractIds or {}) do include(id) end
     if #ids > 0 then Destroy({ Ids = ids }) end
     door.AdditionalIcons = {}; door.AdditionalAttractIds = {}
-    door.CanBeRerolled = false
+  end
+  local function drawDoorPreview(door, room)
+    local actual = door.Room
+    clearDoorPreview(door)
+    door.Room = room
+    local ok, result = pcall(CreateDoorRewardPreview, door)
+    door.Room = actual
+    if not ok then
+      clearDoorPreview(door)
+      pcall(CreateDoorRewardPreview, door)
+      error(result, 0)
+    end
+  end
+  local function refreshDoor(door, room)
+    clearDoorPreview(door)
     AssignRoomToExitDoor(door, room)
     CreateDoorRewardPreview(door)
   end
-  local function applyDoor(door, room)
+  activeEdit = function(door)
     local edit = edits[door]
-    if not edit or edit.applied ~= door.Room or edit.signature ~= doorId(door) then edit = { original = door.Room } end
-    encounters[door.Room] = nil
-    edit.applied = room; edits[door] = edit
+    if type(edit) ~= "table" then return nil end
+    if edit.run ~= CurrentRun or edit.hero ~= hero()
+        or edit.sourceRoom ~= currentRoom() then
+      edits[door] = nil
+      return nil
+    end
+    local identityChanged = edit.physicalToken ~= physicalDoorId(door)
+    local rewardChanged = edit.signature ~= rewardSignature(door.Room)
+    if edit.kind == "route" then
+      identityChanged = identityChanged or edit.original ~= door.Room
+    elseif edit.kind == "reward" then
+      identityChanged = identityChanged or edit.applied ~= door.Room
+      rewardChanged = edit.appliedSignature ~= rewardSignature(door.Room)
+    else
+      identityChanged = true
+    end
+    if identityChanged or rewardChanged then
+      edits[door] = nil
+      -- A native mutation can restore the exact old reward fields. Never
+      -- allow its previously issued token to become valid again.
+      doorEpochs[door] = (doorEpochs[door] or 0) + 1
+      return nil
+    end
+    return edit
+  end
+  local rewardFields = {
+    "Reward", "ChosenRewardType", "ForceLootName", "RewardStoreName",
+    "RewardOverrides", "Encounter", "OriginalChosenRewardType", "OriginalForceLootName",
+  }
+  local function snapshotReward(door, target, leaseToken)
+    local source = currentRoom()
+    local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
+    local room = door.Room
+    local edit = {
+      kind = "reward", original = room, applied = room, target = target,
+      leaseToken = leaseToken, doorToken = doorId(door),
+      physicalToken = physicalDoorId(door),
+      originalCanBeRerolled = door.CanBeRerolled,
+      originalOfferedRewardsPresent = offered ~= nil,
+      originalOfferedReward = offered and offered[door.ObjectId] or nil,
+      fields = {}, run = CurrentRun, hero = hero(), sourceRoom = source,
+    }
+    for _, field in ipairs(rewardFields) do
+      edit.fields[field] = { value = room[field] }
+    end
+    return edit
+  end
+  local function restoreReward(door, edit)
+    local room = door.Room
+    for _, field in ipairs(rewardFields) do
+      room[field] = edit.fields[field].value
+    end
     refreshDoor(door, room)
-    edit.signature = doorId(door)
+    door.CanBeRerolled = edit.originalCanBeRerolled
+    if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+    local source = edit.sourceRoom
+    local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
+    if edit.originalOfferedRewardsPresent and not offered then
+      offered = {}
+      source.OfferedRewards = offered
+    end
+    if offered then
+      offered[door.ObjectId] = edit.originalOfferedReward
+      if not edit.originalOfferedRewardsPresent and next(offered) == nil then
+        source.OfferedRewards = nil
+      end
+    end
+  end
+  -- A reserved category has no concrete room/reward until native door use.
+  -- Render a supported generic native preview without selecting a candidate,
+  -- leaking an NPC/boon icon, or mutating the actual door.Room identity.
+  local function routePreviewDescriptor(door, route)
+    local proxy = DeepCopyTable(door.Room)
+    proxy.Reward = nil
+    proxy.ChosenRewardType = nil
+    proxy.ForceLootName = nil
+    proxy.RewardStoreName = nil
+    proxy.RewardOverrides = nil
+    proxy.RewardPreviewIcon = nil
+    proxy.RewardPreviewFx = nil
+    proxy.Encounter = nil
+    proxy.OriginalChosenRewardType = nil
+    proxy.OriginalForceLootName = nil
+    proxy.NextRoomSet = nil
+    if route == "shop" then
+      proxy.ChosenRewardType = "Shop"
+    elseif route ~= "story" then
+      -- The native preview treats a truthy NextRoomSet as a neutral ExitPreview.
+      -- This is a presentation-only proxy, never written to the exit graph.
+      proxy.NextRoomSet = {}
+    end
+    return proxy
+  end
+  local function reserveRoute(door, route, leaseToken)
+    assert(activeEdit(door) == nil, "hades.error.staleDoor")
+    local routes = routeRooms(currentRoom(), door)
+    local candidates = routes and routes[route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    -- Only present the native generic category icon; candidate selection,
+    -- room generation and RNG are reserved for authorized native departure.
+    drawDoorPreview(door, routePreviewDescriptor(door, route))
+    edits[door] = {
+      kind = "route", route = route, target = route, leaseToken = leaseToken,
+      original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+      physicalToken = physicalDoorId(door), signature = rewardSignature(door.Room),
+    }
+  end
+  local function clearSourceEdits(source, selectedDoor)
+    for door, edit in pairs(edits) do
+      if type(edit) == "table" and edit.sourceRoom == source then
+        -- Native departure has already accepted the door, sometimes paying
+        -- a cost. Revoke each lease before restoring unused sibling previews;
+        -- an icon or button callback failure cannot strand the transition.
+        local restore = door ~= selectedDoor and activeEdit(door) == edit
+        edits[door] = nil
+        if restore then
+          local ok, err = pcall(function()
+            if edit.kind == "reward" then
+              restoreReward(door, edit)
+            elseif edit.kind == "route" then
+              drawDoorPreview(door, door.Room)
+            end
+          end)
+          if not ok then runtime.worldRouteFailure = tostring(err) end
+        end
+      end
+    end
   end
   local function definition(name)
     local data = runtime.worldDefinitions and runtime.worldDefinitions[name]
@@ -1406,10 +1801,50 @@ world = (function()
     if not rewardSourceEligible(data) then return end
     for name, store in pairs(RewardStoreData) do
       for _, reward in ipairs(store) do
-        if type(reward) == "table" and reward.Name == data.rewardType
-            and IsRoomRewardEligible(CurrentRun, room, reward, nil, {}) then return reward, name end
+        if type(reward) == "table" and reward.Name == data.rewardType then
+          local roomProbe, rewardProbe = {}, {}
+          for key, value in pairs(room) do roomProbe[key] = value end
+          for key, value in pairs(reward) do rewardProbe[key] = value end
+          local eligible, stochastic = nativeEligibilityProbe(
+            IsRoomRewardEligible, false, CurrentRun, roomProbe, rewardProbe, nil, {}
+          )
+          if eligible and not stochastic then return reward, name end
+        end
       end
     end
+  end
+  local function applyRewardEdit(door, rewardId, leaseToken)
+    local data = definition(rewardId)
+    assert(data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
+    local reward, store = doorReward(door.Room, data)
+    assert(reward, "hades.error.worldUnavailable")
+    -- Prepare the native reward on a descriptor clone first. Committing the
+    -- reward fields in-place preserves the exact physical target-room owner.
+    local room = door.Room
+    local prepared = DeepCopyTable(room)
+    prepared.ChosenRewardType = data.rewardType
+    prepared.ForceLootName = data.rewardType == "Boon" and rewardId or nil
+    prepared.RewardStoreName = store
+    prepared.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
+    prepared.Encounter = nil
+    prepared.OriginalChosenRewardType = nil; prepared.OriginalForceLootName = nil
+    SetupRoomReward(CurrentRun, prepared, nil, { IgnoreForceLootName = true })
+    local edit = snapshotReward(door, rewardId, leaseToken)
+    for _, field in ipairs(rewardFields) do room[field] = prepared[field] end
+    edit.appliedSignature = rewardSignature(room)
+    edits[door] = edit
+    refreshDoor(door, room)
+  end
+  local function materializeRoute(door, edit)
+    assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
+    local routes = routeRooms(edit.sourceRoom, door)
+    local candidates = routes and routes[edit.route]
+    assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+    local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
+    assert(type(room) == "table", "hades.error.unsupportedRuntime")
+    edits[door] = nil
+    AssignRoomToExitDoor(door, room)
+    return room
   end
   local api = {}
   function api.install()
@@ -1436,41 +1871,205 @@ world = (function()
         return ids
       end
     end)
+    hook("CreateRoom", function(original)
+      return function(data, ...)
+        local pending = occurrencePendingRoom
+        local matching = pending and pending.run == CurrentRun and pending.hero == hero()
+          and pending.sourceRoom == currentRoom()
+          and (pending.chosen == data or type(pending.chosen) == "string"
+            and type(data) == "table" and pending.chosen == data.Name)
+        if matching then occurrencePendingRoom = nil end
+        local previous = occurrenceGeneration
+        occurrenceGeneration = {
+          run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
+          roomName = type(data) == "table" and data.Name or nil,
+        }
+        local result = table.pack(pcall(original, data, ...))
+        occurrenceGeneration = previous
+        if not result[1] then error(result[2], 0) end
+        if matching and type(result[2]) == "table" then
+          occurrenceSelectedRooms[result[2]] = {
+            run = pending.run, hero = pending.hero, sourceRoom = pending.sourceRoom,
+            leaseToken = pending.leaseToken,
+          }
+        end
+        return table.unpack(result, 2, result.n)
+      end
+    end)
+    hook("AssignRoomToExitDoor", function(original)
+      return function(door, room, ...)
+        local previous = type(door) == "table" and door.Room or nil
+        local result = table.pack(original(door, room, ...))
+        if type(previous) == "table" and previous ~= room then
+          occurrenceSelectedRooms[previous] = nil
+        end
+        local selected = occurrenceSelectedRooms[room]
+        if selected then selected.door = door end
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+    hook("ChooseNextRoomData", function(original)
+      return function(...)
+        return occurrenceChoose("room", original, ...)
+      end
+    end)
+    hook("IsRoomForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("room", original, ...)
+      end
+    end)
     hook("ChooseEncounter", function(original)
       return function(run, room, ...)
-        local intent = encounters[room]
-        encounters[room] = nil
-        if intent and run == intent.run and hero() == intent.hero and run.CurrentRoom == intent.sourceRoom
-            and IsEncounterEligible(run, room, EncounterData[intent.name]) then
-          return SetupEncounter(EncounterData[intent.name], room)
+        if not liveEncounterRoom(run, room) then return original(run, room, ...) end
+        return occurrenceChoose("encounter", original, run, room, ...)
+      end
+    end)
+    hook("IsEncounterForced", function(original)
+      return function(...)
+        return occurrenceObserveForced("encounter", original, ...)
+      end
+    end)
+    hook("GetRandomValue", function(original)
+      return function(...)
+        return occurrenceRandom(original, ...)
+      end
+    end)
+    hook("RecordEncounter", function(original)
+      return function(run, encounter, ...)
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
+        local result = table.pack(original(run, encounter, ...))
+        if run == CurrentRun and token and occurrenceEncounterMatches(definition, encounter) then
+          consumeOccurrence(target, token)
         end
-        return original(run, room, ...)
+        return table.unpack(result, 1, result.n)
+      end
+    end)
+    hook("LeaveRoom", function(original)
+      return function(run, door, ...)
+        local source = currentRoom()
+        local edit = activeEdit(door)
+        if edit and edit.kind == "route" then
+          -- Native AttemptUseDoor can already have spent money or health. A
+          -- failed late CreateRoom/Assign must therefore leave via the original
+          -- game-generated destination instead of aborting the transition.
+          -- Native RNG/creation counts are deliberately never rewound.
+          local originalRoom = door.Room
+          local graph = {}
+          for _, field in ipairs({ "OfferedRewards", "ExitDoorRooms" }) do
+            local map = type(source[field]) == "table" and source[field] or nil
+            graph[field] = { existed = map ~= nil, owner = map,
+              value = map and map[door.ObjectId] or nil }
+          end
+          local ok, err = pcall(function()
+            assert(run == CurrentRun and edit.run == run and edit.sourceRoom == source,
+              "hades.error.staleDoor")
+            materializeRoute(door, edit)
+          end)
+          if not ok then
+            door.Room = originalRoom
+            for field, snapshot in pairs(graph) do
+              local map = type(source[field]) == "table" and source[field] or nil
+              if map == nil and snapshot.existed then
+                map = snapshot.owner
+                source[field] = map
+              end
+              if map ~= nil then
+                map[door.ObjectId] = snapshot.value
+                if not snapshot.existed and next(map) == nil then source[field] = nil end
+              end
+            end
+            edits[door] = nil
+            runtime.worldRouteFailure = tostring(err)
+            if type(DebugPrint) == "function" then
+              pcall(DebugPrint, { Text = "MGT Hades route fallback: " .. tostring(err) })
+            end
+          else
+            runtime.worldRouteFailure = nil
+          end
+        end
+        clearSourceEdits(source, door)
+        local request = validOccurrence()
+        local target = request and request.target
+        local token = request and request.leaseToken
+        local definition = target and occurrenceTargets[target]
+        local result = table.pack(original(run, door, ...))
+        if run == CurrentRun and token and occurrenceRoomMatches(definition, door.Room) then
+          consumeOccurrence(target, token)
+        end
+        if occurrencePendingRoom and occurrencePendingRoom.sourceRoom == source then
+          occurrencePendingRoom = nil
+        end
+        for room, selected in pairs(occurrenceSelectedRooms) do
+          if selected.sourceRoom == source then occurrenceSelectedRooms[room] = nil end
+        end
+        return table.unpack(result, 1, result.n)
       end
     end)
   end
-  function api.clearPending() encounters = setmetatable({}, { __mode = "k" }) end
+  function api.clearPending()
+    occurrenceRequest = nil
+    occurrenceSelection = nil
+    occurrenceGeneration = nil
+    clearOccurrenceRoomSelections()
+    local source = currentRoom()
+    local unit = hero()
+    local failure
+    for door, edit in pairs(edits) do
+      local owned = type(edit) == "table" and edit.run == CurrentRun
+        and edit.hero == unit and edit.sourceRoom == source
+      local valid = owned and activeEdit(door) == edit
+      if valid then
+        local ok, err = pcall(function()
+          if edit.kind == "reward" then
+            restoreReward(door, edit)
+          elseif edit.kind == "route" then
+            drawDoorPreview(door, door.Room)
+          end
+        end)
+        if not ok and failure == nil then failure = err end
+      end
+      edits[door] = nil
+    end
+    if failure ~= nil then error(failure, 0) end
+  end
   function api.observation()
     local room = currentRoom()
     if not room then return nil end
-    for target, intent in pairs(encounters) do
-      if intent.run ~= CurrentRun or intent.hero ~= hero() or intent.sourceRoom ~= room then encounters[target] = nil end
-    end
-    local routes, doors = routeRooms(room), array()
+    local doors = array()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
-        local options = array()
-        if routes and canModify(door.Room) then
-          for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
-            if routes[kind] then options[#options + 1] = kind end
+        local routes = routeRooms(room, door)
+        local edit = activeEdit(door)
+        local targets = array()
+        if routes and canModify(door.Room, door.ChooseRoomArgs) then
+          local rewardIds = {}
+          for rewardId, data in pairs(runtime.worldDefinitions or {}) do
+            if data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs)
+              and doorReward(door.Room, data) then rewardIds[#rewardIds + 1] = rewardId end
           end
-          if thanatos(door.Room) then options[#options + 1] = "thanatos" end
+          table.sort(rewardIds)
+          for _, rewardId in ipairs(rewardIds) do
+            targets[#targets + 1] = { kind = "reward", id = rewardId }
+          end
+          for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
+            if routes[kind] then targets[#targets + 1] = { kind = "roomCategory", id = kind } end
+          end
         end
-        local edit, encounter = edits[door], encounters[door.Room]
-        doors[#doors + 1] = { id = doorId(door), number = door.ObjectId,
+        local lease
+        if edit and edit.leaseToken then
+          lease = {
+            kind = edit.kind == "route" and "roomCategory" or "reward",
+            target = edit.target,
+            leaseToken = edit.leaseToken,
+          }
+        end
+        doors[#doors + 1] = { id = doorId(door), doorToken = doorId(door), number = door.ObjectId,
+          roomName = door.Room.Name or "",
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
-          canReward = canModify(door.Room),
-          routes = options, canRestore = edit ~= nil and edit.applied == door.Room and edit.signature == doorId(door),
-          pendingEncounter = encounter ~= nil }
+          targets = targets, activeLease = lease }
       end
     end
     table.sort(doors, function(a, b) return a.number < b.number end)
@@ -1480,7 +2079,21 @@ world = (function()
         if canGenerate(room, kind) then objects[#objects + 1] = kind end
       end
     end
-    return { roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room), objects = objects }
+    local occurrenceList = array()
+    for _, id in ipairs(occurrenceTargetOrder) do
+      local definition = occurrenceTargets[id]
+      occurrenceList[#occurrenceList + 1] = {
+        id = id, kind = definition.kind, sourceId = definition.sourceId,
+      }
+    end
+    local request = validOccurrence()
+    local occurrence = request and {
+      target = request.target, leaseToken = request.leaseToken,
+    } or nil
+    return {
+      roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room),
+      objects = objects, occurrenceTargets = occurrenceList, occurrence = occurrence,
+    }
   end
   function runtime.gain_resource(params)
     requireHero()
@@ -1578,54 +2191,60 @@ world = (function()
     end
     return runtime.status()
   end
-  function runtime.set_door_reward(params)
+  function runtime.apply_world_exit(params)
     local door = requireDoor(params)
-    local data = definition(params.reward)
-    assert(data.doorAllowed and canModify(door.Room), "hades.error.worldUnavailable")
-    local reward, store = doorReward(door.Room, data)
-    assert(reward, "hades.error.worldUnavailable")
-    local room = DeepCopyTable(door.Room)
-    local encounter = encounters[door.Room]
-    room.ChosenRewardType = data.rewardType
-    room.ForceLootName = data.rewardType == "Boon" and params.reward or nil
-    room.RewardStoreName = store
-    room.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
-    room.Encounter = nil
-    room.OriginalChosenRewardType = nil; room.OriginalForceLootName = nil
-    SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
-    encounters[room] = encounter
-    applyDoor(door, room)
-    return runtime.status()
-  end
-  function runtime.set_door_route(params)
-    local door = requireDoor(params)
-    assert(canModify(door.Room), "hades.error.worldUnavailable")
-    local routes = routeRooms(CurrentRun.CurrentRoom)
-    assert(routes, "hades.error.worldUnavailable")
-    if params.route == "thanatos" then
-      local data = thanatos(door.Room)
-      assert(data, "hades.error.worldUnavailable")
-      local room = DeepCopyTable(door.Room)
-      room.Encounter = nil
-      encounters[room] = { run = CurrentRun, hero = hero(), sourceRoom = CurrentRun.CurrentRoom, name = data.Name }
-      applyDoor(door, room)
-    else
-      local candidates = routes[params.route]
+    assert(activeEdit(door) == nil and type(params.requestId) == "string",
+      "hades.error.staleDoor")
+    local leaseToken = "exit:" .. params.requestId
+    if params.kind == "reward" then
+      applyRewardEdit(door, params.targetID, leaseToken)
+    elseif params.kind == "roomCategory" then
+      assert(canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
+      local routes = routeRooms(CurrentRun.CurrentRoom, door)
+      local candidates = routes and routes[params.targetID]
       assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-      applyDoor(door, room)
+      reserveRoute(door, params.targetID, leaseToken)
+    else
+      error("hades.error.invalidValue")
     end
     return runtime.status()
   end
-  function runtime.restore_door(params)
+  function runtime.cancel_world_exit(params)
     local door = requireDoor(params)
-    local edit = edits[door]
-    assert(edit and edit.applied == door.Room and edit.signature == doorId(door), "hades.error.staleDoor")
-    encounters[door.Room] = nil
-    refreshDoor(door, edit.original)
+    local edit = activeEdit(door)
+    assert(edit and edit.leaseToken == params.leaseToken, "hades.error.staleDoor")
+    if edit.kind == "reward" then
+      restoreReward(door, edit)
+    elseif edit.kind == "route" then
+      drawDoorPreview(door, door.Room)
+    end
     edits[door] = nil
     return runtime.status()
   end
+  function runtime.apply_world_occurrence(params)
+    requireRoom(params)
+    assert(type(params.targetID) == "string" and occurrenceTargets[params.targetID],
+      "hades.error.invalidValue")
+    assert(validOccurrence() == nil and type(params.requestId) == "string",
+      "hades.error.worldUnavailable")
+    occurrenceRequest = {
+      target = params.targetID,
+      leaseToken = "occurrence:" .. params.requestId,
+      run = CurrentRun,
+      hero = requireHero(),
+    }
+    return runtime.status()
+  end
+  function runtime.cancel_world_occurrence(params)
+    requireRoom(params)
+    local request = validOccurrence()
+    assert(request and request.leaseToken == params.leaseToken, "hades.error.staleTarget")
+    occurrenceRequest = nil
+    occurrenceSelection = nil
+    clearOccurrenceRoomSelections()
+    return runtime.status()
+  end
+
   return api
 end)()
 
