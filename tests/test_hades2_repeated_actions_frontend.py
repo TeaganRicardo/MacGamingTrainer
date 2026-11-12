@@ -296,8 +296,8 @@ struct Main {
         check(model.selectedWorldExit?.doorToken == "fixture-exit:1"
               && model.selectedWorldExitTarget == "reward:" + reward.id,
               "fixture did not project the exact-exit World Action selection")
-        model.performShortcut(.applyNextRoomReward)
-        model.performShortcut(.applyNextRoomReward)
+        model.performShortcut(.applyWorldExit)
+        model.performShortcut(.applyWorldExit)
         waitForIdle(model, logURL: logURL, phase: "exact-exit world action")
         let worldExitRequests = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "apply_world_exit"
@@ -312,7 +312,7 @@ struct Main {
 
         // The same control means Cancel while latched; no separate switch or
         // cancellation control owns this product state.
-        model.performShortcut(.applyNextRoomReward)
+        model.performShortcut(.applyWorldExit)
         waitForIdle(model, logURL: logURL, phase: "exact-exit cancel")
         let worldExitCancels = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "cancel_world_exit"

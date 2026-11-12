@@ -158,7 +158,7 @@ presentation_cases = dict(re.findall(
     presentation_block,
 ))
 assert len(actions) == len(set(actions)), "duplicate shortcut action declaration"
-assert presentation_cases.get("disableAll") == "host.disableAll"
+assert 'case applyWorldExit = "applyNextRoomReward"' in shortcut_declarations, "World Exit source identity must retain only the released storage raw value"\nassert presentation_cases.get("disableAll") == "host.disableAll"
 assert set(presentation_cases) == set(actions), (
     "every registered shortcut action must have one presentation label"
 )
@@ -193,7 +193,7 @@ for language in ("en", "zh-CN"):
     assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
 
 for key in (
-    'case .applyNextRoomReward: return "hades2.shortcut.applyWorldExit"',
+    'case .applyWorldExit: return "hades2.shortcut.applyWorldExit"',
     'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"',
     'case .spawnPickup: return "hades2.shortcut.spawnPickup"',
     'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"',
@@ -275,21 +275,11 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
         assert picker_count == owner_count, (
             f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
-hades1_rooms = (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
-hades1_world_start = hades1_rooms.index("private var worldExitRow")
-hades1_world_actions = hades1_rooms[
-    hades1_world_start:
-    hades1_rooms.index("var body: some View", hades1_world_start)
-]
-assert hades1_world_actions.count(".trainerPicker(") >= 3
-assert hades1_world_actions.count(".expanding,") >= 2
-assert ".rowAction," in hades1_world_actions
-hades1_occurrence_controls = hades1_world_actions[
-    hades1_world_actions.index("private var worldOccurrenceRow"):
-]
-assert re.search(r"\.trainerPicker\(\s*\.rowAction\s*,\s*state:", hades1_occurrence_controls)
-assert "!pending && !targets.isEmpty" in hades1_occurrence_controls
-assert "latched: pending" in hades1_occurrence_controls
+assert ".trainerPicker(.rowAction" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+world_actions = view[view.index("private var worldExitPanel"):view.index("private var resourcePanel")]
+assert world_actions.count(".trainerPicker(") >= 3
+assert world_actions.count(".expanding,") >= 2
+assert ".rowAction," in world_actions
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in resource_controls
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()

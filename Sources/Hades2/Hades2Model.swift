@@ -1988,7 +1988,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             ) { [weak self] success in
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
-        case .applyNextRoomReward:
+        case .applyWorldExit:
             guard toggleSelectedWorldExit(completion: { success in
                 TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
             }) else {
