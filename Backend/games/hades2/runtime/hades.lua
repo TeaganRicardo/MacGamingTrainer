@@ -8526,6 +8526,8 @@ if __MacGamingTrainerV1 == nil then
     if M.nextOccurrenceTarget ~= target or M.nextOccurrenceToken ~= token then return false end
     M.lastConsumedNextOccurrenceToken = token
     M.occurrenceRouting.roomClaim = nil
+    M.occurrenceRouting.ownerRun = nil
+    M.occurrenceRouting.ownerHero = nil
     M.nextOccurrenceTarget = nil
     M.nextOccurrenceToken = nil
     M.featureErrors.nextOccurrence = nil
@@ -8546,6 +8548,8 @@ if __MacGamingTrainerV1 == nil then
         or M.occurrenceRouting.ownerHero ~= (type(CurrentRun) == "table" and CurrentRun.Hero) then
       M.nextOccurrenceTarget, M.nextOccurrenceToken = nil, nil
       M.occurrenceRouting.roomClaim = nil
+      M.occurrenceRouting.ownerRun = nil
+      M.occurrenceRouting.ownerHero = nil
       M.featureErrors.nextOccurrence = nil
       releaseOccurrenceRouting()
       return false
@@ -9346,6 +9350,9 @@ if __MacGamingTrainerV1 == nil then
         error("World occurrence target is unavailable")
       end
       if M.nextOccurrenceTarget ~= nil or M.nextOccurrenceToken ~= nil then
+        M.occurrenceRouting.liveOwner()
+      end
+      if M.nextOccurrenceTarget ~= nil or M.nextOccurrenceToken ~= nil then
         error("World occurrence already has an active lease")
       end
       if not M.occurrenceRouting.availableFor(params.target) then
@@ -9369,6 +9376,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function preflightOccurrenceCancel(params)
+      if M.nextOccurrenceTarget ~= nil then M.occurrenceRouting.liveOwner() end
       if type(params.leaseToken) ~= "string" or params.leaseToken == ""
           or M.nextOccurrenceTarget == nil or M.nextOccurrenceToken ~= params.leaseToken then
         error("World occurrence lease is invalid or stale")
@@ -9380,6 +9388,9 @@ if __MacGamingTrainerV1 == nil then
       preflightOccurrenceCancel(params)
       M.nextOccurrenceTarget = nil
       M.nextOccurrenceToken = nil
+      M.occurrenceRouting.roomClaim = nil
+      M.occurrenceRouting.ownerRun = nil
+      M.occurrenceRouting.ownerHero = nil
       M.featureErrors.nextOccurrence = nil
       reconcileDesired(true, "nextOccurrence")
       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
@@ -9388,6 +9399,7 @@ if __MacGamingTrainerV1 == nil then
     local function observe(includeTargets)
       local exits = setmetatable({}, arrayMeta)
       local result = { exits = exits }
+      if M.nextOccurrenceTarget ~= nil then M.occurrenceRouting.liveOwner() end
       if M.nextOccurrenceTarget ~= nil and M.nextOccurrenceToken ~= nil then
         result.occurrence = {
           target = M.nextOccurrenceTarget,

@@ -322,6 +322,33 @@ assert(M.lastConsumedNextOccurrenceToken == "skip-unlock-token",
   "native StartRoom did not generate the consumption receipt")
 print("occurrence_routing_ok")
 """,
+    "run_and_hero_identity_replacement_revokes_pending_occurrence": r"""
+setRoomSet("F")
+setOccurrence("npc:Arachne", "hero-owner")
+local originalHero = CurrentRun.Hero
+CurrentRun.Hero = { ObjectId = 998, Traits = {} }
+-- A second explicit Apply must not be blocked by a stale lease from another
+-- Hero identity; preflight retires the previous resident owner first.
+setOccurrence("npc:Arachne", "replacement-hero-owner")
+assert(M.nextOccurrenceToken == "replacement-hero-owner"
+    and M.occurrenceRouting.ownerHero == CurrentRun.Hero,
+  "Hero replacement retained or mis-owned the previous occurrence lease")
+
+local sameHero = CurrentRun.Hero
+local replacementRun = {}
+for key, value in pairs(CurrentRun) do replacementRun[key] = value end
+replacementRun.Hero = sameHero
+CurrentRun = replacementRun
+local observed = M.dispatch("status", { includeCatalogs = false })
+assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil,
+  "run replacement retained a resident occurrence lease")
+assert(observed.worldActions.occurrence == nil,
+  "status projected a stale occurrence after run replacement")
+assert(ChooseNextRoomData == nativeChooseNextRoomData
+    and StartRoom == nativeStartRoom and GetRandomValue == nativeGetRandomValue,
+  "run replacement left occurrence routing hooks installed")
+print("occurrence_routing_ok")
+""",
     "active_target_is_locked_until_cancel_then_owner_can_change": r"""
 setRoomSet("F")
 setOccurrence("npc:Arachne", "room-first")
