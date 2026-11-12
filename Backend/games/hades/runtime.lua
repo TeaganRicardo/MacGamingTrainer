@@ -1771,16 +1771,21 @@ world = (function()
   local function clearSourceEdits(source, selectedDoor)
     for door, edit in pairs(edits) do
       if type(edit) == "table" and edit.sourceRoom == source then
-        -- Unused sibling edits cannot leak into native departure/save state.
-        -- The selected door's reward/route has already been committed.
-        if door ~= selectedDoor and activeEdit(door) == edit then
-          if edit.kind == "reward" then
-            restoreReward(door, edit)
-          elseif edit.kind == "route" then
-            drawDoorPreview(door, door.Room)
-          end
-        end
+        -- Native departure has already accepted the door, sometimes paying
+        -- a cost. Revoke each lease before restoring unused sibling previews;
+        -- an icon or button callback failure cannot strand the transition.
+        local restore = door ~= selectedDoor and activeEdit(door) == edit
         edits[door] = nil
+        if restore then
+          local ok, err = pcall(function()
+            if edit.kind == "reward" then
+              restoreReward(door, edit)
+            elseif edit.kind == "route" then
+              drawDoorPreview(door, door.Room)
+            end
+          end)
+          if not ok then runtime.worldRouteFailure = tostring(err) end
+        end
       end
     end
   end
