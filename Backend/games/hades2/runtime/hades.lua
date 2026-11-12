@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 130 then
+if previousModule and previousModule.revision ~= 131 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 130 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 130,
+    version = 1, revision = 131,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -9268,9 +9268,10 @@ if __MacGamingTrainerV1 == nil then
       if target.UseOptionalOverrides and type(target.OptionalOverrides) == "table" then
         for key, value in pairs(target.OptionalOverrides) do target[key] = value end
       end
+      -- Assign is the only native graph write. The LeaveRoom owner will
+      -- release leases after this succeeds, or restore the exact native
+      -- graph if assignment/preparation throws after the door was paid for.
       AssignRoomToExitDoor(door, target)
-      leases[door] = nil
-      clearSource(source, door)
       return target
     end
 
@@ -9298,13 +9299,40 @@ if __MacGamingTrainerV1 == nil then
           local source = currentSource()
           local lease = activeLease(door)
           if type(lease) == "table" and lease.kind == "roomCategory" then
-            if run ~= CurrentRun or lease.run ~= run or lease.sourceRoom ~= source then
-              error("World exit route lost its native owner")
+            -- Native AttemptUseDoor already checked access and may have paid a
+            -- health/encounter cost. Failing a late destination preparation
+            -- must never strand the player before native LeaveRoom. Keep the
+            -- original generated destination as the safe transition fallback.
+            local originalRoom = door.Room
+            local offered = snapshotDoorMap(source, "OfferedRewards", door.ObjectId)
+            local exitRooms = snapshotDoorMap(source, "ExitDoorRooms", door.ObjectId)
+            local allowReroll = snapshotField(door, "AllowReroll")
+            local canReroll = snapshotField(door, "CanBeRerolled")
+            local ok, reason = pcall(function()
+              if run ~= CurrentRun or lease.run ~= run or lease.sourceRoom ~= source then
+                error("World exit route lost its native owner")
+              end
+              materializeRoute(run, door, lease)
+            end)
+            if not ok then
+              -- CreateRoom and reward setup can consume native RNG/counts.
+              -- Never attempt a fabricated rewind; discard this reservation
+              -- and let the game's already-generated room finish normally.
+              door.Room = originalRoom
+              restoreDoorMap(source, "OfferedRewards", door.ObjectId, offered)
+              restoreDoorMap(source, "ExitDoorRooms", door.ObjectId, exitRooms)
+              restoreField(door, "AllowReroll", allowReroll)
+              restoreField(door, "CanBeRerolled", canReroll)
+              M.featureErrors.worldActions = "hades2.error.worldActionUnavailable"
+              if type(DebugPrint) == "function" then
+                pcall(DebugPrint, { Text = "MGT World Actions route fallback: " .. tostring(reason) })
+              end
+            else
+              M.featureErrors.worldActions = nil
             end
-            materializeRoute(run, door, lease)
-          else
-            clearSource(source, door)
           end
+          clearSource(source, door)
+          -- Keep the yieldable native transition outside pcall.
           return original(run, door, ...)
         end)
       end
