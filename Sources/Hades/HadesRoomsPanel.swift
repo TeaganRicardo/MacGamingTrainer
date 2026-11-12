@@ -129,83 +129,84 @@ struct HadesRoomsPanel: View {
         let rewardTargets = exit?.worldActionTargets.filter { $0.kind == "reward" } ?? []
         let routeTargets = exit?.worldActionTargets.filter { $0.kind == "roomCategory" } ?? []
         let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
-        return TrainerLabeledControlRow(
+        return TrainerDualPickerActionRow(
             title: text("hades.worldActions.modifyExit"),
             icon: TrainerSemanticIcon.Context.doorway,
             tint: model.canSelectWorldExit ? theme.accent : theme.inactive,
-            emphasized: model.selectedWorldExitLease != nil,
-            layout: .pickerAction
+            emphasized: model.selectedWorldExitLease != nil
         ) {
-            HStack(spacing: 8) {
-                Picker(
-                    text("hades.worldActions.exit"),
-                    selection: Binding(
-                        get: { model.selectedWorldExitToken },
-                        set: {
-                            model.selectedWorldExitToken = $0
-                            model.repairWorldActionSelection()
-                        }
-                    )
-                ) {
-                    if doors.isEmpty {
-                        Text(text("hades.worldActions.noExit")).tag("")
+            Picker(
+                text("hades.worldActions.exit"),
+                selection: Binding(
+                    get: { model.selectedWorldExitToken },
+                    set: {
+                        model.selectedWorldExitToken = $0
+                        model.repairWorldActionSelection()
                     }
-                    ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
-                        Text(worldExitLabel(row, index: index)).tag(row.effectiveDoorToken)
-                    }
-                }
-                .labelsHidden()
-                .trainerPicker(
-                    .expanding,
-                    state: model.canSelectWorldExit ? .interactive : .unavailable
                 )
-
-                Picker(
-                    text("hades.worldActions.target"),
-                    selection: $model.selectedWorldExitTarget
-                ) {
-                    if let lease = exit?.activeLease,
-                       !((exit?.worldActionTargets ?? []).contains { $0.stableID == (leaseSelection ?? "") }) {
-                        Text(worldTargetLabel(kind: lease.kind, id: lease.target))
-                            .tag(lease.kind + ":" + lease.target)
-                    }
-                    if !rewardTargets.isEmpty {
-                        Section(text("hades.worldActions.rewards")) {
-                            ForEach(rewardTargets, id: \.stableID) { target in
-                                Text(worldTargetLabel(kind: target.kind, id: target.id))
-                                    .tag(target.stableID)
-                            }
-                        }
-                    }
-                    if !routeTargets.isEmpty {
-                        Section(text("hades.worldActions.routes")) {
-                            ForEach(routeTargets, id: \.stableID) { target in
-                                Text(worldTargetLabel(kind: target.kind, id: target.id))
-                                    .tag(target.stableID)
-                            }
-                        }
-                    }
-                    if exit != nil && rewardTargets.isEmpty && routeTargets.isEmpty && exit?.activeLease == nil {
-                        Text(text("hades.worldActions.noTarget")).tag("")
-                    }
+            ) {
+                if doors.isEmpty {
+                    Text(text("hades.worldActions.noExit")).tag("")
                 }
-                .labelsHidden()
-                .trainerPicker(
-                    .expanding,
-                    state: model.canSelectWorldExit && !model.selectedWorldExitTargetLocked
-                        && (!rewardTargets.isEmpty || !routeTargets.isEmpty)
-                        ? .interactive : .unavailable
-                )
+                ForEach(Array(doors.enumerated()), id: \.element.id) { index, row in
+                    Text(worldExitLabel(row, index: index)).tag(row.effectiveDoorToken)
+                }
             }
-
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: model.canSelectWorldExit ? .interactive : .unavailable)
+            .accessibilityIdentifier("hades.worldActions.currentExit")
+        } secondPicker: {
+            Picker(
+                text("hades.worldActions.target"),
+                selection: $model.selectedWorldExitTarget
+            ) {
+                if let lease = exit?.activeLease,
+                   !((exit?.worldActionTargets ?? []).contains { $0.stableID == (leaseSelection ?? "") }) {
+                    Text(worldTargetLabel(kind: lease.kind, id: lease.target))
+                        .tag(lease.kind + ":" + lease.target)
+                }
+                if !rewardTargets.isEmpty {
+                    Section(text("hades.worldActions.rewards")) {
+                        ForEach(rewardTargets, id: \.stableID) { target in
+                            Text(worldTargetLabel(kind: target.kind, id: target.id))
+                                .tag(target.stableID)
+                        }
+                    }
+                }
+                if !routeTargets.isEmpty {
+                    Section(text("hades.worldActions.routes")) {
+                        ForEach(routeTargets, id: \.stableID) { target in
+                            Text(worldTargetLabel(kind: target.kind, id: target.id))
+                                .tag(target.stableID)
+                        }
+                    }
+                }
+                if exit != nil && rewardTargets.isEmpty && routeTargets.isEmpty && exit?.activeLease == nil {
+                    Text(text("hades.worldActions.noTarget")).tag("")
+                }
+            }
+            .labelsHidden()
+            .trainerPicker(
+                .layoutAllocated,
+                state: model.canSelectWorldExit && !model.selectedWorldExitTargetLocked
+                    && (!rewardTargets.isEmpty || !routeTargets.isEmpty)
+                    ? .interactive : .unavailable
+            )
+            .accessibilityIdentifier("hades.worldActions.target")
+        } shortcut: {
+            EmptyView()
+        } action: {
             TrainerSecondaryActionButton(
-                title: text("hades.apply"),
+                title: text(model.selectedWorldExitLease != nil ? "hades.cancel" : "hades.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.selectedWorldExitActionAvailable,
-                latched: model.selectedWorldExitLease != nil
+                latched: model.selectedWorldExitLease != nil,
+                subduedLatched: true,
+                widthRole: .compactRow
             ) {
                 _ = model.toggleSelectedWorldExit()
             }
+            .accessibilityIdentifier("hades.worldActions.apply")
         }
     }
 
