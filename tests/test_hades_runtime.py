@@ -385,7 +385,7 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 13 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == 14 and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
 for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 }, { revision = 6 }, { revision = 7 }, { revision = 8 }, { revision = 9 }, { revision = 10 }, { revision = 11 }, { revision = 12 } }) do
