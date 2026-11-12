@@ -8610,17 +8610,22 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
     local current = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
+    -- Once the source room changes, only admission into the exact claimed room
+    -- may retain this reversible encounter owner. Old OfferedExitDoors entries
+    -- from the departed source cannot keep the claim alive.
+    if claim.source ~= current then
+      if claim.room == current then return claim end
+      M.occurrenceRouting.encounterClaim = nil
+      return nil
+    end
     if claim.room == current then return claim end
     local doors = type(MapState) == "table" and MapState.OfferedExitDoors or nil
     for _, door in pairs(type(doors) == "table" and doors or {}) do
       if type(door) == "table" and door.Room == claim.room then return claim end
     end
     -- ChooseEncounter may run while a native room is being built, before that
-    -- room is assigned to an exit. Retain that provisional claim only while
-    -- its source room still owns the generation window.
-    if claim.source == current then return claim end
-    M.occurrenceRouting.encounterClaim = nil
-    return nil
+    -- room is assigned to an exit. The source still owns that generation window.
+    return claim
   end
 
   function M.occurrenceRouting.choose(kind, original, ...)
