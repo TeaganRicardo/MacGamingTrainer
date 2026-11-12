@@ -1947,9 +1947,43 @@ world = (function()
         local source = currentRoom()
         local edit = activeEdit(door)
         if edit and edit.kind == "route" then
-          assert(run == CurrentRun and edit.run == run and edit.sourceRoom == source,
-            "hades.error.staleDoor")
-          materializeRoute(door, edit)
+          -- Native AttemptUseDoor can already have spent money or health. A
+          -- failed late CreateRoom/Assign must therefore leave via the original
+          -- game-generated destination instead of aborting the transition.
+          -- Native RNG/creation counts are deliberately never rewound.
+          local originalRoom = door.Room
+          local graph = {}
+          for _, field in ipairs({ "OfferedRewards", "ExitDoorRooms" }) do
+            local map = type(source[field]) == "table" and source[field] or nil
+            graph[field] = { existed = map ~= nil, owner = map,
+              value = map and map[door.ObjectId] or nil }
+          end
+          local ok, err = pcall(function()
+            assert(run == CurrentRun and edit.run == run and edit.sourceRoom == source,
+              "hades.error.staleDoor")
+            materializeRoute(door, edit)
+          end)
+          if not ok then
+            door.Room = originalRoom
+            for field, snapshot in pairs(graph) do
+              local map = type(source[field]) == "table" and source[field] or nil
+              if map == nil and snapshot.existed then
+                map = snapshot.owner
+                source[field] = map
+              end
+              if map ~= nil then
+                map[door.ObjectId] = snapshot.value
+                if not snapshot.existed and next(map) == nil then source[field] = nil end
+              end
+            end
+            edits[door] = nil
+            runtime.worldRouteFailure = tostring(err)
+            if type(DebugPrint) == "function" then
+              pcall(DebugPrint, { Text = "MGT Hades route fallback: " .. tostring(err) })
+            end
+          else
+            runtime.worldRouteFailure = nil
+          end
         end
         clearSourceEdits(source, door)
         local request = validOccurrence()
