@@ -35,27 +35,26 @@ assert 'let primaryName = localization.language == .en && !resource.englishName.
 assert 'let secondaryName = localization.language == .en ? resource.name : resource.englishName' in view
 assert 'secondaryName.isEmpty || secondaryName == primaryName' in view
 assert '"\\(primaryName) · \\(secondaryName)"' in view
-# Next-room reward labels resolve through the shipped bilingual table, so the
-# view names a key per reward id instead of embedding either language.
-for reward in (
-    'RoomMoneyDrop',
-    'MetaCurrencyDrop',
-    'MetaCardPointsCommonDrop',
-    'MemPointsCommonDrop',
-    'MaxHealthDrop',
-    'MaxManaDrop',
-    'StackUpgrade',
-    'WeaponUpgrade',
-    'SpellDrop',
+# World Actions reward labels resolve through the same shipped bilingual
+# table, while the target list itself is resident-projected from each exact
+# door's native RewardStore eligibility.
+for reward_id in (
+    "RoomMoneyDrop", "MetaCardPointsCommonDrop", "MemPointsCommonDrop",
+    "MetaCurrencyDrop", "MaxHealthDrop", "MaxManaDrop",
+    "StackUpgrade", "WeaponUpgrade", "SpellDrop",
 ):
-    assert f'rewardLabel("{reward}")' in view
+    assert f'rewardLabel("{reward_id}")' in view
+assert "local function rewardCandidates(door)" in lua
+assert "IsRoomRewardEligible" in lua
+assert 'targets[#targets + 1] = { kind = "reward", id = candidate.id }' in lua
+assert 'kind = "roomCategory"' in lua
+assert 'installHook("LeaveRoom"' in lua
+assert 'command == "set_next_room_reward"' not in lua
 for retired in (
     'RoomRewardMoney', 'RoomRewardMetaPoint', 'RoomRewardPsyche',
     'RoomRewardMixerFabric', 'RoomRewardMaxHealth', 'RoomRewardPom',
 ):
     assert retired not in view, retired
-assert 'room.ChosenRewardType = rewardType' in lua
-assert 'return "Boon", wanted' in lua
 
 # Selene catalog identity keeps SpellDrop (Hex choice) distinct from TalentDrop
 # (Path of Stars points). Runtime spawning semantics are exercised through
@@ -73,7 +72,7 @@ def source_section(source, start, end):
 def enum_cases(source, start, end):
     body = source_section(source, start, end).split("var id:", 1)[0]
     declarations = re.findall(r"^\s*case\s+([^\n]+)$", body, re.M)
-    return [name for declaration in declarations for name in re.findall(r"[A-Za-z]\w*", declaration)]
+    return [name for declaration in declarations for name in re.findall(r"[A-Za-z]\w*", declaration.split("=", 1)[0])]
 
 def shortcut_references(source):
     pattern = re.compile(
@@ -135,6 +134,8 @@ assert common_order == [
     "forceEnableRerolls", "instantCastCooldown", "hexAlwaysReady", "infiniteAmmo", "autoMiniGames",
 ]
 assert action_order[:10] == common_order
+# The legacy raw shortcut/Profile key does not declare a second action.
+assert 'case applyWorldExit = "applyNextRoomReward"' in types
 parts = [
     common,
     source_section(view, "private var gameSpeedPanel: some View {", "private var presentedContent:"),
@@ -144,7 +145,7 @@ parts = [
     source_section(view, "private var boonAcquisitionPanel: some View {", "private var currentRunEffectsPanel:"),
     source_section(view, "private var resourcePanel: some View {", "private var rewardSpawningPanel:"),
     source_section(view, "private var resourceSection: some View {", "private var roomsSection:"),
-    source_section(view, "private var nextRoomRewardPanel: some View {", "private var resourcePanel:"),
+    source_section(view, "private var worldExitPanel: some View {", "private var resourcePanel:"),
     source_section(view, "private var rewardSpawningPanel: some View {", "private var boonAcquisitionPanel:"),
     source_section(view, "private var management: some View {", "private func featureRow("),
     management.split("struct Hades2ManagementUtilities: View {", 1)[1],

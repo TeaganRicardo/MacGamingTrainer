@@ -8,6 +8,8 @@ CurrentRun.CurrentRoom = {
   RoomCreations = {},
   ChosenRewardType = "RoomMoneyDrop",
   LegalEncounters = { "CombatNormal" },
+  OfferedRewards = {},
+  ExitDoorRooms = {},
 }
 CurrentRun.RoomCreations = {}
 CurrentRun.RoomCountCache = {}
@@ -18,11 +20,21 @@ CurrentRun.EncountersDepthCache = {}
 CurrentRun.BlockedEncounters = {}
 CurrentRun.RunDepthCache = 1
 CurrentRun.BiomeDepthCache = 1
+CurrentRun.RewardPriorities = {}
+CurrentRun.RewardStores = {
+  RunProgress = {
+    { Name = "RoomMoneyDrop", AllowDuplicates = true },
+    { Name = "MaxHealthDrop", AllowDuplicates = true },
+    { Name = "MaxManaDrop", AllowDuplicates = true },
+    { Name = "StackUpgrade", AllowDuplicates = true },
+    { Name = "WeaponUpgrade", AllowDuplicates = true },
+  },
+}
 
 RoomData = {
-  F_Combat01 = { Name = "F_Combat01", RoomSetName = "F" },
+  F_Combat01 = { Name = "F_Combat01", RoomSetName = "F", ChosenRewardType = "RoomMoneyDrop" },
   F_Forced01 = { Name = "F_Forced01", RoomSetName = "F" },
-  F_Story01 = { Name = "F_Story01", RoomSetName = "F", MaxCreationsThisRun = 1 },
+  F_Story01 = { Name = "F_Story01", RoomSetName = "F", ForcedReward = "Story", MaxCreationsThisRun = 1 },
   F_Shop01 = { Name = "F_Shop01", RoomSetName = "F", MaxCreationsThisRun = 1 },
   G_Combat01 = { Name = "G_Combat01", RoomSetName = "G" },
   G_Story01 = { Name = "G_Story01", RoomSetName = "G", MaxCreationsThisRun = 1 },
@@ -48,6 +60,9 @@ RoomSets = {
 
 EncounterData = {
   CombatNormal = { Name = "CombatNormal" },
+  ArachneCombatF = { Name = "ArachneCombatF" },
+  ArachneCombatG = { Name = "ArachneCombatG" },
+  ArachneCombatN = { Name = "ArachneCombatN" },
   ArtemisCombatF = { Name = "ArtemisCombatF" },
   ArtemisCombatF2 = { Name = "ArtemisCombatF2" },
   ArtemisCombatIntro = { Name = "ArtemisCombatIntro" },
@@ -95,7 +110,10 @@ GetRandomValue = function(pool)
 end
 local nativeGetRandomValue = GetRandomValue
 
+probeEligibilityUsesRandom = false
+probeForceUsesRandom = false
 IsRoomEligible = function(run, currentRoom, nextRoomData, args)
+  if probeEligibilityUsesRandom then GetRandomValue({ true, false }) end
   if type(nextRoomData) ~= "table" then return false end
   if roomEligible[nextRoomData.Name] == false then return false end
   if nextRoomData.MaxCreationsThisRun ~= nil
@@ -106,6 +124,9 @@ IsRoomEligible = function(run, currentRoom, nextRoomData, args)
 end
 
 IsRoomForced = function(run, currentRoom, nextRoomData, args, otherDoors)
+  if probeForceUsesRandom and nextRoomData.RandomForced then
+    return GetRandomValue({ false, true })
+  end
   return nativeRoomForced[nextRoomData.Name] == true
 end
 local nativeIsRoomForced = IsRoomForced
@@ -157,13 +178,29 @@ CreateRoom = function(roomData, args)
   return room
 end
 
+previewCalls = 0
 CreateDoorRewardPreview = function(door)
+  previewCalls = previewCalls + 1
   door.PreviewCreated = true
+  door.PreviewRoomName = door.Room and door.Room.Name or ""
+  door.PreviewOverride = door.Room and door.Room.RewardPreviewOverride or nil
+  door.PreviewReward = door.Room and (
+    door.Room.ForceLootName or door.Room.ChosenRewardType or ""
+  ) or ""
 end
 local nativeCreateDoorRewardPreview = CreateDoorRewardPreview
 AssignRoomToExitDoor = function(door, chosen)
   door.Room = chosen
   MapState.OfferedExitDoors[door.ObjectId] = door
+  CurrentRun.CurrentRoom.ExitDoorRooms =
+    CurrentRun.CurrentRoom.ExitDoorRooms or {}
+  CurrentRun.CurrentRoom.OfferedRewards =
+    CurrentRun.CurrentRoom.OfferedRewards or {}
+  CurrentRun.CurrentRoom.ExitDoorRooms[door.ObjectId] = chosen.Name
+  CurrentRun.CurrentRoom.OfferedRewards[door.ObjectId] = {
+    Type = chosen.ChosenRewardType,
+    ForceLootName = chosen.ForceLootName,
+  }
 end
 
 DoUnlockRoomExits = function(run, room)
@@ -187,6 +224,11 @@ DoUnlockRoomExits = function(run, room)
       door.Room.NeedsReward = true
     end
     if door.Room.NeedsReward then
+      door.Room.RewardStoreName = door.Room.RewardStoreName or "RunProgress"
+      door.Room.ChosenRewardType = ChooseRoomReward(
+        run, door.Room, door.Room.RewardStoreName, {}, { Door = door }
+      )
+      SetupRoomReward(run, door.Room, {}, { Door = door })
       AssignRoomToExitDoor(door, door.Room)
       door.Room.NeedsReward = false
     end
@@ -197,6 +239,47 @@ DoUnlockRoomExits = function(run, room)
   end
 end
 local nativeDoUnlockRoomExits = DoUnlockRoomExits
+
+-- Game-owned room admission. An exit being displayed in
+-- MapState.OfferedExitDoors is still a choice; entering it calls StartRoom.
+StartRoom = function(run, room)
+  assert(run == CurrentRun and type(room) == "table")
+  run.CurrentRoom = room
+  return room
+end
+local nativeStartRoom = StartRoom
+-- Preserve the old next-room reward's separate native selection path so
+-- shared StartRoom-hook ownership can be tested in both installation orders.
+IsRoomRewardEligible = function(run, room, reward, previously, args)
+  return type(reward) == "table" and type(reward.Name) == "string"
+end
+ChooseRoomReward = function(run, room, storeName, previously, args)
+  return room.ChosenRewardType or "RoomMoneyDrop"
+end
+ChooseNextRewardStore = function(run)
+  assert(run == CurrentRun)
+  return "RunProgress"
+end
+SetupRoomReward = function(run, room, previously, args)
+  assert(run == CurrentRun and type(room) == "table")
+  room.Reward = room.Reward or { Name = room.ChosenRewardType }
+  if room.ForceLootName ~= nil then room.Reward.ForceLootName = room.ForceLootName end
+  return room
+end
+nativeLeaveCalls = 0
+LeaveRoom = function(run, door)
+  assert(run == CurrentRun and type(door) == "table" and door.Room)
+  nativeLeaveCalls = nativeLeaveCalls + 1
+  return StartRoom(run, door.Room)
+end
+local nativeLeaveRoom = LeaveRoom
+
+AttemptUseDoor = function(door)
+  if not door.ReadyToUse or door.SkipUnlock or door.Blocked or not door.Room
+      or MapState.OfferedExitDoors[door.ObjectId] ~= door then return false end
+  return LeaveRoom(CurrentRun, door)
+end
+local nativeAttemptUseDoor = AttemptUseDoor
 
 IsEncounterEligible = function(run, room, data, args)
   if type(data) ~= "table" then return false end
@@ -245,6 +328,22 @@ ChooseEncounter = function(run, room, args)
 end
 local nativeChooseEncounter = ChooseEncounter
 
+RecordEncounter = function(run, encounter)
+  assert(run == CurrentRun and type(encounter) == "table" and type(encounter.Name) == "string")
+  run.EncountersOccurredCache = run.EncountersOccurredCache or {}
+  run.EncountersOccurredBiomeCache = run.EncountersOccurredBiomeCache or {}
+  run.EncountersDepthCache = run.EncountersDepthCache or {}
+  GameState.EncountersOccurredCache = GameState.EncountersOccurredCache or {}
+  run.EncountersOccurredCache[encounter.Name] = (run.EncountersOccurredCache[encounter.Name] or 0) + 1
+  GameState.EncountersOccurredCache[encounter.Name] =
+    (GameState.EncountersOccurredCache[encounter.Name] or 0) + 1
+  run.EncountersOccurredBiomeCache[encounter.Name] =
+    (run.EncountersOccurredBiomeCache[encounter.Name] or 0) + 1
+  run.EncountersDepthCache[encounter.Name] = run.RunDepthCache
+  return encounter
+end
+local nativeRecordEncounter = RecordEncounter
+
 local function setRoomSet(name)
   CurrentRun.CurrentRoom = {
     Name = name .. "_Start",
@@ -262,9 +361,9 @@ dofile(assert(arg[2]))
 local M = assert(__MacGamingTrainerV1)
 
 local function setOccurrence(target, token)
-  return M.dispatch("set_next_occurrence", {
+  return M.dispatch("apply_world_occurrence", {
     target = target,
-    token = token,
+    requestId = token,
     includeCatalogs = false,
   })
 end

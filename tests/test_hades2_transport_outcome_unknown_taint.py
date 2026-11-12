@@ -363,10 +363,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
             raise AssertionError('a later mutation reused the unknown transport')
         assert len(async_transport.calls) == 1
 
-        # A persisted profile remains pending, while a separately proven
-        # one-shot consumption must still prevent resurrection after restart.
+        # A persisted durable feature remains pending. Resident world-action
+        # receipts are observation only and must never be promoted to persistence.
         desired = Hades2PreferenceStore.defaults()
-        desired.update(invincibility=True, nextRoomReward='RoomMoneyDrop', nextRoomRewardToken='consumed-room')
+        desired.update(invincibility=True)
         store = Hades2PreferenceStore(preparation.DATA / 'desired-state.json')
         store.save(desired)
         dirty_transport = AsyncUnknownTransport()
@@ -381,7 +381,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         assert dirty_transport.tainted and len(dirty_transport.calls) == 1
         saved, initialized = store.load()
         assert initialized and saved['invincibility'] is True, 'unknown status overwrote durable desired intent'
-        assert saved['nextRoomReward'] is None and saved['nextRoomRewardToken'] is None
+        assert 'nextRoomReward' not in saved and 'nextRoomRewardToken' not in saved
         assert dirty_adapter.preference_dirty, 'unknown status pretended replay completed'
         assert dirty_adapter.state['lastAction']['outcome'] == 'outcome_unknown'
         assert dirty_adapter.state['runtimeDiagnostics']['lastConsumedNextRoomRewardToken'] == 'consumed-room'

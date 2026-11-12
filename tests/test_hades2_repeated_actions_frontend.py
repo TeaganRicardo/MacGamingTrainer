@@ -25,6 +25,7 @@ parser.add_argument("--game", required=True)
 args = parser.parse_args()
 log = pathlib.Path(__file__).with_suffix(".commands.jsonl")
 enable_count = 0
+world_lease = None
 for line in sys.stdin:
     request = json.loads(line)
     with log.open("a", encoding="utf-8") as file:
@@ -35,7 +36,31 @@ for line in sys.stdin:
         time.sleep(0.45)
     elif request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
         time.sleep(0.16)
-    observed = {"connected": True}
+    if request["command"] == "apply_world_exit":
+        world_lease = {
+            "kind": request["params"]["kind"],
+            "target": request["params"]["target"],
+            "leaseToken": "fixture-lease:" + request["id"],
+        }
+    elif request["command"] == "cancel_world_exit":
+        world_lease = None
+    exit_row = {
+        "doorToken": "fixture-exit:1",
+        "objectId": 1,
+        "ordinal": 1,
+        "roomName": "F_Combat01",
+        "reward": "RoomMoneyDrop",
+        "targets": [{"kind": "reward", "id": "MaxManaDropBig"}],
+    }
+    if world_lease is not None:
+        exit_row["activeLease"] = world_lease
+    observed = {
+        "connected": True,
+        "capabilities": {
+            "spawnReward": True, "specialChoice": True, "worldActions": True,
+        },
+        "worldActions": {"exits": [exit_row]},
+    }
     success = True
     if request["command"] == "set_desired":
         feature = request["params"]["feature"]
@@ -114,6 +139,7 @@ func makeReward(_ id: String, group: String = "pickup") -> BoonOption {
         sourceName: "Pickup", sourceEnglishName: "Pickup",
         nativeChoice: false, nativeChoiceTitle: "",
         nativeChoiceEnglishTitle: "", acquisitionMode: "",
+        rarities: [], supportsLevel: false,
         sortSection: 1, sortGroup: 1, sortOrder: 1
     )
 }
@@ -153,7 +179,7 @@ struct Main {
         model.connected = true
         model.status = "ready"
         model.scene = "run"
-        model.capabilities = ["spawnReward": true, "specialChoice": true]
+        model.capabilities = ["spawnReward": true, "specialChoice": true, "worldActions": true]
         let reward = makeReward("MaxManaDropBig")
         model.boons = [reward]
         model.selectedPickupReward = reward.id
@@ -265,17 +291,36 @@ struct Main {
               && abs(speedValues[1] - 1.2) < 0.0001 && abs(speedValues[2] - 1.1) < 0.0001,
               "speed keys did not preserve the ordered desired values: \(speedValues)")
 
-        // Applying a next-room reward mints a consumption identity. A double
-        // shortcut press must not mint a second token while the first is pending.
-        model.selectedNextRoomReward = reward.id
-        model.performShortcut(.applyNextRoomReward)
-        model.performShortcut(.applyNextRoomReward)
-        waitForIdle(model, logURL: logURL, phase: "next-room token update")
-        let nextRoomRequests = loggedCommands(at: logURL).filter {
-            ($0["command"] as? String) == "set_next_room_reward_desired"
+        // Row 1 now owns one exact generated exit. Rapid shortcut repetition
+        // must not create a second lease while the first Apply is in flight.
+        check(model.selectedWorldExit?.doorToken == "fixture-exit:1"
+              && model.selectedWorldExitTarget == "reward:" + reward.id,
+              "fixture did not project the exact-exit World Action selection")
+        model.performShortcut(.applyWorldExit)
+        model.performShortcut(.applyWorldExit)
+        waitForIdle(model, logURL: logURL, phase: "exact-exit world action")
+        let worldExitRequests = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "apply_world_exit"
         }
-        check(nextRoomRequests.count == 1,
-              "rapid hotkey duplicated a next-room consumption token: \(nextRoomRequests.count)")
+        check(worldExitRequests.count == 1,
+              "rapid hotkey duplicated an exact-exit World Action: \(worldExitRequests.count)")
+        check(model.selectedWorldExitLease?.kind == "reward"
+              && model.selectedWorldExitLease?.target == reward.id,
+              "successful Apply was not latched from the authoritative backend lease")
+        check(model.selectedWorldExitTargetLocked && model.selectedWorldExitActionAvailable,
+              "latched exact-exit lease did not lock the target while keeping Apply cancellable")
+
+        // The same control means Cancel while latched; no separate switch or
+        // cancellation control owns this product state.
+        model.performShortcut(.applyWorldExit)
+        waitForIdle(model, logURL: logURL, phase: "exact-exit cancel")
+        let worldExitCancels = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "cancel_world_exit"
+        }
+        check(worldExitCancels.count == 1,
+              "second Apply press did not cancel the exact active lease")
+        check(model.selectedWorldExitLease == nil && !model.selectedWorldExitTargetLocked,
+              "backend cancellation observation did not release the pressed state")
 
         // Route the normal special-reward shortcut through the actual typed
         // backend boundary. A source-string assertion cannot prove dispatch.

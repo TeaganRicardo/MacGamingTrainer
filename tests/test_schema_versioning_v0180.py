@@ -34,7 +34,7 @@ try:
     loaded, initialized = store.load()
     assert initialized is True
     assert loaded['invincibility'] is True
-    assert loaded['nextRoomReward'] == 'RoomMoneyDrop'
+    assert 'nextRoomReward' not in loaded and 'nextRoomRewardToken' not in loaded
     assert loaded['boonRarity']['forceLegendary'] is False
     assert loaded['boonRarity']['forceDuo'] is False
     assert 'boonChoiceEnabled' not in loaded and 'boonChoiceCount' not in loaded
@@ -60,7 +60,7 @@ try:
     assert upgraded['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
     assert upgraded['invincibility'] is True
     assert 'godMode' not in upgraded
-    assert upgraded['nextRoomReward'] == 'RoomMoneyDrop'
+    assert 'nextRoomReward' not in upgraded and 'nextRoomRewardToken' not in upgraded
 
     # A file produced by a newer Trainer must never be quarantined or silently
     # replaced by defaults.  This backend starts safely with defaults but keeps

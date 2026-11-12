@@ -21,17 +21,25 @@ sources = [
     "Medea", "Heracles", "Circe", "Icarus", "Dionysus", "Athena", "Charon",
 ]
 assert "struct Hades2OccurrenceTarget: Identifiable, Equatable" in types
-assert 'case setNextOccurrence(String?)' in api
-assert 'return .setNextOccurrenceDesired' in api
-assert 'return ["target": target ?? NSNull()]' in api
-assert "let nextOccurrenceTarget: Hades2FieldPatch<String>" in state
+assert 'case applyWorldOccurrence(target: String)' in api
+assert 'case cancelWorldOccurrence(leaseToken: String)' in api
+assert 'return .applyWorldOccurrence' in api
+assert 'return .cancelWorldOccurrence' in api
+assert 'return ["target": target]' in api
+assert 'return ["leaseToken": leaseToken]' in api
+assert "struct Hades2WorldOccurrenceLease: Equatable" in state
+assert "let occurrence: Hades2WorldOccurrenceLease?" in state
+assert "let worldActions: Hades2FieldPatch<Hades2WorldActionsSnapshot>" in state
 assert "let occurrenceTargets: [Hades2OccurrenceTarget]?" in state
-assert '@Published var nextOccurrenceTarget: String?' in model
+assert '@Published private(set) var worldOccurrence: Hades2WorldOccurrenceLease?' in model
 assert '@Published var occurrenceTargets: [Hades2OccurrenceTarget] = []' in model
-assert "func setNextOccurrence(_ target: String?, completion: ((Bool) -> Void)? = nil) -> Bool" in model
+assert "func toggleNextOccurrence(completion: ((Bool) -> Void)? = nil) -> Bool" in model
 
 assert 'occurrenceTargets = occurrenceList' in runtime
 assert 'kind = definition.kind' in runtime and 'sourceId = definition.sourceId' in runtime
+assert 'command == "apply_world_occurrence"' in runtime
+assert 'command == "cancel_world_occurrence"' in runtime
+assert 'command == "set_next_occurrence"' not in runtime
 assert r'occurrenceTargetIDs: model.occurrenceTargets.map(\.id)' in view
 assert 'ForEach(characters)' in view and 'ForEach(shops)' in view
 assert 'hades2.occurrence.title' in view and 'hades2.spawn.characterRewards' in view
@@ -55,10 +63,9 @@ for source in sources:
 assert terms["officialSourceNames"]["Nemesis"]["id"] == "NPC_Nemesis_01"
 assert terms["officialSourceNames"]["Heracles"]["id"] == "NPC_Heracles_01"
 assert terms["officialSourceNames"]["Charon"]["id"] == "NPC_Charon_01"
-assert en["hades2.occurrence.title"] == "Next Eligible Encounter"
-assert zh["hades2.occurrence.title"] == "下一次合资格遭遇"
-assert en["hades2.occurrence.pending"] == "Pending"
-assert zh["hades2.occurrence.pending"] == "待触发"
+assert en["hades2.occurrence.title"] == "Specify Encounter"
+assert zh["hades2.occurrence.title"] == "指定遭遇"
+assert 'hades2.occurrence.pending' not in view
 
 print("hades2_occurrence_frontend_ok")
 

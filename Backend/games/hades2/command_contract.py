@@ -31,7 +31,6 @@ from .schema import (
     STAT_RULES,
     VITALS,
     is_known_element,
-    is_valid_next_room_reward,
     is_valid_next_occurrence_target,
     validate_desired_feature_value,
     validate_gathering_desired,
@@ -334,20 +333,45 @@ def _boon_rarity(raw):
     return config
 
 
-def _next_room_reward(raw):
-    params = _params(raw)
-    reward = params.get("reward")
-    if not is_valid_next_room_reward(reward):
-        raise ValueError("下一房奖励无效。")
-    return {"reward": reward}
-
-
-def _next_occurrence(raw):
+def _world_occurrence_apply(raw):
     params = _params(raw)
     target = params.get("target")
-    if not is_valid_next_occurrence_target(target):
+    if not isinstance(target, str) or not target or not is_valid_next_occurrence_target(target):
         raise ValueError("下一次遭遇目标无效。")
     return {"target": target}
+
+
+def _world_occurrence_cancel(raw):
+    params = _params(raw)
+    token = params.get("leaseToken")
+    if not isinstance(token, str) or not token or len(token) > 768:
+        raise ValueError("World occurrence lease is invalid or stale")
+    return {"leaseToken": token}
+
+
+def _world_exit_apply(raw):
+    params = _params(raw)
+    door_token = params.get("doorToken")
+    kind = params.get("kind")
+    target = params.get("target")
+    if not isinstance(door_token, str) or not door_token or len(door_token) > 512:
+        raise ValueError("World exit token is invalid or stale")
+    if kind not in ("reward", "roomCategory"):
+        raise ValueError("World exit target kind is invalid")
+    if not isinstance(target, str) or not target or len(target) > 256:
+        raise ValueError("World exit target is invalid")
+    return {"doorToken": door_token, "kind": kind, "target": target}
+
+
+def _world_exit_cancel(raw):
+    params = _params(raw)
+    door_token = params.get("doorToken")
+    lease_token = params.get("leaseToken")
+    if not isinstance(door_token, str) or not door_token or len(door_token) > 512:
+        raise ValueError("World exit token is invalid or stale")
+    if not isinstance(lease_token, str) or not lease_token or len(lease_token) > 768:
+        raise ValueError("World exit lease is invalid or stale")
+    return {"doorToken": door_token, "leaseToken": lease_token}
 
 
 def _save_editor_selection(raw):
@@ -514,14 +538,6 @@ def _chaos_gate_invoke(adapter, params):
     return adapter.set_chaos_gate_desired(params["probability"])
 
 
-def _next_room_invoke(adapter, params):
-    return adapter.set_next_room_reward_desired(params["reward"])
-
-
-def _next_occurrence_invoke(adapter, params):
-    return adapter.set_next_occurrence_desired(params["target"])
-
-
 def _list_profiles(adapter, params):
     return {"profiles": adapter.list_profiles()}
 
@@ -650,18 +666,10 @@ _COMMAND_SPECS = (
         invoke=_boon_rarity_invoke,
         reply_kind="patch",
     ),
-    _spec(
-        "set_next_room_reward_desired",
-        validate=_next_room_reward,
-        invoke=_next_room_invoke,
-        reply_kind="patch",
-    ),
-    _spec(
-        "set_next_occurrence_desired",
-        validate=_next_occurrence,
-        invoke=_next_occurrence_invoke,
-        reply_kind="patch",
-    ),
+    _spec("apply_world_occurrence", request_id=True, validate=_world_occurrence_apply),
+    _spec("cancel_world_occurrence", request_id=True, validate=_world_occurrence_cancel),
+    _spec("apply_world_exit", request_id=True, validate=_world_exit_apply),
+    _spec("cancel_world_exit", request_id=True, validate=_world_exit_cancel),
     _spec("spawn_reward", request_id=True, validate=_spawn_reward),
     _spec("acquire_chaos_pair", request_id=True, validate=_chaos_pair),
     _spec("open_sell_traits", request_id=True),

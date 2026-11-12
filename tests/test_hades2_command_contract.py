@@ -51,12 +51,6 @@ class ProbeAdapter:
     def set_boon_rarity_desired(self, config):
         return self._record("set_boon_rarity_desired", dict(config))
 
-    def set_next_room_reward_desired(self, reward):
-        return self._record("set_next_room_reward_desired", reward)
-
-    def set_next_occurrence_desired(self, target):
-        return self._record("set_next_occurrence_desired", target)
-
     def set_gathering_desired(self, family, probability):
         return self._record("set_gathering_desired", family, probability)
 
@@ -126,8 +120,8 @@ assert names == [
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "mature_garden", "set_stat", "set_element", "lock_element",
-    "set_boon_rarity_desired", "set_next_room_reward_desired", "set_next_occurrence_desired",
-    "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
+    "set_boon_rarity_desired", "apply_world_occurrence", "cancel_world_occurrence",
+    "apply_world_exit", "cancel_world_exit", "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
     "open_special_choice", "save_editor_inventory", "save_editor_open", "save_editor_target", "save_editor_query",
@@ -436,20 +430,56 @@ contract.dispatch(
 )
 assert probe.calls == [("set_chaos_gate_desired", 50.0)]
 probe.calls.clear()
-contract.dispatch(
-    "set_next_room_reward_desired",
-    {"reward": "WeaponUpgrade"},
-    "reward-desired",
+_, world_apply = dispatch_runtime(
+    "apply_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "kind": "reward", "target": "WeaponUpgrade"},
+    "world-exit-apply",
 )
-assert probe.calls == [("set_next_room_reward_desired", "WeaponUpgrade")]
-probe.calls.clear()
-contract.dispatch(
-    "set_next_occurrence_desired",
+assert world_apply == {
+    "doorToken": "exit:1:2:3:4:5",
+    "kind": "reward",
+    "target": "WeaponUpgrade",
+    "requestId": "world-exit-apply",
+}
+_, world_cancel = dispatch_runtime(
+    "cancel_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1"},
+    "world-exit-cancel",
+)
+assert world_cancel == {
+    "doorToken": "exit:1:2:3:4:5",
+    "leaseToken": "lease-1",
+    "requestId": "world-exit-cancel",
+}
+expect_error(
+    "apply_world_exit",
+    {"doorToken": "", "kind": "reward", "target": "WeaponUpgrade"},
+    "World exit token is invalid or stale",
+)
+_, occurrence_apply = dispatch_runtime(
+    "apply_world_occurrence",
     {"target": "npc:Nemesis"},
-    "occurrence-desired",
+    "occurrence-once",
 )
-assert probe.calls == [("set_next_occurrence_desired", "npc:Nemesis")]
-expect_error("set_next_occurrence_desired", {"target": ""}, "下一次遭遇目标无效。")
+assert occurrence_apply == {
+    "target": "npc:Nemesis",
+    "requestId": "occurrence-once",
+}
+_, occurrence_cancel = dispatch_runtime(
+    "cancel_world_occurrence",
+    {"leaseToken": "occurrence-once"},
+    "occurrence-cancel",
+)
+assert occurrence_cancel == {
+    "leaseToken": "occurrence-once",
+    "requestId": "occurrence-cancel",
+}
+expect_error("apply_world_occurrence", {"target": ""}, "下一次遭遇目标无效。")
+expect_error(
+    "cancel_world_occurrence",
+    {"leaseToken": ""},
+    "World occurrence lease is invalid or stale",
+)
 
 
 # Non-request-id runtime commands must not inherit the Host request identity.

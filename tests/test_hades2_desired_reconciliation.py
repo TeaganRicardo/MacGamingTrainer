@@ -48,8 +48,8 @@ def matching_observation(desired):
         "rerollsLocked": False,
         "rerolls": 0,
         "elements": [],
-        "nextRoomReward": desired["nextRoomReward"],
-        "nextOccurrenceTarget": desired["nextOccurrenceTarget"],
+        "nextRoomReward": None,
+        "nextOccurrenceTarget": None,
         "runtimeDiagnostics": {},
     }
     for key in MULTIPLIERS:
@@ -87,14 +87,6 @@ def matching_observation(desired):
             {"id": element, "locked": True, "count": amount}
         )
 
-    if desired["nextRoomReward"] is not None:
-        observation["runtimeDiagnostics"]["nextRoomRewardToken"] = desired[
-            "nextRoomRewardToken"
-        ]
-    if desired["nextOccurrenceTarget"] is not None:
-        observation["runtimeDiagnostics"]["nextOccurrenceToken"] = desired[
-            "nextOccurrenceToken"
-        ]
     return observation
 
 
@@ -137,10 +129,6 @@ class ApplyingSession:
             return "gatheringProbabilities"
         if command == "set_chaos_gate_probability":
             return "chaosGateProbability"
-        if command == "set_next_room_reward":
-            return "nextRoomReward"
-        if command == "set_next_occurrence":
-            return "nextOccurrence"
         return command
 
     def _apply(self, command, params):
@@ -260,22 +248,6 @@ class ApplyingSession:
                 self.observation["elements"].append(row)
             row["locked"] = bool(params["locked"])
             return
-        if command == "set_next_room_reward":
-            self.observation["nextRoomReward"] = params["reward"]
-            diagnostics = self.observation.setdefault("runtimeDiagnostics", {})
-            if params["reward"] is None:
-                diagnostics.pop("nextRoomRewardToken", None)
-            else:
-                diagnostics["nextRoomRewardToken"] = params.get("token")
-            return
-        if command == "set_next_occurrence":
-            self.observation["nextOccurrenceTarget"] = params["target"]
-            diagnostics = self.observation.setdefault("runtimeDiagnostics", {})
-            if params["target"] is None:
-                diagnostics.pop("nextOccurrenceToken", None)
-            else:
-                diagnostics["nextOccurrenceToken"] = params.get("token")
-            return
         raise AssertionError("unexpected command: " + command)
 
 
@@ -298,10 +270,6 @@ desired.update(
     resourceLocks={"Money": 500, "MetaCurrency": 12},
     rerollsLock=3,
     elementLocks={"Fire": 7},
-    nextRoomReward="WeaponUpgrade",
-    nextRoomRewardToken="reward-token",
-    nextOccurrenceTarget="npc:Nemesis",
-    nextOccurrenceToken="occurrence-token",
     gatheringProbabilities={"flora": 25.0},
     chaosGateProbability=75.0,
 )
@@ -325,8 +293,7 @@ assert outcome.reply is None
 assert session.calls == []
 
 
-# A full replay does not invent an empty occurrence mutation. One-shot routing
-# crosses the resident seam only while either desired or observed state is armed.
+# A full durable-state replay never invents world-action mutations.
 empty_desired = Hades2PreferenceStore.defaults()
 empty_observed = matching_observation(empty_desired)
 empty_session = ApplyingSession(empty_observed)
@@ -339,7 +306,7 @@ empty_outcome = empty_reconciler.reconcile(
 assert empty_outcome.confirmed is True
 assert empty_session.calls
 assert all(
-    command != "set_next_occurrence"
+    command not in ("set_next_room_reward", "set_next_occurrence")
     for command, _ in empty_session.calls[0]
 )
 
@@ -370,8 +337,6 @@ mismatch["rerolls"] = 0
 for row in mismatch["elements"]:
     if row["id"] == "Fire":
         row.update(locked=False, count=1)
-mismatch["nextRoomReward"] = None
-mismatch["nextOccurrenceTarget"] = None
 mismatch["runtimeDiagnostics"] = {}
 
 session = ApplyingSession(mismatch)
@@ -407,11 +372,9 @@ assert any(command == "set_rerolls" for command, _ in batch)
 assert any(command == "lock_rerolls" for command, _ in batch)
 assert any(command == "set_element" for command, _ in batch)
 assert any(command == "lock_element" for command, _ in batch)
-assert any(command == "set_next_room_reward" for command, _ in batch)
-assert any(
-    command == "set_next_occurrence"
-    and params == {"target": "npc:Nemesis", "token": "occurrence-token"}
-    for command, params in batch
+assert not any(
+    command in ("set_next_room_reward", "set_next_occurrence")
+    for command, _ in batch
 )
 assert all(
     not (command == "set_feature" and params.get("feature") == "gameSpeed")
@@ -538,7 +501,10 @@ for key in MULTIPLIERS:
             for command, params in full_batch
         )
 assert any(command == "set_boon_rarity" for command, _ in full_batch)
-assert any(command == "set_next_room_reward" for command, _ in full_batch)
+assert not any(
+    command in ("set_next_room_reward", "set_next_occurrence")
+    for command, _ in full_batch
+)
 
 
 # A semantically successful batch that does not converge is not confirmation.
@@ -560,18 +526,22 @@ assert len(partial_session.calls) == 1
 assert desired == before
 
 
-# Equal reward text with a different token is not equivalent durable one-shot
-# identity; reconciliation must re-arm the requested token.
+# Runtime world one-shots may be observed across a reconnect, but forced
+# durable-state reconciliation must never re-arm, clear or replace them.
 token_observed = matching_observation(desired)
-token_observed["runtimeDiagnostics"]["nextRoomRewardToken"] = "stale-token"
+token_observed["nextRoomReward"] = "WeaponUpgrade"
+token_observed["nextOccurrenceTarget"] = "npc:Nemesis"
+token_observed["runtimeDiagnostics"] = {
+    "nextRoomRewardToken": "native-reward",
+    "nextOccurrenceToken": "native-occurrence",
+}
 token_session = ApplyingSession(token_observed)
 token_outcome = Hades2DesiredStateReconciler(
     token_session, request_id_factory=deterministic_ids()
-).reconcile(desired, token_observed)
+).reconcile(desired, token_observed, force_full=True)
 assert token_outcome.confirmed is True
-assert any(
-    command == "set_next_room_reward"
-    and params.get("token") == "reward-token"
+assert not any(
+    command in ("set_next_room_reward", "set_next_occurrence")
     for command, params in token_session.calls[0]
 )
 

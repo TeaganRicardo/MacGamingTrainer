@@ -79,7 +79,7 @@ family_mapping = dict(
 gathering_actions = [family_mapping[family] for family in families]
 
 room_actions = panel_actions(
-    "roomsSection", ["nextRoomRewardPanel", "nextOccurrencePanel", "rewardSpawningPanel"]
+    "roomsSection", ["worldExitPanel", "nextOccurrencePanel", "rewardSpawningPanel"]
 )
 actual = (
     registry[:10]

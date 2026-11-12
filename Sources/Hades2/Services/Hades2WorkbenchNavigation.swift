@@ -61,7 +61,7 @@ enum Hades2WorkbenchIcon {
         case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
         case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
         case "hades2.chaosGate.probability": return chaosProbability
-        case "hades2.nextRoom.title": return TrainerSemanticIcon.Context.doorway
+        case "hades2.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
         case "hades2.occurrence.title": return occurrence
         case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
@@ -124,7 +124,7 @@ extension ShortcutAction {
         case .generateShades: Hades2WorkbenchIcon.shades
         case .generateFishing: TrainerSemanticIcon.Context.fishing
         case .matureGarden: Hades2WorkbenchIcon.garden
-        case .applyNextRoomReward: TrainerSemanticIcon.Context.doorway
+        case .applyWorldExit: TrainerSemanticIcon.Context.doorway
         case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
@@ -209,7 +209,7 @@ enum Hades2WorkbenchCatalog {
         .generateShades,
         .generateFishing,
         .matureGarden,
-        .applyNextRoomReward,
+        .applyWorldExit,
         .applyNextOccurrence,
         .spawnOlympian,
         .spawnPickup,
@@ -243,7 +243,7 @@ enum Hades2WorkbenchCatalog {
                       "hades2.rarity.minimum", "hades2.section.elements", "hades2.spawn.exactBoons"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)
                 + ["hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative"]),
-            (.rooms, ["hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",
+            (.rooms, ["hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.worldActions.modifyExit",
                       "hades2.occurrence.title", "hades2.spawn.olympianBoons", "hades2.spawn.pickupRewards",
                       "hades2.spawn.characterRewards"]),
             (.management, ["hades2.manage.profiles", "hades2.saveEditor.title", "hades2.manage.diagnostics",
@@ -271,7 +271,7 @@ enum Hades2WorkbenchCatalog {
         case .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources
-        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyNextRoomReward, .applyNextOccurrence: .rooms
+        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence: .rooms
         case .disableAll: .management
         }
     }

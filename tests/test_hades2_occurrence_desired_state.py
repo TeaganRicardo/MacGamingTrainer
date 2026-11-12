@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.command_contract import Hades2CommandContract
+from games.hades2.command_contract import Hades2CommandContract, command_metadata
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
     Hades2PreferenceStore,
@@ -14,7 +14,7 @@ from games.hades2.preferences import (
 
 class RuntimeProbe:
     def alive(self):
-        return False
+        return True
 
 
 class AdapterProbe:
@@ -22,84 +22,65 @@ class AdapterProbe:
         self.runtime = RuntimeProbe()
         self.calls = []
 
-    def set_next_occurrence_desired(self, target):
-        self.calls.append(("set_next_occurrence_desired", target))
-        return {"nextOccurrenceTarget": target}
+    def execute(self, command, params):
+        self.calls.append((command, dict(params)))
+        return {"worldActions": {"exits": []}}
 
 
 probe = AdapterProbe()
 contract = Hades2CommandContract(probe)
 
-# The Host command owns only one opaque audited target identity. Native room /
-# encounter eligibility remains runtime-owned.
-result = contract.dispatch(
-    "set_next_occurrence_desired",
+contract.dispatch(
+    "apply_world_occurrence",
     {"target": "npc:Nemesis"},
     "occurrence-request",
 )
-assert result["nextOccurrenceTarget"] == "npc:Nemesis"
-assert probe.calls == [("set_next_occurrence_desired", "npc:Nemesis")]
+assert probe.calls == [(
+    "apply_world_occurrence",
+    {"target": "npc:Nemesis", "requestId": "occurrence-request"},
+)]
 
 probe.calls.clear()
-result = contract.dispatch(
-    "set_next_occurrence_desired",
-    {"target": None},
+contract.dispatch(
+    "cancel_world_occurrence",
+    {"leaseToken": "occurrence-request"},
     "occurrence-clear",
 )
-assert result["nextOccurrenceTarget"] is None
-assert probe.calls == [("set_next_occurrence_desired", None)]
+assert probe.calls == [(
+    "cancel_world_occurrence",
+    {"leaseToken": "occurrence-request", "requestId": "occurrence-clear"},
+)]
 
-# Durable desired state keeps the one-shot identity across backend restarts.
-assert DESIRED_STATE_SCHEMA_VERSION == 11
-normalized = Hades2PreferenceStore.normalize(
+names = {row["name"] for row in command_metadata()}
+assert {"apply_world_occurrence", "cancel_world_occurrence"} <= names
+assert "set_next_occurrence_once" not in names
+assert "set_next_occurrence_desired" not in names
+
+assert DESIRED_STATE_SCHEMA_VERSION == 12
+for raw in (
     {
         "nextOccurrenceTarget": "npc:Nemesis",
         "nextOccurrenceToken": "occurrence-token",
-    }
-)
-assert normalized["nextOccurrenceTarget"] == "npc:Nemesis"
-assert normalized["nextOccurrenceToken"] == "occurrence-token"
-
-# A token without an armed target is meaningless and must not survive
-# normalization.
-cleared = Hades2PreferenceStore.normalize(
+    },
     {
         "nextOccurrenceTarget": None,
         "nextOccurrenceToken": "stale-token",
-    }
-)
-assert cleared["nextOccurrenceTarget"] is None
-assert cleared["nextOccurrenceToken"] is None
-
-incomplete = Hades2PreferenceStore.normalize(
-    {
-        "nextOccurrenceTarget": "npc:Nemesis",
-        "nextOccurrenceToken": None,
-    }
-)
-assert incomplete["nextOccurrenceTarget"] is None
-assert incomplete["nextOccurrenceToken"] is None
-
-# Schema 8 never owned occurrence state. Unknown look-alike fields from an old
-# document are discarded; schema 9 is the first version allowed to restore them.
-legacy = normalize_persisted_desired(
-    {
-        "nextOccurrenceTarget": "npc:Nemesis",
-        "nextOccurrenceToken": "legacy-lookalike",
     },
-    8,
-)
-assert legacy["nextOccurrenceTarget"] is None
-assert legacy["nextOccurrenceToken"] is None
+):
+    normalized = Hades2PreferenceStore.normalize(raw)
+    assert "nextOccurrenceTarget" not in normalized
+    assert "nextOccurrenceToken" not in normalized
 
-current = normalize_persisted_desired(
-    {
-        "nextOccurrenceTarget": "npc:Nemesis",
-        "nextOccurrenceToken": "current-token",
-    },
-    9,
-)
-assert current["nextOccurrenceTarget"] == "npc:Nemesis"
-assert current["nextOccurrenceToken"] == "current-token"
+for version in (8, 9, 11, 12):
+    normalized = normalize_persisted_desired(
+        {
+            "schemaVersion": version,
+            "nextOccurrenceTarget": "npc:Nemesis",
+            "nextOccurrenceToken": "legacy-token",
+        },
+        version,
+    )
+    assert "nextOccurrenceTarget" not in normalized, version
+    assert "nextOccurrenceToken" not in normalized, version
 
-print("hades2_occurrence_desired_state_contract_ok")
+print("hades2_occurrence_world_action_contract_ok")

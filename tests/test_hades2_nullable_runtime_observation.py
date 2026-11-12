@@ -27,7 +27,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-nullable-observation-') as temporar
         raw = adapter.runtime.observe_status({'includeCatalogs': False}).payload
         assert 'spellChargeCost' in raw and raw['spellChargeCost'] is None, 'absent Hex omitted its nullable cost'
         assert 'boons' not in raw and 'rewards' not in raw
-        assert 'nextRoomReward' in raw and raw['nextRoomReward'] is None
+        assert 'nextRoomReward' not in raw
+        assert 'nextOccurrenceTarget' not in raw
+        assert 'worldActions' in raw and isinstance(raw['worldActions'], dict)
+        assert isinstance(raw['worldActions'].get('exits'), list)
         assert 'lastAction' in raw and raw['lastAction'] is None
         assert 'currentRunTraitsReason' in raw
         adapter._merge_resident_reply(adapter.runtime.observe_status({'includeCatalogs': False}))

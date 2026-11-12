@@ -330,7 +330,7 @@ for key in (
     "hades2.traits.remove", "hades2.traits.removeAllMatching", "hades2.traits.chaos.advance",
     "hades2.traits.chaos.cancelPair", "hades2.rarity.minimum", "hades2.section.elements",
     "hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative",
-    "hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",
+    "hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.worldActions.modifyExit",
     "hades2.occurrence.title", "hades2.spawn.olympianBoons", "hades2.spawn.pickupRewards",
     "hades2.spawn.characterRewards", "hades2.spawn.exactBoons", "hades2.manage.profiles", "hades2.saveEditor.title",
     "hades2.manage.diagnostics", "hades2.manage.prepareSigning", "hades2.manage.restoreSigning",

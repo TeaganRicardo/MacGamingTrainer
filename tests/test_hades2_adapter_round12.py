@@ -240,8 +240,17 @@ finally:
 # Offline desired profile semantics survived the module move.
 state = a.set_desired('infiniteMoney', True)
 assert state['infiniteMoney'] is True and a.preferences['infiniteMoney'] is True
-state = a.set_next_room_reward_desired('WeaponUpgrade')
-assert state['nextRoomReward'] == 'WeaponUpgrade'
+try:
+    a.dispatch(
+        'apply_world_exit',
+        {'doorToken':'exit:test:1','kind':'reward','target':'WeaponUpgrade'},
+        'offline-attempt',
+    )
+except Hades2PresentationError as error:
+    assert error.presentation.startswith('hades2.error.'), error.presentation
+else:
+    raise AssertionError('disconnected exact-exit command was accepted')
+assert 'nextRoomReward' not in a.preferences
 
 saved = a.save_profile('模块化测试', {
     'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'},

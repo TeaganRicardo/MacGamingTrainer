@@ -18,19 +18,26 @@ assert 'pendingRestoreTimer' not in model
 assert 'saveManager.applyStagedIfPossible()' in host
 assert 'Timer.scheduledTimer' not in save_model
 
-# Next-room reward is constrained to real exit-door reward selection, persists
-# across every offered door, and is consumed only when the player enters a room.
-assert 'requireFunctions("next room reward", { "ChooseRoomReward", "StartRoom" })' in lua
-assert 'type(args.Door) ~= "table"' in lua
-consume_block = lua[lua.index('if not owns("StartRoom")'):lua.index('local patchRoom', lua.index('if not owns("StartRoom")'))]
-assert consume_block.index('M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken') < consume_block.index('M.nextRoomReward = nil')
-assert consume_block.index('M.nextRoomReward = nil') < consume_block.index('M.nextRoomRewardToken = nil')
-assert consume_block.index('M.nextRoomRewardToken = nil') < consume_block.index('releaseNextRoomReward()')
-choose_block = lua[lua.index('installHook("ChooseRoomReward"'):lua.index('if not owns("StartRoom")')]
-assert 'M.nextRoomReward = nil' not in choose_block
-assert 'patchOfferedNextRoomDoors()' in lua
-assert 'CurrentRun.CurrentRoom.OfferedRewards[doorId]' in lua
-assert 'ReUseIds = true' in lua
-assert 'nextRoomRewardPatchedDoors' in lua
+# #704 retires the global all-exits next-room owner. Row 1 is exact-door
+# resident state, route Apply is a reservation, and LeaveRoom is the only
+# generic-room materialization seam.
+assert 'command == "set_next_room_reward"' not in lua
+assert "M.nextRoomReward" not in lua
+assert "local function rewardCandidates(door)" in lua
+assert "local function applyReward(door, target, doorToken)" in lua
+assert "local function applyRoute(door, target, doorToken)" in lua
+apply_start = lua.index("local function applyRoute(door, target, doorToken)")
+apply_end = lua.index("local function preflightApply", apply_start)
+apply_block = lua[apply_start:apply_end]
+assert "CreateRoom(" not in apply_block
+assert "GetRandomValue(" not in apply_block
+assert "AssignRoomToExitDoor(" not in apply_block
+assert 'installHook("LeaveRoom"' in lua
+commit_start = lua.index("local function materializeRoute(run, door, lease)")
+commit_end = lua.index("local function installRouteHooks", commit_start)
+commit_block = lua[commit_start:commit_end]
+assert "GetRandomValue(candidates)" in commit_block
+assert "CreateRoom(data" in commit_block
+assert "AssignRoomToExitDoor(door, target)" in commit_block
 
 print('v01710_regressions_ok')
