@@ -261,6 +261,41 @@ local function fails(key, fn)
 end
 local initialWorld = world()
 local originalRoomId = initialWorld.roomId
+-- Native reward requirements can update the frame's bookkeeping counter or
+-- sample chance. Catalog observation must preserve the frame and RNG, while
+-- stochastic native eligibility cannot be advertised as a sure target.
+local previousSession, originalRewardEligible = SessionMapState, IsRoomRewardEligible
+SessionMapState = { RequirementChecksThisFrame = 29 }
+local observationSession = SessionMapState
+local rewardRequiresRandom = false
+IsRoomRewardEligible = function(run, room, reward)
+  SessionMapState.RequirementChecksThisFrame =
+    SessionMapState.RequirementChecksThisFrame + 1
+  if rewardRequiresRandom and reward.Name == "Boon" then
+    return GetRandomValue({ true, false })
+  end
+  return originalRewardEligible(run, room, reward)
+end
+local function hasAthenaReward()
+  for _, target in ipairs(world().doors[1].targets or {}) do
+    if target.kind == "reward" and target.id == "AthenaUpgrade" then return true end
+  end
+  return false
+end
+local beforeRewardDraw = randomValueCalls
+assert(hasAthenaReward())
+assert(SessionMapState == observationSession
+    and SessionMapState.RequirementChecksThisFrame == 29
+    and randomValueCalls == beforeRewardDraw,
+  "native reward catalog changed the game's bookkeeping or RNG")
+rewardRequiresRandom = true
+assert(not hasAthenaReward(), "random-dependent reward target was presented as eligible")
+assert(SessionMapState == observationSession
+    and SessionMapState.RequirementChecksThisFrame == 29
+    and randomValueCalls == beforeRewardDraw,
+  "native chance probe advanced reward RNG or frame bookkeeping")
+IsRoomRewardEligible = originalRewardEligible
+SessionMapState = previousSession
 assert(initialWorld.canFish and initialWorld.canChaos and #initialWorld.doors == 2)
 -- Native-generated doors can be assigned before they own any Room reference.
 local unassigned = { Name = "ExitDoor", ObjectId = 120, ReadyToUse = true }
