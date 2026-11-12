@@ -471,7 +471,7 @@ private struct HadesCatalogView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .bottom, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.rarity")).font(.caption).foregroundStyle(.secondary)
+                    Text(text("hades.rarity")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
                     Picker(text("hades.rarity"), selection: Binding(
                         get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
                         set: { model.selectAcquisitionRarity($0) }
@@ -488,7 +488,7 @@ private struct HadesCatalogView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.level")).font(.caption).foregroundStyle(.secondary)
+                    Text(text("hades.level")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
                     TrainerNumberField(
                         text: $model.acquisitionLevel,
                         accessibilityLabel: text("hades.level"),
@@ -509,7 +509,7 @@ private struct HadesCatalogView: View {
 
                 if model.acquisitionTarget == .chaos {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades.chaosEncounters")).font(.caption).foregroundStyle(.secondary)
+                        Text(text("hades.chaosEncounters")).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
                         TrainerNumberField(
                             text: $model.acquisitionEncounters,
                             accessibilityLabel: text("hades.chaosEncounters"),
@@ -542,85 +542,86 @@ private struct HadesCatalogView: View {
     }
 
     private var chaosRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(text("hades.chaosPair")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.chaosBlessing")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.chaosBlessing"), selection: $model.selectedChaosBlessing) {
-                        if chaosBlessings.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
-                        ForEach(chaosBlessings) { entry in
-                            Text(itemTitle(entry)).tag(entry.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.expanding, state: model.canMutate && !chaosBlessings.isEmpty ? .interactive : .unavailable)
+        TrainerDualInlinePickerLayout(
+            minimumPickerWidth: 144,
+            maximumPickerWidth: theme.pickerActionMaxWidth,
+            minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
+            minimumActionWidth: theme.compactActionWidth
+        ) {
+            Text(text("hades.chaosBlessing")).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades.chaosBlessing"), selection: $model.selectedChaosBlessing) {
+                if chaosBlessings.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                ForEach(chaosBlessings) { entry in
+                    Text(itemTitle(entry)).tag(entry.id)
                 }
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: model.canMutate && !chaosBlessings.isEmpty ? .interactive : .unavailable)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.chaosCurse")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.chaosCurse"), selection: $model.selectedChaosCurse) {
-                        if chaosCurses.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
-                        ForEach(chaosCurses) { entry in
-                            Text(itemTitle(entry)).tag(entry.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.expanding, state: model.canMutate && !chaosCurses.isEmpty ? .interactive : .unavailable)
+            Text(text("hades.chaosCurse")).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades.chaosCurse"), selection: $model.selectedChaosCurse) {
+                if chaosCurses.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                ForEach(chaosCurses) { entry in
+                    Text(itemTitle(entry)).tag(entry.id)
                 }
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: model.canMutate && !chaosCurses.isEmpty ? .interactive : .unavailable)
 
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
-                TrainerSecondaryActionButton(
-                    title: text("hades.acquire"),
-                    systemImage: TrainerSemanticIcon.Action.acquire,
-                    enabled: model.canMutate && model.canAcceptRuntimeAction
-                        && selectedChaosBlessing != nil
-                        && chaosCurses.contains(where: { $0.id == model.selectedChaosCurse }),
-                    widthRole: .compactRow
-                ) {
-                    _ = model.acquireSelectedChaosPair()
-                }
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
+            TrainerSecondaryActionButton(
+                title: text("hades.acquire"),
+                systemImage: TrainerSemanticIcon.Action.acquire,
+                enabled: model.canMutate && model.canAcceptRuntimeAction
+                    && selectedChaosBlessing != nil
+                    && chaosCurses.contains(where: { $0.id == model.selectedChaosCurse }),
+                widthRole: .compactRow
+            ) {
+                _ = model.acquireSelectedChaosPair()
             }
         }
     }
 
     private var exactRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.exactSource"), selection: $source) {
-                        if sourceGroups.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
-                        ForEach(sourceGroups) { group in
-                            Text(sourceTitle(group)).tag(group.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.expanding, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)
+        TrainerDualInlinePickerLayout(
+            minimumPickerWidth: 144,
+            maximumPickerWidth: theme.pickerActionMaxWidth,
+            minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
+            minimumActionWidth: theme.compactActionWidth
+        ) {
+            Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades.exactSource"), selection: $source) {
+                if sourceGroups.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                ForEach(sourceGroups) { group in
+                    Text(sourceTitle(group)).tag(group.id)
                 }
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades.selectTrait"), selection: $model.selectedExactTrait) {
-                        if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
-                        ForEach(selectedEntries) { entry in
-                            Text(itemTitle(entry)).tag(entry.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)
+            Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades.selectTrait"), selection: $model.selectedExactTrait) {
+                if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                ForEach(selectedEntries) { entry in
+                    Text(itemTitle(entry)).tag(entry.id)
                 }
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)
 
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
-                TrainerSecondaryActionButton(
-                    title: text("hades.acquire"),
-                    systemImage: TrainerSemanticIcon.Action.acquire,
-                    enabled: selected?.acquirable != false
-                        && selected != nil && model.canMutate && model.canAcceptRuntimeAction,
-                    widthRole: .compactRow
-                ) {
-                    _ = model.acquireSelectedTrait()
-                }
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
+            TrainerSecondaryActionButton(
+                title: text("hades.acquire"),
+                systemImage: TrainerSemanticIcon.Action.acquire,
+                enabled: selected?.acquirable != false
+                    && selected != nil && model.canMutate && model.canAcceptRuntimeAction,
+                widthRole: .compactRow
+            ) {
+                _ = model.acquireSelectedTrait()
             }
         }
     }
