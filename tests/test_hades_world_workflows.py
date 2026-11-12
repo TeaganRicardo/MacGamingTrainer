@@ -132,6 +132,11 @@ function CreateDoorRewardPreview(door)
   previews = previews + 1
   door.PreviewReward = door.Room and (door.Room.ForceLootName or door.Room.ChosenRewardType or "") or ""
   door.PreviewRoomName = door.Room and door.Room.Name or ""
+  door.PreviewAnimation = door.Room and (
+    door.Room.NextRoomSet and "ExitPreview"
+    or door.Room.ChosenRewardType == nil and "StoryPreview"
+    or (door.Room.ChosenRewardType .. "Preview")
+  ) or ""
   door.PreviewIcon = door.Room and door.Room.RewardPreviewIcon or nil
   door.PreviewFx = door.Room and door.Room.RewardPreviewFx or nil
 end
@@ -440,8 +445,11 @@ assert(firstDoor.Room == firstRoom,
 assert((CurrentRun.RoomCreations.A_Story01 or 0) == storyCreationsBefore
     and roomGenerationCalls == storyGenerationBefore,
   "route Apply created a room or advanced room-generation state")
-assert(firstDoor.PreviewRoomName == "A_Story01" and firstDoor.PreviewReward == "Story",
-  "route reservation did not pass the eligible native story descriptor through CreateDoorRewardPreview")
+assert(firstDoor.PreviewRoomName == firstRoom.Name
+    and firstDoor.PreviewReward == ""
+    and firstDoor.PreviewAnimation == "StoryPreview"
+    and firstDoor.PreviewIcon == nil and firstDoor.PreviewFx == nil,
+  "story reservation preview promised an uncommitted native story room or reward")
 local storyObserved = world().doors[1]
 assert(storyObserved.activeLease
     and storyObserved.activeLease.kind == "roomCategory"
@@ -462,6 +470,26 @@ assert(firstDoor.PreviewRoomName == "A_Combat02"
     and firstDoor.PreviewReward == "RoomRewardMoneyDrop",
   "route cancellation did not restore the native exit preview")
 assert(world().doors[1].activeLease == nil, "cancelled route lease remained active")
+
+-- A generic combat reservation uses the supported neutral exit icon.
+-- It never previews a specific room while real candidate RNG is deferred.
+local combatPreviewDoor = world().doors[1]
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = combatPreviewDoor.doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "neutral-combat-preview",
+})
+assert(firstDoor.Room == firstRoom and firstDoor.PreviewRoomName == firstRoom.Name
+    and firstDoor.PreviewReward == "" and firstDoor.PreviewAnimation == "ExitPreview",
+  "combat reservation claimed an uncommitted native combat room or reward")
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = world().doors[1].activeLease.leaseToken,
+  requestId = "neutral-combat-preview-cancel",
+})
+assert(firstDoor.PreviewRoomName == firstRoom.Name
+    and firstDoor.PreviewReward == firstRoom.ChosenRewardType
+    and world().doors[1].activeLease == nil,
+  "generic combat preview failed to restore the native reward")
 
 runtime.apply_world_occurrence({
   roomId = originalRoomId,
@@ -751,7 +779,10 @@ runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = world().doors[1].doorToken,
   kind = "roomCategory", targetID = "story", requestId = "disable-all-route",
 })
-assert(firstDoor.PreviewRoomName == "A_Story01" and world().doors[1].activeLease)
+assert(firstDoor.PreviewRoomName == firstRoom.Name
+    and firstDoor.PreviewReward == ""
+    and firstDoor.PreviewAnimation == "StoryPreview"
+    and world().doors[1].activeLease)
 runtime.disable_all()
 assert(firstDoor.Room == firstRoom and firstDoor.PreviewRoomName == "A_Combat02"
     and world().doors[1].activeLease == nil,
