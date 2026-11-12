@@ -879,6 +879,35 @@ for _, injected in ipairs({ "create", "assign" }) do
 end
 firstDoor.Room = firstRoom
 CurrentRun.CurrentRoom = originalRoom
+
+-- A sibling preview can fail even if the selected route commits correctly.
+-- Its failure must not prevent the accepted native transition from finishing.
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "cleanup-primary",
+})
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[2].doorToken,
+  kind = "roomCategory", targetID = "combat", requestId = "cleanup-sibling",
+})
+local originalPreview = CreateDoorRewardPreview
+CreateDoorRewardPreview = function(door)
+  if door == secondDoor then error("injected sibling preview failure") end
+  return originalPreview(door)
+end
+local beforeCleanupLeave = leaveCalls
+local siblingFailureResult = AttemptUseDoor(firstDoor)
+CreateDoorRewardPreview = originalPreview
+assert(type(siblingFailureResult) == "table"
+    and siblingFailureResult.Name == "A_Combat02"
+    and leaveCalls == beforeCleanupLeave + 1,
+  "Hades I sibling preview cleanup failure aborted native door transition")
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+secondDoor.Room = secondRoom
+assert(world().doors[2].activeLease == nil and type(runtime.worldRouteFailure) == "string",
+  "Hades I failed sibling cleanup did not release the lease or report error")
+
 runtime.generate_fishing(params())
 assert(activated == 501 and originalRoom.FishingPointId == 501 and CurrentRun.LastFishingPointDepth == 8)
 assert(not world().canFish)
