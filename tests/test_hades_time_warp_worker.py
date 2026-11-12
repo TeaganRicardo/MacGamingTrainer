@@ -71,7 +71,7 @@ class LuaTransport:
         if self.fail:
             raise self.fail
         if 'return timeWarp.set(' in source:
-            match = re.search(r'return timeWarp\\.set\\(([-+0-9.eE]+)\\)', source)
+            match = re.search(r'return timeWarp\.set\(([-+0-9.eE]+)\)', source)
             assert match, source
             self.multiplier = float(match.group(1))
             self.installed = True
