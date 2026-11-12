@@ -1,15 +1,13 @@
-"""Hades time-warp RPC uses the existing LLDB transport and resets before detach."""
-import json
+"""Hades I Time Warp uses the game-native simulation clock and resets before detach."""
 from pathlib import Path
-import tempfile
-from unittest.mock import patch
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
 from games.hades.time_warp_worker import HadesTimeWarpWorker, error_payload
-from games.hades.config import time_warp_image_names
+from games.hades.simulation_time_warp import HadesSimulationTimeWarp
 
 
 class FakeTransport:
@@ -58,25 +56,65 @@ class FakeTimeWarp:
         return self.speed
 
 
+class LuaTransport:
+    pid = 42
+
+    def __init__(self):
+        self.sources = []
+        self.installed = False
+        self.multiplier = 1.0
+        self.native_fraction = 1.0
+        self.fail = None
+
+    def execute(self, source, *, mutating=False):
+        self.sources.append((source, mutating))
+        if self.fail:
+            raise self.fail
+        if 'return timeWarp.set(' in source:
+            match = re.search(r'return timeWarp\\.set\\(([-+0-9.eE]+)\\)', source)
+            assert match, source
+            self.multiplier = float(match.group(1))
+            self.installed = True
+        return {
+            'wrapperInstalled': self.installed,
+            'multiplier': self.multiplier,
+            'nativeFraction': self.native_fraction,
+            'effectiveFraction': self.multiplier * self.native_fraction,
+        }
+
+
 transport = FakeTransport()
 time_warp = FakeTimeWarp()
 worker = HadesTimeWarpWorker(transport=transport, time_warp_factory=lambda _: time_warp)
-declared = json.loads((ROOT / 'Backend/games/hades/module.json').read_text())
-assert time_warp_image_names() == (Path(declared['targetApplication']['executablePathSuffix']).name,)
-with tempfile.TemporaryDirectory(prefix='mgt-time-warp-target-metadata-') as temporary:
-    module_dir = Path(temporary)
-    declared['targetApplication']['executablePathSuffix'] = 'Fixture/ChangedTarget'
-    (module_dir / 'module.json').write_text(json.dumps(declared))
-    with patch('games.hades.time_warp_worker.time_warp_image_names',
-               side_effect=lambda: time_warp_image_names(module_dir)), patch(
-        'games.hades.time_warp_worker.ProcessTimeWarpController'
-    ) as controller:
-        HadesTimeWarpWorker._default_time_warp_factory(transport)
-        assert controller.call_args.args[2] == ('ChangedTarget',)
 assert worker.dispatch('time_warp.current_speed', {})['gameSpeed'] == 1.0
 assert worker.dispatch('time_warp.set_speed', {'value': 2.5})['gameSpeed'] == 2.5
 assert worker.dispatch('time_warp.current_speed', {})['gameSpeed'] == 2.5
 assert time_warp.events == [('current', None), ('set', 2.5), ('current', None)]
+
+lua_transport = LuaTransport()
+simulation_warp = HadesSimulationTimeWarp(lua_transport)
+assert simulation_warp.current_speed() == 1.0
+assert lua_transport.sources[-1][1] is False
+assert simulation_warp.reset() == 1.0
+assert len(lua_transport.sources) == 2 and lua_transport.sources[-1][1] is False
+assert simulation_warp.set_speed(2.5) == 2.5
+source, mutating = lua_transport.sources[-1]
+assert mutating is True and 'AdjustSimulationSpeed' in source
+assert 'state.nativeFraction * state.multiplier' in source
+assert 'state.nativeArguments' in source and 'state.multiplier' in source
+assert simulation_warp.current_speed() == 2.5
+lua_transport.native_fraction = 0.5
+assert simulation_warp.current_speed() == 2.5
+assert lua_transport.native_fraction * simulation_warp.current_speed() == 1.25
+assert simulation_warp.set_speed(0.0) == 0.0
+assert simulation_warp.set_speed(1.0) == 1.0
+for invalid in (True, -0.1, 10.1, float('nan'), float('inf'), '2'):
+    try:
+        simulation_warp.set_speed(invalid)
+    except AdapterError as error:
+        assert error.code == 'invalid_value'
+    else:
+        raise AssertionError(f'invalid game-native speed accepted: {invalid!r}')
 
 transport2 = FakeTransport()
 time_warp2 = FakeTimeWarp()
@@ -84,7 +122,7 @@ time_warp2.speed = 4.0
 worker2 = HadesTimeWarpWorker(transport=transport2, time_warp_factory=lambda _: time_warp2)
 state = worker2.dispatch('disconnect', {})
 assert not state['connected'] and time_warp2.speed == 1.0 and transport2.detaches == 1
-assert time_warp2.events == [('reset', None)], 'speed reset must precede LLDB detach'
+assert time_warp2.events == [('reset', None)]
 
 transport3 = FakeTransport()
 time_warp3 = FakeTimeWarp()
@@ -97,7 +135,7 @@ except AdapterError as error:
     assert error.code == 'outcome_unknown'
 else:
     raise AssertionError('uncertain speed reset was hidden')
-assert transport3.attached and transport3.detaches == 0, 'uncertain reset detached the only recovery transport'
+assert transport3.attached and transport3.detaches == 0
 
 for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required', 'restartRequired')):
     failure = AdapterError(code, 'host.timeWarp.error.' + suffix, arguments=['native detail'], diagnostic='native detail')
@@ -107,4 +145,4 @@ for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required',
 known_failure = AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed')
 assert error_payload(known_failure)['presentation'] == known_failure.presentation
 
-print('hades_time_warp_worker_reset_and_outcome_contract_ok')
+print('hades_game_native_simulation_time_warp_worker_contract_ok')
