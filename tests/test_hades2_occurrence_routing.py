@@ -212,12 +212,12 @@ setOccurrence("npc:Arachne", "arachne-combat-first")
 local combat = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
 assert(combat.Name == "ArachneCombatF" and M.occurrenceRouting.encounterClaim,
   "Arachne combat strategy did not claim its native opportunity")
-MapState.OfferedExitDoors = {}
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {} },
+}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
-for _, door in pairs(MapState.OfferedExitDoors) do
-  assert(door.Room.Name ~= "F_Story01",
-    "a claimed Arachne combat path also forced its story strategy")
-end
+assert(MapState.OfferedExitDoors[1].Room.Name == "F_Shop01",
+  "a claimed Arachne combat path altered the native room choice")
 RecordEncounter(CurrentRun, combat)
 assert(M.nextOccurrenceTarget == nil
     and M.lastConsumedNextOccurrenceToken == "arachne-combat-first",
