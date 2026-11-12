@@ -159,6 +159,71 @@ for _, door in pairs(MapState.OfferedExitDoors) do
 end
 print("occurrence_routing_ok")
 """,
+    "arachne_combat_variants_are_supported_native_strategies": r"""
+local variants = {
+  { biome = "F", name = "ArachneCombatF" },
+  { biome = "G", name = "ArachneCombatG" },
+  { biome = "N", name = "ArachneCombatN" },
+}
+for index, variant in ipairs(variants) do
+  setRoomSet(variant.biome)
+  CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", variant.name }
+  setOccurrence("npc:Arachne", "arachne-combat-" .. tostring(index))
+  local selected = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+  assert(selected.Name == variant.name,
+    "Arachne combat variant was omitted from its native occurrence strategy: " .. variant.name)
+  assert(M.nextOccurrenceTarget == "npc:Arachne"
+      and M.lastConsumedNextOccurrenceToken ~= "arachne-combat-" .. tostring(index),
+    "Arachne combat selection consumed before native RecordEncounter")
+  RecordEncounter(CurrentRun, selected)
+  assert(M.nextOccurrenceTarget == nil
+      and M.lastConsumedNextOccurrenceToken == "arachne-combat-" .. tostring(index),
+    "Arachne combat variant did not consume at native RecordEncounter: " .. variant.name)
+end
+print("occurrence_routing_ok")
+""",
+    "one_arachne_request_claims_only_one_native_strategy": r"""
+setRoomSet("F")
+RoomData.F_Story01.MaxCreationsThisRun = nil
+CurrentRun.CurrentRoom.LegalEncounters = { "ArachneCombatF", "CombatNormal" }
+setOccurrence("npc:Arachne", "arachne-story-first")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local storyDoor
+for _, door in pairs(MapState.OfferedExitDoors) do
+  if door.Room.Name == "F_Story01" then storyDoor = door end
+end
+assert(storyDoor and M.occurrenceRouting.roomClaim,
+  "Arachne story strategy did not claim one native opportunity")
+local nativeEncounter = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+assert(nativeEncounter.Name == "CombatNormal",
+  "a claimed Arachne story path also forced its combat strategy")
+assert(M.nextOccurrenceTarget == "npc:Arachne"
+    and M.lastConsumedNextOccurrenceToken == nil,
+  "alternate Arachne strategy consumed the story claim")
+AttemptUseDoor(storyDoor)
+assert(M.nextOccurrenceTarget == nil
+    and M.lastConsumedNextOccurrenceToken == "arachne-story-first",
+  "claimed Arachne story path did not consume exactly once")
+
+setRoomSet("F")
+RoomData.F_Story01.MaxCreationsThisRun = nil
+CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "ArachneCombatF" }
+setOccurrence("npc:Arachne", "arachne-combat-first")
+local combat = ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom)
+assert(combat.Name == "ArachneCombatF" and M.occurrenceRouting.encounterClaim,
+  "Arachne combat strategy did not claim its native opportunity")
+MapState.OfferedExitDoors = {}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+for _, door in pairs(MapState.OfferedExitDoors) do
+  assert(door.Room.Name ~= "F_Story01",
+    "a claimed Arachne combat path also forced its story strategy")
+end
+RecordEncounter(CurrentRun, combat)
+assert(M.nextOccurrenceTarget == nil
+    and M.lastConsumedNextOccurrenceToken == "arachne-combat-first",
+  "claimed Arachne combat path did not consume exactly once")
+print("occurrence_routing_ok")
+""",
     "field_encounter_waits_for_eligibility_and_commits_on_record": r"""
 setRoomSet("F")
 CurrentRun.CurrentRoom.LegalEncounters = { "CombatNormal", "NemesisCombatF" }
