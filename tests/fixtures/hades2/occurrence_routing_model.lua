@@ -60,6 +60,9 @@ RoomSets = {
 
 EncounterData = {
   CombatNormal = { Name = "CombatNormal" },
+  ArachneCombatF = { Name = "ArachneCombatF" },
+  ArachneCombatG = { Name = "ArachneCombatG" },
+  ArachneCombatN = { Name = "ArachneCombatN" },
   ArtemisCombatF = { Name = "ArtemisCombatF" },
   ArtemisCombatF2 = { Name = "ArtemisCombatF2" },
   ArtemisCombatIntro = { Name = "ArtemisCombatIntro" },

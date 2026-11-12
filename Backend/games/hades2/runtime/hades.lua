@@ -8469,7 +8469,11 @@ if __MacGamingTrainerV1 == nil then
     "shop:Charon",
   }
   occurrenceTargets = {
-    ["npc:Arachne"] = { kind = "character", sourceId = "Arachne", rooms = { F_Story01 = true } },
+    ["npc:Arachne"] = {
+      kind = "character", sourceId = "Arachne",
+      rooms = { F_Story01 = true },
+      encounters = { ArachneCombatF = true, ArachneCombatG = true, ArachneCombatN = true },
+    },
     ["npc:Narcissus"] = { kind = "character", sourceId = "Narcissus", rooms = { G_Story01 = true } },
     ["npc:Hades"] = { kind = "character", sourceId = "Hades", rooms = { I_Story01 = true } },
     ["npc:Medea"] = { kind = "character", sourceId = "Medea", rooms = { N_Story01 = true } },
@@ -8526,6 +8530,7 @@ if __MacGamingTrainerV1 == nil then
     if M.nextOccurrenceTarget ~= target or M.nextOccurrenceToken ~= token then return false end
     M.lastConsumedNextOccurrenceToken = token
     M.occurrenceRouting.roomClaim = nil
+    M.occurrenceRouting.encounterClaim = nil
     M.occurrenceRouting.ownerRun = nil
     M.occurrenceRouting.ownerHero = nil
     M.nextOccurrenceTarget = nil
@@ -8540,7 +8545,10 @@ if __MacGamingTrainerV1 == nil then
   -- predicates unchanged, and choose the requested target only from the native
   -- eligible pool when *no* candidate was natively forced. This preserves
   -- linked-room, explicit-force, priority, eligibility and SetupEncounter owners.
-  M.occurrenceRouting = { selection = nil, roomClaim = nil, ownerRun = nil, ownerHero = nil }
+  M.occurrenceRouting = {
+    selection = nil, roomClaim = nil, encounterClaim = nil,
+    ownerRun = nil, ownerHero = nil,
+  }
 
   function M.occurrenceRouting.liveOwner()
     if M.nextOccurrenceTarget == nil then return false end
@@ -8548,6 +8556,7 @@ if __MacGamingTrainerV1 == nil then
         or M.occurrenceRouting.ownerHero ~= (type(CurrentRun) == "table" and CurrentRun.Hero) then
       M.nextOccurrenceTarget, M.nextOccurrenceToken = nil, nil
       M.occurrenceRouting.roomClaim = nil
+      M.occurrenceRouting.encounterClaim = nil
       M.occurrenceRouting.ownerRun = nil
       M.occurrenceRouting.ownerHero = nil
       M.featureErrors.nextOccurrence = nil
@@ -8587,14 +8596,48 @@ if __MacGamingTrainerV1 == nil then
     return claim
   end
 
+  function M.occurrenceRouting.liveEncounterClaim()
+    local claim = M.occurrenceRouting.encounterClaim
+    if not claim then return nil end
+    if claim.token ~= M.nextOccurrenceToken or claim.run ~= CurrentRun
+        or claim.hero ~= (type(CurrentRun) == "table" and CurrentRun.Hero)
+        or type(claim.room) ~= "table" then
+      M.occurrenceRouting.encounterClaim = nil
+      return nil
+    end
+    if type(claim.room.Encounter) == "table" and claim.room.Encounter.Name ~= claim.name then
+      M.occurrenceRouting.encounterClaim = nil
+      return nil
+    end
+    local current = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
+    if claim.room == current then return claim end
+    local doors = type(MapState) == "table" and MapState.OfferedExitDoors or nil
+    for _, door in pairs(type(doors) == "table" and doors or {}) do
+      if type(door) == "table" and door.Room == claim.room then return claim end
+    end
+    -- ChooseEncounter may run while a native room is being built, before that
+    -- room is assigned to an exit. Retain that provisional claim only while
+    -- its source room still owns the generation window.
+    if claim.source == current then return claim end
+    M.occurrenceRouting.encounterClaim = nil
+    return nil
+  end
+
   function M.occurrenceRouting.choose(kind, original, ...)
     local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
     local definition = occurrenceTargets[target]
     if definition == nil or token == nil or not M.occurrenceRouting.liveOwner() then return original(...) end
-    if kind == "room" then M.occurrenceRouting.claim() end
+    -- One run-scoped request may expose several native strategies. The first
+    -- reversible room or encounter selection owns this request until it is
+    -- committed or abandoned; another strategy remains fully native meanwhile.
+    if M.occurrenceRouting.claim() ~= nil
+        or M.occurrenceRouting.liveEncounterClaim() ~= nil then
+      return original(...)
+    end
     local previous = M.occurrenceRouting.selection
     M.occurrenceRouting.selection = {
       kind = kind, target = target, token = token, eligible = {}, nativeForced = false,
+      room = kind == "encounter" and select(2, ...) or nil,
     }
     local packed = table.pack(pcall(original, ...))
     M.occurrenceRouting.selection = previous
@@ -8634,15 +8677,24 @@ if __MacGamingTrainerV1 == nil then
           if matched then choices[#choices + 1] = candidate end
         end
       end
-      if #choices > 0 and (selection.kind ~= "room"
-          or M.occurrenceRouting.claim() == nil) then
-        -- Native weighted sampling remains authoritative among legal variants.
+      if #choices > 0 then
+        -- Preserve native weighted sampling among multiple legal variants.
         local chosen = original(choices, ...)
+        local data = type(chosen) == "string" and type(RoomData) == "table"
+          and RoomData[chosen] or chosen
         if selection.kind == "room" then
-          local data = type(chosen) == "string" and RoomData[chosen] or chosen
           M.occurrenceRouting.roomClaim = {
             run = CurrentRun, source = CurrentRun.CurrentRoom,
-            token = selection.token, name = data.Name,
+            token = selection.token, name = type(data) == "table" and data.Name or tostring(chosen),
+          }
+        elseif selection.kind == "encounter" and type(data) == "table" then
+          M.occurrenceRouting.encounterClaim = {
+            run = CurrentRun,
+            hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil,
+            source = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil,
+            room = selection.room,
+            token = selection.token,
+            name = data.Name,
           }
         end
         return chosen
@@ -8658,16 +8710,22 @@ if __MacGamingTrainerV1 == nil then
     requireFunctions("native world room admission", { "StartRoom" })
     installHook("StartRoom", function(original, run, room, ...)
       local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
-      -- Native StartRoom changes CurrentRun.CurrentRoom. Capture the source
-      -- reservation before entering the destination, then acknowledge only
-      -- after the native admission returns successfully.
-      local claim = run == CurrentRun and M.occurrenceRouting.claim() or nil
+      -- Capture reversible claims before StartRoom changes CurrentRun.CurrentRoom.
+      local roomClaim = run == CurrentRun and M.occurrenceRouting.claim() or nil
+      local encounterClaim = run == CurrentRun and M.occurrenceRouting.liveEncounterClaim() or nil
       local result = table.pack(original(run, room, ...))
       if run == CurrentRun and token ~= nil and M.nextOccurrenceTarget == target
           and M.nextOccurrenceToken == token
           and occurrenceRoomMatches(occurrenceTargets[target], room)
-          and claim and claim.room == room then
+          and roomClaim and roomClaim.room == room then
         consumeNextOccurrence(target, token)
+      else
+        -- Taking another native exit abandons this source-room opportunity but
+        -- keeps the run-scoped request available in the destination.
+        if roomClaim and roomClaim.room ~= room then M.occurrenceRouting.roomClaim = nil end
+        if encounterClaim and encounterClaim.room ~= room then
+          M.occurrenceRouting.encounterClaim = nil
+        end
       end
       return table.unpack(result, 1, result.n)
     end)
@@ -9369,6 +9427,7 @@ if __MacGamingTrainerV1 == nil then
       M.occurrenceRouting.ownerRun = CurrentRun
       M.occurrenceRouting.ownerHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
       M.occurrenceRouting.roomClaim = nil
+      M.occurrenceRouting.encounterClaim = nil
       M.featureErrors.nextOccurrence = nil
       reconcileDesired(true, "nextOccurrence")
       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
@@ -9389,6 +9448,7 @@ if __MacGamingTrainerV1 == nil then
       M.nextOccurrenceTarget = nil
       M.nextOccurrenceToken = nil
       M.occurrenceRouting.roomClaim = nil
+      M.occurrenceRouting.encounterClaim = nil
       M.occurrenceRouting.ownerRun = nil
       M.occurrenceRouting.ownerHero = nil
       M.featureErrors.nextOccurrence = nil
