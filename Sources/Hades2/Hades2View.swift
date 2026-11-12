@@ -1331,7 +1331,7 @@ struct Hades2TrainerView: View {
                 )
             }
 
-            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextRoomReward))
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
             TrainerSecondaryActionButton(
                 title: text("hades2.nextRoom.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,

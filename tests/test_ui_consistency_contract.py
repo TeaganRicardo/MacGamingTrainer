@@ -158,7 +158,7 @@ presentation_cases = dict(re.findall(
     presentation_block,
 ))
 assert len(actions) == len(set(actions)), "duplicate shortcut action declaration"
-assert presentation_cases.get("disableAll") == "host.disableAll"
+assert 'case applyWorldExit = "applyNextRoomReward"' in shortcut_declarations, "World Exit source identity must retain only the released storage raw value"\nassert presentation_cases.get("disableAll") == "host.disableAll"
 assert set(presentation_cases) == set(actions), (
     "every registered shortcut action must have one presentation label"
 )
@@ -193,7 +193,7 @@ for language in ("en", "zh-CN"):
     assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
 
 for key in (
-    'case .applyNextRoomReward: return "hades2.shortcut.applyWorldExit"',
+    'case .applyWorldExit: return "hades2.shortcut.applyWorldExit"',
     'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"',
     'case .spawnPickup: return "hades2.shortcut.spawnPickup"',
     'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"',
