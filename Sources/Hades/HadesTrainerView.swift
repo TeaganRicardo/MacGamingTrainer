@@ -522,7 +522,8 @@ private struct HadesCatalogView: View {
     }
 
     private var chaosRow: some View {
-        TrainerDualInlinePickerLayout(
+        VStack(alignment: .leading, spacing: 6) {
+            TrainerDualInlinePickerLayout(
             minimumPickerWidth: 144,
             maximumPickerWidth: theme.pickerActionMaxWidth,
             minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
@@ -560,6 +561,29 @@ private struct HadesCatalogView: View {
                 widthRole: .compactRow
             ) {
                 _ = model.acquireSelectedChaosPair()
+            }
+            }
+
+            if model.acquisitionTarget == .chaos {
+                HStack(spacing: 6) {
+                    Text(text("hades.chaosEncounters"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                    TrainerNumberField(
+                        text: $model.acquisitionEncounters,
+                        accessibilityLabel: text("hades.chaosEncounters"),
+                        accessibilityIdentifier: "hades.acquisition.encounters",
+                        width: 64,
+                        enabled: true,
+                        onCommit: { completion in
+                            guard let count = Int(completion.text), (1...100).contains(count) else {
+                                return completion.rejected(message: text("hades.error.invalidValue"))
+                            }
+                            return String(count)
+                        }
+                    )
+                }
+                .accessibilityIdentifier("hades.acquisition.chaosSettings")
             }
         }
     }
