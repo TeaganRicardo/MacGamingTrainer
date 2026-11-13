@@ -5704,16 +5704,6 @@ if __MacGamingTrainerV1 == nil then
     for _, entry in ipairs(facilityDefinitions) do facilityById[entry.id] = entry end
     local facilityObservations, facilitySerial = {}, 0
     local facilityGenerated = setmetatable({}, { __mode = "k" })
-    local facilityFail = {
-      scene = "hades2.facility.unavailable.scene",
-      native = "hades2.facility.unavailable.native",
-      route = "hades2.facility.unavailable.route",
-      progression = "hades2.facility.unavailable.progression",
-      existing = "hades2.facility.unavailable.existing",
-      placement = "hades2.facility.unavailable.placement",
-      stock = "hades2.facility.unavailable.stock",
-      stale = "hades2.facility.unavailable.stale",
-    }
     local facilityNativeFunctions = {
       "GetIdsByType", "HandleSecretSpawns", "IsGameStateEligible", "SetupObstacle",
       "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
@@ -5726,7 +5716,7 @@ if __MacGamingTrainerV1 == nil then
       if definition == nil or M.terminalActionUnknown or owner == nil
           or type(CurrentRun) ~= "table" or type(MapState) ~= "table"
           or type(MapState.ActiveObstacles) ~= "table" or type(CurrentRun.CurrentRoom) ~= "table" then
-        return nil, facilityFail.scene
+        return nil, "hades2.facility.unavailable.scene"
       end
       local room = owner.room
       if (type(ScreenState) == "table" and ScreenState.InTransition)
@@ -5734,20 +5724,20 @@ if __MacGamingTrainerV1 == nil then
           or type(room.Encounter) == "table" and room.Encounter.InProgress
           or type(room.ChallengeEncounter) == "table" and room.ChallengeEncounter.InProgress
           or CurrentRun.IsDreamRun or room ~= CurrentRun.CurrentRoom then
-        return nil, facilityFail.scene
+        return nil, "hades2.facility.unavailable.scene"
       end
       if not functionsPresent(facilityNativeFunctions)
           or definition.requiresStore and not functionsPresent({ "RunShopGeneration", "FillInShopOptions" })
           or definition.requiresSell and not functionsPresent({ "IsGodTrait", "GenerateSellTraitValues" })
           or type(ObstacleData) ~= "table" or type(ObstacleData[definition.field]) ~= "table"
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
-        return nil, facilityFail.native
+        return nil, "hades2.facility.unavailable.native"
       end
       local authored = RoomData[room.Name] or room
       if definition.requiresStore and (room.Store ~= nil or room.StoreDataName ~= nil
-          or room.ChosenRewardType == "Shop") then return nil, facilityFail.existing end
+          or room.ChosenRewardType == "Shop") then return nil, "hades2.facility.unavailable.existing" end
       if type(room[definition.field]) == "table" or room[definition.force] then
-        return nil, facilityFail.existing
+        return nil, "hades2.facility.unavailable.existing"
       end
       -- A 0.0 authored chance is an explicit room/biome exclusion, separate
       -- from a failed roll in an otherwise legal room. Surface and sell shops
@@ -5756,16 +5746,16 @@ if __MacGamingTrainerV1 == nil then
       if spawnChance == nil and definition.id == "well" then
         spawnChance = RoomData.BaseRoom.WellShopSpawnChance
       end
-      if not finite(spawnChance) or spawnChance <= 0 then return nil, facilityFail.route end
+      if not finite(spawnChance) or spawnChance <= 0 then return nil, "hades2.facility.unavailable.route" end
       local requirements = room[definition.requirements]
         or definition.defaultRequirements and RoomData.BaseRoom[definition.defaultRequirements]
       if requirements ~= nil and not IsGameStateEligible(room, requirements) then
-        return nil, facilityFail.progression
+        return nil, "hades2.facility.unavailable.progression"
       end
       if definition.requiresStore then
         local stock = type(StoreData) == "table"
           and type(StoreData[definition.id == "well" and "RoomShop" or "SurfaceShop"]) == "table"
-        if not stock then return nil, facilityFail.stock end
+        if not stock then return nil, "hades2.facility.unavailable.stock" end
       else
         local traitEligible = false
         for _, trait in ipairs(owner.hero.Traits or {}) do
@@ -5775,10 +5765,10 @@ if __MacGamingTrainerV1 == nil then
             break
           end
         end
-        if not traitEligible then return nil, facilityFail.stock end
+        if not traitEligible then return nil, "hades2.facility.unavailable.stock" end
       end
       local points = GetIdsByType({ Name = "ChallengeSwitchBase" })
-      if type(points) ~= "table" then return nil, facilityFail.placement end
+      if type(points) ~= "table" then return nil, "hades2.facility.unavailable.placement" end
       local occupied = {}
       for _, field in ipairs({
         "WellShop", "SurfaceShop", "SellTraitShop", "ChallengeSwitch", "MetaRewardStand",
@@ -5804,9 +5794,9 @@ if __MacGamingTrainerV1 == nil then
           break
         end
       end
-      if point == nil then return nil, facilityFail.placement end
+      if point == nil then return nil, "hades2.facility.unavailable.placement" end
       if facilityGenerated[room] and facilityGenerated[room][kind] then
-        return nil, facilityFail.existing
+        return nil, "hades2.facility.unavailable.existing"
       end
       return {
         definition = definition, id = kind, session = SessionState,
@@ -5853,7 +5843,7 @@ if __MacGamingTrainerV1 == nil then
       local target, reason = inspectFacility(params.facility)
       if type(params.scopeToken) ~= "string" or prior == nil
           or params.scopeToken ~= prior.token or not sameFacility(prior, target) then
-        error(reason or facilityFail.stale)
+        error(reason or "hades2.facility.unavailable.stale")
       end
       return target
     end
@@ -5861,7 +5851,7 @@ if __MacGamingTrainerV1 == nil then
       local current, reason = inspectFacility(target.id)
       if not sameFacility(target, current) then
         record.status = "failed"
-        record.error = reason or facilityFail.stale
+        record.error = reason or "hades2.facility.unavailable.stale"
         return nil, "failed"
       end
       local room, definition, id = target.room, target.definition, target.point

@@ -95,6 +95,17 @@ def _generate_chaos_gate(raw):
     return {"scopeToken": token}
 
 
+def _generate_chamber_facility(raw):
+    params = _params(raw)
+    facility = params.get("facility")
+    token = params.get("scopeToken")
+    if (type(facility) is not str or not 1 <= len(facility) <= 48
+            or not facility.isascii() or not facility.isidentifier()
+            or type(token) is not str or not 1 <= len(token) <= 128):
+        raise ValueError("请刷新当前房间后再生成房间设施。")
+    return {"facility": facility, "scopeToken": token}
+
+
 def _mature_garden(raw):
     token = _params(raw).get("scopeToken")
     if not isinstance(token, str) or not 1 <= len(token) <= 128:
@@ -664,6 +675,7 @@ _COMMAND_SPECS = (
     ),
     _spec("generate_gathering", request_id=True, validate=_generate_gathering),
     _spec("generate_chaos_gate", request_id=True, validate=_generate_chaos_gate),
+    _spec("generate_chamber_facility", request_id=True, validate=_generate_chamber_facility),
     _spec("mature_garden", request_id=True, validate=_mature_garden),
     _spec("set_stat", validate=_set_stat),
     _spec("set_element", validate=_set_element),
