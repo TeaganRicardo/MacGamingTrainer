@@ -201,6 +201,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var chaosGateProbability: Double?
     @Published private(set) var gatheringProbabilities: [Hades2GatheringFamily: Double] = [:]
     @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
+    @Published private(set) var chaosGateTarget: Hades2GatheringTarget?
     @Published var boons: [BoonOption] = []
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
@@ -704,6 +705,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
         gatheringTargets = [:]
+        chaosGateTarget = nil
         gardenScopeToken = nil
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
@@ -821,6 +823,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
         if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
+        if patch.chaosGateTarget.isPresent { chaosGateTarget = patch.chaosGateTarget.value }
         if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
@@ -930,6 +933,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         case .generateGathering: title = presentation("hades2.gathering.generate")
+        case .generateChaosGate: title = presentation("hades2.chaosGate.generate")
         case .matureGarden: title = presentation("hades2.garden.title")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
@@ -953,6 +957,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             if command == .generateGathering, let error = receipt.error, error.hasPrefix("hades2.gathering.unavailable.") {
                 errorToken = presentation(error)
             } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
+            if command == .generateChaosGate, let error = receipt.error, error.hasPrefix("hades2.chaosGate.unavailable.") {
+                errorToken = presentation(error)
+            }
         case .outcomeUnknown:
             noticeToken = nil
             errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
@@ -1373,6 +1380,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
         connected && canAcceptRuntimeAction && !exiting && protocolCompatible
             && gatheringTargets[family]?.available == true
+    }
+
+    var canGenerateChaosGate: Bool {
+        connected && canAcceptRuntimeAction && !exiting && protocolCompatible
+            && chaosGateTarget?.available == true
+    }
+
+    @discardableResult
+    func generateChaosGate(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canGenerateChaosGate, let token = chaosGateTarget?.scopeToken else { return false }
+        send(.generateChaosGate(scopeToken: token),
+             title: "hades2.chaosGate.generate",
+             announceSuccess: false, completion: completion)
+        return true
     }
 
     var canMatureGarden: Bool {
@@ -2003,6 +2024,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .generateFlora, .generateMining, .generateDigging, .generateShades, .generateFishing:
             guard let family = action.gatheringFamily,
                   generateGathering(family, completion: Self.playOneShotShortcutResult) else {
+                rejectShortcut(action)
+                return
+            }
+        case .generateChaosGate:
+            guard generateChaosGate(completion: Self.playOneShotShortcutResult) else {
                 rejectShortcut(action)
                 return
             }

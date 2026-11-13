@@ -12,9 +12,33 @@
       ],
       "key": "hades2.error.timeout"
     },
+    "desired-state schemaVersion 无效。": {
+      "arguments": [],
+      "key": "hades2.error.desiredSchemaInvalid"
+    },
     "Game must be stopped before applying a save edit.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.applyRequiresStopped"
+    },
+    "hades2.garden.unavailable": {
+      "arguments": [],
+      "key": "hades2.garden.unavailable"
+    },
+    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），": {
+      "arguments": [
+        "kind",
+        "1",
+        "9"
+      ],
+      "key": "hades2.error.preferenceOlderFormat"
+    },
+    "kind 使用了更新的数据格式（schemaVersion=10，当前支持 9），": {
+      "arguments": [
+        "kind",
+        "10",
+        "9"
+      ],
+      "key": "hades2.error.preferenceNewerFormat"
     },
     "Legendary / Duo 设置无效。": {
       "arguments": [],
@@ -31,6 +55,10 @@
     "Next occurrence token is invalid": {
       "arguments": [],
       "key": "hades2.error.invalidNextOccurrence"
+    },
+    "probeRuntime 必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.probeRuntimeBoolean"
     },
     "Profile desired 字段无效。": {
       "arguments": [],
@@ -84,6 +112,18 @@
       "arguments": [],
       "key": "hades2.error.profileCorrupt"
     },
+    "recoverLostAttach 必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.recoverLostAttachBoolean"
+    },
+    "runtime observation 仅允许 status。": {
+      "arguments": [],
+      "key": "hades2.error.runtimeObservationOnly"
+    },
+    "Save Editor active profile save is missing.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.operationFailed"
+    },
     "Save Editor Advanced path is invalid.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
@@ -99,18 +139,6 @@
     "Save Editor Arcana level is invalid.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.arcanaLevelInvalid"
-    },
-    "Save Editor GameState is malformed.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.operationFailed"
-    },
-    "Save Editor GameState is unavailable.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.operationFailed"
-    },
-    "Save Editor active profile save is missing.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.operationFailed"
     },
     "Save Editor could not resolve the active Hades profile.": {
       "arguments": [],
@@ -143,6 +171,14 @@
     "Save Editor equipped familiar must be unlocked.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.equippedFamiliarMustBeUnlocked"
+    },
+    "Save Editor GameState is malformed.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.operationFailed"
+    },
+    "Save Editor GameState is unavailable.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.operationFailed"
     },
     "Save Editor has no changes to apply.": {
       "arguments": [],
@@ -335,46 +371,6 @@
       ],
       "key": "hades2.error.architectureRequired"
     },
-    "Unsupported next occurrence target": {
-      "arguments": [],
-      "key": "hades2.error.invalidNextOccurrence"
-    },
-    "desired-state schemaVersion 无效。": {
-      "arguments": [],
-      "key": "hades2.error.desiredSchemaInvalid"
-    },
-    "hades2.garden.unavailable": {
-      "arguments": [],
-      "key": "hades2.garden.unavailable"
-    },
-    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），": {
-      "arguments": [
-        "kind",
-        "1",
-        "9"
-      ],
-      "key": "hades2.error.preferenceOlderFormat"
-    },
-    "kind 使用了更新的数据格式（schemaVersion=10，当前支持 9），": {
-      "arguments": [
-        "kind",
-        "10",
-        "9"
-      ],
-      "key": "hades2.error.preferenceNewerFormat"
-    },
-    "probeRuntime 必须为布尔值。": {
-      "arguments": [],
-      "key": "hades2.error.probeRuntimeBoolean"
-    },
-    "recoverLostAttach 必须为布尔值。": {
-      "arguments": [],
-      "key": "hades2.error.recoverLostAttachBoolean"
-    },
-    "runtime observation 仅允许 status。": {
-      "arguments": [],
-      "key": "hades2.error.runtimeObservationOnly"
-    },
     "some tool 失败（1）：detail": {
       "arguments": [
         "some tool",
@@ -389,6 +385,14 @@
         "30"
       ],
       "key": "hades2.error.timeout"
+    },
+    "Unsupported next occurrence target": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
+    "World action is unavailable in the current scene": {
+      "arguments": [],
+      "key": "hades2.error.worldActionUnavailable"
     },
     "上次调用结果不明，请重启游戏后重新连接。": {
       "arguments": [],
@@ -1022,9 +1026,9 @@
       "arguments": [],
       "key": "hades2.error.resumeUnverified"
     },
-    "游戏调用结果不明，未自动重试。": {
+    "游戏调用结果不明，未自动重试；请检查游戏并重启。": {
       "arguments": [],
-      "key": "hades2.error.outcomeUnknownEmpty"
+      "key": "hades2.error.outcomeUnknownGeneric"
     },
     "游戏调用结果不明，未自动重试： 失败（5）": {
       "arguments": [
@@ -1068,9 +1072,9 @@
       ],
       "key": "hades2.error.outcomeUnknownTransport"
     },
-    "游戏调用结果不明，未自动重试；请检查游戏并重启。": {
+    "游戏调用结果不明，未自动重试。": {
       "arguments": [],
-      "key": "hades2.error.outcomeUnknownGeneric"
+      "key": "hades2.error.outcomeUnknownEmpty"
     },
     "游戏进程已结束。": {
       "arguments": [],
@@ -1272,6 +1276,10 @@
       ],
       "key": "hades2.error.prepareWhileRunning"
     },
+    "请刷新当前房间后再生成混沌之门。": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.stale"
+    },
     "请刷新当前房间后再生成采集点。": {
       "arguments": [],
       "key": "hades2.gathering.unavailable.stale"
@@ -1409,10 +1417,6 @@
     "额外魔力恢复必须为 0–1000/秒。": {
       "arguments": [],
       "key": "hades2.error.manaRegenRange"
-    },
-    "World action is unavailable in the current scene": {
-      "arguments": [],
-      "key": "hades2.error.worldActionUnavailable"
     }
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
@@ -1433,6 +1437,10 @@
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
     },
+    "acquire_chaos_pair::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
     "acquire_chaos_pair::Selected boon does not support the requested level": {
       "arguments": [],
       "key": "hades2.error.exactLevelUnsupported"
@@ -1452,10 +1460,6 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "acquire_chaos_pair::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "advance_trait_lifecycle::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1471,6 +1475,10 @@
     "advance_trait_lifecycle::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "advance_trait_lifecycle::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "advance_trait_lifecycle::Trait instance is no longer present": {
       "arguments": [],
@@ -1499,10 +1507,6 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "advance_trait_lifecycle::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "expire_trait::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1510,6 +1514,10 @@
     "expire_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "expire_trait::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "expire_trait::Temporary effect duration did not reach the requested remaining uses": {
       "arguments": [],
@@ -1550,16 +1558,33 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "expire_trait::requestId reused for a different action": {
+    "generate_chaos_gate::hades2.chaosGate.unavailable.existing": {
       "arguments": [],
-      "key": "hades2.error.requestIdReused"
+      "key": "hades2.chaosGate.unavailable.existing"
     },
-    "generate_gathering::Unsupported sample-purpose: missing SampleFunction": {
-      "arguments": [
-        "sample-purpose",
-        "SampleFunction"
-      ],
-      "key": "hades2.error.nativeFunctionMissing"
+    "generate_chaos_gate::hades2.chaosGate.unavailable.native": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.native"
+    },
+    "generate_chaos_gate::hades2.chaosGate.unavailable.placement": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.placement"
+    },
+    "generate_chaos_gate::hades2.chaosGate.unavailable.progression": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.progression"
+    },
+    "generate_chaos_gate::hades2.chaosGate.unavailable.route": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.route"
+    },
+    "generate_chaos_gate::hades2.chaosGate.unavailable.scene": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.scene"
+    },
+    "generate_chaos_gate::hades2.chaosGate.unavailable.stale": {
+      "arguments": [],
+      "key": "hades2.chaosGate.unavailable.stale"
     },
     "generate_gathering::hades2.gathering.unavailable.complex": {
       "arguments": [],
@@ -1605,6 +1630,13 @@
       "arguments": [],
       "key": "hades2.gathering.unavailable.tool"
     },
+    "generate_gathering::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
     "lock_rerolls::Disable Infinite Rerolls before selecting a fixed-value reroll lock": {
       "arguments": [],
       "key": "hades2.error.infiniteRerollsLockConflict"
@@ -1627,16 +1659,16 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
+    "mature_garden::hades2.garden.unavailable": {
+      "arguments": [],
+      "key": "hades2.garden.unavailable"
+    },
     "mature_garden::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
         "sample-purpose",
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
-    },
-    "mature_garden::hades2.garden.unavailable": {
-      "arguments": [],
-      "key": "hades2.garden.unavailable"
     },
     "open_sell_traits::Boon selling requires a live trait owner": {
       "arguments": [],
@@ -1728,6 +1760,10 @@
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
     },
+    "remove_trait::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
     "remove_trait::Selene spell removal left owner state mounted": {
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
@@ -1775,10 +1811,6 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "remove_trait::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "set_chaos_gate_probability::Invalid Chaos Gate probability": {
       "arguments": [],
       "key": "hades2.error.percentRange"
@@ -1809,6 +1841,10 @@
     "set_trait_level::Not enough uninvested Path of Stars nodes remain for the requested level": {
       "arguments": [],
       "key": "hades2.error.traitLevelNoLongerEligible"
+    },
+    "set_trait_level::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "set_trait_level::Selene talent tree changed before the requested level was applied": {
       "arguments": [],
@@ -1857,10 +1893,6 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "set_trait_level::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "set_trait_rarity::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1876,6 +1908,10 @@
     "set_trait_rarity::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "set_trait_rarity::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "set_trait_rarity::Trait instance is no longer present": {
       "arguments": [],
@@ -1912,10 +1948,6 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "set_trait_rarity::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "set_trait_remaining_uses::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1923,6 +1955,10 @@
     "set_trait_remaining_uses::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "set_trait_remaining_uses::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "set_trait_remaining_uses::Temporary effect duration did not reach the requested remaining uses": {
       "arguments": [],
@@ -1958,10 +1994,6 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
-    },
-    "set_trait_remaining_uses::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
     },
     "spawn_reward::Arachne costume acquisition failed": {
       "arguments": [],
@@ -2037,12 +2069,20 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "generate_chaos_gate::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     }
   },
   "runtime_commands": [
     "acquire_chaos_pair",
     "advance_trait_lifecycle",
     "expire_trait",
+    "generate_chaos_gate",
     "generate_gathering",
     "lock_rerolls",
     "lock_resource",

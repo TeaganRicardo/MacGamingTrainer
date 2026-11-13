@@ -81,6 +81,16 @@ gathering_actions = [family_mapping[family] for family in families]
 room_actions = panel_actions(
     "roomsSection", ["worldExitPanel", "nextOccurrencePanel", "rewardSpawningPanel"]
 )
+# The Chaos row lives in its own reusable subview; resolve the same slot in
+# the section's source order rather than hard-coding a second shortcut list.
+chaos_row = (ROOT / "Sources/Hades2/Views/Hades2ChaosGatePanel.swift").read_text()
+chaos_actions = action_refs(chaos_row)
+assert chaos_actions == ["generateChaosGate"]
+rooms_section = view_block("roomsSection")
+assert (rooms_section.index("nextOccurrencePanel")
+        < rooms_section.index("Hades2ChaosGatePanel(model: model)")
+        < rooms_section.index("rewardSpawningPanel"))
+room_actions = room_actions[:2] + chaos_actions + room_actions[2:]
 actual = (
     registry[:10]
     + speed_actions

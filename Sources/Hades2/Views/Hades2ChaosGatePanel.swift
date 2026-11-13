@@ -34,7 +34,15 @@ struct Hades2ChaosGatePanel: View {
                     changed: completion.changed, generation: generation)
                 { key in _ = completion.rejected(message: text(key)) }
             },
-            onReset: { model.setChaosGateProbability(nil) }
+            onReset: { model.setChaosGateProbability(nil) },
+            generateLabel: text("hades2.chaosGate.generate"),
+            generateShortcutText: model.shortcutText(.generateChaosGate),
+            generateHelp: model.chaosGateTarget?.reason.map { text($0) }
+                ?? (model.chaosGateTarget == nil
+                    ? text("hades2.chaosGate.unavailable.scene")
+                    : text("hades2.chaosGate.generateHelp")),
+            canGenerate: model.canGenerateChaosGate,
+            onGenerate: { _ = model.generateChaosGate() }
         )
         .trainerGroupedRows()
         .onAppear { synchronize() }

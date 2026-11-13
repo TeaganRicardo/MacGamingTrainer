@@ -126,6 +126,7 @@ extension ShortcutAction {
         case .matureGarden: Hades2WorkbenchIcon.garden
         case .applyWorldExit: TrainerSemanticIcon.Context.doorway
         case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
+        case .generateChaosGate: TrainerSemanticIcon.Context.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
         case .spawnSpecial: Hades2WorkbenchIcon.specialReward
@@ -211,6 +212,7 @@ enum Hades2WorkbenchCatalog {
         .matureGarden,
         .applyWorldExit,
         .applyNextOccurrence,
+        .generateChaosGate,
         .spawnOlympian,
         .spawnPickup,
         .spawnSpecial,
@@ -271,7 +273,8 @@ enum Hades2WorkbenchCatalog {
         case .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources
-        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence: .rooms
+        case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence,
+             .generateChaosGate: .rooms
         case .disableAll: .management
         }
     }

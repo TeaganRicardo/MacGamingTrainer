@@ -119,7 +119,7 @@ assert names == [
     "set_vital", "set_counter", "lock_vital",
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
-    "generate_gathering", "mature_garden", "set_stat", "set_element", "lock_element",
+    "generate_gathering", "generate_chaos_gate", "mature_garden", "set_stat", "set_element", "lock_element",
     "set_boon_rarity_desired", "apply_world_occurrence", "cancel_world_occurrence",
     "apply_world_exit", "cancel_world_exit", "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
@@ -304,6 +304,17 @@ expect_error(
     {"family": "mining", "scopeToken": ""},
     "请刷新当前房间后再生成采集点。",
 )
+
+
+_, params = dispatch_runtime(
+    "generate_chaos_gate", {"scopeToken": "observed-chaos-room"}, "direct-chaos-id",
+)
+assert params == {"scopeToken": "observed-chaos-room", "requestId": "direct-chaos-id"}
+for invalid_token in (None, "", "x" * 129):
+    expect_error(
+        "generate_chaos_gate", {"scopeToken": invalid_token},
+        "请刷新当前房间后再生成混沌之门。",
+    )
 
 
 trait_target = {

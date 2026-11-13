@@ -5,6 +5,20 @@ RoomData = { BaseRoom = { SecretSpawnChance = .2 },
  Chaos_01 = { Name = 'Chaos_01', RoomSetName = 'Chaos', UsePreviousRoomSet = true, PauseBiomeState = true },
  F_Next = { Name = 'F_Next', RoomSetName = 'F' } }
 RoomSets = { Chaos = { 'Chaos_01' }, F = { 'F_Next' } }
+ObstacleData = { SecretDoor = { Name = 'SecretDoor', OnUsedFunctionName = 'AttemptUseDoor' } }
+SetupHarvestPoints = function() end
+local unlockedDoors, previewDoors = 0, 0
+CheckRoomExitsReady = function(room) return room.ExitsUnlocked and not room.BlockExits end
+CreateDoorRewardPreview = function(door) previewDoors = previewDoors + 1 end
+ExitDoorUnlockedPresentation = function(door) unlockedDoors = unlockedDoors + 1 end
+thread = function(callback, ...) return callback(...) end
+MapState.OfferedExitDoors = {}
+SpawnObstacle = function() end
+AssignRoomToExitDoor = function() end
+UseHeroTraitsWithValue = function() end
+RemoveRandomValue = function(values) return table.remove(values) end
+RandomSynchronize = function() end
+IsEmpty = function(value) return next(value) == nil end
 CurrentRun.RoomHistory = {}; CurrentRun.RoomCountCache = {}; CurrentRun.RoomCreations = {}
 CurrentRun.BiomeRoomCountCache = {}; CurrentRun.RunDepthCache = 8
 local heroForce, forceUses, spawns, charges = false, 0, 0, 0
@@ -20,6 +34,7 @@ CreateRoom = function(data, args)
  local room = gatheringCreate(data, args)
  room.SecretChanceSuccess = RandomChance(room.SecretSpawnChance or .2)
  room.ExitDoorRooms = {}; room.RoomCreations = {}
+ room.ExitsUnlocked = true; room.ActiveEncounters = {}
  return room
 end
 local nativeCreate = CreateRoom
