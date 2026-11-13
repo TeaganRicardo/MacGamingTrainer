@@ -1417,6 +1417,10 @@
     "额外魔力恢复必须为 0–1000/秒。": {
       "arguments": [],
       "key": "hades2.error.manaRegenRange"
+    },
+    "请刷新当前房间后再生成房间设施。": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.stale"
     }
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
@@ -2076,12 +2080,52 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.scene": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.scene"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.native": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.native"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.route": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.route"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.progression": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.progression"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.existing": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.existing"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.placement": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.placement"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.stock": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.stock"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.stale": {
+      "arguments": [],
+      "key": "hades2.facility.unavailable.stale"
+    },
+    "generate_chamber_facility::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     }
   },
   "runtime_commands": [
     "acquire_chaos_pair",
     "advance_trait_lifecycle",
     "expire_trait",
+    "generate_chamber_facility",
     "generate_chaos_gate",
     "generate_gathering",
     "lock_rerolls",
