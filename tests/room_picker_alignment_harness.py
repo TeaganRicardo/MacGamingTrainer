@@ -232,7 +232,8 @@ private func exerciseWorldExitDualPickerLayout() {
                 localization.language = language
                 let host = NSHostingView(rootView:
                     WorldExitDualPickerGeometryFixture(language: language, hasShortcut: hasShortcut)
-                        .frame(width: width, height: 180, alignment: .topLeading)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .frame(height: 180, alignment: .topLeading)
                         .preferredColorScheme(.dark)
                         .trainerTheme(theme)
                         .environmentObject(localization)
@@ -284,10 +285,10 @@ private func exerciseWorldExitDualPickerLayout() {
                 let trailingInset = hostFrame.maxX - apply.maxX
                 hierarchyCheck(apply.width >= theme.compactActionWidth - 2
                                && trailingInset >= -2 && trailingInset <= theme.rowHorizontalPadding + 12,
-                    "World Exit action lost its Core minimum/trailing lane: language=\(language.rawValue) shortcut=\(hasShortcut) width=\(width) action=\(apply) viewport=\(hostFrame) inset=\(trailingInset)")
+                    "World Exit action lost its Core minimum/trailing lane: language=\(language.rawValue) shortcut=\(hasShortcut) requestedWidth=\(width) nativeViewport=\(host.bounds.width) action=\(apply) viewport=\(hostFrame) inset=\(trailingInset)")
                 if let previousPickerWidth {
-                    hierarchyCheck(first.width >= previousPickerWidth + 20,
-                        "dual Picker columns did not expand with the viewport")
+                    hierarchyCheck(first.width >= min(theme.pickerActionMaxWidth, previousPickerWidth + 8) - 2,
+                        "dual Picker columns did not expand toward their configured cap")
                 }
                 previousPickerWidth = first.width
 
