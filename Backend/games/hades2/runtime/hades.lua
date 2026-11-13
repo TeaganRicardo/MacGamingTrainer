@@ -5836,7 +5836,7 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       facilityObservations = nextObservations
-      return options
+      return setmetatable(options, arrayMeta)
     end
     local function prepareFacility(params)
       local prior = facilityObservations[params.facility]

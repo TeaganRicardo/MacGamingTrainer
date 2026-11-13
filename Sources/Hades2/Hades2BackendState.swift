@@ -215,7 +215,7 @@ struct Hades2StatePatch {
             let options = rows.compactMap { row -> Hades2ChamberFacility? in
                 guard let id = row["id"] as? String, !id.isEmpty, id.count <= 48,
                       let label = row["labelKey"] as? String,
-                      label.hasPrefix("hades2.facility."),
+                      !label.isEmpty, label.count <= 100,
                       let token = row["scopeToken"] as? String,
                       !token.isEmpty, token.count <= 128 else { return nil }
                 return .init(id: id, labelKey: label, scopeToken: token)
