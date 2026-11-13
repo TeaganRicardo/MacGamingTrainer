@@ -227,6 +227,7 @@ private func exerciseWorldExitDualPickerLayout() {
     for language in [TrainerPresentationLanguage.en, .zhCN] {
         for hasShortcut in [false, true] {
             var previousPickerWidth: CGFloat?
+            var previousViewportWidth: CGFloat?
             for width in widths {
                 let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
                 localization.language = language
@@ -287,11 +288,24 @@ private func exerciseWorldExitDualPickerLayout() {
                 hierarchyCheck(apply.width >= theme.compactActionWidth - 2
                                && trailingInset >= -2 && trailingInset <= theme.rowHorizontalPadding + 12,
                     "World Exit action lost its Core minimum/trailing lane: language=\(language.rawValue) shortcut=\(hasShortcut) requestedWidth=\(width) nativeViewport=\(host.bounds.width) action=\(apply) viewport=\(hostFrame) inset=\(trailingInset)")
-                if let previousPickerWidth {
-                    hierarchyCheck(first.width >= min(theme.pickerActionMaxWidth, previousPickerWidth + 8) - 2,
-                        "dual Picker columns did not expand toward their configured cap")
+                // AppKit clamps requested windows to the runner's actual screen.
+                // The 1050pt and 1600pt windows may have identical usable widths;
+                // expansion is required only when the *actual* viewport grows.
+                let actualViewportWidth = host.bounds.width
+                if let previousPickerWidth, let previousViewportWidth {
+                    let growth = max(0, actualViewportWidth - previousViewportWidth)
+                    if growth > 12 && previousPickerWidth < theme.pickerActionMaxWidth - 4 {
+                        let expected = min(theme.pickerActionMaxWidth,
+                                           previousPickerWidth + growth / 2 - 6)
+                        hierarchyCheck(first.width >= expected - 2,
+                            "dual Picker columns did not use new viewport space: requested=\(width) actual=\(actualViewportWidth) previous=\(previousViewportWidth) picker=\(first.width) previousPicker=\(previousPickerWidth)")
+                    } else {
+                        hierarchyCheck(first.width + 2 >= previousPickerWidth,
+                            "dual Picker columns shrank without losing viewport space")
+                    }
                 }
                 previousPickerWidth = first.width
+                previousViewportWidth = actualViewportWidth
 
                 hierarchyCheck(action(applyLabel)!.enabled && action(applyLabel)!.press(),
                     "World Exit Apply refused native AX activation")
