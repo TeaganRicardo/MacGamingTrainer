@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 133 then
+if previousModule and previousModule.revision ~= 134 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 133 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 133,
+    version = 1, revision = 134,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5680,7 +5680,256 @@ if __MacGamingTrainerV1 == nil then
       chaosObservation = nil
       return created.ObjectId, "completed"
     end
-    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate, observeChaos = observeChaos, prepareChaos = prepareCurrentChaosGate, generateChaos = generateChaos }
+
+    -- Native in-room facilities use the same authored ChallengeSwitchBase pool.
+    -- Keep this strategy beside the Chaos room-generation owner because native
+    -- HandleSecretSpawns owns the *entire* shared placement and activation flow.
+    local facilityDefinitions = {
+      { id = "well", labelKey = "hades2.facility.well",
+        field = "WellShop", force = "ForceWellShop", chance = "WellShopChanceSuccess",
+        configuredChance = "WellShopSpawnChance", native = "IsWellShopEligible",
+        requirements = "WellShopRequirements", defaultRequirements = "WellShopRequirements",
+        use = "UseWellShop", requiresStore = true },
+      { id = "shrine", labelKey = "hades2.facility.shrine",
+        field = "SurfaceShop", force = "ForceSurfaceShop", chance = "SurfaceShopChanceSuccess",
+        configuredChance = "SurfaceShopSpawnChance", native = "IsSurfaceShopEligible",
+        requirements = "SurfaceShopRequirements", defaultRequirements = "SurfaceShopRequirements",
+        use = "ShowSurfaceShopScreen", requiresStore = true },
+      { id = "purging", labelKey = "hades2.facility.purging",
+        field = "SellTraitShop", force = "ForceSellShop", chance = "SellShopChanceSuccess",
+        configuredChance = "SellShopSpawnChance", native = "IsSellTraitShopEligible",
+        requirements = "SellShopRequirements", use = "OpenSellTraitMenu", requiresSell = true },
+    }
+    local facilityById = {}
+    for _, entry in ipairs(facilityDefinitions) do facilityById[entry.id] = entry end
+    local facilityObservations, facilitySerial = {}, 0
+    local facilityGenerated = setmetatable({}, { __mode = "k" })
+    local facilityFail = {
+      scene = "hades2.facility.unavailable.scene",
+      native = "hades2.facility.unavailable.native",
+      route = "hades2.facility.unavailable.route",
+      progression = "hades2.facility.unavailable.progression",
+      existing = "hades2.facility.unavailable.existing",
+      placement = "hades2.facility.unavailable.placement",
+      stock = "hades2.facility.unavailable.stock",
+      stale = "hades2.facility.unavailable.stale",
+    }
+    local facilityNativeFunctions = {
+      "GetIdsByType", "HandleSecretSpawns", "IsGameStateEligible", "SetupObstacle",
+      "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
+      "IsWellShopEligible", "IsSurfaceShopEligible", "IsSellTraitShopEligible",
+      "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
+    }
+    local function inspectFacility(kind)
+      local definition = facilityById[kind]
+      local owner = M.runtimeOwners.roomContext()
+      if definition == nil or M.terminalActionUnknown or owner == nil
+          or type(CurrentRun) ~= "table" or type(MapState) ~= "table"
+          or type(MapState.ActiveObstacles) ~= "table" or type(CurrentRun.CurrentRoom) ~= "table" then
+        return nil, facilityFail.scene
+      end
+      local room = owner.room
+      if (type(ScreenState) == "table" and ScreenState.InTransition)
+          or next(ActiveScreens or {}) ~= nil or MapState.HostilePolymorph
+          or type(room.Encounter) == "table" and room.Encounter.InProgress
+          or type(room.ChallengeEncounter) == "table" and room.ChallengeEncounter.InProgress
+          or CurrentRun.IsDreamRun or room ~= CurrentRun.CurrentRoom then
+        return nil, facilityFail.scene
+      end
+      if not functionsPresent(facilityNativeFunctions)
+          or definition.requiresStore and not functionsPresent({ "RunShopGeneration", "FillInShopOptions" })
+          or definition.requiresSell and not functionsPresent({ "IsGodTrait", "GenerateSellTraitValues" })
+          or type(ObstacleData) ~= "table" or type(ObstacleData[definition.field]) ~= "table"
+          or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
+        return nil, facilityFail.native
+      end
+      local authored = RoomData[room.Name] or room
+      if definition.requiresStore and (room.Store ~= nil or room.StoreDataName ~= nil
+          or room.ChosenRewardType == "Shop") then return nil, facilityFail.existing end
+      if type(room[definition.field]) == "table" or room[definition.force] then
+        return nil, facilityFail.existing
+      end
+      -- A 0.0 authored chance is an explicit room/biome exclusion, separate
+      -- from a failed roll in an otherwise legal room. Surface and sell shops
+      -- require a room-owned positive chance (BaseRoom defaults to zero).
+      local spawnChance = room[definition.configuredChance]
+      if spawnChance == nil and definition.id == "well" then
+        spawnChance = RoomData.BaseRoom.WellShopSpawnChance
+      end
+      if not finite(spawnChance) or spawnChance <= 0 then return nil, facilityFail.route end
+      local requirements = room[definition.requirements]
+        or definition.defaultRequirements and RoomData.BaseRoom[definition.defaultRequirements]
+      if requirements ~= nil and not IsGameStateEligible(room, requirements) then
+        return nil, facilityFail.progression
+      end
+      if definition.requiresStore then
+        local stock = type(StoreData) == "table"
+          and type(StoreData[definition.id == "well" and "RoomShop" or "SurfaceShop"]) == "table"
+        if not stock then return nil, facilityFail.stock end
+      else
+        local traitEligible = false
+        for _, trait in ipairs(owner.hero.Traits or {}) do
+          if type(trait) == "table" and trait.Rarity and type(trait.Name) == "string"
+              and IsGodTrait(trait.Name, { ForShop = true }) then
+            traitEligible = true
+            break
+          end
+        end
+        if not traitEligible then return nil, facilityFail.stock end
+      end
+      local points = GetIdsByType({ Name = "ChallengeSwitchBase" })
+      if type(points) ~= "table" then return nil, facilityFail.placement end
+      local occupied = {}
+      for _, field in ipairs({
+        "WellShop", "SurfaceShop", "SellTraitShop", "ChallengeSwitch", "MetaRewardStand",
+      }) do
+        if type(room[field]) == "table" and finite(room[field].ObjectId) then
+          occupied[room[field].ObjectId] = true
+        end
+      end
+      local point
+      local forcedId = definition.id == "well" and authored.WellShopChallengeBaseId or nil
+      for _, id in ipairs(points) do
+        local resident = MapState.ActiveObstacles[id]
+        if finite(id) and id > 0 and (forcedId == nil or forcedId == id)
+            and not occupied[id]
+            and (resident == nil or
+              resident.Name == "ChallengeSwitchBase" and
+              resident.OnUsedFunctionName == nil)
+            and (type(MapState.RoomRequiredObjects) ~= "table"
+              or MapState.RoomRequiredObjects[id] == nil)
+            and (type(SessionMapState) ~= "table" or type(SessionMapState.SpawnPointsUsed) ~= "table"
+              or SessionMapState.SpawnPointsUsed[id] == nil) then
+          point = id
+          break
+        end
+      end
+      if point == nil then return nil, facilityFail.placement end
+      if facilityGenerated[room] and facilityGenerated[room][kind] then
+        return nil, facilityFail.existing
+      end
+      return {
+        definition = definition, id = kind, session = SessionState,
+        run = CurrentRun, hero = owner.hero, room = room, map = MapState,
+        name = room.Name, biome = room.RoomSetName,
+        point = point, authored = authored, configuredChance = spawnChance,
+        forceNextRoom = ForceNextRoom, depth = CurrentRun.RunDepthCache,
+        store = room.Store,
+      }
+    end
+    local function sameFacility(left, right)
+      if left == nil or right == nil then return false end
+      for _, key in ipairs({
+        "id", "session", "run", "hero", "room", "map", "name",
+        "biome", "point", "authored", "configuredChance",
+        "forceNextRoom", "depth", "store",
+      }) do
+        if left[key] ~= right[key] then return false end
+      end
+      return true
+    end
+    local function observeFacilities()
+      local options, nextObservations = {}, {}
+      for _, entry in ipairs(facilityDefinitions) do
+        local ok, target = pcall(inspectFacility, entry.id)
+        if ok and target ~= nil then
+          local old = facilityObservations[entry.id]
+          if sameFacility(old, target) then target.token = old.token
+          else
+            facilitySerial = facilitySerial + 1
+            target.token = M.traitInventoryGeneration .. ":facility:" .. tostring(facilitySerial)
+          end
+          options[#options + 1] = {
+            id = entry.id, labelKey = entry.labelKey, scopeToken = target.token,
+          }
+          nextObservations[entry.id] = target
+        end
+      end
+      facilityObservations = nextObservations
+      return options
+    end
+    local function prepareFacility(params)
+      local prior = facilityObservations[params.facility]
+      local target, reason = inspectFacility(params.facility)
+      if type(params.scopeToken) ~= "string" or prior == nil
+          or params.scopeToken ~= prior.token or not sameFacility(prior, target) then
+        error(reason or facilityFail.stale)
+      end
+      return target
+    end
+    local function generateFacility(record, target)
+      local current, reason = inspectFacility(target.id)
+      if not sameFacility(target, current) then
+        record.status = "failed"
+        record.error = reason or facilityFail.stale
+        return nil, "failed"
+      end
+      local room, definition, id = target.room, target.definition, target.point
+      local savedChance, savedAnomaly = room[definition.chance], room.AnomalyDoorChanceSuccess
+      local originalIds, originalHarvest = GetIdsByType, SetupHarvestPoints
+      local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
+      local function pointLease(args)
+        if type(args) == "table" and args.Name == "ChallengeSwitchBase" then return { id } end
+        if type(args) == "table" and args.Name == "SecretPoint" then return {} end
+        return originalIds(args)
+      end
+      local function nativeEligible(kind, original)
+        return function(run, checkingRoom)
+          if kind ~= target.id or run ~= CurrentRun and kind ~= "purging"
+              or checkingRoom ~= room then return false end
+          return original(run, checkingRoom)
+        end
+      end
+      -- Sell trait eligibility takes a single currentRoom argument, whereas
+      -- Well and Surface take (currentRun, currentRoom).
+      local function sellEligible(checkingRoom)
+        return target.id == "purging" and checkingRoom == room and originalSell(checkingRoom)
+      end
+      local suppressHarvest = function() end
+      room[definition.chance] = true
+      room.AnomalyDoorChanceSuccess = false
+      GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
+      IsWellShopEligible = nativeEligible("well", originalWell)
+      IsSurfaceShopEligible = nativeEligible("shrine", originalSurface)
+      IsSellTraitShopEligible = sellEligible
+      local ok, failure = pcall(function()
+        if definition.requiresStore then RunShopGeneration(room) end
+        HandleSecretSpawns(CurrentRun)
+      end)
+      -- Every temporary override is invocation-local, even when the game
+      -- throws. Preserve any other resident's newer replacement if present.
+      if GetIdsByType == pointLease then GetIdsByType = originalIds end
+      if SetupHarvestPoints == suppressHarvest then SetupHarvestPoints = originalHarvest end
+      IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible =
+        originalWell, originalSurface, originalSell
+      room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
+      if not ok then error(failure) end
+      if SessionState ~= target.session or CurrentRun ~= target.run
+          or CurrentRun.Hero ~= target.hero or CurrentRun.CurrentRoom ~= room
+          or MapState ~= target.map then error("Native facility source owner changed") end
+      local object = room[definition.field]
+      if type(object) ~= "table" or object.ObjectId ~= id
+          or MapState.ActiveObstacles[id] ~= object
+          or object.OnUsedFunctionName ~= "AttemptUseChallengeSwitch"
+          or object.ChallengeSwitchUseFunctionName ~= definition.use
+          or not IsUseable({ Id = id }) then
+        error("Native facility was not registered as interactable")
+      end
+      if definition.requiresStore then
+        if type(room.Store) ~= "table" or type(room.Store.StoreOptions) ~= "table"
+            or next(room.Store.StoreOptions) == nil then
+          error("Native facility has no usable shop stock")
+        end
+      elseif type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil then
+        error("Native Purging Pool has no generated sell options")
+      end
+      facilityGenerated[room] = facilityGenerated[room] or {}
+      facilityGenerated[room][target.id] = true
+      facilityObservations = {}
+      return id, "completed"
+    end
+
+    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate, observeChaos = observeChaos, prepareChaos = prepareCurrentChaosGate, generateChaos = generateChaos, observeFacilities = observeFacilities, prepareFacility = prepareFacility, generateFacility = generateFacility }
   end)()
 
   runtimeState.forceRerolls = (function()
@@ -8034,6 +8283,7 @@ if __MacGamingTrainerV1 == nil then
       chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
       gatheringTargets = runtimeState.roomGeneration.observe(),
       chaosGateTarget = runtimeState.roomGeneration.observeChaos(),
+      facilityOptions = runtimeState.roomGeneration.observeFacilities(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
@@ -10248,6 +10498,7 @@ if __MacGamingTrainerV1 == nil then
       open_special_choice = { "session", "run", "hero" },
       generate_gathering = { "session", "run", "hero", "room", "map" },
       generate_chaos_gate = { "session", "run", "hero", "room", "map" },
+      generate_chamber_facility = { "session", "run", "hero", "room", "map" },
       mature_garden = { "session", "gameState", "gardenPlots", "run", "hero", "room", "map" },
       acquire_chaos_pair = { "session", "run", "hero" },
       spawn_reward = function(context)
@@ -10272,6 +10523,7 @@ if __MacGamingTrainerV1 == nil then
       open_special_choice = { "source" },
       generate_gathering = { "family", "scopeToken" },
       generate_chaos_gate = { "scopeToken" },
+      generate_chamber_facility = { "facility", "scopeToken" },
       mature_garden = { "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
       spawn_reward = { "reward", "rarity", "level" },
@@ -11100,6 +11352,12 @@ if __MacGamingTrainerV1 == nil then
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
+    end
+    if command == "generate_chamber_facility" then
+      local target
+      return actionLedger.run(command, params,
+        function(record) return runtimeState.roomGeneration.generateFacility(record, target) end,
+        function() target = runtimeState.roomGeneration.prepareFacility(params) end)
     end
     if command == "generate_chaos_gate" then
       local target
