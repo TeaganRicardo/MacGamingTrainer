@@ -212,7 +212,9 @@ rarity = (HADES / "Views/Hades2BoonRarityPanel.swift").read_text()
 chaos_row = (HADES / "Views/Hades2ChaosGatePanel.swift").read_text()
 assert "Hades2OccurrenceSetting(" in chaos_row
 assert "generateShortcutText: model.shortcutText(.generateChaosGate)" in chaos_row
-visible_ui = "\n".join((view, management_view, gathering, occurrence_setting, rarity, chaos_row))
+facility_row = (HADES / "Views/Hades2ChamberFacilityPanel.swift").read_text()
+assert "model.shortcutText(.generateChamberFacility)" in facility_row
+visible_ui = "\n".join((view, management_view, gathering, occurrence_setting, rarity, chaos_row, facility_row))
 common_section = view[view.index("private var commonSection: some View {"):view.index("private var boonsSection: some View {")]
 assert "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common_section
 assert "action.commonFeatureIcon" in common_section

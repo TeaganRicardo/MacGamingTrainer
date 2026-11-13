@@ -21,6 +21,7 @@ DYNAMIC_PREFIXES = {
     "hades2.traits.family.",
     "hades2.gathering.unavailable.",
     "hades2.chaosGate.unavailable.",
+    "hades2.facility.unavailable.",
     "hades2.saveEditor.workbench.section.",
     "hades2.saveEditor.investigate.block.",
     "hades2.saveEditor.discovery.reason.",
@@ -286,6 +287,15 @@ def dynamic_key_references(sources):
                 raise AssertionError(f"Unsupported Chaos Gate unavailable key: {token!r}")
             chaos_unavailable.add(suffix)
 
+    facility_unavailable = set()
+    for token in quoted_strings(lua, "lua"):
+        prefix = "hades2.facility.unavailable."
+        if token.startswith(prefix):
+            suffix = token[len(prefix):]
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", suffix):
+                raise AssertionError(f"Unsupported facility unavailable key: {token!r}")
+            facility_unavailable.add(suffix)
+
     reason_function = save_view[
         save_view.index("private func discoveryReason"):
         save_view.index("private func valueText")
@@ -326,6 +336,7 @@ def dynamic_key_references(sources):
         "hades2.traits.family.": trait_families,
         "hades2.gathering.unavailable.": gathering_unavailable,
         "hades2.chaosGate.unavailable.": chaos_unavailable,
+        "hades2.facility.unavailable.": facility_unavailable,
         "hades2.saveEditor.workbench.section.": workbench_sections,
         "hades2.saveEditor.investigate.block.": block_codes,
         "hades2.saveEditor.discovery.reason.": discovery_reasons,

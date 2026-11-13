@@ -86,11 +86,15 @@ room_actions = panel_actions(
 chaos_row = (ROOT / "Sources/Hades2/Views/Hades2ChaosGatePanel.swift").read_text()
 chaos_actions = action_refs(chaos_row)
 assert chaos_actions == ["generateChaosGate"]
+facility_row = (ROOT / "Sources/Hades2/Views/Hades2ChamberFacilityPanel.swift").read_text()
+facility_actions = action_refs(facility_row)
+assert facility_actions == ["generateChamberFacility"]
 rooms_section = view_block("roomsSection")
 assert (rooms_section.index("nextOccurrencePanel")
+        < rooms_section.index("Hades2ChamberFacilityPanel(model: model)")
         < rooms_section.index("Hades2ChaosGatePanel(model: model)")
         < rooms_section.index("rewardSpawningPanel"))
-room_actions = room_actions[:2] + chaos_actions + room_actions[2:]
+room_actions = room_actions[:2] + facility_actions + chaos_actions + room_actions[2:]
 actual = (
     registry[:10]
     + speed_actions

@@ -774,6 +774,7 @@ struct Hades2TrainerView: View {
         TrainerSection(title: text("hades2.section.roomsAndRewards"), icon: Hades2WorkbenchSection.rooms.icon) {
             worldExitPanel
             nextOccurrencePanel
+            Hades2ChamberFacilityPanel(model: model)
             Hades2ChaosGatePanel(model: model)
             rewardSpawningPanel
         }

@@ -154,6 +154,10 @@ chaos_row = read("Sources/Hades2/Views/Hades2ChaosGatePanel.swift")
 assert "Hades2OccurrenceSetting(" in chaos_row
 assert "generateShortcutText: model.shortcutText(.generateChaosGate)" in chaos_row
 parts.append(chaos_row)
+facility_row = read("Sources/Hades2/Views/Hades2ChamberFacilityPanel.swift")
+assert "TrainerLabeledControlRow(" in facility_row
+assert "model.shortcutText(.generateChamberFacility)" in facility_row
+parts.append(facility_row)
 visible_actions = [action for part in parts for action in shortcut_references(part)]
 if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
     visible_actions.extend(common_order)

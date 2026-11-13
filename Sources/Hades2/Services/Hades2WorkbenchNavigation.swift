@@ -59,6 +59,7 @@ enum Hades2WorkbenchIcon {
         case "hades2.resource.materials": return TrainerSemanticIcon.Concept.item
         case "hades2.gathering.title": return TrainerSemanticIcon.Section.inventory
         case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
+        case "hades2.facility.title": return TrainerSemanticIcon.Action.generate
         case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
         case "hades2.chaosGate.probability": return chaosProbability
         case "hades2.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
@@ -126,6 +127,7 @@ extension ShortcutAction {
         case .matureGarden: Hades2WorkbenchIcon.garden
         case .applyWorldExit: TrainerSemanticIcon.Context.doorway
         case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
+        case .generateChamberFacility: TrainerSemanticIcon.Action.generate
         case .generateChaosGate: TrainerSemanticIcon.Context.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
@@ -212,6 +214,7 @@ enum Hades2WorkbenchCatalog {
         .matureGarden,
         .applyWorldExit,
         .applyNextOccurrence,
+        .generateChamberFacility,
         .generateChaosGate,
         .spawnOlympian,
         .spawnPickup,
@@ -274,7 +277,7 @@ enum Hades2WorkbenchCatalog {
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources
         case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence,
-             .generateChaosGate: .rooms
+             .generateChamberFacility, .generateChaosGate: .rooms
         case .disableAll: .management
         }
     }

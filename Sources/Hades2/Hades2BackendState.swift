@@ -110,6 +110,7 @@ struct Hades2StatePatch {
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
     let chaosGateProbability: Hades2FieldPatch<Double>
     let chaosGateTarget: Hades2FieldPatch<Hades2GatheringTarget>
+    let facilityOptions: Hades2FieldPatch<[Hades2ChamberFacility]>
     let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
     let gardenScopeToken: Hades2FieldPatch<String>
 
@@ -209,6 +210,19 @@ struct Hades2StatePatch {
             }
         } else {
             chaosGateTarget = payload.keys.contains("chaosGateTarget") ? .present(nil) : .absent
+        }
+        if let rows = payload["facilityOptions"] as? [[String: Any]] {
+            let options = rows.compactMap { row -> Hades2ChamberFacility? in
+                guard let id = row["id"] as? String, !id.isEmpty, id.count <= 48,
+                      let label = row["labelKey"] as? String,
+                      !label.isEmpty, label.count <= 100,
+                      let token = row["scopeToken"] as? String,
+                      !token.isEmpty, token.count <= 128 else { return nil }
+                return .init(id: id, labelKey: label, scopeToken: token)
+            }
+            facilityOptions = .present(options)
+        } else {
+            facilityOptions = payload.keys.contains("facilityOptions") ? .present(nil) : .absent
         }
         if let values = payload["gatheringTargets"] as? [String: Any] {
             var decoded: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
