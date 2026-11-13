@@ -5203,6 +5203,7 @@ if __MacGamingTrainerV1 == nil then
     }
     local frames = setmetatable({}, { __mode = "k" })
     local chaosRooms = setmetatable({}, { __mode = "k" })
+    local directlyGeneratingChaosRoom = nil
     local function liveFrame(frame)
       return frame ~= nil and not M.terminalActionUnknown and frame.session == SessionState
         and frame.run == CurrentRun and type(CurrentRun) == "table" and frame.hero == CurrentRun.Hero
@@ -5264,6 +5265,11 @@ if __MacGamingTrainerV1 == nil then
       if chaos then
         installHook("IsSecretDoorEligible", function(original, run, room)
           local captured = chaosRooms[room]
+          if directlyGeneratingChaosRoom == room and run == CurrentRun then
+            -- Explicit generation bypasses the captured chance only; the
+            -- original native eligibility owner still checks progression.
+            return original(run, room)
+          end
           if not chaosAvailable() or room.ForceSecretDoor or not liveFrame(captured)
               or run ~= CurrentRun or room ~= CurrentRun.CurrentRoom then return original(run, room) end
           -- Zero suppresses uncommitted Hero force before its native owner can
@@ -5522,7 +5528,154 @@ if __MacGamingTrainerV1 == nil then
       for family, value in pairs(M.gatheringProbabilities) do result[family] = value end
       return result
     end
-    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
+
+    -- Session-only observed authority. A new room, Hero, map, route or
+    -- reservation invalidates the outstanding token before native mutation.
+    local chaosObservation, chaosSerial = nil, 0
+    local chaosGenerated = setmetatable({}, { __mode = "k" })
+    local chaosUnavailable = "hades2.chaosGate.unavailable."
+    local function inspectChaos()
+      local owner = M.runtimeOwners.roomContext()
+      if M.terminalActionUnknown or owner == nil or type(MapState) ~= "table"
+          or type(MapState.ActiveObstacles) ~= "table" or type(CurrentRun) ~= "table"
+          or type(CurrentRun.CurrentRoom) ~= "table" then
+        return nil, chaosUnavailable .. "scene"
+      end
+      local room = owner.room
+      if MapState.HostilePolymorph or (type(ScreenState) == "table" and ScreenState.InTransition)
+          or next(ActiveScreens or {}) ~= nil or room ~= CurrentRun.CurrentRoom then
+        return nil, chaosUnavailable .. "scene"
+      end
+      if not functionsPresent(nativeFunctions.chaos)
+          or not functionsPresent({ "IsGameStateEligible", "HasHeroTraitValue", "SetupHarvestPoints" })
+          or type(ObstacleData) ~= "table" or type(ObstacleData.SecretDoor) ~= "table"
+          or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
+        return nil, chaosUnavailable .. "native"
+      end
+      if chaosGenerated[room] or room.ForceSecretDoor or room.SecretDoorHealthCost ~= nil then
+        return nil, chaosUnavailable .. "existing"
+      end
+      for _, object in pairs(MapState.ActiveObstacles) do
+        if type(object) == "table" and object.Name == "SecretDoor" then
+          return nil, chaosUnavailable .. "existing"
+        end
+      end
+      for _, door in pairs(MapState.OfferedExitDoors or {}) do
+        if type(door) == "table" and (door.Name == "SecretDoor"
+            or type(door.Room) == "table" and door.Room.RoomSetName == "Chaos") then
+          return nil, chaosUnavailable .. "existing"
+        end
+      end
+      local regular = IsGameStateEligible(room, room.SecretDoorRequirements or RoomData.BaseRoom.SecretDoorRequirements)
+      local forced = HasHeroTraitValue("ForceSecretDoor")
+      local forcedRules = type(NamedRequirementsData) == "table" and NamedRequirementsData.ForceSecretDoorRequirements or nil
+      local forcedEligible = forced and type(NamedRequirementsData) == "table"
+        and IsGameStateEligible(room, forcedRules)
+      if not regular and not forcedEligible then return nil, chaosUnavailable .. "progression" end
+      if not chaosDestinationAvailable(CurrentRun, room) then return nil, chaosUnavailable .. "route" end
+      local availablePoints = GetIdsByType({ Name = "SecretPoint" })
+      if type(availablePoints) ~= "table" then return nil, chaosUnavailable .. "placement" end
+      local point
+      for _, id in ipairs(availablePoints) do
+        local occupant = MapState.ActiveObstacles[id]
+        if finite(id) and id > 0 and (occupant == nil or occupant.Name == "SecretPoint") then
+          point = id
+          break
+        end
+      end
+      if point == nil then return nil, chaosUnavailable .. "placement" end
+      return {
+        session = SessionState, run = CurrentRun, hero = owner.hero,
+        room = room, map = MapState, roomName = room.Name,
+        biome = room.RoomSetName, point = point,
+        forceNextRoom = ForceNextRoom, forced = forced,
+        runDepth = CurrentRun.RunDepthCache, roomHistory = CurrentRun.RoomHistory,
+        roomHistorySize = type(CurrentRun.RoomHistory) == "table" and #CurrentRun.RoomHistory or 0,
+      }
+    end
+    local function sameChaosTarget(left, right)
+      if left == nil or right == nil then return false end
+      for _, key in ipairs({
+        "session", "run", "hero", "room", "map", "roomName", "biome", "point",
+        "forceNextRoom", "forced", "runDepth", "roomHistory", "roomHistorySize",
+      }) do
+        if left[key] ~= right[key] then return false end
+      end
+      return true
+    end
+    local function observeChaos()
+      local ok, target, reason = pcall(inspectChaos)
+      if not ok then target, reason = nil, chaosUnavailable .. "native" end
+      if target == nil then chaosObservation = nil; return { available = false, reason = reason } end
+      if sameChaosTarget(chaosObservation, target) then target.token = chaosObservation.token
+      else chaosSerial = chaosSerial + 1; target.token = M.traitInventoryGeneration .. ":chaos:" .. tostring(chaosSerial) end
+      chaosObservation = target
+      return { available = true, scopeToken = target.token }
+    end
+    local function prepareChaos(params)
+      local previous = chaosObservation
+      local target, reason = inspectChaos()
+      if type(params.scopeToken) ~= "string" or previous == nil or
+          params.scopeToken ~= previous.token or not sameChaosTarget(previous, target) then
+        error(reason or chaosUnavailable .. "stale")
+      end
+      return target
+    end
+    local function generateChaos(record, target)
+      local current, reason = inspectChaos()
+      if not sameChaosTarget(target, current) then
+        record.status = "failed"; record.error = reason or chaosUnavailable .. "stale"
+        return nil, "failed"
+      end
+      -- The game source combines gate generation with unrelated facilities.
+      -- Isolate the one native branch during this invocation and restore
+      -- everything, including on an exception. No future-room chance changes.
+      local room, map, id = target.room, target.map, target.point
+      local oldChance, oldAnomaly = room.SecretChanceSuccess, room.AnomalyDoorChanceSuccess
+      local originalIds, originalHarvest = GetIdsByType, SetupHarvestPoints
+      local seen = {}
+      for doorId in pairs(map.OfferedExitDoors or {}) do seen[doorId] = true end
+      local function onlySecretPoint(args)
+        if type(args) == "table" and args.Name == "ChallengeSwitchBase" then return {} end
+        if type(args) == "table" and args.Name == "SecretPoint" then return { id } end
+        return originalIds(args)
+      end
+      directlyGeneratingChaosRoom = room
+      room.SecretChanceSuccess = true
+      room.AnomalyDoorChanceSuccess = false
+      GetIdsByType, SetupHarvestPoints = onlySecretPoint, function() end
+      local ok, failure = pcall(HandleSecretSpawns, CurrentRun)
+      if GetIdsByType == onlySecretPoint then GetIdsByType = originalIds end
+      SetupHarvestPoints = originalHarvest
+      room.SecretChanceSuccess, room.AnomalyDoorChanceSuccess = oldChance, oldAnomaly
+      directlyGeneratingChaosRoom = nil
+      if not ok then error(failure) end
+      if SessionState ~= target.session or CurrentRun ~= target.run
+          or CurrentRun.Hero ~= target.hero or CurrentRun.CurrentRoom ~= room
+          or MapState ~= map then error("Native Chaos source room changed") end
+      local created, count
+      count = 0
+      for doorId, door in pairs(map.OfferedExitDoors or {}) do
+        if not seen[doorId] and type(door) == "table"
+            and type(door.Room) == "table" and door.Room.RoomSetName == "Chaos" then
+          count = count + 1
+          created = door
+        end
+      end
+      if count ~= 1 or not room.ForceSecretDoor or type(created) ~= "table"
+          or not finite(created.ObjectId) or not finite(created.HealthCost)
+          or created.HealthCost < 0 or room.SecretDoorHealthCost ~= created.HealthCost
+          or room.ExitDoorRooms[created.ObjectId] ~= created.Room.Name
+          or not created.Room.UsePreviousRoomSet or not created.Room.PauseBiomeState
+          or type(map.ActiveObstacles[created.ObjectId]) ~= "table"
+          or created.OnUsedFunctionName ~= "AttemptUseDoor" then
+        error("Native Chaos gate was not registered as an interactable exit")
+      end
+      chaosGenerated[room] = true
+      chaosObservation = nil
+      return created.ObjectId, "completed"
+    end
+    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate, observeChaos = observeChaos, prepareChaos = prepareChaos, generateChaos = generateChaos }
   end)()
 
   runtimeState.forceRerolls = (function()
@@ -7875,6 +8028,7 @@ if __MacGamingTrainerV1 == nil then
       gatheringProbabilities = runtimeState.roomGeneration.snapshot(),
       chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
       gatheringTargets = runtimeState.roomGeneration.observe(),
+      chaosGateTarget = runtimeState.roomGeneration.observeChaos(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
@@ -10088,6 +10242,7 @@ if __MacGamingTrainerV1 == nil then
       advance_trait_lifecycle = { "session", "run", "hero" },
       open_special_choice = { "session", "run", "hero" },
       generate_gathering = { "session", "run", "hero", "room", "map" },
+      generate_chaos_gate = { "session", "run", "hero", "room", "map" },
       mature_garden = { "session", "gameState", "gardenPlots", "run", "hero", "room", "map" },
       acquire_chaos_pair = { "session", "run", "hero" },
       spawn_reward = function(context)
@@ -10111,6 +10266,7 @@ if __MacGamingTrainerV1 == nil then
       advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
       generate_gathering = { "family", "scopeToken" },
+      generate_chaos_gate = { "scopeToken" },
       mature_garden = { "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
       spawn_reward = { "reward", "rarity", "level" },
@@ -10939,6 +11095,12 @@ if __MacGamingTrainerV1 == nil then
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
+    end
+    if command == "generate_chaos_gate" then
+      local target
+      return actionLedger.run(command, params,
+        function(record) return runtimeState.roomGeneration.generateChaos(record, target) end,
+        function() target = runtimeState.roomGeneration.prepareChaos(params) end)
     end
     if command == "generate_gathering" then
       local target
