@@ -8,14 +8,17 @@ RoomData.BaseRoom.WellShopRequirements = { allow = true }
 RoomData.BaseRoom.SurfaceShopRequirements = { allow = true }
 ObstacleData.WellShop = {
   Name = 'WellShop', OnUsedFunctionName = 'AttemptUseChallengeSwitch',
+  AvailableUseText = 'UseWell_Unlocked',
   ChallengeSwitchUseFunctionName = 'UseWellShop',
 }
 ObstacleData.SurfaceShop = {
   Name = 'SurfaceShop', OnUsedFunctionName = 'AttemptUseChallengeSwitch',
+  AvailableUseText = 'UseWell_Unlocked',
   ChallengeSwitchUseFunctionName = 'ShowSurfaceShopScreen',
 }
 ObstacleData.SellTraitShop = {
   Name = 'SellTraitShop', OnUsedFunctionName = 'AttemptUseChallengeSwitch',
+  AvailableUseText = 'UseTraitShop_Unlocked',
   ChallengeSwitchUseFunctionName = 'OpenSellTraitMenu',
 }
 
@@ -43,6 +46,10 @@ SetupObstacle = function(obj)
   MapState.ActiveObstacles[obj.ObjectId] = obj
 end
 SetAnimation = function() end
+RefreshUseButton = function() end
+PlaySound = function() end
+CreateAnimation = function() end
+CheckRoomExitsReady = function(room) return room.ExitsUnlocked and not room.BlockExits end
 FillInShopOptions = function(args)
   nativeShopStock = nativeShopStock + 1
   local name = args.StoreData == StoreData.RoomShop and 'charon' or 'hermes'
@@ -131,5 +138,7 @@ CreateRoom = function(data,args)
   room.WellShopChanceSuccess = RandomChance(room.WellShopSpawnChance or RoomData.BaseRoom.WellShopSpawnChance)
   room.SurfaceShopChanceSuccess = RandomChance(room.SurfaceShopSpawnChance or RoomData.BaseRoom.SurfaceShopSpawnChance)
   room.SellShopChanceSuccess = RandomChance(room.SellShopSpawnChance or 0)
+  room.ExitsUnlocked = true
+  room.ActiveEncounters = {}
   return room
 end
