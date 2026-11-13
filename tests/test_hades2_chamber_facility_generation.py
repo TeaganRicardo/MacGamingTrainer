@@ -70,6 +70,7 @@ assert(reply.applied and reply.actionOutcome=='completed' and nativeSpawns==1)
 assert(nativeShopStock==1 and #source.Store.StoreOptions==2)
 assert(source.Store.StoreOptions[1].Name=='charonPotion')
 assert(source.WellShop.ObjectId==211 and IsUseable({Id=211}))
+assert(source.WellShop.ReadyToUse and source.WellShop.UseText==source.WellShop.AvailableUseText)
 assert(MapState.ActiveObstacles[211]==source.WellShop)
 assert(source.WellShop.ChallengeSwitchUseFunctionName=='UseWellShop')
 assert(source.ForceWellShop and CurrentRun.LastWellShopDepth==CurrentRun.RunDepthCache)
@@ -95,6 +96,7 @@ assert(option('shrine') and not option('well') and not option('purging'))
 local reply=generate('shrine','shrine-1')
 assert(reply.applied and nativeSpawns==1 and nativeShopStock==1)
 assert(source.SurfaceShop.ObjectId==211 and IsUseable({Id=211}))
+assert(source.SurfaceShop.ReadyToUse and source.SurfaceShop.UseText==source.SurfaceShop.AvailableUseText)
 assert(source.SurfaceShop.ChallengeSwitchUseFunctionName=='ShowSurfaceShopScreen')
 assert(source.Store.StoreOptions[1].Name=='hermesPotion')
 CurrentRun.Hero.Money=100
@@ -110,11 +112,29 @@ assert(option('purging') and not option('well') and not option('shrine'))
 local reply=generate('purging','purge-1')
 assert(reply.applied and nativeSpawns==1 and nativeSellMenus==0)
 assert(source.SellTraitShop.ObjectId==211 and IsUseable({Id=211}))
+assert(source.SellTraitShop.ReadyToUse and source.SellTraitShop.UseText==source.SellTraitShop.AvailableUseText)
 assert(source.SellTraitShop.ChallengeSwitchUseFunctionName=='OpenSellTraitMenu')
 assert(#source.SellOptions==1 and source.SellOptions[1].Name=='ZeusBoon')
 OpenSellTraitMenu()
 assert(nativeSellMenus==1)
 assert(source.SellShopChanceSuccess and source.ForceSellShop)
+print('chamber_facility_ok')
+""",
+r"""
+local source=room({WellShopSpawnChance=.5},.95)
+local before=assert(option('well'))
+source.ExitsUnlocked=false
+assert(not option('well'))
+assert(not pcall(M.dispatch,'generate_chamber_facility',{
+ facility='well',scopeToken=before.scopeToken,requestId='early-unlock',
+}))
+assert(nativeSpawns==0 and nativeShopStock==0)
+source.ExitsUnlocked=true
+source.BlockExits=true
+assert(not option('well'))
+source.BlockExits=false
+local reply=generate('well','after-clear')
+assert(reply.applied and source.WellShop.ReadyToUse)
 print('chamber_facility_ok')
 """,
 r"""
