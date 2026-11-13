@@ -84,7 +84,6 @@ shared_labels = {
     "hades.catalog": "hades2.spawn.exactBoons",
     "hades.exactSource": "hades2.spawn.exactSource",
     "hades.selectTrait": "hades2.spawn.exactTarget",
-    "hades.chaosPair": "hades2.spawn.chaosPair",
     "hades.chaosBlessing": "hades2.spawn.chaosBlessing",
     "hades.chaosCurse": "hades2.spawn.chaosCurse",
     "hades.cancelCurse": "hades2.traits.chaos.cancelPair",
@@ -451,5 +450,28 @@ assert hades_catalog_view.count("Text(itemTitle(entry))") == 3
 assert 'if options.isEmpty { return "Common" }' not in hades_model_source
 assert 'func addTrait(_ trait:' not in hades_model_source
 assert 'func addChaosPair(blessing:' not in hades_model_source
+
+
+# #706/#717: the inline feedback must visibly name the automatically selected
+# rarity even at the compact header width. Keep the full explanation in help.
+for language, adjusted, game_controlled in (
+    ("zh-CN", "自动 →", "游戏决定"),
+    ("en", "Auto →", "Game-defined"),
+):
+    hades2_presentation = hades2_labels(language)
+    assert hades_labels["hades.acquisition.rarityAdjustedCompact"][language] == adjusted
+    assert hades_labels["hades.acquisition.gameControlledCompact"][language] == game_controlled
+    assert hades2_presentation["hades2.acquisition.adjustedRarityCompact"] == adjusted
+    assert hades2_presentation["hades2.acquisition.gameControlledCompact"] == game_controlled
+for path, adjusted, controlled in (
+    ("Sources/Hades/HadesTrainerView.swift",
+     "hades.acquisition.rarityAdjustedCompact", "hades.acquisition.gameControlledCompact"),
+    ("Sources/Hades2/Hades2View.swift",
+     "hades2.acquisition.adjustedRarityCompact", "hades2.acquisition.gameControlledCompact"),
+):
+    view_source = (ROOT / path).read_text()
+    assert 'text("' + adjusted + '") + " " +' in view_source, path
+    assert 'text("' + controlled + '")' in view_source, path
+
 
 print("cross_game_ui_semantics_ok")

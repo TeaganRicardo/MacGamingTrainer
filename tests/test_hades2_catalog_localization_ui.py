@@ -175,6 +175,9 @@ assert exact_surface.count('Picker(') >= 2
 assert 'text("hades2.spawn.exactSource")' in exact_surface
 assert 'text("hades2.spawn.exactTarget")' in exact_surface
 assert 'selectExactSource' in exact_surface
+# Catalog identity/rarity changes must reactivate the selected acquisition target.
+assert '.onChange(of: model.nativeRarityOrder)' in exact_surface
+assert '.onChange(of: model.exactBoonOptions.map { $0.id + ":" + $0.rarities.joined(separator: ",") })' in exact_surface
 assert 'exactItemSelection' in exact_surface
 assert '"hades2.spawn.exactSource": "来源"' in zh_presentation
 assert '"hades2.spawn.exactSource": "Source"' in en_presentation
@@ -194,16 +197,16 @@ assert '$0.acquisitionMode == "chaosCurse"' in view
 assert 'private func repairChaosPairSelections()' in view
 
 chaos_pair_surface = exact_surface[
-    exact_surface.index('hades2.spawn.chaosPair'):
-    exact_surface.index('hades2.spawn.exactSource')
+    exact_surface.index('TrainerDualInlinePickerLayout('):
+    exact_surface.index('text("hades2.spawn.exactSource")')
 ]
 assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing)' in chaos_pair_surface
 assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse)' in chaos_pair_surface
 assert 'model.acquireChaosPair(' in chaos_pair_surface
 assert chaos_pair_surface.count('TrainerSecondaryActionButton(') == 1
 assert 'title: text("hades2.spawn.acquire")' in chaos_pair_surface
-assert '"hades2.spawn.chaosPair": "卡俄斯配对"' in zh_presentation
-assert '"hades2.spawn.chaosPair": "Chaos Pair"' in en_presentation
+assert '"hades2.spawn.chaosPair"' not in zh_presentation
+assert '"hades2.spawn.chaosPair"' not in en_presentation
 assert '"hades2.spawn.chaosBlessing": "祝福"' in zh_presentation
 assert '"hades2.spawn.chaosBlessing": "Blessing"' in en_presentation
 assert '"hades2.spawn.chaosCurse": "诅咒"' in zh_presentation

@@ -1453,60 +1453,55 @@ struct Hades2TrainerView: View {
     /// Session-only settings for the currently active acquisition target.
     /// Neither the source nor the displayed rarity is the natural-offer policy.
     private var acquisitionSettingsRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades2.acquisition.rarity"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades2.acquisition.rarity"), selection: Binding(
-                        get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
-                        set: { model.selectAcquisitionRarity($0) }
-                    )) {
-                        if !model.acquisitionAllowsCallerRarity {
-                            Text(text("hades2.acquisition.gameControlled")).tag("")
-                        }
-                        ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
-                            Text(traitRarityLabel(rarity)).tag(rarity)
-                        }
+        HStack(spacing: 6) {
+            Text(text("hades2.acquisition.level"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            TrainerNumberField(
+                text: $model.acquisitionLevel,
+                accessibilityLabel: text("hades2.acquisition.level"),
+                accessibilityIdentifier: "hades2.acquisition.level",
+                width: 76,
+                enabled: model.acquisitionSupportsLevel,
+                onCommit: { value in
+                    guard let level = Int(value.text), (1...999_999).contains(level) else {
+                        return value.rejected(message: text("hades2.acquisition.invalidLevel"))
                     }
-                    .labelsHidden()
-                    .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+                    return String(level)
                 }
+            )
+            .id(model.acquisitionTarget.rawValue + "|" + model.acquisitionTargetDescription)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades2.acquisition.level"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    TrainerNumberField(
-                        text: $model.acquisitionLevel,
-                        accessibilityLabel: text("hades2.acquisition.level"),
-                        accessibilityIdentifier: "hades2.acquisition.level",
-                        width: 76,
-                        enabled: model.acquisitionSupportsLevel,
-                        onCommit: { value in
-                            guard let level = Int(value.text), (1...999_999).contains(level) else {
-                                return value.rejected(message: text("hades2.acquisition.invalidLevel"))
-                            }
-                            return String(level)
-                        }
-                    )
-                    .id(model.acquisitionTarget.rawValue + "|" + model.acquisitionTargetDescription)
+            Text(text("hades2.acquisition.rarity"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades2.acquisition.rarity"), selection: Binding(
+                get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
+                set: { model.selectAcquisitionRarity($0) }
+            )) {
+                if !model.acquisitionAllowsCallerRarity {
+                    Text(text("hades2.acquisition.gameControlled")).tag("")
                 }
-                Spacer(minLength: 0)
-                Text(model.acquisitionTarget == .chaos
-                     ? text("hades2.spawn.chaosPair") : text("hades2.spawn.exactBoons"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1)
+                ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
+                    Text(traitRarityLabel(rarity)).tag(rarity)
+                }
             }
+            .labelsHidden()
+            .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+
             if model.acquisitionRarityAdjustment != .none {
                 let key = model.acquisitionAllowsCallerRarity
-                    ? "hades2.acquisition.adjustedRarity"
-                    : "hades2.acquisition.gameControlledHint"
+                    ? "hades2.acquisition.adjustedRarity" : "hades2.acquisition.gameControlledHint"
                 Text(model.acquisitionAllowsCallerRarity
-                     ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
-                     : text(key))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                     ? text("hades2.acquisition.adjustedRarityCompact") + " " + traitRarityLabel(model.acquisitionRarity)
+                     : text("hades2.acquisition.gameControlledCompact"))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 88, alignment: .leading)
+                    .help(model.acquisitionAllowsCallerRarity
+                        ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
+                        : text(key))
                     .accessibilityIdentifier("hades2.acquisition.adjustment")
             }
         }
@@ -1523,42 +1518,39 @@ struct Hades2TrainerView: View {
             acquisitionSettingsRow
         } rows: {
             VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text("hades2.spawn.chaosPair"))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades2.spawn.chaosBlessing"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
-                            if chaosBlessingOptions.isEmpty {
-                                Text(text("hades2.spawn.noItems")).tag("")
-                            }
-                            ForEach(chaosBlessingOptions) { option in
-                                Text(exactItemLabel(option)).tag(option.id)
-                            }
+                TrainerDualInlinePickerLayout(
+                    minimumPickerWidth: 144,
+                    maximumPickerWidth: theme.pickerActionMaxWidth,
+                    minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
+                    minimumActionWidth: theme.compactActionWidth
+                ) {
+                    Text(text("hades2.spawn.chaosBlessing"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
+                        if chaosBlessingOptions.isEmpty {
+                            Text(text("hades2.spawn.noItems")).tag("")
                         }
-                        .labelsHidden()
-                        .trainerPicker(.expanding, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
+                        ForEach(chaosBlessingOptions) { option in
+                            Text(exactItemLabel(option)).tag(option.id)
+                        }
                     }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades2.spawn.chaosCurse"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
-                            if chaosCurseOptions.isEmpty {
-                                Text(text("hades2.spawn.noItems")).tag("")
-                            }
-                            ForEach(chaosCurseOptions) { option in
-                                Text(exactItemLabel(option)).tag(option.id)
-                            }
+                    Text(text("hades2.spawn.chaosCurse"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
+                        if chaosCurseOptions.isEmpty {
+                            Text(text("hades2.spawn.noItems")).tag("")
                         }
-                        .labelsHidden()
-                        .trainerPicker(.expanding, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
+                        ForEach(chaosCurseOptions) { option in
+                            Text(exactItemLabel(option)).tag(option.id)
+                        }
                     }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
 
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
                     TrainerSecondaryActionButton(
@@ -1575,49 +1567,48 @@ struct Hades2TrainerView: View {
                         )
                     }
                 }
-            }
-            .onAppear { repairChaosPairSelections() }
-            .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
+                .onAppear { repairChaosPairSelections() }
+                .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades2.spawn.exactSource"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Picker(
-                            text("hades2.spawn.exactSource"),
-                            selection: Binding(
-                                get: { exactSourceSelection },
-                                set: { selectExactSource($0) }
-                            )
-                        ) {
-                            if exactBoonSourceGroups.isEmpty {
-                                Text(text("hades2.spawn.noItems")).tag("")
-                            }
-                            ForEach(exactBoonSourceGroups) { group in
-                                Text(group.title).tag(group.id)
-                            }
+                TrainerDualInlinePickerLayout(
+                    minimumPickerWidth: 144,
+                    maximumPickerWidth: theme.pickerActionMaxWidth,
+                    minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
+                    minimumActionWidth: theme.compactActionWidth
+                ) {
+                    Text(text("hades2.spawn.exactSource"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Picker(
+                        text("hades2.spawn.exactSource"),
+                        selection: Binding(
+                            get: { exactSourceSelection },
+                            set: { selectExactSource($0) }
+                        )
+                    ) {
+                        if exactBoonSourceGroups.isEmpty {
+                            Text(text("hades2.spawn.noItems")).tag("")
                         }
-                        .labelsHidden()
-                        .trainerPicker(.expanding, state: model.canAcquireExactReward && !exactBoonSourceGroups.isEmpty ? .interactive : .unavailable)
+                        ForEach(exactBoonSourceGroups) { group in
+                            Text(group.title).tag(group.id)
+                        }
                     }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: model.canAcquireExactReward && !exactBoonSourceGroups.isEmpty ? .interactive : .unavailable)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(text("hades2.spawn.exactTarget"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.exactTarget"), selection: exactItemSelection) {
-                            if selectedExactItems.isEmpty || exactItemSelection.wrappedValue.isEmpty {
-                                Text(text("hades2.spawn.noItems")).tag("")
-                            }
-                            ForEach(selectedExactItems) { option in
-                                Text(exactItemLabel(option)).tag(option.id)
-                            }
+                    Text(text("hades2.spawn.exactTarget"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Picker(text("hades2.spawn.exactTarget"), selection: exactItemSelection) {
+                        if selectedExactItems.isEmpty || exactItemSelection.wrappedValue.isEmpty {
+                            Text(text("hades2.spawn.noItems")).tag("")
                         }
-                        .labelsHidden()
-                        .trainerPicker(.expanding, state: model.canAcquireExactReward && !selectedExactItems.isEmpty ? .interactive : .unavailable)
+                        ForEach(selectedExactItems) { option in
+                            Text(exactItemLabel(option)).tag(option.id)
+                        }
                     }
+                    .labelsHidden()
+                    .trainerPicker(.layoutAllocated, state: model.canAcquireExactReward && !selectedExactItems.isEmpty ? .interactive : .unavailable)
 
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                     TrainerSecondaryActionButton(
@@ -1630,15 +1621,16 @@ struct Hades2TrainerView: View {
                         _ = model.acquireExactBoon(model.selectedExactBoon)
                     }
                 }
-            }
-            .onAppear { repairExactSourceSelection() }
-            .onChange(of: exactSearch) { _, _ in repairExactSourceSelection() }
-            .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairExactSourceSelection() }
+                .onAppear { repairExactSourceSelection() }
+                .onChange(of: exactSearch) { _, _ in repairExactSourceSelection() }
+                .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairExactSourceSelection() }
             }
         }
-        .onChange(of: model.selectedExactBoon) { _, _ in model.activateAcquisition(.exact) }
         .onChange(of: model.selectedChaosBlessing) { _, _ in model.activateAcquisition(.chaos) }
         .onChange(of: model.selectedChaosCurse) { _, _ in model.activateAcquisition(.chaos) }
+        .onChange(of: model.selectedExactBoon) { _, _ in model.activateAcquisition(.exact) }
+        .onChange(of: model.acquisitionRarity) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
+        .onChange(of: model.acquisitionLevel) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
         .onChange(of: model.nativeRarityOrder) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
         .onChange(of: model.exactBoonOptions.map { $0.id + ":" + $0.rarities.joined(separator: ",") }) { _, _ in
             model.activateAcquisition(model.acquisitionTarget)
