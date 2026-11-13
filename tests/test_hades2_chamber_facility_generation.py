@@ -73,7 +73,7 @@ assert(source.WellShop.ObjectId==211 and IsUseable({Id=211}))
 assert(MapState.ActiveObstacles[211]==source.WellShop)
 assert(source.WellShop.ChallengeSwitchUseFunctionName=='UseWellShop')
 assert(source.ForceWellShop and CurrentRun.LastWellShopDepth==CurrentRun.RunDepthCache)
-assert(source.WellShopChanceSuccess==false and source.AnomalyDoorChanceSuccess==false)
+assert(source.WellShopChanceSuccess==false and not source.AnomalyDoorChanceSuccess)
 assert(unrelatedChallenges==0 and setupHarvestCalls==0)
 CurrentRun.Hero.Money=100
 UseWellShop(source.Store.StoreOptions[1])
