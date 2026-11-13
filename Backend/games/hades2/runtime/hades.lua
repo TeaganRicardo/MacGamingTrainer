@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 134 then
+if previousModule and previousModule.revision ~= 135 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 134 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 134,
+    version = 1, revision = 135,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5699,6 +5699,18 @@ if __MacGamingTrainerV1 == nil then
         field = "SellTraitShop", force = "ForceSellShop", chance = "SellShopChanceSuccess",
         configuredChance = "SellShopSpawnChance", native = "IsSellTraitShopEligible",
         requirements = "SellShopRequirements", use = "OpenSellTraitMenu", requiresSell = true },
+      { id = "trove", labelKey = "hades2.facility.trove", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "TimeChallengeSwitchRequirements", defaultRequirements = "TimeChallengeSwitchRequirements",
+        challenge = "TimeChallengeOptions" },
+      { id = "sigil", labelKey = "hades2.facility.sigil", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "PerfectClearSwitchRequirements", defaultRequirements = "PerfectClearSwitchRequirements",
+        challenge = "PerfectClearOptions" },
+      { id = "monument", labelKey = "hades2.facility.monument", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "EliteSwitchRequirements", defaultRequirements = "EliteSwitchRequirements",
+        challenge = "EliteChallengeOptions" },
     }
     local facilityById = {}
     for _, entry in ipairs(facilityDefinitions) do facilityById[entry.id] = entry end
@@ -5709,6 +5721,12 @@ if __MacGamingTrainerV1 == nil then
       "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
       "IsWellShopEligible", "IsSurfaceShopEligible", "IsSellTraitShopEligible",
       "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
+    }
+    local challengeFunctions = {
+      "GetRandomValue", "IsTimeChallengeForced", "IsPerfectClearChallengeForced",
+      "IsEliteChallengeForced", "GenerateEncounter", "IsHorizontallyFlipped",
+      "Attach", "CreateTextBox", "ModifyTextBox", "GetRunDepth",
+      "GetTotalHeroTraitValue", "round", "RandomInt", "SetThingProperty", "SpawnObstacle",
     }
     local function inspectFacility(kind)
       local definition = facilityById[kind]
@@ -5729,6 +5747,8 @@ if __MacGamingTrainerV1 == nil then
       if not functionsPresent(facilityNativeFunctions)
           or definition.requiresStore and not functionsPresent({ "RunShopGeneration", "FillInShopOptions" })
           or definition.requiresSell and not functionsPresent({ "IsGodTrait", "GenerateSellTraitValues" })
+          or definition.challenge and not functionsPresent(challengeFunctions)
+          or definition.challenge and (type(EncounterSets) ~= "table" or type(EncounterData) ~= "table")
           or type(ObstacleData) ~= "table" or type(ObstacleData[definition.field]) ~= "table"
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
         return nil, "hades2.facility.unavailable.native"
@@ -5736,7 +5756,8 @@ if __MacGamingTrainerV1 == nil then
       local authored = RoomData[room.Name] or room
       if definition.requiresStore and (room.Store ~= nil or room.StoreDataName ~= nil
           or room.ChosenRewardType == "Shop") then return nil, "hades2.facility.unavailable.existing" end
-      if type(room[definition.field]) == "table" or room[definition.force] then
+      if type(room[definition.field]) == "table"
+          or definition.force ~= nil and room[definition.force] then
         return nil, "hades2.facility.unavailable.existing"
       end
       -- A 0.0 authored chance is an explicit room/biome exclusion, separate
@@ -5745,9 +5766,18 @@ if __MacGamingTrainerV1 == nil then
       local spawnChance = room[definition.configuredChance]
       if spawnChance == nil and definition.id == "well" then
         spawnChance = RoomData.BaseRoom.WellShopSpawnChance
+      elseif spawnChance == nil and definition.challenge then
+        spawnChance = RoomData.BaseRoom.ChallengeSpawnChance
       end
       if not finite(spawnChance) or spawnChance <= 0 then return nil, "hades2.facility.unavailable.route" end
-      local requirements = room[definition.requirements]
+      if definition.challenge then
+        local baseRequirements = authored.ChallengeSpawnRequirements
+          or RoomData.BaseRoom.ChallengeSpawnRequirements
+        if baseRequirements ~= nil and not IsGameStateEligible(room, baseRequirements) then
+          return nil, "hades2.facility.unavailable.progression"
+        end
+      end
+      local requirements = authored[definition.requirements] or room[definition.requirements]
         or definition.defaultRequirements and RoomData.BaseRoom[definition.defaultRequirements]
       if requirements ~= nil and not IsGameStateEligible(room, requirements) then
         return nil, "hades2.facility.unavailable.progression"
@@ -5756,7 +5786,7 @@ if __MacGamingTrainerV1 == nil then
         local stock = type(StoreData) == "table"
           and type(StoreData[definition.id == "well" and "RoomShop" or "SurfaceShop"]) == "table"
         if not stock then return nil, "hades2.facility.unavailable.stock" end
-      else
+      elseif definition.requiresSell then
         local traitEligible = false
         for _, trait in ipairs(owner.hero.Traits or {}) do
           if type(trait) == "table" and trait.Rarity and type(trait.Name) == "string"
@@ -5766,6 +5796,26 @@ if __MacGamingTrainerV1 == nil then
           end
         end
         if not traitEligible then return nil, "hades2.facility.unavailable.stock" end
+      end
+      local variants
+      if definition.challenge then
+        variants = {}
+        for _, name in ipairs(EncounterSets[definition.challenge] or {}) do
+          local obstacle = ObstacleData[name]
+          if type(obstacle) == "table" and type(obstacle.EncounterOptionsName) == "string"
+              and (obstacle.Requirements == nil
+                or IsGameStateEligible(obstacle, obstacle.Requirements)) then
+            local encounters = room[obstacle.EncounterOptionsName]
+            if type(encounters) == "table" and next(encounters) ~= nil then
+              local valid = true
+              for _, encounterName in ipairs(encounters) do
+                if type(EncounterData[encounterName]) ~= "table" then valid = false; break end
+              end
+              if valid then variants[#variants + 1] = name end
+            end
+          end
+        end
+        if #variants == 0 then return nil, "hades2.facility.unavailable.encounter" end
       end
       local points = GetIdsByType({ Name = "ChallengeSwitchBase" })
       if type(points) ~= "table" then return nil, "hades2.facility.unavailable.placement" end
@@ -5805,6 +5855,7 @@ if __MacGamingTrainerV1 == nil then
         point = point, authored = authored, configuredChance = spawnChance,
         forceNextRoom = ForceNextRoom, depth = CurrentRun.RunDepthCache,
         store = room.Store,
+        challengeVariants = variants, challengeKey = variants and table.concat(variants, "|") or nil,
       }
     end
     local function sameFacility(left, right)
@@ -5812,7 +5863,7 @@ if __MacGamingTrainerV1 == nil then
       for _, key in ipairs({
         "id", "session", "run", "hero", "room", "map", "name",
         "biome", "point", "authored", "configuredChance",
-        "forceNextRoom", "depth", "store",
+        "forceNextRoom", "depth", "store", "challengeKey",
       }) do
         if left[key] ~= right[key] then return false end
       end
