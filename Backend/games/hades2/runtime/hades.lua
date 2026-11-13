@@ -5722,6 +5722,8 @@ if __MacGamingTrainerV1 == nil then
       "GetIdsByType", "HandleSecretSpawns", "IsGameStateEligible", "SetupObstacle",
       "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
       "IsWellShopEligible", "IsSurfaceShopEligible", "IsSellTraitShopEligible",
+      "IsTimeChallengeForced", "IsPerfectClearChallengeForced",
+      "IsEliteChallengeForced", "IsMetaRewardStandEligible",
       "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
       "CheckRoomExitsReady", "RefreshUseButton", "PlaySound", "CreateAnimation",
     }
@@ -5890,8 +5892,12 @@ if __MacGamingTrainerV1 == nil then
       end
       local room, definition, id = target.room, target.definition, target.point
       local savedChance, savedAnomaly = room[definition.chance], room.AnomalyDoorChanceSuccess
+      local savedOtherChallengeChance = room.ChallengeChanceSuccess
+      local originalMetaEligible = IsMetaRewardStandEligible
       local originalIds, originalHarvest = GetIdsByType, SetupHarvestPoints
       local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
+      local originalTime, originalPerfect, originalElite =
+        IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced
       local function pointLease(args)
         if type(args) == "table" and args.Name == "ChallengeSwitchBase" then return { id } end
         if type(args) == "table" and args.Name == "SecretPoint" then return {} end
@@ -5912,6 +5918,13 @@ if __MacGamingTrainerV1 == nil then
       local suppressHarvest = function() end
       room[definition.chance] = true
       room.AnomalyDoorChanceSuccess = false
+      -- The native spawn helper visits all challenge families after shops.
+      -- A failed selected shop must never create a different challenge.
+      room.ChallengeChanceSuccess = false
+      IsTimeChallengeForced = function() return false end
+      IsPerfectClearChallengeForced = function() return false end
+      IsEliteChallengeForced = function() return false end
+      IsMetaRewardStandEligible = function() return false end
       GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
       IsWellShopEligible = nativeEligible("well", originalWell)
       IsSurfaceShopEligible = nativeEligible("shrine", originalSurface)
@@ -5926,7 +5939,11 @@ if __MacGamingTrainerV1 == nil then
       if SetupHarvestPoints == suppressHarvest then SetupHarvestPoints = originalHarvest end
       IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible =
         originalWell, originalSurface, originalSell
+      IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
+        originalTime, originalPerfect, originalElite
+      IsMetaRewardStandEligible = originalMetaEligible
       room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
+      room.ChallengeChanceSuccess = savedOtherChallengeChance
       if not ok then error(failure) end
       if SessionState ~= target.session or CurrentRun ~= target.run
           or CurrentRun.Hero ~= target.hero or CurrentRun.CurrentRoom ~= room
