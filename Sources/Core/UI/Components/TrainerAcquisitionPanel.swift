@@ -33,22 +33,22 @@ struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
-            HStack {
+            HStack(spacing: 10) {
                 TrainerIconLabel(
                     title: title,
                     icon: icon,
                     tint: theme.accent,
                     emphasized: true
                 )
-                Spacer()
+                settings
+                Spacer(minLength: 0)
                 TrainerSearchField(
                     text: $search,
                     placeholder: searchPlaceholder,
                     clearLabel: clearLabel
                 )
-                .frame(maxWidth: 280)
+                .frame(minWidth: 128, maxWidth: 280)
             }
-            settings
             rows
         }
         .trainerPanel()
