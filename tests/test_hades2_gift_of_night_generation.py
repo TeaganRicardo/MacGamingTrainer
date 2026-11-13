@@ -75,6 +75,7 @@ local reply=M.dispatch('generate_chamber_facility',{
 })
 assert(reply.applied and reply.actionOutcome=='completed')
 assert(nativeRewardSpawns==1 and nativeSpawns==1 and nativeRewardDisplays==1)
+assert(nativeRewardPresentations==1)
 local stand=assert(source.MetaRewardStand)
 assert(stand.ObjectId==211 and MapState.ActiveObstacles[211]==stand)
 assert(stand.ChallengeSwitchUseFunctionName=='UseMetaRewardStand')
