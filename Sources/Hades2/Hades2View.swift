@@ -1348,7 +1348,7 @@ struct Hades2TrainerView: View {
         return TrainerLabeledControlRow(
             title: text("hades2.occurrence.title"),
             icon: Hades2WorkbenchIcon.occurrence,
-            tint: model.canApplyWorldAction ? theme.accent : theme.inactive,
+            tint: model.canSelectWorldOccurrence ? theme.accent : theme.inactive,
             emphasized: pending,
             layout: .pickerAction
         ) {
@@ -1374,7 +1374,7 @@ struct Hades2TrainerView: View {
             .labelsHidden()
             .trainerPicker(
                 .rowAction,
-                state: model.canApplyWorldAction && !pending && !model.occurrenceTargets.isEmpty
+                state: model.canSelectWorldOccurrenceTarget
                     ? .interactive : .unavailable
             )
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))

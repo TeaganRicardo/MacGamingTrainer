@@ -42,6 +42,8 @@ class HadesLuaTransport:
         self.focus_original = None
         self._tainted_pid = None
         self.tainted = False
+        self._cleanup_pending = False
+        self._cleanup_failure = None
 
     @property
     def tainted(self):
@@ -63,6 +65,8 @@ class HadesLuaTransport:
         )
 
     def attach(self, pid, executable):
+        if self.cleanup_pending:
+            self.detach()
         if self.tainted and self._tainted_pid == pid:
             raise failure('restart_required', 'restartRequired')
         if self.alive() and self.pid == pid:
@@ -95,9 +99,8 @@ class HadesLuaTransport:
                 self.addresses[name] = address
             self.tainted = False
             self._resume(time.monotonic() + 3)
-        except Exception:
-            self.detach()
-            raise
+        except Exception as exc:
+            self._rollback_failed_attach(exc)
 
     def stop(self, deadline):
         """Expose the transport's existing bounded stop to Core-owned helpers."""
@@ -160,6 +163,8 @@ class HadesLuaTransport:
         self.focus_original = None
 
     def _boundary(self):
+        if self.cleanup_pending:
+            raise self._quarantined_error()
         deadline = time.monotonic() + 3
         # The initial stop precedes target breakpoint, focus mutation, or
         # Lua execution. Keep its failure distinct from uncertain cleanup.
@@ -200,6 +205,8 @@ class HadesLuaTransport:
         raise failure('runtime_not_ready', 'runtimeNotReady')
 
     def execute(self, source, *, mutating=False):
+        if self.cleanup_pending:
+            raise self._quarantined_error()
         if self.tainted:
             raise failure('restart_required', 'restartRequired')
         payload = source.encode('utf-8')
@@ -278,18 +285,73 @@ class HadesLuaTransport:
                         detail = original + '; cleanup: ' + detail
                     raise failure('outcome_unknown', 'outcomeUnknown', detail) from error
 
-    def detach(self):
-        if self.alive():
-            self._stop(time.monotonic() + 3)
-            self._restore_focus()
-            self.target.DeleteAllBreakpoints()
-            error = self.process.Detach()
-            if error.Fail():
-                raise failure('detach_failed', 'detachFailed', str(error))
+    @property
+    def cleanup_pending(self):
+        return bool(getattr(self, '_cleanup_pending', False))
+
+    @property
+    def cleanup_failure(self):
+        return getattr(self, '_cleanup_failure', None)
+
+    def _quarantined_error(self):
+        failure_info = self.cleanup_failure
+        if failure_info:
+            stage, detail = failure_info
+            note = f'rollback {stage} failed (pid={self.pid} still attached): {detail}'
+        else:
+            note = f'pid={self.pid} cleanup pending'
+        return failure('detach_failed', 'detachFailed', note)
+
+    def _clear_cleanup_state(self):
+        self._cleanup_pending = False
+        self._cleanup_failure = None
+
+    def _record_cleanup_failure(self, stage, error):
+        detail = getattr(error, 'diagnostic', None) or str(error)
+        self._cleanup_pending = True
+        self._cleanup_failure = (stage, detail)
+        return detail
+
+    def _clear_attachment(self):
         self.process = None
         self.pid = None
         self.addresses = {}
         self.focus_original = None
+        self._clear_cleanup_state()
+
+    def _rollback_failed_attach(self, error):
+        """Release a failed attach without masking primary failure or dropping ownership."""
+        try:
+            self.detach()
+        except Exception as cleanup_error:
+            stage, detail = self.cleanup_failure or (
+                'detach', getattr(cleanup_error, 'diagnostic', None) or str(cleanup_error)
+            )
+            state_note = (f'pid={self.pid} still attached' if self.process is not None
+                          else 'cleanup incomplete')
+            note = f'rollback {stage} failed ({state_note}): {detail}'
+            if hasattr(error, 'diagnostic'):
+                error.diagnostic = f'{error.diagnostic}; {note}' if error.diagnostic else note
+            raise error from cleanup_error
+        raise error
+
+    def detach(self):
+        if self.alive():
+            stage = 'stop'
+            try:
+                self._stop(time.monotonic() + 3)
+                stage = 'restore_focus'
+                self._restore_focus()
+                stage = 'delete_breakpoints'
+                self.target.DeleteAllBreakpoints()
+                stage = 'lldb_detach'
+                error = self.process.Detach()
+                if error.Fail():
+                    raise failure('detach_failed', 'detachFailed', str(error))
+            except Exception as exc:
+                self._record_cleanup_failure(stage, exc)
+                raise
+        self._clear_attachment()
 
     def close(self):
         try:

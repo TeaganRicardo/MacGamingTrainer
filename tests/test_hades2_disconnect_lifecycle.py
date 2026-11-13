@@ -20,6 +20,8 @@ from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
 class NativeTransport:
     pid = None
     tainted = False
+    cleanup_pending = False
+    pending_resume_pid = None
 
     def __init__(self, outcome):
         self.outcome = outcome
@@ -32,18 +34,28 @@ class NativeTransport:
         self.pid = pid
         if self.outcome == "attach_release_failed":
             self.pid = None
+            self.cleanup_pending = True
+            self.pending_resume_pid = pid
             raise AdapterError("resume_failed", "hades2.error.resumeFailed",
                                diagnostic="OS resume denied", arguments=["OS resume denied"])
+        if self.outcome == "attach_rollback_lldb_failed":
+            self.cleanup_pending = True
+            raise AdapterError("incompatible", "hades2.error.unsupportedBuild",
+                               diagnostic="rollback lldb_detach failed")
 
     def detach(self):
-        if self.pid is None:
+        if self.pid is None and not self.cleanup_pending:
             return
         if self.outcome == "restore_failed":
             raise AdapterError("restore_failed", "hades2.error.focusNotRestored")
+        if self.outcome == "attach_rollback_lldb_failed":
+            raise AdapterError("detach_failed", "synthetic detach error")
         self.pid = None
-        if self.outcome == "resume_failed":
+        if self.outcome in ("resume_failed", "attach_release_failed"):
             raise AdapterError("resume_failed", "hades2.error.resumeFailed",
                                diagnostic="OS resume denied", arguments=["OS resume denied"])
+        self.cleanup_pending = False
+        self.pending_resume_pid = None
 
     def close(self):
         self.detach()
@@ -145,5 +157,46 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                     native.outcome = "success"
                     transport.close()
                     native.close()
+
+with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary:
+    for scenario in ("lldb_still_attached", "os_resume_pending"):
+        native = NativeTransport(
+            "attach_rollback_lldb_failed" if scenario == "lldb_still_attached" else "attach_release_failed",
+        )
+        sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
+        with patch.object(preparation, "DATA", Path(temporary) / scenario), patch.object(
+            _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
+        ), patch.object(preparation, "compatibility", return_value={
+            "version": "1.143476", "steam_build": "fixture", "warnings": [],
+        }), patch("games.hades2.adapter.subprocess.run", return_value=SimpleNamespace(
+            returncode=0, stdout="4242\n", stderr="",
+        )):
+            transport = Hades2LuaTransport()
+            adapter = Hades2Adapter(transport=transport)
+            try:
+                adapter.connect()
+            except AdapterError as error:
+                expected_code = "incompatible" if scenario == "lldb_still_attached" else "resume_failed"
+                assert error.code == expected_code, (scenario, error.code)
+            else:
+                raise AssertionError(f"{scenario} attach failure was suppressed")
+            assert transport.cleanup_pending is True
+            if scenario == "lldb_still_attached":
+                assert native.pid == transport.pid == 4242
+                assert adapter.runtime.cleanup_pending is True
+            else:
+                assert native.pid is None and transport.pid is None
+                assert transport.pending_resume_pid == 4242
+                assert adapter.runtime.cleanup_pending is True
+            # Once the transient cleanup blocker clears, adapter.disconnect() must finish recovery.
+            native.outcome = "success"
+            result = adapter.disconnect()
+            assert result["connected"] is False
+            assert native.pid is None and transport.pid is None
+            assert transport.cleanup_pending is False
+            assert transport.pending_resume_pid is None
+            assert "transport.detach" in sidecar.calls
+            transport.close()
+            native.close()
 
 print("hades2_disconnect_lifecycle_ok")

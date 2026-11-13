@@ -152,6 +152,14 @@ class Hades2ResidentSession:
         """Last acknowledged attachment; execution must still verify liveness."""
         return self.pid is not None
 
+    @property
+    def cleanup_pending(self):
+        return bool(getattr(self._transport, "cleanup_pending", False))
+
+    @property
+    def pending_resume_pid(self):
+        return getattr(self._transport, "pending_resume_pid", None)
+
     def allows_process_time_warp(self):
         """Whether the current resident generation makes Host Time Warp safe.
 

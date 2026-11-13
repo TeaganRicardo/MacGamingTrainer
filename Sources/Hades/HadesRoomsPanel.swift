@@ -219,7 +219,7 @@ struct HadesRoomsPanel: View {
         return TrainerLabeledControlRow(
             title: text("hades.occurrence.title"),
             icon: TrainerSemanticIcon.Context.characterReward,
-            tint: model.canMutate && model.canAcceptRuntimeAction ? theme.accent : theme.inactive,
+            tint: model.canSelectWorldOccurrence ? theme.accent : theme.inactive,
             emphasized: pending,
             layout: .pickerAction
         ) {
@@ -245,7 +245,7 @@ struct HadesRoomsPanel: View {
             .labelsHidden()
             .trainerPicker(
                 .rowAction,
-                state: model.canMutate && model.canAcceptRuntimeAction && !pending && !targets.isEmpty
+                state: model.canSelectWorldOccurrence && !pending && !targets.isEmpty
                     ? .interactive : .unavailable
             )
             TrainerSecondaryActionButton(

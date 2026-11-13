@@ -272,6 +272,8 @@ class Hades2LuaTransport:
         self.last_attach_profile = {}
         self.last_mailbox_profile = {}
         self._tainted = False
+        self.cleanup_pending = False
+        self.pending_resume_pid = None
         self._worker = _LLDBWorkerClient(on_state=self._adopt_state)
 
     def _adopt_state(self, state):
@@ -280,6 +282,11 @@ class Hades2LuaTransport:
         pid = state.get("pid")
         self.pid = pid if type(pid) is int and pid > 0 else None
         self._tainted = state.get("tainted") is True
+        self.cleanup_pending = state.get("cleanupPending") is True
+        pending_resume_pid = state.get("pendingResumePid")
+        self.pending_resume_pid = (
+            pending_resume_pid if type(pending_resume_pid) is int and pending_resume_pid > 0 else None
+        )
         duration = state.get("lastDuration")
         self.last_duration = float(duration) if type(duration) in (int, float) else 0.0
         expression = state.get("lastExpressionDuration")
@@ -322,6 +329,8 @@ class Hades2LuaTransport:
         if not self._worker.started:
             self.pid = None
             self._tainted = False
+            self.cleanup_pending = False
+            self.pending_resume_pid = None
             return
         self._call("transport.detach")
 
@@ -350,6 +359,9 @@ class Hades2LuaTransport:
     def close(self):
         self._worker.close()
         self.pid = None
+        self._tainted = False
+        self.cleanup_pending = False
+        self.pending_resume_pid = None
 
 
 class RemoteProcessTimeWarpController:

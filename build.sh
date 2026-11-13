@@ -54,7 +54,8 @@ python_runtime_field() {
 
 prepare_python_runtime() (
     set -e
-    local temporary=""
+    # Subshell scope keeps temporary visible to the EXIT trap after function return.
+    temporary=""
     trap 'if [[ -n "$temporary" ]]; then rm -f "$temporary"; fi' EXIT
     local arch="$1"
     local destination="$GENERATED_DIR/python-runtime/$arch"

@@ -300,7 +300,7 @@ class Hades2CommandMailbox:
     def close(self):
         if self._closed:
             return
-        self._closed = True
         if self._mapping is not None:
             self._call("MGTMailboxClose")
         self._release()
+        self._closed = True

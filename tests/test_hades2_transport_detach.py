@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 fake_lldb = types.SimpleNamespace(eStateInvalid=0, eStateStopped=5,
                                  eStateRunning=6, eStateExited=10, eStateDetached=9)
 with patch.dict(sys.modules, {"lldb": fake_lldb}), patch("subprocess.check_output", return_value=""):
+    from games.hades2 import transport as hades2_transport
     from games.hades2.transport import Hades2LuaTransport, TransportError
 
 
@@ -104,5 +105,201 @@ with patch("os.kill") as send_signal:
     transport.detach()
     send_signal.assert_not_called()
 assert transport.process is None and transport.pid is None
+
+# Failed attach rollback must preserve primary incompatible error, keep quarantined
+# ownership when cleanup stops/fails, reject mutations, and finish cleanup on retry.
+def make_attach_transport(*, triple="arm64-apple-macosx", uuid="expected-uuid", release_failed=False):
+    attaching = Hades2LuaTransport.__new__(Hades2LuaTransport)
+    proc = Process(state=fake_lldb.eStateStopped, release_failed=release_failed)
+    image = types.SimpleNamespace(GetUUIDString=lambda: uuid)
+    target = types.SimpleNamespace(
+        AttachToProcessWithID=lambda listener, pid, error: proc,
+        GetModuleAtIndex=lambda index: image,
+        GetTriple=lambda: triple,
+        DeleteAllBreakpoints=lambda: None,
+    )
+    attaching.debugger = types.SimpleNamespace(
+        CreateTarget=lambda path: target,
+        _destroyed=False,
+    )
+    attaching._target_ref = target
+    attaching.listener = None
+    attaching.target = None
+    attaching.process = None
+    attaching.pid = None
+    attaching.addresses = {}
+    attaching.tainted = False
+    attaching._mailbox = None
+    attaching.mailbox_mode = "lldb"
+    attaching.native_runtime_installer = None
+    attaching.native_mailbox_library = None
+    attaching.runtime_uuid = None
+    attaching.known_uuid = "expected-uuid"
+    attaching.symbols = {}
+    attaching.last_attach_profile = {}
+    attaching.focus_original = None
+    attaching.stop = lambda deadline, **obs: setattr(proc, "state", fake_lldb.eStateStopped)
+    attaching.restore_focus = lambda: None
+    attaching.drain = lambda: None
+    return attaching, proc
+
+fake_lldb.SBError = lambda: types.SimpleNamespace(Fail=lambda: False)
+fake_lldb.SBDebugger = types.SimpleNamespace(Destroy=lambda dbg: setattr(dbg, "_destroyed", True))
+
+# 1) LLDB Detach fails during attach rollback: keep live process ownership & deny mutations.
+bad_attach, bad_proc = make_attach_transport(triple="x86_64-apple-macosx", release_failed=True)
+with patch("os.kill") as send_signal:
+    try:
+        bad_attach.attach(7777)
+    except TransportError as error:
+        assert error.code == "incompatible", f"expected incompatible, got {error.code}"
+        assert "rollback lldb_detach failed (pid=7777 still attached):" in (error.diagnostic or "")
+    else:
+        raise AssertionError("attach rollback masked primary incompatible error")
+    send_signal.assert_not_called()
+
+assert bad_attach.alive() is True
+assert bad_attach.cleanup_pending is True
+assert bad_attach.cleanup_failure[0] == "lldb_detach"
+assert bad_attach.process is bad_proc and bad_attach.pid == 7777
+assert bad_proc.state == fake_lldb.eStateStopped
+
+for mode in ("lldb", "mailbox"):
+    bad_attach.mailbox_mode = mode
+    try:
+        bad_attach.execute("return {}")
+    except TransportError as error:
+        assert error.code == "detach_failed"
+        assert "pid=7777 still attached" in (error.diagnostic or "")
+    else:
+        raise AssertionError(f"quarantined {mode} execute succeeded")
+
+try:
+    bad_attach.boundary()
+except TransportError as error:
+    assert error.code == "detach_failed"
+else:
+    raise AssertionError("quarantined boundary succeeded")
+
+with patch.dict(sys.modules, {"lldb": fake_lldb}):
+    from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpError
+    try:
+        with LLDBProcessTimeWarpDriver(bad_attach, fake_lldb).session():
+            raise AssertionError("quarantined transport entered TimeWarp session")
+    except ProcessTimeWarpError as error:
+        assert error.code == "detach_failed"
+        assert error.presentation == "host.timeWarp.error.restartRequired"
+
+with patch("os.kill") as send_signal:
+    try:
+        bad_attach.attach(7777)
+    except TransportError as error:
+        assert error.code == "detach_failed"
+    else:
+        raise AssertionError("attach reused quarantined attachment")
+    send_signal.assert_not_called()
+assert bad_attach.process is bad_proc and bad_attach.pid == 7777
+
+bad_proc.release_failed = False
+with patch("os.kill") as send_signal:
+    bad_attach.detach()
+    send_signal.assert_called_once_with(7777, signal.SIGCONT)
+assert bad_proc.state == fake_lldb.eStateDetached
+assert bad_attach.process is None and bad_attach.pid is None
+assert not bad_attach.alive() and not bad_attach.cleanup_pending
+
+# 2) Post-Detach os.kill(SIGCONT) fails during rollback: debugger released, OS resume still pending.
+attach_os_fail, proc_os_fail = make_attach_transport(triple="x86_64-apple-macosx", release_failed=False)
+with patch("os.kill", side_effect=PermissionError("os resume blocked")):
+    try:
+        attach_os_fail.attach(7779)
+    except TransportError as error:
+        assert error.code == "incompatible"
+        assert "post-detach OS resume failed (pid=7779): os resume blocked" in (error.diagnostic or "")
+    else:
+        raise AssertionError("attach rollback masked incompatible after OS resume failure")
+assert proc_os_fail.state == fake_lldb.eStateDetached
+assert attach_os_fail.process is None and attach_os_fail.pid is None
+assert not attach_os_fail.alive()
+assert attach_os_fail.cleanup_pending is True
+assert attach_os_fail.pending_resume_pid == 7779
+assert attach_os_fail.cleanup_failure == ("os_resume", "os resume blocked")
+try:
+    attach_os_fail.execute("return {}")
+except TransportError as error:
+    assert error.code == "resume_failed"
+    assert error.presentation == "hades2.error.resumeFailed"
+else:
+    raise AssertionError("execute allowed while OS resume remained pending")
+with patch("os.kill") as send_signal:
+    attach_os_fail.detach()
+    send_signal.assert_called_once_with(7779, signal.SIGCONT)
+assert not attach_os_fail.cleanup_pending and attach_os_fail.pending_resume_pid is None
+
+# 3) Failed mailbox.close() preserves _mailbox & process ownership and retries cleanly.
+class FlakyMailbox:
+    def __init__(self):
+        self.fail_close = True
+        self.closed = False
+
+    def close(self):
+        if self.fail_close:
+            raise OSError("mailbox busy")
+        self.closed = True
+
+
+mailbox_fail, mailbox_proc = make_attach_transport(triple="x86_64-apple-macosx", release_failed=False)
+fake_mailbox = FlakyMailbox()
+mailbox_fail._mailbox = fake_mailbox
+with patch("os.kill") as send_signal:
+    try:
+        mailbox_fail.attach(7780)
+    except TransportError as error:
+        assert error.code == "incompatible"
+        assert "rollback mailbox_close failed (pid=7780 still attached): mailbox busy" in (error.diagnostic or "")
+    else:
+        raise AssertionError("attach rollback masked incompatible after mailbox_close failure")
+    send_signal.assert_not_called()
+assert mailbox_fail._mailbox is fake_mailbox and not fake_mailbox.closed
+assert mailbox_fail.process is mailbox_proc and mailbox_fail.pid == 7780 and mailbox_fail.cleanup_pending
+fake_mailbox.fail_close = False
+with patch("os.kill") as send_signal:
+    mailbox_fail.detach()
+    send_signal.assert_called_once_with(7780, signal.SIGCONT)
+assert fake_mailbox.closed and mailbox_fail._mailbox is None
+assert mailbox_proc.state == fake_lldb.eStateDetached
+assert mailbox_fail.process is None and mailbox_fail.pid is None and not mailbox_fail.cleanup_pending
+
+# 4) Recovery via close() detaches target, sends SIGCONT, clears quarantine, and destroys debugger.
+close_recover, close_proc = make_attach_transport(triple="x86_64-apple-macosx", release_failed=True)
+with patch("os.kill"):
+    try:
+        close_recover.attach(7781)
+    except TransportError as error:
+        assert error.code == "incompatible"
+close_proc.release_failed = False
+debugger_ref = close_recover.debugger
+with patch("os.kill") as send_signal:
+    close_recover.close()
+    send_signal.assert_called_once_with(7781, signal.SIGCONT)
+assert close_proc.state == fake_lldb.eStateDetached
+assert debugger_ref._destroyed is True and close_recover.debugger is None
+assert close_recover.process is None and close_recover.pid is None and not close_recover.cleanup_pending
+
+# 5) Failures in attach()'s final resume step must also roll back cleanly.
+resume_fail_attach, resume_proc = make_attach_transport(release_failed=False)
+resume_fail_attach.resume = lambda deadline: (_ for _ in ()).throw(
+    TransportError("resume_timeout", "hades2.error.resumeTimeout")
+)
+with patch.object(hades2_transport, "prepare_native_query", return_value=None), patch("os.kill") as send_signal:
+    try:
+        resume_fail_attach.attach(7778)
+    except TransportError as error:
+        assert error.code == "resume_timeout", f"expected resume_timeout, got {error.code}"
+    else:
+        raise AssertionError("attach resume failure was suppressed")
+    send_signal.assert_called_once_with(7778, signal.SIGCONT)
+assert resume_proc.state == fake_lldb.eStateDetached
+assert resume_fail_attach.process is None and resume_fail_attach.pid is None
 
 print("hades2_transport_detach_ok")

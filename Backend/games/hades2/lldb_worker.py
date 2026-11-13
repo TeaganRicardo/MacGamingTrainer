@@ -62,6 +62,8 @@ class Hades2LLDBWorker:
         return {
             "pid": self.transport.pid,
             "tainted": bool(self.transport.tainted),
+            "cleanupPending": bool(getattr(self.transport, "cleanup_pending", False)),
+            "pendingResumePid": getattr(self.transport, "pending_resume_pid", None),
             "lastDuration": float(getattr(self.transport, "last_duration", 0.0) or 0.0),
             "lastExpressionDuration": float(
                 getattr(self.transport, "last_expression_duration", 0.0) or 0.0

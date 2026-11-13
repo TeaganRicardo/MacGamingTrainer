@@ -2,6 +2,7 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,14 +51,20 @@ if shutil.which('swiftc'):
         subprocess.run([executable],check=True,timeout=10)
         # Exercise the production Layout against a small SwiftUI type shim on
         # Linux: an intrinsic 39pt shortcut must reserve a 52pt visual lane.
-        shim_library = str(Path(tmp) / 'libSwiftUI.so')
+        shim_name = 'libSwiftUI.dylib' if sys.platform == 'darwin' else 'libSwiftUI.so'
+        shim_library = str(Path(tmp) / shim_name)
         shim_module = str(Path(tmp) / 'SwiftUI.swiftmodule')
         swift_fixtures = ROOT / 'tests/fixtures/swift'
-        subprocess.run(['swiftc', '-emit-library', '-emit-module',
-                        '-module-name', 'SwiftUI',
-                        str(swift_fixtures / 'PickerActionLayoutMock.swift'),
-                        '-emit-module-path', shim_module,
-                        '-o', shim_library], check=True, timeout=40)
+        build_shim = [
+            'swiftc', '-emit-library', '-emit-module',
+            '-module-name', 'SwiftUI',
+            str(swift_fixtures / 'PickerActionLayoutMock.swift'),
+            '-emit-module-path', shim_module,
+            '-o', shim_library,
+        ]
+        if sys.platform == 'darwin':
+            build_shim += ['-Xlinker', '-install_name', '-Xlinker', f'@rpath/{shim_name}']
+        subprocess.run(build_shim, check=True, timeout=40)
         layout_executable = str(Path(tmp) / 'layout-check')
         subprocess.run(['swiftc', '-I', tmp, '-L', tmp, '-lSwiftUI',
                         '-Xlinker', '-rpath', '-Xlinker', tmp,
