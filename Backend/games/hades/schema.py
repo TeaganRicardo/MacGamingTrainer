@@ -19,8 +19,9 @@ DEFAULT_FEATURES = {
     'attackSpeedMultiplier': 1,
     'dashBonus': 0,
 }
-# Process Time Warp is a separate Core-owned native helper. It is a durable
-# module preference, but it must never enter the Lua resident feature document.
+# Game-native simulation speed is a durable module preference, but it must
+# never enter the Lua resident feature document. Its multiplier is owned by
+# the Hades Lua bridge and composes with the game's own AdjustSimulationSpeed.
 DEFAULT_PREFERENCES = {
     **DEFAULT_FEATURES,
     'boonRarityTarget': 'Heroic',

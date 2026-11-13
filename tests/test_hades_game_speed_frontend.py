@@ -1,4 +1,4 @@
-"""Decode the Hades process-speed projection and keep its control discoverable."""
+"""Decode the Hades game-native simulation-speed projection and keep its control discoverable."""
 import json
 from pathlib import Path
 import subprocess

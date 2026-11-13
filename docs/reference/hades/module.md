@@ -13,7 +13,7 @@ Hades-native owners determine each capability. [Combat and boon effects](combat_
 | Domain | Behavior |
 | --- | --- |
 | Combat | Invincibility, full life, unlimited Cast/gun ammunition, native reroll permissions, non-consuming Obols/rerolls, full God Gauge while an Aid is available, outgoing/incoming damage and movement/attack-speed multipliers, additional dashes |
-| Game speed | Process-owned Time Warp setting 0–10×, separate from resident Lua effects; the native helper requires an x86_64 slice for the supported Intel target |
+| Game speed | Game-native simulation-time multiplier 0–10× through `AdjustSimulationSpeed`, separate from resident feature preferences and composed with native `SimSpeedChanges` |
 | Boon rarity | On/off selectable Common/Rare/Epic/Heroic minimum for future normal Olympian/Hermes offers and rerolls; preserves higher native/Legendary odds and does not alter eligibility, fixed rarity, existing offers, Chaos, Hammer or Pom selection |
 | Hero values | Set health, maximum health, Obols, rerolls and inactive God Gauge; fixed Health current/max, Obol and reroll locks use the shared Hades II lock affordance |
 | Permanent resources | Edit the seven native resource owners declared by `schema.py` and the generated catalog |
@@ -31,7 +31,7 @@ Acquiring a Keepsake or Companion uses its native equipment owner, replaces the 
 
 ## Ownership and recovery
 
-The game-speed control uses the debugger-side Process Time Warp helper and preserves desired versus observed applied speed separately. The native helper is built with both Host and x86_64 target slices. A manual disconnect attempts to reset time to 1× before detaching; an unacknowledged reset retains the same-process recovery interlock. This capability is awaiting user-run native game acceptance; portable tests and a signed diagnostic build do not establish gameplay efficacy.
+The game-speed control runs on the existing exact-build Hades Lua bridge at the main-thread `App::Update` boundary. It wraps the game's `AdjustSimulationSpeed` function and multiplies each native fraction by the Trainer's durable 0–10× preference. The native fraction and its arguments are retained separately, so native slow/fast effects continue to compose while the Trainer multiplier is active. A manual disconnect restores the Trainer multiplier to 1× before detaching while preserving any active native effect. An unknown mutation outcome retains the same-process recovery interlock. Lua fixtures verify composition and recovery; actual gameplay-wide timing, 0× freeze and frame pacing remain separate native acceptance evidence.
 
 Durable desired settings live under the module's own `MacGamingTrainer/hades` directory. Reconnecting applies them to a compatible runtime; hero setup remounts them after native per-room state resets. Manual detach preserves desired intent. Disable All and application termination reset desired settings and attempt resident cleanup. Offline Disable All reports that in-game cleanup needs reconnection or a game restart. A failed preference write is reported while resident cleanup still runs. Native scripted movement temporarily owns speed; its completion or native reset remounts the current movement multiplier. Committed numeric edits remain after Disable All.
 

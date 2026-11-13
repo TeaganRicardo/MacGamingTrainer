@@ -108,7 +108,13 @@ class HadesLuaTransport:
             raise failure('not_connected', 'notConnected')
         if self.process.GetState() == lldb.eStateStopped:
             return
-        self.process.SendAsyncInterrupt()
+        # SBProcess.Stop requests and acknowledges the LLDB-owned stop as one
+        # operation. SendAsyncInterrupt can lose the stop notification under
+        # Rosetta debugserver after several otherwise successful boundaries.
+        # Validate both the API result and the observed process state.
+        error = self.process.Stop()
+        if error.Fail():
+            raise failure('stop_failed', 'stopTimeout', str(error))
         while time.monotonic() < deadline:
             self._drain()
             if self.process.GetState() == lldb.eStateStopped:
@@ -155,7 +161,11 @@ class HadesLuaTransport:
 
     def _boundary(self):
         deadline = time.monotonic() + 3
+        # The initial stop precedes target breakpoint, focus mutation, or
+        # Lua execution. Keep its failure distinct from uncertain cleanup.
+        self._boundary_initial_stop_pending = True
         self._stop(deadline)
+        self._boundary_initial_stop_pending = False
         self._restore_focus()
         error = lldb.SBError()
         focus = self.addresses['_ZN3sgg13ConfigOptions20RequireFocusToUpdateE']
@@ -196,6 +206,7 @@ class HadesLuaTransport:
         if len(payload) > LUA_SOURCE_LIMIT_BYTES:
             raise ValueError('Hades Lua request exceeds 128 KiB')
         scratch = None
+        self._boundary_initial_stop_pending = False
         try:
             thread, state = self._boundary()
             error = lldb.SBError()
@@ -239,7 +250,7 @@ class HadesLuaTransport:
             if result.GetValueAsSigned() != 0:
                 if 'hades.error.restartRequired' in text:
                     raise failure('restart_required', 'restartRequired', text)
-                for key in ('heroNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
+                for key in ('heroNotReady', 'runtimeNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
                             'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied',
                             'staleRoom', 'staleDoor', 'worldUnavailable'):
                     if 'hades.error.' + key in text:
@@ -251,7 +262,7 @@ class HadesLuaTransport:
             return json.loads(text)
         finally:
             primary_error = sys.exc_info()[1]
-            if self.alive():
+            if self.alive() and not self._boundary_initial_stop_pending:
                 try:
                     self._stop(time.monotonic() + 3)
                     self.target.DeleteAllBreakpoints()

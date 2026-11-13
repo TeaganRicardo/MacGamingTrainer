@@ -18,7 +18,7 @@ Resources, NPC rewards, exits and rooms have a separate [capability map](rooms_r
 | Unlimited Cast and Gun Ammo | Refill equipped `RangedWeapon` / `GunWeapon` with native `RunWeaponMethod("RefillAmmo")` before `UpdateAmmoUI` / `UpdateGunUI` readback. `Powers.lua:1119,1153`, `Combat.lua:70`, `UIScripts.lua:924,1000`. | Implemented; native stored Casts, projectile drops/pickups, loading and volley bookkeeping remain owned by the game. |
 | Damage; incoming damage | Trainer-owned outgoing and incoming `GlobalMultiplier` modifiers, multiplicative alongside native modifiers. `Combat.lua` damage calculation and `TraitScripts.lua` modifier owners. | Outgoing retained; incoming implemented. Neutral 1 removes only the Trainer modifier. |
 | Movement; attack speed; additional dashes | Reversible native property changes, Hermes speed property definitions, `WeaponSets.HeroRushWeapons`; scripted movement leases preserve native entrances/flashbacks. | Existing paths retained, including the delivered native movement ownership work. |
-| Game Speed | Existing Core Time Warp helper through Hades' durable `gameSpeed` preference; desired/actual/active projection and reset/recovery. | Delivered #576 retained. |
+| Game Speed | Game-native `AdjustSimulationSpeed` wrapper through Hades' durable `gameSpeed` preference; the Trainer multiplier composes with native `SimSpeedChanges`, with desired/actual/active projection and reset/recovery. | Root-path correction for #723; actual gameplay-wide timing remains an explicit acceptance item. |
 
 The numeric multipliers are 0.1–100; additional dashes are 0–20. There is no invented Hades II Magick, Sprint or Hex stat behind these controls.
 
