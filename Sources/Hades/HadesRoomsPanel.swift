@@ -194,7 +194,7 @@ struct HadesRoomsPanel: View {
             )
             .accessibilityIdentifier("hades.worldActions.target")
         } shortcut: {
-            EmptyView()
+            Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
         } action: {
             TrainerSecondaryActionButton(
                 title: text(model.selectedWorldExitLease != nil ? "hades.cancel" : "hades.apply"),
