@@ -565,7 +565,7 @@ func exerciseModuleDisclosure<Content: View>(
             try observeAvailability(3)
             let host = NSHostingView(rootView: TrainerShell { EmptyView() } content: {
                 content.frame(minWidth: TrainerTheme.standard.contentMinWidth,
-                              maxWidth: TrainerTheme.standard.pageMaxWidth, alignment: .topLeading)
+                              maxWidth: .infinity, alignment: .topLeading)
             }.environmentObject(localization))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 740),
                 styleMask: [.titled, .resizable], backing: .buffered, defer: false)

@@ -39,7 +39,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 Module.makeContent(model: model)
                     .environment(\.trainerManagementActions, managementActions)
             }
-            .frame(minWidth: theme.contentMinWidth, maxWidth: theme.pageMaxWidth, minHeight: theme.contentMinHeight, alignment: .topLeading)
+            .frame(minWidth: theme.contentMinWidth, maxWidth: .infinity, minHeight: theme.contentMinHeight, alignment: .topLeading)
         } feedback: {
             Module.makeFeedback(model: model)
         }

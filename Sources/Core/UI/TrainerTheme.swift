@@ -21,7 +21,6 @@ struct TrainerTheme {
     let controlPadding: CGFloat
     let compactControlSpacing: CGFloat
     let compactCornerRadius: CGFloat
-    let pageMaxWidth: CGFloat
     let contentMinWidth: CGFloat
     let contentMinHeight: CGFloat
     let pagePadding: CGFloat
@@ -67,7 +66,6 @@ struct TrainerTheme {
         controlPadding: 10,
         compactControlSpacing: 8,
         compactCornerRadius: 6,
-        pageMaxWidth: 1000,
         contentMinWidth: 760,
         contentMinHeight: 740,
         pagePadding: 28,

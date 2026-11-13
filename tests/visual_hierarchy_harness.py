@@ -97,7 +97,7 @@ private struct VisualHierarchyFixture: View {
                 }
             }
             .frame(minWidth: TrainerTheme.standard.contentMinWidth,
-                   maxWidth: TrainerTheme.standard.pageMaxWidth, alignment: .topLeading)
+                   maxWidth: .infinity, alignment: .topLeading)
         }
         .preferredColorScheme(.dark)
         .trainerTheme(.standard)
