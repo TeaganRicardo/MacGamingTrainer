@@ -154,7 +154,7 @@ enum HadesPresentation {
             "hades.shortcut.acquireExactBoon": .init(zhCN: "获取指定祝福", en: "Acquire Exact Boon"),
             "hades.acquisition.rarityAdjusted": .init(zhCN: "已自动调整为此目标支持的稀有度：", en: "Adjusted to supported rarity:"),
             "hades.acquisition.rarityAdjustedCompact": .init(zhCN: "自动 →", en: "Auto →"),
-            "hades.acquisition.gameControlledCompact": .init(zhCN: "游戏决定", en: "Game set"),
+            "hades.acquisition.gameControlledCompact": .init(zhCN: "游戏决定", en: "Game-defined"),
             "hades.acquisition.gameControlled": .init(zhCN: "不适用 · 游戏决定", en: "N/A · Native"),
             "hades.acquisition.gameControlledHint": .init(zhCN: "该目标不接受指定稀有度。", en: "This target does not accept a specified rarity."),
             "hades.catalog": .init(zhCN: "指定祝福", en: "Exact Boons"),
