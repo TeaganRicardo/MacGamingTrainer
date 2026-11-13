@@ -296,7 +296,11 @@ struct Main {
         check(model.selectedWorldExit?.doorToken == "fixture-exit:1"
               && model.selectedWorldExitTarget == "reward:" + reward.id,
               "fixture did not project the exact-exit World Action selection")
+        check(model.canSelectWorldExitTarget,
+              "idle selected exit did not enable local target selection")
         model.performShortcut(.applyWorldExit)
+        check(!model.canAcceptRuntimeAction && model.canSelectWorldExitTarget,
+              "blocking Apply request incorrectly disabled the local target picker")
         model.performShortcut(.applyWorldExit)
         waitForIdle(model, logURL: logURL, phase: "exact-exit world action")
         let worldExitRequests = loggedCommands(at: logURL).filter {
@@ -309,6 +313,8 @@ struct Main {
               "successful Apply was not latched from the authoritative backend lease")
         check(model.selectedWorldExitTargetLocked && model.selectedWorldExitActionAvailable,
               "latched exact-exit lease did not lock the target while keeping Apply cancellable")
+        check(!model.canSelectWorldExitTarget,
+              "latched exit lease did not lock its target picker")
 
         // The same control means Cancel while latched; no separate switch or
         // cancellation control owns this product state.
@@ -321,6 +327,8 @@ struct Main {
               "second Apply press did not cancel the exact active lease")
         check(model.selectedWorldExitLease == nil && !model.selectedWorldExitTargetLocked,
               "backend cancellation observation did not release the pressed state")
+        check(model.canSelectWorldExitTarget,
+              "native cancellation did not restore target-picker selection")
 
         // Route the normal special-reward shortcut through the actual typed
         // backend boundary. A source-string assertion cannot prove dispatch.
