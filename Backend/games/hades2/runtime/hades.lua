@@ -5770,6 +5770,11 @@ if __MacGamingTrainerV1 == nil then
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
         return nil, "hades2.facility.unavailable.native"
       end
+      local useFunction = definition.challenge and "UseChallengeSwitch" or definition.use
+      if type(useFunction) ~= "string" or type(_G[useFunction]) ~= "function"
+          or type(_G.AttemptUseChallengeSwitch) ~= "function" then
+        return nil, "hades2.facility.unavailable.native"
+      end
       local authored = RoomData[room.Name] or room
       if definition.requiresStore and (room.Store ~= nil or room.StoreDataName ~= nil
           or room.ChosenRewardType == "Shop") then return nil, "hades2.facility.unavailable.existing" end
@@ -6021,7 +6026,8 @@ if __MacGamingTrainerV1 == nil then
             break
           end
         end
-        if not fromFamily or type(encounter) ~= "table" or encounter.Switch ~= object
+        if not fromFamily or object.ChallengeSwitchUseFunctionName ~= "UseChallengeSwitch"
+            or type(encounter) ~= "table" or encounter.Switch ~= object
             or encounter.SpawnNearId ~= id
             or CurrentRun.LastChallengeDepth ~= target.depth then
           error("Native challenge encounter is not linked to its switch")
