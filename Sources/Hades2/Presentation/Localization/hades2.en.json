@@ -210,6 +210,7 @@
     "hades2.metric.rerolls": "Change of Fate",
     "hades2.metric.spellCharge": "Hex Charge",
     "hades2.worldActions.apply": "Apply",
+    "hades2.worldActions.cancel": "Cancel",
     "hades2.occurrence.characters": "Characters",
     "hades2.occurrence.noRequest": "No Request",
     "hades2.occurrence.shop": "Shop",
