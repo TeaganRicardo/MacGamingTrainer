@@ -286,6 +286,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var selectedWorldExitLease: Hades2WorldActionLease? { selectedWorldExit?.activeLease }
     var selectedWorldExitTargetLocked: Bool { selectedWorldExitLease != nil }
+    var canSelectWorldExitTarget: Bool {
+        guard canSelectWorldExit, !selectedWorldExitTargetLocked,
+              let exit = selectedWorldExit else { return false }
+        return !exit.targets.isEmpty
+    }
     var canSelectWorldExit: Bool {
         connected && capabilities["worldActions"] == true && !exiting && protocolCompatible
             && !worldActionExits.isEmpty
