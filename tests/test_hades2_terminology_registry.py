@@ -167,7 +167,6 @@ def test_legacy_aliases_and_internal_terms_are_not_user_facing():
 def test_frontend_roles_use_declared_trainer_product_pairs():
     registry = load_hades2_terminology()
     labels = {
-        "chaosPair": "hades2.spawn.chaosPair",
         "chaosBlessingSelector": "hades2.spawn.chaosBlessing",
         "chaosCurseSelector": "hades2.spawn.chaosCurse",
         "forceEnableRerolls": "hades2.feature.forceEnableRerolls",
@@ -181,6 +180,7 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
         )["entries"]
         for language in ("zh-CN", "en")
     }
+    assert all("hades2.spawn.chaosPair" not in table for table in tables.values())
     for term_id, presentation_id in labels.items():
         term = registry.get(f"productTerms.{term_id}")
         assert term.term_class is TermClass.TRAINER_PRODUCT
