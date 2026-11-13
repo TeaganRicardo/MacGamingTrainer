@@ -625,14 +625,6 @@ private struct ExactBoonAcquisitionGeometryFixture: View {
                 .labelsHidden()
                 .trainerPicker(.compactValue, state: .interactive)
                 .accessibilityIdentifier("acquisition.rarity")
-                if gameID == "hades" {
-                    Text(label("Encounters", "遭遇次数")).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .accessibilityIdentifier("acquisition.encounters.label")
-                    TextField("", text: $encounters)
-                        .frame(width: 64)
-                        .accessibilityIdentifier("acquisition.encounters")
-                }
                 Text(label("Game-controlled", "游戏控制"))
                     .font(.caption2).lineLimit(1)
                     .frame(maxWidth: 96, alignment: .leading)
@@ -666,6 +658,16 @@ private struct ExactBoonAcquisitionGeometryFixture: View {
                     TrainerSecondaryActionButton(title: label("Apply", "应用"),
                         systemImage: TrainerSemanticIcon.Action.acquire, enabled: true,
                         widthRole: .compactRow) {}
+                }
+                if gameID == "hades" {
+                    HStack(spacing: 6) {
+                        Text(label("Encounters", "遭遇次数")).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .accessibilityIdentifier("acquisition.encounters.label")
+                        TextField("", text: $encounters)
+                            .frame(width: 64)
+                            .accessibilityIdentifier("acquisition.encounters")
+                    }
                 }
                 TrainerDualInlinePickerLayout(
                     minimumPickerWidth: 144,
@@ -754,10 +756,10 @@ private func exerciseAcquisitionLayoutGeometry() {
                 if gameID == "hades" {
                     let countLabel = control("acquisition.encounters.label")!.frame
                     let count = control("acquisition.encounters")!.frame
-                    hierarchyCheck(adjustment.minX >= count.maxX - 2
-                                   && countLabel.maxX <= count.minX + 2
-                                   && abs(count.midY - level.midY) < 4,
-                                   "Hades I conditional Chaos count left the inline header")
+                    hierarchyCheck(countLabel.maxX <= count.minX + 2
+                                   && abs(count.midY - countLabel.midY) < 4
+                                   && abs(count.midY - level.midY) > 8,
+                                   "Hades I conditional Chaos count is not inline within the Chaos row")
                 } else {
                     hierarchyCheck(control("acquisition.encounters") == nil,
                                    "Hades II unexpectedly rendered Hades I Chaos count")
