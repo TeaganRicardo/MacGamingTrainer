@@ -1330,7 +1330,8 @@ struct Hades2TrainerView: View {
                 enabled: model.selectedWorldExitActionAvailable,
                 latched: model.selectedWorldExitLease != nil,
                 subduedLatched: true,
-                widthRole: .compactRow
+                widthRole: .compactRow,
+                helpText: text(model.selectedWorldExitLease != nil ? "hades2.worldActions.cancel" : "hades2.worldActions.apply")
             ) {
                 _ = model.toggleSelectedWorldExit()
             }
