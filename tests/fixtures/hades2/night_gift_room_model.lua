@@ -3,8 +3,10 @@
 RoomData.BaseRoom.MetaRewardStandSpawnChance = 0.10
 RoomData.BaseRoom.MetaRewardStandRequirements = {allow = true}
 RoomData.I_Gift = { Name="I_Gift", RoomSetName="I", MetaRewardStandSpawnChance=.3,
+ WellShopSpawnChance=0,
  MetaRewardStandRequirements={allow=true} }
 RoomData.Q_Gift = { Name="Q_Gift", RoomSetName="Q", MetaRewardStandSpawnChance=.5,
+ WellShopSpawnChance=0,
  MetaRewardStandRequirements={allow=true} }
 ObstacleData.MetaRewardStand = {
  Name='MetaRewardStand', OnUsedFunctionName='AttemptUseChallengeSwitch',
