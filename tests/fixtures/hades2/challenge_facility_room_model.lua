@@ -35,12 +35,20 @@ EncounterData={
 }
 local nativeChallengeGen, nativeChallengeUses, nativeRewards = 0, 0, 0
 local forcedUses = {}
+-- A native force may have been granted for a *later* room. A direct
+-- one-shot challenge must not consume it while borrowing the spawn owner.
+local forcedTraits = {
+  ForceChallengeSwitch = true,
+  ForcePerfectClearSwitch = true,
+  ForceEliteSwitch = true,
+}
 local baseHandleSecretSpawns = HandleSecretSpawns
 IsTimeChallengeForced = function(room) return room.ForceChallengeSwitch or false end
 IsPerfectClearChallengeForced = function(room) return room.ForcePerfectClearSwitch or false end
 IsEliteChallengeForced = function(room) return room.ForceEliteSwitch or false end
 UseHeroTraitsWithValue = function(name, consume)
  forcedUses[name] = (forcedUses[name] or 0) + 1
+ if consume then forcedTraits[name] = false end
 end
 GetRandomValue = function(list) assert(type(list)=='table'); return list[1] end
 GenerateEncounter = function(run,room,encounter) nativeChallengeGen=nativeChallengeGen+1 end
