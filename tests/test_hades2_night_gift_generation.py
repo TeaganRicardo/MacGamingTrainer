@@ -79,10 +79,10 @@ assert(IsMetaRewardStandEligible==beforeMeta and forcedTraits.ForceChallengeSwit
 UseMetaRewardStand(altar)
 assert(nativeGiftClaims==1 and GameState.NightCardsClaimed==1 and not IsUseable({Id=211}))
 assert(not option('gift'))
-local repeat=M.dispatch('generate_chamber_facility',{
+local duplicate=M.dispatch('generate_chamber_facility',{
  facility='gift',scopeToken=requested.scopeToken,requestId='night-gift-I',includeCatalogs=false,
 })
-assert(repeat.duplicate and repeat.applied and nativeGiftDisplays==1)
+assert(duplicate.duplicate and duplicate.applied and nativeGiftDisplays==1)
 assert(not pcall(M.dispatch,'generate_chamber_facility',{
  facility='gift',scopeToken=requested.scopeToken,requestId='gift-I-second',includeCatalogs=false,
 }))
