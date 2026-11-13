@@ -77,8 +77,11 @@ assert(switch.ReadyToUse and switch.UseText==switch.ChallengeAvailableUseText)
 local encounter=source.ChallengeEncounter
 assert(encounter.Name=='TimeChallengeF' and encounter.Switch==switch and encounter.SpawnNearId==211)
 assert(CurrentRun.LastChallengeDepth==CurrentRun.RunDepthCache)
-assert(nativeChallengeGen>0 and forcedUses.ForceChallengeSwitch==1)
-assert(not forcedUses.ForcePerfectClearSwitch and not forcedUses.ForceEliteSwitch)
+assert(nativeChallengeGen>0)
+assert(not forcedUses.ForceChallengeSwitch and not forcedUses.ForcePerfectClearSwitch
+  and not forcedUses.ForceEliteSwitch)
+assert(forcedTraits.ForceChallengeSwitch and forcedTraits.ForcePerfectClearSwitch
+  and forcedTraits.ForceEliteSwitch)
 assert(not source.ChallengeChanceSuccess and not source.DoAnomalies)
 assert(EncounterSets.TimeChallengeOptions==oldTime and EncounterSets.PerfectClearOptions==oldSigil and EncounterSets.EliteChallengeOptions==oldMoon)
 assert(IsTimeChallengeForced==originalTime and IsPerfectClearChallengeForced==originalSigil and IsEliteChallengeForced==originalMoon)
@@ -102,7 +105,8 @@ AttemptUseChallengeSwitch(source.ChallengeSwitch)
 assert(source.ChallengeEncounter.InProgress)
 CompleteChallenge()
 assert(source.ChallengeEncounter.Completed and nativeRewards==1)
-assert(not forcedUses.ForceChallengeSwitch and forcedUses.ForcePerfectClearSwitch==1)
+assert(not forcedUses.ForceChallengeSwitch and not forcedUses.ForcePerfectClearSwitch)
+assert(forcedTraits.ForcePerfectClearSwitch)
 print('chamber_challenge_ok')
 """,
 r"""
@@ -112,7 +116,8 @@ assert(result.applied and source.ChallengeSwitch.Name=='EliteChallengeSwitch_Tal
 assert(source.ChallengeSwitch.ReadyToUse)
 assert(source.ChallengeEncounter.Name=='EliteChallengeF')
 assert(source.ChallengeSwitch.RewardType=='TalentDrop')
-assert(forcedUses.ForceEliteSwitch==1 and not forcedUses.ForceChallengeSwitch)
+assert(not forcedUses.ForceEliteSwitch and not forcedUses.ForceChallengeSwitch)
+assert(forcedTraits.ForceEliteSwitch)
 AttemptUseChallengeSwitch(source.ChallengeSwitch)
 CompleteChallenge()
 assert(source.ChallengeEncounter.Completed and nativeRewards==1)
@@ -169,6 +174,7 @@ local source=room()
 local target=assert(option('trove'))
 local originalSetup=SetupObstacle
 local originalTime,originalPerfect,originalElite=IsTimeChallengeForced,IsPerfectClearChallengeForced,IsEliteChallengeForced
+local originalConsume=UseHeroTraitsWithValue
 local oldTime,oldPerfect,oldElite=EncounterSets.TimeChallengeOptions,EncounterSets.PerfectClearOptions,EncounterSets.EliteChallengeOptions
 SetupObstacle=function(object)
  originalSetup(object)
@@ -179,6 +185,7 @@ assert(not pcall(M.dispatch,'generate_chamber_facility',{
 }))
 assert(M.terminalActionUnknown and not source.ChallengeChanceSuccess)
 assert(IsTimeChallengeForced==originalTime and IsPerfectClearChallengeForced==originalPerfect and IsEliteChallengeForced==originalElite)
+assert(UseHeroTraitsWithValue==originalConsume and forcedTraits.ForceChallengeSwitch)
 assert(EncounterSets.TimeChallengeOptions==oldTime and EncounterSets.PerfectClearOptions==oldPerfect and EncounterSets.EliteChallengeOptions==oldElite)
 assert(nativeSpawns==1)
 assert(not pcall(M.dispatch,'generate_chamber_facility',{
