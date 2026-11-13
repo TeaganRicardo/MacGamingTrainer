@@ -7,6 +7,13 @@ RoomData = { BaseRoom = { SecretSpawnChance = .2 },
 RoomSets = { Chaos = { 'Chaos_01' }, F = { 'F_Next' } }
 ObstacleData = { SecretDoor = { Name = 'SecretDoor', OnUsedFunctionName = 'AttemptUseDoor' } }
 SetupHarvestPoints = function() end
+MapState.OfferedExitDoors = {}
+SpawnObstacle = function() end
+AssignRoomToExitDoor = function() end
+UseHeroTraitsWithValue = function() end
+RemoveRandomValue = function(values) return table.remove(values) end
+RandomSynchronize = function() end
+IsEmpty = function(value) return next(value) == nil end
 CurrentRun.RoomHistory = {}; CurrentRun.RoomCountCache = {}; CurrentRun.RoomCreations = {}
 CurrentRun.BiomeRoomCountCache = {}; CurrentRun.RunDepthCache = 8
 local heroForce, forceUses, spawns, charges = false, 0, 0, 0
