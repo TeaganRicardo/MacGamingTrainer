@@ -253,10 +253,9 @@ class _LLDBWorkerClient:
     def close(self):
         # Do not respawn a child merely to close an already-dead sidecar.
         if self._sidecar.started and not self.terminal:
-            try:
-                self.call("transport.close")
-            except AdapterError:
-                pass
+            # On failed native release the sidecar is still the recovery owner.
+            # Keep it reachable so a later detach/close can finish cleanup.
+            self.call("transport.close")
         self._sidecar.close()
         self._hello_complete = False
         self._initial_attach_reply_lost = False
@@ -357,7 +356,18 @@ class Hades2LuaTransport:
         )
 
     def close(self):
+        if self.cleanup_pending and self._worker.terminal:
+            # The sidecar is already gone: no verified release was observed.
+            # Do not claim the outstanding debugger/OS resume lease was cleared.
+            raise AdapterError(
+                "detach_failed", "hades2.error.debuggerExited",
+                diagnostic=(
+                    f"LLDB sidecar exited with cleanup pending "
+                    f"(pid={self.pid}, pendingResumePid={self.pending_resume_pid})."
+                ),
+            )
         self._worker.close()
+        # Only a successfully acknowledged worker close releases the lease.
         self.pid = None
         self._tainted = False
         self.cleanup_pending = False

@@ -354,7 +354,7 @@ class HadesLuaTransport:
         self._clear_attachment()
 
     def close(self):
-        try:
-            self.detach()
-        finally:
-            lldb.SBDebugger.Destroy(self.debugger)
+        # Detach failure still owns a stopped process.  Retain this debugger
+        # for an explicit retry instead of destroying the only recovery handle.
+        self.detach()
+        lldb.SBDebugger.Destroy(self.debugger)

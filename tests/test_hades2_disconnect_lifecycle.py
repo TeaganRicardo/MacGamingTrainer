@@ -199,4 +199,41 @@ with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary
             transport.close()
             native.close()
 
+# A persistent native close failure must remain visible through the worker and
+# facade, and the live sidecar must remain available for a later retry.
+for outcome, expected_code in (
+    ("attach_rollback_lldb_failed", "detach_failed"),
+    ("attach_release_failed", "resume_failed"),
+):
+    native = NativeTransport(outcome)
+    sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
+    with patch.object(_LLDBWorkerClient, "_make_sidecar", return_value=sidecar):
+        transport = Hades2LuaTransport()
+        try:
+            transport.attach(4242)
+        except AdapterError:
+            pass
+        else:
+            raise AssertionError("cleanup fixture did not fail attach")
+        assert transport.cleanup_pending
+        try:
+            transport.close()
+        except AdapterError as error:
+            assert error.code == expected_code, (outcome, error.code)
+        else:
+            raise AssertionError(f"{outcome} cleanup failure was lost during close")
+        assert sidecar.started and transport.cleanup_pending
+        assert transport._worker.started and not transport._worker.terminal
+        if outcome == "attach_rollback_lldb_failed":
+            assert transport.pid == native.pid == 4242
+        else:
+            assert transport.pid is None and transport.pending_resume_pid == 4242
+        # The same worker must be able to finish once the blocker clears.
+        native.outcome = "success"
+        transport.close()
+        assert not sidecar.started
+        assert transport.pid is None and not transport.cleanup_pending
+        assert transport.pending_resume_pid is None
+        assert sidecar.calls.count("transport.close") == 2
+
 print("hades2_disconnect_lifecycle_ok")

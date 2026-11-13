@@ -252,6 +252,32 @@ assert proc45.state == fake_lldb.eStateDetached
 assert destroyed_debuggers == [transport.debugger]
 assert transport.process is None and transport.pid is None and not transport.cleanup_pending
 
+# A terminal close must not destroy the debugger while Detach still fails.
+proc47 = Process(fake_lldb.eStateStopped, release_failed=True)
+target47 = make_mismatched_target(proc47)
+debugger47 = types.SimpleNamespace(CreateTarget=lambda path: target47)
+transport.debugger = debugger47
+try:
+    transport.attach(47, executable)
+except AdapterError as error:
+    assert error.code == 'incompatible'
+else:
+    raise AssertionError('failed attach did not enter cleanup quarantine')
+destroyed_before = len(destroyed_debuggers)
+try:
+    transport.close()
+except AdapterError as error:
+    assert error.code == 'detach_failed'
+else:
+    raise AssertionError('failed close was silently accepted')
+assert len(destroyed_debuggers) == destroyed_before
+assert transport.debugger is debugger47 and transport.pid == 47
+assert transport.cleanup_pending and proc47.state == fake_lldb.eStateStopped
+proc47.release_failed = False
+transport.close()
+assert destroyed_debuggers[-1] is debugger47
+assert transport.process is None and transport.pid is None and not transport.cleanup_pending
+
 # External target exit clears stale quarantine cleanly on detach().
 proc46 = Process(fake_lldb.eStateStopped, release_failed=True)
 target46 = make_mismatched_target(proc46)

@@ -181,7 +181,9 @@ def main():
         try:
             worker.transport.close()
         except Exception:
-            pass
+            # EOF/sidecar termination may prevent a further retry. Preserve
+            # diagnostic evidence of a possible still-attached target.
+            logging.exception("Hades II LLDB worker cleanup failed at shutdown")
     return 0
 
 

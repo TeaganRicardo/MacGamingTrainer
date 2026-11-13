@@ -301,6 +301,14 @@ class Hades2CommandMailbox:
         if self._closed:
             return
         if self._mapping is not None:
-            self._call("MGTMailboxClose")
+            status = self._call("MGTMailboxClose")
+            if status != OK:
+                # Native close returns status codes; a non-OK result leaves the
+                # lease unverified and its mapping needed for a safe retry.
+                raise AdapterError(
+                    "mailbox_close_failed",
+                    "hades2.error.commandConnectionUnavailable",
+                    diagnostic=f"MGTMailboxClose returned {status}",
+                )
         self._release()
         self._closed = True

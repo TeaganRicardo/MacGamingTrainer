@@ -539,7 +539,8 @@ class Hades2LuaTransport:
                 self._record_cleanup_failure('lldb_detach',detail)
                 raise TransportError('detach_failed',detail)
             detached_pid=self.pid
-            self.drain()
+            # The debugger has released ownership; nothing may interrupt the
+            # mandatory OS resume handoff after successful LLDB Detach.
         self._clear_debugger_attachment()
         resume_pid=detached_pid if detached_pid is not None else self.pending_resume_pid
         if resume_pid is not None:
@@ -558,7 +559,7 @@ class Hades2LuaTransport:
         self._clear_cleanup_state()
 
     def close(self):
-        try:
-            self.detach()
-        finally:
-            if self.debugger:lldb.SBDebugger.Destroy(self.debugger);self.debugger=None
+        # A failed detach or SIGCONT handoff is still owned by this worker;
+        # only destroy the debugger once all release stages have succeeded.
+        self.detach()
+        if self.debugger:lldb.SBDebugger.Destroy(self.debugger);self.debugger=None
