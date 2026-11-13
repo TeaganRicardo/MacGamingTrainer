@@ -2,6 +2,9 @@
 import json
 from pathlib import Path
 
+from core.module_manifest import GameModuleManifest
+
+MODULE_DIR = Path(__file__).resolve().parent
 
 
 def steam_launch_url(module_dir):
