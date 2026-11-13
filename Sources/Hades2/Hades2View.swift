@@ -1494,9 +1494,11 @@ struct Hades2TrainerView: View {
             if model.acquisitionRarityAdjustment != .none {
                 let key = model.acquisitionAllowsCallerRarity
                     ? "hades2.acquisition.adjustedRarity" : "hades2.acquisition.gameControlledHint"
+                let compactKey = model.acquisitionAllowsCallerRarity
+                    ? "hades2.acquisition.adjustedRarityCompact" : "hades2.acquisition.gameControlledCompact"
                 Text(model.acquisitionAllowsCallerRarity
-                     ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
-                     : text(key))
+                     ? text(compactKey) + " " + traitRarityLabel(model.acquisitionRarity)
+                     : text(compactKey))
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
