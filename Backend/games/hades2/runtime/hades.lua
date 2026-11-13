@@ -5739,7 +5739,7 @@ if __MacGamingTrainerV1 == nil then
     }
     local challengeFunctions = {
       "GetRandomValue", "IsTimeChallengeForced", "IsPerfectClearChallengeForced",
-      "IsEliteChallengeForced", "GenerateEncounter", "IsHorizontallyFlipped",
+      "IsEliteChallengeForced", "UseHeroTraitsWithValue", "GenerateEncounter", "IsHorizontallyFlipped",
       "Attach", "CreateTextBox", "ModifyTextBox", "GetRunDepth",
       "GetTotalHeroTraitValue", "round", "RandomInt", "SetThingProperty", "SpawnObstacle",
     }
@@ -5945,6 +5945,12 @@ if __MacGamingTrainerV1 == nil then
       local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
       local originalTime, originalPerfect, originalElite =
         IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced
+      local originalUseHeroTraits = UseHeroTraitsWithValue
+      local explicitChallengeForce = {
+        TimeChallengeOptions = "ForceChallengeSwitch",
+        PerfectClearOptions = "ForcePerfectClearSwitch",
+        EliteChallengeOptions = "ForceEliteSwitch",
+      }
       local challengePools = { "TimeChallengeOptions", "PerfectClearOptions", "EliteChallengeOptions" }
       local previousPools = {}
       local function pointLease(args)
@@ -5984,6 +5990,20 @@ if __MacGamingTrainerV1 == nil then
         IsEliteChallengeForced = function(checkingRoom)
           return checkingRoom == room and definition.challenge == "EliteChallengeOptions"
         end
+        -- The forced result above is synthetic and room-local. Native
+        -- HandleSecretSpawns consumes the corresponding Hero future-room
+        -- force effect unconditionally when the check succeeds. An explicit
+        -- one-shot must leave that separate, uncommitted force effect intact.
+        -- Intercept only this specific consumption during the native call.
+        local explicitForce = explicitChallengeForce[definition.challenge]
+        local skipped = false
+        UseHeroTraitsWithValue = function(name, ...)
+          if name == explicitForce and not skipped then
+            skipped = true
+            return
+          end
+          return originalUseHeroTraits(name, ...)
+        end
       end
       GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
       IsWellShopEligible = nativeEligible("well", originalWell)
@@ -6002,6 +6022,7 @@ if __MacGamingTrainerV1 == nil then
       if definition.challenge then
         IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
           originalTime, originalPerfect, originalElite
+        UseHeroTraitsWithValue = originalUseHeroTraits
         for _, pool in ipairs(challengePools) do EncounterSets[pool] = previousPools[pool] end
       end
       room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
