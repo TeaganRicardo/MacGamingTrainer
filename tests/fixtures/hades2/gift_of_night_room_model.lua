@@ -9,6 +9,8 @@ ObstacleData.MetaRewardStand = {
   AvailableUseText='UseMetaRewardStand_Unlocked',
   RequiredShrinePoints=12,
   RewardIconScale=1.0,
+  ExitsUnlockedFunctionName='HarvestPointAvailablePresentation',
+  ExitsUnlockedFunctionArgs={SkipVoiceLines=true},
 }
 ResourceData.CardUpgradePoints={
   Name='CardUpgradePoints',MetaRewardStandPickupSound='BountyClaim',
@@ -24,6 +26,12 @@ MetaRewardStandData = {
 }
 GameState.SpentShrinePointsCache=12
 local nativeRewardSpawns, nativeRewardClaims, nativeRewardDisplays = 0, 0, 0
+local nativeRewardPresentations=0
+CallFunctionName=function(name,object,args)
+ assert(name=='HarvestPointAvailablePresentation' and object.Name=='MetaRewardStand')
+ assert(type(args)=='table' and args.SkipVoiceLines)
+ nativeRewardPresentations=nativeRewardPresentations+1
+end
 local originalShopsHandle=HandleSecretSpawns
 IsMetaRewardStandEligible=function(run,room)
  if room.ForceMetaRewardStand then return true end
