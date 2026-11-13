@@ -1455,60 +1455,55 @@ struct Hades2TrainerView: View {
     /// Session-only settings for the currently active acquisition target.
     /// Neither the source nor the displayed rarity is the natural-offer policy.
     private var acquisitionSettingsRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades2.acquisition.rarity"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Picker(text("hades2.acquisition.rarity"), selection: Binding(
-                        get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
-                        set: { model.selectAcquisitionRarity($0) }
-                    )) {
-                        if !model.acquisitionAllowsCallerRarity {
-                            Text(text("hades2.acquisition.gameControlled")).tag("")
-                        }
-                        ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
-                            Text(traitRarityLabel(rarity)).tag(rarity)
-                        }
+        HStack(spacing: 6) {
+            Text(text("hades2.acquisition.level"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            TrainerNumberField(
+                text: $model.acquisitionLevel,
+                accessibilityLabel: text("hades2.acquisition.level"),
+                accessibilityIdentifier: "hades2.acquisition.level",
+                width: 76,
+                enabled: model.acquisitionSupportsLevel,
+                onCommit: { value in
+                    guard let level = Int(value.text), (1...999_999).contains(level) else {
+                        return value.rejected(message: text("hades2.acquisition.invalidLevel"))
                     }
-                    .labelsHidden()
-                    .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+                    return String(level)
                 }
+            )
+            .id(model.acquisitionTarget.rawValue + "|" + model.acquisitionTargetDescription)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades2.acquisition.level"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    TrainerNumberField(
-                        text: $model.acquisitionLevel,
-                        accessibilityLabel: text("hades2.acquisition.level"),
-                        accessibilityIdentifier: "hades2.acquisition.level",
-                        width: 76,
-                        enabled: model.acquisitionSupportsLevel,
-                        onCommit: { value in
-                            guard let level = Int(value.text), (1...999_999).contains(level) else {
-                                return value.rejected(message: text("hades2.acquisition.invalidLevel"))
-                            }
-                            return String(level)
-                        }
-                    )
-                    .id(model.acquisitionTarget.rawValue + "|" + model.acquisitionTargetDescription)
+            Text(text("hades2.acquisition.rarity"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
+            Picker(text("hades2.acquisition.rarity"), selection: Binding(
+                get: { model.acquisitionAllowsCallerRarity ? model.acquisitionRarity : "" },
+                set: { model.selectAcquisitionRarity($0) }
+            )) {
+                if !model.acquisitionAllowsCallerRarity {
+                    Text(text("hades2.acquisition.gameControlled")).tag("")
                 }
-                Spacer(minLength: 0)
-                Text(model.acquisitionTarget == .chaos
-                     ? text("hades2.spawn.chaosPair") : text("hades2.spawn.exactBoons"))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1)
+                ForEach(model.acquisitionRarityOptions, id: \.self) { rarity in
+                    Text(traitRarityLabel(rarity)).tag(rarity)
+                }
             }
+            .labelsHidden()
+            .trainerPicker(.compactValue, state: model.acquisitionAllowsCallerRarity ? .interactive : .unavailable)
+
             if model.acquisitionRarityAdjustment != .none {
                 let key = model.acquisitionAllowsCallerRarity
-                    ? "hades2.acquisition.adjustedRarity"
-                    : "hades2.acquisition.gameControlledHint"
+                    ? "hades2.acquisition.adjustedRarity" : "hades2.acquisition.gameControlledHint"
                 Text(model.acquisitionAllowsCallerRarity
                      ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
                      : text(key))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 88, alignment: .leading)
+                    .help(model.acquisitionAllowsCallerRarity
+                        ? text(key) + " " + traitRarityLabel(model.acquisitionRarity)
+                        : text(key))
                     .accessibilityIdentifier("hades2.acquisition.adjustment")
             }
         }
