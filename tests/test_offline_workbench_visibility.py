@@ -51,8 +51,8 @@ catalog = hades.split("private struct HadesCatalogView:", 1)[1].split("private s
 assert 'Picker(text("hades.exactSource")' in catalog
 assert 'Picker(text("hades.selectTrait")' in catalog
 assert 'TrainerSecondaryActionButton(' in catalog and 'title: text("hades.acquire")' in catalog
-assert ".trainerPicker(.expanding, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)" in catalog
-assert ".trainerPicker(.expanding, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)" in catalog
+assert ".trainerPicker(.layoutAllocated, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)" in catalog
+assert ".trainerPicker(.layoutAllocated, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)" in catalog
 assert "selected != nil && model.canMutate" in catalog
 # #706 uses one fixed Core acquisition panel. It is rendered even
 # while disconnected, with game-controlled fallback for empty rarity catalogs.
