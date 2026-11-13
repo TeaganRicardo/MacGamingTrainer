@@ -150,6 +150,10 @@ parts = [
     source_section(view, "private var management: some View {", "private func featureRow("),
     management.split("struct Hades2ManagementUtilities: View {", 1)[1],
 ]
+chaos_row = (HADES / "Views/Hades2ChaosGatePanel.swift").read_text()
+assert "Hades2OccurrenceSetting(" in chaos_row
+assert "generateShortcutText: model.shortcutText(.generateChaosGate)" in chaos_row
+parts.append(chaos_row)
 visible_actions = [action for part in parts for action in shortcut_references(part)]
 if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
     visible_actions.extend(common_order)

@@ -954,11 +954,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             noticeToken = presentation("hades2.receipt.opened", arguments: [title.key])
         case .failed:
             noticeToken = nil
-            if (command == .generateGathering && receipt.error?.hasPrefix("hades2.gathering.unavailable.") == true) ||
-               (command == .generateChaosGate && receipt.error?.hasPrefix("hades2.chaosGate.unavailable.") == true),
-               let error = receipt.error {
+            if command == .generateGathering, let error = receipt.error, error.hasPrefix("hades2.gathering.unavailable.") {
                 errorToken = presentation(error)
             } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
+            if command == .generateChaosGate, let error = receipt.error, error.hasPrefix("hades2.chaosGate.unavailable.") {
+                errorToken = presentation(error)
+            }
         case .outcomeUnknown:
             noticeToken = nil
             errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])

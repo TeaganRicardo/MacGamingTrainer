@@ -5558,10 +5558,11 @@ if __MacGamingTrainerV1 == nil then
       if chaosGenerated[room] or room.ForceSecretDoor or room.SecretDoorHealthCost ~= nil then
         return nil, "hades2.chaosGate.unavailable.existing"
       end
-      for _, object in pairs(MapState.ActiveObstacles) do
-        if type(object) == "table" and object.Name == "SecretDoor" then
-          return nil, "hades2.chaosGate.unavailable.existing"
-        end
+      -- Query the native secret-door type directly. Scanning every active
+      -- obstacle on every status would scale with the entire chamber map.
+      local existingGateIds = GetIdsByType({ Name = "SecretDoor" })
+      if type(existingGateIds) == "table" and next(existingGateIds) ~= nil then
+        return nil, "hades2.chaosGate.unavailable.existing"
       end
       for _, door in pairs(MapState.OfferedExitDoors or {}) do
         if type(door) == "table" and (door.Name == "SecretDoor"
@@ -5615,7 +5616,7 @@ if __MacGamingTrainerV1 == nil then
       chaosObservation = target
       return { available = true, scopeToken = target.token }
     end
-    local function prepareChaos(params)
+    local function prepareCurrentChaosGate(params)
       local previous = chaosObservation
       local target, reason = inspectChaos()
       if type(params.scopeToken) ~= "string" or previous == nil or
@@ -5646,10 +5647,11 @@ if __MacGamingTrainerV1 == nil then
       directlyGeneratingChaosRoom = room
       room.SecretChanceSuccess = true
       room.AnomalyDoorChanceSuccess = false
-      GetIdsByType, SetupHarvestPoints = onlySecretPoint, function() end
+      local suppressedHarvest = function() end
+      GetIdsByType, SetupHarvestPoints = onlySecretPoint, suppressedHarvest
       local ok, failure = pcall(HandleSecretSpawns, CurrentRun)
       if GetIdsByType == onlySecretPoint then GetIdsByType = originalIds end
-      SetupHarvestPoints = originalHarvest
+      if SetupHarvestPoints == suppressedHarvest then SetupHarvestPoints = originalHarvest end
       room.SecretChanceSuccess, room.AnomalyDoorChanceSuccess = oldChance, oldAnomaly
       directlyGeneratingChaosRoom = nil
       if not ok then error(failure) end
@@ -5678,7 +5680,7 @@ if __MacGamingTrainerV1 == nil then
       chaosObservation = nil
       return created.ObjectId, "completed"
     end
-    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate, observeChaos = observeChaos, prepareChaos = prepareChaos, generateChaos = generateChaos }
+    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate, observeChaos = observeChaos, prepareChaos = prepareCurrentChaosGate, generateChaos = generateChaos }
   end)()
 
   runtimeState.forceRerolls = (function()

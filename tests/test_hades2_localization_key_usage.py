@@ -20,6 +20,7 @@ DYNAMIC_PREFIXES = {
     "hades2.rarity.",
     "hades2.traits.family.",
     "hades2.gathering.unavailable.",
+    "hades2.chaosGate.unavailable.",
     "hades2.saveEditor.workbench.section.",
     "hades2.saveEditor.investigate.block.",
     "hades2.saveEditor.discovery.reason.",
