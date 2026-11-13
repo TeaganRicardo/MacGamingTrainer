@@ -444,6 +444,8 @@
     "hades2.facility.generate": "生成",
     "hades2.facility.empty": "当前房间没有可用的原生设施",
     "hades2.facility.help": "在当前房间空闲的原生设施点位生成实体设施；库存、售价、出售选项与交互均遵循游戏原生规则。",
+    "hades2.facility.gift": "黑夜礼赠",
+    "hades2.facility.unavailable.fear": "当前恐惧等级尚未满足原生领取条件。",
     "hades2.facility.trove": "地狱宝藏",
     "hades2.facility.sigil": "匿踪符石",
     "hades2.facility.monument": "明月碑石",
