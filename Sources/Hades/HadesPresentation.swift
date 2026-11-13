@@ -240,6 +240,7 @@ enum HadesPresentation {
             "hades.rarity.Legendary": .init(zhCN: "传奇", en: "Legendary"),
             "hades.rarity.Duo": .init(zhCN: "双重", en: "Duo"),
             "hades.apply": .init(zhCN: "应用", en: "Apply"),
+            "hades.cancel": .init(zhCN: "取消", en: "Cancel"),
             "hades.setLevel": .init(zhCN: "设置等级", en: "Set Level"),
             "hades.setRarity": .init(zhCN: "设置稀有度", en: "Set Rarity"),
             "hades.remove": .init(zhCN: "删除", en: "Remove"),

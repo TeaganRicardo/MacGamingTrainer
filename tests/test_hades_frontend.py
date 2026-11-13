@@ -2202,6 +2202,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'disclosure': 'hades.disclosure',
         'search': 'hades.search',
     }
+    # Empty means the normal full regression. For isolated native layout
+    # acceptance, select only the journey that owns the changed interface.
+    selected_journeys = {value.strip() for value in os.environ.get(
+        'MGT_HADES_FRONTEND_JOURNEYS', '').split(',') if value.strip()}
     for journey, completion_marker in (
         ('frontend', 'hades_save_editor_native_control_journeys_ok'),
         ('recovery', 'hades_frontend_native_drafts_and_target_ownership_ok'),
@@ -2212,6 +2216,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         ('disclosure', 'hades_disclosure_module_journey_ok'),
         ('search', 'hades_workbench_search_native_ok'),
     ):
+        if selected_journeys and journey not in selected_journeys:
+            continue
         case_folder = folder / 'journeys' / journey
         case_folder.mkdir(parents=True)
         (case_folder / 'worker.py').write_text(worker_source)

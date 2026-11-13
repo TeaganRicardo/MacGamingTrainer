@@ -162,5 +162,168 @@ private func exerciseRoomPickerAlignment() {
         }
     }
     print("room_picker_native_alignment_ok")
+    exerciseWorldExitDualPickerLayout()
 }
+
+
+private struct WorldExitDualPickerGeometryFixture: View {
+    let language: TrainerPresentationLanguage
+    let hasShortcut: Bool
+    @State private var pending = false
+    @State private var exit = "exit"
+    @State private var target = "target"
+
+    private func title(_ english: String, _ chinese: String) -> String {
+        language == .en ? english : chinese
+    }
+
+    var body: some View {
+        TrainerDualPickerActionRow(
+            title: title("Modify exit", "修改出口"),
+            icon: "door.left.hand.open",
+            tint: TrainerTheme.standard.accent,
+            emphasized: pending
+        ) {
+            Picker(title("Current exit", "当前出口"), selection: $exit) {
+                Text(title("01 · Charon's shop", "01 · 卡戎商店")).tag("exit")
+                Text(title("02 · Long reward room", "02 · 长名称奖励房间")).tag("other")
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: .interactive)
+            .accessibilityIdentifier("worldExit.current")
+        } secondPicker: {
+            Picker(title("Target", "目标"), selection: $target) {
+                Text(title("Gold reward · Very long native menu value", "金币奖励 · 很长的原生菜单选项名称")).tag("target")
+                Text(title("Room category · Mourning Fields", "房间类别 · 哀悼原野")).tag("other")
+            }
+            .labelsHidden()
+            .trainerPicker(.layoutAllocated, state: pending ? .unavailable : .interactive)
+            .accessibilityIdentifier("worldExit.target")
+        } shortcut: {
+            if hasShortcut {
+                TrainerShortcutBadgeSlot(text: "⌃⌥G")
+            } else {
+                Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+            }
+        } action: {
+            TrainerSecondaryActionButton(
+                title: title(pending ? "Cancel" : "Apply", pending ? "取消" : "应用"),
+                enabled: true,
+                latched: pending,
+                subduedLatched: true,
+                widthRole: .compactRow
+            ) {
+                pending.toggle()
+            }
+            .accessibilityIdentifier("worldExit.action")
+        }
+    }
+}
+
+@MainActor
+private func exerciseWorldExitDualPickerLayout() {
+    let theme = TrainerTheme.standard
+    let widths = [theme.contentMinWidth + 56, CGFloat(1050), CGFloat(1600)]
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        for hasShortcut in [false, true] {
+            var previousPickerWidth: CGFloat?
+            var previousViewportWidth: CGFloat?
+            for width in widths {
+                let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+                localization.language = language
+                let host = NSHostingView(rootView:
+                    WorldExitDualPickerGeometryFixture(language: language, hasShortcut: hasShortcut)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .frame(height: 180, alignment: .topLeading)
+                        .preferredColorScheme(.dark)
+                        .trainerTheme(theme)
+                        .environmentObject(localization)
+                )
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 180),
+                    styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.appearance = NSAppearance(named: .darkAqua)
+                window.contentView = host
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+
+                func controls() -> [NativeAccessibilityControl] { nativeAccessibilityControls(host) }
+                func picker(_ identifier: String) -> NativeAccessibilityControl? {
+                    controls().first { $0.role == "AXPopUpButton" && $0.identifier == identifier }
+                }
+                func action(_ name: String) -> NativeAccessibilityControl? {
+                    controls().first { $0.role == "AXButton" && $0.label == name }
+                }
+                let applyLabel = language == .en ? "Apply" : "应用"
+                let cancelLabel = language == .en ? "Cancel" : "取消"
+                hierarchyWait(host) {
+                    picker("worldExit.current") != nil
+                        && picker("worldExit.target") != nil
+                        && action(applyLabel) != nil
+                        && (!hasShortcut || controls().contains {
+                            $0.role == "AXStaticText" && ($0.text ?? "").contains("⌃⌥G")
+                        })
+                }
+                let first = picker("worldExit.current")!.frame
+                let second = picker("worldExit.target")!.frame
+                let apply = action(applyLabel)!.frame
+                let shortcut = controls().first {
+                    $0.role == "AXStaticText" && ($0.text ?? "").contains("⌃⌥G")
+                }
+                let hostFrame = window.convertToScreen(host.convert(host.bounds, to: nil))
+                hierarchyCheck(first.width >= 142 && second.width >= 142
+                               && first.maxX <= second.minX + 2,
+                    "dual exit pickers overlap or collapse: language=\(language.rawValue) shortcut=\(hasShortcut) width=\(width)")
+                if hasShortcut {
+                    hierarchyCheck(shortcut != nil
+                                   && second.maxX <= shortcut!.frame.minX + 2
+                                   && shortcut!.frame.maxX <= apply.minX + 2
+                                   && apply.minX - second.maxX >= theme.shortcutBadgeMinimumWidth + 2,
+                        "shortcut lane overlaps a native Picker or action: second=\(second) badgeText=\(String(describing: shortcut?.frame)) action=\(apply) nativeViewport=\(host.bounds.width)")
+                } else {
+                    hierarchyCheck(second.maxX <= apply.minX + 2,
+                        "Hades I target Picker overlaps its action")
+                }
+                let trailingInset = hostFrame.maxX - apply.maxX
+                hierarchyCheck(apply.width >= theme.compactActionWidth - 2
+                               && trailingInset >= -2 && trailingInset <= theme.rowHorizontalPadding + 12,
+                    "World Exit action lost its Core minimum/trailing lane: language=\(language.rawValue) shortcut=\(hasShortcut) requestedWidth=\(width) nativeViewport=\(host.bounds.width) action=\(apply) viewport=\(hostFrame) inset=\(trailingInset)")
+                // AppKit clamps requested windows to the runner's actual screen.
+                // The 1050pt and 1600pt windows may have identical usable widths;
+                // expansion is required only when the *actual* viewport grows.
+                let actualViewportWidth = host.bounds.width
+                if let previousPickerWidth, let previousViewportWidth {
+                    let growth = max(0, actualViewportWidth - previousViewportWidth)
+                    if growth > 12 && previousPickerWidth < theme.pickerActionMaxWidth - 4 {
+                        let expected = min(theme.pickerActionMaxWidth,
+                                           previousPickerWidth + growth / 2 - 6)
+                        hierarchyCheck(first.width >= expected - 2,
+                            "dual Picker columns did not use new viewport space: requested=\(width) actual=\(actualViewportWidth) previous=\(previousViewportWidth) picker=\(first.width) previousPicker=\(previousPickerWidth)")
+                    } else {
+                        hierarchyCheck(first.width + 2 >= previousPickerWidth,
+                            "dual Picker columns shrank without losing viewport space")
+                    }
+                }
+                previousPickerWidth = first.width
+                previousViewportWidth = actualViewportWidth
+
+                hierarchyCheck(action(applyLabel)!.enabled && action(applyLabel)!.press(),
+                    "World Exit Apply refused native AX activation")
+                hierarchyWait(host) {
+                    action(cancelLabel) != nil && picker("worldExit.target")?.enabled == false
+                }
+                hierarchyCheck(action(cancelLabel)!.enabled && action(cancelLabel)!.press(),
+                    "latched World Exit Cancel refused native AX activation")
+                hierarchyWait(host) {
+                    action(applyLabel) != nil && picker("worldExit.target")?.enabled == true
+                }
+                print("world_exit_dual_picker_geometry language=\(language.rawValue) shortcut=\(hasShortcut) width=\(width)")
+                window.contentView = nil
+                window.close()
+            }
+        }
+    }
+    print("world_exit_dual_picker_native_geometry_ok")
+}
+
 '''

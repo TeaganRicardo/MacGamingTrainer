@@ -102,6 +102,7 @@ enum TrainerPickerWidthRole {
     case compactValue
     case rowValue
     case rowAction
+    case layoutAllocated
     case form
     case expanding
 }
@@ -138,6 +139,9 @@ private struct TrainerPickerWidthModifier: ViewModifier {
                 content
                     .modifier(TrainerNativeFlexiblePickerSizing())
                     .frame(minWidth: theme.pickerStandardWidth, maxWidth: .infinity)
+            case .layoutAllocated:
+                // The parent Layout owns the picker minimum and proposed width.
+                content.modifier(TrainerNativeFlexiblePickerSizing())
             case .form:
                 content.frame(
                     minWidth: theme.pickerStandardWidth,

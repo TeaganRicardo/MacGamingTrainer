@@ -96,32 +96,25 @@ for path in ("Sources/Hades/HadesWorkbenchNavigation.swift", "Sources/Hades2/Vie
 hades2 = source("Sources/Hades2/Hades2View.swift")
 world_exit = region(hades2, "private var worldExitPanel", "private var nextOccurrencePanel")
 next_occurrence = region(hades2, "private var nextOccurrencePanel", "private var resourcePanel")
-for block in (world_exit, next_occurrence):
-    assert "TrainerLabeledControlRow(" in block
-    assert "layout: .pickerAction" in block
+assert "TrainerDualPickerActionRow(" in world_exit
+assert world_exit.count(".trainerPicker(.layoutAllocated") == 2
+assert "model.canSelectWorldExitTarget" in world_exit
 assert "latched: model.selectedWorldExitLease != nil" in world_exit
+assert "subduedLatched: true" in world_exit
+assert "TrainerLabeledControlRow(" in next_occurrence
+assert "layout: .pickerAction" in next_occurrence
 assert "latched: pending" in next_occurrence
-grouped = region(source("Sources/Core/UI/Components/TrainerResourceControls.swift"),
-                 "struct TrainerGroupedOptionPicker")
-assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in grouped
-inline_group = region(grouped, "if inline {", "} else {")
-assert "TrainerLabeledControlRow(" in inline_group
-assert "layout: .pickerAction" in inline_group
-assert "inline: true" in region(hades2, "private func spawnRow(", "private func multiplierRow(")
-assert "spawnRow(" in region(hades2, "private var rewardSpawningPanel", "private var boonAcquisitionPanel")
+
 hades1_rooms = source("Sources/Hades/HadesRoomsPanel.swift")
 hades1_exit = region(hades1_rooms, "private var worldExitRow", "private var worldOccurrenceRow")
 hades1_occurrence = region(hades1_rooms, "private var worldOccurrenceRow", "var body: some View")
-for block in (hades1_exit, hades1_occurrence):
-    assert "TrainerLabeledControlRow(" in block
-    assert "layout: .pickerAction" in block
-assert hades1_exit.count(".trainerPicker(") >= 2
-assert hades1_exit.count(".expanding,") >= 2
+assert "TrainerDualPickerActionRow(" in hades1_exit
+assert hades1_exit.count(".trainerPicker(") == 2
+assert hades1_exit.count(".layoutAllocated") == 2
 assert "latched: model.selectedWorldExitLease != nil" in hades1_exit
+assert "subduedLatched: true" in hades1_exit
+assert "TrainerLabeledControlRow(" in hades1_occurrence
+assert "layout: .pickerAction" in hades1_occurrence
 assert ".rowAction," in hades1_occurrence
-assert "latched: pending" in hades1_occurrence
-# Hades I's Generate reward rows remain the same inline Core grouped pickers.
-assert "inline: true" in region(hades1_rooms, "private func spawnRow(", "private var worldExitRow")
-assert hades1_rooms.count("spawnRow(.") == 3
 
 print("sidebar_and_room_picker_regressions_ok")

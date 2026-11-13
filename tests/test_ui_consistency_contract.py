@@ -279,10 +279,15 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
             f"{relative} has {picker_count} Pickers but {owner_count} presentation owners"
         )
 assert ".trainerPicker(.rowAction" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
-world_actions = view[view.index("private var worldExitPanel"):view.index("private var resourcePanel")]
-assert world_actions.count(".trainerPicker(") >= 3
-assert world_actions.count(".expanding,") >= 2
-assert ".rowAction," in world_actions
+world_actions = view[view.index("private var worldExitPanel"):view.index("private var nextOccurrencePanel")]
+assert world_actions.count(".trainerPicker(.layoutAllocated") == 2
+assert "TrainerDualPickerActionRow(" in world_actions
+assert "model.canSelectWorldExitTarget" in world_actions
+assert "latched: model.selectedWorldExitLease != nil" in world_actions
+assert "subduedLatched: true" in world_actions
+assert 'title: text(model.selectedWorldExitLease != nil ? "hades2.worldActions.cancel" : "hades2.worldActions.apply")' in world_actions
+assert ".trainerPicker(.layoutAllocated" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+assert "subduedLatched: true" in (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
 assert ".trainerPicker(inline ? .rowAction : .expanding, state:" in resource_controls
 assert "layout: .pickerAction" in resource_controls
 row_primitive = (ROOT / "Sources/Core/UI/Primitives/TrainerRow.swift").read_text()
@@ -335,3 +340,10 @@ assert "specialSearch" not in view
 
 assert 'let lines = busy' in sidebar
 assert 'return lines.joined(separator: "\\n")' in sidebar
+
+dual_picker_layout = (CORE_UI / "Components/TrainerDualPickerActionRow.swift").read_text()
+assert "struct TrainerDualPickerActionLayout: Layout" in dual_picker_layout
+assert "subviews[1]" in dual_picker_layout and "subviews[2]" in dual_picker_layout
+assert "minimumShortcutWidth" in dual_picker_layout and "minimumActionWidth" in dual_picker_layout
+assert "minimumPickerWidth: 144" in dual_picker_layout
+assert "case .layoutAllocated:" in theme

@@ -286,6 +286,12 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
     NSApp.setActivationPolicy(.regular)
     NSApp.finishLaunching()
     NSApp.activate(ignoringOtherApps: true)
+    // Test-only isolated geometry mode. The normal journey still covers all
+    // existing Picker, contrast and workbench assertions.
+    if ProcessInfo.processInfo.environment["MGT_NATIVE_GEOMETRY_ONLY"] == "world-exit" {
+        exerciseWorldExitDualPickerLayout()
+        return
+    }
     let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
     let theme = TrainerTheme.standard
     // System accessibility environment values are read-only. Exercise the
