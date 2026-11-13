@@ -5734,6 +5734,8 @@ if __MacGamingTrainerV1 == nil then
       "GetIdsByType", "HandleSecretSpawns", "IsGameStateEligible", "SetupObstacle",
       "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
       "IsWellShopEligible", "IsSurfaceShopEligible", "IsSellTraitShopEligible",
+      "IsTimeChallengeForced", "IsPerfectClearChallengeForced",
+      "IsEliteChallengeForced", "IsMetaRewardStandEligible",
       "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
       "CheckRoomExitsReady", "RefreshUseButton", "PlaySound", "CreateAnimation",
     }
@@ -5941,6 +5943,8 @@ if __MacGamingTrainerV1 == nil then
       end
       local room, definition, id = target.room, target.definition, target.point
       local savedChance, savedAnomaly = room[definition.chance], room.AnomalyDoorChanceSuccess
+      local savedOtherChallengeChance = room.ChallengeChanceSuccess
+      local originalMetaEligible = IsMetaRewardStandEligible
       local originalIds, originalHarvest = GetIdsByType, SetupHarvestPoints
       local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
       local originalTime, originalPerfect, originalElite =
@@ -5976,6 +5980,16 @@ if __MacGamingTrainerV1 == nil then
       if definition.challenge then room[definition.chance] = false
       else room[definition.chance] = true end
       room.AnomalyDoorChanceSuccess = false
+      -- HandleSecretSpawns owns the *whole* shared pedestal pool. A one-shot
+      -- must never create an unrelated Gift of Night or fall through to a
+      -- different challenge when its requested family is not produced.
+      IsMetaRewardStandEligible = function() return false end
+      if not definition.challenge then
+        room.ChallengeChanceSuccess = false
+        IsTimeChallengeForced = function() return false end
+        IsPerfectClearChallengeForced = function() return false end
+        IsEliteChallengeForced = function() return false end
+      end
       if definition.challenge then
         for _, pool in ipairs(challengePools) do
           previousPools[pool] = EncounterSets[pool]
@@ -6019,13 +6033,15 @@ if __MacGamingTrainerV1 == nil then
       if SetupHarvestPoints == suppressHarvest then SetupHarvestPoints = originalHarvest end
       IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible =
         originalWell, originalSurface, originalSell
+      IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
+        originalTime, originalPerfect, originalElite
+      IsMetaRewardStandEligible = originalMetaEligible
       if definition.challenge then
-        IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
-          originalTime, originalPerfect, originalElite
         UseHeroTraitsWithValue = originalUseHeroTraits
         for _, pool in ipairs(challengePools) do EncounterSets[pool] = previousPools[pool] end
       end
       room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
+      room.ChallengeChanceSuccess = savedOtherChallengeChance
       if not ok then error(failure) end
       if SessionState ~= target.session or CurrentRun ~= target.run
           or CurrentRun.Hero ~= target.hero or CurrentRun.CurrentRoom ~= room
