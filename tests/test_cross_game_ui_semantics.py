@@ -84,7 +84,6 @@ shared_labels = {
     "hades.catalog": "hades2.spawn.exactBoons",
     "hades.exactSource": "hades2.spawn.exactSource",
     "hades.selectTrait": "hades2.spawn.exactTarget",
-    "hades.chaosPair": "hades2.spawn.chaosPair",
     "hades.chaosBlessing": "hades2.spawn.chaosBlessing",
     "hades.chaosCurse": "hades2.spawn.chaosCurse",
     "hades.cancelCurse": "hades2.traits.chaos.cancelPair",
