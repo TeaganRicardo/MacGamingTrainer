@@ -5533,37 +5533,36 @@ if __MacGamingTrainerV1 == nil then
     -- reservation invalidates the outstanding token before native mutation.
     local chaosObservation, chaosSerial = nil, 0
     local chaosGenerated = setmetatable({}, { __mode = "k" })
-    local chaosUnavailable = "hades2.chaosGate.unavailable."
     local function inspectChaos()
       local owner = M.runtimeOwners.roomContext()
       if M.terminalActionUnknown or owner == nil or type(MapState) ~= "table"
           or type(MapState.ActiveObstacles) ~= "table" or type(CurrentRun) ~= "table"
           or type(CurrentRun.CurrentRoom) ~= "table" then
-        return nil, chaosUnavailable .. "scene"
+        return nil, "hades2.chaosGate.unavailable.scene"
       end
       local room = owner.room
       if MapState.HostilePolymorph or (type(ScreenState) == "table" and ScreenState.InTransition)
           or next(ActiveScreens or {}) ~= nil or room ~= CurrentRun.CurrentRoom then
-        return nil, chaosUnavailable .. "scene"
+        return nil, "hades2.chaosGate.unavailable.scene"
       end
       if not functionsPresent(nativeFunctions.chaos)
           or not functionsPresent({ "IsGameStateEligible", "HasHeroTraitValue", "SetupHarvestPoints" })
           or type(ObstacleData) ~= "table" or type(ObstacleData.SecretDoor) ~= "table"
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
-        return nil, chaosUnavailable .. "native"
+        return nil, "hades2.chaosGate.unavailable.native"
       end
       if chaosGenerated[room] or room.ForceSecretDoor or room.SecretDoorHealthCost ~= nil then
-        return nil, chaosUnavailable .. "existing"
+        return nil, "hades2.chaosGate.unavailable.existing"
       end
       for _, object in pairs(MapState.ActiveObstacles) do
         if type(object) == "table" and object.Name == "SecretDoor" then
-          return nil, chaosUnavailable .. "existing"
+          return nil, "hades2.chaosGate.unavailable.existing"
         end
       end
       for _, door in pairs(MapState.OfferedExitDoors or {}) do
         if type(door) == "table" and (door.Name == "SecretDoor"
             or type(door.Room) == "table" and door.Room.RoomSetName == "Chaos") then
-          return nil, chaosUnavailable .. "existing"
+          return nil, "hades2.chaosGate.unavailable.existing"
         end
       end
       local regular = IsGameStateEligible(room, room.SecretDoorRequirements or RoomData.BaseRoom.SecretDoorRequirements)
@@ -5571,10 +5570,10 @@ if __MacGamingTrainerV1 == nil then
       local forcedRules = type(NamedRequirementsData) == "table" and NamedRequirementsData.ForceSecretDoorRequirements or nil
       local forcedEligible = forced and type(NamedRequirementsData) == "table"
         and IsGameStateEligible(room, forcedRules)
-      if not regular and not forcedEligible then return nil, chaosUnavailable .. "progression" end
-      if not chaosDestinationAvailable(CurrentRun, room) then return nil, chaosUnavailable .. "route" end
+      if not regular and not forcedEligible then return nil, "hades2.chaosGate.unavailable.progression" end
+      if not chaosDestinationAvailable(CurrentRun, room) then return nil, "hades2.chaosGate.unavailable.route" end
       local availablePoints = GetIdsByType({ Name = "SecretPoint" })
-      if type(availablePoints) ~= "table" then return nil, chaosUnavailable .. "placement" end
+      if type(availablePoints) ~= "table" then return nil, "hades2.chaosGate.unavailable.placement" end
       local point
       for _, id in ipairs(availablePoints) do
         local occupant = MapState.ActiveObstacles[id]
@@ -5583,7 +5582,7 @@ if __MacGamingTrainerV1 == nil then
           break
         end
       end
-      if point == nil then return nil, chaosUnavailable .. "placement" end
+      if point == nil then return nil, "hades2.chaosGate.unavailable.placement" end
       return {
         session = SessionState, run = CurrentRun, hero = owner.hero,
         room = room, map = MapState, roomName = room.Name,
@@ -5605,7 +5604,7 @@ if __MacGamingTrainerV1 == nil then
     end
     local function observeChaos()
       local ok, target, reason = pcall(inspectChaos)
-      if not ok then target, reason = nil, chaosUnavailable .. "native" end
+      if not ok then target, reason = nil, "hades2.chaosGate.unavailable.native" end
       if target == nil then chaosObservation = nil; return { available = false, reason = reason } end
       if sameChaosTarget(chaosObservation, target) then target.token = chaosObservation.token
       else chaosSerial = chaosSerial + 1; target.token = M.traitInventoryGeneration .. ":chaos:" .. tostring(chaosSerial) end
@@ -5617,14 +5616,14 @@ if __MacGamingTrainerV1 == nil then
       local target, reason = inspectChaos()
       if type(params.scopeToken) ~= "string" or previous == nil or
           params.scopeToken ~= previous.token or not sameChaosTarget(previous, target) then
-        error(reason or chaosUnavailable .. "stale")
+        error(reason or "hades2.chaosGate.unavailable.stale")
       end
       return target
     end
     local function generateChaos(record, target)
       local current, reason = inspectChaos()
       if not sameChaosTarget(target, current) then
-        record.status = "failed"; record.error = reason or chaosUnavailable .. "stale"
+        record.status = "failed"; record.error = reason or "hades2.chaosGate.unavailable.stale"
         return nil, "failed"
       end
       -- The game source combines gate generation with unrelated facilities.
