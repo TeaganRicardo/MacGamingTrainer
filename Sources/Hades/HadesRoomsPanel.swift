@@ -248,10 +248,12 @@ struct HadesRoomsPanel: View {
                     ? .interactive : .unavailable
             )
             TrainerSecondaryActionButton(
-                title: text("hades.apply"),
+                title: text(pending ? "hades.cancel" : "hades.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.worldOccurrenceActionAvailable,
-                latched: pending
+                latched: pending,
+                subduedLatched: true,
+                helpText: text(pending ? "hades.cancel" : "hades.apply")
             ) {
                 _ = model.toggleWorldOccurrence()
             }
