@@ -38,6 +38,7 @@ assert(result.applied and result.actionOutcome=='completed' and spawns==1)
 assert(result.chaosGateProbability==0 and room.SecretChanceSuccess==false)
 local door = assert(gate())
 assert(door.HealthCost==14 and door.Room.UsePreviousRoomSet and door.Room.PauseBiomeState)
+assert(door.ReadyToUse and unlockedDoors==1 and previewDoors==1)
 assert(room.ExitDoorRooms[door.ObjectId]=='Chaos_01')
 assert(not result.chaosGateTarget.available and result.chaosGateTarget.reason=='hades2.chaosGate.unavailable.existing')
 assert(M.dispatch('generate_chaos_gate', params).duplicate and spawns==1)
@@ -45,6 +46,35 @@ assert(not pcall(M.dispatch, 'generate_chaos_gate', {scopeToken=params.scopeToke
 CurrentRun.Hero.Health = 14; AttemptUseDoor(door); assert(charges==0)
 CurrentRun.Hero.Health = 100; AttemptUseDoor(door); assert(charges==1)
 assert(CurrentRun.CurrentRoom==door.Room and ChooseNextRoomData(CurrentRun).Name=='F_Next')
+print('direct_chaos_ok')
+""",
+r"""
+local room=newRoom(0,.95)
+local token=M.dispatch('status',{includeCatalogs=false}).chaosGateTarget.scopeToken
+assert(type(token)=='string')
+room.ExitsUnlocked=false
+local denied=M.dispatch('status',{includeCatalogs=false}).chaosGateTarget
+assert(not denied.available and denied.reason=='hades2.chaosGate.unavailable.scene')
+assert(not pcall(M.dispatch,'generate_chaos_gate',{
+ scopeToken=token,requestId='before-clear',includeCatalogs=false,
+}))
+assert(spawns==0 and unlockedDoors==0)
+room.ExitsUnlocked=true
+room.BlockExits=true
+assert(not M.dispatch('status',{includeCatalogs=false}).chaosGateTarget.available)
+room.BlockExits=false
+local restored=M.dispatch('status',{includeCatalogs=false}).chaosGateTarget
+assert(restored.available)
+local nativeHandle=HandleSecretSpawns
+HandleSecretSpawns=function(run)
+ nativeHandle(run)
+ local door=gate()
+ if door then door.ReadyToUse=false end
+end
+local result=M.dispatch('generate_chaos_gate',{
+ scopeToken=restored.scopeToken,requestId='unlock-after-clear',includeCatalogs=false,
+})
+assert(result.applied and gate().ReadyToUse and unlockedDoors==1)
 print('direct_chaos_ok')
 """,
 r"""
