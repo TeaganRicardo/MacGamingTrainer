@@ -150,7 +150,7 @@ parts = [
     source_section(view, "private var management: some View {", "private func featureRow("),
     management.split("struct Hades2ManagementUtilities: View {", 1)[1],
 ]
-chaos_row = (HADES / "Views/Hades2ChaosGatePanel.swift").read_text()
+chaos_row = read("Sources/Hades2/Views/Hades2ChaosGatePanel.swift")
 assert "Hades2OccurrenceSetting(" in chaos_row
 assert "generateShortcutText: model.shortcutText(.generateChaosGate)" in chaos_row
 parts.append(chaos_row)

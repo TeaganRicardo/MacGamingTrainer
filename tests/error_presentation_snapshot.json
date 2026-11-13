@@ -2069,6 +2069,13 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "generate_chaos_gate::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     }
   },
   "runtime_commands": [
