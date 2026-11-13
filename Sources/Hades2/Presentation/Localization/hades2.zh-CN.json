@@ -210,6 +210,7 @@
     "hades2.metric.rerolls": "{term:officialTerms.reroll}",
     "hades2.metric.spellCharge": "{term:officialTerms.spell}充能",
     "hades2.worldActions.apply": "应用",
+    "hades2.worldActions.cancel": "取消",
     "hades2.occurrence.characters": "角色",
     "hades2.occurrence.noRequest": "不指定",
     "hades2.occurrence.shop": "商店",
