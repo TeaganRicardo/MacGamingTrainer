@@ -8,14 +8,17 @@ ObstacleData.ChallengeSwitch = {OnUsedFunctionName='AttemptUseChallengeSwitch'}
 ObstacleData.TimeChallengeSwitch_Money = {
   Name='TimeChallengeSwitch_Money', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='TimeChallengeEncounterOptions', RewardType='Money',
+  ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='TimeChallengeUnlocked',
 }
 ObstacleData.PerfectClearChallengeSwitch_Pom = {
   Name='PerfectClearChallengeSwitch_Pom', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='PerfectClearEncounterOptions', RewardType='StackUpgrade',
+  ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='PerfectClearUnlocked',
 }
 ObstacleData.EliteChallengeSwitch_Talent = {
   Name='EliteChallengeSwitch_Talent', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='EliteChallengeEncounterOptions', RewardType='TalentDrop',
+  ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='EliteChallengeUnlocked',
 }
 EncounterSets = {
   TimeChallengeOptions={'TimeChallengeSwitch_Money'},
