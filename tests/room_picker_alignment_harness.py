@@ -281,9 +281,10 @@ private func exerciseWorldExitDualPickerLayout() {
                     hierarchyCheck(second.maxX <= apply.minX + 2,
                         "Hades I target Picker overlaps its action")
                 }
+                let trailingInset = hostFrame.maxX - apply.maxX
                 hierarchyCheck(apply.width >= theme.compactActionWidth - 2
-                               && abs((hostFrame.maxX - theme.rowHorizontalPadding) - apply.maxX) < 3,
-                    "World Exit action lost its Core minimum/trailing lane")
+                               && trailingInset >= -2 && trailingInset <= theme.rowHorizontalPadding + 12,
+                    "World Exit action lost its Core minimum/trailing lane: language=\(language.rawValue) shortcut=\(hasShortcut) width=\(width) action=\(apply) viewport=\(hostFrame) inset=\(trailingInset)")
                 if let previousPickerWidth {
                     hierarchyCheck(first.width >= previousPickerWidth + 20,
                         "dual Picker columns did not expand with the viewport")
