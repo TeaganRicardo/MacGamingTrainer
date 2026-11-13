@@ -1377,10 +1377,12 @@ struct Hades2TrainerView: View {
             )
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
-                title: text("hades2.worldActions.apply"),
+                title: text(pending ? "hades2.worldActions.cancel" : "hades2.worldActions.apply"),
                 systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.occurrenceActionAvailable,
-                latched: pending
+                latched: pending,
+                subduedLatched: true,
+                helpText: text(pending ? "hades2.worldActions.cancel" : "hades2.worldActions.apply")
             ) {
                 _ = model.toggleNextOccurrence()
             }
