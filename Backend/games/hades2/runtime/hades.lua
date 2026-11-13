@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 132 then
+if previousModule and previousModule.revision ~= 133 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 132 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 132,
+    version = 1, revision = 133,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5212,6 +5212,8 @@ if __MacGamingTrainerV1 == nil then
     local nativeFunctions = {
       room = { "CreateRoom", "DeepCopyTable", "ShallowCopyTable" },
       chaos = { "IsSecretDoorEligible", "IsRoomEligible", "GetIdsByType", "ChooseNextRoomData", "HandleSecretSpawns", "AttemptUseDoor", "GetSecretDoorCost" },
+      chaosAction = { "SpawnObstacle", "AssignRoomToExitDoor", "UseHeroTraitsWithValue",
+        "RemoveRandomValue", "RandomSynchronize", "IsEmpty", "DeepCopyTable", "SetupHarvestPoints" },
       gathering = { "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" },
       toolChance = { "GetHarvestPointSpawnChance" },
     }
@@ -5545,10 +5547,12 @@ if __MacGamingTrainerV1 == nil then
           or next(ActiveScreens or {}) ~= nil or room ~= CurrentRun.CurrentRoom then
         return nil, "hades2.chaosGate.unavailable.scene"
       end
-      if not functionsPresent(nativeFunctions.chaos)
-          or not functionsPresent({ "IsGameStateEligible", "HasHeroTraitValue", "SetupHarvestPoints" })
+      if not functionsPresent(nativeFunctions.chaos) or not functionsPresent(nativeFunctions.chaosAction)
+          or not functionsPresent({ "IsGameStateEligible", "HasHeroTraitValue" })
           or type(ObstacleData) ~= "table" or type(ObstacleData.SecretDoor) ~= "table"
-          or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
+          or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table"
+          or type(MapState.OfferedExitDoors) ~= "table"
+          or type(room.ExitDoorRooms) ~= "table" then
         return nil, "hades2.chaosGate.unavailable.native"
       end
       if chaosGenerated[room] or room.ForceSecretDoor or room.SecretDoorHealthCost ~= nil then
