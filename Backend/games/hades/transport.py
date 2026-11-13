@@ -161,7 +161,11 @@ class HadesLuaTransport:
 
     def _boundary(self):
         deadline = time.monotonic() + 3
+        # The initial stop precedes target breakpoint, focus mutation, or
+        # Lua execution. Keep its failure distinct from uncertain cleanup.
+        self._boundary_initial_stop_pending = True
         self._stop(deadline)
+        self._boundary_initial_stop_pending = False
         self._restore_focus()
         error = lldb.SBError()
         focus = self.addresses['_ZN3sgg13ConfigOptions20RequireFocusToUpdateE']
@@ -202,6 +206,7 @@ class HadesLuaTransport:
         if len(payload) > LUA_SOURCE_LIMIT_BYTES:
             raise ValueError('Hades Lua request exceeds 128 KiB')
         scratch = None
+        self._boundary_initial_stop_pending = False
         try:
             thread, state = self._boundary()
             error = lldb.SBError()
@@ -257,7 +262,7 @@ class HadesLuaTransport:
             return json.loads(text)
         finally:
             primary_error = sys.exc_info()[1]
-            if self.alive():
+            if self.alive() and not self._boundary_initial_stop_pending:
                 try:
                     self._stop(time.monotonic() + 3)
                     self.target.DeleteAllBreakpoints()
