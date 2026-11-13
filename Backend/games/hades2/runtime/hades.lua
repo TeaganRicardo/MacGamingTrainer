@@ -5936,7 +5936,8 @@ if __MacGamingTrainerV1 == nil then
       local suppressHarvest = function() end
       -- Only the selected challenge family receives an invocation-scoped force
       -- result. Preserve all unrelated Hero force effects and their native rules.
-      room[definition.chance] = definition.challenge and false or true
+      if definition.challenge then room[definition.chance] = false
+      else room[definition.chance] = true end
       room.AnomalyDoorChanceSuccess = false
       if definition.challenge then
         for _, pool in ipairs(challengePools) do
