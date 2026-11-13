@@ -274,10 +274,11 @@ private func exerciseWorldExitDualPickerLayout() {
                                && first.maxX <= second.minX + 2,
                     "dual exit pickers overlap or collapse: language=\(language.rawValue) shortcut=\(hasShortcut) width=\(width)")
                 if hasShortcut {
-                    hierarchyCheck(shortcut != nil && second.maxX <= shortcut!.frame.minX + 2
-                                   && shortcut!.frame.width >= theme.shortcutBadgeMinimumWidth - 2
-                                   && shortcut!.frame.maxX <= apply.minX + 2,
-                        "shortcut lane overlaps a native Picker or action")
+                    hierarchyCheck(shortcut != nil
+                                   && second.maxX <= shortcut!.frame.minX + 2
+                                   && shortcut!.frame.maxX <= apply.minX + 2
+                                   && apply.minX - second.maxX >= theme.shortcutBadgeMinimumWidth + 2,
+                        "shortcut lane overlaps a native Picker or action: second=\(second) badgeText=\(String(describing: shortcut?.frame)) action=\(apply) nativeViewport=\(host.bounds.width)")
                 } else {
                     hierarchyCheck(second.maxX <= apply.minX + 2,
                         "Hades I target Picker overlaps its action")
