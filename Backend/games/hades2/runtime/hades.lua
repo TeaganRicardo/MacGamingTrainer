@@ -5743,7 +5743,7 @@ if __MacGamingTrainerV1 == nil then
       "Attach", "CreateTextBox", "ModifyTextBox", "GetRunDepth",
       "GetTotalHeroTraitValue", "round", "RandomInt", "SetThingProperty", "SpawnObstacle",
     }
-    local function inspectFacility(kind)
+    local function inspectFacility(kind, getSharedBaseIds)
       local definition = facilityById[kind]
       local owner = M.runtimeOwners.roomContext()
       if definition == nil or M.terminalActionUnknown or owner == nil
@@ -5834,7 +5834,11 @@ if __MacGamingTrainerV1 == nil then
         end
         if #variants == 0 then return nil, "hades2.facility.unavailable.encounter" end
       end
-      local points = GetIdsByType({ Name = "ChallengeSwitchBase" })
+      -- Status observations share one native base-point lookup; mutation
+      -- preflight always calls this inspector again with fresh native data.
+      local points
+      if getSharedBaseIds then points = getSharedBaseIds()
+      else points = GetIdsByType({ Name = "ChallengeSwitchBase" }) end
       if type(points) ~= "table" then return nil, "hades2.facility.unavailable.placement" end
       local occupied = {}
       for _, field in ipairs({
@@ -5888,8 +5892,16 @@ if __MacGamingTrainerV1 == nil then
     end
     local function observeFacilities()
       local options, nextObservations = {}, {}
+      local pointIds, queried = nil, false
+      local function sharedPoints()
+        if not queried then
+          queried = true
+          pointIds = GetIdsByType({ Name = "ChallengeSwitchBase" })
+        end
+        return pointIds
+      end
       for _, entry in ipairs(facilityDefinitions) do
-        local ok, target = pcall(inspectFacility, entry.id)
+        local ok, target = pcall(inspectFacility, entry.id, sharedPoints)
         if ok and target ~= nil then
           local old = facilityObservations[entry.id]
           if sameFacility(old, target) then target.token = old.token
