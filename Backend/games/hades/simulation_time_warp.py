@@ -28,6 +28,16 @@ class HadesSimulationTimeWarp:
             raise AdapterError('invalid_value', 'hades.error.invalidValue')
         return speed
 
+    def _invalid_receipt(self, operation, detail, *, verify=False):
+        if operation == 'set':
+            # The Lua native speed owner may have applied the requested speed.
+            # A contradictory receipt cannot be treated as a retryable failure.
+            self.transport.tainted = True
+            raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown', diagnostic=detail)
+        code = 'time_warp_verify_failed' if verify else 'debugger_protocol'
+        key = 'host.timeWarp.error.verifyFailed' if verify else 'hades.error.debuggerProtocol'
+        raise AdapterError(code, key, diagnostic=detail)
+
     def _execute(self, operation, value=None):
         source = 'local timeWarp = (function()\n' + self.source + '\nend)()\n'
         if operation == 'set':
@@ -36,7 +46,7 @@ class HadesSimulationTimeWarp:
             source += 'return timeWarp.current()'
         receipt = self.transport.execute(source, mutating=operation == 'set')
         if not isinstance(receipt, dict):
-            raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+            self._invalid_receipt(operation, 'native simulation-time receipt is not a JSON object')
         speed = receipt.get('multiplier')
         native = receipt.get('nativeFraction')
         effective = receipt.get('effectiveFraction')
@@ -46,13 +56,11 @@ class HadesSimulationTimeWarp:
                 or type(native) not in (int, float) or not math.isfinite(float(native))
                 or type(effective) not in (int, float) or not math.isfinite(float(effective))
                 or type(installed) is not bool):
-            raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+            self._invalid_receipt(operation, 'invalid native simulation-time receipt fields')
         if abs(float(effective) - float(native) * float(speed)) > 1e-6:
-            raise AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed',
-                               arguments=(speed, effective))
+            self._invalid_receipt(operation, 'effective simulation fraction disagrees with native multiplied fraction', verify=True)
         if operation == 'set' and (not installed or abs(float(speed) - value) > 1e-6):
-            raise AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed',
-                               arguments=(value, speed))
+            self._invalid_receipt(operation, 'Lua speed owner did not confirm the applied multiplier', verify=True)
         return receipt
 
     def current_speed(self):
