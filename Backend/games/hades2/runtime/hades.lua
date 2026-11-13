@@ -5765,6 +5765,7 @@ if __MacGamingTrainerV1 == nil then
     local metaRewardFunctions = {
       "GetRandomEligibleValueFromWeightedList", "SpawnObstacle",
       "SetScale", "Attach", "SetThingProperty", "StopAnimation", "IsAlive",
+      "thread", "CallFunctionName",
     }
     local function inspectFacility(kind, getSharedBaseIds)
       local definition = facilityById[kind]
@@ -6163,6 +6164,13 @@ if __MacGamingTrainerV1 == nil then
       -- never call DoUnlockRoomExits, which would reroll unrelated room exits.
       if not CheckRoomExitsReady(room) or not room.ExitsUnlocked then
         error("Native room became unavailable for facility interaction")
+      end
+      -- DoUnlockRoomExits normally schedules this for every live obstacle
+      -- before making its individual use button ready. Replay the new
+      -- stand's authored callback only; never redo the whole exit unlock.
+      if definition.requiresMeta and type(object.ExitsUnlockedFunctionName) == "string" then
+        thread(CallFunctionName, object.ExitsUnlockedFunctionName,
+               object, object.ExitsUnlockedFunctionArgs)
       end
       local animation, sound, availableText
       if definition.challenge then
