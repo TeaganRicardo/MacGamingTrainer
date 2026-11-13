@@ -175,6 +175,9 @@ assert exact_surface.count('Picker(') >= 2
 assert 'text("hades2.spawn.exactSource")' in exact_surface
 assert 'text("hades2.spawn.exactTarget")' in exact_surface
 assert 'selectExactSource' in exact_surface
+# Catalog identity/rarity changes must reactivate the selected acquisition target.
+assert '.onChange(of: model.nativeRarityOrder)' in exact_surface
+assert '.onChange(of: model.exactBoonOptions.map { $0.id + ":" + $0.rarities.joined(separator: ",") })' in exact_surface
 assert 'exactItemSelection' in exact_surface
 assert '"hades2.spawn.exactSource": "来源"' in zh_presentation
 assert '"hades2.spawn.exactSource": "Source"' in en_presentation
