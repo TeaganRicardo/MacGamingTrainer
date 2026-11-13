@@ -448,6 +448,8 @@
     "hades2.facility.sigil": "Unseen Sigil",
     "hades2.facility.monument": "Moon Monument",
     "hades2.facility.unavailable.encounter": "The current room has no compatible native challenge encounter and reward.",
+    "hades2.facility.gift": "Gift of Night",
+    "hades2.facility.unavailable.shrine": "The Gift of Night requires enough Fear points to be usable in this room.",
     "hades2.facility.well": "Well of Charon",
     "hades2.facility.shrine": "Shrine of Hermes",
     "hades2.facility.purging": "Pool of Purging",

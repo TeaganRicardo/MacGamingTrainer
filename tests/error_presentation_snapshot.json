@@ -2123,6 +2123,10 @@
     "generate_chamber_facility::hades2.facility.unavailable.encounter": {
       "key": "hades2.facility.unavailable.encounter",
       "arguments": []
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.shrine": {
+      "key": "hades2.facility.unavailable.shrine",
+      "arguments": []
     }
   },
   "runtime_commands": [

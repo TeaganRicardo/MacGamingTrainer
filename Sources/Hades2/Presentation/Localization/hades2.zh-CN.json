@@ -448,6 +448,8 @@
     "hades2.facility.sigil": "匿踪符石",
     "hades2.facility.monument": "明月碑石",
     "hades2.facility.unavailable.encounter": "当前房间没有符合游戏原生规则的挑战战斗及奖励。",
+    "hades2.facility.gift": "黑夜礼赠",
+    "hades2.facility.unavailable.shrine": "当前房间的黑夜礼赠需要满足游戏原生恐惧值门槛才可使用。",
     "hades2.facility.well": "卡戎之井",
     "hades2.facility.shrine": "赫尔墨斯的神龛",
     "hades2.facility.purging": "净化之池",
