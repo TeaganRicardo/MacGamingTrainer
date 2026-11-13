@@ -7,6 +7,11 @@ RoomData = { BaseRoom = { SecretSpawnChance = .2 },
 RoomSets = { Chaos = { 'Chaos_01' }, F = { 'F_Next' } }
 ObstacleData = { SecretDoor = { Name = 'SecretDoor', OnUsedFunctionName = 'AttemptUseDoor' } }
 SetupHarvestPoints = function() end
+local unlockedDoors, previewDoors = 0, 0
+CheckRoomExitsReady = function(room) return room.ExitsUnlocked and not room.BlockExits end
+CreateDoorRewardPreview = function(door) previewDoors = previewDoors + 1 end
+ExitDoorUnlockedPresentation = function(door) unlockedDoors = unlockedDoors + 1 end
+thread = function(callback, ...) return callback(...) end
 MapState.OfferedExitDoors = {}
 SpawnObstacle = function() end
 AssignRoomToExitDoor = function() end
@@ -29,6 +34,7 @@ CreateRoom = function(data, args)
  local room = gatheringCreate(data, args)
  room.SecretChanceSuccess = RandomChance(room.SecretSpawnChance or .2)
  room.ExitDoorRooms = {}; room.RoomCreations = {}
+ room.ExitsUnlocked = true; room.ActiveEncounters = {}
  return room
 end
 local nativeCreate = CreateRoom
