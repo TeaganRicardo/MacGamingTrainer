@@ -67,6 +67,11 @@ IsSurfaceShopEligible = function(run,room)
   return room.ForceSurfaceShop or room.SurfaceShopChanceSuccess
     and IsGameStateEligible(room,room.SurfaceShopRequirements or RoomData.BaseRoom.SurfaceShopRequirements)
 end
+-- These native side effects must stay isolated when a shop is requested.
+IsTimeChallengeForced = function(room) return room.FixtureForceChallenge == true end
+IsPerfectClearChallengeForced = function(room) return false end
+IsEliteChallengeForced = function(room) return false end
+IsMetaRewardStandEligible = function() return true end
 IsSellTraitShopEligible = function(room)
   return room.ForceSellShop or room.SellShopChanceSuccess
     and IsGameStateEligible(room,room.SellShopRequirements)
@@ -120,7 +125,20 @@ HandleSecretSpawns = function(run)
     room.ForceSurfaceShop = true
     setupShop('SurfaceShop')
   end
-  if not IsEmpty(bases) then unrelatedChallenges = unrelatedChallenges + 1 end
+  if room.FixtureUnrelatedChallenge and not IsEmpty(bases)
+      and (room.ChallengeChanceSuccess or IsTimeChallengeForced(room)) then
+    local item = { Name = "UnexpectedTrove", ObjectId = RemoveRandomValue(bases) }
+    room.ChallengeSwitch = item
+    SetupObstacle(item)
+    unrelatedChallenges = unrelatedChallenges + 1
+  end
+  if room.FixtureUnrelatedMeta and not IsEmpty(bases)
+      and IsMetaRewardStandEligible(run, room) then
+    local item = { Name = "UnexpectedMeta", ObjectId = RemoveRandomValue(bases) }
+    room.MetaRewardStand = item
+    SetupObstacle(item)
+    unrelatedChallenges = unrelatedChallenges + 1
+  end
   SetupHarvestPoints(room)
   if room.AnomalyDoorChanceSuccess then room.DoAnomalies = true end
 end
