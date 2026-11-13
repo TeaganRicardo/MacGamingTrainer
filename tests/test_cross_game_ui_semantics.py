@@ -456,7 +456,7 @@ assert 'func addChaosPair(blessing:' not in hades_model_source
 # rarity even at the compact header width. Keep the full explanation in help.
 for language, adjusted, game_controlled in (
     ("zh-CN", "自动 →", "游戏决定"),
-    ("en", "Auto →", "Game set"),
+    ("en", "Auto →", "Game-defined"),
 ):
     hades2_presentation = hades2_labels(language)
     assert hades_labels["hades.acquisition.rarityAdjustedCompact"][language] == adjusted
