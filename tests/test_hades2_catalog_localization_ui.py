@@ -194,8 +194,8 @@ assert '$0.acquisitionMode == "chaosCurse"' in view
 assert 'private func repairChaosPairSelections()' in view
 
 chaos_pair_surface = exact_surface[
-    exact_surface.index('hades2.spawn.chaosPair'):
-    exact_surface.index('hades2.spawn.exactSource')
+    exact_surface.index('TrainerDualInlinePickerLayout('):
+    exact_surface.index('text("hades2.spawn.exactSource")')
 ]
 assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing)' in chaos_pair_surface
 assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse)' in chaos_pair_surface
