@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 136 then
+if previousModule and previousModule.revision ~= 137 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 136 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 136,
+    version = 1, revision = 137,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5737,6 +5737,11 @@ if __MacGamingTrainerV1 == nil then
         chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
         requirements = "EliteSwitchRequirements", defaultRequirements = "EliteSwitchRequirements",
         challenge = "EliteChallengeOptions" },
+      { id = "gift", labelKey = "hades2.facility.gift", field = "MetaRewardStand",
+        force = "ForceMetaRewardStand", chance = "MetaRewardStandSuccess",
+        configuredChance = "MetaRewardStandSpawnChance",
+        requirements = "MetaRewardStandRequirements", defaultRequirements = "MetaRewardStandRequirements",
+        use = "UseMetaRewardStand", requiresMeta = true },
     }
     local facilityById = {}
     for _, entry in ipairs(facilityDefinitions) do facilityById[entry.id] = entry end
@@ -5756,6 +5761,10 @@ if __MacGamingTrainerV1 == nil then
       "IsEliteChallengeForced", "UseHeroTraitsWithValue", "GenerateEncounter", "IsHorizontallyFlipped",
       "Attach", "CreateTextBox", "ModifyTextBox", "GetRunDepth",
       "GetTotalHeroTraitValue", "round", "RandomInt", "SetThingProperty", "SpawnObstacle",
+    }
+    local metaFunctions = {
+      "GetRandomEligibleValueFromWeightedList", "SpawnObstacle", "SetScale",
+      "Attach", "SetThingProperty", "StopAnimation", "CallFunctionName", "thread",
     }
     local function inspectFacility(kind, getSharedBaseIds)
       local definition = facilityById[kind]
@@ -5780,6 +5789,7 @@ if __MacGamingTrainerV1 == nil then
           or definition.requiresSell and not functionsPresent({ "IsGodTrait", "GenerateSellTraitValues" })
           or definition.challenge and not functionsPresent(challengeFunctions)
           or definition.challenge and (type(EncounterSets) ~= "table" or type(EncounterData) ~= "table")
+          or definition.requiresMeta and not functionsPresent(metaFunctions)
           or type(ObstacleData) ~= "table" or type(ObstacleData[definition.field]) ~= "table"
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
         return nil, "hades2.facility.unavailable.native"
@@ -5800,10 +5810,15 @@ if __MacGamingTrainerV1 == nil then
       -- from a failed roll in an otherwise legal room. Surface and sell shops
       -- require a room-owned positive chance (BaseRoom defaults to zero).
       local spawnChance = room[definition.configuredChance]
+      if definition.requiresMeta and (room.RoomSetName ~= "I" and room.RoomSetName ~= "Q") then
+        return nil, "hades2.facility.unavailable.route"
+      end
       if spawnChance == nil and definition.id == "well" then
         spawnChance = RoomData.BaseRoom.WellShopSpawnChance
       elseif spawnChance == nil and definition.challenge then
         spawnChance = RoomData.BaseRoom.ChallengeSpawnChance
+      elseif spawnChance == nil and definition.requiresMeta then
+        spawnChance = RoomData.BaseRoom.MetaRewardStandSpawnChance
       end
       if not finite(spawnChance) or spawnChance <= 0 then return nil, "hades2.facility.unavailable.route" end
       if definition.challenge then
@@ -5822,6 +5837,34 @@ if __MacGamingTrainerV1 == nil then
         local stock = type(StoreData) == "table"
           and type(StoreData[definition.id == "well" and "RoomShop" or "SurfaceShop"]) == "table"
         if not stock then return nil, "hades2.facility.unavailable.stock" end
+      elseif definition.requiresMeta then
+        local stand = ObstacleData.MetaRewardStand
+        local shrinePoints = type(GameState) == "table" and GameState.SpentShrinePointsCache
+        if not finite(shrinePoints) or not finite(stand.RequiredShrinePoints)
+            or shrinePoints < stand.RequiredShrinePoints then
+          return nil, "hades2.facility.unavailable.shrine"
+        end
+        if type(roomData) ~= "table" or roomData ~= RoomData[room.Name] then
+          return nil, "hades2.facility.unavailable.scene"
+        end
+        if type(MetaRewardStandData) ~= "table"
+            or type(MetaRewardStandData.WeightedOptions) ~= "table"
+            or type(ResourceData) ~= "table" then
+          return nil, "hades2.facility.unavailable.native"
+        end
+        local allowedReward = false
+        for _, entry in pairs(MetaRewardStandData.WeightedOptions) do
+          if type(entry) == "table" and type(entry.Name) == "string"
+              and type(entry.Animation) == "string"
+              and finite(entry.Amount) and entry.Amount > 0
+              and finite(entry.Weight) and entry.Weight > 0
+              and type(ResourceData[entry.Name]) == "table"
+              and (entry.GameStateRequirements == nil
+                or IsGameStateEligible(entry, entry.GameStateRequirements)) then
+            allowedReward = true
+          end
+        end
+        if not allowedReward then return nil, "hades2.facility.unavailable.stock" end
       elseif definition.requiresSell then
         local traitEligible = false
         for _, trait in ipairs(owner.hero.Traits or {}) do
@@ -5895,6 +5938,7 @@ if __MacGamingTrainerV1 == nil then
         point = point, authored = authored, configuredChance = spawnChance,
         forceNextRoom = ForceNextRoom, depth = CurrentRun.RunDepthCache,
         store = room.Store,
+        shrinePoints = definition.requiresMeta and GameState.SpentShrinePointsCache or nil,
         challengeVariants = variants, challengeKey = variants and table.concat(variants, "|") or nil,
       }
     end
@@ -5903,7 +5947,7 @@ if __MacGamingTrainerV1 == nil then
       for _, key in ipairs({
         "id", "session", "run", "hero", "room", "map", "name",
         "biome", "point", "authored", "configuredChance",
-        "forceNextRoom", "depth", "store", "challengeKey",
+        "forceNextRoom", "depth", "store", "challengeKey", "shrinePoints",
       }) do
         if left[key] ~= right[key] then return false end
       end
@@ -5995,7 +6039,15 @@ if __MacGamingTrainerV1 == nil then
       -- HandleSecretSpawns owns the *whole* shared pedestal pool. A one-shot
       -- must never create an unrelated Gift of Night or fall through to a
       -- different challenge when its requested family is not produced.
-      IsMetaRewardStandEligible = function() return false end
+      IsMetaRewardStandEligible = function(run, checkingRoom)
+        if not definition.requiresMeta or run ~= target.run or checkingRoom ~= room then
+          return false
+        end
+        -- The game owns upgrade/route/Fear timing; we override only the
+        -- chance field for this one call. Its global roomData is established
+        -- by OnAnyLoad and checked against the same source room in preflight.
+        return originalMetaEligible(run, checkingRoom)
+      end
       if not definition.challenge then
         room.ChallengeChanceSuccess = false
         IsTimeChallengeForced = function() return false end
@@ -6065,7 +6117,17 @@ if __MacGamingTrainerV1 == nil then
           or not IsUseable({ Id = id }) then
         error("Native facility was not registered as interactable")
       end
-      if definition.challenge then
+      if definition.requiresMeta then
+        if type(object.ResourceData) ~= "table"
+            or type(object.ResourceData.Name) ~= "string"
+            or not finite(object.RewardAmount) or object.RewardAmount <= 0
+            or not finite(object.DisplayItemId) or object.DisplayItemId <= 0
+            or CurrentRun.LastMetaRewardStandDepth ~= target.depth
+            or type(GameState) ~= "table"
+            or GameState.SpentShrinePointsCache < object.RequiredShrinePoints then
+          error("Native Gift of Night reward and use records are unavailable")
+        end
+      elseif definition.challenge then
         local encounter = room.ChallengeEncounter
         local fromFamily = false
         for _, variant in ipairs(target.challengeVariants) do
@@ -6100,7 +6162,13 @@ if __MacGamingTrainerV1 == nil then
         error("Native room became unavailable for facility interaction")
       end
       local animation, sound, availableText
-      if definition.challenge then
+      if definition.requiresMeta then
+        availableText, animation, sound = object.AvailableUseText, "MetaRewardStandUnlocked", "/SFX/WellShopUnlocked"
+        if object.ExitsUnlockedFunctionName then
+          thread(CallFunctionName, object.ExitsUnlockedFunctionName, object, object.ExitsUnlockedFunctionArgs)
+        end
+        StopAnimation({ Name = "MetaRewardStandLockedFx", DestinationId = id })
+      elseif definition.challenge then
         local starting = object.StartingValue or 0
         if object.RewardType == "Health" then
           if type(CalculateHealingMultiplier) ~= "function" then
