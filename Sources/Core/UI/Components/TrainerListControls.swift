@@ -169,6 +169,7 @@ struct TrainerSecondaryActionButton: View {
     let systemImage: String?
     let enabled: Bool
     let latched: Bool
+    let subduedLatched: Bool
     let widthRole: TrainerActionWidthRole
     let helpText: String?
     let accessibilityLabel: String?
@@ -179,6 +180,7 @@ struct TrainerSecondaryActionButton: View {
         systemImage: String? = nil,
         enabled: Bool = true,
         latched: Bool = false,
+        subduedLatched: Bool = false,
         widthRole: TrainerActionWidthRole = .automatic,
         helpText: String? = nil,
         accessibilityLabel: String? = nil,
@@ -188,6 +190,7 @@ struct TrainerSecondaryActionButton: View {
         self.systemImage = systemImage
         self.enabled = enabled
         self.latched = latched
+        self.subduedLatched = subduedLatched
         self.widthRole = widthRole
         self.helpText = helpText
         self.accessibilityLabel = accessibilityLabel
@@ -202,7 +205,11 @@ struct TrainerSecondaryActionButton: View {
 
     @ViewBuilder
     private var styledButton: some View {
-        if latched {
+        if latched && subduedLatched {
+            button
+                .buttonStyle(.bordered)
+                .tint(theme.accent.opacity(0.8))
+        } else if latched {
             button
                 .buttonStyle(.borderedProminent)
                 .tint(theme.accent)
