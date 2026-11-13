@@ -178,6 +178,34 @@ assert(#options()==0 and nativeSpawns==0)
 print('chamber_facility_ok')
 """,
 r"""
+-- The status preflight permits this room. Simulate the game's own shop
+-- eligibility rejecting the target only once the native owner executes.
+-- The room also has an unrelated challenge and Gift ready to spawn; neither
+-- may steal the borrowed pedestal or change a future-room force effect.
+local source=room({
+ WellShopSpawnChance=.5,
+ FixtureUnrelatedChallenge=true,
+ FixtureUnrelatedMeta=true,
+ FixtureForceChallenge=true,
+}, .95)
+source.ChallengeChanceSuccess=true
+local wanted=assert(option('well'))
+local beforeChance=source.ChallengeChanceSuccess
+local beforeTime,beforePerfect,beforeElite,beforeMeta=
+  IsTimeChallengeForced,IsPerfectClearChallengeForced,IsEliteChallengeForced,IsMetaRewardStandEligible
+IsWellShopEligible=function() return false end
+assert(not pcall(M.dispatch,'generate_chamber_facility',{
+ facility='well',scopeToken=wanted.scopeToken,requestId='native-denied',includeCatalogs=false,
+}))
+assert(source.ChallengeChanceSuccess==beforeChance)
+assert(not source.ChallengeSwitch and not source.MetaRewardStand)
+assert(not source.WellShop and source.Store==nil)
+assert(nativeSpawns==0 and unrelatedChallenges==0 and nativeShopStock==0)
+assert(IsTimeChallengeForced==beforeTime and IsPerfectClearChallengeForced==beforePerfect)
+assert(IsEliteChallengeForced==beforeElite and IsMetaRewardStandEligible==beforeMeta)
+print('chamber_facility_ok')
+""",
+r"""
 local source=room({WellShopSpawnChance=.5,AnomalyDoorChanceSuccess=true},.95)
 source.AnomalyDoorChanceSuccess=true
 local target=assert(option('well'))
