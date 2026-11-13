@@ -69,6 +69,23 @@ def fixture():
     return transport, breakpoint, events, clock, running
 
 
+# An initial Stop failure precedes all native mutation. Cleanup must not
+# reissue that stop or claim the Lua mutation had an unknown outcome.
+for stop_code in ('stop_failed', 'stop_timeout'):
+    transport, breakpoint, events, clock, running = fixture()
+    def refuse_initial_stop(deadline):
+        events.append('stop-rejected')
+        raise AdapterError(stop_code, 'hades.error.stopTimeout', diagnostic='LLDB stop rejected')
+    transport._stop = refuse_initial_stop
+    try:
+        transport.execute('return "{}"', mutating=True)
+    except AdapterError as error:
+        assert error.code == stop_code and error.diagnostic == 'LLDB stop rejected'
+    else:
+        raise AssertionError('failed pre-Lua stop was accepted')
+    assert events == ['stop-rejected'], 'failed initial stop was reissued during cleanup'
+    assert transport.tainted is False, 'no Lua mutation must not be labeled unknown'
+
 transport, breakpoint, events, clock, running = fixture()
 with patch.object(module.time, 'monotonic', side_effect=lambda: clock[0]):
     try:
@@ -133,6 +150,27 @@ with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
     else:
         raise AssertionError('an expression failure lost its unknown-outcome result')
 assert transport.tainted
+assert events == ['stop', 'delete', 'restore', 'free', 'resume'], events
+
+# An expected game-native slow-effect admission refusal from Lua is definite,
+# so it remains retryable once that effect has retired.
+transport, breakpoint, events, clock, running = fixture()
+running[0] = True
+native_error = types.SimpleNamespace(Fail=lambda: False)
+validation_frame = types.SimpleNamespace(EvaluateExpression=lambda *args: types.SimpleNamespace(
+    GetError=lambda: native_error, GetValueAsSigned=lambda: 1,
+))
+transport._boundary = lambda: (types.SimpleNamespace(GetFrameAtIndex=lambda index: validation_frame), 123)
+transport.process.ReadCStringFromMemory = lambda *args: 'hades.error.runtimeNotReady'
+with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
+        patch.object(module.lldb, 'eLanguageTypeC_plus_plus', 4, create=True):
+    try:
+        transport.execute('return "{}"', mutating=True)
+    except AdapterError as error:
+        assert error.code == 'runtime_not_ready' and error.presentation == 'hades.error.runtimeNotReady'
+    else:
+        raise AssertionError('definitive Lua rejection was accepted')
+assert not transport.tainted, 'a known Lua admission failure must allow retry'
 assert events == ['stop', 'delete', 'restore', 'free', 'resume'], events
 
 # If suspension itself fails, retain the breakpoint for the existing detach
