@@ -16,6 +16,7 @@ class Transport:
         self.multiplier = 1.0
         self.native = 1.0
         self.mutate_result = None
+        self.tainted = False
 
     def execute(self, source, *, mutating):
         self.calls.append((source, mutating))
@@ -59,9 +60,10 @@ for bad in ({'wrapperInstalled': False}, {'effectiveFraction': 77}, {'nativeFrac
     try:
         owner.set_speed(3)
     except AdapterError as error:
-        assert error.code in ('time_warp_verify_failed', 'debugger_protocol')
+        assert error.code == 'outcome_unknown' and t.tainted
     else:
         raise AssertionError('bad receipt accepted: %r' % (bad,))
     t.mutate_result = None
+    t.tainted = False
 assert owner.set_speed(1) == 1.0
 print('hades_simulation_time_warp_controller_contract_ok')
