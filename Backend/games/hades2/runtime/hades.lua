@@ -5585,7 +5585,19 @@ if __MacGamingTrainerV1 == nil then
       local point
       for _, id in ipairs(availablePoints) do
         local occupant = MapState.ActiveObstacles[id]
-        if finite(id) and id > 0 and (occupant == nil or occupant.Name == "SecretPoint") then
+        local unclaimedMarker = occupant == nil or (
+          occupant.Name == "SecretPoint"
+          and occupant.OnUsedFunctionName == nil
+          and not occupant.BlockedByRequirements
+          and not occupant.InUse
+        )
+        if finite(id) and id > 0 and unclaimedMarker
+            and MapState.OfferedExitDoors[id] == nil
+            and (type(MapState.RoomRequiredObjects) ~= "table"
+              or MapState.RoomRequiredObjects[id] == nil)
+            and (type(SessionMapState) ~= "table"
+              or type(SessionMapState.SpawnPointsUsed) ~= "table"
+              or SessionMapState.SpawnPointsUsed[id] == nil) then
           point = id
           break
         end
