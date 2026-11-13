@@ -67,7 +67,7 @@ HandleSecretSpawns = function(run)
    {'EliteChallengeOptions','EliteSwitchRequirements','IsEliteChallengeForced','ForceEliteSwitch'},
   }
   for _,family in ipairs(candidatesByFamily) do
-    local pool,req,force,forcedTrait=unpack(family)
+    local pool,req,force,forcedTrait=table.unpack(family)
     if IsGameStateEligible(room,room[req] or RoomData.BaseRoom[req]) then
       if room.ChallengeChanceSuccess or _G[force](room) then
         UseHeroTraitsWithValue(forcedTrait,true)
