@@ -137,6 +137,31 @@ else:
     raise AssertionError('uncertain speed reset was hidden')
 assert transport3.attached and transport3.detaches == 0
 
+# EOF and unexpected end of the JSONL loop must restore the game clock before
+# detaching. The close path is distinct from the explicit disconnect command.
+transport4 = FakeTransport()
+time_warp4 = FakeTimeWarp()
+time_warp4.speed = 3.0
+worker4 = HadesTimeWarpWorker(transport=transport4, time_warp_factory=lambda _: time_warp4)
+worker4.close()
+assert transport4.detaches == 1 and time_warp4.speed == 1.0
+assert time_warp4.events == [('reset', None)]
+
+# If native reset failed, neither EOF cleanup nor a forced detach may hide
+# the unknown outcome or abandon the still attached game process.
+transport5 = FakeTransport()
+time_warp5 = FakeTimeWarp()
+time_warp5.speed = 0.5
+time_warp5.failure = AdapterError('outcome_unknown', 'hades.error.outcomeUnknown')
+worker5 = HadesTimeWarpWorker(transport=transport5, time_warp_factory=lambda _: time_warp5)
+try:
+    worker5.close()
+except AdapterError as error:
+    assert error.code == 'outcome_unknown'
+else:
+    raise AssertionError('unknown native EOF reset was hidden')
+assert transport5.attached and transport5.detaches == 0
+
 for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required', 'restartRequired')):
     failure = AdapterError(code, 'host.timeWarp.error.' + suffix, arguments=['native detail'], diagnostic='native detail')
     payload = error_payload(failure)
