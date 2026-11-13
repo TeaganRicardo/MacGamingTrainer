@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 134 then
+if previousModule and previousModule.revision ~= 135 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 134 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 134,
+    version = 1, revision = 135,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5709,6 +5709,7 @@ if __MacGamingTrainerV1 == nil then
       "UseableOn", "IsUseable", "RemoveRandomValue", "DeepCopyTable", "RandomSynchronize",
       "IsWellShopEligible", "IsSurfaceShopEligible", "IsSellTraitShopEligible",
       "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
+      "CheckRoomExitsReady", "RefreshUseButton", "PlaySound", "CreateAnimation",
     }
     local function inspectFacility(kind)
       local definition = facilityById[kind]
@@ -5723,7 +5724,9 @@ if __MacGamingTrainerV1 == nil then
           or next(ActiveScreens or {}) ~= nil or MapState.HostilePolymorph
           or type(room.Encounter) == "table" and room.Encounter.InProgress
           or type(room.ChallengeEncounter) == "table" and room.ChallengeEncounter.InProgress
-          or CurrentRun.IsDreamRun or room ~= CurrentRun.CurrentRoom then
+          or CurrentRun.IsDreamRun or room ~= CurrentRun.CurrentRoom
+          or room.ExitsUnlocked ~= true or type(CheckRoomExitsReady) ~= "function"
+          or not CheckRoomExitsReady(room) then
         return nil, "hades2.facility.unavailable.scene"
       end
       if not functionsPresent(facilityNativeFunctions)
@@ -5912,6 +5915,53 @@ if __MacGamingTrainerV1 == nil then
         end
       elseif type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil then
         error("Native Purging Pool has no generated sell options")
+      end
+      -- HandleSecretSpawns normally precedes DoUnlockRoomExits. Generating a
+      -- facility after room clear skips that game's unlock pass. Reproduce
+      -- only its native *object-local* unlock stage (RoomLogic.lua:4040-4090):
+      -- never call DoUnlockRoomExits, which would reroll unrelated room exits.
+      if not CheckRoomExitsReady(room) or not room.ExitsUnlocked then
+        error("Native room became unavailable for facility interaction")
+      end
+      local animation, sound, availableText
+      if definition.challenge then
+        local starting = object.StartingValue or 0
+        if object.RewardType == "Health" then
+          if type(CalculateHealingMultiplier) ~= "function" then
+            error("Native challenge healing multiplier unavailable")
+          end
+          starting = starting * CalculateHealingMultiplier()
+        end
+        if object.RewardType == "Money" and HasHeroTraitValue("BlockMoney") then
+          starting = 0
+        end
+        object.StartingValue = round(starting)
+        availableText = object.ChallengeAvailableUseText
+        animation = object.UnlockedAnimationName
+        sound = "/SFX/ChallengeChestUnlocked"
+      elseif definition.id == "well" then
+        availableText, animation, sound = object.AvailableUseText, "WellShopUnlocked", "/SFX/WellShopUnlocked"
+      elseif definition.id == "shrine" then
+        availableText, animation, sound = object.AvailableUseText, "SurfaceShopUnlocked", "/SFX/Menu Sounds/KeepsakeHermesFastClear2"
+      elseif definition.id == "purging" then
+        if object.BlockedByRequirements then
+          error("Native Purging Pool is blocked by game requirements")
+        end
+        availableText, animation, sound = object.AvailableUseText, "SellTraitShopUnlocked", "/SFX/WellShopUnlocked"
+      end
+      if type(availableText) ~= "string" or type(animation) ~= "string" then
+        error("Native facility unlock presentation data is unavailable")
+      end
+      object.ReadyToUse = true
+      object.UseText = availableText
+      RefreshUseButton(id, object)
+      SetAnimation({ Name = animation, DestinationId = id })
+      if definition.challenge and object.UnlockedFxAnimationName then
+        CreateAnimation({ DestinationId = id, Name = object.UnlockedFxAnimationName })
+      end
+      PlaySound({ Name = sound, Id = id })
+      if not IsUseable({ Id = id }) or not object.ReadyToUse then
+        error("Native facility is not ready for interaction")
       end
       facilityGenerated[room] = facilityGenerated[room] or {}
       facilityGenerated[room][target.id] = true
