@@ -40,13 +40,23 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
             self.time_warp.reset()
         return super().dispatch(method, params)
 
+    def close(self):
+        # The JSONL server also exits on EOF and protocol failure, without
+        # receiving an explicit "disconnect" method. Release an active speed
+        # lease before the debugger is detached on those ordinary exit paths.
+        # On reset failure leave the attachment intact; its outcome may be
+        # unknown and a forced detach would strand the live target.
+        if self.transport.alive():
+            self.time_warp.reset()
+        self.transport.close()
+
 
 def main():
     worker = HadesTimeWarpWorker()
     try:
         serve_jsonl_requests(sys.stdin, sys.stdout, worker.dispatch, error_payload=error_payload)
     finally:
-        worker.transport.close()
+        worker.close()
     return 0
 
 
