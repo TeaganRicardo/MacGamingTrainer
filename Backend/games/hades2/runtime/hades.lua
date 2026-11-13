@@ -5859,6 +5859,7 @@ if __MacGamingTrainerV1 == nil then
               and finite(entry.Amount) and entry.Amount > 0
               and finite(entry.Weight) and entry.Weight > 0
               and type(ResourceData[entry.Name]) == "table"
+              and type(ResourceData[entry.Name].Name) == "string"
               and (entry.GameStateRequirements == nil
                 or IsGameStateEligible(entry, entry.GameStateRequirements)) then
             allowedReward = true
