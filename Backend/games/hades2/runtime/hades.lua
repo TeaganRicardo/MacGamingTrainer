@@ -5909,6 +5909,10 @@ if __MacGamingTrainerV1 == nil then
       local savedChance, savedAnomaly = room[definition.chance], room.AnomalyDoorChanceSuccess
       local originalIds, originalHarvest = GetIdsByType, SetupHarvestPoints
       local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
+      local originalTime, originalPerfect, originalElite =
+        IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced
+      local challengePools = { "TimeChallengeOptions", "PerfectClearOptions", "EliteChallengeOptions" }
+      local previousPools = {}
       local function pointLease(args)
         if type(args) == "table" and args.Name == "ChallengeSwitchBase" then return { id } end
         if type(args) == "table" and args.Name == "SecretPoint" then return {} end
@@ -5927,8 +5931,25 @@ if __MacGamingTrainerV1 == nil then
         return target.id == "purging" and checkingRoom == room and originalSell(checkingRoom)
       end
       local suppressHarvest = function() end
-      room[definition.chance] = true
+      -- Only the selected challenge family receives an invocation-scoped force
+      -- result. Preserve all unrelated Hero force effects and their native rules.
+      room[definition.chance] = definition.challenge and false or true
       room.AnomalyDoorChanceSuccess = false
+      if definition.challenge then
+        for _, pool in ipairs(challengePools) do
+          previousPools[pool] = EncounterSets[pool]
+          EncounterSets[pool] = pool == definition.challenge and target.challengeVariants or {}
+        end
+        IsTimeChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "TimeChallengeOptions"
+        end
+        IsPerfectClearChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "PerfectClearOptions"
+        end
+        IsEliteChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "EliteChallengeOptions"
+        end
+      end
       GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
       IsWellShopEligible = nativeEligible("well", originalWell)
       IsSurfaceShopEligible = nativeEligible("shrine", originalSurface)
@@ -5943,6 +5964,11 @@ if __MacGamingTrainerV1 == nil then
       if SetupHarvestPoints == suppressHarvest then SetupHarvestPoints = originalHarvest end
       IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible =
         originalWell, originalSurface, originalSell
+      if definition.challenge then
+        IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
+          originalTime, originalPerfect, originalElite
+        for _, pool in ipairs(challengePools) do EncounterSets[pool] = previousPools[pool] end
+      end
       room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
       if not ok then error(failure) end
       if SessionState ~= target.session or CurrentRun ~= target.run
@@ -5952,16 +5978,33 @@ if __MacGamingTrainerV1 == nil then
       if type(object) ~= "table" or object.ObjectId ~= id
           or MapState.ActiveObstacles[id] ~= object
           or object.OnUsedFunctionName ~= "AttemptUseChallengeSwitch"
-          or object.ChallengeSwitchUseFunctionName ~= definition.use
           or not IsUseable({ Id = id }) then
         error("Native facility was not registered as interactable")
+      end
+      if definition.challenge then
+        local encounter = room.ChallengeEncounter
+        local fromFamily = false
+        for _, variant in ipairs(target.challengeVariants) do
+          if object.EncounterOptionsName == ObstacleData[variant].EncounterOptionsName
+              and object.RewardType == ObstacleData[variant].RewardType then
+            fromFamily = true
+            break
+          end
+        end
+        if not fromFamily or type(encounter) ~= "table" or encounter.Switch ~= object
+            or encounter.SpawnNearId ~= id
+            or CurrentRun.LastChallengeDepth ~= target.depth then
+          error("Native challenge encounter is not linked to its switch")
+        end
+      elseif object.ChallengeSwitchUseFunctionName ~= definition.use then
+        error("Native shop interaction is unavailable")
       end
       if definition.requiresStore then
         if type(room.Store) ~= "table" or type(room.Store.StoreOptions) ~= "table"
             or next(room.Store.StoreOptions) == nil then
           error("Native facility has no usable shop stock")
         end
-      elseif type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil then
+      elseif definition.requiresSell and (type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil) then
         error("Native Purging Pool has no generated sell options")
       end
       facilityGenerated[room] = facilityGenerated[room] or {}
