@@ -8,16 +8,19 @@ ObstacleData.ChallengeSwitch = {OnUsedFunctionName='AttemptUseChallengeSwitch'}
 ObstacleData.TimeChallengeSwitch_Money = {
   Name='TimeChallengeSwitch_Money', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='TimeChallengeEncounterOptions', RewardType='Money',
+  ChallengeSwitchUseFunctionName='UseChallengeSwitch',
   ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='TimeChallengeUnlocked',
 }
 ObstacleData.PerfectClearChallengeSwitch_Pom = {
   Name='PerfectClearChallengeSwitch_Pom', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='PerfectClearEncounterOptions', RewardType='StackUpgrade',
+  ChallengeSwitchUseFunctionName='UseChallengeSwitch',
   ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='PerfectClearUnlocked',
 }
 ObstacleData.EliteChallengeSwitch_Talent = {
   Name='EliteChallengeSwitch_Talent', OnUsedFunctionName='AttemptUseChallengeSwitch',
   EncounterOptionsName='EliteChallengeEncounterOptions', RewardType='TalentDrop',
+  ChallengeSwitchUseFunctionName='UseChallengeSwitch',
   ChallengeAvailableUseText='UseChallengeSwitch_Unlocked', UnlockedAnimationName='EliteChallengeUnlocked',
 }
 EncounterSets = {
@@ -98,6 +101,10 @@ HandleSecretSpawns = function(run)
   SetAnimation({DestinationId=object.ObjectId,Name='LockedChallenge'})
   UseableOn({Id=object.ObjectId})
   run.LastChallengeDepth=run.RunDepthCache
+end
+UseChallengeSwitch = function(object)
+  assert(object.ReadyToUse and object.ChallengeSwitchUseFunctionName=='UseChallengeSwitch')
+  return true
 end
 AttemptUseChallengeSwitch = function(object)
  local room=CurrentRun.CurrentRoom
