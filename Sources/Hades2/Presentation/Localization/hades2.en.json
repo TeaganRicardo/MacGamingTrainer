@@ -444,6 +444,8 @@
     "hades2.facility.generate": "Generate",
     "hades2.facility.empty": "No eligible current-room facilities",
     "hades2.facility.help": "Spawns a native physical facility at an unused authored pedestal. Stock, prices, sale options and interactions follow game rules.",
+    "hades2.facility.gift": "Gift of Night",
+    "hades2.facility.unavailable.fear": "The current Fear is below the native Gift of Night claim requirement.",
     "hades2.facility.trove": "Infernal Trove",
     "hades2.facility.sigil": "Unseen Sigil",
     "hades2.facility.monument": "Moon Monument",
