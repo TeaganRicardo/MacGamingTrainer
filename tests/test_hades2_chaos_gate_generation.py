@@ -78,6 +78,34 @@ assert(result.applied and gate().ReadyToUse and unlockedDoors==1)
 print('direct_chaos_ok')
 """,
 r"""
+local source=newRoom(0,.95)
+local function unavailable()
+  local target=M.dispatch('status',{includeCatalogs=false}).chaosGateTarget
+  assert(not target.available and target.reason=='hades2.chaosGate.unavailable.placement')
+end
+SessionMapState.SpawnPointsUsed={ [101]=true }
+unavailable()
+SessionMapState.SpawnPointsUsed={}
+MapState.RoomRequiredObjects={ [101]={Name='OtherRequiredObject'} }
+unavailable()
+MapState.RoomRequiredObjects={}
+MapState.OfferedExitDoors[101]={Name='OtherExit',Room={RoomSetName='F'}}
+unavailable()
+MapState.OfferedExitDoors[101]=nil
+MapState.ActiveObstacles[101]={Name='SecretPoint',OnUsedFunctionName='AttemptUseDoor'}
+unavailable()
+MapState.ActiveObstacles[101]={Name='SecretPoint',BlockedByRequirements=true}
+unavailable()
+MapState.ActiveObstacles[101]={Name='SecretPoint'}
+local live=M.dispatch('status',{includeCatalogs=false}).chaosGateTarget
+assert(live.available)
+local generated=M.dispatch('generate_chaos_gate',{
+ scopeToken=live.scopeToken,requestId='reserved-and-released',includeCatalogs=false,
+})
+assert(generated.applied and spawns==1 and source.ForceSecretDoor)
+print('direct_chaos_ok')
+""",
+r"""
 heroForce=true
 newRoom(0, .99)
 local target = M.dispatch('status', {includeCatalogs=false}).chaosGateTarget
