@@ -202,8 +202,8 @@ assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosC
 assert 'model.acquireChaosPair(' in chaos_pair_surface
 assert chaos_pair_surface.count('TrainerSecondaryActionButton(') == 1
 assert 'title: text("hades2.spawn.acquire")' in chaos_pair_surface
-assert '"hades2.spawn.chaosPair": "卡俄斯配对"' in zh_presentation
-assert '"hades2.spawn.chaosPair": "Chaos Pair"' in en_presentation
+assert '"hades2.spawn.chaosPair"' not in zh_presentation
+assert '"hades2.spawn.chaosPair"' not in en_presentation
 assert '"hades2.spawn.chaosBlessing": "祝福"' in zh_presentation
 assert '"hades2.spawn.chaosBlessing": "Blessing"' in en_presentation
 assert '"hades2.spawn.chaosCurse": "诅咒"' in zh_presentation
