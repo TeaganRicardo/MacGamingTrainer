@@ -2119,6 +2119,10 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "generate_chamber_facility::hades2.facility.unavailable.encounter": {
+      "key": "hades2.facility.unavailable.encounter",
+      "arguments": []
     }
   },
   "runtime_commands": [

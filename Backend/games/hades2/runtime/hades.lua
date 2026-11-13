@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 135 then
+if previousModule and previousModule.revision ~= 136 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 135 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 135,
+    version = 1, revision = 136,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -5725,6 +5725,18 @@ if __MacGamingTrainerV1 == nil then
         field = "SellTraitShop", force = "ForceSellShop", chance = "SellShopChanceSuccess",
         configuredChance = "SellShopSpawnChance", native = "IsSellTraitShopEligible",
         requirements = "SellShopRequirements", use = "OpenSellTraitMenu", requiresSell = true },
+      { id = "trove", labelKey = "hades2.facility.trove", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "TimeChallengeSwitchRequirements", defaultRequirements = "TimeChallengeSwitchRequirements",
+        challenge = "TimeChallengeOptions" },
+      { id = "sigil", labelKey = "hades2.facility.sigil", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "PerfectClearSwitchRequirements", defaultRequirements = "PerfectClearSwitchRequirements",
+        challenge = "PerfectClearOptions" },
+      { id = "monument", labelKey = "hades2.facility.monument", field = "ChallengeSwitch",
+        chance = "ChallengeChanceSuccess", configuredChance = "ChallengeSpawnChance",
+        requirements = "EliteSwitchRequirements", defaultRequirements = "EliteSwitchRequirements",
+        challenge = "EliteChallengeOptions" },
     }
     local facilityById = {}
     for _, entry in ipairs(facilityDefinitions) do facilityById[entry.id] = entry end
@@ -5738,6 +5750,12 @@ if __MacGamingTrainerV1 == nil then
       "IsEliteChallengeForced", "IsMetaRewardStandEligible",
       "GenerateSellTraitShop", "SetupHarvestPoints", "SetAnimation",
       "CheckRoomExitsReady", "RefreshUseButton", "PlaySound", "CreateAnimation",
+    }
+    local challengeFunctions = {
+      "GetRandomValue", "IsTimeChallengeForced", "IsPerfectClearChallengeForced",
+      "IsEliteChallengeForced", "UseHeroTraitsWithValue", "GenerateEncounter", "IsHorizontallyFlipped",
+      "Attach", "CreateTextBox", "ModifyTextBox", "GetRunDepth",
+      "GetTotalHeroTraitValue", "round", "RandomInt", "SetThingProperty", "SpawnObstacle",
     }
     local function inspectFacility(kind, getSharedBaseIds)
       local definition = facilityById[kind]
@@ -5760,6 +5778,8 @@ if __MacGamingTrainerV1 == nil then
       if not functionsPresent(facilityNativeFunctions)
           or definition.requiresStore and not functionsPresent({ "RunShopGeneration", "FillInShopOptions" })
           or definition.requiresSell and not functionsPresent({ "IsGodTrait", "GenerateSellTraitValues" })
+          or definition.challenge and not functionsPresent(challengeFunctions)
+          or definition.challenge and (type(EncounterSets) ~= "table" or type(EncounterData) ~= "table")
           or type(ObstacleData) ~= "table" or type(ObstacleData[definition.field]) ~= "table"
           or type(RoomData) ~= "table" or type(RoomData.BaseRoom) ~= "table" then
         return nil, "hades2.facility.unavailable.native"
@@ -5772,7 +5792,8 @@ if __MacGamingTrainerV1 == nil then
       local authored = RoomData[room.Name] or room
       if definition.requiresStore and (room.Store ~= nil or room.StoreDataName ~= nil
           or room.ChosenRewardType == "Shop") then return nil, "hades2.facility.unavailable.existing" end
-      if type(room[definition.field]) == "table" or room[definition.force] then
+      if type(room[definition.field]) == "table"
+          or definition.force ~= nil and room[definition.force] then
         return nil, "hades2.facility.unavailable.existing"
       end
       -- A 0.0 authored chance is an explicit room/biome exclusion, separate
@@ -5781,9 +5802,18 @@ if __MacGamingTrainerV1 == nil then
       local spawnChance = room[definition.configuredChance]
       if spawnChance == nil and definition.id == "well" then
         spawnChance = RoomData.BaseRoom.WellShopSpawnChance
+      elseif spawnChance == nil and definition.challenge then
+        spawnChance = RoomData.BaseRoom.ChallengeSpawnChance
       end
       if not finite(spawnChance) or spawnChance <= 0 then return nil, "hades2.facility.unavailable.route" end
-      local requirements = room[definition.requirements]
+      if definition.challenge then
+        local baseRequirements = authored.ChallengeSpawnRequirements
+          or RoomData.BaseRoom.ChallengeSpawnRequirements
+        if baseRequirements ~= nil and not IsGameStateEligible(room, baseRequirements) then
+          return nil, "hades2.facility.unavailable.progression"
+        end
+      end
+      local requirements = authored[definition.requirements] or room[definition.requirements]
         or definition.defaultRequirements and RoomData.BaseRoom[definition.defaultRequirements]
       if requirements ~= nil and not IsGameStateEligible(room, requirements) then
         return nil, "hades2.facility.unavailable.progression"
@@ -5792,7 +5822,7 @@ if __MacGamingTrainerV1 == nil then
         local stock = type(StoreData) == "table"
           and type(StoreData[definition.id == "well" and "RoomShop" or "SurfaceShop"]) == "table"
         if not stock then return nil, "hades2.facility.unavailable.stock" end
-      else
+      elseif definition.requiresSell then
         local traitEligible = false
         for _, trait in ipairs(owner.hero.Traits or {}) do
           if type(trait) == "table" and trait.Rarity and type(trait.Name) == "string"
@@ -5802,6 +5832,26 @@ if __MacGamingTrainerV1 == nil then
           end
         end
         if not traitEligible then return nil, "hades2.facility.unavailable.stock" end
+      end
+      local variants
+      if definition.challenge then
+        variants = {}
+        for _, name in ipairs(EncounterSets[definition.challenge] or {}) do
+          local obstacle = ObstacleData[name]
+          if type(obstacle) == "table" and type(obstacle.EncounterOptionsName) == "string"
+              and (obstacle.Requirements == nil
+                or IsGameStateEligible(obstacle, obstacle.Requirements)) then
+            local encounters = room[obstacle.EncounterOptionsName]
+            if type(encounters) == "table" and next(encounters) ~= nil then
+              local valid = true
+              for _, encounterName in ipairs(encounters) do
+                if type(EncounterData[encounterName]) ~= "table" then valid = false; break end
+              end
+              if valid then variants[#variants + 1] = name end
+            end
+          end
+        end
+        if #variants == 0 then return nil, "hades2.facility.unavailable.encounter" end
       end
       -- Status observations share one native base-point lookup; mutation
       -- preflight always calls this inspector again with fresh native data.
@@ -5845,6 +5895,7 @@ if __MacGamingTrainerV1 == nil then
         point = point, authored = authored, configuredChance = spawnChance,
         forceNextRoom = ForceNextRoom, depth = CurrentRun.RunDepthCache,
         store = room.Store,
+        challengeVariants = variants, challengeKey = variants and table.concat(variants, "|") or nil,
       }
     end
     local function sameFacility(left, right)
@@ -5852,7 +5903,7 @@ if __MacGamingTrainerV1 == nil then
       for _, key in ipairs({
         "id", "session", "run", "hero", "room", "map", "name",
         "biome", "point", "authored", "configuredChance",
-        "forceNextRoom", "depth", "store",
+        "forceNextRoom", "depth", "store", "challengeKey",
       }) do
         if left[key] ~= right[key] then return false end
       end
@@ -5910,6 +5961,14 @@ if __MacGamingTrainerV1 == nil then
       local originalWell, originalSurface, originalSell = IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible
       local originalTime, originalPerfect, originalElite =
         IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced
+      local originalUseHeroTraits = UseHeroTraitsWithValue
+      local explicitChallengeForce = {
+        TimeChallengeOptions = "ForceChallengeSwitch",
+        PerfectClearOptions = "ForcePerfectClearSwitch",
+        EliteChallengeOptions = "ForceEliteSwitch",
+      }
+      local challengePools = { "TimeChallengeOptions", "PerfectClearOptions", "EliteChallengeOptions" }
+      local previousPools = {}
       local function pointLease(args)
         if type(args) == "table" and args.Name == "ChallengeSwitchBase" then return { id } end
         if type(args) == "table" and args.Name == "SecretPoint" then return {} end
@@ -5928,15 +5987,50 @@ if __MacGamingTrainerV1 == nil then
         return target.id == "purging" and checkingRoom == room and originalSell(checkingRoom)
       end
       local suppressHarvest = function() end
-      room[definition.chance] = true
+      -- Only the selected challenge family receives an invocation-scoped force
+      -- result. Preserve all unrelated Hero force effects and their native rules.
+      if definition.challenge then room[definition.chance] = false
+      else room[definition.chance] = true end
       room.AnomalyDoorChanceSuccess = false
-      -- The native spawn helper visits all challenge families after shops.
-      -- A failed selected shop must never create a different challenge.
-      room.ChallengeChanceSuccess = false
-      IsTimeChallengeForced = function() return false end
-      IsPerfectClearChallengeForced = function() return false end
-      IsEliteChallengeForced = function() return false end
+      -- HandleSecretSpawns owns the *whole* shared pedestal pool. A one-shot
+      -- must never create an unrelated Gift of Night or fall through to a
+      -- different challenge when its requested family is not produced.
       IsMetaRewardStandEligible = function() return false end
+      if not definition.challenge then
+        room.ChallengeChanceSuccess = false
+        IsTimeChallengeForced = function() return false end
+        IsPerfectClearChallengeForced = function() return false end
+        IsEliteChallengeForced = function() return false end
+      end
+      if definition.challenge then
+        for _, pool in ipairs(challengePools) do
+          previousPools[pool] = EncounterSets[pool]
+          EncounterSets[pool] = pool == definition.challenge and target.challengeVariants or {}
+        end
+        IsTimeChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "TimeChallengeOptions"
+        end
+        IsPerfectClearChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "PerfectClearOptions"
+        end
+        IsEliteChallengeForced = function(checkingRoom)
+          return checkingRoom == room and definition.challenge == "EliteChallengeOptions"
+        end
+        -- The forced result above is synthetic and room-local. Native
+        -- HandleSecretSpawns consumes the corresponding Hero future-room
+        -- force effect unconditionally when the check succeeds. An explicit
+        -- one-shot must leave that separate, uncommitted force effect intact.
+        -- Intercept only this specific consumption during the native call.
+        local explicitForce = explicitChallengeForce[definition.challenge]
+        local skipped = false
+        UseHeroTraitsWithValue = function(name, ...)
+          if name == explicitForce and not skipped then
+            skipped = true
+            return
+          end
+          return originalUseHeroTraits(name, ...)
+        end
+      end
       GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
       IsWellShopEligible = nativeEligible("well", originalWell)
       IsSurfaceShopEligible = nativeEligible("shrine", originalSurface)
@@ -5954,6 +6048,10 @@ if __MacGamingTrainerV1 == nil then
       IsTimeChallengeForced, IsPerfectClearChallengeForced, IsEliteChallengeForced =
         originalTime, originalPerfect, originalElite
       IsMetaRewardStandEligible = originalMetaEligible
+      if definition.challenge then
+        UseHeroTraitsWithValue = originalUseHeroTraits
+        for _, pool in ipairs(challengePools) do EncounterSets[pool] = previousPools[pool] end
+      end
       room[definition.chance], room.AnomalyDoorChanceSuccess = savedChance, savedAnomaly
       room.ChallengeChanceSuccess = savedOtherChallengeChance
       if not ok then error(failure) end
@@ -5964,16 +6062,34 @@ if __MacGamingTrainerV1 == nil then
       if type(object) ~= "table" or object.ObjectId ~= id
           or MapState.ActiveObstacles[id] ~= object
           or object.OnUsedFunctionName ~= "AttemptUseChallengeSwitch"
-          or object.ChallengeSwitchUseFunctionName ~= definition.use
           or not IsUseable({ Id = id }) then
         error("Native facility was not registered as interactable")
+      end
+      if definition.challenge then
+        local encounter = room.ChallengeEncounter
+        local fromFamily = false
+        for _, variant in ipairs(target.challengeVariants) do
+          if object.EncounterOptionsName == ObstacleData[variant].EncounterOptionsName
+              and object.RewardType == ObstacleData[variant].RewardType then
+            fromFamily = true
+            break
+          end
+        end
+        if not fromFamily or object.ChallengeSwitchUseFunctionName ~= "UseChallengeSwitch"
+            or type(encounter) ~= "table" or encounter.Switch ~= object
+            or encounter.SpawnNearId ~= id
+            or CurrentRun.LastChallengeDepth ~= target.depth then
+          error("Native challenge encounter is not linked to its switch")
+        end
+      elseif object.ChallengeSwitchUseFunctionName ~= definition.use then
+        error("Native shop interaction is unavailable")
       end
       if definition.requiresStore then
         if type(room.Store) ~= "table" or type(room.Store.StoreOptions) ~= "table"
             or next(room.Store.StoreOptions) == nil then
           error("Native facility has no usable shop stock")
         end
-      elseif type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil then
+      elseif definition.requiresSell and (type(room.SellOptions) ~= "table" or next(room.SellOptions) == nil) then
         error("Native Purging Pool has no generated sell options")
       end
       -- HandleSecretSpawns normally precedes DoUnlockRoomExits. Generating a
