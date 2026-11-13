@@ -317,6 +317,8 @@
     "hades2.acquisition.level": "等级",
     "hades2.acquisition.gameControlled": "不适用 · 游戏决定",
     "hades2.acquisition.adjustedRarity": "已自动调整为此目标支持的稀有度：",
+    "hades2.acquisition.adjustedRarityCompact": "自动 →",
+    "hades2.acquisition.gameControlledCompact": "游戏决定",
     "hades2.acquisition.gameControlledHint": "此目标的稀有度由游戏决定，获取请求不会指定稀有度。",
     "hades2.acquisition.invalidLevel": "等级须为 1 至 999999 之间的整数。",
     "hades2.spawn.exactBoons": "指定祝福",
