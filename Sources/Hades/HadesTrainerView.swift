@@ -507,8 +507,8 @@ private struct HadesCatalogView: View {
 
             if model.acquisitionRarityAdjustment != .none {
                 Text(model.acquisitionAllowsCallerRarity
-                     ? text("hades.acquisition.rarityAdjusted") + " " + text("hades.rarity.\(model.acquisitionRarity)")
-                     : text("hades.acquisition.gameControlledHint"))
+                     ? text("hades.acquisition.rarityAdjustedCompact") + " " + text("hades.rarity.\(model.acquisitionRarity)")
+                     : text("hades.acquisition.gameControlledCompact"))
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
