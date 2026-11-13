@@ -5,6 +5,8 @@ RoomData = { BaseRoom = { SecretSpawnChance = .2 },
  Chaos_01 = { Name = 'Chaos_01', RoomSetName = 'Chaos', UsePreviousRoomSet = true, PauseBiomeState = true },
  F_Next = { Name = 'F_Next', RoomSetName = 'F' } }
 RoomSets = { Chaos = { 'Chaos_01' }, F = { 'F_Next' } }
+ObstacleData = { SecretDoor = { Name = 'SecretDoor', OnUsedFunctionName = 'AttemptUseDoor' } }
+SetupHarvestPoints = function() end
 CurrentRun.RoomHistory = {}; CurrentRun.RoomCountCache = {}; CurrentRun.RoomCreations = {}
 CurrentRun.BiomeRoomCountCache = {}; CurrentRun.RunDepthCache = 8
 local heroForce, forceUses, spawns, charges = false, 0, 0, 0
