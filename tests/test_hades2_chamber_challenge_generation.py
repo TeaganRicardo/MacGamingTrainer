@@ -73,6 +73,7 @@ assert(reply.applied and reply.actionOutcome=='completed')
 local switch=source.ChallengeSwitch
 assert(switch and switch.Name=='TimeChallengeSwitch_Money' and switch.ObjectId==211)
 assert(IsUseable({Id=211}) and MapState.ActiveObstacles[211]==switch)
+assert(switch.ReadyToUse and switch.UseText==switch.ChallengeAvailableUseText)
 local encounter=source.ChallengeEncounter
 assert(encounter.Name=='TimeChallengeF' and encounter.Switch==switch and encounter.SpawnNearId==211)
 assert(CurrentRun.LastChallengeDepth==CurrentRun.RunDepthCache)
@@ -94,6 +95,7 @@ r"""
 local source=room({ChallengeChanceSuccess=false})
 local result=generate('sigil','sigil-1')
 assert(result.applied and source.ChallengeSwitch.Name=='PerfectClearChallengeSwitch_Pom')
+assert(source.ChallengeSwitch.ReadyToUse)
 assert(source.ChallengeEncounter.Name=='PerfectClearChallengeF')
 assert(source.ChallengeSwitch.RewardType=='StackUpgrade')
 AttemptUseChallengeSwitch(source.ChallengeSwitch)
@@ -107,12 +109,30 @@ r"""
 local source=room()
 local result=generate('monument','moon-1')
 assert(result.applied and source.ChallengeSwitch.Name=='EliteChallengeSwitch_Talent')
+assert(source.ChallengeSwitch.ReadyToUse)
 assert(source.ChallengeEncounter.Name=='EliteChallengeF')
 assert(source.ChallengeSwitch.RewardType=='TalentDrop')
 assert(forcedUses.ForceEliteSwitch==1 and not forcedUses.ForceChallengeSwitch)
 AttemptUseChallengeSwitch(source.ChallengeSwitch)
 CompleteChallenge()
 assert(source.ChallengeEncounter.Completed and nativeRewards==1)
+print('chamber_challenge_ok')
+""",
+r"""
+local source=room()
+local row=assert(option('trove'))
+source.ExitsUnlocked=false
+assert(not option('trove'))
+assert(not pcall(M.dispatch,'generate_chamber_facility',{
+ facility='trove',scopeToken=row.scopeToken,requestId='before-clear',
+}))
+assert(nativeSpawns==0)
+source.ExitsUnlocked=true
+source.BlockExits=true
+assert(#available()==0)
+source.BlockExits=false
+local result=generate('trove','unlocked-trove')
+assert(result.applied and source.ChallengeSwitch.ReadyToUse)
 print('chamber_challenge_ok')
 """,
 r"""
