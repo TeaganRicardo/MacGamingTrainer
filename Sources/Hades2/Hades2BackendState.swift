@@ -109,6 +109,7 @@ struct Hades2StatePatch {
     let rerollsLocked: Bool?
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
     let chaosGateProbability: Hades2FieldPatch<Double>
+    let chaosGateTarget: Hades2FieldPatch<Hades2GatheringTarget>
     let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
     let gardenScopeToken: Hades2FieldPatch<String>
 
@@ -197,6 +198,18 @@ struct Hades2StatePatch {
             }
             gatheringProbabilities = .present(valid ? decoded : nil)
         } else { gatheringProbabilities = payload.keys.contains("gatheringProbabilities") ? .present(nil) : .absent }
+        if let row = payload["chaosGateTarget"] as? [String: Any],
+           let available = row["available"] as? Bool {
+            let token = row["scopeToken"] as? String
+            if !available || (token?.isEmpty == false && (token?.count ?? 0) <= 128) {
+                chaosGateTarget = .present(.init(available: available, scopeToken: token,
+                                                reason: row["reason"] as? String))
+            } else {
+                chaosGateTarget = .present(nil)
+            }
+        } else {
+            chaosGateTarget = payload.keys.contains("chaosGateTarget") ? .present(nil) : .absent
+        }
         if let values = payload["gatheringTargets"] as? [String: Any] {
             var decoded: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
             for (key, raw) in values {

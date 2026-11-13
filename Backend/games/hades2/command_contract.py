@@ -88,6 +88,13 @@ def _generate_gathering(raw):
     return {"family": params["family"], "scopeToken": token}
 
 
+def _generate_chaos_gate(raw):
+    token = _params(raw).get("scopeToken")
+    if not isinstance(token, str) or not 1 <= len(token) <= 128:
+        raise ValueError("请刷新当前房间后再生成混沌之门。")
+    return {"scopeToken": token}
+
+
 def _mature_garden(raw):
     token = _params(raw).get("scopeToken")
     if not isinstance(token, str) or not 1 <= len(token) <= 128:
@@ -656,6 +663,7 @@ _COMMAND_SPECS = (
         reply_kind="patch",
     ),
     _spec("generate_gathering", request_id=True, validate=_generate_gathering),
+    _spec("generate_chaos_gate", request_id=True, validate=_generate_chaos_gate),
     _spec("mature_garden", request_id=True, validate=_mature_garden),
     _spec("set_stat", validate=_set_stat),
     _spec("set_element", validate=_set_element),
