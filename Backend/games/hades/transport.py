@@ -108,7 +108,13 @@ class HadesLuaTransport:
             raise failure('not_connected', 'notConnected')
         if self.process.GetState() == lldb.eStateStopped:
             return
-        self.process.SendAsyncInterrupt()
+        # SBProcess.Stop requests and acknowledges the LLDB-owned stop as one
+        # operation. SendAsyncInterrupt can lose the stop notification under
+        # Rosetta debugserver after several otherwise successful boundaries.
+        # Validate both the API result and the observed process state.
+        error = self.process.Stop()
+        if error.Fail():
+            raise failure('stop_failed', 'stopTimeout', str(error))
         while time.monotonic() < deadline:
             self._drain()
             if self.process.GetState() == lldb.eStateStopped:
