@@ -50,6 +50,9 @@ RefreshUseButton = function() end
 PlaySound = function() end
 CreateAnimation = function() end
 CheckRoomExitsReady = function(room) return room.ExitsUnlocked and not room.BlockExits end
+AttemptUseChallengeSwitch = function(object)
+  return object.ReadyToUse == true and CheckRoomExitsReady(CurrentRun.CurrentRoom)
+end
 FillInShopOptions = function(args)
   nativeShopStock = nativeShopStock + 1
   local name = args.StoreData == StoreData.RoomShop and 'charon' or 'hermes'
