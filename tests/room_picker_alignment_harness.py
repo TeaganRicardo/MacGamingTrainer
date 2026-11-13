@@ -200,7 +200,11 @@ private struct WorldExitDualPickerGeometryFixture: View {
             .trainerPicker(.layoutAllocated, state: pending ? .unavailable : .interactive)
             .accessibilityIdentifier("worldExit.target")
         } shortcut: {
-            TrainerShortcutBadgeSlot(text: hasShortcut ? "⌃⌥G" : "")
+            if hasShortcut {
+                TrainerShortcutBadgeSlot(text: "⌃⌥G")
+            } else {
+                Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+            }
         } action: {
             TrainerSecondaryActionButton(
                 title: title(pending ? "Cancel" : "Apply", pending ? "取消" : "应用"),
