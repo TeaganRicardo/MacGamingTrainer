@@ -1628,12 +1628,15 @@ struct Hades2TrainerView: View {
                 .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairExactSourceSelection() }
             }
         }
-        .onChange(of: exactSearch) { _, _ in repairExactSourceSelection() }
         .onChange(of: model.selectedChaosBlessing) { _, _ in model.activateAcquisition(.chaos) }
         .onChange(of: model.selectedChaosCurse) { _, _ in model.activateAcquisition(.chaos) }
         .onChange(of: model.selectedExactBoon) { _, _ in model.activateAcquisition(.exact) }
         .onChange(of: model.acquisitionRarity) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
         .onChange(of: model.acquisitionLevel) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
+        .onChange(of: model.nativeRarityOrder) { _, _ in model.activateAcquisition(model.acquisitionTarget) }
+        .onChange(of: model.exactBoonOptions.map { $0.id + ":" + $0.rarities.joined(separator: ",") }) { _, _ in
+            model.activateAcquisition(model.acquisitionTarget)
+        }
     }
 
     private var currentRunEffectsPanel: some View {
