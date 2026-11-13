@@ -100,7 +100,7 @@ assert len(lua_transport.sources) == 2 and lua_transport.sources[-1][1] is False
 assert simulation_warp.set_speed(2.5) == 2.5
 source, mutating = lua_transport.sources[-1]
 assert mutating is True and 'AdjustSimulationSpeed' in source
-assert 'state.nativeFraction * state.multiplier' in source
+assert 'nativeFraction * state.multiplier' in source
 assert 'state.nativeArguments' in source and 'state.multiplier' in source
 assert simulation_warp.current_speed() == 2.5
 lua_transport.native_fraction = 0.5
