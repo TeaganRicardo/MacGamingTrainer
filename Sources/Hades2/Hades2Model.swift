@@ -202,6 +202,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var gatheringProbabilities: [Hades2GatheringFamily: Double] = [:]
     @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
     @Published private(set) var chaosGateTarget: Hades2GatheringTarget?
+    @Published private(set) var facilityOptions: [Hades2ChamberFacility] = []
+    @Published var selectedFacilityID = ""
     @Published var boons: [BoonOption] = []
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
@@ -706,6 +708,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !rerollsLocked { rerolls = nil }
         gatheringTargets = [:]
         chaosGateTarget = nil
+        facilityOptions = []
+        selectedFacilityID = ""
         gardenScopeToken = nil
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
@@ -824,6 +828,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
         if patch.chaosGateTarget.isPresent { chaosGateTarget = patch.chaosGateTarget.value }
+        if patch.facilityOptions.isPresent {
+            facilityOptions = patch.facilityOptions.value ?? []
+            if !facilityOptions.contains(where: { $0.id == selectedFacilityID }) {
+                selectedFacilityID = facilityOptions.first?.id ?? ""
+            }
+        }
         if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
@@ -934,6 +944,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         case .generateGathering: title = presentation("hades2.gathering.generate")
         case .generateChaosGate: title = presentation("hades2.chaosGate.generate")
+        case .generateChamberFacility: title = presentation("hades2.facility.title")
         case .matureGarden: title = presentation("hades2.garden.title")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
@@ -958,6 +969,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 errorToken = presentation(error)
             } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
             if command == .generateChaosGate, let error = receipt.error, error.hasPrefix("hades2.chaosGate.unavailable.") {
+                errorToken = presentation(error)
+            }
+            if command == .generateChamberFacility, let error = receipt.error, error.hasPrefix("hades2.facility.unavailable.") {
                 errorToken = presentation(error)
             }
         case .outcomeUnknown:
@@ -1380,6 +1394,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
         connected && canAcceptRuntimeAction && !exiting && protocolCompatible
             && gatheringTargets[family]?.available == true
+    }
+
+    var selectedFacility: Hades2ChamberFacility? {
+        facilityOptions.first { $0.id == selectedFacilityID }
+    }
+
+    var canGenerateFacility: Bool {
+        connected && canAcceptRuntimeAction && !exiting && protocolCompatible
+            && selectedFacility != nil
+    }
+
+    @discardableResult
+    func generateChamberFacility(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canGenerateFacility, let facility = selectedFacility else { return false }
+        send(.generateChamberFacility(facility: facility.id, scopeToken: facility.scopeToken),
+             title: "hades2.facility.title", announceSuccess: false, completion: completion)
+        return true
     }
 
     var canGenerateChaosGate: Bool {
@@ -2024,6 +2055,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .generateFlora, .generateMining, .generateDigging, .generateShades, .generateFishing:
             guard let family = action.gatheringFamily,
                   generateGathering(family, completion: Self.playOneShotShortcutResult) else {
+                rejectShortcut(action)
+                return
+            }
+        case .generateChamberFacility:
+            guard generateChamberFacility(completion: Self.playOneShotShortcutResult) else {
                 rejectShortcut(action)
                 return
             }

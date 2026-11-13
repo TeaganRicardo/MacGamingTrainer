@@ -88,7 +88,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case generateFlora, generateMining, generateDigging, generateShades, generateFishing, matureGarden
     /// Current source identity; raw value preserves the released shortcut/profile storage key only.
     case applyWorldExit = "applyNextRoomReward"
-    case applyNextOccurrence, generateChaosGate
+    case applyNextOccurrence, generateChamberFacility, generateChaosGate
     case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
 
@@ -160,6 +160,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .openSellTraits: return "hades2.shortcut.openPurgingPool"
         case .applyWorldExit: return "hades2.shortcut.applyWorldExit"
         case .applyNextOccurrence: return "hades2.shortcut.applyNextOccurrence"
+        case .generateChamberFacility: return "hades2.facility.title"
         case .generateChaosGate: return "hades2.chaosGate.generate"
         case .disableAll: return "host.disableAll"
         }
@@ -292,4 +293,12 @@ struct Hades2GatheringTarget {
     let available: Bool
     let scopeToken: String?
     let reason: String?
+}
+
+/// Exactly one eligible facility projected by the resident game's native owner.
+/// A token authorizes one current-room placement only; none are stored in profiles.
+struct Hades2ChamberFacility: Identifiable, Equatable {
+    let id: String
+    let labelKey: String
+    let scopeToken: String
 }

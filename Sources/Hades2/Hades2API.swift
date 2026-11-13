@@ -18,6 +18,7 @@ enum Hades2Request {
     case setChaosGate(probability: Double?)
     case generateGathering(family: Hades2GatheringFamily, scopeToken: String)
     case generateChaosGate(scopeToken: String)
+    case generateChamberFacility(facility: String, scopeToken: String)
     case matureGarden(scopeToken: String)
     case setStat(stat: String, locked: Bool, value: Any?)
     case setElement(element: String, amount: Int)
@@ -79,6 +80,7 @@ enum Hades2Request {
         case .setChaosGate: return .setChaosGateDesired
         case .generateGathering: return .generateGathering
         case .generateChaosGate: return .generateChaosGate
+        case .generateChamberFacility: return .generateChamberFacility
         case .matureGarden: return .matureGarden
         case .setStat: return .setStat
         case .setElement: return .setElement
@@ -167,6 +169,8 @@ enum Hades2Request {
             return ["family": family.rawValue, "scopeToken": scopeToken]
         case .generateChaosGate(let scopeToken):
             return ["scopeToken": scopeToken]
+        case .generateChamberFacility(let facility, let scopeToken):
+            return ["facility": facility, "scopeToken": scopeToken]
         case .matureGarden(let scopeToken):
             return ["scopeToken": scopeToken]
         case .setStat(let stat, let locked, let value):
