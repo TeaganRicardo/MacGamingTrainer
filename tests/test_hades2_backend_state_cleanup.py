@@ -76,14 +76,16 @@ struct Main {
         check(model.currentRunTraits[0].canRemove && model.currentRunTraits[0].instanceID == "selected-502",
               "single-instance capability lost selected identity")
 
-        let setOccurrence = Hades2Request.setNextOccurrence("npc:Nemesis")
-        check(setOccurrence.command == .setNextOccurrenceDesired,
+        let setOccurrence = Hades2Request.applyWorldOccurrence(target: "npc:Nemesis")
+        check(setOccurrence.command == .applyWorldOccurrence,
               "occurrence request routed to the wrong Host command")
         check(setOccurrence.params["target"] as? String == "npc:Nemesis",
               "occurrence target identity was not serialized opaquely")
-        let clearOccurrence = Hades2Request.setNextOccurrence(nil)
-        check(clearOccurrence.params["target"] is NSNull,
-              "clearing occurrence did not serialize explicit null")
+        let clearOccurrence = Hades2Request.cancelWorldOccurrence(leaseToken: "occurrence-lease-1")
+        check(clearOccurrence.command == .cancelWorldOccurrence,
+              "occurrence cancellation routed to the wrong Host command")
+        check(clearOccurrence.params["leaseToken"] as? String == "occurrence-lease-1",
+              "clearing occurrence did not serialize its lease token")
 
         // U-03: a sparse payload cannot clear a warning. Explicit null or an
         // empty warnings array clears it; nonempty values replace it.
@@ -107,10 +109,28 @@ struct Main {
 
         // Resident full snapshots explicitly clear nullable run observations;
         // sparse Profile/Save patches still preserve them and the catalogs.
+        let sampleWorldActions: [String: Any] = [
+            "exits": [[
+                "doorToken": "exit-1",
+                "objectId": 101,
+                "ordinal": 1,
+                "roomName": "RoomOpening",
+                "reward": "RoomMoneyDrop",
+                "targets": [["kind": "reward", "id": "RoomMoneyDrop"]],
+                "activeLease": [
+                    "kind": "reward",
+                    "target": "RoomMoneyDrop",
+                    "leaseToken": "exit-lease-1",
+                ],
+            ]],
+            "occurrence": [
+                "target": "npc:Nemesis",
+                "leaseToken": "occurrence-lease-1",
+            ],
+        ]
         model.apply([
             "spellChargeCost": 20.0,
-            "nextRoomReward": "RoomMoneyDrop",
-            "nextOccurrenceTarget": "npc:Nemesis",
+            "worldActions": sampleWorldActions,
             "occurrenceTargets": [
                 ["id": "npc:Nemesis", "kind": "character", "sourceId": "Nemesis"],
                 ["id": "shop:Charon", "kind": "shop", "sourceId": "Charon"],
@@ -119,21 +139,22 @@ struct Main {
         model.apply(["profiles": []])
         check(
             model.spellChargeCost == 20
-                && model.nextRoomReward == "RoomMoneyDrop"
-                && model.nextOccurrenceTarget == "npc:Nemesis"
+                && model.worldActionExits.count == 1
+                && model.worldActionExits[0].activeLease?.target == "RoomMoneyDrop"
+                && model.activeWorldOccurrenceTarget == "npc:Nemesis"
                 && model.occurrenceTargets.map(\.id) == ["npc:Nemesis", "shop:Charon"],
-            "sparse Profile payload erased run or occurrence state"
+            "sparse Profile payload erased run or world-action state"
         )
         model.apply([
             "spellChargeCost": NSNull(),
-            "nextRoomReward": NSNull(),
-            "nextOccurrenceTarget": NSNull(),
+            "worldActions": ["exits": [[String: Any]]()],
         ])
         check(
             model.spellChargeCost == nil
-                && model.nextRoomReward == nil
-                && model.nextOccurrenceTarget == nil,
-            "full resident null did not clear absent Hex/reward/occurrence state"
+                && model.worldActionExits.isEmpty
+                && model.worldOccurrence == nil
+                && model.activeWorldOccurrenceTarget == nil,
+            "full resident snapshot did not clear absent Hex/world-action state"
         )
 
         // A Core-owned feature failure keeps its Host presentation identity and
@@ -171,8 +192,7 @@ struct Main {
         model.boonForceDuo = true
         model.moneyMultiplierEnabled = true
         model.resourceMultiplierEnabled = true
-        model.nextRoomReward = "RoomMoneyDrop"
-        model.nextOccurrenceTarget = "npc:Nemesis"
+        model.apply(["worldActions": sampleWorldActions])
 
         model.connected = true
         model.pid = 123
@@ -222,7 +242,8 @@ struct Main {
             kind: "loot", group: "pickup", targetID: "boon", officialName: true,
             sectionTitle: "", englishSectionTitle: "", sourceId: "",
             sourceName: "", sourceEnglishName: "", nativeChoice: false, nativeChoiceTitle: "",
-            nativeChoiceEnglishTitle: "", acquisitionMode: "", sortSection: 0, sortGroup: 0, sortOrder: 0
+            nativeChoiceEnglishTitle: "", acquisitionMode: "", rarities: [], supportsLevel: false,
+            sortSection: 0, sortGroup: 0, sortOrder: 0
         )]
         model.diagnostics = [DiagnosticCheck(name: "check", ok: false, detail: "detail")]
         model.diagnosticsPassed = 0
@@ -287,6 +308,14 @@ struct Main {
         check(model.noticeText.key.isEmpty && model.errorText.key.isEmpty
                 && model.runtimeIssuePresentations.isEmpty,
               "presentation tokens survived termination")
+        check(
+            model.worldActionExits.isEmpty
+                && model.worldOccurrence == nil
+                && model.activeWorldOccurrenceTarget == nil
+                && model.selectedWorldExitToken.isEmpty
+                && model.selectedWorldExitTarget.isEmpty,
+            "live world actions survived backend termination"
+        )
 
         // A Hades-owned token must not outlive a newer Core-owned message.
         // The banner prefers the Hades token, so a stale receipt error would
@@ -344,11 +373,8 @@ struct Main {
         check(model.boonRarityTarget == "Epic",
               "durable boon rarity intent was cleared")
         check(
-            model.boonForceLegendary
-                && model.boonForceDuo
-                && model.nextRoomReward == "RoomMoneyDrop"
-                && model.nextOccurrenceTarget == "npc:Nemesis",
-            "durable reward/occurrence intent was cleared"
+            model.boonForceLegendary && model.boonForceDuo,
+            "durable boon force intent was cleared"
         )
         check(model.moneyMultiplierEnabled && model.resourceMultiplierEnabled,
               "durable multiplier toggles were cleared")
