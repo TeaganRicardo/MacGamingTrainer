@@ -138,9 +138,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                         else:
                             raise AssertionError("disconnect error was lost")
                     if outcome == "outcome_unknown":
-                        assert native.pid == transport.pid == 4242
-                        assert transport.tainted and adapter.state["status"] == "restart_required"
-                        assert adapter.state["connected"] is True, "uncertain attachment was described as released"
+                        # Connect's failed initial status performs its own safe detach.
+                        assert native.pid is None and transport.pid is None
+                        assert transport.tainted
+                        assert adapter.state["connected"] is False
+                        assert sidecar.calls.count("transport.detach") == 1
                         try:
                             transport.execute("another native mutation")
                         except AdapterError as error:
@@ -148,14 +150,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                         else:
                             raise AssertionError("terminal connection allowed another mutation")
                         assert native.native_entries == 1, "unknown native call was replayed"
-                        assert "transport.detach" not in sidecar.calls, "runtime mutation failure detached eagerly"
-                        # Semantic outcome-unknown still owns a live debugger.
-                        # Manual disconnect may send only the safe detach RPC.
-                        disconnected = adapter.disconnect()
-                        assert disconnected["connected"] is False
-                        assert sidecar.calls.count("transport.detach") == 1
-                        assert native.detach_calls == 1
-                        assert native.pid is None and transport.pid is None
                     elif outcome == "restore_failed":
                         assert native.pid == transport.pid == 4242
                         assert adapter.state["connected"] is True, "failed pre-detach recovery lost its attachment"
@@ -249,6 +243,31 @@ for outcome, expected_code in (
         assert transport.pid is None and not transport.cleanup_pending
         assert transport.pending_resume_pid is None
         assert sidecar.calls.count("transport.close") == 2
+
+# An established session can be explicitly disconnected after a semantic terminal error.
+with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-disconnect-") as temporary:
+    native = NativeTransport("success")
+    sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
+    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+        _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
+    ):
+        transport = Hades2LuaTransport()
+        adapter = Hades2Adapter(transport=transport)
+        transport.attach(4242)
+        adapter.state.update(connected=True, pid=4242, status="ready", scene="run")
+        try:
+            transport.execute("uncertain native mutation")
+        except AdapterError as error:
+            assert error.code == "outcome_unknown"
+        else:
+            raise AssertionError("native outcome uncertainty was swallowed")
+        assert transport.pid == native.pid == 4242
+        disconnected = adapter.disconnect()
+        assert disconnected["connected"] is False
+        assert native.detach_calls == 1
+        assert native.pid is None and transport.pid is None
+        assert sidecar.calls.count("transport.detach") == 1
+        transport.close()
 
 # Semantic outcome-unknown permits only native cleanup on a trusted live sidecar.
 with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-close-") as temporary:
