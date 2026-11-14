@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROBE = (
     "import sys\n"
     "sys.path.insert(0, sys.argv[1])\n"
-    "from core.protocol import _target_process_running\n"
-    "print(_target_process_running(sys.argv[2], sys.argv[3]))\n"
+    "from core.target_probe import target_process_running\n"
+    "print(target_process_running(sys.argv[2], sys.argv[3]))\n"
 )
 
 

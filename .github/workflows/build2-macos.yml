@@ -137,18 +137,47 @@ jobs:
           PYTHON
           echo "MGT_MACOS_SELECTION=$selection" >> "$GITHUB_ENV"
 
+      - name: Cache Lua 5.2 runtime test dependency
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || steps.test-selection.outputs.lua52_native == 'true')
+        id: lua52-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/lua-5.2.4
+          key: lua-5.2.4-${{ runner.os }}-${{ runner.arch }}
+
       - name: Build Lua 5.2 runtime test dependency
         if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || steps.test-selection.outputs.lua52_native == 'true')
         run: |
           archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
           lua_root="$RUNNER_TEMP/lua-5.2.4"
-          # A connection reset mid-transfer is not a 5xx, so plain --retry gives
-          # up on it. Lua-dependent native fixtures need this source; the checksum
-          # below still verifies the bytes, so retrying transport errors is safe.
-          curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 \
-            -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
-          printf '%s  %s\n' b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b "$archive" | shasum -a 256 -c -
-          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          if [ -x "$lua_root/src/lua" ] && [ "$("$lua_root/src/lua" -e 'io.write(_VERSION)' 2>/dev/null)" = 'Lua 5.2' ]; then
+            echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          rm -rf "$lua_root"
+          mkdir -p "$lua_root"
+          fetched=false
+          for mirror in \
+            "https://www.lua.org/ftp/lua-5.2.4.tar.gz|b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b" \
+            "https://deb.debian.org/debian/pool/main/l/lua5.2/lua5.2_5.2.4.orig.tar.gz|86fb7e23cbbddfcd92684e5f8017ff41c9112251d1656dbece415a97fad171c0" \
+            "https://archive.ubuntu.com/ubuntu/pool/universe/l/lua5.2/lua5.2_5.2.4.orig.tar.gz|86fb7e23cbbddfcd92684e5f8017ff41c9112251d1656dbece415a97fad171c0"; do
+            url="${mirror%|*}"
+            expected_sha="${mirror##*|}"
+            # Retry transport errors across multiple verified mirrors; exact SHA-256
+            # checks guarantee identical Lua 5.2.4 source regardless of mirror.
+            if curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 -o "$archive" "$url" \
+              && printf '%s  %s\n' "$expected_sha" "$archive" | shasum -a 256 -c -; then
+              fetched=true
+              break
+            fi
+            rm -f "$archive"
+          done
+          if [ "$fetched" != "true" ]; then
+            echo "Failed to download and verify Lua 5.2.4 from all configured mirrors." >&2
+            exit 1
+          fi
+          tar -xzf "$archive" --strip-components=1 -C "$lua_root"
+          rm -f "$archive"
           make -C "$lua_root/src" generic
           test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
           echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"

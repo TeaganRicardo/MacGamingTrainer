@@ -6,6 +6,12 @@ on:
     branches: [main]
     paths: [Info.plist]
 
+# Serialize releases so monotonically ordered build checks cannot interleave
+# across concurrent main pushes and out-of-order convergence completions.
+concurrency:
+  group: direct-release
+  cancel-in-progress: false
+
 permissions:
   actions: write
   contents: write
@@ -26,7 +32,21 @@ jobs:
         with:
           python-version: '3.15.0'
 
+      - name: Check release identity change scope
+        id: release-scope
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "release_needed=true" >> "$GITHUB_OUTPUT"
+          else
+            needed=$(python3 Tools/release_tag.py --push-precheck "${{ github.event.before }}" HEAD)
+            echo "release_needed=$needed" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Require exact checkout and release identity
+        if: steps.release-scope.outputs.release_needed == 'true'
         id: version
         run: |
           test "$GITHUB_REF" = "refs/heads/main"
@@ -48,7 +68,7 @@ jobs:
           echo "sha_short=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch convergence checks for release version push
-        if: github.event_name == 'push'
+        if: steps.release-scope.outputs.release_needed == 'true' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -59,7 +79,7 @@ jobs:
           done
 
       - name: Await successful exact-SHA convergence
-        if: github.event_name == 'push'
+        if: steps.release-scope.outputs.release_needed == 'true' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           # Must exceed the slowest dispatched producer's own timeout plus
@@ -105,6 +125,7 @@ jobs:
           exit 1
 
       - name: Require successful convergence dispatches on exact SHA
+        if: steps.release-scope.outputs.release_needed == 'true'
         id: convergence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -152,6 +173,7 @@ jobs:
           PY
 
       - name: Download exact convergence artifact
+        if: steps.release-scope.outputs.release_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -163,6 +185,7 @@ jobs:
             --dir artifacts
 
       - name: Verify retained artifact provenance and checksum
+        if: steps.release-scope.outputs.release_needed == 'true'
         id: package
         run: |
           test "$(find artifacts -maxdepth 1 -type f -name '*.zip' -print | wc -l | tr -d ' ')" -eq 1
@@ -187,7 +210,15 @@ jobs:
           echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
           echo "sidecar=$sidecar" >> "$GITHUB_OUTPUT"
 
+      - name: Re-verify monotonic release tag after convergence
+        if: steps.release-scope.outputs.release_needed == 'true'
+        run: |
+          git fetch --tags --force
+          tag=$(python3 Tools/release_tag.py "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}")
+          test "$tag" = "${{ steps.version.outputs.tag }}"
+
       - name: Publish GitHub release
+        if: steps.release-scope.outputs.release_needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

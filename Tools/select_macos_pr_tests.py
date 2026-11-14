@@ -26,6 +26,166 @@ SHARED_SMOKE = (
     "test_global_hotkey_routing.py",
 )
 BUILD_SMOKE = "test_build_signing_metadata_macos.py"
+# Core Save tests share TrainerSaveManagerModel/Validator/ReplyCoordinator/Types.
+_CORE_SAVE_MANAGER_TESTS = (
+    "test_core_save_batch_delete_round20.py",
+    "test_core_save_manager_lifecycle_u01_u02.py",
+    "test_core_save_rename_completion_round24.py",
+)
+_CORE_SHARED_UI_TESTS = (
+    "test_hades_frontend.py",
+    "test_hades2_view_state_flow.py",
+)
+_TEXT_INPUT_TESTS = (
+    "test_trainer_text_field_appearance.py",
+    "test_runtime_text_edit_completion.py",
+    "test_hades_frontend.py",
+)
+_HADES2_SAVE_EDITOR_TESTS = (
+    "test_hades2_save_editor_frontend.py",
+    "test_hades2_save_editor_player_journey.py",
+    "test_hades2_save_record_frontend.py",
+    "test_hades2_save_container_frontend.py",
+    "test_hades2_advanced_save_frontend.py",
+)
+_HADES2_MANAGEMENT_TESTS = (
+    "test_hades2_repeated_actions_frontend.py",
+)
+
+# Explicit ownership table: keeps specialized macOS suites reachable from the
+# exact production files they exercise without widening unrelated PRs.
+EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
+    # Shared Core Host/Runtime behavior owners
+    "Sources/Core/Host/TrainerLocalization.swift": ("test_host_localization_behavior.py",),
+    "Sources/Core/Host/TrainerApplicationStartup.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Host/TrainerGameContext.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Host/TrainerTargetOwnership.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Runtime/TrainerLogSink.swift": ("test_trainer_log_session_lifecycle.py",),
+    "Sources/Core/Runtime/BackendProcess.swift": ("test_backend_stderr_liveness.py",),
+    "Sources/Core/Runtime/BackendClient.swift": ("test_core_save_manager_lifecycle_u01_u02.py",),
+    "Sources/Core/Runtime/TrainerBackendSession.swift": ("test_core_save_manager_lifecycle_u01_u02.py",),
+    "Sources/Core/Host/TrainerConnectionPolicy.swift": ("test_hades2_run_log_watcher.py",),
+
+    # Shared Core Save management owners
+    "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift": _CORE_SAVE_MANAGER_TESTS,
+    "Sources/Core/Save/TrainerSavePathValidator.swift": _CORE_SAVE_MANAGER_TESTS,
+    "Sources/Core/Save/TrainerSaveTypes.swift": _CORE_SAVE_MANAGER_TESTS,
+    "Sources/Core/Save/TrainerSaveManagerModel.swift": (
+        *_CORE_SAVE_MANAGER_TESTS,
+        "test_core_save_retention_controls.py",
+    ),
+    "Sources/Core/Save/TrainerSaveManagerView.swift": ("test_core_save_retention_controls.py",),
+    "Sources/Core/Save/TrainerSaveRetentionSettings.swift": ("test_core_save_retention_controls.py",),
+
+    # Shared Core UI owners
+    "Sources/Core/UI/Primitives/TrainerMappedSlider.swift": ("test_mapped_slider_interaction.py",),
+    "Sources/Core/UI/Primitives/TrainerSliderMapping.swift": ("test_mapped_slider_interaction.py",),
+    "Sources/Core/UI/Primitives/TrainerTextField.swift": _TEXT_INPUT_TESTS,
+    "Sources/Core/UI/Primitives/TrainerField.swift": _TEXT_INPUT_TESTS,
+    "Sources/Core/UI/Components/TrainerResourceControls.swift": _TEXT_INPUT_TESTS,
+    "Sources/Core/UI/TrainerTheme.swift": ("test_trainer_text_field_appearance.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/Components/TrainerSearchField.swift": ("test_trainer_search_field_appearance.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/TrainerMotion.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/TrainerWorkbenchSearch.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Primitives/TrainerToggleControl.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerFeatureControls.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/TrainerShell.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/StatusComponents.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Primitives/TrainerRow.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Primitives/TrainerCard.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerDisclosure.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerMetricGrid.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerListControls.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerSheetScaffold.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerSheetLifetime.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerProfileManagerView.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerDiagnosticsView.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/TrainerFeedbackOverlay.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/TrainerFeedbackTiming.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/TrainerSidebar.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/Components/TrainerStatusControls.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/TrainerToolWindows.swift": ("test_trainer_tool_windows.py",),
+
+    # Two-module Host & reveal owners
+    "Sources/Hades/HadesTrainerView.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades/HadesWorkbenchNavigation.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades/HadesModule.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades2/Hades2Module.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades2/Hades2View.swift": ("test_multi_game_contexts.py", "test_runtime_text_edit_completion.py"),
+    "Sources/Hades2/Hades2Model.swift": (
+        "test_multi_game_contexts.py",
+        "test_runtime_text_edit_completion.py",
+        "test_hades2_backend_state_cleanup.py",
+    ),
+    "Sources/Hades2/Hades2BackendState.swift": ("test_hades2_backend_state_cleanup.py",),
+    "Sources/Hades2/Hades2API.swift": ("test_hades2_backend_state_cleanup.py",),
+    "Sources/Hades2/Hades2Types.swift": ("test_hades2_backend_state_cleanup.py",),
+
+    # Hades II specialized views & services
+    "Sources/Hades2/Services/Hades2RunLogWatcher.swift": ("test_hades2_run_log_watcher.py",),
+    "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift": ("test_hades2_run_log_watcher.py",),
+    "Sources/Hades2/Views/Hades2ChaosGatePanel.swift": ("test_hades2_chaos_gate_frontend.py",),
+    "Sources/Hades2/Views/Hades2GatheringPanel.swift": ("test_hades2_gathering_frontend.py",),
+    "Sources/Hades2/Views/Hades2OccurrenceSetting.swift": (
+        "test_hades2_chaos_gate_frontend.py",
+        "test_hades2_gathering_frontend.py",
+    ),
+    "Sources/Hades2/Views/Hades2BoonRarityPanel.swift": ("test_hades2_force_enable_rerolls_frontend.py",),
+    "Sources/Hades2/Presentation/Hades2FeaturePresentation.swift": (
+        "test_hades2_chaos_gate_frontend.py",
+        "test_hades2_gathering_frontend.py",
+        "test_hades2_force_enable_rerolls_frontend.py",
+    ),
+    "Sources/Hades2/Generated/Hades2Feature.generated.swift": (
+        "test_hades2_chaos_gate_frontend.py",
+        "test_hades2_gathering_frontend.py",
+        "test_hades2_force_enable_rerolls_frontend.py",
+    ),
+    "Sources/Hades2/Views/Hades2ManagementViews.swift": _HADES2_MANAGEMENT_TESTS,
+    "Sources/Hades2/Services/Hades2ManagementActions.swift": _HADES2_MANAGEMENT_TESTS,
+    "Sources/Hades2/Views/Hades2OperationFeedback.swift": _HADES2_MANAGEMENT_TESTS,
+    "Sources/Hades2/Views/Hades2HostActions.swift": (
+        "test_multi_game_contexts.py",
+        *_HADES2_MANAGEMENT_TESTS,
+    ),
+    "Sources/Hades2/Generated/Hades2Command.generated.swift": _HADES2_MANAGEMENT_TESTS,
+    "Sources/Hades2/Views/Hades2SaveEditorView.swift": _HADES2_SAVE_EDITOR_TESTS,
+    "Sources/Hades2/Hades2SaveEditorModel.swift": _HADES2_SAVE_EDITOR_TESTS,
+    "Sources/Hades2/Hades2SaveAdvancedValue.swift": ("test_hades2_advanced_save_frontend.py",),
+    "Sources/Hades2/Views/Hades2SaveAdvancedValueView.swift": ("test_hades2_advanced_save_frontend.py",),
+    "Sources/Hades2/Views/Hades2SaveEditorEntityGrouping.swift": ("test_hades2_save_container_frontend.py",),
+
+    # Backend, native, build & workflow smoke owners
+    "Backend/games/hades/adapter.py": ("test_hades_process_identity_macos.py",),
+    "tests/test_native_effect_query.py": ("test_native_effect_query_macos.py",),
+    "build.sh": (BUILD_SMOKE,),
+    "Tools/build_module_native.py": (BUILD_SMOKE,),
+    "Tools/macos_toolchain_identity.py": (BUILD_SMOKE,),
+    "Tools/verify_module_build.py": (BUILD_SMOKE,),
+    "Tools/write_build_provenance.py": (BUILD_SMOKE,),
+    "Tools/verify_build_provenance.py": (BUILD_SMOKE,),
+    "Backend/games/hades/trainer-entitlements.plist": (BUILD_SMOKE,),
+    "Backend/games/hades2/trainer-entitlements.plist": (BUILD_SMOKE,),
+    "Tools/generate_game_binding.py": ("test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"),
+    "Tools/module_support.py": ("test_multi_game_context_state.py", "test_reference_fixture_session_integration.py"),
+    "Tools/resident_runtime.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),
+    "Tools/supported_build.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),
+    "Tools/run_macos_checks.sh": ("test_multi_game_context_state.py", BUILD_SMOKE),
+    "Tools/select_macos_pr_tests.py": ("test_multi_game_context_state.py", BUILD_SMOKE),
+    ".github/workflows/build2-macos.yml": (BUILD_SMOKE, "test_host_localization_behavior.py"),
+}
+
+PREFIX_TESTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Resources/Localization/", ("test_host_localization_behavior.py",)),
+    ("Sources/Core/Save/", ("test_core_save_manager_lifecycle_u01_u02.py",)),
+    ("ContractFixtures/reference_module/", ("test_reference_fixture_session_integration.py",)),
+    ("Backend/games/hades2/native/", ("test_native_effect_query_macos.py",)),
+    ("Native/", (BUILD_SMOKE,)),
+)
 
 # Journeys that assert native focus, key-window and foreground activation state.
 # A hosted runner cannot guarantee that a background test process becomes the
@@ -105,65 +265,11 @@ def selected_tests(paths: list[str], tests: set[str], sources: dict[str, str],
             chosen.add(Path(path).name)
         if path.startswith("Sources/Core/") or path == "Sources/App.swift":
             chosen.update(SHARED_SMOKE)
-        if path in (
-            "Sources/Hades/HadesTrainerView.swift", "Sources/Hades/HadesWorkbenchNavigation.swift",
-            "Sources/Hades/HadesModule.swift", "Sources/Hades2/Hades2View.swift",
-            "Sources/Hades2/Views/Hades2HostActions.swift", "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
-            "Sources/Hades2/Hades2Module.swift", "Sources/Hades2/Hades2Model.swift",
-        ):
-            # These adapters own the section IDs, reveal handlers and native
-            # targets exercised together by the real two-module Host journey.
-            chosen.add("test_multi_game_contexts.py")
-        if path in ("Sources/Core/UI/Primitives/TrainerMappedSlider.swift", "Sources/Core/UI/Primitives/TrainerSliderMapping.swift"):
-            chosen.add("test_mapped_slider_interaction.py")
-        if path in (
-            "Sources/Core/UI/Primitives/TrainerTextField.swift", "Sources/Core/UI/Primitives/TrainerField.swift",
-            "Sources/Core/UI/Components/TrainerResourceControls.swift",
-        ):
-            chosen.update(("test_trainer_text_field_appearance.py", "test_runtime_text_edit_completion.py", "test_hades_frontend.py"))
-        if path == "Sources/Core/UI/TrainerTheme.swift":
-            chosen.add("test_trainer_text_field_appearance.py")
-        if path == "Sources/Core/UI/Components/TrainerSearchField.swift":
-            chosen.add("test_trainer_search_field_appearance.py")
-        if path in ("Sources/Hades2/Hades2View.swift", "Sources/Hades2/Hades2Model.swift"):
-            chosen.add("test_runtime_text_edit_completion.py")
-        if path in (
-            "Sources/Core/UI/TrainerMotion.swift",
-            "Sources/Core/UI/TrainerWorkbenchSearch.swift",
-            "Sources/Core/UI/Components/TrainerSearchField.swift",
-            "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift",
-            "Sources/Core/UI/Primitives/TrainerToggleControl.swift",
-            "Sources/Core/UI/Components/TrainerFeatureControls.swift",
-            "Sources/Core/UI/TrainerTheme.swift", "Sources/Core/UI/TrainerShell.swift",
-            "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/StatusComponents.swift",
-            "Sources/Core/UI/Primitives/TrainerRow.swift", "Sources/Core/UI/Primitives/TrainerCard.swift",
-            "Sources/Core/UI/Components/TrainerDisclosure.swift",
-            "Sources/Core/UI/Components/TrainerMetricGrid.swift",
-            "Sources/Core/UI/Components/TrainerListControls.swift",
-            "Sources/Core/UI/Components/TrainerSheetScaffold.swift",
-            "Sources/Core/UI/Components/TrainerSheetLifetime.swift",
-            "Sources/Core/UI/Components/TrainerProfileManagerView.swift",
-            "Sources/Core/UI/Components/TrainerDiagnosticsView.swift",
-            "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift",
-        ):
-            chosen.update(("test_hades_frontend.py", "test_hades2_view_state_flow.py"))
-        if path in ("Sources/Core/UI/TrainerFeedbackOverlay.swift", "Sources/Core/UI/TrainerFeedbackTiming.swift",
-                    "Sources/Core/UI/TrainerSidebar.swift", "Sources/Core/UI/Components/TrainerStatusControls.swift"):
-            chosen.update(("test_viewport_feedback.py", "test_hades_frontend.py", "test_hades2_view_state_flow.py"))
-        if path == "Sources/Core/UI/TrainerToolWindows.swift":
-            chosen.add("test_trainer_tool_windows.py")
-        if path.startswith("ContractFixtures/reference_module/"):
-            chosen.add("test_reference_fixture_session_integration.py")
-        if path in ("Sources/Hades2/Views/Hades2SaveEditorView.swift", "Sources/Hades2/Hades2SaveEditorModel.swift"):
-            chosen.add("test_hades2_save_editor_frontend.py")
-        if path == "Backend/games/hades/adapter.py":
-            chosen.add("test_hades_process_identity_macos.py")
-        if path.startswith("Backend/games/hades2/native/") or path == "tests/test_native_effect_query.py":
-            chosen.add("test_native_effect_query_macos.py")
-        if path.startswith("Native/") or path == "build.sh":
-            chosen.add(BUILD_SMOKE)
-        if path in ("Tools/run_macos_checks.sh", "Tools/select_macos_pr_tests.py"):
-            chosen.update(("test_multi_game_context_state.py", BUILD_SMOKE))
+        if path in EXACT_PATH_TESTS:
+            chosen.update(EXACT_PATH_TESTS[path])
+        for prefix, mapped in PREFIX_TESTS:
+            if path.startswith(prefix):
+                chosen.update(mapped)
         if path == "Tools/macos_only_tests.txt":
             changed = metadata_changes.get(path) if metadata_changes is not None else None
             if changed is None:

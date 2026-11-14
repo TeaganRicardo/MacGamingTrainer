@@ -7,7 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
-from ci_docs_only import MACOS_TEST_DEPENDENCIES, load_macos_only_tests
+from ci_docs_only import (
+    MACOS_TEST_DEPENDENCIES,
+    classify_scope,
+    current_app_resource_sources,
+    current_reference_prefixes,
+    load_macos_only_tests,
+)
 from select_macos_pr_tests import PR_DEFERRED, metadata_test_changes, pr_smoke_tests, selected_tests, smoke_selection
 
 TESTS = load_macos_only_tests()
@@ -125,4 +131,83 @@ for name, detail in result["deferred"].items():
     assert name in TESTS and detail["reason"] and "workflow_dispatch" in detail["verification_owner"]
 assert set(PR_DEFERRED) <= TESTS
 assert pr_smoke_tests([], TESTS, SOURCES) == sorted(TESTS - PR_DEFERRED.keys())
+
+# Newly wired Backend, Host, Localization, Hades II panel, and workflow routes.
+expected_routes = {
+    "Resources/Localization/zh-CN.lproj/Host.strings": {"test_host_localization_behavior.py"},
+    "Sources/Core/Host/TrainerLocalization.swift": {"test_host_localization_behavior.py"},
+    "Sources/Core/Host/TrainerTargetOwnership.swift": {"test_host_target_ownership.py"},
+    "Sources/Core/Runtime/TrainerLogSink.swift": {"test_trainer_log_session_lifecycle.py"},
+    "Sources/Core/Runtime/BackendProcess.swift": {"test_backend_stderr_liveness.py"},
+    "Sources/Core/Save/TrainerSaveRetentionSettings.swift": {"test_core_save_retention_controls.py"},
+    "Sources/Hades2/Services/Hades2RunLogWatcher.swift": {"test_hades2_run_log_watcher.py"},
+    "Sources/Hades2/Views/Hades2ChaosGatePanel.swift": {"test_hades2_chaos_gate_frontend.py"},
+    "Sources/Hades2/Views/Hades2GatheringPanel.swift": {"test_hades2_gathering_frontend.py"},
+    "Sources/Hades2/Views/Hades2BoonRarityPanel.swift": {"test_hades2_force_enable_rerolls_frontend.py"},
+    "Sources/Hades2/Views/Hades2ManagementViews.swift": {"test_hades2_repeated_actions_frontend.py"},
+    "Sources/Hades2/Hades2BackendState.swift": {"test_hades2_backend_state_cleanup.py"},
+    "Backend/core/target_probe.py": {"test_core_save_target_probe_macos.py"},
+    "Backend/games/hades2/transport.py": {"test_hades2_lldb_breakpoint_lifetime.py"},
+    "Backend/debugger/lldb_time_warp.py": {"test_hades2_lldb_breakpoint_lifetime.py"},
+    ".github/workflows/build2-macos.yml": {"test_build_signing_metadata_macos.py", "test_host_localization_behavior.py"},
+    "Tools/generate_game_binding.py": {"test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"},
+}
+for changed_path, required_tests in expected_routes.items():
+    chosen = set(pr_smoke_tests([changed_path], TESTS, SOURCES))
+    assert required_tests <= chosen, (changed_path, required_tests, chosen)
+
+# Every macOS inventory entry must be reachable from real non-test/helper files
+# (not only metadata edits to macos_only_tests.txt or macos_test_dependencies.json).
+tracked_non_test = [
+    path for path in subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    if not path.startswith("tests/") and path not in ("Tools/macos_only_tests.txt", "Tools/macos_test_dependencies.json")
+]
+reachable = set()
+for path in tracked_non_test:
+    reachable.update(selected_tests([path], TESTS, SOURCES))
+# Also include non-test helper test_native_effect_query.py / disclosure_ui_harness.py
+for helper in ("tests/disclosure_ui_harness.py", "tests/test_native_effect_query.py"):
+    reachable.update(selected_tests([helper], TESTS, SOURCES))
+assert TESTS - reachable == set(), sorted(TESTS - reachable)
+
+# Every needs_macos=True non-test file must either select >=1 PR macOS test
+# or fall into an explicit non-behavior category (build/version metadata,
+# packaging assets, profiling fixtures, or Linux-contracted generators/schemas).
+_REFS = current_reference_prefixes(ROOT)
+_RES = current_app_resource_sources(ROOT)
+_NON_BEHAVIOR_MACOS_EXACT = frozenset({
+    ".gitignore",
+    "ACTIVE_GAME_ID",
+    "AppIcon.icns",
+    "ContractFixtures/host_protocol_v6.json",
+    "Info.plist",
+    "LICENSE",
+    "Tools/hades2_profile_workloads.py",
+    "Tools/module_inventory.py",
+    "Tools/mutation_gate.py",
+    "Tools/product_support.py",
+    "Tools/python_runtime.json",
+    "Tools/validate_game_module.py",
+    "app.json",
+})
+_NON_BEHAVIOR_MACOS_PREFIXES = (
+    "Resources/Assets.xcassets/",
+    "Tools/fixtures/",
+    "Tools/generate_",
+    "docs/reference/",
+)
+unexplained_zero_test = []
+for path in sorted(set(tracked_non_test)):
+    scope = classify_scope([path], macos_only_tests=TESTS, reference_prefixes=_REFS, app_resource_sources=_RES)
+    if not scope["needs_macos"] or pr_smoke_tests([path], TESTS, SOURCES):
+        continue
+    if (
+        path in _NON_BEHAVIOR_MACOS_EXACT
+        or path.startswith(_NON_BEHAVIOR_MACOS_PREFIXES)
+        or (path.startswith("Backend/games/") and path.endswith("/module.json"))
+    ):
+        continue
+    unexplained_zero_test.append(path)
+assert not unexplained_zero_test, f"needs_macos files without PR test or exemption: {unexplained_zero_test}"
+
 print("ci_pr_macos_selection_ok")
