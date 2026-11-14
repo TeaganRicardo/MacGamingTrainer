@@ -93,7 +93,8 @@ another Lua/Time Warp reset; debugger destruction follows successful release.
 The Hades debugger child owns shutdown cleanup: normal close, reply loss and
 timeout close its input without terminating the worker. On EOF it retries only
 interrupted-target termination, retaining the debugger until an observed exit.
-Each native attempt remains bounded, with one second between failed attempts.
+Each attempt waits up to three seconds for exit acknowledgement after Kill
+returns, with one second between unsuccessful attempts.
 Other sidecars keep their existing parent-owned termination policy. This
 prevents upper-layer client shutdown from discarding the unsafe attachment.
 This does not repair an interrupted VM or restore an already damaged disk save.

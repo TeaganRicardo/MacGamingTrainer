@@ -332,7 +332,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         enableNativeAccessibility()
         guard CommandLine.arguments.count == 4 else { fatalError("expected fixture directory, python and journey") }
         let journey = CommandLine.arguments[3]
-        guard ["frontend", "recovery", "interlock", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
+        guard ["frontend", "recovery", "feedback", "interlock", "management", "slider", "hierarchy", "disclosure", "search"].contains(journey) else { fatalError("unknown frontend journey: " + journey) }
         if journey == "hierarchy" {
             exerciseVisualHierarchy(descriptor: HadesGameModule.descriptor, presentation: HadesGameModule.presentation)
             exerciseRoomPickerAlignment()
@@ -450,6 +450,131 @@ func pump(_ seconds: TimeInterval = 0.1) {
         recordPhase("start: " + journey)
         wait("startup status/catalog replies: connected, catalog populated, trainer idle") { model.connected && !model.catalog.isEmpty && !model.busy }
         check(model.heroReady && model.health==50,"catalog reply erased runtime observation")
+        if journey == "feedback" {
+            // Start feedback/AX ownership from a fresh worker, rather than
+            // spending its watchdog on unrelated runtime editors and pickers.
+            let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
+            localization.language = .en
+            localization.registerModulePresentation(prefix:HadesGameModule.presentationKeyPrefix,
+                resolver:HadesGameModule.presentationText)
+            let feedbackVisibility = TrainerGamePageVisibility()
+            let feedbackHost = NSHostingView(rootView: ManagementPageFixture(
+                content: HadesGameModule.makeFeedback(model: model), visibility: feedbackVisibility)
+                .environmentObject(localization))
+            let feedbackWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 150),
+                styleMask: [.titled], backing: .buffered, defer: false)
+            feedbackWindow.isReleasedWhenClosed = false
+            feedbackWindow.contentView = feedbackHost
+            feedbackWindow.makeKeyAndOrderFront(nil)
+            func feedbackDismiss() -> NativeAccessibilityControl? {
+                nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.dismiss" && $0.role == "AXButton" }
+            }
+            for connected in [true,false] {
+                try setConnection(connected,heroReady:false)
+                model.refreshFromHost()
+                wait("feedback setup: no hero, connected=\(connected)") {
+                    !model.busy && model.connected==connected && !model.heroReady
+                }
+                let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
+                model.performShortcut(HadesShortcutAction.disableAll.rawValue)
+                wait("no-hero disable_all reply: request received, trainer idle (connected=\(connected))") {
+                    !model.busy && commands().filter { $0["command"] as? String == "disable_all" }.count==disabled+1
+                }
+                check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
+                    "Disable All feedback did not distinguish native cleanup from detached desired reset")
+                let noticeID = model.feedback!.id
+                let feedbackRequests = commands().count
+                wait("real Hades feedback adapter exposes acknowledged receipt") { feedbackDismiss()?.enabled == true }
+                let retiredDismiss = feedbackDismiss()!
+                feedbackVisibility.setVisible(false)
+                wait("hidden Hades feedback adapter retires its controls") { feedbackDismiss() == nil }
+                _ = retiredDismiss.press(); pump()
+                check(model.feedback?.id == noticeID, "hidden Hades feedback callback consumed its retained notice")
+                feedbackVisibility.setVisible(true)
+                wait("returning Hades feedback keeps its receipt") { feedbackDismiss()?.enabled == true }
+                check(model.feedback?.id == noticeID, "page selection generated another Hades feedback event")
+                check(feedbackDismiss()!.press(), "real Hades feedback dismissal refused native AX input")
+                wait("native Hades feedback dismissal") { model.feedback == nil }
+                check(commands().count == feedbackRequests && model.connected == connected,
+                      "Hades feedback presentation replayed a command or changed connection truth")
+            }
+            try setConnection(true,heroReady:true)
+            model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
+            try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
+            model.refreshFromHost();wait("known Time Warp verification failure: trainer idle") { !model.busy && model.backendStatus.errorCode=="time_warp_verify_failed" }
+            check(model.connected && model.canMutate,"a known verification failure discarded a trusted runtime")
+            recordPhase("feedback: current issues details")
+            check(model.feedback?.tone == .warning && model.feedback?.text.key=="host.timeWarp.error.verifyFailed",
+                  "a known runtime failure lacked its warning notice")
+            check(model.currentIssues.map(\.id)==["backend"] && model.currentIssues[0].text.key=="host.timeWarp.error.verifyFailed",
+                  "a known runtime failure was not projected as a current issue")
+            let failureNotice=model.feedback!.id
+            let sidebarHost=NSHostingView(rootView:ManagementPageFixture(
+                content:HadesGameModule.makeSidebarActions(model:model).frame(width:220),visibility:feedbackVisibility)
+                .environmentObject(localization))
+            let sidebarWindow=NSWindow(contentRect:NSRect(x:0,y:200,width:240,height:420),
+                styleMask:[.titled],backing:.buffered,defer:false)
+            sidebarWindow.isReleasedWhenClosed=false
+            sidebarWindow.contentView=sidebarHost
+            sidebarWindow.makeKeyAndOrderFront(nil)
+            let issuesTitle=localization.localized("host.feedback.currentIssues")
+            let closeTitle=localization.localized("host.feedback.closeDetails")
+            func noticeDetails() -> NativeAccessibilityControl? {
+                nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.details" && $0.role == "AXButton" }
+            }
+            // The details popover is its own native window beside the fixtures.
+            func detailsControls() -> [NativeAccessibilityControl] {
+                NSApp.windows.filter { $0.isVisible && $0 !== feedbackWindow && $0 !== sidebarWindow }
+                    .flatMap { nativeAccessibilityControls($0) }
+            }
+            func closeDetails() -> NativeAccessibilityControl? {
+                detailsControls().first { $0.role=="AXButton" && $0.label==closeTitle }
+            }
+            wait("warning notice offers details for its retained issue") { noticeDetails()?.enabled == true }
+            check(noticeDetails()!.press(),"Hades notice Details refused native AX input")
+            wait("notice Details opens the current issues") {
+                model.feedbackDetailsPresented && model.feedbackDetailsNoticeID==failureNotice && closeDetails()?.enabled==true
+            }
+            check(closeDetails()!.press(),"Hades current issues refused native Close")
+            wait("native Close retires only the details") { !model.feedbackDetailsPresented && closeDetails()==nil }
+            check(model.feedback?.id==failureNotice && !model.currentIssues.isEmpty,
+                  "closing details erased the originating notice or issue")
+            var speedState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+            var speedFeatures=speedState["features"] as! [String:Any]
+            var speedProjection=(speedFeatures["gameSpeed"] as? [String:Any]) ?? ["desired":1.0]
+            speedProjection["errorPresentation"]="host.timeWarp.error.setFailed"
+            speedProjection["errorArguments"]=["7"]
+            speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+            speedState["fixtureError"]=nil
+            try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+            model.refreshFromHost()
+            wait("speed failure becomes a titled current issue") {
+                !model.busy && model.backendStatus.error.isEmpty && model.currentIssues.map(\.id)==["runtime.gameSpeed"]
+            }
+            let speedIssue=model.currentIssues[0]
+            check(speedIssue.title?.key=="hades.gameSpeed" && speedIssue.text.arguments==["7"],
+                  "speed failure lost its Hades title or Host arguments")
+            pressNativeButton(named:issuesTitle,in:sidebarHost)
+            wait("sidebar entry opens titled speed details") {
+                model.feedbackDetailsPresented && closeDetails()?.enabled==true
+                    && detailsControls().contains { $0.text==HadesPresentation.text("hades.gameSpeed",language:.en) }
+                    && detailsControls().contains { $0.text==localization.string(speedIssue.text) }
+            }
+            speedProjection.removeValue(forKey:"errorPresentation");speedProjection.removeValue(forKey:"errorArguments")
+            speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
+            try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
+            model.refreshFromHost()
+            wait("resolved issues retire their details and sidebar entry") {
+                sidebarHost.layoutSubtreeIfNeeded()
+                return !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
+                    && closeDetails()==nil && accessibilityButton(named:issuesTitle,in:sidebarHost)==nil
+            }
+            sidebarWindow.contentView=nil;sidebarWindow.close()
+            feedbackWindow.contentView = nil; feedbackWindow.close()
+            stopBackend()
+            print("hades_feedback_notice_and_current_issues_ok")
+            return
+        }
         if journey == "interlock" {
             // Start with a live, explicitly observed replacement hero. The
             // prior UI scenario originally reached this same live identity
@@ -2025,18 +2150,6 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
             && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
             "remaining-use commit lost its selected effect or hero")
-        let feedbackVisibility = TrainerGamePageVisibility()
-        let feedbackHost = NSHostingView(rootView: ManagementPageFixture(
-            content: HadesGameModule.makeFeedback(model: model), visibility: feedbackVisibility)
-            .environmentObject(localization))
-        let feedbackWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 150),
-            styleMask: [.titled], backing: .buffered, defer: false)
-        feedbackWindow.isReleasedWhenClosed = false
-        feedbackWindow.contentView = feedbackHost
-        feedbackWindow.makeKeyAndOrderFront(nil)
-        func feedbackDismiss() -> NativeAccessibilityControl? {
-            nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.dismiss" && $0.role == "AXButton" }
-        }
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait("no-hero status reply: connected=\(connected), trainer idle") { !model.busy && model.connected==connected && !model.heroReady }
@@ -2061,29 +2174,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                       "an offline or unobserved permanent resource was hidden/editable: \(id), connected=\(connected)")
             }
             model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
-            let disabled=commands().filter { $0["command"] as? String == "disable_all" }.count
-            model.performShortcut(HadesShortcutAction.disableAll.rawValue)
-            wait("no-hero disable_all reply: request received, trainer idle (connected=\(connected))") {
-                !model.busy && commands().filter { $0["command"] as? String == "disable_all" }.count==disabled+1
-            }
-            check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
-                "Disable All feedback did not distinguish native cleanup from detached desired reset")
-            let noticeID = model.feedback!.id
-            let feedbackRequests = commands().count
-            wait("real Hades feedback adapter exposes acknowledged receipt") { feedbackDismiss()?.enabled == true }
-            let retiredDismiss = feedbackDismiss()!
-            feedbackVisibility.setVisible(false)
-            wait("hidden Hades feedback adapter retires its controls") { feedbackDismiss() == nil }
-            _ = retiredDismiss.press(); pump()
-            check(model.feedback?.id == noticeID, "hidden Hades feedback callback consumed its retained notice")
-            feedbackVisibility.setVisible(true)
-            wait("returning Hades feedback keeps its receipt") { feedbackDismiss()?.enabled == true }
-            check(model.feedback?.id == noticeID, "page selection generated another Hades feedback event")
-            check(feedbackDismiss()!.press(), "real Hades feedback dismissal refused native AX input")
-            wait("native Hades feedback dismissal") { model.feedback == nil }
-            check(commands().count == feedbackRequests && model.connected == connected,
-                  "Hades feedback presentation replayed a command or changed connection truth")
-            let afterDisable=commands().count
+            let beforeOneShot=commands().count
             let issuesBeforeOneShot=model.currentIssues
             // Without a hero every one-shot is refused as in Hades II: no
             // request, a transient warning and no retained issue. The Generate
@@ -2094,89 +2185,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 check(model.feedback?.text.key=="hades.shortcut.unavailable" && model.feedback?.tone == .warning,
                       "a refused \(action.rawValue) shortcut lacked Hades II's warning notice (connected=\(connected))")
             }
-            check(commands().count==afterDisable && model.currentIssues==issuesBeforeOneShot,
+            check(commands().count==beforeOneShot && model.currentIssues==issuesBeforeOneShot,
                   "a one-shot shortcut escaped live-owner gating")
             host.layoutSubtreeIfNeeded()
             check(nativeAccessibilityControls(host).filter { $0.role=="AXButton"
                     && $0.label==HadesPresentation.text("hades.generate",language:.en) }.allSatisfy { !$0.enabled },
                   "a Generate action stayed available without a hero (connected=\(connected))")
         }
-        try setConnection(true,heroReady:true)
-        model.refreshFromHost();wait("restored hero status reply: trainer mutation authority") { !model.busy && model.canMutate }
-        try setFixtureError("host.timeWarp.error.verifyFailed",code:"time_warp_verify_failed")
-        model.refreshFromHost();wait("known Time Warp verification failure: trainer idle") { !model.busy && model.backendStatus.errorCode=="time_warp_verify_failed" }
-        check(model.connected && model.canMutate,"a known verification failure discarded a trusted runtime")
-        recordPhase("recovery: current issues details")
-        check(model.feedback?.tone == .warning && model.feedback?.text.key=="host.timeWarp.error.verifyFailed",
-              "a known runtime failure lacked its warning notice")
-        check(model.currentIssues.map(\.id)==["backend"] && model.currentIssues[0].text.key=="host.timeWarp.error.verifyFailed",
-              "a known runtime failure was not projected as a current issue")
-        let failureNotice=model.feedback!.id
-        let sidebarHost=NSHostingView(rootView:ManagementPageFixture(
-            content:HadesGameModule.makeSidebarActions(model:model).frame(width:220),visibility:feedbackVisibility)
-            .environmentObject(localization))
-        let sidebarWindow=NSWindow(contentRect:NSRect(x:0,y:200,width:240,height:420),
-            styleMask:[.titled],backing:.buffered,defer:false)
-        sidebarWindow.isReleasedWhenClosed=false
-        sidebarWindow.contentView=sidebarHost
-        sidebarWindow.makeKeyAndOrderFront(nil)
-        let issuesTitle=localization.localized("host.feedback.currentIssues")
-        let closeTitle=localization.localized("host.feedback.closeDetails")
-        func noticeDetails() -> NativeAccessibilityControl? {
-            nativeAccessibilityControls(feedbackHost).first { $0.identifier == "host.feedback.details" && $0.role == "AXButton" }
-        }
-        // The details popover is its own native window beside the fixtures.
-        func detailsControls() -> [NativeAccessibilityControl] {
-            NSApp.windows.filter { $0.isVisible && $0 !== window && $0 !== feedbackWindow && $0 !== sidebarWindow }
-                .flatMap { nativeAccessibilityControls($0) }
-        }
-        func closeDetails() -> NativeAccessibilityControl? {
-            detailsControls().first { $0.role=="AXButton" && $0.label==closeTitle }
-        }
-        wait("warning notice offers details for its retained issue") { noticeDetails()?.enabled == true }
-        check(noticeDetails()!.press(),"Hades notice Details refused native AX input")
-        wait("notice Details opens the current issues") {
-            model.feedbackDetailsPresented && model.feedbackDetailsNoticeID==failureNotice && closeDetails()?.enabled==true
-        }
-        check(closeDetails()!.press(),"Hades current issues refused native Close")
-        wait("native Close retires only the details") { !model.feedbackDetailsPresented && closeDetails()==nil }
-        check(model.feedback?.id==failureNotice && !model.currentIssues.isEmpty,
-              "closing details erased the originating notice or issue")
-        var speedState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
-        var speedFeatures=speedState["features"] as! [String:Any]
-        var speedProjection=(speedFeatures["gameSpeed"] as? [String:Any]) ?? ["desired":1.0]
-        speedProjection["errorPresentation"]="host.timeWarp.error.setFailed"
-        speedProjection["errorArguments"]=["7"]
-        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
-        speedState["fixtureError"]=nil
-        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
-        model.refreshFromHost()
-        wait("speed failure becomes a titled current issue") {
-            !model.busy && model.backendStatus.error.isEmpty && model.currentIssues.map(\.id)==["runtime.gameSpeed"]
-        }
-        let speedIssue=model.currentIssues[0]
-        check(speedIssue.title?.key=="hades.gameSpeed" && speedIssue.text.arguments==["7"],
-              "speed failure lost its Hades title or Host arguments")
-        pressNativeButton(named:issuesTitle,in:sidebarHost)
-        wait("sidebar entry opens titled speed details") {
-            model.feedbackDetailsPresented && closeDetails()?.enabled==true
-                && detailsControls().contains { $0.text==HadesPresentation.text("hades.gameSpeed",language:.en) }
-                && detailsControls().contains { $0.text==localization.string(speedIssue.text) }
-        }
-        speedProjection.removeValue(forKey:"errorPresentation");speedProjection.removeValue(forKey:"errorArguments")
-        speedFeatures["gameSpeed"]=speedProjection;speedState["features"]=speedFeatures
-        try JSONSerialization.data(withJSONObject:speedState).write(to:stateURL,options:.atomic)
-        model.refreshFromHost()
-        wait("resolved issues retire their details and sidebar entry") {
-            sidebarHost.layoutSubtreeIfNeeded()
-            return !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
-                && closeDetails()==nil && accessibilityButton(named:issuesTitle,in:sidebarHost)==nil
-        }
-        sidebarWindow.contentView=nil;sidebarWindow.close()
-        feedbackWindow.contentView = nil; feedbackWindow.close()
-        // The independent interlock journey below owns each unsafe status
-        // reply, explicit reconnect and malformed-observation assertion.
-        // This UI/AX journey retains its own controls and issue-detail gates.
+        // Connection interlocks and feedback/sidebar ownership have separate
+        // workers; this journey retains native editor and offline-value gates.
         stopBackend()
         window.close()
         print("hades_frontend_native_drafts_and_target_ownership_ok")
@@ -2216,14 +2233,16 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     binary = folder / 'frontend'
     subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(binary)], check=True, cwd=ROOT)
 
-    # Compile once and give Save editing, runtime recovery and management their
-    # own workers: a separate recovery process stops unrelated editor work from
+    # Compile once and give Save editing, runtime recovery, feedback and management
+    # their own workers: a separate recovery process stops unrelated editor work from
     # consuming the editor's watchdog. Each launch takes its outer watchdog from
     # tests/macos_fixture_policy.py; this loop owns only the journey identity and
     # its completion marker.
     JOURNEY_IDS = {
         'frontend': 'hades.save_editor',
+        # Independent process variants retain the existing recovery-family budget.
         'recovery': 'hades.recovery',
+        'feedback': 'hades.recovery',
         'interlock': 'hades.interlock',
         'management': 'hades.management',
         'slider': 'hades.slider',
@@ -2238,6 +2257,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     for journey, completion_marker in (
         ('frontend', 'hades_save_editor_native_control_journeys_ok'),
         ('recovery', 'hades_frontend_native_drafts_and_target_ownership_ok'),
+        ('feedback', 'hades_feedback_notice_and_current_issues_ok'),
         ('interlock', 'hades_runtime_interlock_journey_ok'),
         ('management', 'hades_management_native_workflows_ok'),
         ('slider', 'hades_slider_module_journey_ok'),
