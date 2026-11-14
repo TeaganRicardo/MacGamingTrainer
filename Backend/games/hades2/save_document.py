@@ -7,11 +7,13 @@ This module owns only Hades save bytes and their structured representation. It
 does not resolve the user's real save path and does not perform destructive
 replace/rollback transactions; Core Save owns those responsibilities.
 """
+from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
 import struct
+from typing import Optional
 import zlib
 
 from core import lz4_block
@@ -168,7 +170,7 @@ class Hades2SaveHeader:
     accumulated_meta_points: int
     active_shrine_points: int
     meta_upgrade_level: int
-    cosmetics_points: int | None
+    cosmetics_points: Optional[int]
     easy_mode: int
     hard_mode: int
     notable_lua_data: tuple[str, ...]

@@ -52,15 +52,20 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "hades.interlock": 45.0,
     "hades.management": 30.0,
     "hades.slider": 20.0,
-    "hades.hierarchy": 20.0,
+    # Seven hosted runs on macos-26/ARM64 after #717/#719 expanded hierarchy
+    # geometry checks span 15.255s to 20.124s (spread 4.869s); 20s expired
+    # after hades_visual_hierarchy_ok printed. Give the journey real margin.
+    "hades.hierarchy": 30.0,
     "hades.disclosure": 60.0,
     "hades.search": 20.0,
     # Hades II native journeys (tests/test_hades2_view_state_flow.py).
-    "hades2.hierarchy": 20.0,
+    # Shares exerciseVisualHierarchy and exerciseRoomPickerAlignment with Hades I.
+    "hades2.hierarchy": 30.0,
     "hades2.slider": 20.0,
     "hades2.disclosure": 60.0,
     "hades2.search": 20.0,
     "hades2.state_flow": 30.0,
+    "hades2.world_exit": 30.0,
     "hades2.live_trait_flow": 30.0,
     "hades2.save_editor": 30.0,
     # Shared ownership journeys.

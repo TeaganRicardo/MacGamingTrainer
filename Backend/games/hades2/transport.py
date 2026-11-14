@@ -36,6 +36,7 @@ class Hades2LuaTransport:
         self.listener=self.debugger.GetListener()
         self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None; self.native_mailbox_library=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
+        self._boundary_initial_stop_pending=False; self._boundary_cleanup_depth=0
         self._cleanup_pending=False; self._cleanup_failure=None; self._pending_resume_pid=None
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         from .config import SUPPORTED_BUILD
@@ -82,7 +83,7 @@ class Hades2LuaTransport:
             )
             raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
 
-        self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None; self.native_runtime_installer=None; self.native_mailbox_library=None
+        self.pid=pid; self.addresses={}; self.tainted=False; self._boundary_initial_stop_pending=False; self._boundary_cleanup_depth=0; self.focus_original=None; self.native_runtime_installer=None; self.native_mailbox_library=None
         self._clear_cleanup_state()
         try:
             phase=time.monotonic()
@@ -186,35 +187,56 @@ class Hades2LuaTransport:
         return self.process is not None and self.process.GetState() not in (lldb.eStateExited,lldb.eStateDetached,lldb.eStateInvalid)
 
     def wait_state(self, states, deadline, *, phase='transport.stop', primary_error_code=None):
+        if self.process is None:
+            raise TransportError('disconnected','游戏进程已结束。')
         last_observed_state=None
         while time.monotonic()<deadline:
+            if self.process is None:
+                raise TransportError('disconnected','游戏进程已结束。')
             self.drain()
             state=self.process.GetState()
             last_observed_state=state
             if state in states:return state
-            if state in (lldb.eStateExited,lldb.eStateDetached):
+            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
                 raise TransportError('disconnected','游戏进程已结束。')
             time.sleep(.005)
         observation={'phase':phase,'expectedStates':list(states),'lastObservedState':last_observed_state}
         if primary_error_code is not None:observation['primary_error_code']=primary_error_code
         raise TransportError('process_timeout','游戏进程状态切换超时。',diagnostic=json.dumps(observation,separators=(',',':')))
 
+    def _stop_failed_error(self, phase, last_state, *, lldb_error=None, primary_error_code=None):
+        observation={'phase':phase,'expectedStates':[lldb.eStateStopped],'lastObservedState':last_state}
+        if lldb_error is not None:observation['lldbError']=str(lldb_error)
+        if primary_error_code is not None:observation['primary_error_code']=primary_error_code
+        return TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=json.dumps(observation,separators=(',',':')))
+
     @profiled("debugger.stop")
     def stop(self, deadline, *, phase='transport.stop', primary_error_code=None):
+        if self.process is None:
+            raise TransportError('disconnected','游戏进程已结束。')
         self.drain()
         state=self.process.GetState()
         if state==lldb.eStateStopped:return
         if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
             raise TransportError('disconnected','游戏进程已结束。')
         if time.monotonic()>=deadline:
-            raise TransportError('stop_failed','无法在时限内暂停游戏。')
-        # LLDB owns the stop request and its process-state event. An asynchronous
-        # request is not completion: observe the stop within the original deadline.
-        self.process.SendAsyncInterrupt()
-        return self.wait_state((lldb.eStateStopped,),deadline,phase=phase,primary_error_code=primary_error_code)
+            raise self._stop_failed_error(phase,state,primary_error_code=primary_error_code)
+        # SBProcess.Stop requests and acknowledges the LLDB-owned stop as one
+        # operation; SendAsyncInterrupt returns void and can lose its stop event.
+        error=self.process.Stop()
+        if error.Fail():
+            self.drain()
+            state=self.process.GetState()
+            if state==lldb.eStateStopped:return
+            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
+                raise TransportError('disconnected','游戏进程已结束。')
+            raise self._stop_failed_error(phase,state,lldb_error=error,primary_error_code=primary_error_code)
+        self.wait_state((lldb.eStateStopped,),deadline,phase=phase,primary_error_code=primary_error_code)
 
     @profiled("debugger.resume")
     def resume(self, deadline, breakpoint_expected=False):
+        if self.process is None:
+            raise TransportError('disconnected','游戏进程已结束。')
         self.drain()
         if self.process.GetState()==lldb.eStateRunning:return
         previous_stop=self.process.GetStopID()
@@ -225,7 +247,7 @@ class Hades2LuaTransport:
             state=self.process.GetState()
             if state==lldb.eStateRunning:return
             if breakpoint_expected and state==lldb.eStateStopped and self.process.GetStopID()>previous_stop:return
-            if state in (lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已结束。')
+            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已结束。')
             time.sleep(.005)
         raise TransportError('resume_failed','游戏未能恢复运行。')
 
@@ -243,11 +265,37 @@ class Hades2LuaTransport:
 
     @profiled("debugger.boundary")
     def boundary(self, timeout=3, *, entry_address=None):
+        self._boundary_initial_stop_pending=False
         if getattr(self, 'cleanup_pending', False):raise self._quarantined_error()
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
         deadline=time.monotonic()+timeout
-        self.stop(deadline,phase='boundary.initial_stop')
+        # Initial stop happens before breakpoint/focus/scratch/Lua mutations;
+        # keep its failure distinct from uncertain post-mutation cleanup.
+        track_initial_stop=getattr(self,'_boundary_cleanup_depth',0)>0
+        self._boundary_initial_stop_pending=track_initial_stop
+        try:
+            self.stop(deadline,phase='boundary.initial_stop')
+        except BaseException as exc:
+            # Stop() may physically pause the process just as its observation
+            # deadline expires. Release that known pre-mutation stop rather than
+            # leaving the game frozen when the caller skips mutation cleanup.
+            if getattr(exc,'code',None)!='disconnected' and self.process is not None:
+                try:
+                    self.drain()
+                    if self.process.GetState()==lldb.eStateStopped:
+                        self.resume(time.monotonic()+3)
+                except BaseException as release_exc:
+                    # Failure to release a debugger-owned stop ends trust in
+                    # this attachment, even though no Lua call was submitted.
+                    if getattr(release_exc,'code',None)!='disconnected':
+                        self.tainted=True
+                    raise
+            raise
+        finally:
+            if not track_initial_stop:
+                self._boundary_initial_stop_pending=False
+        self._boundary_initial_stop_pending=False
         self.restore_focus() # Never overwrite an outstanding recovery value.
         error=lldb.SBError()
         focus=self.address('_ZN3sgg13ConfigOptions20RequireFocusToUpdateE')
@@ -263,7 +311,7 @@ class Hades2LuaTransport:
             while time.monotonic()<deadline:
                 self.drain()
                 state=self.process.GetState()
-                if state in (lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已退出。')
+                if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已退出。')
                 if state!=lldb.eStateStopped:
                     time.sleep(.005);continue
                 matching=[th for th in self.process if th.GetStopReason()==lldb.eStopReasonBreakpoint and th.GetStopReasonDataAtIndex(0)==bp.GetID()]
@@ -346,7 +394,14 @@ class Hades2LuaTransport:
 
     @profiled("debugger.execute")
     def _execute_lldb(self, source, *, expression_timeout_seconds=2.0):
+        if getattr(self, 'cleanup_pending', False):
+            raise self._quarantined_error()
+        if self.tainted:
+            raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0; primary_error_code=None
+        self._boundary_initial_stop_pending=False
+        cleanup_depth=getattr(self,'_boundary_cleanup_depth',0)
+        self._boundary_cleanup_depth=cleanup_depth+1
         try:
             th,L,bp=self.boundary()
             payload=source.encode('utf-8')
@@ -414,19 +469,22 @@ class Hades2LuaTransport:
                     raise TransportError('outcome_unknown',message or '游戏调用结果不明，未自动重试。')
                 raise TransportError('lua_error',text or 'Lua 执行失败')
             return text
-        except Exception as exc:
+        except BaseException as exc:
             primary_error_code=getattr(exc,'code',None)
             raise
         finally:
+            initial_stop_failed=getattr(self,'_boundary_initial_stop_pending',False)
+            self._boundary_initial_stop_pending=False
+            self._boundary_cleanup_depth=cleanup_depth
             if bp is not None and self.target:
                 self.target.BreakpointDelete(bp.GetID())
-            if self.process and self.alive():
+            if not initial_stop_failed and self.process and self.alive():
                 try:
                     self.stop(time.monotonic()+3,phase='execute.cleanup_stop',primary_error_code=primary_error_code)
                     self.restore_focus()
                     if scratch is not None:self.process.DeallocateMemory(scratch)
                     self.resume(time.monotonic()+3)
-                except Exception:
+                except BaseException:
                     self.tainted=True
                     raise
             self.last_duration=time.monotonic()-started
@@ -474,7 +532,7 @@ class Hades2LuaTransport:
         return TransportError('detach_failed',diagnostic,diagnostic=diagnostic)
 
     def _clear_debugger_attachment(self):
-        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None;self.native_mailbox_library=None
+        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self._boundary_initial_stop_pending=False;self._boundary_cleanup_depth=0;self.native_runtime_installer=None;self.native_mailbox_library=None
 
     def _clear_attachment(self):
         self._clear_debugger_attachment()
