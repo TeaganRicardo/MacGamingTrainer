@@ -182,9 +182,21 @@ class Hades2LuaTransport:
         event=lldb.SBEvent()
         while self.listener.GetNextEvent(event): pass
 
+    @staticmethod
+    def _is_terminal_state(state):
+        return state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached)
+
+    def _observe_live_state(self):
+        """Drain pending LLDB events and return the current non-terminal process state."""
+        self.drain()
+        state=self.process.GetState()
+        if self._is_terminal_state(state):
+            raise TransportError('disconnected','游戏进程已结束。')
+        return state
+
     def alive(self):
         self.drain()
-        return self.process is not None and self.process.GetState() not in (lldb.eStateExited,lldb.eStateDetached,lldb.eStateInvalid)
+        return self.process is not None and not self._is_terminal_state(self.process.GetState())
 
     def wait_state(self, states, deadline, *, phase='transport.stop', primary_error_code=None):
         if self.process is None:
@@ -197,7 +209,7 @@ class Hades2LuaTransport:
             state=self.process.GetState()
             last_observed_state=state
             if state in states:return state
-            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
+            if self._is_terminal_state(state):
                 raise TransportError('disconnected','游戏进程已结束。')
             time.sleep(.005)
         observation={'phase':phase,'expectedStates':list(states),'lastObservedState':last_observed_state}
@@ -214,22 +226,16 @@ class Hades2LuaTransport:
     def stop(self, deadline, *, phase='transport.stop', primary_error_code=None):
         if self.process is None:
             raise TransportError('disconnected','游戏进程已结束。')
-        self.drain()
-        state=self.process.GetState()
+        state=self._observe_live_state()
         if state==lldb.eStateStopped:return
-        if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
-            raise TransportError('disconnected','游戏进程已结束。')
         if time.monotonic()>=deadline:
             raise self._stop_failed_error(phase,state,primary_error_code=primary_error_code)
         # SBProcess.Stop requests and acknowledges the LLDB-owned stop as one
         # operation; SendAsyncInterrupt returns void and can lose its stop event.
         error=self.process.Stop()
         if error.Fail():
-            self.drain()
-            state=self.process.GetState()
+            state=self._observe_live_state()
             if state==lldb.eStateStopped:return
-            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
-                raise TransportError('disconnected','游戏进程已结束。')
             raise self._stop_failed_error(phase,state,lldb_error=error,primary_error_code=primary_error_code)
         self.wait_state((lldb.eStateStopped,),deadline,phase=phase,primary_error_code=primary_error_code)
 
@@ -237,17 +243,16 @@ class Hades2LuaTransport:
     def resume(self, deadline, breakpoint_expected=False):
         if self.process is None:
             raise TransportError('disconnected','游戏进程已结束。')
-        self.drain()
-        if self.process.GetState()==lldb.eStateRunning:return
+        if self._observe_live_state()==lldb.eStateRunning:return
         previous_stop=self.process.GetStopID()
         error=self.process.Continue()
-        if error.Fail():raise TransportError('resume_failed','无法恢复游戏运行：'+str(error))
+        if error.Fail():
+            if self._observe_live_state()==lldb.eStateRunning:return
+            raise TransportError('resume_failed','无法恢复游戏运行：'+str(error))
         while time.monotonic()<deadline:
-            self.drain()
-            state=self.process.GetState()
+            state=self._observe_live_state()
             if state==lldb.eStateRunning:return
             if breakpoint_expected and state==lldb.eStateStopped and self.process.GetStopID()>previous_stop:return
-            if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已结束。')
             time.sleep(.005)
         raise TransportError('resume_failed','游戏未能恢复运行。')
 

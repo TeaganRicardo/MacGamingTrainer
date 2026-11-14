@@ -35,19 +35,31 @@ class StopError:
 
 
 class Process:
-    def __init__(self, state, *, stop_error=None):
+    def __init__(self, state, *, stop_error=None, continue_error=None, stop_id=1):
         self.state = state
         self.stops = 0
+        self.continues = 0
         self.stop_requested = False
+        self.continue_requested = False
         self.stop_error = stop_error
+        self.continue_error = continue_error
+        self.stop_id = stop_id
 
     def GetState(self):
         return self.state
+
+    def GetStopID(self):
+        return self.stop_id
 
     def Stop(self):
         self.stops += 1
         self.stop_requested = True
         return StopError(self.stop_error is not None, self.stop_error or "")
+
+    def Continue(self):
+        self.continues += 1
+        self.continue_requested = True
+        return StopError(self.continue_error is not None, self.continue_error or "")
 
     def SendAsyncInterrupt(self):
         raise AssertionError("Hades II must use the acknowledged LLDB Stop API")
@@ -198,6 +210,70 @@ except TransportError as error:
     assert error.code == "disconnected", error.code
 else:
     raise AssertionError("eStateInvalid during resume did not fail closed")
+
+# resume() must classify terminal states before Continue(), and on Continue().Fail()
+# drain and re-read state to distinguish already-running, disconnected, and live-stopped.
+for state in (fake_lldb.eStateInvalid, fake_lldb.eStateExited, fake_lldb.eStateDetached):
+    terminal_resume = make_transport(state)
+    terminal_resume.process.continue_error = "Process is not alive."
+    try:
+        terminal_resume.resume(time.monotonic() + 1)
+    except TransportError as error:
+        assert error.code == "disconnected", (state, error.code)
+    else:
+        raise AssertionError("terminal state at resume entry did not fail closed")
+    assert terminal_resume.process.continues == 0, "Continue() called on terminal state"
+
+    failed_continue_terminal = make_transport(fake_lldb.eStateStopped)
+    failed_continue_terminal.process.continue_error = "Process exited."
+    drain_calls = []
+
+    def drain_to_terminal(target_transport=failed_continue_terminal, terminal_state=state, calls=drain_calls):
+        calls.append(True)
+        if target_transport.process.continue_requested:
+            target_transport.process.state = terminal_state
+
+    failed_continue_terminal.drain = drain_to_terminal
+    try:
+        failed_continue_terminal.resume(time.monotonic() + 1)
+    except TransportError as error:
+        assert error.code == "disconnected", (state, error.code)
+    else:
+        raise AssertionError("terminal transition during failed Continue() did not fail closed")
+    assert failed_continue_terminal.process.continues == 1
+    assert len(drain_calls) == 2
+
+concurrent_resume_running = make_transport(fake_lldb.eStateStopped)
+concurrent_resume_running.process.continue_error = "Process is already running."
+running_drains = []
+
+def drain_to_running():
+    running_drains.append(True)
+    if concurrent_resume_running.process.continue_requested:
+        concurrent_resume_running.process.state = fake_lldb.eStateRunning
+
+concurrent_resume_running.drain = drain_to_running
+concurrent_resume_running.resume(time.monotonic() + 1)
+assert concurrent_resume_running.process.continues == 1
+assert len(running_drains) == 2
+
+for breakpoint_expected, next_stop_id in ((False, 1), (True, 2)):
+    failed_resume_stopped = make_transport(fake_lldb.eStateStopped)
+    failed_resume_stopped.process.continue_error = "simulated LLDB resume error"
+    failed_resume_stopped.process.Continue = lambda proc=failed_resume_stopped.process, sid=next_stop_id: (
+        setattr(proc, "continues", proc.continues + 1),
+        setattr(proc, "continue_requested", True),
+        setattr(proc, "stop_id", sid),
+        StopError(True, proc.continue_error),
+    )[-1]
+    try:
+        failed_resume_stopped.resume(time.monotonic() + 1, breakpoint_expected=breakpoint_expected)
+    except TransportError as error:
+        assert error.code == "resume_failed", error.code
+        assert "simulated LLDB resume error" in str(error)
+    else:
+        raise AssertionError("failed Continue() on stopped process did not raise resume_failed")
+    assert failed_resume_stopped.process.continues == 1
 
 # A Stop request cannot open a boundary while LLDB still sees running.
 transport = make_transport(fake_lldb.eStateRunning)
@@ -493,6 +569,96 @@ else:
     raise AssertionError("disconnect during late-stop release was hidden")
 assert not late_disconnect_release.tainted
 assert not late_disconnect_release._boundary_initial_stop_pending
+
+# Real resume() inside late-stop recovery must classify terminal states at entry
+# and after Continue().Fail() as disconnected without tainting or poisoning, while
+# concurrent running completes cleanly and a live-stopped Continue().Fail() taints.
+def make_real_resume_late_stop_transport(*, continue_error=None):
+    transport = make_transport(fake_lldb.eStateRunning)
+    transport.tainted = False
+    transport.alive = lambda: True
+    transport.target = Mock()
+    transport.process.continue_error = continue_error
+
+    def late_stop(*args, **kwargs):
+        transport.process.stops += 1
+        transport.process.state = fake_lldb.eStateStopped
+        raise TransportError("process_timeout", "stop observation missed deadline")
+
+    transport.stop = Mock(side_effect=late_stop)
+    return transport
+
+
+def assert_late_stop_real_resume_case(
+    *, caller, continue_error, transition_hook, expected_code, expected_continues, expected_tainted,
+):
+    transport = make_real_resume_late_stop_transport(continue_error=continue_error)
+    drain_count = [0]
+
+    def custom_drain():
+        drain_count[0] += 1
+        transition_hook(transport, drain_count[0])
+
+    transport.drain = custom_drain
+    poison_calls = []
+    mailbox_object = types.SimpleNamespace(
+        path="/tmp/fixture-mailbox", tainted=False, poison=lambda: poison_calls.append("poisoned"),
+    )
+    if caller == "mailbox":
+        transport._mailbox = mailbox_object
+    try:
+        if caller == "execute":
+            transport._execute_lldb("return 1")
+        else:
+            install_command_mailbox(transport, fake_lldb, mailbox_object, library_fake)
+    except TransportError as error:
+        assert error.code == expected_code, (caller, expected_code, error.code)
+    else:
+        raise AssertionError(f"late-stop scenario unexpectedly succeeded for {caller}/{expected_code}")
+    assert transport.process.stops == 1
+    assert transport.process.continues == expected_continues
+    assert transport.tainted is expected_tainted, (caller, expected_code, transport.tainted)
+    assert not transport._boundary_initial_stop_pending
+    expected_poison = ["poisoned"] if (caller == "mailbox" and expected_tainted) else []
+    assert poison_calls == expected_poison, (caller, poison_calls)
+
+
+for caller in ("execute", "mailbox"):
+    for state in (fake_lldb.eStateInvalid, fake_lldb.eStateExited, fake_lldb.eStateDetached):
+        assert_late_stop_real_resume_case(
+            caller=caller,
+            continue_error="Process is not alive.",
+            transition_hook=lambda t, n, s=state: setattr(t.process, "state", s) if n == 2 else None,
+            expected_code="disconnected",
+            expected_continues=0,
+            expected_tainted=False,
+        )
+        assert_late_stop_real_resume_case(
+            caller=caller,
+            continue_error="Process exited.",
+            transition_hook=lambda t, _n, s=state: setattr(t.process, "state", s) if t.process.continue_requested else None,
+            expected_code="disconnected",
+            expected_continues=1,
+            expected_tainted=False,
+        )
+    assert_late_stop_real_resume_case(
+        caller=caller,
+        continue_error="Process is already running.",
+        transition_hook=lambda t, _n: (
+            setattr(t.process, "state", fake_lldb.eStateRunning) if t.process.continue_requested else None
+        ),
+        expected_code="process_timeout",
+        expected_continues=1,
+        expected_tainted=False,
+    )
+    assert_late_stop_real_resume_case(
+        caller=caller,
+        continue_error="simulated LLDB resume error",
+        transition_hook=lambda _t, _n: None,
+        expected_code="resume_failed",
+        expected_continues=1,
+        expected_tainted=True,
+    )
 
 # Post-initial-stop failure inside install_command_mailbox (after the target was
 # paused) still cleans up and taints/poisons if cleanup fails.
