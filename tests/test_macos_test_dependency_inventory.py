@@ -23,10 +23,11 @@ from select_macos_pr_tests import selected_tests, source_directories
 
 INVENTORY = load_macos_only_tests()
 SOURCES = source_directories()
-# Pure-Python Backend protocol/codec/manifest/save-document modules imported by
-# macOS harnesses as fixtures or wire codecs; platform-coupled Backend modules
-# (Darwin probes, LLDB transport, time-warp, save metadata/restore) must appear
-# in Tools/macos_test_dependencies.json instead.
+# Pure-Python Backend protocol/codec/manifest/fixture modules imported by macOS
+# harnesses (including adapter/save-provider seams contractually kept portable
+# in tests/test_ci_docs_only.py and exercised purely in-memory on Save fixtures).
+# Platform-coupled Backend modules (Darwin probes, LLDB transport, mailbox,
+# time-warp, save metadata/restore) must appear in Tools/macos_test_dependencies.json.
 PORTABLE_BACKEND_FIXTURES = frozenset({
     'Backend/core/__init__.py',
     'Backend/core/adapter.py',

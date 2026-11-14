@@ -109,6 +109,46 @@ with tempfile.TemporaryDirectory(prefix="mgt-release-tags-") as tmp:
     )
     assert changed_cli.stdout.strip() == "true", changed_cli.stdout
 
+    # Version-only bumps and backwards build reverts must trigger release validation.
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "10",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "bump marketing version")
+    v40_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, b10_sha, v40_sha) is True
+
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "9",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "revert build")
+    revert_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, v40_sha, revert_sha) is True
+
+    # Non-dict or malformed plists fail closed: base corruption still requests release,
+    # while corrupt HEAD rejects precheck with exit code 2.
+    (repo / "Info.plist").write_bytes(plistlib.dumps(["not", "a", "dict"]))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "non-dict plist")
+    array_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    bad_head = subprocess.run(
+        [sys.executable, str(ROOT / "Tools/release_tag.py"), "--repo-root", str(repo), "--push-precheck", revert_sha, array_sha],
+        capture_output=True, text=True,
+    )
+    assert bad_head.returncode == 2, (bad_head.returncode, bad_head.stderr)
+
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "11",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "recover valid plist")
+    recovered_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, array_sha, recovered_sha) is True
+
 workflow = (ROOT / ".github/workflows/direct-release.yml").read_text(encoding="utf-8")
 versioning = (ROOT / "VERSIONING.md").read_text(encoding="utf-8")
 for required in (

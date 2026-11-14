@@ -74,6 +74,8 @@ def select_release_tag(version: str, build: str, published: Mapping[str, int]) -
 
 def _plist_release_identity(plist_bytes: bytes) -> tuple[str, str]:
     metadata = plistlib.loads(plist_bytes)
+    if not isinstance(metadata, dict):
+        raise ValueError("Info.plist root must be a plist dictionary")
     version = metadata.get("CFBundleShortVersionString")
     build = metadata.get("CFBundleVersion")
     if not isinstance(version, str) or not isinstance(build, str):
@@ -112,6 +114,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.push_precheck:
+            if args.version is not None or args.build is not None:
+                parser.error("--push-precheck does not accept positional version/build arguments")
             base_ref, head_ref = args.push_precheck
             changed = release_identity_changed(args.repo_root, base_ref, head_ref)
             if not changed:

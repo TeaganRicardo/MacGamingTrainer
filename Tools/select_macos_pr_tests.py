@@ -170,13 +170,18 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Tools/verify_build_provenance.py": (BUILD_SMOKE,),
     "Backend/games/hades/trainer-entitlements.plist": (BUILD_SMOKE,),
     "Backend/games/hades2/trainer-entitlements.plist": (BUILD_SMOKE,),
+    "docs/reference/hades2/1.143476-25481925/ui_terminology.json": ("test_hades2_model_flow.py",),
     "Tools/generate_game_binding.py": ("test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"),
     "Tools/module_support.py": ("test_multi_game_context_state.py", "test_reference_fixture_session_integration.py"),
     "Tools/resident_runtime.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),
     "Tools/supported_build.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),
     "Tools/run_macos_checks.sh": ("test_multi_game_context_state.py", BUILD_SMOKE),
     "Tools/select_macos_pr_tests.py": ("test_multi_game_context_state.py", BUILD_SMOKE),
-    ".github/workflows/build2-macos.yml": (BUILD_SMOKE, "test_host_localization_behavior.py"),
+    ".github/workflows/build2-macos.yml": (
+        BUILD_SMOKE,
+        "test_host_localization_behavior.py",
+        "test_native_effect_query_macos.py",
+    ),
 }
 
 PREFIX_TESTS: tuple[tuple[str, tuple[str, ...]], ...] = (

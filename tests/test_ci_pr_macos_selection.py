@@ -149,12 +149,18 @@ expected_routes = {
     "Backend/core/target_probe.py": {"test_core_save_target_probe_macos.py"},
     "Backend/games/hades2/transport.py": {"test_hades2_lldb_breakpoint_lifetime.py"},
     "Backend/debugger/lldb_time_warp.py": {"test_hades2_lldb_breakpoint_lifetime.py"},
-    ".github/workflows/build2-macos.yml": {"test_build_signing_metadata_macos.py", "test_host_localization_behavior.py"},
+    ".github/workflows/build2-macos.yml": {
+        "test_build_signing_metadata_macos.py",
+        "test_host_localization_behavior.py",
+        "test_native_effect_query_macos.py",
+    },
     "Tools/generate_game_binding.py": {"test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"},
+    "docs/reference/hades2/1.143476-25481925/ui_terminology.json": {"test_hades2_model_flow.py"},
 }
 for changed_path, required_tests in expected_routes.items():
     chosen = set(pr_smoke_tests([changed_path], TESTS, SOURCES))
     assert required_tests <= chosen, (changed_path, required_tests, chosen)
+assert smoke_selection([".github/workflows/build2-macos.yml"], TESTS, SOURCES)["requirements"]["lua52_native"] is True
 
 # Every macOS inventory entry must be reachable from real non-test/helper files
 # (not only metadata edits to macos_only_tests.txt or macos_test_dependencies.json).
@@ -165,9 +171,8 @@ tracked_non_test = [
 reachable = set()
 for path in tracked_non_test:
     reachable.update(selected_tests([path], TESTS, SOURCES))
-# Also include non-test helper test_native_effect_query.py / disclosure_ui_harness.py
-for helper in ("tests/disclosure_ui_harness.py", "tests/test_native_effect_query.py"):
-    reachable.update(selected_tests([helper], TESTS, SOURCES))
+# test_disclosure_settle_classification.py tests tests/disclosure_ui_harness.py directly.
+reachable.update(selected_tests(["tests/disclosure_ui_harness.py"], TESTS, SOURCES))
 assert TESTS - reachable == set(), sorted(TESTS - reachable)
 
 # Every needs_macos=True non-test file must either select >=1 PR macOS test
@@ -194,7 +199,6 @@ _NON_BEHAVIOR_MACOS_PREFIXES = (
     "Resources/Assets.xcassets/",
     "Tools/fixtures/",
     "Tools/generate_",
-    "docs/reference/",
 )
 unexplained_zero_test = []
 for path in sorted(set(tracked_non_test)):

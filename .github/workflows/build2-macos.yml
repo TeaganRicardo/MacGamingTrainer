@@ -150,7 +150,12 @@ jobs:
         run: |
           archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
           lua_root="$RUNNER_TEMP/lua-5.2.4"
-          if [ -x "$lua_root/src/lua" ] && [ "$("$lua_root/src/lua" -e 'io.write(_VERSION)' 2>/dev/null)" = 'Lua 5.2' ]; then
+          if [ -x "$lua_root/src/lua" ] \
+            && [ -f "$lua_root/src/liblua.a" ] \
+            && [ -f "$lua_root/src/lua.h" ] \
+            && [ -f "$lua_root/src/lauxlib.h" ] \
+            && [ -f "$lua_root/src/lualib.h" ] \
+            && [ "$("$lua_root/src/lua" -e 'io.write(_VERSION)' 2>/dev/null)" = 'Lua 5.2' ]; then
             echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
             exit 0
           fi
