@@ -28,6 +28,7 @@ class HadesRuntimeClient:
         return JsonLineSidecarClient(
             ['/usr/bin/xcrun', 'python3', '-u', '-m', 'games.hades.time_warp_worker'],
             cwd=backend, env=environment, reply_timeout_seconds=120,
+            child_owns_cleanup=True,
         )
 
     def _call(self, method, params=None):

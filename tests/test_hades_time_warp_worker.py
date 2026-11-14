@@ -169,5 +169,22 @@ for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required',
     assert payload['arguments'] == [] and payload['diagnostic'] == 'native detail'
 known_failure = AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed')
 assert error_payload(known_failure)['presentation'] == known_failure.presentation
+interrupted = AdapterError('outcome_unknown', 'hades.error.luaInterrupted', diagnostic='native interruption')
+assert error_payload(interrupted)['presentation'] == 'hades.error.luaInterrupted'
+exit_failed = AdapterError('outcome_unknown', 'hades.error.luaTerminationFailed', diagnostic='native kill failed')
+assert error_payload(exit_failed)['presentation'] == 'hades.error.luaTerminationFailed'
+
+# An interrupted VM must not enter another native reset on disconnect or EOF.
+for operation in ('disconnect', 'close'):
+    interrupted_transport = FakeTransport()
+    interrupted_transport.vm_interrupted = True
+    interrupted_time_warp = FakeTimeWarp()
+    interrupted_worker = HadesTimeWarpWorker(transport=interrupted_transport,
+                                           time_warp_factory=lambda _: interrupted_time_warp)
+    if operation == 'disconnect':
+        interrupted_worker.dispatch('disconnect', {})
+    else:
+        interrupted_worker.close()
+    assert interrupted_time_warp.events == [] and interrupted_transport.detaches == 1
 
 print('hades_game_native_simulation_time_warp_worker_contract_ok')

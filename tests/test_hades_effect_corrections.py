@@ -172,8 +172,8 @@ near(unit.properties.Speed, 540)
 print("hades_effect_corrections_native_journeys_ok")
 '''
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
-result = subprocess.run([require_lua52('Hades effect review corrections'), '-e',
-                         'local SOURCE=' + json.dumps(source) + '\n' + fixture + journey],
+result = subprocess.run([require_lua52('Hades effect review corrections'), '-'],
+                        input='local SOURCE=' + json.dumps(source) + '\n' + fixture + journey,
                         capture_output=True, text=True)
 assert result.returncode == 0, result.stdout + '\n' + result.stderr
 print(result.stdout.strip())

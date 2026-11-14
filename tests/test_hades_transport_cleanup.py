@@ -1,5 +1,6 @@
 """A leased native breakpoint is removed only after an observed stop."""
 from pathlib import Path
+import re
 import sys
 import tempfile
 import types
@@ -19,7 +20,7 @@ class Error:
 
 
 fake_lldb = types.SimpleNamespace(
-    SBError=Error, eStateStopped=5, eStateRunning=6,
+    SBError=Error, eStateStopped=5, eStateRunning=6, eStateExited=10,
     ePermissionsReadable=1, ePermissionsWritable=2,
 )
 with patch.dict(sys.modules, {'lldb': fake_lldb}), patch('subprocess.check_output', return_value=''):
@@ -30,6 +31,7 @@ def fixture():
     events = []
     clock = [0]
     running = [False]
+    exited = [False]
     breakpoint = types.SimpleNamespace(GetID=lambda: 1)
 
     def delete():
@@ -45,9 +47,15 @@ def fixture():
         running[0] = True
         clock[0] += 4
 
+    def kill():
+        events.append('kill')
+        running[0], exited[0] = False, True
+        return Error()
+
     transport = module.HadesLuaTransport.__new__(module.HadesLuaTransport)
     transport.pid = 42
     transport._tainted_pid = None
+    transport._unsafe_vm_pid = None
     transport.focus_original = None
     transport.addresses = {name: index + 100 for index, name in enumerate((
         '_ZN3sgg13ConfigOptions20RequireFocusToUpdateE', '_ZN3sgg3App6UpdateEf',
@@ -60,9 +68,13 @@ def fixture():
         ReadMemory=lambda *args: b'\x01', WriteMemory=lambda address, value, error: len(value),
         AllocateMemory=lambda *args: 1000,
         DeallocateMemory=lambda address: events.append('free'),
-        Detach=lambda: Error(),
+        Detach=lambda *args: events.append(('detach', args)) or Error(),
+        Kill=kill,
+        GetState=lambda: fake_lldb.eStateExited if exited[0] else (
+            fake_lldb.eStateRunning if running[0] else fake_lldb.eStateStopped),
     )
-    transport.alive = lambda: True
+    transport.alive = lambda: not exited[0]
+    transport._drain = lambda: None
     transport._stop = stop
     transport._resume = resume
     transport._restore_focus = lambda: events.append('restore')
@@ -117,7 +129,7 @@ with patch.object(module.time, 'monotonic', side_effect=lambda: clock[0]):
 assert transport.tainted and events == ['stop', 'restore', 'resume'], events
 transport._stop = observed_stop
 transport.detach()
-assert events[-3:] == ['stop', 'restore', 'delete'], events
+assert events[-4:] == ['stop', 'restore', 'delete', ('detach', ())], events
 
 
 class Options:
@@ -147,10 +159,62 @@ with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
         transport.execute('return "{}"', mutating=True)
     except AdapterError as error:
         assert error.code == 'outcome_unknown'
+        assert error.presentation == 'hades.error.luaInterrupted'
     else:
         raise AssertionError('an expression failure lost its unknown-outcome result')
 assert transport.tainted
-assert events == ['stop', 'delete', 'restore', 'free', 'resume'], events
+assert transport._unsafe_vm_pid == 42
+assert events == ['kill'] and not transport.alive(), events
+transport.detach()
+assert events == ['kill'], events
+assert transport.process is None and transport.pid is None
+assert transport._unsafe_vm_pid is None, 'released VM diagnosis can kill a later reused PID'
+
+# LLDB can also reject compilation before entering Lua, or lose a result after
+# protected return/stack cleanup. Neither observation authorizes Force Quit.
+for observed_phase in (b'\x00', b'\x02'):
+    transport, breakpoint, events, clock, running = fixture()
+    transport._boundary = lambda: (types.SimpleNamespace(GetFrameAtIndex=lambda index: frame), 123)
+    transport.process.ReadMemory = lambda *args: observed_phase
+    with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
+            patch.object(module.lldb, 'eLanguageTypeC_plus_plus', 4, create=True):
+        try:
+            transport.execute('return "{}"', mutating=True)
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown' and error.presentation == 'hades.error.outcomeUnknown'
+        else:
+            raise AssertionError('an expression engine failure was hidden')
+    assert not transport.vm_interrupted and transport.alive()
+    assert events == ['stop', 'delete', 'restore', 'free', 'resume'], events
+
+# An unreadable execution phase cannot establish that Lua cleanup completed.
+transport, breakpoint, events, clock, running = fixture()
+transport._boundary = lambda: (types.SimpleNamespace(GetFrameAtIndex=lambda index: frame), 123)
+def fail_phase_read(address, count, error):
+    error.Fail = lambda: True
+    return b'\x00'
+transport.process.ReadMemory = fail_phase_read
+with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
+        patch.object(module.lldb, 'eLanguageTypeC_plus_plus', 4, create=True):
+    try:
+        transport.execute('return "{}"', mutating=True)
+    except AdapterError as error:
+        assert error.presentation == 'hades.error.luaInterrupted'
+    else:
+        raise AssertionError('an unreadable execution phase was accepted')
+assert events == ['kill'] and not transport.alive()
+
+# Detaching and destroying the worker must not turn an interrupted Lua VM
+# back into a running game that can overwrite its save.
+transport, breakpoint, events, clock, running = fixture()
+transport._unsafe_vm_pid = transport.pid
+try:
+    module.HadesLuaTransport._resume(transport, 1)
+except AdapterError as error:
+    assert error.code == 'restart_required' and error.presentation == 'hades.error.luaTerminationFailed'
+else:
+    raise AssertionError('an interrupted VM was resumed')
+assert not events
 
 # An expected game-native slow-effect admission refusal from Lua is definite,
 # so it remains retryable once that effect has retired.
@@ -173,8 +237,8 @@ with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
 assert not transport.tainted, 'a known Lua admission failure must allow retry'
 assert events == ['stop', 'delete', 'restore', 'free', 'resume'], events
 
-# If suspension itself fails, retain the breakpoint for the existing detach
-# recovery path instead of attempting native cleanup against a running target.
+# Termination takes priority over focus/scratch/breakpoint cleanup, even if a
+# cleanup Stop would fail. None of those failures may resume an unsafe VM.
 transport, breakpoint, events, clock, running = fixture()
 transport._boundary = lambda: (types.SimpleNamespace(GetFrameAtIndex=lambda index: frame), 123)
 running[0] = True
@@ -189,10 +253,61 @@ with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
         transport.execute('return "{}"', mutating=True)
     except AdapterError as error:
         assert error.code == 'outcome_unknown'
-        assert 'fixture expression interrupted; cleanup: hades.error.stopTimeout' == error.diagnostic
+        assert error.presentation == 'hades.error.luaInterrupted'
+        assert error.diagnostic == 'fixture expression interrupted'
     else:
         raise AssertionError('failed suspension was hidden')
-assert transport.tainted and events == [], events
+assert transport.tainted and events == ['kill'] and not transport.alive(), events
+
+
+class KillError(NativeError):
+    def __str__(self):
+        return 'fixture kill failed'
+
+
+# A failed native Kill retains the debugger handle and the recovery interlock.
+transport, breakpoint, events, clock, running = fixture()
+transport._boundary = lambda: (types.SimpleNamespace(GetFrameAtIndex=lambda index: frame), 123)
+kill_successfully = transport.process.Kill
+transport.process.Kill = lambda: events.append('kill-failed') or KillError()
+transport.debugger = object()
+with patch.object(module.lldb, 'SBExpressionOptions', Options, create=True), \
+        patch.object(module.lldb, 'eLanguageTypeC_plus_plus', 4, create=True):
+    try:
+        transport.execute('return "{}"', mutating=True)
+    except AdapterError as error:
+        assert error.code == 'outcome_unknown' and error.presentation == 'hades.error.luaTerminationFailed'
+        assert 'fixture expression interrupted' in error.diagnostic and 'fixture kill failed' in error.diagnostic
+    else:
+        raise AssertionError('failed termination was hidden')
+assert transport.tainted and transport.cleanup_pending and transport.alive()
+destroyed = []
+with patch.object(module.lldb, 'SBDebugger', types.SimpleNamespace(Destroy=destroyed.append), create=True):
+    try:
+        transport.close()
+    except AdapterError as error:
+        assert error.presentation == 'hades.error.luaTerminationFailed'
+    else:
+        raise AssertionError('close abandoned an unsafe live process')
+assert events == ['kill-failed', 'kill-failed'] and destroyed == [], events
+transport.process.Kill = kill_successfully
+with patch.object(module.lldb, 'SBDebugger', types.SimpleNamespace(Destroy=destroyed.append), create=True):
+    transport.close()
+assert events == ['kill-failed', 'kill-failed', 'kill'] and transport.process is None, events
+assert destroyed == [transport.debugger]
+
+# An accepted Kill without an observed exit is still a failure.
+transport, breakpoint, events, clock, running = fixture()
+transport._unsafe_vm_pid = transport.pid
+transport.process.Kill = lambda: events.append('kill') or Error()
+with patch.object(module.time, 'monotonic', side_effect=range(10)), patch.object(module.time, 'sleep'):
+    try:
+        transport.detach()
+    except AdapterError as error:
+        assert error.presentation == 'hades.error.luaTerminationFailed'
+    else:
+        raise AssertionError('an unobserved target exit was accepted')
+assert events == ['kill'] and transport.cleanup_pending and transport.process is not None
 
 from games.hades.client import HadesRuntimeClient
 from games.hades.lldb_worker import error_payload
@@ -218,7 +333,11 @@ class PayloadCapture:
     def execute(self, source, *, mutating):
         self.sizes.append(len(source.encode('utf-8')))
         assert self.sizes[-1] <= module.LUA_SOURCE_LIMIT_BYTES, 'assembled resident request exceeds transport capacity'
-        return {'heroId': 'a' * 32 + ':1:2:40000', 'heroReady': True}
+        result = {'heroId': 'a' * 32 + ':1:2:40000', 'heroReady': True}
+        submitted = re.search(r'return runtime\.json\(runtime\.submit_trait_command\("([0-9a-f]{32})",', source)
+        if submitted:
+            return {'id': submitted.group(1), 'state': 'complete', 'mutationStarted': True, 'result': result}
+        return result
 
 
 # Exercise the actual request builder, including its resident, world registry,
@@ -318,6 +437,7 @@ with tempfile.TemporaryDirectory(prefix='hades-cleanup-') as directory, \
         client.command('set_value', {'field': 'money', 'value': 1, 'target': {'heroId': 'fixture'}})
     except AdapterError as error:
         assert error.code == 'outcome_unknown'
+        assert error.presentation == 'hades.error.luaTerminationFailed'
     else:
         raise AssertionError('the client accepted uncertain cleanup')
     assert not client.connected and journal.path.is_file()

@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,6 +51,52 @@ assert reply["result"] == {"ok": True}
 request = json.loads(process.stdin.getvalue())
 assert request == {"id": "1", "method": "ping", "params": {"value": 7}}
 assert client.started
+
+# A child with its own pending native cleanup must receive EOF without being
+# killed by generic client shutdown, and this connection cannot be reused.
+cleanup_process = FakeProcess(b'{"id":"1","result":true}\n')
+cleanup_client = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1,
+                                     process_factory=factory_for(cleanup_process), child_owns_cleanup=True)
+cleanup_client.request('prepare')
+cleanup_client.close()
+assert cleanup_process.stdin.closed and cleanup_process.stdout.closed
+assert not cleanup_process.terminated and not cleanup_process.killed
+assert not cleanup_client.started
+lost_cleanup_process = FakeProcess(b'{"id":"wrong","result":true}\n')
+cleanup_client = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1,
+                                     process_factory=factory_for(lost_cleanup_process), child_owns_cleanup=True)
+try:
+    cleanup_client.request('mutate', outcome_unknown_on_loss=True)
+except SidecarTerminalError:
+    pass
+else:
+    raise AssertionError('lost cleanup ownership reply was accepted')
+assert cleanup_client.terminal and not cleanup_client.started
+assert lost_cleanup_process.stdin.closed and lost_cleanup_process.stdout.closed
+assert not lost_cleanup_process.terminated and not lost_cleanup_process.killed
+
+with tempfile.TemporaryDirectory(prefix='sidecar-child-cleanup-') as directory:
+    completed = Path(directory) / 'completed'
+    children = []
+    def start_cleanup_child(*args, **kwargs):
+        child = subprocess.Popen(*args, **kwargs)
+        children.append(child)
+        return child
+    source = '''import json,sys,time
+from pathlib import Path
+request=json.loads(sys.stdin.readline())
+print(json.dumps({'id':request['id'],'result':True}),flush=True)
+sys.stdin.read()
+time.sleep(0.05)
+Path(sys.argv[1]).write_text('cleanup completed')
+'''
+    child_cleanup = JsonLineSidecarClient([sys.executable, '-u', '-c', source, str(completed)],
+                                         reply_timeout_seconds=2, child_owns_cleanup=True,
+                                         process_factory=start_cleanup_child)
+    child_cleanup.request('prepare')
+    child_cleanup.close()
+    assert children[0].wait(timeout=3) == 0
+    assert completed.read_text() == 'cleanup completed'
 
 # A child that exits between requests has no in-flight result to distrust. Reap
 # it and start a fresh child instead of turning a known crash into a terminal

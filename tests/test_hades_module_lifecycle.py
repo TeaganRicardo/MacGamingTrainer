@@ -82,6 +82,7 @@ transport.pid = 42
 transport.addresses = {focus_symbol: 200}
 transport.focus_original = b'\x01'
 transport._tainted_pid = None
+transport._unsafe_vm_pid = 42
 transport._drain = lambda: None
 transport._resume = lambda deadline: None
 transport._stop = lambda deadline: None
@@ -91,6 +92,7 @@ transport._stop = lambda deadline: None
 transport.attach(43, executable)
 transport._restore_focus()
 assert transport.pid == 43 and transport.process is new_process
+assert transport._unsafe_vm_pid is None, 'a dead VM diagnosis leaked into a replacement attachment'
 assert transport.focus_original is None
 assert new_process.writes == [] and new_process.focus == b'\x00', 'old PID focus state leaked into a new process'
 
