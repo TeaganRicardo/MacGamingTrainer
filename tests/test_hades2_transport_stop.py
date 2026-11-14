@@ -359,6 +359,68 @@ assert poison_calls == []
 mailbox_pre.restore_focus.assert_not_called()
 mailbox_pre.resume.assert_not_called()
 
+# An acknowledged stop may complete at the state-observation deadline. Even
+# though boundary.initial_stop raises before Lua mutation, the process can be
+# left stopped. Release the known stop, retain the original timeout, and skip
+# redundant cleanup without poisoning a recovered session.
+def make_late_initial_stop_transport():
+    transport = make_transport(fake_lldb.eStateRunning)
+    transport.tainted = False
+    transport.alive = lambda: True
+    transport.target = Mock()
+
+    def late_stop(*args, **kwargs):
+        transport.process.stops += 1
+        transport.process.state = fake_lldb.eStateStopped
+        raise TransportError("process_timeout", "stop observation missed deadline")
+
+    transport.stop = Mock(side_effect=late_stop)
+    transport.resume = Mock(
+        side_effect=lambda deadline: setattr(transport.process, "state", fake_lldb.eStateRunning)
+    )
+    return transport
+
+
+late_exec = make_late_initial_stop_transport()
+try:
+    late_exec._execute_lldb("return 1")
+except TransportError as error:
+    assert error.code == "process_timeout", error.code
+else:
+    raise AssertionError("late initial stop timeout was hidden")
+assert late_exec.process.state == fake_lldb.eStateRunning
+assert late_exec.process.stops == 1, "late stop caused a redundant cleanup stop"
+late_exec.resume.assert_called_once()
+assert not late_exec.tainted
+assert not late_exec._boundary_initial_stop_pending
+
+late_mailbox = make_late_initial_stop_transport()
+late_poison = []
+late_mailbox_object = types.SimpleNamespace(
+    path="/tmp/fixture-mailbox", poison=lambda: late_poison.append("poisoned")
+)
+try:
+    install_command_mailbox(late_mailbox, fake_lldb, late_mailbox_object, library_fake)
+except TransportError as error:
+    assert error.code == "process_timeout", error.code
+else:
+    raise AssertionError("late mailbox installation stop timeout was hidden")
+assert late_mailbox.process.state == fake_lldb.eStateRunning
+assert late_mailbox.process.stops == 1
+late_mailbox.resume.assert_called_once()
+assert not late_mailbox.tainted and late_poison == []
+
+# A failed release of that known debugger-owned stop is a recovery failure.
+late_release_failure = make_late_initial_stop_transport()
+late_release_failure.resume.side_effect = TransportError("resume_failed", "cannot release stopped process")
+try:
+    late_release_failure._execute_lldb("return 1")
+except TransportError as error:
+    assert error.code == "resume_failed", error.code
+else:
+    raise AssertionError("failed release of a late stop was hidden")
+assert late_release_failure.tainted, "failure to release a stop cannot leave a trusted session"
+
 # Post-initial-stop failure inside install_command_mailbox (after the target was
 # paused) still cleans up and taints/poisons if cleanup fails.
 mailbox_post = make_transport(fake_lldb.eStateRunning)
