@@ -76,8 +76,15 @@ def prepare_command_mailbox(transport, lldb):
 
 def install_command_mailbox(transport, lldb, mailbox, library):
     """No resident command is submitted until this installation has completed."""
+    if getattr(transport, "cleanup_pending", False):
+        raise transport._quarantined_error()
+    if getattr(transport, "tainted", False):
+        raise AdapterError("restart_required", "hades2.error.restartRequired")
     scratch = None
     breakpoint = None
+    transport._boundary_initial_stop_pending = False
+    cleanup_depth = getattr(transport, "_boundary_cleanup_depth", 0)
+    transport._boundary_cleanup_depth = cleanup_depth + 1
     try:
         thread, state, breakpoint = transport.boundary(entry_address=library.main_update)
         path = str(mailbox.path).encode("utf-8") + b"\0"
@@ -121,9 +128,12 @@ def install_command_mailbox(transport, lldb, mailbox, library):
         _check_install_status(status, message, mailbox, transport)
         mailbox.installed_in_target()
     finally:
+        initial_stop_failed = getattr(transport, "_boundary_initial_stop_pending", False)
+        transport._boundary_initial_stop_pending = False
+        transport._boundary_cleanup_depth = cleanup_depth
         if breakpoint is not None and transport.target:
             transport.target.BreakpointDelete(breakpoint.GetID())
-        if transport.process and transport.alive():
+        if not initial_stop_failed and transport.process and transport.alive():
             try:
                 transport.stop(time.monotonic() + 3, phase="mailbox.install_cleanup")
                 transport.restore_focus()
