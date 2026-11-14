@@ -254,6 +254,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
             teardown = handled({"id": request_id + "-cleanup", "command": "disable_all", "params": {}})
             assert teardown["error"]["code"] == "restart_required", teardown
             assert native.entries == 1 and not speed.calls
-            transport.close()
+            # ACK loss terminated the only trusted debugger IPC owner. Preserve
+            # the last attached PID and surface unconfirmed cleanup at close.
+            try:
+                transport.close()
+            except AdapterError as error:
+                assert error.code == "detach_failed", error.code
+            else:
+                raise AssertionError("lost ACK worker falsely acknowledged debugger release")
+            assert transport.pid == native.pid == 4242
+            assert transport._worker.terminal
+            assert "transport.detach" not in sidecar.calls
 
 print("hades2_operation_liveness_ok")
