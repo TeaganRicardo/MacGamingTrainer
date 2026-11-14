@@ -11,6 +11,7 @@ from slider_ui_harness import SLIDER_JOURNEY
 from visual_hierarchy_harness import VISUAL_HIERARCHY_JOURNEY
 from room_picker_alignment_harness import ROOM_PICKER_ALIGNMENT_JOURNEY
 from disclosure_ui_harness import DISCLOSURE_JOURNEY
+from native_picker_harness import NATIVE_PICKER
 from search_ui_harness import SEARCH_JOURNEY
 from macos_fixture_policy import launch_fixture
 
@@ -54,6 +55,26 @@ for raw in sys.stdin:
     disclosure_path=log_path.with_suffix('.disclosure')
     if disclosure_path.exists():
         result.update(gameSpeed=1.0,featureSupport={'gameSpeed':int(disclosure_path.read_text())>0})
+    world_actions_path=log_path.with_suffix('.world_actions')
+    if world_actions_path.exists():
+        world_delay_path=log_path.with_suffix('.world_actions_delay')
+        if command=='apply_world_exit' and world_delay_path.exists():
+            delay=float(world_delay_path.read_text(encoding='utf-8'))
+            world_delay_path.unlink()
+            time.sleep(delay)
+        world_state=json.loads(world_actions_path.read_text(encoding='utf-8'))
+        exits=world_state['exits']
+        if command=='apply_world_exit':
+            for row in exits:
+                if row['doorToken']==params['doorToken']:
+                    row['activeLease']={'kind':params['kind'],'target':params['target'],'leaseToken':'lease-'+row['doorToken']}
+            world_actions_path.write_text(json.dumps(world_state),encoding='utf-8')
+        elif command=='cancel_world_exit':
+            for row in exits:
+                if row['doorToken']==params['doorToken'] and (row.get('activeLease') or {}).get('leaseToken')==params.get('leaseToken'):
+                    row.pop('activeLease',None)
+            world_actions_path.write_text(json.dumps(world_state),encoding='utf-8')
+        result.update(status='ready',scene='run',capabilities=world_state['capabilities'],worldActions={'exits':exits})
     if command in ('list_profiles','save_profile','delete_profile'):
         if command=='save_profile' and params['name']!='__error__':
             profiles=[row for row in profiles if row['name']!=params['name']]+[{'name':params['name'],'updatedAt':'Today'}]
@@ -234,6 +255,10 @@ struct Main {
                 })
             session.stop()
             pump(0.1)
+            return
+        }
+        if args.count == 4 && args[3] == "world_exit" {
+            try exerciseWorldExitJourney(python: python, worker: worker, commandLog: commandLog)
             return
         }
 
@@ -504,6 +529,286 @@ struct Main {
 }
 '''
 
+WORLD_EXIT_JOURNEY = r'''
+@MainActor
+private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL) throws {
+    let worldActionsURL = commandLog.deletingPathExtension().appendingPathExtension("world_actions")
+    let worldActionsDelayURL = commandLog.deletingPathExtension().appendingPathExtension("world_actions_delay")
+    func writeWorldState(exits: [[String: Any]], worldActionsEnabled: Bool) throws {
+        let payload: [String: Any] = [
+            "capabilities": ["worldActions": worldActionsEnabled],
+            "exits": exits,
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        try data.write(to: worldActionsURL, options: .atomic)
+    }
+    let baselineExits: [[String: Any]] = [
+        [
+            "doorToken": "exit:1",
+            "objectId": 101,
+            "ordinal": 1,
+            "roomName": "F_Combat01",
+            "reward": "RoomMoneyDrop",
+            "targets": [
+                ["kind": "reward", "id": "MaxHealthDrop"],
+                ["kind": "roomCategory", "id": "shop"],
+            ],
+        ],
+        [
+            "doorToken": "exit:2",
+            "objectId": 102,
+            "ordinal": 2,
+            "roomName": "F_Story01",
+            "reward": "MetaCardPointsCommonDrop",
+            "targets": [
+                ["kind": "reward", "id": "WeaponUpgrade"],
+                ["kind": "roomCategory", "id": "story"],
+            ],
+        ],
+    ]
+    try writeWorldState(exits: baselineExits, worldActionsEnabled: true)
+
+    let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+        executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
+    let model = Hades2TrainerModel(
+        session: session,
+        logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("world_exit.log")),
+        backendScriptURL: worker,
+        runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("world_exit-game-log"),
+        shortcutDefaults: InMemoryDefaults()
+    )
+    model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+    nativePickerWait("world_exit backend startup") {
+        model.backendAvailable && !model.busy && model.canSelectWorldExit
+            && model.selectedWorldExitToken == "exit:1"
+            && model.selectedWorldExitTarget == "reward:MaxHealthDrop"
+    }
+
+    let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+    localization.language = .en
+    localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
+        resolver: Hades2GameModule.presentationText)
+    let visibility = TrainerGamePageVisibility()
+    let viewportHeight = min(CGFloat(760), (NSScreen.main?.visibleFrame.height ?? 900) - 80)
+    let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 1050, height: viewportHeight),
+        styleMask: [.titled, .closable, .resizable],
+        backing: .buffered,
+        defer: false
+    )
+    window.isReleasedWhenClosed = false
+    let host = NSHostingView(
+        rootView: ScrollView {
+            Hades2TrainerView(model: model).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .preferredColorScheme(.dark)
+        .trainerTheme(.standard)
+        .environment(\.trainerGamePageVisibility, visibility)
+        .environmentObject(localization)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: 1050, height: viewportHeight)
+    window.contentView = host
+    window.center()
+    activateNativePickerWindow(window)
+    defer {
+        window.contentView = nil
+        window.close()
+        session.stop()
+        pump(0.10)
+    }
+
+    func control(_ role: String, _ id: String) -> NativeAccessibilityControl? {
+        host.layoutSubtreeIfNeeded()
+        return nativeAccessibilityControls(host).first { $0.role == role && $0.identifier == id }
+    }
+    func findScrollView(in view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        for sub in view.subviews {
+            if let found = findScrollView(in: sub) { return found }
+        }
+        return nil
+    }
+    func revealWorldExitPanel() {
+        nativePickerWait("worldExitPanel scrolled into visible viewport") {
+            host.layoutSubtreeIfNeeded()
+            guard let scroll = findScrollView(in: host),
+                  let document = scroll.documentView,
+                  let picker = control("AXPopUpButton", "hades2.worldActions.currentExit"),
+                  let target = control("AXPopUpButton", "hades2.worldActions.target"),
+                  !picker.frame.isEmpty,
+                  !target.frame.isEmpty else { return false }
+            let combined = picker.frame.union(target.frame)
+            let localRect = document.convert(window.convertFromScreen(combined), from: nil)
+            _ = document.scrollToVisible(localRect)
+            host.layoutSubtreeIfNeeded()
+            let viewport = window.convertToScreen(scroll.contentView.convert(scroll.contentView.bounds, to: nil))
+            return viewport.contains(picker.frame)
+                && viewport.contains(target.frame)
+                && window.screen?.visibleFrame.contains(picker.frame) == true
+                && window.screen?.visibleFrame.contains(target.frame) == true
+        }
+    }
+    func exitPicker() -> NativeAccessibilityControl? { control("AXPopUpButton", "hades2.worldActions.currentExit") }
+    func targetPicker() -> NativeAccessibilityControl? { control("AXPopUpButton", "hades2.worldActions.target") }
+    func applyButton() -> NativeAccessibilityControl? { control("AXButton", "hades2.worldActions.apply") }
+
+    let applyTitle = Hades2GameModule.resolveText(key: "hades2.worldActions.apply", localization: localization)
+    let cancelTitle = Hades2GameModule.resolveText(key: "hades2.worldActions.cancel", localization: localization)
+
+    nativePickerWait("real Hades2TrainerView worldExitPanel AX controls mount") {
+        exitPicker()?.enabled == true && targetPicker()?.enabled == true && applyButton()?.enabled == true
+    }
+    revealWorldExitPanel()
+    guard applyButton()?.label == applyTitle else {
+        fail("worldExitPanel initial button label expected \(applyTitle), got \(applyButton()?.label ?? "nil")")
+    }
+
+    // Open revealed in-viewport layout-allocated pickers via pointer click so
+    // initial menu highlight is present without Space-key menu-item rebuild races.
+    // 1. Switch currentExit popup from exit 1 -> exit 2 in real Hades2TrainerView.
+    let exitMenu = selectNativePicker(exitPicker()!, in: window, moving: 1, opening: .pointer)
+    guard exitMenu.count == 2 else {
+        fail("worldExitPanel currentExit menu expected 2 exits, got \(exitMenu)")
+    }
+    nativePickerWait("currentExit popup selection updates target picker for exit:2") {
+        model.selectedWorldExitToken == "exit:2"
+            && model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+            && targetPicker()?.enabled == true
+    }
+
+    // 2. Select Route Category -> Story in the real target popup menu.
+    let targetMenu = selectNativePicker(targetPicker()!, in: window, moving: 1, opening: .pointer)
+    let rewardsHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.rewards", localization: localization)
+    let routesHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.routes", localization: localization)
+    guard targetMenu.count >= 4 && targetMenu.contains(rewardsHeader) && targetMenu.contains(routesHeader) else {
+        fail("worldExitPanel target menu lost section headers: \(targetMenu)")
+    }
+    nativePickerWait("target popup selection updates model.selectedWorldExitTarget") {
+        model.selectedWorldExitTarget == "roomCategory:story" && applyButton()?.enabled == true
+    }
+
+    // 3. Apply through the real AXButton: while the blocking request is in
+    // flight, the target picker remains enabled and Apply is safely gated; on
+    // completion, the target popup locks and the button switches to Cancel.
+    try? FileManager.default.removeItem(at: commandLog)
+    try "0.35".write(to: worldActionsDelayURL, atomically: true, encoding: .utf8)
+    guard applyButton()!.press() else { fail("worldExitPanel Apply button refused AXPress") }
+    nativePickerWait("in-flight blocking apply keeps targetPicker enabled while gating applyButton") {
+        model.busy
+            && !model.canAcceptRuntimeAction
+            && exitPicker()?.enabled == true
+            && targetPicker()?.enabled == true
+            && applyButton()?.enabled == false
+    }
+    nativePickerWait("apply_world_exit locks target picker and switches action to Cancel") {
+        let applied = commands(at: commandLog).filter { ($0["command"] as? String) == "apply_world_exit" }
+        return applied.count == 1
+            && !model.busy
+            && model.selectedWorldExitLease?.leaseToken == "lease-exit:2"
+            && targetPicker()?.enabled == false
+            && applyButton()?.enabled == true
+            && applyButton()?.label == cancelTitle
+    }
+    let applyParams = commands(at: commandLog).last?["params"] as? [String: Any]
+    guard applyParams?["doorToken"] as? String == "exit:2"
+            && applyParams?["kind"] as? String == "roomCategory"
+            && applyParams?["target"] as? String == "story" else {
+        fail("apply_world_exit sent unexpected params: \(String(describing: applyParams))")
+    }
+
+    // 4. Switching exits updates per-exit target lock and repairs target
+    // selection cleanly without leaking a stale cross-door target.
+    _ = selectNativePicker(exitPicker()!, in: window, moving: -1, opening: .pointer)
+    nativePickerWait("switching to unleased exit:1 unlocks target picker and repairs target") {
+        model.selectedWorldExitToken == "exit:1"
+            && model.selectedWorldExitTarget == "reward:MaxHealthDrop"
+            && targetPicker()?.enabled == true
+            && applyButton()?.enabled == true
+            && applyButton()?.label == applyTitle
+    }
+    _ = selectNativePicker(exitPicker()!, in: window, moving: 1, opening: .pointer)
+    nativePickerWait("switching back to leased exit:2 restores locked target picker and leased target") {
+        model.selectedWorldExitToken == "exit:2"
+            && model.selectedWorldExitTarget == "roomCategory:story"
+            && targetPicker()?.enabled == false
+            && applyButton()?.enabled == true
+            && applyButton()?.label == cancelTitle
+    }
+
+    // 5. Cancel through the real AXButton -> unlocks target popup and restores Apply.
+    guard applyButton()!.press() else { fail("worldExitPanel Cancel button refused AXPress") }
+    nativePickerWait("cancel_world_exit unlocks target picker and restores Apply") {
+        let cancels = commands(at: commandLog).filter { ($0["command"] as? String) == "cancel_world_exit" }
+        return cancels.count == 1
+            && !model.busy
+            && model.selectedWorldExitLease == nil
+            && model.selectedWorldExitTarget == "roomCategory:story"
+            && targetPicker()?.enabled == true
+            && applyButton()?.enabled == true
+            && applyButton()?.label == applyTitle
+    }
+
+    // 6. Editable exit with empty targets disables target popup & Apply while
+    // keeping currentExit interactive; disappearing exit repairs onto exit:2.
+    let emptyTargetExits = baselineExits + [[
+        "doorToken": "exit:3",
+        "objectId": 103,
+        "ordinal": 3,
+        "roomName": "F_MiniBoss01",
+        "reward": "RoomMoneyDrop",
+        "targets": [],
+    ]]
+    try writeWorldState(exits: emptyTargetExits, worldActionsEnabled: true)
+    model.refreshFromHost()
+    nativePickerWait("exit:3 mounts in worldExitPanel") {
+        model.worldActionExits.count == 3 && !model.busy
+    }
+    let threeExitMenu = selectNativePicker(exitPicker()!, in: window, moving: 1, opening: .pointer)
+    guard threeExitMenu.count == 3 else {
+        fail("worldExitPanel currentExit menu expected 3 exits, got \(threeExitMenu)")
+    }
+    nativePickerWait("empty-target exit:3 disables targetPicker and applyButton") {
+        model.selectedWorldExitToken == "exit:3"
+            && model.selectedWorldExitTarget.isEmpty
+            && exitPicker()?.enabled == true
+            && targetPicker()?.enabled == false
+            && applyButton()?.enabled == false
+    }
+
+    try writeWorldState(exits: [baselineExits[1]], worldActionsEnabled: true)
+    model.refreshFromHost()
+    nativePickerWait("disappeared exit:3 repairs to exit:2 and re-enables targetPicker") {
+        model.selectedWorldExitToken == "exit:2"
+            && model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+            && !model.busy
+            && exitPicker()?.enabled == true
+            && targetPicker()?.enabled == true
+            && applyButton()?.enabled == true
+    }
+
+    // 7. Empty exits list with worldActions enabled disables all three controls.
+    try writeWorldState(exits: [], worldActionsEnabled: true)
+    model.refreshFromHost()
+    nativePickerWait("empty exits disables all three real worldExitPanel controls") {
+        !model.busy && model.worldActionExits.isEmpty
+            && exitPicker()?.enabled == false
+            && targetPicker()?.enabled == false
+            && applyButton()?.enabled == false
+    }
+
+    // 8. Revoking worldActions capability disables all three native controls.
+    try writeWorldState(exits: baselineExits, worldActionsEnabled: false)
+    model.refreshFromHost()
+    nativePickerWait("revoked worldActions disables real worldExitPanel controls") {
+        !model.busy && !model.canSelectWorldExit
+            && exitPicker()?.enabled == false
+            && targetPicker()?.enabled == false
+            && applyButton()?.enabled == false
+    }
+    print("hades2_world_exit_module_journey_ok")
+}
+'''
+
 with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     td = Path(td)
     worker_path = td / "worker.py"
@@ -521,7 +826,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         localized.mkdir()
         shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + ROOM_PICKER_ALIGNMENT_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY, encoding="utf-8")
+    main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + ROOM_PICKER_ALIGNMENT_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY + WORLD_EXIT_JOURNEY + NATIVE_PICKER, encoding="utf-8")
 
     generated = td / "ActiveGame.generated.swift"
     subprocess.run(
@@ -592,6 +897,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         raise SystemExit(search_proc.returncode)
     assert "hades2_workbench_search_native_ok" in search_proc.stdout, search_proc.stdout
     print(search_proc.stdout.strip())
+    world_exit_worker = td / "world_exit_worker.py"
+    shutil.copy2(worker_path, world_exit_worker)
+    world_exit_proc = launch_fixture(
+        [str(binary), PYTHON, str(world_exit_worker), "world_exit"],
+        journey="hades2.world_exit",
+        cwd=ROOT, env=env, text=True, capture_output=True,
+    )
+    if world_exit_proc.returncode != 0:
+        print(world_exit_proc.stdout)
+        print(world_exit_proc.stderr)
+        raise SystemExit(world_exit_proc.returncode)
+    assert "hades2_world_exit_module_journey_ok" in world_exit_proc.stdout, world_exit_proc.stdout
+    print(world_exit_proc.stdout.strip())
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
         journey="hades2.state_flow",

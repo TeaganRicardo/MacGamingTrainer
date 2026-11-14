@@ -36,6 +36,8 @@ for line in sys.stdin:
         time.sleep(0.45)
     elif request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
         time.sleep(0.16)
+    world_mode_path = log.with_suffix(".world_mode")
+    world_mode = world_mode_path.read_text(encoding="utf-8").strip() if world_mode_path.exists() else "default"
     if request["command"] == "apply_world_exit":
         world_lease = {
             "kind": request["params"]["kind"],
@@ -54,13 +56,60 @@ for line in sys.stdin:
     }
     if world_lease is not None:
         exit_row["activeLease"] = world_lease
+    if world_mode == "multi_exits":
+        exit_row["targets"] = [
+            {"kind": "reward", "id": "MaxManaDropBig"},
+            {"kind": "reward", "id": "RoomMoneyDrop"},
+        ]
+        exits_payload = [
+            exit_row,
+            {
+                "doorToken": "fixture-exit:2",
+                "objectId": 2,
+                "ordinal": 2,
+                "roomName": "F_Story01",
+                "reward": "MetaCardPointsCommonDrop",
+                "targets": [
+                    {"kind": "reward", "id": "WeaponUpgrade"},
+                    {"kind": "roomCategory", "id": "story"},
+                ],
+            },
+            {
+                "doorToken": "fixture-exit:3",
+                "objectId": 3,
+                "ordinal": 3,
+                "roomName": "F_MiniBoss01",
+                "reward": "MaxHealthDrop",
+                "targets": [],
+            },
+        ]
+    elif world_mode == "stale_exit":
+        exits_payload = [
+            {
+                "doorToken": "fixture-exit:2",
+                "objectId": 2,
+                "ordinal": 2,
+                "roomName": "F_Story01",
+                "reward": "MetaCardPointsCommonDrop",
+                "targets": [
+                    {"kind": "reward", "id": "WeaponUpgrade"},
+                    {"kind": "roomCategory", "id": "story"},
+                ],
+            },
+        ]
+    elif world_mode == "empty_exits":
+        exits_payload = []
+    else:
+        exits_payload = [exit_row]
     observed = {
         "connected": True,
         "capabilities": {
-            "spawnReward": True, "specialChoice": True, "worldActions": True,
+            "spawnReward": True,
+            "specialChoice": True,
+            "worldActions": world_mode != "no_world_cap",
         },
         "occurrenceTargets": [{"id": "charon", "kind": "shop", "sourceId": "charon"}],
-        "worldActions": {"exits": [exit_row]},
+        "worldActions": {"exits": exits_payload},
     }
     success = True
     if request["command"] == "set_desired":
@@ -300,8 +349,9 @@ struct Main {
         check(model.canSelectWorldExitTarget,
               "idle selected exit did not enable local target selection")
         model.performShortcut(.applyWorldExit)
-        check(!model.canAcceptRuntimeAction && model.canSelectWorldExitTarget,
-              "blocking Apply request incorrectly disabled the local target picker")
+        check(!model.canAcceptRuntimeAction && model.canSelectWorldExitTarget
+              && !model.selectedWorldExitActionAvailable,
+              "blocking Apply request must keep local target picker enabled while gating Apply")
         check(!model.canAcceptRuntimeAction && model.canSelectWorldOccurrence
               && model.canSelectWorldOccurrenceTarget,
               "blocking Apply request incorrectly disabled the occurrence picker")
@@ -334,14 +384,86 @@ struct Main {
         check(model.canSelectWorldExitTarget,
               "native cancellation did not restore target-picker selection")
 
+        // Issue #720 model/eligibility regressions: multi-door repair without
+        // stale cross-door target carryover, mid-flight target preservation
+        // across unrelated blocking requests, empty targets, stale exits,
+        // empty exits, and capability/connection revocation.
+        let worldModeURL = logURL.deletingPathExtension().appendingPathExtension("world_mode")
+        try "multi_exits".write(to: worldModeURL, atomically: true, encoding: .utf8)
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "multi_exits refresh")
+        check(model.worldActionExits.count == 3 && model.canSelectWorldExit,
+              "multi_exits snapshot did not populate exits")
+        model.selectedWorldExitTarget = "reward:RoomMoneyDrop"
+        model.selectedWorldExitToken = "fixture-exit:2"
+        model.repairWorldActionSelection()
+        check(model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+              && model.canSelectWorldExitTarget
+              && model.selectedWorldExitActionAvailable,
+              "switching doors leaked a stale cross-door target or broke eligibility")
+
         // Route the normal special-reward shortcut through the actual typed
-        // backend boundary. A source-string assertion cannot prove dispatch.
+        // backend boundary, and also assert that during a 0.45s blocking
+        // request the local target picker stays interactive and preserves an
+        // in-flight local target edit while Apply remains safely gated.
         let specialReward = makeReward("SpecialDrop", group: "special")
         model.boons = [reward, specialReward]
         model.selectedSpecialReward = specialReward.id
         check(model.canPerformSelectedSpecialReward, "ordinary special reward should be available")
         model.performShortcut(.spawnSpecial)
+        check(!model.canAcceptRuntimeAction
+              && model.canSelectWorldExit
+              && model.canSelectWorldExitTarget
+              && !model.selectedWorldExitActionAvailable,
+              "unrelated blocking request gated target picker or left Apply enabled")
+        model.selectedWorldExitTarget = "roomCategory:story"
         waitForIdle(model, logURL: logURL, phase: "slow special-reward spawn")
+        check(model.selectedWorldExitTarget == "roomCategory:story"
+              && model.selectedWorldExitActionAvailable,
+              "completion of unrelated blocking request clobbered mid-flight target choice")
+
+        // Empty targets on an otherwise editable exit must disable both target
+        // selection and Apply while keeping the current-exit picker interactive.
+        model.selectedWorldExitToken = "fixture-exit:3"
+        model.repairWorldActionSelection()
+        check(model.canSelectWorldExit
+              && model.selectedWorldExitTarget.isEmpty
+              && !model.canSelectWorldExitTarget
+              && !model.selectedWorldExitActionAvailable,
+              "empty-target exit did not disable target picker and Apply")
+
+        // A disappeared selected exit repairs cleanly onto a surviving door.
+        try "stale_exit".write(to: worldModeURL, atomically: true, encoding: .utf8)
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "stale_exit refresh")
+        check(model.selectedWorldExitToken == "fixture-exit:2"
+              && model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+              && model.canSelectWorldExitTarget
+              && model.selectedWorldExitActionAvailable,
+              "disappeared exit token did not repair to surviving exit and valid target")
+
+        // Empty exits with worldActions capability keeps selection/Apply disabled.
+        try "empty_exits".write(to: worldModeURL, atomically: true, encoding: .utf8)
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "empty_exits refresh")
+        check(model.worldActionExits.isEmpty
+              && !model.canSelectWorldExit
+              && !model.canSelectWorldExitTarget
+              && !model.selectedWorldExitActionAvailable,
+              "empty exits did not disable world exit selection and Apply")
+
+        // Revoked worldActions capability disables selection and Apply, then restores cleanly.
+        try "no_world_cap".write(to: worldModeURL, atomically: true, encoding: .utf8)
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "revoked worldActions refresh")
+        check(!model.canSelectWorldExit && !model.canSelectWorldExitTarget && !model.selectedWorldExitActionAvailable,
+              "revoked worldActions capability left exit selection/Apply enabled")
+        try? FileManager.default.removeItem(at: worldModeURL)
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "restored worldActions refresh")
+        check(model.canSelectWorldExit && model.canSelectWorldExitTarget && model.selectedWorldExitActionAvailable,
+              "restoring worldActions did not re-enable exit controls")
+
         let specials = loggedCommands(at: logURL).filter {
             guard ($0["command"] as? String) == "spawn_reward",
                   let params = $0["params"] as? [String: Any] else { return false }
@@ -360,6 +482,11 @@ struct Main {
         }
         check(acceptedDisable.count == 1,
               "idle Disable All should produce exactly one backend request")
+
+        // Disconnected state revokes both selection and Apply gates.
+        model.connected = false
+        check(!model.canSelectWorldExit && !model.canSelectWorldExitTarget && !model.selectedWorldExitActionAvailable,
+              "disconnected runtime left world exit gates enabled")
 
         session.stop()
         pump(0.10)

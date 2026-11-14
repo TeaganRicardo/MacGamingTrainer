@@ -24,6 +24,7 @@
     "tests/feedback_ui_harness.py",
     "tests/search_ui_harness.py",
     "tests/sheet_ui_harness.py",
+    "tests/native_picker_harness.py",
     "tests/room_picker_alignment_harness.py"
   ],
   "test_hades2_save_editor_frontend.py": [

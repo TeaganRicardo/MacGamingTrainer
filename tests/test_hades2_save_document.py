@@ -1,6 +1,7 @@
 import struct
 import sys
 import tempfile
+import typing
 import zlib
 from pathlib import Path
 
@@ -9,6 +10,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.save_document import (  # noqa: E402
     Hades2SaveDocument,
+    Hades2SaveHeader,
     HadesSaveChecksumError,
     HadesSaveFormatError,
     LuaTable,
@@ -247,5 +249,6 @@ else:
 v11 = Hades2SaveDocument.from_bytes(build_save(version=0x11))
 assert v11.header.cosmetics_points is None
 assert v11.to_bytes() == build_save(version=0x11)
+assert typing.get_type_hints(Hades2SaveHeader)["cosmetics_points"] == typing.Optional[int]
 
 print("hades2_save_document_ok")

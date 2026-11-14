@@ -33,7 +33,7 @@ CONSUMERS = {
     ),
     "test_hades2_view_state_flow.py": (
         "hades2.hierarchy", "hades2.slider", "hades2.disclosure",
-        "hades2.search", "hades2.state_flow",
+        "hades2.search", "hades2.world_exit", "hades2.state_flow",
     ),
     "test_hades2_save_editor_frontend.py": ("hades2.save_editor",),
     "test_hades2_model_flow.py": ("hades2.live_trait_flow",),
@@ -120,6 +120,8 @@ else:
 assert min(JOURNEY_BUDGETS.values()) >= 20, JOURNEY_BUDGETS
 assert JOURNEY_BUDGETS["hades.disclosure"] >= 60, "measured 41.6s needs real margin"
 assert JOURNEY_BUDGETS["hades2.disclosure"] >= 60, "Hades II shares the Hades I disclosure shape"
+assert JOURNEY_BUDGETS["hades.hierarchy"] >= 30, "measured 15.3s-20.1s needs real margin"
+assert JOURNEY_BUDGETS["hades2.hierarchy"] >= 30, "Hades II shares the Hades I hierarchy shape"
 
 # --- Enforcement --------------------------------------------------------------
 
