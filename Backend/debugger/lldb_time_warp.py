@@ -39,6 +39,12 @@ class LLDBProcessTimeWarpDriver:
 
     @contextmanager
     def session(self):
+        if getattr(self.transport, 'cleanup_pending', False):
+            raise ProcessTimeWarpError(
+                "detach_failed",
+                "host.timeWarp.error.restartRequired",
+                diagnostic="Debugger cleanup is pending; the transport is quarantined.",
+            )
         if getattr(self.transport, 'tainted', False):
             raise ProcessTimeWarpError(
                 "restart_required",

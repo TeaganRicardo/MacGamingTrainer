@@ -136,7 +136,7 @@ shutil.copyfile(os.environ['MGT_CACHE_PAYLOAD'],destination)
     build_source = (ROOT / "build.sh").read_text()
     functions = build_source.split("python_runtime_field()", 1)[1].split('\nHOST_ARCH=', 1)[0]
     harness = root / "bootstrap.sh"
-    harness.write_text('set -euo pipefail\npython_runtime_field()' + functions + '\nprepare_python_runtime arm64\n')
+    harness.write_text('set -euo pipefail\npython_runtime_field()' + functions + '\nruntime="$(prepare_python_runtime arm64)"\n')
     cache = root / "cache"
     barrier = root / "barrier"
     barrier.mkdir()
@@ -158,6 +158,7 @@ shutil.copyfile(os.environ['MGT_CACHE_PAYLOAD'],destination)
         result = subprocess.run(["bash", str(harness)], env={**env, "MGT_CACHE_MODE": mode,
                                 "GENERATED_DIR": str(root / mode)}, text=True, capture_output=True, timeout=20)
         assert result.returncode != 0, result.stdout + '\n' + result.stderr
+        assert 'unbound variable' not in result.stderr
         assert cached.read_bytes() == b'old invalid cache', 'failed download replaced the prior archive'
         assert not list(cache.glob('*.tmp.*')), 'failed download left temporary state'
 
@@ -213,7 +214,7 @@ exit 96
     build_source = (ROOT / "build.sh").read_text()
     functions = build_source.split("python_runtime_field()", 1)[1].split('\nHOST_ARCH=', 1)[0]
     harness = root / "bootstrap.sh"
-    harness.write_text('set -euo pipefail\npython_runtime_field()' + functions + '\nprepare_python_runtime arm64\n')
+    harness.write_text('set -euo pipefail\npython_runtime_field()' + functions + '\nruntime="$(prepare_python_runtime arm64)"\n')
     env = {
         **os.environ,
         "PATH": str(fakebin) + os.pathsep + os.environ["PATH"],

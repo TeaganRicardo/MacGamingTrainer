@@ -34,8 +34,9 @@ class Hades2LuaTransport:
             self.debugger.GetCommandInterpreter().HandleCommand('settings set '+setting+' '+value,result)
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
-        self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None
+        self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None; self.native_mailbox_library=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
+        self._cleanup_pending=False; self._cleanup_failure=None; self._pending_resume_pid=None
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         from .config import SUPPORTED_BUILD
         self.symbols=manifest['symbols'];self.known_uuid=SUPPORTED_BUILD['uuid'];self.runtime_uuid=None
@@ -52,6 +53,8 @@ class Hades2LuaTransport:
             self._mailbox.poison()
 
     def attach(self,pid):
+        if self.cleanup_pending:
+            self.detach()
         if self.process:
             if self.pid==pid and self.alive():
                 self.last_attach_profile={'reused':True,'total':0.0}
@@ -79,7 +82,8 @@ class Hades2LuaTransport:
             )
             raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
 
-        self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None; self.native_runtime_installer=None
+        self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None; self.native_runtime_installer=None; self.native_mailbox_library=None
+        self._clear_cleanup_state()
         try:
             phase=time.monotonic()
             try:
@@ -121,8 +125,7 @@ class Hades2LuaTransport:
                 getattr(exc,'code',type(exc).__name__),profile['total'],profile.get('createTarget',0.0),
                 profile.get('attachProcess',0.0),profile.get('identity',0.0),profile.get('symbols',0.0),
             )
-            self.detach()
-            raise
+            self._rollback_failed_attach(exc)
 
         phase=time.monotonic()
         try:
@@ -135,7 +138,7 @@ class Hades2LuaTransport:
                 getattr(exc,'code',type(exc).__name__),profile['total'],profile.get('createTarget',0.0),
                 profile.get('attachProcess',0.0),profile.get('identity',0.0),profile.get('symbols',0.0),profile.get('resume',0.0),
             )
-            raise
+            self._rollback_failed_attach(exc)
         profile['resume']=time.monotonic()-phase
         profile['total']=time.monotonic()-started
         logging.info(
@@ -240,6 +243,7 @@ class Hades2LuaTransport:
 
     @profiled("debugger.boundary")
     def boundary(self, timeout=3, *, entry_address=None):
+        if getattr(self, 'cleanup_pending', False):raise self._quarantined_error()
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
         deadline=time.monotonic()+timeout
@@ -283,6 +287,8 @@ class Hades2LuaTransport:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 
     def execute(self, source, *, expression_timeout_seconds=2.0):
+        if getattr(self, 'cleanup_pending', False):
+            raise self._quarantined_error()
         if getattr(self, 'mailbox_mode', 'lldb') == 'mailbox':
             return self._execute_mailbox(source, expression_timeout_seconds=expression_timeout_seconds)
         return self._execute_lldb(source, expression_timeout_seconds=expression_timeout_seconds)
@@ -292,6 +298,8 @@ class Hades2LuaTransport:
         self.last_expression_duration=0
         self.last_mailbox_profile={}
         try:
+            if getattr(self, 'cleanup_pending', False):
+                raise self._quarantined_error()
             if self.tainted:
                 raise TransportError('restart_required','hades2.error.restartRequired')
             if not self.alive():
@@ -423,32 +431,135 @@ class Hades2LuaTransport:
                     raise
             self.last_duration=time.monotonic()-started
 
+    @property
+    def cleanup_pending(self):
+        return bool(getattr(self,'_cleanup_pending',False))
+
+    @property
+    def pending_resume_pid(self):
+        return getattr(self,'_pending_resume_pid',None)
+
+    @property
+    def cleanup_failure(self):
+        return getattr(self,'_cleanup_failure',None)
+
+    def _clear_cleanup_state(self):
+        self._cleanup_pending=False
+        self._cleanup_failure=None
+        self._pending_resume_pid=None
+
+    def _record_cleanup_failure(self, stage, error):
+        detail=getattr(error,'diagnostic',None) or str(error)
+        self._cleanup_pending=True
+        self._cleanup_failure=(stage,detail)
+
+    def _quarantined_error(self):
+        failure=self.cleanup_failure
+        if failure is not None:
+            stage,detail=failure
+            if stage=='os_resume' and self.pending_resume_pid is not None:
+                diagnostic=f'post-detach OS resume failed (pid={self.pending_resume_pid}): {detail}'
+                return TransportError(
+                    'resume_failed',
+                    'hades2.error.resumeFailed',
+                    diagnostic=diagnostic,
+                    arguments=[diagnostic],
+                )
+            if self.pid is not None:
+                diagnostic=f'cleanup {stage} failed (pid={self.pid} still attached): {detail}'
+            else:
+                diagnostic=f'cleanup {stage} failed: {detail}'
+        else:
+            diagnostic='debugger cleanup pending'
+        return TransportError('detach_failed',diagnostic,diagnostic=diagnostic)
+
+    def _clear_debugger_attachment(self):
+        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None;self.native_mailbox_library=None
+
+    def _clear_attachment(self):
+        self._clear_debugger_attachment()
+        self._clear_cleanup_state()
+
+    def _rollback_failed_attach(self, error):
+        """Release a failed attach while preserving quarantine ownership if cleanup fails."""
+        try:
+            self.detach()
+        except Exception as cleanup_error:
+            failure=self.cleanup_failure
+            if failure is not None:
+                stage,detail=failure
+            else:
+                stage='detach'
+                detail=getattr(cleanup_error,'diagnostic',None) or str(cleanup_error)
+            if stage=='os_resume':
+                resume_pid=self.pending_resume_pid
+                target=f' (pid={resume_pid})' if resume_pid is not None else ''
+                note=f'post-detach OS resume failed{target}: {detail}'
+            elif self.process is not None:
+                note=f'rollback {stage} failed (pid={self.pid} still attached): {detail}'
+            else:
+                note=f'rollback {stage} failed: {detail}'
+            if hasattr(error,'diagnostic'):
+                error.diagnostic=f'{error.diagnostic}; {note}' if error.diagnostic else note
+        raise error
+
     def detach(self):
         detached_pid=None
         mailbox=getattr(self,'_mailbox',None)
         if mailbox is not None:
-            mailbox.close()
+            try:
+                mailbox.close()
+            except Exception as exc:
+                self._record_cleanup_failure('mailbox_close',exc)
+                raise
             self._mailbox=None
         if self.process and self.alive():
-            self.stop(time.monotonic()+3,phase='detach.stop')
-            self.restore_focus()
-            self.target.DeleteAllBreakpoints()
-            error=self.process.Detach()
-            if error.Fail():raise TransportError('detach_failed',str(error))
+            try:
+                self.stop(time.monotonic()+3,phase='detach.stop')
+            except Exception as exc:
+                self._record_cleanup_failure('stop',exc)
+                raise
+            try:
+                self.restore_focus()
+            except Exception as exc:
+                self._record_cleanup_failure('restore_focus',exc)
+                raise
+            try:
+                self.target.DeleteAllBreakpoints()
+            except Exception as exc:
+                self._record_cleanup_failure('delete_breakpoints',exc)
+                raise
+            try:
+                error=self.process.Detach()
+            except Exception as exc:
+                self._record_cleanup_failure('lldb_detach',exc)
+                raise
+            if error.Fail():
+                detail=str(error)
+                self._record_cleanup_failure('lldb_detach',detail)
+                raise TransportError('detach_failed',detail)
             detached_pid=self.pid
-            self.drain()
-        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None;self.native_mailbox_library=None
-        if detached_pid is not None:
+            # The debugger has released ownership; nothing may interrupt the
+            # mandatory OS resume handoff after successful LLDB Detach.
+        self._clear_debugger_attachment()
+        resume_pid=detached_pid if detached_pid is not None else self.pending_resume_pid
+        if resume_pid is not None:
             # LLDB has released the target, but macOS may retain its BSD stop
             # signal. Complete the process handoff after debugger ownership ends.
-            # The released attachment stays cleared even if OS resume fails.
+            # The released attachment stays cleared while pending_resume_pid tracks retry.
             try:
-                os.kill(detached_pid,signal.SIGCONT)
+                os.kill(resume_pid,signal.SIGCONT)
             except ProcessLookupError:
                 pass # The target exited after release; no attachment remains.
             except OSError as exc:
+                self._pending_resume_pid=resume_pid
+                self._record_cleanup_failure('os_resume',exc)
                 raise TransportError('resume_failed','hades2.error.resumeFailed',
                                      diagnostic=str(exc),arguments=[str(exc)]) from exc
+        self._clear_cleanup_state()
+
     def close(self):
+        # A failed detach or SIGCONT handoff is still owned by this worker;
+        # only destroy the debugger once all release stages have succeeded.
         self.detach()
         if self.debugger:lldb.SBDebugger.Destroy(self.debugger);self.debugger=None

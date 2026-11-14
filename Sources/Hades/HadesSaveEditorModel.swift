@@ -450,7 +450,7 @@ final class HadesSaveEditorModel: ObservableObject {
         }
     }
     private func refreshReview() {
-        guard !applying, let workspaceID, let baseline = baselineGeneration else { return }
+        guard !applying, let workspaceID, baselineGeneration != nil else { return }
         perform("review", params: ["language": language.rawValue], scope: "review", workspace: workspaceID,
                 blocking: false, lane: .review) { [weak self] result in
             _ = self?.applyReview(result, scope: "review")

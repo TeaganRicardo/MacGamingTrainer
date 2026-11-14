@@ -102,7 +102,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var selectedWorldExitLease: HadesWorldActionLease? { selectedWorldExit?.activeLease }
     var selectedWorldExitTargetLocked: Bool { selectedWorldExitLease != nil }
     var canSelectWorldExit: Bool {
-        canMutate && canAcceptRuntimeAction && world?.doors.isEmpty == false
+        canMutate && world?.doors.isEmpty == false
     }
     var selectedWorldExitActionAvailable: Bool {
         guard canMutate && canAcceptRuntimeAction, let exit = selectedWorldExit else { return false }
@@ -113,6 +113,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         world?.worldOccurrenceTargets ?? []
     }
     var worldOccurrenceLease: HadesWorldOccurrenceLease? { world?.occurrence }
+    var canSelectWorldOccurrence: Bool {
+        canMutate && (!worldOccurrenceTargets.isEmpty || worldOccurrenceLease != nil)
+    }
     var worldOccurrenceActionAvailable: Bool {
         guard canMutate && canAcceptRuntimeAction else { return false }
         if worldOccurrenceLease != nil { return true }

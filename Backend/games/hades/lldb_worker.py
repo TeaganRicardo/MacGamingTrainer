@@ -92,9 +92,13 @@ class HadesLLDBWorker:
         if method == 'disconnect':
             self.transport.detach()
         elif method == 'status':
+            if getattr(self.transport, 'cleanup_pending', False):
+                raise self.transport._quarantined_error()
             if self.transport.alive():
                 return self._invoke()
         elif method in MUTATING_COMMANDS:
+            if getattr(self.transport, 'cleanup_pending', False):
+                raise self.transport._quarantined_error()
             if not self.transport.alive():
                 raise AdapterError('not_connected', 'hades.error.notConnected')
             target = None

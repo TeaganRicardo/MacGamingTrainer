@@ -1893,6 +1893,34 @@ func pump(_ seconds: TimeInterval = 0.1) {
         waitPhase(.fullHealth,.off,help:nil)
         check(requests("set_feature").suffix(2).compactMap { ($0["params"] as? [String:Any])?["value"] as? Bool } == [true,false],
               "the native switch did not send one enable and one disable intent")
+        var worldState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
+        worldState["slowFeature"]=true
+        worldState["world"]=[
+            "roomId":"run:room:1",
+            "doors":[[
+                "id":"door:1","doorToken":"fixture-exit:1","number":1,"reward":"RoomMoneyDrop",
+                "targets":[["kind":"reward","id":"MaxHealthDrop"]]
+            ]],
+            "canFish":true,"canChaos":true,"objects":[],
+            "occurrenceTargets":[["id":"charon","kind":"shop","sourceId":"charon"]]
+        ]
+        try JSONSerialization.data(withJSONObject:worldState).write(to:stateURL,options:.atomic)
+        model.refreshFromHost()
+        wait("Hades world actions fixture observed") {
+            !model.busy && model.canSelectWorldExit && model.canSelectWorldOccurrence
+        }
+        check(featureSwitch(.fullHealth)!.press(),"Infinite Life switch refused slow blocking press")
+        wait("blocking request leaves canAcceptRuntimeAction false while keeping Hades world pickers interactive") {
+            model.busy && !model.canAcceptRuntimeAction
+        }
+        check(model.canSelectWorldExit && model.canSelectWorldOccurrence,
+              "blocking runtime action incorrectly disabled Hades world pickers")
+        wait("slow feature reply completed before restoring fixture") { !model.busy }
+        worldState["slowFeature"]=false
+        worldState["world"]=["roomId":"run:room:1","doors":[],"canFish":true,"canChaos":true,"objects":[]]
+        try JSONSerialization.data(withJSONObject:worldState).write(to:stateURL,options:.atomic)
+        check(featureSwitch(.fullHealth)!.press(),"Infinite Life restore switch press failed")
+        waitPhase(.fullHealth,.off,help:nil)
 
         // All seven permanent resources use independent Core numeric inputs.
         // No search or popup may gate direct editing, including while detached.

@@ -59,6 +59,7 @@ for line in sys.stdin:
         "capabilities": {
             "spawnReward": True, "specialChoice": True, "worldActions": True,
         },
+        "occurrenceTargets": [{"id": "charon", "kind": "shop", "sourceId": "charon"}],
         "worldActions": {"exits": [exit_row]},
     }
     success = True
@@ -301,6 +302,9 @@ struct Main {
         model.performShortcut(.applyWorldExit)
         check(!model.canAcceptRuntimeAction && model.canSelectWorldExitTarget,
               "blocking Apply request incorrectly disabled the local target picker")
+        check(!model.canAcceptRuntimeAction && model.canSelectWorldOccurrence
+              && model.canSelectWorldOccurrenceTarget,
+              "blocking Apply request incorrectly disabled the occurrence picker")
         model.performShortcut(.applyWorldExit)
         waitForIdle(model, logURL: logURL, phase: "exact-exit world action")
         let worldExitRequests = loggedCommands(at: logURL).filter {

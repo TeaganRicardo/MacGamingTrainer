@@ -1,6 +1,9 @@
-// Minimal SwiftUI Layout surface for exercising production geometry on Linux.
+// Minimal SwiftUI Layout surface for exercising production geometry on Linux and macOS.
 // No Apple framework or native game is required for the allocation contract.
 @_exported import Foundation
+#if canImport(CoreGraphics)
+@_exported import CoreGraphics
+#endif
 
 public enum UnitPoint { case leading }
 

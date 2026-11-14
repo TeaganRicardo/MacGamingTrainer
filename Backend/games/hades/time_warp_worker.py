@@ -25,6 +25,8 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         if not isinstance(params, dict):
             raise ValueError('Hades worker params must be an object')
         if method in ('time_warp.current_speed', 'time_warp.set_speed'):
+            if getattr(self.transport, 'cleanup_pending', False):
+                raise self.transport._quarantined_error()
             if not self.transport.alive():
                 raise AdapterError('not_connected', 'hades.error.notConnected')
             if method == 'time_warp.current_speed':
@@ -34,7 +36,8 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
                 reset = type(value) in (int, float) and value == 1
                 speed = self.time_warp.reset() if reset else self.time_warp.set_speed(value)
             return {'connected': True, 'pid': self.transport.pid, 'gameSpeed': speed}
-        if method == 'disconnect' and self.transport.alive():
+        if (method == 'disconnect' and self.transport.alive()
+                and not getattr(self.transport, 'cleanup_pending', False)):
             # Never detach after an uncertain native reset: the attachment is
             # the sole same-process recovery opportunity.
             self.time_warp.reset()
@@ -46,7 +49,7 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         # lease before the debugger is detached on those ordinary exit paths.
         # On reset failure leave the attachment intact; its outcome may be
         # unknown and a forced detach would strand the live target.
-        if self.transport.alive():
+        if self.transport.alive() and not getattr(self.transport, 'cleanup_pending', False):
             self.time_warp.reset()
         self.transport.close()
 

@@ -62,6 +62,8 @@ class Hades2LLDBWorker:
         return {
             "pid": self.transport.pid,
             "tainted": bool(self.transport.tainted),
+            "cleanupPending": bool(getattr(self.transport, "cleanup_pending", False)),
+            "pendingResumePid": getattr(self.transport, "pending_resume_pid", None),
             "lastDuration": float(getattr(self.transport, "last_duration", 0.0) or 0.0),
             "lastExpressionDuration": float(
                 getattr(self.transport, "last_expression_duration", 0.0) or 0.0
@@ -179,7 +181,9 @@ def main():
         try:
             worker.transport.close()
         except Exception:
-            pass
+            # EOF/sidecar termination may prevent a further retry. Preserve
+            # diagnostic evidence of a possible still-attached target.
+            logging.exception("Hades II LLDB worker cleanup failed at shutdown")
     return 0
 
 

@@ -133,7 +133,19 @@ def run_case(root, mode):
                     raise AssertionError("unsafe mutation loss allowed reattach")
                 assert len(launches) == 1, "uncertain mutation silently spawned a worker"
         finally:
-            transport.close()
+            if mode in ("blocked_reattach", "blocked_mutation"):
+                # The child/IPC is gone while the last acknowledged state still
+                # owns this PID. Close must report unconfirmed native release.
+                try:
+                    transport.close()
+                except AdapterError as error:
+                    assert error.code == "detach_failed", error.code
+                else:
+                    raise AssertionError("lost worker falsely acknowledged target release")
+                assert transport.pid == 4242
+                assert transport._worker.terminal
+            else:
+                transport.close()
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-attach-terminal-") as temporary:

@@ -275,14 +275,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var shuttingDown = false
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
+    private var worldActionsSupported: Bool {
+        connected && capabilities["worldActions"] == true && !exiting && protocolCompatible
+    }
     var canApplyWorldAction: Bool {
-        connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
-            && !exiting && protocolCompatible
+        worldActionsSupported && canAcceptRuntimeAction
     }
     var activeWorldOccurrenceTarget: String? { worldOccurrence?.target }
     var canApplyWorldExit: Bool {
-        connected && capabilities["worldActions"] == true && canAcceptRuntimeAction
-            && !exiting && protocolCompatible && selectedWorldExit != nil
+        canApplyWorldAction && selectedWorldExit != nil
     }
     var selectedWorldExit: Hades2WorldExit? {
         worldActionExits.first { $0.doorToken == selectedWorldExitToken }
@@ -295,8 +296,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return !exit.targets.isEmpty
     }
     var canSelectWorldExit: Bool {
-        connected && capabilities["worldActions"] == true && !exiting && protocolCompatible
-            && !worldActionExits.isEmpty
+        worldActionsSupported && !worldActionExits.isEmpty
+    }
+    var canSelectWorldOccurrence: Bool {
+        worldActionsSupported && (!occurrenceTargets.isEmpty || activeWorldOccurrenceTarget != nil)
+    }
+    var canSelectWorldOccurrenceTarget: Bool {
+        worldActionsSupported && activeWorldOccurrenceTarget == nil && !occurrenceTargets.isEmpty
     }
     var selectedWorldExitActionAvailable: Bool {
         guard canApplyWorldExit, let exit = selectedWorldExit else { return false }

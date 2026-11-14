@@ -722,9 +722,9 @@ class Hades2Adapter(GameAdapter):
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
         pid=pids[0] if pids else None
-        if self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive()):
-            attached_pid=self.runtime.pid
-            same_process=pid is not None and pid==attached_pid
+        if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
+            attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
+            same_process=pid is not None and attached_pid is not None and pid==attached_pid
             if not same_process:clear_active(self.state,preserve_desired=True)
             self._detach_runtime()
         elif self.state.get('pid') is not None and pid!=self.state.get('pid'):
@@ -981,8 +981,15 @@ class Hades2Adapter(GameAdapter):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
-        if self.runtime.alive():self._detach_runtime()
-        else:self._project_detached_runtime()
+        if (
+            getattr(self.runtime, 'pid', None) is not None
+            or self.runtime.alive()
+            or getattr(self.runtime, 'cleanup_pending', False)
+            or getattr(self.runtime, 'pending_resume_pid', None) is not None
+        ):
+            self._detach_runtime()
+        else:
+            self._project_detached_runtime()
         return dict(self.state)
 
     def bind_save_service(self, save_service):

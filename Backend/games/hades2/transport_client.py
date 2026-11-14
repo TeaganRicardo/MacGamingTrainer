@@ -22,6 +22,10 @@ _RISKY_METHODS = frozenset({
     "time_warp.set_speed",
     "time_warp.reset",
 })
+_TERMINAL_CLEANUP_METHODS = frozenset({
+    "transport.detach",
+    "transport.close",
+})
 
 
 class _LLDBWorkerClient:
@@ -30,6 +34,7 @@ class _LLDBWorkerClient:
         self._on_state = on_state
         self._hello_complete = False
         self._terminal_error = None
+        self._semantic_terminal_error = None
         self._initial_attach_reply_lost = False
 
     @staticmethod
@@ -71,7 +76,21 @@ class _LLDBWorkerClient:
 
     @property
     def terminal(self):
-        return self._terminal_error is not None or self._sidecar.terminal
+        return (
+            self._terminal_error is not None
+            or self._semantic_terminal_error is not None
+            or self._sidecar.terminal
+        )
+
+    @property
+    def cleanup_available(self):
+        """A trusted live worker can still release its native attachment."""
+        return (
+            self._hello_complete
+            and self._sidecar.started
+            and not self._sidecar.terminal
+            and self._terminal_error is None
+        )
 
     @property
     def available(self):
@@ -126,6 +145,10 @@ class _LLDBWorkerClient:
     def _start(self):
         if self._terminal_error is not None:
             raise self._terminal_error
+        if self._semantic_terminal_error is not None:
+            if self.cleanup_available:
+                return
+            raise self._semantic_terminal_error
         if self._hello_complete and self._sidecar.started:
             return
         try:
@@ -159,6 +182,11 @@ class _LLDBWorkerClient:
     def call(self, method, params=None, *, allow_start=True):
         if self._terminal_error is not None:
             raise self._terminal_error
+        if (
+            self._semantic_terminal_error is not None
+            and method not in _TERMINAL_CLEANUP_METHODS
+        ):
+            raise self._semantic_terminal_error
         accepting_result = method == "transport.acknowledge_result"
         try:
             result, state = self._call(
@@ -216,7 +244,7 @@ class _LLDBWorkerClient:
                 # The worker method's semantic uncertainty is Hades-owned.
                 # Stop this wrapper from issuing further calls; the generic
                 # sidecar only terminalizes itself for IPC trust failures.
-                self._terminal_error = raised
+                self._semantic_terminal_error = raised
             raise raised
         if method == "transport.attach":
             self._initial_attach_reply_lost = False
@@ -241,7 +269,7 @@ class _LLDBWorkerClient:
         return True
 
     def mark_tainted(self, value):
-        if self._terminal_error is not None or not self.started:
+        if self.terminal or not self.started:
             return
         try:
             self.call("transport.set_tainted", {"value": bool(value)})
@@ -251,12 +279,12 @@ class _LLDBWorkerClient:
             pass
 
     def close(self):
-        # Do not respawn a child merely to close an already-dead sidecar.
-        if self._sidecar.started and not self.terminal:
-            try:
-                self.call("transport.close")
-            except AdapterError:
-                pass
+        # Semantic outcome-unknown blocks game work, but a trusted live worker
+        # may still detach the debugger and release the target safely.
+        if self.cleanup_available:
+            self.call("transport.close")
+            self._semantic_terminal_error = None
+        # Never respawn a dead worker or send cleanup over an untrusted IPC seam.
         self._sidecar.close()
         self._hello_complete = False
         self._initial_attach_reply_lost = False
@@ -272,6 +300,8 @@ class Hades2LuaTransport:
         self.last_attach_profile = {}
         self.last_mailbox_profile = {}
         self._tainted = False
+        self.cleanup_pending = False
+        self.pending_resume_pid = None
         self._worker = _LLDBWorkerClient(on_state=self._adopt_state)
 
     def _adopt_state(self, state):
@@ -280,6 +310,11 @@ class Hades2LuaTransport:
         pid = state.get("pid")
         self.pid = pid if type(pid) is int and pid > 0 else None
         self._tainted = state.get("tainted") is True
+        self.cleanup_pending = state.get("cleanupPending") is True
+        pending_resume_pid = state.get("pendingResumePid")
+        self.pending_resume_pid = (
+            pending_resume_pid if type(pending_resume_pid) is int and pending_resume_pid > 0 else None
+        )
         duration = state.get("lastDuration")
         self.last_duration = float(duration) if type(duration) in (int, float) else 0.0
         expression = state.get("lastExpressionDuration")
@@ -318,10 +353,29 @@ class Hades2LuaTransport:
             self._worker.reopen_after_initial_attach_loss()
         self._call("transport.attach", {"pid": pid})
 
+    def _cleanup_unavailable_error(self):
+        diagnostic = (
+            "LLDB sidecar is unavailable; target release is unconfirmed "
+            f"(pid={self.pid}, cleanupPending={self.cleanup_pending}, "
+            f"pendingResumePid={self.pending_resume_pid})."
+        )
+        return AdapterError(
+            "detach_failed",
+            "hades2.error.debuggerExited",
+            diagnostic=diagnostic,
+        )
+
     def detach(self):
-        if not self._worker.started:
-            self.pid = None
+        if not self._worker.cleanup_available:
+            if (
+                self.pid is not None
+                or self.cleanup_pending
+                or self.pending_resume_pid is not None
+            ):
+                raise self._cleanup_unavailable_error()
             self._tainted = False
+            self.cleanup_pending = False
+            self.pending_resume_pid = None
             return
         self._call("transport.detach")
 
@@ -348,8 +402,19 @@ class Hades2LuaTransport:
         )
 
     def close(self):
+        owns_cleanup = (
+            self.pid is not None
+            or self.cleanup_pending
+            or self.pending_resume_pid is not None
+        )
+        if owns_cleanup and not self._worker.cleanup_available:
+            raise self._cleanup_unavailable_error()
         self._worker.close()
+        # Only a successfully acknowledged worker close releases the lease.
         self.pid = None
+        self._tainted = False
+        self.cleanup_pending = False
+        self.pending_resume_pid = None
 
 
 class RemoteProcessTimeWarpController:
