@@ -61,6 +61,7 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "hades2.disclosure": 60.0,
     "hades2.search": 20.0,
     "hades2.state_flow": 30.0,
+    "hades2.world_exit": 30.0,
     "hades2.live_trait_flow": 30.0,
     "hades2.save_editor": 30.0,
     # Shared ownership journeys.

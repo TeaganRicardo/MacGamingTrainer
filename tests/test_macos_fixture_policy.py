@@ -33,7 +33,7 @@ CONSUMERS = {
     ),
     "test_hades2_view_state_flow.py": (
         "hades2.hierarchy", "hades2.slider", "hades2.disclosure",
-        "hades2.search", "hades2.state_flow",
+        "hades2.search", "hades2.world_exit", "hades2.state_flow",
     ),
     "test_hades2_save_editor_frontend.py": ("hades2.save_editor",),
     "test_hades2_model_flow.py": ("hades2.live_trait_flow",),
