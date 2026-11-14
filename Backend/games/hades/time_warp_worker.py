@@ -1,4 +1,4 @@
-"""Hades I sidecar extension for the game-native simulation-time owner."""
+"""Hades I sidecar extension for game-wide sgg::App::TimeScale control."""
 import sys
 
 from core.adapter import AdapterError
@@ -48,10 +48,12 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         # The JSONL server also exits on EOF and protocol failure, without
         # receiving an explicit "disconnect" method. Release an active speed
         # lease before the debugger is detached on those ordinary exit paths.
-        # On reset failure leave the attachment intact; its outcome may be
-        # unknown and a forced detach would strand the live target.
+        # On an already-tainted session (e.g., after a Lua outcome_unknown)
+        # resetting TimeScale would immediately raise restart_required and skip
+        # debugger detach/focus cleanup; only guard fresh EOF reset failures.
         if (self.transport.alive() and not getattr(self.transport, 'cleanup_pending', False)
-                and not getattr(self.transport, 'vm_interrupted', False)):
+                and not getattr(self.transport, 'vm_interrupted', False)
+                and not getattr(self.transport, 'tainted', False)):
             self.time_warp.reset()
         self.transport.close()
 

@@ -293,6 +293,32 @@ proc46.state = fake_lldb.eStateExited
 transport.detach()
 assert not transport.alive() and transport.process is None and transport.pid is None
 assert not transport.cleanup_pending and transport.cleanup_failure is None
+
+# Transport memory read/write primitives enforce exact lengths and SBError failures.
+mem_transport = HadesLuaTransport.__new__(HadesLuaTransport)
+mem_transport.process = types.SimpleNamespace(
+    ReadMemory=lambda addr, size, err: b'\x01\x02\x03\x04' if size == 4 else b'\x01',
+    ReadPointerFromMemory=lambda addr, err: 0x123456,
+    WriteMemory=lambda addr, data, err: len(data),
+)
+assert mem_transport.read_memory(0x100, 4) == b'\x01\x02\x03\x04'
+assert mem_transport.read_pointer(0x200) == 0x123456
+mem_transport.write_memory(0x100, b'\xaa')
+mem_transport.process.WriteMemory = lambda addr, data, err: 0
+try:
+    mem_transport.write_memory(0x100, b'\xaa')
+except AdapterError as error:
+    assert error.code == 'memory_error'
+else:
+    raise AssertionError('short memory write was ignored')
+mem_transport.process = None
+try:
+    mem_transport.read_memory(0x100, 1)
+except AdapterError as error:
+    assert error.code == 'not_connected'
+else:
+    raise AssertionError('detached read_memory succeeded')
+
 print('hades_transport_focus_ownership_ok')
 
 # The termination harness imports only Foundation, so it runs in the portable

@@ -1,23 +1,40 @@
-"""Hades I simulation-time controller over the owned game Lua execution boundary.
+"""Hades I global simulation-time controller over sgg::App::TimeScale.
 
-The Lua module owns game-specific speed semantics. A command is confirmed
-only after reading the Lua owner's receipt.
+Owns direct stopped-process inspection and mutation of the supported Intel build's
+engine-wide frame clock (`sgg::App::TimeScale`, `sgg::Debug::AUTO_RESET_TIME_SCALE`,
+and `App` fixed-step state), leaving Lua `World::SimulationSpeed` (`hitstop`) untouched.
 """
-import json
 import math
-from pathlib import Path
+import struct
+import sys
+import time
 
 from core.adapter import AdapterError
+
+APP_INSTANCE_SYMBOL = '_ZN3sgg3App8INSTANCEE'
+AUTO_RESET_SYMBOL = '_ZN3sgg5Debug21AUTO_RESET_TIME_SCALEE'
+NO_FIXED_STEP_SYMBOL = '_ZN3sgg13ConfigOptions11NoFixedStepE'
+
+APP_USE_FIXED_STEP_OFFSET = 0x1A
+APP_ACCUMULATOR_OFFSET = 0x90
+APP_TIME_SCALE_OFFSET = 0x94
+
+_ZERO_FLOAT32 = struct.pack('<f', 0.0)
+_ONE_FLOAT32 = struct.pack('<f', 1.0)
+
+
+def _normalize_float(value):
+    return 0.0 if value == 0.0 else float(value)
 
 
 class HadesSimulationTimeWarp:
     MINIMUM = 0.0
     MAXIMUM = 10.0
+    FIXED_STEP_MAXIMUM = 5.0
+    BOUNDED_TIMEOUT_SECONDS = 3.0
 
-    def __init__(self, transport, source_path=None):
+    def __init__(self, transport):
         self.transport = transport
-        path = Path(source_path) if source_path is not None else Path(__file__).with_name('simulation_time_warp.lua')
-        self.source = path.read_text(encoding='utf-8')
 
     @classmethod
     def _validate_speed(cls, value):
@@ -26,52 +43,218 @@ class HadesSimulationTimeWarp:
         speed = float(value)
         if not math.isfinite(speed) or not cls.MINIMUM <= speed <= cls.MAXIMUM:
             raise AdapterError('invalid_value', 'hades.error.invalidValue')
-        return speed
+        return _normalize_float(speed)
 
-    def _invalid_receipt(self, operation, detail, *, verify=False):
-        if operation == 'set':
-            # The Lua native speed owner may have applied the requested speed.
-            # A contradictory receipt cannot be treated as a retryable failure.
-            self.transport.tainted = True
-            raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown', diagnostic=detail)
-        code = 'time_warp_verify_failed' if verify else 'debugger_protocol'
-        key = 'host.timeWarp.error.verifyFailed' if verify else 'hades.error.debuggerProtocol'
-        raise AdapterError(code, key, diagnostic=detail)
+    def _require_usable_transport(self):
+        if getattr(self.transport, 'cleanup_pending', False):
+            raise self.transport._quarantined_error()
+        if getattr(self.transport, 'tainted', False):
+            raise AdapterError('restart_required', 'hades.error.restartRequired')
+        if not self.transport.alive():
+            raise AdapterError('not_connected', 'hades.error.notConnected')
+        addresses = getattr(self.transport, 'addresses', None) or {}
+        missing = [
+            symbol for symbol in (APP_INSTANCE_SYMBOL, AUTO_RESET_SYMBOL, NO_FIXED_STEP_SYMBOL)
+            if symbol not in addresses
+        ]
+        if missing:
+            raise AdapterError(
+                'incompatible',
+                'hades.error.unsupportedBuild',
+                diagnostic='Missing native Time Warp symbols: ' + ', '.join(missing),
+            )
+        return (
+            addresses[APP_INSTANCE_SYMBOL],
+            addresses[AUTO_RESET_SYMBOL],
+            addresses[NO_FIXED_STEP_SYMBOL],
+        )
 
-    def _execute(self, operation, value=None):
-        source = 'local timeWarp = (function()\n' + self.source + '\nend)()\n'
-        if operation == 'set':
-            source += 'return timeWarp.set(' + json.dumps(value, allow_nan=False) + ')'
-        else:
-            source += 'return timeWarp.current()'
-        receipt = self.transport.execute(source, mutating=operation == 'set')
-        if not isinstance(receipt, dict):
-            self._invalid_receipt(operation, 'native simulation-time receipt is not a JSON object')
-        speed = receipt.get('multiplier')
-        native = receipt.get('nativeFraction')
-        effective = receipt.get('effectiveFraction')
-        installed = receipt.get('wrapperInstalled')
-        if (type(speed) not in (int, float) or not math.isfinite(float(speed))
-                or not self.MINIMUM <= speed <= self.MAXIMUM
-                or type(native) not in (int, float) or not math.isfinite(float(native))
-                or type(effective) not in (int, float) or not math.isfinite(float(effective))
-                or type(installed) is not bool):
-            self._invalid_receipt(operation, 'invalid native simulation-time receipt fields')
-        if abs(float(effective) - float(native) * float(speed)) > 1e-6:
-            self._invalid_receipt(operation, 'effective simulation fraction disagrees with native multiplied fraction', verify=True)
-        if operation == 'set' and (not installed or abs(float(speed) - value) > 1e-6):
-            self._invalid_receipt(operation, 'Lua speed owner did not confirm the applied multiplier', verify=True)
-        return receipt
+    def _with_stopped_process(self, operation):
+        app_instance_addr, auto_reset_addr, no_fixed_step_addr = self._require_usable_transport()
+        stopped = False
+        try:
+            self.transport.stop(time.monotonic() + self.BOUNDED_TIMEOUT_SECONDS)
+            stopped = True
+            return operation(app_instance_addr, auto_reset_addr, no_fixed_step_addr)
+        finally:
+            primary_error = sys.exc_info()[1]
+            if stopped and self.transport.alive():
+                try:
+                    self.transport.resume(time.monotonic() + self.BOUNDED_TIMEOUT_SECONDS)
+                except Exception as resume_error:
+                    self.transport.tainted = True
+                    detail = getattr(resume_error, 'diagnostic', None) or str(resume_error)
+                    if primary_error is not None:
+                        original = getattr(primary_error, 'diagnostic', None) or str(primary_error)
+                        detail = f'{original}; resume: {detail}' if original else f'resume: {detail}'
+                    raise AdapterError(
+                        'outcome_unknown', 'hades.error.outcomeUnknown', diagnostic=detail
+                    ) from resume_error
+
+    def _read_snapshot(self, app_instance_addr, auto_reset_addr, no_fixed_step_addr, *, allow_null_on_reset=False):
+        app_ptr = self.transport.read_pointer(app_instance_addr)
+        auto_reset_raw = self.transport.read_memory(auto_reset_addr, 1)
+        if auto_reset_raw not in (b'\x00', b'\x01'):
+            raise AdapterError(
+                'incompatible',
+                'hades.error.unsupportedBuild',
+                diagnostic='Unexpected sgg::Debug::AUTO_RESET_TIME_SCALE flag byte',
+            )
+        if app_ptr == 0:
+            if allow_null_on_reset and auto_reset_raw == b'\x00':
+                return None
+            raise AdapterError(
+                'runtime_not_ready',
+                'hades.error.runtimeNotReady',
+                diagnostic='sgg::App::INSTANCE is null',
+            )
+        no_fixed_step_raw = self.transport.read_memory(no_fixed_step_addr, 1)
+        use_fixed_step_raw = self.transport.read_memory(app_ptr + APP_USE_FIXED_STEP_OFFSET, 1)
+        time_scale_raw = self.transport.read_memory(app_ptr + APP_TIME_SCALE_OFFSET, 4)
+        if no_fixed_step_raw not in (b'\x00', b'\x01') or use_fixed_step_raw not in (b'\x00', b'\x01'):
+            raise AdapterError(
+                'incompatible',
+                'hades.error.unsupportedBuild',
+                diagnostic='Unexpected sgg::App fixed-step flag byte',
+            )
+        time_scale = _normalize_float(struct.unpack('<f', time_scale_raw)[0])
+        return (
+            app_ptr,
+            auto_reset_raw,
+            no_fixed_step_raw,
+            use_fixed_step_raw,
+            time_scale_raw,
+            time_scale,
+        )
+
+    def _verify_finite_non_negative(self, time_scale, *, target='0..10'):
+        if not math.isfinite(time_scale) or time_scale < self.MINIMUM:
+            observed = f'{time_scale:g}' if math.isfinite(time_scale) else str(time_scale)
+            raise AdapterError(
+                'time_warp_verify_failed',
+                'host.timeWarp.error.verifyFailed',
+                arguments=(target, observed),
+                diagnostic=f'Observed sgg::App::TimeScale is invalid: {observed}',
+            )
+
+    def _verify_finite_range(self, time_scale):
+        target = f'{self.MINIMUM:g}..{self.MAXIMUM:g}'
+        self._verify_finite_non_negative(time_scale, target=target)
+        if time_scale > self.MAXIMUM:
+            observed = f'{time_scale:g}'
+            raise AdapterError(
+                'time_warp_verify_failed',
+                'host.timeWarp.error.verifyFailed',
+                arguments=(target, observed),
+                diagnostic=f'Observed sgg::App::TimeScale out of supported range: {observed}',
+            )
 
     def current_speed(self):
-        return float(self._execute('current')['multiplier'])
+        def read_op(app_instance_addr, auto_reset_addr, no_fixed_step_addr):
+            snapshot = self._read_snapshot(app_instance_addr, auto_reset_addr, no_fixed_step_addr)
+            time_scale = snapshot[5]
+            self._verify_finite_range(time_scale)
+            return time_scale
+
+        return self._with_stopped_process(read_op)
+
+    def _apply_speed(self, target_speed, *, skip_if_clean=False):
+        def write_op(app_instance_addr, auto_reset_addr, no_fixed_step_addr):
+            snapshot = self._read_snapshot(
+                app_instance_addr,
+                auto_reset_addr,
+                no_fixed_step_addr,
+                allow_null_on_reset=skip_if_clean,
+            )
+            if snapshot is None:
+                return 1.0
+            (
+                app_ptr,
+                auto_reset_raw,
+                no_fixed_step_raw,
+                use_fixed_step_raw,
+                time_scale_raw,
+                current_scale,
+            ) = snapshot
+            packed_speed = _ONE_FLOAT32 if target_speed == 1.0 else struct.pack('<f', target_speed)
+            effective_speed = _normalize_float(struct.unpack('<f', packed_speed)[0])
+            self._verify_finite_non_negative(current_scale, target=f'{effective_speed:g}')
+
+            expected_fixed_step = b'\x00' if no_fixed_step_raw == b'\x01' else b'\x01'
+            # At 0x, FixedStep stops calling sgg::App::Update, which freezes input and
+            # starves HadesLuaTransport._boundary(). Above 5x, UpdateAndDraw clamps the
+            # FixedStep accumulator at 0.083333336s (5 steps/frame at 60Hz). Routing
+            # 0x and >5x through the engine's built-in variable-step branch resolves both.
+            target_fixed_step = (
+                b'\x00'
+                if effective_speed == 0.0 or effective_speed > self.FIXED_STEP_MAXIMUM
+                else expected_fixed_step
+            )
+            target_auto_reset = b'\x00' if effective_speed == 1.0 else b'\x01'
+            if effective_speed == 1.0:
+                packed_speed = _ONE_FLOAT32
+
+            if (
+                skip_if_clean
+                and time_scale_raw == packed_speed
+                and auto_reset_raw == b'\x00'
+                and use_fixed_step_raw == expected_fixed_step
+            ):
+                return 1.0
+
+            switch_step_mode = use_fixed_step_raw != target_fixed_step
+            clear_accumulator = switch_step_mode or effective_speed == 0.0 or effective_speed == 1.0
+
+            try:
+                if effective_speed == 1.0:
+                    if clear_accumulator:
+                        self.transport.write_memory(app_ptr + APP_ACCUMULATOR_OFFSET, _ZERO_FLOAT32)
+                    if switch_step_mode:
+                        self.transport.write_memory(app_ptr + APP_USE_FIXED_STEP_OFFSET, target_fixed_step)
+                    self.transport.write_memory(app_ptr + APP_TIME_SCALE_OFFSET, packed_speed)
+                    self.transport.write_memory(auto_reset_addr, target_auto_reset)
+                else:
+                    self.transport.write_memory(auto_reset_addr, target_auto_reset)
+                    self.transport.write_memory(app_ptr + APP_TIME_SCALE_OFFSET, packed_speed)
+                    if clear_accumulator:
+                        self.transport.write_memory(app_ptr + APP_ACCUMULATOR_OFFSET, _ZERO_FLOAT32)
+                    if switch_step_mode:
+                        self.transport.write_memory(app_ptr + APP_USE_FIXED_STEP_OFFSET, target_fixed_step)
+
+                observed_auto_reset = self.transport.read_memory(auto_reset_addr, 1)
+                observed_fixed_step = self.transport.read_memory(app_ptr + APP_USE_FIXED_STEP_OFFSET, 1)
+                observed_scale_raw = self.transport.read_memory(app_ptr + APP_TIME_SCALE_OFFSET, 4)
+                if (
+                    observed_auto_reset != target_auto_reset
+                    or observed_fixed_step != target_fixed_step
+                    or observed_scale_raw != packed_speed
+                ):
+                    raise AdapterError(
+                        'outcome_unknown',
+                        'hades.error.outcomeUnknown',
+                        diagnostic='Hades App clock readback did not match written TimeScale state',
+                    )
+                if clear_accumulator:
+                    observed_acc = self.transport.read_memory(app_ptr + APP_ACCUMULATOR_OFFSET, 4)
+                    if observed_acc != _ZERO_FLOAT32:
+                        raise AdapterError(
+                            'outcome_unknown',
+                            'hades.error.outcomeUnknown',
+                            diagnostic='Hades App accumulator readback did not clear to zero',
+                        )
+                return _normalize_float(struct.unpack('<f', observed_scale_raw)[0])
+            except Exception as error:
+                self.transport.tainted = True
+                if isinstance(error, AdapterError) and error.code == 'outcome_unknown':
+                    raise
+                detail = getattr(error, 'diagnostic', None) or str(error)
+                raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown', diagnostic=detail) from error
+
+        return self._with_stopped_process(write_op)
 
     def set_speed(self, value):
         speed = self._validate_speed(value)
-        return float(self._execute('set', speed)['multiplier'])
+        return self._apply_speed(speed, skip_if_clean=False)
 
     def reset(self):
-        observation = self._execute('current')
-        if not observation['wrapperInstalled'] or observation['multiplier'] == 1.0:
-            return 1.0
-        return self.set_speed(1.0)
+        return self._apply_speed(1.0, skip_if_clean=True)

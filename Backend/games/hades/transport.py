@@ -107,21 +107,51 @@ class HadesLuaTransport:
         except Exception as exc:
             self._rollback_failed_attach(exc)
 
+    def _stop_or_release_late_stop(self, deadline):
+        try:
+            self._stop(deadline)
+        except Exception as exc:
+            # Stop() may physically pause the process just as its observation
+            # deadline expires. Release that known pre-mutation stop rather
+            # than stranding Hades frozen.
+            if getattr(exc, 'code', None) != 'not_connected' and self.alive():
+                try:
+                    self._drain()
+                    if self.process.GetState() == lldb.eStateStopped:
+                        self._resume(time.monotonic() + 3)
+                except Exception as release_exc:
+                    if getattr(release_exc, 'code', None) == 'not_connected':
+                        raise release_exc from exc
+                    self.tainted = True
+                    detail = getattr(release_exc, 'diagnostic', None) or str(release_exc)
+                    original = getattr(exc, 'diagnostic', None) or str(exc)
+                    merged = f'{original}; resume: {detail}' if original else detail
+                    raise failure('outcome_unknown', 'outcomeUnknown', merged) from release_exc
+            raise
+
     def stop(self, deadline):
         """Expose the transport's existing bounded stop to Core-owned helpers."""
-        self._stop(deadline)
+        self._stop_or_release_late_stop(deadline)
 
     def _stop(self, deadline):
         if not self.alive():
             raise failure('not_connected', 'notConnected')
+        self._drain()
         if self.process.GetState() == lldb.eStateStopped:
             return
+        if time.monotonic() >= deadline:
+            raise failure('stop_timeout', 'stopTimeout')
         # SBProcess.Stop requests and acknowledges the LLDB-owned stop as one
         # operation. SendAsyncInterrupt can lose the stop notification under
         # Rosetta debugserver after several otherwise successful boundaries.
         # Validate both the API result and the observed process state.
         error = self.process.Stop()
         if error.Fail():
+            self._drain()
+            if not self.alive():
+                raise failure('not_connected', 'notConnected')
+            if self.process.GetState() == lldb.eStateStopped:
+                return
             raise failure('stop_failed', 'stopTimeout', str(error))
         while time.monotonic() < deadline:
             self._drain()
@@ -130,6 +160,11 @@ class HadesLuaTransport:
             if not self.alive():
                 raise failure('not_connected', 'notConnected')
             time.sleep(.005)
+        self._drain()
+        if not self.alive():
+            raise failure('not_connected', 'notConnected')
+        if self.process.GetState() == lldb.eStateStopped:
+            return
         raise failure('stop_timeout', 'stopTimeout')
 
     def _resume(self, deadline, *, breakpoint_expected=False):
@@ -157,6 +192,37 @@ class HadesLuaTransport:
     def resume(self, deadline):
         """Expose the transport's existing bounded resume to Core-owned helpers."""
         self._resume(deadline)
+
+    def read_memory(self, address, size):
+        """Read an exact byte count from the stopped target process."""
+        if self.process is None:
+            raise failure('not_connected', 'notConnected')
+        error = lldb.SBError()
+        data = self.process.ReadMemory(address, size, error)
+        if error.Fail() or data is None or len(data) != size:
+            detail = str(error) if error.Fail() else f'short read ({len(data or b"")}/{size} bytes)'
+            raise failure('memory_error', 'debuggerCall', detail)
+        return bytes(data)
+
+    def read_pointer(self, address):
+        """Read a pointer-sized value from the stopped target process."""
+        if self.process is None:
+            raise failure('not_connected', 'notConnected')
+        error = lldb.SBError()
+        pointer = self.process.ReadPointerFromMemory(address, error)
+        if error.Fail():
+            raise failure('memory_error', 'debuggerCall', str(error))
+        return int(pointer)
+
+    def write_memory(self, address, data):
+        """Write an exact byte sequence to the stopped target process."""
+        if self.process is None:
+            raise failure('not_connected', 'notConnected')
+        error = lldb.SBError()
+        written = self.process.WriteMemory(address, data, error)
+        if error.Fail() or written != len(data):
+            detail = str(error) if error.Fail() else f'short write ({written}/{len(data)} bytes)'
+            raise failure('memory_error', 'debuggerCall', detail)
 
     def _restore_focus(self):
         if self.focus_original is None:

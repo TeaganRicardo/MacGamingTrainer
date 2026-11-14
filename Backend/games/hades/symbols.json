@@ -1,14 +1,27 @@
 {
   "symbols": {
+    "_ZN3sgg13ConfigOptions11NoFixedStepE": {
+      "rva": 28618420
+    },
     "_ZN3sgg13ConfigOptions20RequireFocusToUpdateE": {
       "rva": 28618475
     },
     "_ZN3sgg13ScriptManager13LUA_INTERFACEE": {
       "rva": 5517480
     },
+    "_ZN3sgg3App13UpdateAndDrawEf": {
+      "rva": 3035056,
+      "prefix": "554889e553504889fb807f74000f84d6"
+    },
     "_ZN3sgg3App6UpdateEf": {
       "rva": 3035488,
       "prefix": "554889e54157415641554154534881ec"
+    },
+    "_ZN3sgg3App8INSTANCEE": {
+      "rva": 36183208
+    },
+    "_ZN3sgg5Debug21AUTO_RESET_TIME_SCALEE": {
+      "rva": 36180932
     },
     "luaL_loadbufferx": {
       "rva": 102881,

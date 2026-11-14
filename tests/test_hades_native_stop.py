@@ -100,4 +100,62 @@ expect_error(transport_for(process), time.monotonic() + 0.02, "stop_timeout")
 assert process.stop_calls == 1, "never blindly resend an uncertain stop"
 assert process.state == lldb.eStateRunning
 
+# Already-expired deadline while running must not issue a new Stop request.
+process = Process()
+expect_error(transport_for(process), time.monotonic() - 1, "stop_timeout")
+assert process.stop_calls == 0
+
+# Stop().Fail() still succeeds if draining reveals an already-stopped process.
+class FailedStopAlreadyStoppedProcess(Process):
+    def Stop(self):
+        self.stop_calls += 1
+        self.state = lldb.eStateStopped
+        return StopResult(False)
+
+
+already_stopped_on_fail = FailedStopAlreadyStoppedProcess()
+transport_for(already_stopped_on_fail)._stop(time.monotonic() + 1)
+assert already_stopped_on_fail.stop_calls == 1
+
+# Public transport.stop(deadline) releases a late physical stop rather than leaving Hades paused.
+late_process = Process(complete_after=None)
+late_transport = transport_for(late_process)
+late_transport._tainted_pid = None
+late_transport.pid = 42
+late_transport.tainted = False
+late_events = []
+def raise_timeout_after_late_stop(_deadline):
+    late_process.state = lldb.eStateStopped
+    raise AdapterError("stop_timeout", "hades.error.stopTimeout")
+late_transport._stop = raise_timeout_after_late_stop
+late_transport._resume = lambda _deadline: late_events.append("resume") or setattr(late_process, "state", lldb.eStateRunning)
+try:
+    late_transport.stop(time.monotonic() + 0.5)
+except AdapterError as error:
+    assert error.code == "stop_timeout"
+else:
+    raise AssertionError("late stop release masked primary stop timeout")
+assert late_events == ["resume"] and late_process.state == lldb.eStateRunning and not late_transport.tainted
+
+# Failing to release that late physical stop taints the attachment and surfaces outcome_unknown.
+stuck_process = Process(complete_after=None)
+stuck_transport = transport_for(stuck_process)
+stuck_transport._tainted_pid = None
+stuck_transport.pid = 42
+stuck_transport.tainted = False
+def raise_stuck_timeout(_deadline):
+    stuck_process.state = lldb.eStateStopped
+    raise AdapterError("stop_timeout", "hades.error.stopTimeout", diagnostic="timed out")
+stuck_transport._stop = raise_stuck_timeout
+def fail_resume(_deadline):
+    raise AdapterError("resume_failed", "hades.error.resumeFailed", diagnostic="continue rejected")
+stuck_transport._resume = fail_resume
+try:
+    stuck_transport.stop(time.monotonic() + 0.5)
+except AdapterError as error:
+    assert error.code == "outcome_unknown" and stuck_transport.tainted
+    assert "timed out" in error.diagnostic and "continue rejected" in error.diagnostic
+else:
+    raise AssertionError("failed late stop release did not raise outcome_unknown")
+
 print("hades_lldb_acknowledged_stop_contract_ok")
