@@ -41,6 +41,7 @@ class HadesLuaTransport:
         self.addresses = {}
         self.focus_original = None
         self._tainted_pid = None
+        self._unsafe_vm_pid = None
         self.tainted = False
         self._cleanup_pending = False
         self._cleanup_failure = None
@@ -52,6 +53,10 @@ class HadesLuaTransport:
     @tainted.setter
     def tainted(self, value):
         self._tainted_pid = self.pid if value else None
+
+    @property
+    def vm_interrupted(self):
+        return self.pid is not None and self._unsafe_vm_pid == self.pid
 
     def _drain(self):
         event = lldb.SBEvent()
@@ -128,6 +133,8 @@ class HadesLuaTransport:
         raise failure('stop_timeout', 'stopTimeout')
 
     def _resume(self, deadline, *, breakpoint_expected=False):
+        if self.vm_interrupted:
+            raise failure('restart_required', 'luaTerminationFailed')
         self._drain()
         if self.process.GetState() == lldb.eStateRunning:
             return
@@ -218,16 +225,20 @@ class HadesLuaTransport:
             thread, state = self._boundary()
             error = lldb.SBError()
             capacity = 262144
-            scratch = self.process.AllocateMemory(len(payload) + 1 + capacity,
+            scratch = self.process.AllocateMemory(len(payload) + 1 + capacity + 1,
                 lldb.ePermissionsReadable | lldb.ePermissionsWritable, error)
             if error.Fail() or not scratch:
                 raise failure('memory_error', 'debuggerCall', str(error))
             if self.process.WriteMemory(scratch, payload + b'\0', error) != len(payload) + 1 or error.Fail():
                 raise failure('memory_error', 'debuggerCall', str(error))
             output = scratch + len(payload) + 1
+            phase = output + capacity
+            if self.process.WriteMemory(phase, b'\x00', error) != 1 or error.Fail():
+                raise failure('memory_error', 'debuggerCall', str(error))
             addresses = self.addresses
             expression = f'''({{
-              void *L=(void*){state}; char *o=(char*){output}; o[0]=0;
+              void *L=(void*){state}; char *o=(char*){output};
+              volatile unsigned char *phase=(volatile unsigned char*){phase}; *phase=1; o[0]=0;
               int top=((int(*)(void*)){addresses['lua_gettop']})(L);
               int rc=((int(*)(void*,const char*,unsigned long,const char*,const char*)){addresses['luaL_loadbufferx']})(L,(const char*){scratch},{len(payload)},"MacGamingTrainer.Hades",(const char*)0);
               if(rc==0) rc=((int(*)(void*,int,int,int,int,void*)){addresses['lua_pcallk']})(L,0,1,0,0,(void*)0);
@@ -237,6 +248,7 @@ class HadesLuaTransport:
               if(s){{for(unsigned long i=0;i<n;++i)o[i]=s[i];}} else {{n=0;rc=101;}}
               o[n]=0;
               ((void(*)(void*,int)){addresses['lua_settop']})(L,top);
+              *phase=2;
               rc;
             }})'''
             options = lldb.SBExpressionOptions()
@@ -249,7 +261,13 @@ class HadesLuaTransport:
             result = thread.GetFrameAtIndex(0).EvaluateExpression(expression, options)
             if result.GetError().Fail():
                 self.tainted = True
-                raise failure('outcome_unknown', 'outcomeUnknown', str(result.GetError()))
+                # LLDB restores the native stack, not Lua's CallInfo/errorJmp
+                # bookkeeping. Running this VM again can corrupt native saves.
+                observed_phase = self.process.ReadMemory(phase, 1, error)
+                if error.Fail() or observed_phase not in (b'\x00', b'\x02'):
+                    self._unsafe_vm_pid = self.pid
+                key = 'luaInterrupted' if self.vm_interrupted else 'outcomeUnknown'
+                raise failure('outcome_unknown', key, str(result.GetError()))
             text = self.process.ReadCStringFromMemory(output, capacity, error)
             if error.Fail():
                 self.tainted = True
@@ -269,21 +287,43 @@ class HadesLuaTransport:
             return json.loads(text)
         finally:
             primary_error = sys.exc_info()[1]
-            if self.alive() and not self._boundary_initial_stop_pending:
+            if not self._boundary_initial_stop_pending and (self.vm_interrupted or self.alive()):
                 try:
-                    self._stop(time.monotonic() + 3)
-                    self.target.DeleteAllBreakpoints()
-                    self._restore_focus()
-                    if scratch is not None:
-                        self.process.DeallocateMemory(scratch)
-                    self._resume(time.monotonic() + 3)
+                    if self.vm_interrupted:
+                        self._terminate_interrupted_process()
+                    else:
+                        self._stop(time.monotonic() + 3)
+                        self.target.DeleteAllBreakpoints()
+                        self._restore_focus()
+                        if scratch is not None:
+                            self.process.DeallocateMemory(scratch)
+                        self._resume(time.monotonic() + 3)
                 except Exception as error:
                     self.tainted = True
                     detail = getattr(error, 'diagnostic', None) or str(error)
                     if primary_error is not None:
                         original = getattr(primary_error, 'diagnostic', None) or str(primary_error)
                         detail = original + '; cleanup: ' + detail
-                    raise failure('outcome_unknown', 'outcomeUnknown', detail) from error
+                    key = 'luaTerminationFailed' if self.vm_interrupted else 'outcomeUnknown'
+                    raise failure('outcome_unknown', key, detail) from error
+
+    def _terminate_interrupted_process(self):
+        try:
+            if self.process.GetState() == lldb.eStateExited:
+                return
+            error = self.process.Kill()
+            if error.Fail():
+                raise failure('outcome_unknown', 'luaTerminationFailed', str(error))
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                self._drain()
+                if self.process.GetState() == lldb.eStateExited:
+                    return
+                time.sleep(.005)
+            raise failure('outcome_unknown', 'luaTerminationFailed', 'Kill returned without an observed process exit')
+        except Exception as error:
+            detail = self._record_cleanup_failure('terminate_interrupted_process', error)
+            raise failure('outcome_unknown', 'luaTerminationFailed', detail) from error
 
     @property
     def cleanup_pending(self):
@@ -300,6 +340,8 @@ class HadesLuaTransport:
             note = f'rollback {stage} failed (pid={self.pid} still attached): {detail}'
         else:
             note = f'pid={self.pid} cleanup pending'
+        if self.vm_interrupted:
+            return failure('outcome_unknown', 'luaTerminationFailed', note)
         return failure('detach_failed', 'detachFailed', note)
 
     def _clear_cleanup_state(self):
@@ -315,6 +357,7 @@ class HadesLuaTransport:
     def _clear_attachment(self):
         self.process = None
         self.pid = None
+        self._unsafe_vm_pid = None
         self.addresses = {}
         self.focus_original = None
         self._clear_cleanup_state()
@@ -336,7 +379,9 @@ class HadesLuaTransport:
         raise error
 
     def detach(self):
-        if self.alive():
+        if self.vm_interrupted:
+            self._terminate_interrupted_process()
+        elif self.alive():
             stage = 'stop'
             try:
                 self._stop(time.monotonic() + 3)

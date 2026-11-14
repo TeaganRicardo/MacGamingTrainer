@@ -2,12 +2,13 @@
 import json
 from pathlib import Path
 import sys
+import time
 import traceback
 import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .schema import (DEFAULT_FEATURES, LOCK_FIELDS, MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
+from .schema import (DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, LOCK_FIELDS, MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
                      feature_document, feature_value)
 from .world import (mutation_params as world_mutation_params, runtime_definitions,
                     runtime_definitions_identity)
@@ -61,12 +62,60 @@ class HadesLLDBWorker:
         if target is not None:
             source += ('assert(runtime.status().heroId==' + lua_literal(target['heroId'])
                        + ',"hades.error.staleTarget")\n')
-        source += 'return runtime.json(runtime.' + method + '(' + ','.join(map(lua_literal, arguments)) + '))'
-        result = self.transport.execute(source, mutating=True)
+        if method in DEFERRED_TRAIT_COMMANDS:
+            command_id = uuid.uuid4().hex
+            values = {index + 1: value for index, value in enumerate(arguments)}
+            values['n'] = len(arguments)
+            source += ('return runtime.json(runtime.submit_trait_command(' + lua_literal(command_id)
+                       + ',' + lua_literal(method) + ',' + lua_literal(values) + '))')
+            result = self._trait_command(source, command_id)
+        else:
+            source += 'return runtime.json(runtime.' + method + '(' + ','.join(map(lua_literal, arguments)) + '))'
+            result = self.transport.execute(source, mutating=True)
         self._remember(result)
         result.update({'connected': True, 'pid': self.transport.pid})
         result['target'] = {'heroId': result.get('heroId', '')}
         return result
+
+    def _trait_command(self, source, command_id):
+        deadline = time.monotonic() + 3
+        receipt = self.transport.execute(source, mutating=True)
+        owner = 'MacGamingTrainerHades'
+        identifier = lua_literal(command_id)
+
+        def read(method, *, mutating=False):
+            snippet = 'return ' + owner + '.json(' + owner + '.' + method + '(' + identifier + '))'
+            try:
+                return self.transport.execute(snippet, mutating=mutating)
+            except AdapterError as error:
+                self.transport.tainted = True
+                if error.code == 'outcome_unknown':
+                    raise
+                raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown',
+                                   diagnostic=error.diagnostic or str(error)) from error
+
+        while receipt.get('id') == command_id and receipt.get('state') in ('pending', 'running'):
+            if time.monotonic() >= deadline:
+                receipt = read('cancel_trait_command', mutating=True)
+                break
+            time.sleep(0.02)
+            receipt = read('trait_command_result')
+        if receipt.get('id') == command_id:
+            state = receipt.get('state')
+            if state == 'complete':
+                return receipt['result']
+            if state == 'cancelled':
+                raise AdapterError('runtime_not_ready', 'hades.error.runtimeNotReady',
+                                   diagnostic='Trait command did not start; close the pause menu and try again.')
+            if state == 'error' and not receipt.get('mutationStarted'):
+                detail = receipt.get('error', '')
+                for key in ('heroNotReady', 'runtimeNotReady', 'invalidValue', 'staleTarget',
+                            'staleTrait', 'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied'):
+                    if 'hades.error.' + key in detail:
+                        raise AdapterError('runtime_not_ready', 'hades.error.' + key, diagnostic=detail)
+        self.transport.tainted = True
+        raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown',
+                           diagnostic=receipt.get('error') or 'Native trait command completion was not confirmed.')
 
     def _remember(self, result):
         """Record lock/rarity intent from a reply that reports the resident status."""
@@ -74,6 +123,9 @@ class HadesLLDBWorker:
             self.locks = tuple(result.get(value) if result[flag] else None for flag, value in LOCK_FIELDS)
         if result.get('boonRarityTarget') in ('Common', 'Rare', 'Epic', 'Heroic'):
             self.boon_rarity_target = result['boonRarityTarget']
+
+    def close(self):
+        self.transport.close()
 
     def dispatch(self, method, params):
         if method == 'connect':
@@ -164,12 +216,25 @@ def error_payload(error):
             'arguments': []}
 
 
+def close_worker(worker):
+    while True:
+        try:
+            worker.close()
+            return
+        except AdapterError:
+            if not worker.transport.vm_interrupted:
+                raise
+            # The parent relinquishes this worker on EOF. It must retain the
+            # debugger until the unsafe target exits, even after Trainer quits.
+            time.sleep(1)
+
+
 def main():
     worker = HadesLLDBWorker()
     try:
         serve_jsonl_requests(sys.stdin, sys.stdout, worker.dispatch, error_payload=error_payload)
     finally:
-        worker.transport.close()
+        close_worker(worker)
     return 0
 
 

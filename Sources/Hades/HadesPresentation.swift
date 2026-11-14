@@ -130,6 +130,8 @@ enum HadesPresentation {
             "hades.error.debuggerProtocol": .init(zhCN: "调试组件响应不兼容，操作结果不明；请重启游戏和后台后重新连接。", en: "Incompatible debugger reply; the outcome is unknown. Restart the game and backend before reconnecting."),
             "hades.error.debuggerCall": .init(zhCN: "无法读取游戏状态，请刷新或重新连接。", en: "Unable to read game state. Refresh or reconnect."),
             "hades.error.outcomeUnknown": .init(zhCN: "操作结果不明，未自动重试；请检查游戏并重启游戏后再连接。", en: "The operation outcome is unknown and was not retried. Inspect and restart the game before reconnecting."),
+            "hades.error.luaInterrupted": .init(zhCN: "调试器中断了游戏执行；为阻止继续写坏存档，已强制退出游戏，未保存进度已丢失。请重新启动游戏后连接。", en: "The debugger interrupted game execution. The game was force quit to prevent further save corruption; unsaved progress was lost. Relaunch the game and reconnect."),
+            "hades.error.luaTerminationFailed": .init(zhCN: "游戏执行已被中断，但无法确认强制退出成功。请立即在“活动监视器”中强制退出游戏，避免继续运行或保存，然后重新启动。", en: "Game execution was interrupted, but Force Quit could not be confirmed. Force Quit the game immediately in Activity Monitor before it continues or saves, then relaunch."),
             "hades.error.restartRequired": .init(zhCN: "当前运行时需要重启游戏后重新连接。", en: "Restart the game before reconnecting to this runtime."),
             "hades.error.stopTimeout": .init(zhCN: "等待游戏暂停超时，请重新连接。", en: "Timed out waiting for the game to stop. Reconnect."),
             "hades.error.resumeFailed": .init(zhCN: "游戏尚未恢复运行，请保持连接并重试断开。", en: "The game has not resumed. Keep connected and retry disconnecting."),

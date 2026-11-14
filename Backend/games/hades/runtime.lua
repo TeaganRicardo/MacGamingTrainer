@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 16 then error("hades.error.restartRequired") end
+  if existing.revision ~= 17 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 16,
+  version = 1, revision = 17,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -1033,6 +1033,20 @@ local function addTraits(unit, name, rarity, level, preserved)
   AddTraitToHero({ TraitData = processed })
   for _ = 2, level do AddTraitToHero({ TraitName = name }) end
 end
+local function beginTraitMutation()
+  local command = runtime.traitCommand
+  if command and command.executionThread == coroutine.running() then command.mutationStarted = true end
+end
+local function closeTraitMenu()
+  local menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen
+  if not menu then return end
+  assert(menu.CanClose and type(CloseAdvancedTooltipScreen) == "function", "hades.error.runtimeNotReady")
+  CloseAdvancedTooltipScreen()
+  assert(ScreenAnchors.TraitTrayScreen == nil, "hades.error.runtimeNotReady")
+  local command = runtime.traitCommand
+  if command and command.executionThread == coroutine.running() then command.menu = nil end
+  return true
+end
 local function equipOwnedTrait(unit, name, source, rarity, level)
   assert(level == 1, "hades.error.invalidValue")
   local assist = source.Slot == "Assist"
@@ -1069,6 +1083,8 @@ local function equipOwnedTrait(unit, name, source, rarity, level)
   end
   if previous and previous.Name == name and previous.Rarity == rarity
       and GameState[ownerKey] == name and rank == currentRank then return end
+  closeTraitMenu()
+  beginTraitMutation()
   suspendProperties(unit)
   runtime.propertyDepth = runtime.propertyDepth + 1
   if previous then unequip(unit, previous.Name) end
@@ -1125,6 +1141,8 @@ function runtime.add_trait(name, rarity, level)
     end
   end
   assert(not patroclus or level == 1, "hades.error.invalidValue")
+  closeTraitMenu()
+  beginTraitMutation()
   suspendProperties(unit)
   if patroclus then
     -- PatroclusBuff's synchronous trait owner; its presentation yields first.
@@ -1161,6 +1179,7 @@ function runtime.remove_trait(id)
   local unit = requireHero()
   local group = selectedTrait(unit, id)
   assert(group.canRemove, "hades.error.unsupportedTrait")
+  beginTraitMutation()
   suspendProperties(unit)
   cancelGroup(unit, group, false)
   mount(unit, false)
@@ -1175,6 +1194,12 @@ function runtime.update_trait(id, rarity, level)
   if source.Slot == "Keepsake" or source.Slot == "Assist" then
     equipOwnedTrait(unit, trait.Name, source, rarity, level)
   else
+    if closeTraitMenu() then
+      group = selectedTrait(unit, id)
+      assert(group.canEdit, "hades.error.unsupportedTrait")
+      trait = group.trait
+    end
+    beginTraitMutation()
     suspendProperties(unit)
     cancelGroup(unit, group, false)
     addTraits(unit, trait.Name, rarity, level, trait)
@@ -1188,6 +1213,7 @@ function runtime.set_trait_uses(id, uses)
   assert(group.canSetUses and finite(uses) and uses == math.floor(uses) and uses >= 0 and uses <= 1000,
     "hades.error.invalidValue")
   if uses == 0 and group.useField == "RemainingUses" and group.canExpire then return runtime.expire_trait(id) end
+  beginTraitMutation()
   group.trait[group.useField] = uses
   TraitUIUpdateText(group.trait)
   return runtime.status()
@@ -1196,6 +1222,7 @@ function runtime.refresh_trait(id)
   local unit = requireHero()
   local group = selectedTrait(unit, id)
   assert(group.canRefresh, "hades.error.unsupportedTrait")
+  beginTraitMutation()
   IncrementTraitCooldown(group.trait, group.cooldownLimit)
   TraitUIUpdateText(group.trait)
   return runtime.status()
@@ -1204,6 +1231,12 @@ function runtime.expire_trait(id)
   local unit = requireHero()
   local group = selectedTrait(unit, id)
   assert(group.canRemove and group.canExpire, "hades.error.unsupportedTrait")
+  local expiration = group.trait.OnExpire
+  if expiration and (expiration.Traits or expiration.TraitData) and closeTraitMenu() then
+    group = selectedTrait(unit, id)
+    assert(group.canRemove and group.canExpire, "hades.error.unsupportedTrait")
+  end
+  beginTraitMutation()
   suspendProperties(unit)
   cancelGroup(unit, group, true)
   mount(unit, false)
@@ -1221,6 +1254,8 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
   validateTrait(unit, blessingName, rarity, 1)
   assert(finite(encounters) and encounters == math.floor(encounters) and encounters >= 1 and encounters <= 100,
     "hades.error.invalidValue")
+  closeTraitMenu()
+  beginTraitMutation()
   local blessing = GetProcessedTraitData({ Unit = unit, TraitName = blessingName, Rarity = rarity })
   local curse = GetProcessedTraitData({ Unit = unit, TraitName = curseName, Rarity = rarity })
   local title = "ChaosCombo_" .. curseName .. "_" .. blessingName
@@ -1234,6 +1269,83 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
   AddTraitToHero({ TraitData = curse })
   mount(unit, false)
   return runtime.status()
+end
+function runtime.trait_command_result(id)
+  local command = runtime.traitCommand
+  assert(command and command.id == id, "hades.error.staleTarget")
+  return { id = id, state = command.state, mutationStarted = command.mutationStarted,
+    result = command.result, error = command.error }
+end
+function runtime.cancel_trait_command(id)
+  local command = runtime.traitCommand
+  assert(command and command.id == id, "hades.error.staleTarget")
+  if command.state == "pending" then
+    command.state = "cancelled"
+  elseif command.state == "running" then
+    command.state = "unknown"
+    command.error = "native trait command did not complete before its deadline"
+    runtime.propertyDepth = command.propertyDepth
+  end
+  return runtime.trait_command_result(id)
+end
+function runtime.submit_trait_command(id, name, arguments)
+  local previous = runtime.traitCommand
+  if previous and previous.id == id then return runtime.trait_command_result(id) end
+  assert(not previous or (previous.state ~= "unknown"
+    and not (previous.state == "error" and previous.mutationStarted)), "hades.error.restartRequired")
+  assert(not previous or (previous.state ~= "pending" and previous.state ~= "running"),
+    "hades.error.runtimeNotReady")
+  assert(name == "add_trait" or name == "update_trait" or name == "remove_trait"
+    or name == "set_trait_uses" or name == "expire_trait" or name == "refresh_trait"
+    or name == "add_chaos_pair", "hades.error.invalidValue")
+  assert(type(_threads) == "table", "hades.error.runtimeNotReady")
+  local unit = requireHero()
+  local command = { id = id, state = "pending", mutationStarted = false,
+    run = CurrentRun, unit = unit, objectId = unit.ObjectId, room = CurrentRun.CurrentRoom,
+    menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil }
+  runtime.traitCommand = command
+  local function ownsContext()
+    return CurrentRun == command.run and hero() == command.unit
+      and command.unit.ObjectId == command.objectId and CurrentRun.CurrentRoom == command.room
+      and (type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil) == command.menu
+  end
+  local function failOwner()
+    command.state = command.state == "running" and "unknown" or "error"
+    command.error = "hades.error.staleTarget"
+    if command.propertyDepth ~= nil then runtime.propertyDepth = command.propertyDepth end
+  end
+  local scheduled = coroutine.create(function()
+    if command.state ~= "pending" then return end
+    if not ownsContext() then failOwner(); return end
+    command.state = "running"
+    command.propertyDepth = runtime.propertyDepth
+    command.executionThread = coroutine.create(function()
+      local ok, value = xpcall(function()
+        return runtime[name](table.unpack(arguments, 1, arguments.n))
+      end, tostring)
+      if ok then
+        command.result, command.state = value, "complete"
+      else
+        command.error, command.state = value, "error"
+        runtime.propertyDepth = command.propertyDepth
+      end
+    end)
+    while command.state == "running" do
+      if not ownsContext() then failOwner(); return end
+      local ok, waiting = coroutine.resume(command.executionThread)
+      if not ok then
+        command.error, command.state = tostring(waiting), "error"
+        runtime.propertyDepth = command.propertyDepth
+        return
+      end
+      if coroutine.status(command.executionThread) == "dead" then return end
+      coroutine.yield(waiting)
+    end
+  end)
+  -- Main.lua update owns the first resume. Calling native thread() here would
+  -- run the first native side effects inside the debugger expression again.
+  table.insert(_threads, { thread = scheduled, resumeTime = -1 })
+  return runtime.trait_command_result(id)
 end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })

@@ -1,13 +1,19 @@
 from pathlib import Path
+import io
+import os
+import subprocess
 import sys
 import tempfile
+import types
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
-from core.sidecar import SidecarTerminalError
+from core.sidecar import JsonLineSidecarClient, SidecarTerminalError
 from games.hades.client import HadesRuntimeClient
 from games.hades.recovery import HadesRecoveryJournal
+
+assert HadesRuntimeClient._new_sidecar().child_owns_cleanup
 
 
 class Sidecar:
@@ -106,3 +112,84 @@ for malformed in (False, True):
         assert client.connect(42, '/tmp/Hades/Game.macOS')['connected']
 
 print('hades_native_request_crash_recovery_and_pid_reuse_ok')
+
+for reply in (b'{"id":"1","error":{"code":"outcome_unknown","presentation":"hades.error.luaTerminationFailed"}}\n',
+              b'not-json\n'):
+    with tempfile.TemporaryDirectory(prefix='hades-termination-recovery-') as directory:
+        terminated = []
+        process = types.SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(reply), poll=lambda: None,
+                                        terminate=lambda: terminated.append('terminate'),
+                                        kill=lambda: terminated.append('kill'), wait=lambda **kwargs: None)
+        sidecar = JsonLineSidecarClient(['fixture'], reply_timeout_seconds=1,
+                                       process_factory=lambda *args, **kwargs: process, child_owns_cleanup=True)
+        sidecar.start()
+        journal = HadesRecoveryJournal(Path(directory) / 'pending.json')
+        client = HadesRuntimeClient(sidecar, recovery=journal, identity=lambda pid: 'unsafe-life')
+        client.pid, client.process_identity, client.connected = 42, 'unsafe-life', True
+        try:
+            client.command('update_trait', {})
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown'
+        else:
+            raise AssertionError('failed/lost termination reply was accepted')
+        assert journal.path.is_file()
+        try:
+            client.close()
+        except AdapterError as error:
+            assert error.code == 'restart_required'
+        assert not terminated and process.stdin.closed and process.stdout.closed
+        try:
+            client.connect(42, '/tmp/Hades/Game.macOS')
+        except AdapterError as error:
+            assert error.code == 'restart_required'
+        else:
+            raise AssertionError('child cleanup permitted same-process reconnection')
+print('hades_failed_termination_survives_client_close_ok')
+
+# Lost reply through the real client/Core process seam: EOF reaches the actual
+# game-owned shutdown loop, which outlives client.close and completes cleanup.
+with tempfile.TemporaryDirectory(prefix='hades-child-cleanup-') as directory:
+    events = Path(directory) / 'events'
+    children = []
+    def start_child(*args, **kwargs):
+        process = subprocess.Popen(*args, **kwargs)
+        children.append(process)
+        return process
+    source = '''import sys
+from pathlib import Path
+from types import SimpleNamespace
+from core.adapter import AdapterError
+from games.hades.lldb_worker import close_worker
+events=Path(sys.argv[1])
+transport=SimpleNamespace(vm_interrupted=True)
+attempts=0
+def close():
+    global attempts
+    attempts+=1
+    with events.open('a') as out: out.write('kill\\n')
+    if attempts<3: raise AdapterError('outcome_unknown','hades.error.luaTerminationFailed')
+    transport.vm_interrupted=False
+    with events.open('a') as out: out.write('exited\\n')
+sys.stdin.readline()
+print('lost-native-reply',flush=True)
+sys.stdin.read()
+close_worker(SimpleNamespace(transport=transport,close=close))
+'''
+    sidecar = JsonLineSidecarClient([sys.executable, '-u', '-c', source, str(events)],
+                                   env={**os.environ, 'PYTHONPATH': str(ROOT / 'Backend')},
+                                   reply_timeout_seconds=3, child_owns_cleanup=True, process_factory=start_child)
+    sidecar.start()
+    journal = HadesRecoveryJournal(Path(directory) / 'pending.json')
+    client = HadesRuntimeClient(sidecar, recovery=journal)
+    client.pid, client.process_identity, client.connected = 42, 'isolated-life', True
+    try:
+        client.command('update_trait', {})
+    except AdapterError as error:
+        assert error.code == 'outcome_unknown'
+    else:
+        raise AssertionError('lost child reply was accepted')
+    client.close()
+    assert children[0].wait(timeout=6) == 0
+    assert events.read_text().splitlines() == ['kill', 'kill', 'kill', 'exited']
+    assert journal.path.is_file()
+print('hades_lost_reply_child_cleanup_completes_after_client_exit_ok')

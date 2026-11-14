@@ -40,9 +40,10 @@ WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object',
                             'apply_world_exit', 'cancel_world_exit',
                             'apply_world_occurrence', 'cancel_world_occurrence'))
-ONE_SHOT_COMMANDS = WORLD_COMMANDS | frozenset(('set_value', 'set_resource', 'add_trait',
-                                               'update_trait', 'remove_trait', 'add_chaos_pair',
-                                               'set_trait_uses', 'expire_trait', 'refresh_trait'))
+DEFERRED_TRAIT_COMMANDS = frozenset(('add_trait', 'update_trait', 'remove_trait',
+                                     'set_trait_uses', 'expire_trait', 'refresh_trait',
+                                     'add_chaos_pair'))
+ONE_SHOT_COMMANDS = WORLD_COMMANDS | DEFERRED_TRAIT_COMMANDS | frozenset(('set_value', 'set_resource'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
     'set_feature', 'set_boon_rarity', 'configure',
     'configure_locks', 'lock_vital', 'lock_resource', 'lock_rerolls', 'disable_all',

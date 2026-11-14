@@ -1,6 +1,7 @@
 """Hades-owned continuous intent, native coroutine lifetime and absolute edits."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -10,12 +11,14 @@ from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades runtime feature journeys')
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
+resident = json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['residentRuntime']
+revision = int(re.search(resident['moduleRevisionPattern'], source).group(1))
 
 def run_lua(script):
     """Run the resident source through stdin so test size never depends on ARG_MAX."""
     return subprocess.run(
         [lua, '-'],
-        input='local SOURCE=' + json.dumps(source) + '\n' + script,
+        input='local SOURCE=' + json.dumps(source) + '\nlocal EXPECTED_REVISION=' + str(revision) + '\n' + script,
         text=True,
         capture_output=True,
     )
@@ -385,10 +388,12 @@ function SetTraitsOnLoot(loot, args)
 end
 
 local runtime = assert(load(SOURCE))()
-assert(runtime.version == 1 and runtime.revision == 16 and runtime.generationId == tostring(runtime))
+assert(runtime.version == 1 and runtime.revision == EXPECTED_REVISION and runtime.generationId == tostring(runtime))
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
-for _, old in ipairs({ {}, { revision = 0 }, { revision = 1 }, { revision = 2 }, { revision = 3 }, { revision = 4 }, { revision = 5 }, { revision = 6 }, { revision = 7 }, { revision = 8 }, { revision = 9 }, { revision = 10 }, { revision = 11 }, { revision = 12 }, { revision = 13 }, { revision = 14 }, { revision = 15 } }) do
+local oldRuntimes = { {} }
+for previous = 0, EXPECTED_REVISION - 1 do oldRuntimes[#oldRuntimes + 1] = { revision = previous } end
+for _, old in ipairs(oldRuntimes) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)
 end

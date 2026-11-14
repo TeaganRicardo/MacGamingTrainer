@@ -3,10 +3,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import types
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
-from games.hades.lldb_worker import HadesLLDBWorker, lua_literal
+from games.hades.lldb_worker import HadesLLDBWorker, close_worker, lua_literal
 from core.adapter import AdapterError
 from lua_runtime_support import require_lua52
 
@@ -187,3 +189,45 @@ probe = 'local v=' + encoded + '; assert(#v==8); assert(string.byte(v,1)==228); 
 result = subprocess.run([lua, '-e', probe], capture_output=True, text=True)
 assert result.returncode == 0, result.stderr
 print('hades_worker_native_target_capture_and_lua_encoding_ok')
+
+
+class InterruptedReceiptTransport:
+    tainted = False
+
+    def execute(self, source, *, mutating):
+        if source == 'submit':
+            return {'id': 'receipt', 'state': 'pending'}
+        raise AdapterError('outcome_unknown', 'hades.error.luaInterrupted', diagnostic='interrupted receipt read')
+
+
+receipt_transport = InterruptedReceiptTransport()
+try:
+    HadesLLDBWorker(receipt_transport)._trait_command('submit', 'receipt')
+except AdapterError as error:
+    assert error.code == 'outcome_unknown' and error.presentation == 'hades.error.luaInterrupted'
+    assert error.diagnostic == 'interrupted receipt read'
+else:
+    raise AssertionError('an interrupted receipt read lost its recovery instruction')
+assert receipt_transport.tainted
+print('hades_worker_interrupted_receipt_recovery_ok')
+
+cleanup_events = []
+cleanup_transport = types.SimpleNamespace(vm_interrupted=True)
+def finish_cleanup():
+    cleanup_events.append('kill')
+    if cleanup_events.count('kill') < 3:
+        raise AdapterError('outcome_unknown', 'hades.error.luaTerminationFailed')
+    cleanup_transport.vm_interrupted = False
+with patch('games.hades.lldb_worker.time.sleep', side_effect=lambda seconds: cleanup_events.append('wait')):
+    close_worker(types.SimpleNamespace(transport=cleanup_transport, close=finish_cleanup))
+assert cleanup_events == ['kill', 'wait', 'kill', 'wait', 'kill']
+cleanup_transport.vm_interrupted = False
+with patch('games.hades.lldb_worker.time.sleep', side_effect=AssertionError('ordinary cleanup error was retried')):
+    try:
+        close_worker(types.SimpleNamespace(transport=cleanup_transport,
+                     close=lambda: (_ for _ in ()).throw(AdapterError('detach_failed', 'hades.error.detachFailed'))))
+    except AdapterError as error:
+        assert error.code == 'detach_failed'
+    else:
+        raise AssertionError('ordinary cleanup failure was hidden')
+print('hades_worker_eof_retains_interrupted_target_until_exit_ok')

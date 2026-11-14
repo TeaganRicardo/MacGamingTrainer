@@ -460,7 +460,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             wait("interlock setup: current hero observed") {
                 !model.busy && model.canMutate && model.target?.heroId=="run:hero:2"
             }
-        for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.restartRequired","restart_required"),
+        for (key,code) in [("hades.error.outcomeUnknown","outcome_unknown"),("hades.error.luaInterrupted","outcome_unknown"),
+                           ("hades.error.luaTerminationFailed","outcome_unknown"),("hades.error.restartRequired","restart_required"),
                            ("hades.error.debuggerProtocol","debugger_protocol"),("hades.error.debuggerLost","debugger_lost"),
                            ("host.timeWarp.error.outcomeUnknown","outcome_unknown"),
                            ("host.timeWarp.error.restartRequired","restart_required")] {

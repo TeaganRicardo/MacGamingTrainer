@@ -3,14 +3,14 @@ import sys
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .lldb_worker import HadesLLDBWorker, error_payload as runtime_error_payload
+from .lldb_worker import HadesLLDBWorker, close_worker, error_payload as runtime_error_payload
 from .simulation_time_warp import HadesSimulationTimeWarp
 
 
 def error_payload(error):
     payload = runtime_error_payload(error)
     recovery = {'outcome_unknown': 'outcomeUnknown', 'restart_required': 'restartRequired'}
-    if payload['code'] in recovery:
+    if payload['code'] in recovery and payload['presentation'].startswith('host.timeWarp.error.'):
         payload['presentation'] = 'hades.error.' + recovery[payload['code']]
         payload['arguments'] = []
     return payload
@@ -37,7 +37,8 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
                 speed = self.time_warp.reset() if reset else self.time_warp.set_speed(value)
             return {'connected': True, 'pid': self.transport.pid, 'gameSpeed': speed}
         if (method == 'disconnect' and self.transport.alive()
-                and not getattr(self.transport, 'cleanup_pending', False)):
+                and not getattr(self.transport, 'cleanup_pending', False)
+                and not getattr(self.transport, 'vm_interrupted', False)):
             # Never detach after an uncertain native reset: the attachment is
             # the sole same-process recovery opportunity.
             self.time_warp.reset()
@@ -49,7 +50,8 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         # lease before the debugger is detached on those ordinary exit paths.
         # On reset failure leave the attachment intact; its outcome may be
         # unknown and a forced detach would strand the live target.
-        if self.transport.alive() and not getattr(self.transport, 'cleanup_pending', False):
+        if (self.transport.alive() and not getattr(self.transport, 'cleanup_pending', False)
+                and not getattr(self.transport, 'vm_interrupted', False)):
             self.time_warp.reset()
         self.transport.close()
 
@@ -59,7 +61,7 @@ def main():
     try:
         serve_jsonl_requests(sys.stdin, sys.stdout, worker.dispatch, error_payload=error_payload)
     finally:
-        worker.close()
+        close_worker(worker)
     return 0
 
 

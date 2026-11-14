@@ -39,6 +39,8 @@ class JsonLineSidecarClient:
     Method names and payload semantics remain caller-owned. Core owns only
     process lifetime, request identity, bounded framing, reply timeout and the
     terminal distinction between known failure and outcome-unknown loss.
+    A child that owns native cleanup receives EOF on close/loss and must finish
+    that cleanup itself; the parent must not terminate it mid-cleanup.
     """
 
     def __init__(
@@ -50,6 +52,7 @@ class JsonLineSidecarClient:
         env=None,
         max_line_bytes=DEFAULT_MAX_LINE_BYTES,
         process_factory=subprocess.Popen,
+        child_owns_cleanup=False,
     ):
         if not command or any(not isinstance(part, str) or not part for part in command):
             raise ValueError("sidecar command must contain non-empty strings")
@@ -63,6 +66,7 @@ class JsonLineSidecarClient:
         self.reply_timeout_seconds = float(reply_timeout_seconds)
         self.max_line_bytes = max_line_bytes
         self._process_factory = process_factory
+        self.child_owns_cleanup = child_owns_cleanup
         self._process = None
         self._next_id = 1
         self._terminal_error = None
@@ -109,7 +113,7 @@ class JsonLineSidecarClient:
                 process.stdin.close()
         except (AttributeError, OSError):
             pass
-        if process.poll() is None:
+        if not self.child_owns_cleanup and process.poll() is None:
             try:
                 process.terminate()
             except ProcessLookupError:
