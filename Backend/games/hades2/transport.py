@@ -276,19 +276,20 @@ class Hades2LuaTransport:
         self._boundary_initial_stop_pending=track_initial_stop
         try:
             self.stop(deadline,phase='boundary.initial_stop')
-        except BaseException:
+        except BaseException as exc:
             # Stop() may physically pause the process just as its observation
             # deadline expires. Release that known pre-mutation stop rather than
             # leaving the game frozen when the caller skips mutation cleanup.
-            if self.process is not None:
+            if getattr(exc,'code',None)!='disconnected' and self.process is not None:
                 try:
                     self.drain()
                     if self.process.GetState()==lldb.eStateStopped:
                         self.resume(time.monotonic()+3)
-                except BaseException:
+                except BaseException as release_exc:
                     # Failure to release a debugger-owned stop ends trust in
                     # this attachment, even though no Lua call was submitted.
-                    self.tainted=True
+                    if getattr(release_exc,'code',None)!='disconnected':
+                        self.tainted=True
                     raise
             raise
         finally:

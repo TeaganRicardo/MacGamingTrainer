@@ -221,9 +221,11 @@ with patch.object(transport.process, 'GetState') as observe, patch('time.monoton
 
 # Initial boundary and detach stops keep their deadline and error rules,
 # while the diagnostic identifies which owning phase exhausted its budget.
-for phase, invoke in (
-    ('boundary.initial_stop', lambda t: t.boundary()),
-    ('detach.stop', lambda t: t.detach()),
+# boundary.initial_stop adds one post-failure GetState check so a late stop
+# that paused the target is released instead of leaving it frozen.
+for phase, invoke, expected_observations in (
+    ('boundary.initial_stop', lambda t: t.boundary(), 3),
+    ('detach.stop', lambda t: t.detach(), 2),
 ):
     transport = make_transport(fake_lldb.eStateRunning)
     transport.tainted = False
@@ -237,7 +239,7 @@ for phase, invoke in (
             assert json.loads(error.diagnostic) == {'phase': phase, 'expectedStates': [5], 'lastObservedState': 6}
         else:
             raise AssertionError('Unobserved owning stop was accepted')
-        assert observe.call_count == 2 and transport.process.stops == 1
+        assert observe.call_count == expected_observations and transport.process.stops == 1
         send_signal.assert_not_called()
     assert not transport.tainted
     assert not getattr(transport, '_boundary_initial_stop_pending', False)
@@ -420,6 +422,77 @@ except TransportError as error:
 else:
     raise AssertionError("failed release of a late stop was hidden")
 assert late_release_failure.tainted, "failure to release a stop cannot leave a trusted session"
+assert not late_release_failure._boundary_initial_stop_pending
+
+# Failed release during mailbox installation also taints and skips redundant cleanup.
+late_mailbox_release_failure = make_late_initial_stop_transport()
+late_mailbox_release_failure.resume.side_effect = TransportError("resume_failed", "cannot release stopped process")
+late_mailbox_failure_poison = []
+late_mailbox_failure_object = types.SimpleNamespace(
+    path="/tmp/fixture-mailbox", poison=lambda: late_mailbox_failure_poison.append("poisoned")
+)
+try:
+    install_command_mailbox(late_mailbox_release_failure, fake_lldb, late_mailbox_failure_object, library_fake)
+except TransportError as error:
+    assert error.code == "resume_failed", error.code
+else:
+    raise AssertionError("failed mailbox late-stop release was hidden")
+assert late_mailbox_release_failure.process.stops == 1
+assert late_mailbox_release_failure.tainted
+assert not late_mailbox_release_failure._boundary_initial_stop_pending
+assert late_mailbox_failure_poison == []
+
+# Unmocked stop/wait_state/resume releases a stop that arrives during the final sleep.
+unmocked_late = make_transport(fake_lldb.eStateRunning)
+unmocked_late.tainted = False
+unmocked_late.alive = lambda: True
+unmocked_late.target = Mock()
+unmocked_late.process.GetStopID = lambda: 1
+unmocked_late.process.Continue = lambda: (
+    setattr(unmocked_late.process, "state", fake_lldb.eStateRunning),
+    StopError(False, ""),
+)[1]
+with patch("time.monotonic", side_effect=[0, 0, 1, 2, 4, 5, 6, 7]), patch(
+    "time.sleep", side_effect=lambda _: setattr(unmocked_late.process, "state", fake_lldb.eStateStopped)
+):
+    try:
+        unmocked_late._execute_lldb("return 1")
+    except TransportError as error:
+        assert error.code == "process_timeout", error.code
+    else:
+        raise AssertionError("unmocked late initial stop timeout was hidden")
+assert unmocked_late.process.state == fake_lldb.eStateRunning
+assert unmocked_late.process.stops == 1
+assert not unmocked_late.tainted
+assert not unmocked_late._boundary_initial_stop_pending
+
+# Terminal disconnect during initial stop or late-stop release must not re-probe or taint.
+disconnect_exec = make_transport(fake_lldb.eStateRunning)
+disconnect_exec.tainted = False
+disconnect_exec.alive = lambda: True
+disconnect_exec.target = Mock()
+disconnect_states = iter((fake_lldb.eStateRunning, fake_lldb.eStateExited))
+disconnect_exec.process.GetState = lambda: next(disconnect_states)
+try:
+    disconnect_exec._execute_lldb("return 1")
+except TransportError as error:
+    assert error.code == "disconnected", error.code
+else:
+    raise AssertionError("disconnect during boundary.initial_stop was hidden")
+assert disconnect_exec.process.stops == 1
+assert not disconnect_exec.tainted
+assert not disconnect_exec._boundary_initial_stop_pending
+
+late_disconnect_release = make_late_initial_stop_transport()
+late_disconnect_release.resume.side_effect = TransportError("disconnected", "process exited during resume")
+try:
+    late_disconnect_release._execute_lldb("return 1")
+except TransportError as error:
+    assert error.code == "disconnected", error.code
+else:
+    raise AssertionError("disconnect during late-stop release was hidden")
+assert not late_disconnect_release.tainted
+assert not late_disconnect_release._boundary_initial_stop_pending
 
 # Post-initial-stop failure inside install_command_mailbox (after the target was
 # paused) still cleans up and taints/poisons if cleanup fails.
