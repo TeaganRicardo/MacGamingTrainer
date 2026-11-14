@@ -26,6 +26,8 @@ class NativeTransport:
     def __init__(self, outcome):
         self.outcome = outcome
         self.native_entries = 0
+        self.detach_calls = 0
+        self.detach_failures = 0
 
     def alive(self):
         return self.pid is not None
@@ -44,6 +46,11 @@ class NativeTransport:
                                diagnostic="rollback lldb_detach failed")
 
     def detach(self):
+        self.detach_calls += 1
+        if self.detach_failures:
+            self.detach_failures -= 1
+            self.cleanup_pending = True
+            raise AdapterError("detach_failed", "synthetic detach failure")
         if self.pid is None and not self.cleanup_pending:
             return
         if self.outcome == "restore_failed":
@@ -141,7 +148,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                         else:
                             raise AssertionError("terminal connection allowed another mutation")
                         assert native.native_entries == 1, "unknown native call was replayed"
-                        assert "transport.detach" not in sidecar.calls, "terminal worker accepted cleanup RPC"
+                        assert "transport.detach" not in sidecar.calls, "runtime mutation failure detached eagerly"
+                        # Semantic outcome-unknown still owns a live debugger.
+                        # Manual disconnect may send only the safe detach RPC.
+                        disconnected = adapter.disconnect()
+                        assert disconnected["connected"] is False
+                        assert sidecar.calls.count("transport.detach") == 1
+                        assert native.detach_calls == 1
+                        assert native.pid is None and transport.pid is None
                     elif outcome == "restore_failed":
                         assert native.pid == transport.pid == 4242
                         assert adapter.state["connected"] is True, "failed pre-detach recovery lost its attachment"
@@ -235,5 +249,70 @@ for outcome, expected_code in (
         assert transport.pid is None and not transport.cleanup_pending
         assert transport.pending_resume_pid is None
         assert sidecar.calls.count("transport.close") == 2
+
+# Semantic outcome-unknown permits only native cleanup on a trusted live sidecar.
+with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-close-") as temporary:
+    native = NativeTransport("success")
+    native.detach_failures = 1
+    sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
+    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+        _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
+    ):
+        transport = Hades2LuaTransport()
+        transport.attach(4242)
+        try:
+            transport.execute("uncertain native mutation")
+        except AdapterError as error:
+            assert error.code == "outcome_unknown"
+        else:
+            raise AssertionError("native outcome uncertainty was swallowed")
+        assert transport.tainted and transport.pid == 4242
+        try:
+            transport.close()
+        except AdapterError as error:
+            assert error.code == "detach_failed"
+        else:
+            raise AssertionError("persistent detach failure was swallowed")
+        assert sidecar.started and transport.pid == native.pid == 4242
+        assert transport.cleanup_pending and transport._worker.terminal
+        assert sidecar.calls.count("transport.close") == 1
+        # Once the detach blocker clears, close retries through the same trusted worker.
+        transport.close()
+        assert sidecar.calls.count("transport.close") == 2
+        assert not sidecar.started and transport.pid is None
+        assert not transport.cleanup_pending and not transport._worker.terminal
+
+# A dead/untrusted sidecar cannot acknowledge release; retain the PID and report it.
+with tempfile.TemporaryDirectory(prefix="mgt-lost-terminal-sidecar-") as temporary:
+    native = NativeTransport("success")
+    sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
+    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+        _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
+    ):
+        transport = Hades2LuaTransport()
+        transport.attach(4242)
+        try:
+            transport.execute("uncertain native mutation")
+        except AdapterError as error:
+            assert error.code == "outcome_unknown"
+        else:
+            raise AssertionError("native outcome uncertainty was swallowed")
+        sidecar.started = False
+        sidecar.terminal = True
+        try:
+            transport.detach()
+        except AdapterError as error:
+            assert error.code == "detach_failed"
+        else:
+            raise AssertionError("dead sidecar falsely acknowledged detach")
+        try:
+            transport.close()
+        except AdapterError as error:
+            assert error.code == "detach_failed"
+        else:
+            raise AssertionError("dead sidecar falsely acknowledged close")
+        assert transport.pid == native.pid == 4242
+        assert "transport.detach" not in sidecar.calls
+        assert "transport.close" not in sidecar.calls
 
 print("hades2_disconnect_lifecycle_ok")
