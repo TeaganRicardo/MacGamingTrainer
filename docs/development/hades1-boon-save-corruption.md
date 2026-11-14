@@ -62,13 +62,22 @@ and reads completion without running observation maintenance during the edit:
 resume. Calling native `thread()` at submission would immediately start work
 inside the debugger again, so submission only inserts a pending coroutine.
 
-Acquisition, replacement, equipment changes and expiry transformations close
+Acquisition, replacement, removal, equipment changes and expiry transformations close
 the native trait-detail menu before mutating trait records or modifiers. Saves
 during its yields therefore observe the original consistent state. Replacement
-resolves the physical group token again after menu closure, so a boon that
-natively expired during that wait is not resurrected. Each continuation retains
+and removal resolve the physical group token again after menu closure, so an
+expired selection is neither resurrected nor reused for removal. Each continuation retains
 its original run, hero, object, room and menu owner. A confirmed pending cancel
 cannot execute later; started or unconfirmed work is never replayed.
+
+Removal also closes the menu before touching the selected group: native
+`RemoveWeaponTrait` can rebuild its weapon and reacquire unrelated dependent
+Hammer traits. Their `AddTraitData` calls otherwise yield after physical
+insertion and before dictionary/effect repair. The weapon-removal regression
+checks every menu-close save snapshot and retains the dependent Hammer.
+Its fixture preserves native `SkipUIUpdate` behavior and verifies the Hammer's
+named outgoing damage modifier, so matching trait names alone cannot hide an
+effect missing during reacquisition.
 
 The resident compatibility revision changes through its Lua declaration. An
 already-running older resident must be replaced by restarting the game.

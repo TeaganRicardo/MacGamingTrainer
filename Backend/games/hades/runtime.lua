@@ -1179,6 +1179,10 @@ function runtime.remove_trait(id)
   local unit = requireHero()
   local group = selectedTrait(unit, id)
   assert(group.canRemove, "hades.error.unsupportedTrait")
+  if closeTraitMenu() then
+    group = selectedTrait(unit, id)
+    assert(group.canRemove, "hades.error.unsupportedTrait")
+  end
   beginTraitMutation()
   suspendProperties(unit)
   cancelGroup(unit, group, false)

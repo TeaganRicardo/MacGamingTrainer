@@ -62,7 +62,7 @@ function Save()
 end
 GameState = { Resources = {}, RunHistory = {} }
 CurrentRun = { Hero = { ObjectId = 42, Health = 50, MaxHealth = 50,
-  Traits = {}, TraitDictionary = {}, IncomingDamageModifiers = {}, Weapons = {} },
+  Traits = {}, TraitDictionary = {}, IncomingDamageModifiers = {}, OutgoingDamageModifiers = {}, Weapons = {} },
   Money = 25, NumRerolls = 3, CurrentRoom = { Name = 'A_Shop01' } }
 PresetEventArgs = { PatroclusBenefitChoices = {} }
 TraitData = {
@@ -71,6 +71,9 @@ TraitData = {
     AddIncomingDamageModifiers = { TrapDamageTakenMultiplier = 0.4 } },
   SiblingTrait = { Name = 'SiblingTrait', RarityLevels = { Common = {}, Heroic = {} } },
   AddedTrait = { Name = 'AddedTrait', RarityLevels = { Common = {}, Rare = {} } },
+  ZeusWeaponTrait = { Name = 'ZeusWeaponTrait', Slot = 'Melee', RarityLevels = { Common = {} } },
+  SwordDoubleDashAttackTrait = { Name = 'SwordDoubleDashAttackTrait', RequiredWeapon = 'SwordWeapon',
+    AddOutgoingDamageModifiers = { ValidWeaponMultiplier = 1.2 } },
   TemporaryTrait = { Name = 'TemporaryTrait', RemainingUses = 3, RarityLevels = { Common = {} } },
   CooldownTrait = { Name = 'CooldownTrait', CurrentCooldown = 0, RoomCooldown = 3,
     RarityLevels = { Common = {} } },
@@ -173,14 +176,19 @@ function GetProcessedTraitData(args)
 end
 -- TraitScripts.lua:1180-1221 removes the physical record, rebuilds its index,
 -- then tears down the name-owned incoming damage modifier.
-function RemoveTraitData(unit, selected)
+function RemoveTraitData(unit, selected, args)
   for index, trait in pairs(unit.Traits) do
     if trait == selected then unit.Traits[index] = nil; break end
   end
-  UpdateHeroTraitDictionary()
+  if not (args and args.SkipUIUpdate) then UpdateHeroTraitDictionary() end
   if selected.AddIncomingDamageModifiers then
     for index, data in pairs(unit.IncomingDamageModifiers) do
       if data.Name == selected.Name then table.remove(unit.IncomingDamageModifiers, index); break end
+    end
+  end
+  if selected.AddOutgoingDamageModifiers then
+    for index, data in pairs(unit.OutgoingDamageModifiers) do
+      if data.Name == selected.Name then table.remove(unit.OutgoingDamageModifiers, index); break end
     end
   end
   -- Native OnExpire.TraitData transforms through AddTraitData, without replaying
@@ -195,6 +203,17 @@ function RemoveWeaponTrait(name)
   assert(not fixture.inExpression, 'native trait removal ran inside a debugger expression')
   fixture.removals = fixture.removals + 1
   while HeroHasTrait(name) do RemoveTraitData(CurrentRun.Hero, CurrentRun.Hero.TraitDictionary[name][1]) end
+  -- TraitScripts.lua:1051-1155 rebuilds a removed attack's weapon and re-adds
+  -- its dependent Hammers through AddTraitToHero before the final index update.
+  if TraitData[name].Slot == 'Melee' then
+    local dependents = {}
+    for _, trait in pairs(CurrentRun.Hero.Traits) do
+      if trait.RequiredWeapon == 'SwordWeapon' then table.insert(dependents, trait) end
+    end
+    for _, trait in ipairs(dependents) do RemoveTraitData(CurrentRun.Hero, trait, { SkipUIUpdate = true }) end
+    for _, trait in ipairs(dependents) do AddTraitToHero({ TraitData = trait, SkipPriorityTray = true }) end
+    UpdateHeroTraitDictionary()
+  end
 end
 -- TraitScripts.lua:832-914 closes an open trait menu before adding effects.
 function AddTraitData(unit, data)
@@ -210,6 +229,11 @@ function AddTraitData(unit, data)
     local modifier = copy(trait.AddIncomingDamageModifiers)
     modifier.Name = trait.Name
     table.insert(unit.IncomingDamageModifiers, modifier)
+  end
+  if trait.AddOutgoingDamageModifiers then
+    local modifier = copy(trait.AddOutgoingDamageModifiers)
+    modifier.Name = trait.Name
+    table.insert(unit.OutgoingDamageModifiers, modifier)
   end
   fixture.additions = fixture.additions + 1
 end
@@ -502,24 +526,25 @@ for changes, presentation in (({'rarity': 'Legendary'}, 'invalidValue'),
 
 # A native duration expiry can run while menu teardown yields. The original
 # physical selection is rechecked before removing or re-adding any boon.
-transport = LuaTransport()
-try:
-    worker = HadesLLDBWorker(transport)
-    before = worker.dispatch('status', {})
-    transport.inspect('ScreenAnchors.TraitTrayScreen={CanClose=true}; FixtureControl("expireDuringClose",true)')
+for method in ('update_trait', 'remove_trait'):
+    transport = LuaTransport()
     try:
-        worker.dispatch('update_trait', update_params(before))
-    except AdapterError as error:
-        assert error.code == 'runtime_not_ready' and error.presentation == 'hades.error.staleTrait'
-    else:
-        raise AssertionError('menu teardown resurrected a natively expired physical boon')
-    state = transport.inspect()
-    assert state['fixture']['nativeExpirations'] == 1
-    assert state['fixture']['removals'] == 0 and state['fixture']['additions'] == 0
-    assert state['propertyDepth'] == 0 and not getattr(transport, 'tainted', False)
-    assert all(row['name'] != 'TrapDamageTrait' for row in worker.dispatch('status', {})['traits'])
-finally:
-    transport.close()
+        worker = HadesLLDBWorker(transport)
+        before = worker.dispatch('status', {})
+        transport.inspect('ScreenAnchors.TraitTrayScreen={CanClose=true}; FixtureControl("expireDuringClose",true)')
+        try:
+            worker.dispatch(method, update_params(before))
+        except AdapterError as error:
+            assert error.code == 'runtime_not_ready' and error.presentation == 'hades.error.staleTrait'
+        else:
+            raise AssertionError('menu teardown reused a natively expired physical boon')
+        state = transport.inspect()
+        assert state['fixture']['nativeExpirations'] == 1
+        assert state['fixture']['removals'] == 0 and state['fixture']['additions'] == 0
+        assert state['propertyDepth'] == 0 and not getattr(transport, 'tainted', False)
+        assert all(row['name'] != 'TrapDamageTrait' for row in worker.dispatch('status', {})['traits'])
+    finally:
+        transport.close()
 
 # Native menu teardown yields with a hook depth held. A replacement run owner
 # must not receive the suspended operation's post-yield UI/modifier writes.
@@ -599,7 +624,7 @@ try:
                                             'target': state['target']})
     assert all(row['name'] != 'AddedTrait' for row in state['traits'])
     observation = transport.inspect('Save()')
-    assert observation['menuOpen'] and observation['fixture']['closes'] == closes
+    assert not observation['menuOpen'] and observation['fixture']['closes'] == closes + 1
     saved = reload_snapshot(observation['saved'])['CurrentRun']['Hero']
     assert 'AddedTrait' not in saved['TraitDictionary']
     assert {row['Name'] for row in saved['Traits'].values()} == {'TrapDamageTrait', 'SiblingTrait'}
@@ -655,3 +680,40 @@ finally:
     transport.close()
 
 print('hades_boon_add_remove_uses_expire_cooldown_and_chaos_saved_fields_ok')
+
+# Native weapon removal can reacquire an unrelated Hammer. Menu-close yields
+# must precede both selected removal and that dependent trait rebuild.
+transport = LuaTransport()
+try:
+    worker = HadesLLDBWorker(transport)
+    state = worker.dispatch('status', {})
+    transport.inspect('CurrentRun.Hero.Weapons.SwordWeapon=true')
+    for name in ('ZeusWeaponTrait', 'SwordDoubleDashAttackTrait'):
+        state = worker.dispatch('add_trait', {'trait': name, 'rarity': 'Common', 'level': 1,
+                                             'target': state['target']})
+    transport.inspect('ScreenAnchors.TraitTrayScreen={CanClose=true}; FixtureControl("saveEachTick",true)')
+    state = worker.dispatch('remove_trait', {'instanceId': boon(state, 'ZeusWeaponTrait')['instanceId'],
+                                            'target': state['target']})
+    observation = transport.inspect()
+    snapshots = list(observation['fixture']['saveSnapshots'].values())
+    assert any(row['menuOpen'] and row['state'] == 'running' for row in snapshots)
+    for row in snapshots:
+        hero = reload_snapshot(row['snapshot'])['CurrentRun']['Hero']
+        names = {trait['Name'] for trait in hero['Traits'].values()}
+        assert names == set(hero['TraitDictionary']), 'weapon rebuild saved a physical trait without its index'
+        expected = {'TrapDamageTrait', 'SiblingTrait', 'SwordDoubleDashAttackTrait'}
+        if row['menuOpen']:
+            expected.add('ZeusWeaponTrait')
+        assert names == expected, 'selected weapon removal started before native menu teardown completed'
+        assert hero['TraitDictionary']['SwordDoubleDashAttackTrait'][1]['RequiredWeapon'] == 'SwordWeapon'
+        modifiers = list(hero['OutgoingDamageModifiers'].values())
+        assert len(modifiers) == 1 and modifiers[0]['Name'] == 'SwordDoubleDashAttackTrait'
+        assert modifiers[0]['ValidWeaponMultiplier'] == 1.2, 'weapon rebuild saved the Hammer before restoring its effect'
+    assert all(row['name'] != 'ZeusWeaponTrait' for row in state['traits'])
+    assert boon(state, 'SwordDoubleDashAttackTrait')['rarity'] == 'Common'
+    assert not observation['menuOpen'] and observation['receipt']['state'] == 'complete'
+    verify_snapshot(transport.inspect('Save()')['saved'], 'Common')
+finally:
+    transport.close()
+
+print('hades_boon_weapon_removal_rebuild_save_consistency_ok')
