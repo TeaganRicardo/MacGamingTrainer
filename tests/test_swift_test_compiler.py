@@ -282,9 +282,9 @@ def test_pruning_honors_active_link_lease_and_recovers_eviction() -> None:
     with tempfile.TemporaryDirectory(prefix="mgt-stc-lease-") as tmp:
         root = Path(tmp)
         generated = root / "ActiveGame.generated.swift"
-        generated.write_text("internal let answer = 42\\n", encoding="utf-8")
+        generated.write_text("internal let answer = 42\n", encoding="utf-8")
         harness = root / "Harness.swift"
-        harness.write_text("@main struct Main { static func main() { print(answer) } }\\n", encoding="utf-8")
+        harness.write_text("@main struct Main { static func main() { print(answer) } }\n", encoding="utf-8")
         cache = root / "cache"
         output = root / "binary"
         builds = []
