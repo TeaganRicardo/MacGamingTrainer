@@ -5,10 +5,17 @@ from pathlib import Path
 from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
 from .recovery import HadesRecoveryJournal, process_identity
-from .schema import MUTATING_COMMANDS
+from .schema import DEFERRED_TRAIT_COMMANDS, MUTATING_COMMANDS
 
 
 class HadesRuntimeClient:
+    @staticmethod
+    def _reply_timeout(method):
+        if method == 'connect':
+            return 90
+        if method in DEFERRED_TRAIT_COMMANDS:
+            return 50
+        return 22
     def __init__(self, sidecar=None, *, recovery=None, identity=process_identity):
         self.sidecar = sidecar or self._new_sidecar()
         self.connected = False
@@ -27,12 +34,12 @@ class HadesRuntimeClient:
         environment['PYTHONDONTWRITEBYTECODE'] = '1'
         return JsonLineSidecarClient(
             ['/usr/bin/xcrun', 'python3', '-u', '-m', 'games.hades.time_warp_worker'],
-            cwd=backend, env=environment, reply_timeout_seconds=120,
+            cwd=backend, env=environment, reply_timeout_seconds=90,
             child_owns_cleanup=True,
         )
 
     def _call(self, method, params=None):
-        self.sidecar.reply_timeout_seconds = 120 if method == 'connect' else 12
+        self.sidecar.reply_timeout_seconds = self._reply_timeout(method)
         # Disconnect resets native time before detaching, so a lost reply
         # must retain recovery evidence just like another native mutation.
         crosses_runtime = method != 'time_warp.current_speed'
@@ -63,8 +70,11 @@ class HadesRuntimeClient:
             if error['code'] in ('outcome_unknown', 'restart_required'):
                 self.uncertain_pid = self.pid
                 self.connected = False
-            elif crosses_runtime:
-                self.recovery.complete()
+            else:
+                if error['code'] in ('not_connected', 'debugger_lost', 'detach_failed'):
+                    self.connected = False
+                if crosses_runtime:
+                    self.recovery.complete()
             raise AdapterError(error['code'], error['presentation'],
                                diagnostic=error.get('diagnostic'), arguments=error.get('arguments', []))
         result = response.get('result')

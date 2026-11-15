@@ -721,11 +721,23 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
+    // Exceed the worst-case sequential sidecar RPC sums in HadesAdapter so
+    // backend/sidecar recovery owns timeouts rather than premature Host kills.
+    private static func requestTimeout(for command: String) -> TimeInterval {
+        switch command {
+        case "connect": return 190
+        case "load_profile": return 120
+        case "add_trait", "update_trait", "remove_trait", "set_trait_uses", "expire_trait", "refresh_trait", "add_chaos_pair": return 60
+        case "set_feature", "disable_all", "lock_vital", "lock_resource", "lock_rerolls", "set_value": return 55
+        default: return 30
+        }
+    }
+
     private func send(_ command: String, params: [String: Any] = [:], operation: String,
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
         let offlineIntent = !connected && ["set_feature", "set_boon_rarity", "load_profile", "disable_all"].contains(command)
         session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
-                     timeout: command == "connect" ? 130 : 20,
+                     timeout: Self.requestTimeout(for: command),
                      requiresTrustedTarget: !offlineIntent &&
                         !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
                      completion: { [weak self] ok in

@@ -155,8 +155,10 @@ class HadesAdapter(GameAdapter):
                 state = self.runtime.command(
                     'set_boon_rarity', {'target': self.features['boonRarityTarget']}
                 )
-            self._reconcile_game_speed()
+            speed_error = self._reconcile_game_speed()
             if not self.connected:
+                if speed_error is not None:
+                    raise speed_error
                 state = {**self._offline(), 'features': self.features}
             return self._observe(state)
         if command == 'status':

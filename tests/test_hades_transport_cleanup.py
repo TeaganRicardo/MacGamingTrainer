@@ -85,6 +85,7 @@ def fixture():
 # reissue that stop or claim the Lua mutation had an unknown outcome.
 for stop_code in ('stop_failed', 'stop_timeout'):
     transport, breakpoint, events, clock, running = fixture()
+    running[0] = True
     def refuse_initial_stop(deadline):
         events.append('stop-rejected')
         raise AdapterError(stop_code, 'hades.error.stopTimeout', diagnostic='LLDB stop rejected')
