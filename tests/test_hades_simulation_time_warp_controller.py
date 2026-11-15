@@ -156,6 +156,36 @@ assert t_nofixed.memory[t_nofixed.APP_PTR + APP_USE_FIXED_STEP_OFFSET] == b'\x00
 assert owner_nofixed.reset() == 1.0
 assert t_nofixed.memory[t_nofixed.APP_PTR + APP_USE_FIXED_STEP_OFFSET] == b'\x00'
 
+# A matching TimeScale byte is insufficient if the game's auto-reset or fixed-
+# step mode has drifted. 2x with AUTO_RESET=0 is restored to 1x next frame;
+# 0x with FixedStep=1 can starve input and the debugger boundary.
+for speed, wrong_field, wrong_value in (
+    (2.0, 'auto', b'\x00'),
+    (0.0, 'fixed', b'\x01'),
+    (10.0, 'fixed', b'\x01'),
+    (1.0, 'auto', b'\x01'),
+):
+    drift_transport = Transport()
+    drift_owner = HadesSimulationTimeWarp(drift_transport)
+    assert drift_owner.set_speed(speed) == speed
+    address = (
+        drift_transport.addresses[AUTO_RESET_SYMBOL]
+        if wrong_field == 'auto'
+        else drift_transport.APP_PTR + APP_USE_FIXED_STEP_OFFSET
+    )
+    drift_transport.memory[address] = bytearray(wrong_value)
+    write_count = len(drift_transport.writes)
+    try:
+        drift_owner.current_speed()
+    except AdapterError as error:
+        assert error.code == 'time_warp_verify_failed' and not drift_transport.tainted
+        assert 'autoReset=' in error.arguments[0] and 'fixedStep=' in error.arguments[1]
+    else:
+        raise AssertionError(f'inconsistent engine clock flags passed readback at {speed}x')
+    assert len(drift_transport.writes) == write_count, 'readback modified target state'
+    assert drift_transport.events[-1] == 'resume', 'readback left target paused'
+    assert drift_owner.reset() == 1.0, 'explicit reset must recover valid drift'
+
 # Validation failures must never stop or write to target memory.
 t.writes.clear()
 t.events.clear()
