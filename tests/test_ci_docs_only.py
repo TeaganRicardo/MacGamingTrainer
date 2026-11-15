@@ -458,4 +458,16 @@ with tempfile.TemporaryDirectory() as tmp:
     assert paths == ["docs/feature.md"], paths
     assert module.is_docs_only(paths)
 
+# Darwin target probe and LLDB/transport Backend modules run macOS checks, while
+# the pure-Python wire protocol stays on Linux fast path.
+for darwin_backend in (
+    "Backend/core/target_probe.py",
+    "Backend/core/process_time_warp.py",
+    "Backend/debugger/lldb_time_warp.py",
+    "Backend/games/hades2/transport.py",
+):
+    scope = module.classify_scope([darwin_backend])
+    assert scope["needs_macos"] is True, (darwin_backend, scope)
+assert module.classify_scope(["Backend/core/protocol.py"])["needs_macos"] is False
+
 print("ci_docs_only_ok")

@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
-from release_tag import published_builds, select_release_tag
+from release_tag import published_builds, release_identity_changed, select_release_tag
 
 
 def rejects(version, build, history, message):
@@ -65,10 +65,97 @@ with tempfile.TemporaryDirectory(prefix="mgt-release-tags-") as tmp:
     else:
         raise AssertionError("malformed release tag was accepted")
 
+    # Root commit with no readable Info.plist parent must fail closed (need release).
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.3.1",
+        "CFBundleVersion": "9",
+        "CFBundleName": "Initial",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "non-version metadata prep")
+    v9_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, "0" * 40, v9_sha) is True
+
+    # Non-version Info.plist edits on main must skip release precheck cleanly.
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.3.1",
+        "CFBundleVersion": "9",
+        "CFBundleName": "MetadataOnly",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "metadata only")
+    meta_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, v9_sha, meta_sha) is False
+    assert release_identity_changed(repo, "0" * 40, meta_sha) is False
+
+    # Version or build bumps trigger release validation.
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.3.1",
+        "CFBundleVersion": "10",
+        "CFBundleName": "MetadataOnly",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "bump build")
+    b10_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, meta_sha, b10_sha) is True
+    unchanged_cli = subprocess.run(
+        [sys.executable, str(ROOT / "Tools/release_tag.py"), "--repo-root", str(repo), "--push-precheck", v9_sha, meta_sha],
+        check=True, capture_output=True, text=True,
+    )
+    assert unchanged_cli.stdout.strip() == "false", unchanged_cli.stdout
+    changed_cli = subprocess.run(
+        [sys.executable, str(ROOT / "Tools/release_tag.py"), "--repo-root", str(repo), "--push-precheck", meta_sha, b10_sha],
+        check=True, capture_output=True, text=True,
+    )
+    assert changed_cli.stdout.strip() == "true", changed_cli.stdout
+
+    # Version-only bumps and backwards build reverts must trigger release validation.
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "10",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "bump marketing version")
+    v40_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, b10_sha, v40_sha) is True
+
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "9",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "revert build")
+    revert_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, v40_sha, revert_sha) is True
+
+    # Non-dict or malformed plists fail closed: base corruption still requests release,
+    # while corrupt HEAD rejects precheck with exit code 2.
+    (repo / "Info.plist").write_bytes(plistlib.dumps(["not", "a", "dict"]))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "non-dict plist")
+    array_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    bad_head = subprocess.run(
+        [sys.executable, str(ROOT / "Tools/release_tag.py"), "--repo-root", str(repo), "--push-precheck", revert_sha, array_sha],
+        capture_output=True, text=True,
+    )
+    assert bad_head.returncode == 2, (bad_head.returncode, bad_head.stderr)
+
+    (repo / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": "0.4.0",
+        "CFBundleVersion": "11",
+    }))
+    git(repo, "add", "Info.plist")
+    git(repo, "commit", "-m", "recover valid plist")
+    recovered_sha = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    assert release_identity_changed(repo, array_sha, recovered_sha) is True
+
 workflow = (ROOT / ".github/workflows/direct-release.yml").read_text(encoding="utf-8")
 versioning = (ROOT / "VERSIONING.md").read_text(encoding="utf-8")
 for required in (
+    'python3 Tools/release_tag.py --push-precheck',
     'python3 Tools/release_tag.py "$version" "$build"',
+    'git fetch --tags --force',
+    'python3 Tools/release_tag.py "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}"',
     '--target "$GITHUB_SHA"',
     '--notes-file "$RUNNER_TEMP/release-notes.md"',
     'Verify retained artifact provenance and checksum',

@@ -234,4 +234,41 @@ assert len(waits) == 1, waits
 assert waits[0] >= producer_minutes + 30, (waits[0], producer_minutes)
 assert dispatch_minutes(release_job) >= waits[0] + 10, (dispatch_minutes(release_job), waits[0])
 
+# Direct release serializes concurrent main pushes and gates every post-precheck
+# step on release_needed so non-version Info.plist edits exit cleanly without
+# dispatching convergence lanes.
+release_workflow = workflows[RELEASE_WORKFLOW]
+# Release triggers must queue rather than replacing an earlier pending version bump
+# with a later metadata-only push whose precheck correctly skips publication.
+assert release_workflow.get('concurrency') == {
+    'group': 'direct-release',
+    'cancel-in-progress': 'false',
+    'queue': 'max',
+}, release_workflow.get('concurrency')
+release_steps = steps(release_job)
+scope_index = next(i for i, step in enumerate(release_steps) if step.get('id') == 'release-scope')
+for step in release_steps[scope_index + 1:]:
+    assert "steps.release-scope.outputs.release_needed == 'true'" in conjuncts(step.get('if')), step
+
+# Lua 5.2.4 setup caches the compiled interpreter and keeps multiple SHA-256
+# verified download mirrors so upstream ftp downtime never blocks macOS CI.
+build2_steps = steps(workflows['build2-macos.yml']['jobs']['build'])
+assert any(
+    str(step.get('uses', '')).startswith('actions/cache@')
+    and 'lua-5.2.4' in str((step.get('with') or {}).get('path'))
+    for step in build2_steps
+), 'build2-macos.yml must cache Lua 5.2.4'
+lua_build_run = next(
+    str(step.get('run') or '')
+    for step in build2_steps
+    if step.get('name') == 'Build Lua 5.2 runtime test dependency'
+)
+for marker in (
+    'https://www.lua.org/ftp/lua-5.2.4.tar.gz',
+    'https://deb.debian.org/debian/pool/main/l/lua5.2/lua5.2_5.2.4.orig.tar.gz',
+    'https://archive.ubuntu.com/ubuntu/pool/universe/l/lua5.2/lua5.2_5.2.4.orig.tar.gz',
+    'shasum -a 256 -c -',
+):
+    assert marker in lua_build_run, marker
+
 print('ci_workflow_contract_ok')

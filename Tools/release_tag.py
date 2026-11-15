@@ -72,15 +72,63 @@ def select_release_tag(version: str, build: str, published: Mapping[str, int]) -
     return candidate
 
 
+def _plist_release_identity(plist_bytes: bytes) -> tuple[str, str]:
+    metadata = plistlib.loads(plist_bytes)
+    if not isinstance(metadata, dict):
+        raise ValueError("Info.plist root must be a plist dictionary")
+    version = metadata.get("CFBundleShortVersionString")
+    build = metadata.get("CFBundleVersion")
+    if not isinstance(version, str) or not isinstance(build, str):
+        raise ValueError("Info.plist release identity must contain string CFBundleShortVersionString and CFBundleVersion")
+    return version, build
+
+
+def release_identity_changed(repo_root: Path, base_ref: str, head_ref: str = "HEAD") -> bool:
+    """Return True unless both refs parse cleanly and carry identical version/build."""
+    head_bytes = subprocess.run(
+        ["git", "show", f"{head_ref}:Info.plist"], cwd=repo_root,
+        check=True, capture_output=True,
+    ).stdout
+    head_identity = _plist_release_identity(head_bytes)
+
+    effective_base = base_ref if base_ref and not set(base_ref) == {"0"} else f"{head_ref}^"
+    prior = subprocess.run(
+        ["git", "show", f"{effective_base}:Info.plist"], cwd=repo_root,
+        capture_output=True,
+    )
+    if prior.returncode != 0:
+        return True  # Fail closed when base history is unavailable (e.g. root commit).
+    try:
+        base_identity = _plist_release_identity(prior.stdout)
+    except (ValueError, plistlib.InvalidFileException):
+        return True
+    return base_identity != head_identity
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("version")
-    parser.add_argument("build")
+    parser.add_argument("version", nargs="?")
+    parser.add_argument("build", nargs="?")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--push-precheck", nargs=2, metavar=("BASE", "HEAD"))
     args = parser.parse_args()
     try:
+        if args.push_precheck:
+            if args.version is not None or args.build is not None:
+                parser.error("--push-precheck does not accept positional version/build arguments")
+            base_ref, head_ref = args.push_precheck
+            changed = release_identity_changed(args.repo_root, base_ref, head_ref)
+            if not changed:
+                print(
+                    "Info.plist CFBundleShortVersionString and CFBundleVersion are unchanged; skipping release.",
+                    file=sys.stderr,
+                )
+            print("true" if changed else "false")
+            return 0
+        if not args.version or not args.build:
+            parser.error("version and build are required unless --push-precheck is specified")
         print(select_release_tag(args.version, args.build, published_builds(args.repo_root)))
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, plistlib.InvalidFileException, subprocess.CalledProcessError) as error:
         print(f"Release identity rejected: {error}", file=sys.stderr)
         return 2
     return 0

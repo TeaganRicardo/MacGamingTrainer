@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 import core.protocol as protocol_module
+import core.target_probe as target_probe_module
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
@@ -228,11 +229,11 @@ assert probe_backup['ok'] is True
 probe_snapshot_id = probe_backup['result']['operation']['id']
 (saves / 'Profile1.sav').write_bytes(b'probe-current')
 probe_router = JsonlRequestRouter(adapter, save_data_root=base/'probe-data')
-real_run = protocol_module.subprocess.run
+real_run = target_probe_module.subprocess.run
 class FailedProcessQuery:
     returncode = 2
 try:
-    protocol_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
+    target_probe_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
     logging.disable(logging.CRITICAL)
     probe_restore = probe_router.handle({
         'id':'probe-restore',
@@ -241,9 +242,10 @@ try:
     })
 finally:
     logging.disable(logging.NOTSET)
-    protocol_module.subprocess.run = real_run
+    target_probe_module.subprocess.run = real_run
 assert probe_restore['ok'] is False
 assert probe_restore['error']['code'] == 'save_busy'
+assert protocol_module._target_process_running is target_probe_module.target_process_running
 assert (saves / 'Profile1.sav').read_bytes() == b'probe-current'
 
 identity_adapter = create_adapter('hades')
@@ -255,7 +257,7 @@ identity_adapter.context = replace(identity_adapter.context, save_management=rep
     declared, roots=(replace(declared.roots[0], path=str(identity_saves)),)))
 identity_router = JsonlRequestRouter(identity_adapter, save_data_root=base / 'identity-data')
 process_rows = SimpleNamespace(returncode=0, stdout='/tmp/AnotherGame/Game.macOS\n')
-with patch.object(protocol_module.subprocess, 'run', return_value=process_rows):
+with patch.object(target_probe_module.subprocess, 'run', return_value=process_rows):
     snapshot = identity_router.save_service.backup()
     assert snapshot['hot'] is False, 'An unrelated generic-name process was treated as the target game'
     identity_file.write_bytes(b'identity-changed')
@@ -295,23 +297,23 @@ def macos_process_table(*executables):
 long_name = 'Example Long Game Name'
 assert len(long_name.encode()) > MACOS_MAXCOMLEN
 long_executable = f'/Applications/{long_name}.app/Contents/MacOS/{long_name}'
-with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', long_executable)):
+with patch.object(target_probe_module.subprocess, 'run', macos_process_table('/sbin/launchd', long_executable)):
     assert protocol_module._target_process_running(long_name) is True, \
         'A running target whose name exceeds MAXCOMLEN was reported stopped'
-with patch.object(protocol_module.subprocess, 'run', macos_process_table(
+with patch.object(target_probe_module.subprocess, 'run', macos_process_table(
         '/Applications/Hades II.app/Contents/MacOS/Hades II', '/opt/Hades/launcher', '/usr/libexec/Hadesd')):
     assert protocol_module._target_process_running('Hades') is False, \
         'A name that is only a prefix, substring or directory of an executable matched the target'
 hades_suffix = 'Hades/Game.macOS.app/Contents/MacOS/Game.macOS'
 steam_hades = '/Users/fixture/Library/Application Support/Steam/steamapps/common/' + hades_suffix
 steam_hades2 = '/Users/fixture/Library/Application Support/Steam/steamapps/common/Hades II/Hades II.app/Contents/MacOS/Hades II'
-with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades)):
+with patch.object(target_probe_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades)):
     assert protocol_module._target_process_running('Game.macOS', hades_suffix) is True, \
         'A running Steam install was reported stopped (path suffix)'
-with patch.object(protocol_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades2)):
+with patch.object(target_probe_module.subprocess, 'run', macos_process_table('/sbin/launchd', steam_hades2)):
     assert protocol_module._target_process_running('Hades II') is True, \
         'A running Steam install whose path contains spaces was reported stopped (executable name)'
-with patch.object(protocol_module.subprocess, 'run', macos_process_table(
+with patch.object(target_probe_module.subprocess, 'run', macos_process_table(
         '/tmp/AnotherGame/Game.macOS', '/tmp/NotHades/Game.macOS.app/Contents/MacOS/Game.macOS')):
     assert protocol_module._target_process_running('Game.macOS', hades_suffix) is False, \
         'An executable outside the declared path suffix matched the target'
@@ -319,8 +321,8 @@ for executable_path_suffix in ('', hades_suffix):
     for failure in (
             {'return_value': SimpleNamespace(returncode=1, stdout='')},
             {'side_effect': OSError('ps unavailable')},
-            {'side_effect': protocol_module.subprocess.TimeoutExpired(['/bin/ps'], 2)}):
-        with patch.object(protocol_module.subprocess, 'run', **failure):
+            {'side_effect': target_probe_module.subprocess.TimeoutExpired(['/bin/ps'], 2)}):
+        with patch.object(target_probe_module.subprocess, 'run', **failure):
             try:
                 protocol_module._target_process_running(long_name, executable_path_suffix)
             except protocol_module.SaveBusyError:
