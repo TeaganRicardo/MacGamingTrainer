@@ -238,9 +238,12 @@ assert dispatch_minutes(release_job) >= waits[0] + 10, (dispatch_minutes(release
 # step on release_needed so non-version Info.plist edits exit cleanly without
 # dispatching convergence lanes.
 release_workflow = workflows[RELEASE_WORKFLOW]
+# Release triggers must queue rather than replacing an earlier pending version bump
+# with a later metadata-only push whose precheck correctly skips publication.
 assert release_workflow.get('concurrency') == {
     'group': 'direct-release',
     'cancel-in-progress': 'false',
+    'queue': 'max',
 }, release_workflow.get('concurrency')
 release_steps = steps(release_job)
 scope_index = next(i for i, step in enumerate(release_steps) if step.get('id') == 'release-scope')
