@@ -1,6 +1,6 @@
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 17 then error("hades.error.restartRequired") end
+  if existing.revision ~= 18 then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +22,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 17,
+  version = 1, revision = 18,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),
@@ -63,7 +63,7 @@ local function releaseHealthLock(unit)
   runtime.healthLock = nil
   if not unit then return end
   assert(type(ValidateMaxHealth) == "function" and type(UpdateHealthUI) == "function",
-    "hades.error.unsupportedRuntime")
+    "hades.error.outcomeUnknown")
   ValidateMaxHealth(true)
   unit.Health = math.max(1, math.min(unit.Health, unit.MaxHealth))
   UpdateHealthUI()
@@ -170,12 +170,12 @@ local function refillAmmo(unit)
 end
 local suspendProperties
 local function nativeChange(unit, change)
-  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.unsupportedRuntime")
+  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.outcomeUnknown")
   ApplyUnitPropertyChanges(unit, { change }, false)
 end
 local function attackChanges(factor)
   assert(type(TraitData) == "table" and type(TraitData.HermesWeaponTrait) == "table",
-    "hades.error.unsupportedRuntime")
+    "hades.error.outcomeUnknown")
   local changes = {}
   for _, source in ipairs(TraitData.HermesWeaponTrait.PropertyChanges or {}) do
     if source.ChangeType == "Multiply" then
@@ -189,7 +189,7 @@ local function attackChanges(factor)
 end
 local function applyAttack(unit, factor)
   if factor == 1 then return end
-  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.unsupportedRuntime")
+  assert(type(ApplyUnitPropertyChanges) == "function", "hades.error.outcomeUnknown")
   ApplyUnitPropertyChanges(unit, attackChanges(factor), false)
 end
 local function fillGauge(unit)
@@ -210,10 +210,10 @@ local function mount(unit, rebuilt)
   local desired = runtime.features
   if desired.invincibility then
     assert(type(unit.InvulnerableFlags) == "table" and type(CurrentRun.InvulnerableFlags) == "table"
-      and type(SetPlayerInvulnerable) == "function", "hades.error.unsupportedRuntime")
+      and type(SetPlayerInvulnerable) == "function", "hades.error.outcomeUnknown")
     if not unit.InvulnerableFlags[trainerFlag] then SetPlayerInvulnerable(trainerFlag) end
   elseif type(unit.InvulnerableFlags) == "table" and unit.InvulnerableFlags[trainerFlag] then
-    assert(type(SetPlayerVulnerable) == "function", "hades.error.unsupportedRuntime")
+    assert(type(SetPlayerVulnerable) == "function", "hades.error.outcomeUnknown")
     SetPlayerVulnerable(trainerFlag)
   end
   mountIncomingDamage(unit)
@@ -229,7 +229,7 @@ local function mount(unit, rebuilt)
   elseif damage then
     damage.GlobalMultiplier = desired.damageMultiplier
   else
-    assert(type(AddOutgoingDamageModifier) == "function", "hades.error.unsupportedRuntime")
+    assert(type(AddOutgoingDamageModifier) == "function", "hades.error.outcomeUnknown")
     AddOutgoingDamageModifier(unit, { Name = trainerFlag, GlobalMultiplier = desired.damageMultiplier, Multiplicative = true })
   end
   mounted.damageMultiplier = damageModifier(unit, "OutgoingDamageModifiers")
@@ -246,7 +246,7 @@ local function mount(unit, rebuilt)
     mounted.attack = desired.attackSpeedMultiplier
   end
   if mounted.dash ~= desired.dashBonus then
-    assert(type(WeaponSets) == "table" and type(WeaponSets.HeroRushWeapons) == "table", "hades.error.unsupportedRuntime")
+    assert(type(WeaponSets) == "table" and type(WeaponSets.HeroRushWeapons) == "table", "hades.error.outcomeUnknown")
     nativeChange(unit, { WeaponNames = WeaponSets.HeroRushWeapons, WeaponProperty = "ClipSize",
       ChangeValue = desired.dashBonus - mounted.dash, ChangeType = "Add" })
     mounted.dash = desired.dashBonus
@@ -1732,6 +1732,29 @@ world = (function()
     end
     return free
   end
+  local function challengeSwitchAvailable(room)
+    if type(EncounterSets) == "table" and type(EncounterSets.ChallengeOptions) == "table" then
+      if type(ObstacleData) ~= "table" then return false end
+      local eligibleOption = false
+      for _, name in pairs(EncounterSets.ChallengeOptions) do
+        local data = ObstacleData[name]
+        if type(data) == "table" and (data.Requirements == nil
+            or (type(IsGameStateEligible) == "function"
+              and IsGameStateEligible(CurrentRun, data, data.Requirements))) then
+          eligibleOption = true
+          break
+        end
+      end
+      if not eligibleOption then return false end
+    end
+    if type(ChooseChallengeEncounter) == "function" then
+      if type(room.ChallengeEncounterName) ~= "string" or type(EncounterData) ~= "table"
+          or type(EncounterData[room.ChallengeEncounterName]) ~= "table" then
+        return false
+      end
+    end
+    return true
+  end
   local function canGenerate(room, kind)
     local owner = objectOwners[kind]
     if room[owner.field] then return false end
@@ -1739,6 +1762,9 @@ world = (function()
     if count == 0 then return false end
     local callback = _G[owner.query]
     if kind == "trove" then
+      local reserved = ((not room.WellShop and room.ForceWellShop) and 1 or 0)
+        + ((not room.SellTraitShop and room.ForceSellTraitShop) and 1 or 0)
+      if count <= reserved or not challengeSwitchAvailable(room) then return false end
       return chanceEligible(room, owner.chance, function(run) return callback(run) end)
     end
     return chanceEligible(room, owner.chance, callback)
@@ -1957,7 +1983,7 @@ world = (function()
     local candidates = routes and routes[edit.route]
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
     local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
-    assert(type(room) == "table", "hades.error.unsupportedRuntime")
+    assert(type(room) == "table", "hades.error.outcomeUnknown")
     edits[door] = nil
     AssignRoomToExitDoor(door, room)
     return room
@@ -2294,9 +2320,9 @@ world = (function()
     local ok, result = pcall(HandleSecretSpawns, CurrentRun)
     spawnContext = nil
     room[owner.chance] = previous
-    if not ok then error(result, 0) end
+    if not ok then error("hades.error.outcomeUnknown: " .. tostring(result), 0) end
     local object = room[owner.field]
-    assert(object, "hades.error.unsupportedRuntime")
+    assert(object, "hades.error.outcomeUnknown")
     if CheckRoomExitsReady(room) then
       object.ReadyToUse = true
       object.UseText = object.ChallengeAvailableUseText or object.AvailableUseText
@@ -2377,7 +2403,7 @@ function runtime.json(value)
   if kind == "boolean" then return tostring(value) end
   if kind == "number" then return finite(value) and string.format("%.17g", value) or "null" end
   if kind == "nil" then return "null" end
-  assert(kind == "table", "hades.error.unsupportedRuntime")
+  assert(kind == "table", "hades.error.outcomeUnknown")
   local values = {}
   if getmetatable(value) == arrayType then
     for _, item in ipairs(value) do values[#values + 1] = runtime.json(item) end
