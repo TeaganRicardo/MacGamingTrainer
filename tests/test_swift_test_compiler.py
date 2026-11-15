@@ -277,6 +277,90 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
         assert shimmed[0].read_text(encoding="utf-8").startswith(f"@testable import {stc.MODULE_NAME}\n")
 
 
+def test_pruning_honors_active_link_lease_and_recovers_eviction() -> None:
+    """Parallel cache builds cannot unlink a module used by an active linker."""
+    with tempfile.TemporaryDirectory(prefix="mgt-stc-lease-") as tmp:
+        root = Path(tmp)
+        generated = root / "ActiveGame.generated.swift"
+        generated.write_text("internal let answer = 42\\n", encoding="utf-8")
+        harness = root / "Harness.swift"
+        harness.write_text("@main struct Main { static func main() { print(answer) } }\\n", encoding="utf-8")
+        cache = root / "cache"
+        output = root / "binary"
+        builds = []
+        trigger_prune = False
+        entry_dir = None
+
+        def fake_run(cmd: list[str], **kwargs):
+            if "-emit-module-path" in cmd:
+                builds.append("support")
+                Path(cmd[cmd.index("-emit-module-path") + 1]).write_bytes(b"swiftmodule")
+                Path(cmd[cmd.index("-o") + 1]).write_bytes(b"static library")
+            else:
+                if trigger_prune:
+                    # The current manifest is the oldest candidate. Only a
+                    # held link lease should prevent pruning its directory.
+                    for index in range(stc.MAX_CACHE_ENTRIES + 3):
+                        extra = cache / f"extra-{index:02d}"
+                        extra.mkdir(exist_ok=True)
+                        (extra / "manifest.json").write_text("{}", encoding="utf-8")
+                    assert entry_dir is not None
+                    os.utime(entry_dir / "manifest.json", (1, 1))
+                    stc._prune_cache(cache, keep_name="another-key")
+                    assert entry_dir.exists(), "pruner evicted an in-use Swift module"
+                Path(cmd[cmd.index("-o") + 1]).write_bytes(b"linked binary")
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"), mock.patch.object(
+            stc, "probe_toolchain", return_value=_make_toolchain()
+        ), mock.patch.object(stc.subprocess, "run", side_effect=fake_run):
+            stc.compile_swift_test(
+                support_sources=[generated], harness_sources=[harness],
+                output=output, cache_dir=cache, environ={},
+            )
+            entries = [p for p in cache.iterdir() if p.is_dir() and not p.name.startswith(".")]
+            assert len(entries) == 1
+            entry_dir = entries[0]
+            trigger_prune = True
+            stc.compile_swift_test(
+                support_sources=[generated], harness_sources=[harness],
+                output=output, cache_dir=cache, environ={},
+            )
+            assert builds == ["support"], builds
+            assert output.read_bytes() == b"linked binary"
+
+        # With no live linker lease, the previously old entry can be evicted.
+        stc._prune_cache(cache, keep_name="another-key")
+        assert entry_dir is not None and not entry_dir.exists()
+
+        # An eviction between build completion and acquiring a link lease is
+        # detected and rebuilt, never passed through to the linker.
+        eviction_cache = root / "eviction"
+        builds.clear()
+        original_ensure = stc._ensure_support_module
+        first = [True]
+
+        def evict_once(**kwargs):
+            result = original_ensure(**kwargs)
+            if first[0]:
+                first[0] = False
+                shutil.rmtree(result)
+            return result
+
+        with mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"), mock.patch.object(
+            stc, "probe_toolchain", return_value=_make_toolchain()
+        ), mock.patch.object(stc.subprocess, "run", side_effect=fake_run), mock.patch.object(
+            stc, "_ensure_support_module", side_effect=evict_once
+        ):
+            trigger_prune = False
+            stc.compile_swift_test(
+                support_sources=[generated], harness_sources=[harness],
+                output=output, cache_dir=eviction_cache, environ={},
+            )
+            assert builds == ["support", "support"], builds
+            assert output.read_bytes() == b"linked binary"
+
+
 def test_clt_sdk_shim_ignored_for_xcode_discovery() -> None:
     """CommandLineTools SDKROOT injected by /usr/bin/python3 must not shadow Xcode SDK."""
     clt_sdk = f"{stc._CLT_SDK_PREFIX}SDKs/MacOSX.sdk"
@@ -441,6 +525,7 @@ struct EquivalenceHarness {
 if __name__ == "__main__":
     test_support_key_sensitivity_and_filepath_safety()
     test_cache_hit_miss_corruption_recovery_and_opt_out()
+    test_pruning_honors_active_link_lease_and_recovers_eviction()
     test_clt_sdk_shim_ignored_for_xcode_discovery()
     test_real_darwin_equivalence_and_cache_hit()
     print("swift_test_compiler_ok")
