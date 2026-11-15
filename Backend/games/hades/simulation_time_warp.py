@@ -45,10 +45,10 @@ class HadesSimulationTimeWarp:
             raise AdapterError('invalid_value', 'hades.error.invalidValue')
         return _normalize_float(speed)
 
-    def _require_usable_transport(self):
+    def _require_usable_transport(self, *, allow_tainted_cleanup=False):
         if getattr(self.transport, 'cleanup_pending', False):
             raise self.transport._quarantined_error()
-        if getattr(self.transport, 'tainted', False):
+        if getattr(self.transport, 'tainted', False) and not allow_tainted_cleanup:
             raise AdapterError('restart_required', 'hades.error.restartRequired')
         if not self.transport.alive():
             raise AdapterError('not_connected', 'hades.error.notConnected')
@@ -69,8 +69,10 @@ class HadesSimulationTimeWarp:
             addresses[NO_FIXED_STEP_SYMBOL],
         )
 
-    def _with_stopped_process(self, operation):
-        app_instance_addr, auto_reset_addr, no_fixed_step_addr = self._require_usable_transport()
+    def _with_stopped_process(self, operation, *, allow_tainted_cleanup=False):
+        app_instance_addr, auto_reset_addr, no_fixed_step_addr = self._require_usable_transport(
+            allow_tainted_cleanup=allow_tainted_cleanup
+        )
         stopped = False
         try:
             self.transport.stop(time.monotonic() + self.BOUNDED_TIMEOUT_SECONDS)
@@ -188,7 +190,7 @@ class HadesSimulationTimeWarp:
 
         return self._with_stopped_process(read_op)
 
-    def _apply_speed(self, target_speed, *, skip_if_clean=False):
+    def _apply_speed(self, target_speed, *, skip_if_clean=False, allow_tainted_cleanup=False):
         def write_op(app_instance_addr, auto_reset_addr, no_fixed_step_addr):
             snapshot = self._read_snapshot(
                 app_instance_addr,
@@ -276,7 +278,9 @@ class HadesSimulationTimeWarp:
                 detail = getattr(error, 'diagnostic', None) or str(error)
                 raise AdapterError('outcome_unknown', 'hades.error.outcomeUnknown', diagnostic=detail) from error
 
-        return self._with_stopped_process(write_op)
+        return self._with_stopped_process(
+            write_op, allow_tainted_cleanup=allow_tainted_cleanup
+        )
 
     def set_speed(self, value):
         speed = self._validate_speed(value)
@@ -284,3 +288,12 @@ class HadesSimulationTimeWarp:
 
     def reset(self):
         return self._apply_speed(1.0, skip_if_clean=True)
+
+    def reset_for_close(self):
+        """Best-effort idempotent clock release on EOF after a non-VM taint.
+
+        The native 1x reset never replays a Lua mutation. It must complete
+        stopped-process readback before the debugger may detach. The worker
+        excludes interrupted Lua VMs, whose separate exit path kills the game.
+        """
+        return self._apply_speed(1.0, skip_if_clean=True, allow_tainted_cleanup=True)
