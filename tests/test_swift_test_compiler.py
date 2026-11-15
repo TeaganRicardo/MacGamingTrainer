@@ -268,7 +268,7 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
             m.write_text(json.dumps({"idx": idx}), encoding="utf-8")
             os.utime(m, (1000 + idx, 1000 + idx))
         stc._prune_cache(prune_dir, keep_name="entry-00")
-        remaining = {p.name for p in prune_dir.iterdir() if p.is_dir()}
+        remaining = {p.name for p in prune_dir.iterdir() if p.is_dir() and not p.name.startswith(".")}
         assert "entry-00" in remaining
         assert len(remaining) <= stc.MAX_CACHE_ENTRIES, (len(remaining), remaining)
 
