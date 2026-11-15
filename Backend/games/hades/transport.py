@@ -238,11 +238,11 @@ class HadesLuaTransport:
     def _boundary(self):
         if self.cleanup_pending:
             raise self._quarantined_error()
-        deadline = time.monotonic() + 3
         # The initial stop precedes target breakpoint, focus mutation, or
-        # Lua execution. Keep its failure distinct from uncertain cleanup.
+        # Lua execution. Keep its failure distinct from uncertain cleanup, and
+        # give the post-stop breakpoint wait its own 3s budget under Rosetta.
         self._boundary_initial_stop_pending = True
-        self._stop(deadline)
+        self._stop_or_release_late_stop(time.monotonic() + 3)
         self._boundary_initial_stop_pending = False
         self._restore_focus()
         error = lldb.SBError()
@@ -254,6 +254,7 @@ class HadesLuaTransport:
         if self.process.WriteMemory(focus, b'\x00', error) != 1 or error.Fail():
             raise failure('memory_error', 'debuggerCall', str(error))
         breakpoint = self.target.BreakpointCreateByAddress(self.addresses['_ZN3sgg3App6UpdateEf'])
+        deadline = time.monotonic() + 3
         self._resume(deadline, breakpoint_expected=True)
         while time.monotonic() < deadline:
             self._drain()
@@ -266,7 +267,13 @@ class HadesLuaTransport:
                        if thread.GetStopReason() == lldb.eStopReasonBreakpoint
                        and thread.GetStopReasonDataAtIndex(0) == breakpoint.GetID()]
             if not matches:
-                raise failure('unexpected_stop', 'unexpectedStop')
+                none_reason = getattr(lldb, 'eStopReasonNone', 0)
+                reasons = [
+                    f"{thread.GetName() or 'unnamed'}#{thread.GetThreadID()}:reason={thread.GetStopReason()}"
+                    for thread in self.process
+                    if thread.GetStopReason() != none_reason
+                ]
+                raise failure('unexpected_stop', 'unexpectedStop', ', '.join(reasons) if reasons else None)
             thread = matches[0]
             state = self.process.ReadPointerFromMemory(
                 self.addresses['_ZN3sgg13ScriptManager13LUA_INTERFACEE'], error,

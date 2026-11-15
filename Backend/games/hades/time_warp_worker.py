@@ -54,10 +54,17 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         # instead follows transport.close()'s existing forced-termination path.
         if (self.transport.alive() and not getattr(self.transport, 'cleanup_pending', False)
                 and not getattr(self.transport, 'vm_interrupted', False)):
-            if getattr(self.transport, 'tainted', False):
-                self.time_warp.reset_for_close()
-            else:
-                self.time_warp.reset()
+            try:
+                if getattr(self.transport, 'tainted', False):
+                    self.time_warp.reset_for_close()
+                else:
+                    self.time_warp.reset()
+            except Exception as error:
+                if (getattr(error, 'code', None) == 'not_connected' or not self.transport.alive()
+                        or (getattr(error, 'code', None) != 'outcome_unknown'
+                            and not getattr(self.transport, 'tainted', False))):
+                    self.transport.close()
+                raise
         self.transport.close()
 
 

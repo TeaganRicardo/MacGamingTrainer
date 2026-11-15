@@ -140,7 +140,18 @@ class HadesLLDBWorker:
             self.locks = (None, None, None)
             self.boon_rarity_target = 'Heroic'
             self.transport.attach(pid, executable)
-            return self._invoke('configure', (self.features,))
+            try:
+                return self._invoke('configure', (self.features,))
+            except Exception as error:
+                if (not getattr(self.transport, 'tainted', False)
+                        and not getattr(self.transport, 'vm_interrupted', False)
+                        and not getattr(self.transport, 'cleanup_pending', False)):
+                    rollback = getattr(self.transport, '_rollback_failed_attach', None)
+                    if callable(rollback):
+                        rollback(error)
+                    elif hasattr(self.transport, 'detach'):
+                        self.transport.detach()
+                raise
         if method == 'disconnect':
             self.transport.detach()
         elif method == 'status':
