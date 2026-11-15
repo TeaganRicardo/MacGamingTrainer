@@ -341,9 +341,12 @@ class HadesLuaTransport:
             if result.GetValueAsSigned() != 0:
                 if 'hades.error.restartRequired' in text:
                     raise failure('restart_required', 'restartRequired', text)
+                if 'hades.error.outcomeUnknown' in text:
+                    self.tainted = True
+                    raise failure('outcome_unknown', 'outcomeUnknown', text)
                 for key in ('heroNotReady', 'runtimeNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
                             'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied',
-                            'staleRoom', 'staleDoor', 'worldUnavailable'):
+                            'staleRoom', 'staleDoor', 'worldUnavailable', 'unsupportedRuntime'):
                     if 'hades.error.' + key in text:
                         raise failure('runtime_not_ready', key, text)
                 if mutating:
