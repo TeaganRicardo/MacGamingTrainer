@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_save import JOURNEY_BUDGETS
 import os
 import shutil
 import subprocess
@@ -348,7 +349,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     ], check=True, cwd=ROOT)
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path), str(recovery)],
-        cwd=ROOT, env=environment, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.1'
+        cwd=ROOT, env=environment, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.1', budgets=JOURNEY_BUDGETS
     )
     if proc.returncode != 0:
         print(proc.stdout)
@@ -372,7 +373,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-path-validation-") as td:
     ], check=True, cwd=ROOT)
     proc = launch_fixture(
         [str(binary), str(root), str(outside)],
-        cwd=ROOT, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.2'
+        cwd=ROOT, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.2', budgets=JOURNEY_BUDGETS
     )
     if proc.returncode != 0:
         print(proc.stdout)

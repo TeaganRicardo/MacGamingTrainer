@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_panels import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 import json
 import os
 import shutil
@@ -109,6 +111,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-frontend-') as directory
     generated = temp / 'ActiveGame.generated.swift'
     subprocess.run([PYTHON, str(ROOT / 'Tools/generate_game_binding.py'), 'hades2', str(generated)], check=True)
     sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades2').rglob('*.swift'))
-    subprocess.run([SWIFTC, '-parse-as-library', '-whole-module-optimization', *map(str, sources),
-                    str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'), str(generated), str(main), '-o', str(binary)], check=True)
-    launch_fixture([str(binary), PYTHON, str(worker)], env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home)), check=True, journey='native.hades2_chaos_gate_frontend')
+    compile_swift_test(
+        support_sources=[*sources, ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', generated],
+        harness_sources=[main],
+        output=binary,
+        swiftc=SWIFTC,
+    )
+    launch_fixture([str(binary), PYTHON, str(worker)], env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home)), check=True, journey='native.hades2_chaos_gate_frontend', budgets=JOURNEY_BUDGETS)

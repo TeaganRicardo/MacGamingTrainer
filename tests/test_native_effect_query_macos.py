@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from lua_native_prerequisites import require_lua52_native
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.native_effect_query import JOURNEY_BUDGETS
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only native effect-query image test")
@@ -24,4 +25,4 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-effect-query-image-") as tem
     insertion = Path(temporary) / "libStartupInsertion.dylib"
     subprocess.run([compiler, "-dynamiclib", str(source), "-o", str(insertion)], check=True)
     environment = {**os.environ, "DYLD_INSERT_LIBRARIES": str(insertion), "MGT_EXPECT_STARTUP_IMAGE": "1"}
-    launch_fixture([str(executable)], journey="native_effect_query.image_identity", check=True, env=environment)
+    launch_fixture([str(executable)], journey="native_effect_query.image_identity", budgets=JOURNEY_BUDGETS, check=True, env=environment)

@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 """Exercise the real shared SwiftUI/AppKit text control on macOS."""
 import shutil
 import subprocess
@@ -388,11 +390,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
                 .background(PickerAllocationProbe().allowsHitTesting(false).accessibilityHidden(true))"""))
     core_sources = [observed_resource if source == resource_source else source
                     for source in sorted((ROOT / "Sources/Core").rglob("*.swift"))]
-    subprocess.run([
-        SWIFTC, "-parse-as-library",
-        *map(str, core_sources),
-        str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
-        str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
-        str(swift), "-o", str(binary),
-    ], cwd=ROOT, check=True)
-    launch_fixture([str(binary)], cwd=ROOT, check=True, journey='native.trainer_text_field_appearance')
+    compile_swift_test(
+        support_sources=[*core_sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"],
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", swift],
+        output=binary,
+        swiftc=SWIFTC,
+        cwd=ROOT,
+    )
+    launch_fixture([str(binary)], cwd=ROOT, check=True, journey='native.trainer_text_field_appearance', budgets=JOURNEY_BUDGETS)

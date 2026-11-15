@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 import ctypes
 import json
 import math
@@ -856,12 +858,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-    subprocess.run([SWIFTC, "-parse-as-library", "-whole-module-optimization", *map(str, sources),
-                    str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
-                    str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
-                    str(generated), str(main), "-o", str(binary)], check=True, cwd=ROOT)
+    compile_swift_test(
+        support_sources=[*sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated],
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        output=binary,
+        swiftc=SWIFTC,
+        cwd=ROOT,
+    )
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
-    launch_fixture([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, journey='native.viewport_feedback')
+    launch_fixture([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, journey='native.viewport_feedback', budgets=JOURNEY_BUDGETS)
     interaction_directory = td / "interactions"
     interaction_directory.mkdir()
     interaction_worker = interaction_directory / "worker.py"

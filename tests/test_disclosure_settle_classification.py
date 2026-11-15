@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_ui import JOURNEY_BUDGETS
 """The disclosure settle classifier reports three outcomes and fails the third.
 
 Phase C of #670 requires that a deliberately unsatisfied predicate still fails
@@ -69,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-disclosure-settle-") as directory:
     source.write_text(PROGRAM, encoding="utf-8")
     subprocess.run([SWIFTC, "-parse-as-library", str(source), "-o", str(binary)],
                    check=True, cwd=ROOT)
-    result = launch_fixture([str(binary)], capture_output=True, text=True, journey='native.disclosure_settle_classification')
+    result = launch_fixture([str(binary)], capture_output=True, text=True, journey='native.disclosure_settle_classification', budgets=JOURNEY_BUDGETS)
     if result.returncode != 0:
         print(result.stdout)
         print(result.stderr)

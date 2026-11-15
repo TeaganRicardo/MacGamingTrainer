@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_panels import JOURNEY_BUDGETS
 import shutil
 import subprocess
 import tempfile
@@ -286,7 +287,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
         "-o", str(binary),
     ], check=True, cwd=ROOT)
     support = td / "fake-hades-support"
-    proc = launch_fixture([str(binary), str(support)], cwd=ROOT, text=True, capture_output=True, journey='native.hades2_run_log_watcher')
+    proc = launch_fixture([str(binary), str(support)], cwd=ROOT, text=True, capture_output=True, journey='native.hades2_run_log_watcher', budgets=JOURNEY_BUDGETS)
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)

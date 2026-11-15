@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.multi_game import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only shared module context harness")
@@ -731,13 +733,19 @@ def run_context_journey(*, state_only=False):
         main = project / "Harness.swift"
         main.write_text(HARNESS)
         binary = project / "test"
-        subprocess.run(["swiftc", "-parse-as-library", *map(str, sorted((project / "Sources/Core").rglob("*.swift"))),
-                        *map(str, frontends), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"),
-                        str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
-                        str(generated), str(main), "-o", str(binary)], check=True)
+        compile_swift_test(
+            support_sources=[
+                *sorted((project / "Sources/Core").rglob("*.swift")),
+                *frontends,
+                ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                generated,
+            ],
+            harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+            output=binary,
+        )
         env = {**os.environ, "HOME": str(project / "home"), "PYTHONDONTWRITEBYTECODE": "1"}
         Path(env["HOME"]).mkdir()
         launch_fixture([str(binary), str(project / "Backend/core/server.py"), sys.executable,
                         "state-only" if state_only else "navigation"],
-                       journey="multi_game.context_state" if state_only else "multi_game.context_navigation",
+                       journey="multi_game.context_state" if state_only else "multi_game.context_navigation", budgets=JOURNEY_BUDGETS,
                        cwd=project, env=env, check=True)

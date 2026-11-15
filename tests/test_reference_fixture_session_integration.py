@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.multi_game import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 import json
 import os
 import shutil
@@ -332,19 +334,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     binary = project / "reference_fixture_session_test"
 
     core_sources = sorted((project / "Sources/Core").rglob("*.swift"))
-    subprocess.run(
-        [
-            SWIFTC,
-            *map(str, core_sources),
-            str(project / "Sources/ReferenceFixture/ReferenceFixtureModule.swift"),
-            str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
-            str(generated),
-            str(main_swift),
-            "-o",
-            str(binary),
+    compile_swift_test(
+        support_sources=[
+            *core_sources,
+            project / "Sources/ReferenceFixture/ReferenceFixtureModule.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            generated,
         ],
+        harness_sources=[main_swift],
+        output=binary,
+        flags=(),
+        swiftc=SWIFTC,
         cwd=project,
-        check=True,
     )
 
     home = temp / "home"
@@ -365,12 +366,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
             proc = launch_fixture(
                 [str(binary), str(project / "Backend/core/server.py"), PYTHON, str(target_process.pid), "session"],
                 cwd=project, env=env, text=True, capture_output=True,
-                journey="native.reference_fixture_session_integration",
+                journey="native.reference_fixture_session_integration", budgets=JOURNEY_BUDGETS,
             )
             target_process.terminate()
             target_process.wait(timeout=5)
             launch_fixture([str(binary), str(project / "Backend/core/server.py"), PYTHON, "absent", "identity-only"],
-                           cwd=project, env=env, check=True, journey="reference_fixture.suffix_identity")
+                           cwd=project, env=env, check=True, journey="reference_fixture.suffix_identity", budgets=JOURNEY_BUDGETS)
         finally:
             for process in (target_process, unrelated_process):
                 if process.poll() is None:

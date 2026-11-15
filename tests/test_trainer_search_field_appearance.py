@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_ui import JOURNEY_BUDGETS
 """Exercise shared search-field appearance and clear-action semantics on macOS."""
 import shutil
 import subprocess
@@ -123,4 +124,4 @@ with tempfile.TemporaryDirectory(prefix="mgt-search-field-appearance-") as tempo
         str(ROOT / "Sources/Core/UI/Components/TrainerSearchField.swift"),
         str(swift), "-o", str(binary),
     ], cwd=ROOT, check=True)
-    launch_fixture([str(binary)], cwd=ROOT, check=True, journey='native.trainer_search_field_appearance')
+    launch_fixture([str(binary)], cwd=ROOT, check=True, journey='native.trainer_search_field_appearance', budgets=JOURNEY_BUDGETS)

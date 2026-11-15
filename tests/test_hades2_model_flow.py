@@ -8,6 +8,8 @@ import tempfile
 import textwrap
 from pathlib import Path
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_flow import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 live-trait model flow test")
@@ -465,14 +467,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     )
     # This harness drives the live-trait model only; it never builds a
     # TrainerLocalizationStore, so it does not need the in-memory defaults.
-    sources = (
+    support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated, main_path]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
     )
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
-        check=True,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[main_path],
+        output=binary,
+        swiftc=SWIFTC,
         cwd=ROOT,
     )
     env = dict(os.environ)
@@ -480,7 +484,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     env["CFFIXED_USER_HOME"] = str(home)
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
-        journey="hades2.live_trait_flow",
+        journey="hades2.live_trait_flow", budgets=JOURNEY_BUDGETS,
         cwd=ROOT,
         env=env,
         text=True,

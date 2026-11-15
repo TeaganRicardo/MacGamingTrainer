@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_save import JOURNEY_BUDGETS
 import shutil
 import subprocess
 import tempfile
@@ -110,7 +111,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-batch-delete-") as td:
         "-framework", "AppKit",
         "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc=launch_fixture([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, journey='native.core_save_batch_delete_round20')
+    proc=launch_fixture([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, journey='native.core_save_batch_delete_round20', budgets=JOURNEY_BUDGETS)
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)
