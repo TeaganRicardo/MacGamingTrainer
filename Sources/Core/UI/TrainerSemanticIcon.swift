@@ -48,11 +48,15 @@ enum TrainerSemanticIcon {
     enum Tool {
         static let saveEditor = "externaldrive.badge.gearshape"
         static let saveManagement = "externaldrive"
+        static let saveFolder = "folder"
+        static let saveHistory = "clock.arrow.circlepath"
+        static let retention = "clock.badge.checkmark"
         static let profiles = "square.stack.3d.up"
         static let shortcuts = "keyboard"
         static let diagnostics = "stethoscope"
         static let exportDiagnostics = "square.and.arrow.up"
         static let refreshStatus = "arrow.clockwise"
+        static let currentIssues = "exclamationmark.circle"
         static let log = "doc.text.magnifyingglass"
         static let logHistory = "clock.arrow.circlepath"
         static let clearLogs = "trash"
@@ -65,7 +69,21 @@ enum TrainerSemanticIcon {
         static let generate = "plus.circle.fill"
         static let save = "square.and.arrow.down"
         static let load = "arrow.down.circle"
+        static let edit = "square.and.pencil"
+        static let rename = "pencil"
+        static let protect = "lock"
+        static let unprotect = "lock.open"
         static let remove = "trash"
         static let restore = "arrow.uturn.backward"
+        static let dismiss = "xmark"
+    }
+
+    enum Feedback {
+        static let success = "checkmark.circle"
+        static let warning = "exclamationmark.triangle"
+        static let storageWarning = "externaldrive.badge.exclamationmark"
+        static let toastSuccess = "checkmark.circle.fill"
+        static let toastWarning = "exclamationmark.triangle.fill"
+        static let toastInfo = "info.circle.fill"
     }
 }

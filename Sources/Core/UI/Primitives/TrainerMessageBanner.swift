@@ -12,8 +12,8 @@ struct TrainerMessageBanner: View {
             .font(.callout)
             .foregroundStyle(color)
             .textSelection(.enabled)
-            .padding(14)
+            .padding(theme.noticePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
+            .background(color.opacity(theme.noticeFillOpacity), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
     }
 }

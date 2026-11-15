@@ -133,6 +133,16 @@ flushCapture()
 precondition(capture.capturingActionID == nil && capture.issue == nil)
 precondition(committed.count == 1 && monitorHandlers.isEmpty)
 
+capture.begin(actionID: "disableAllConflict") { _, chord in
+    precondition(TrainerHotkeyLayout.isDisableAllChord(chord), "Ctrl+Opt+Backspace must match disableAllChord")
+    precondition(chord.displayText == "⌃⌥⌫")
+    return .conflict(actionID: "disableAll")
+}
+precondition(capture.handleKeyDown(testKey(51, flags: [.control, .option], characters: "\u{7f}")) == nil)
+flushCapture()
+precondition(capture.issue == .conflict(chordText: "⌃⌥⌫", actionID: "disableAll"))
+precondition(capture.capturingActionID == nil && monitorHandlers.isEmpty)
+
 // An event captured just before page selection/dismissal is not allowed to
 // call a module after the controller is cancelled.
 capture.begin(actionID: "stale", onAssign: accept)

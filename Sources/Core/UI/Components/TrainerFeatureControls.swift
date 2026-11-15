@@ -35,7 +35,7 @@ struct TrainerFeaturePresentation: Equatable {
     }
 
     var isInteractive: Bool { supported && canEditDesired }
-    var opacity: Double { supported ? 1 : 0.45 }
+    var opacity: Double { supported ? 1 : TrainerTheme.standard.disabledOpacity }
 
     func tint(using theme: TrainerTheme) -> Color {
         switch phase {

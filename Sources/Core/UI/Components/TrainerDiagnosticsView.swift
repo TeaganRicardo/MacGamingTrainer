@@ -59,9 +59,8 @@ struct TrainerDiagnosticsView: View {
                     arguments: [String(passed), String(checks.count)]))
                 .contentTransition(.opacity)
                 .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: "\(passed)/\(checks.count)")
-            ProgressView().controlSize(.small).frame(width: 16, height: 16)
+            TrainerLoadingIndicator()
                 .opacity(busy ? 1 : 0).accessibilityHidden(!busy)
-                .accessibilityLabel(localization.localized("host.operation.inProgress"))
                 .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy)
             Button {
                 guard lifetime.accepts(presentationID), !busy, canExport else { return }
@@ -119,10 +118,15 @@ struct TrainerDiagnosticsView: View {
                     guard lifetime.accepts(presentationID) else { return }
                     lifetime.invalidate()
                     actions.dismiss()
-                }.keyboardShortcut(.cancelAction)
+                }.keyboardShortcut(.defaultAction)
             }
         }
         .onAppear { lifetime.appear() }
         .onDisappear { lifetime.invalidate() }
+        .onExitCommand {
+            guard lifetime.accepts(presentationID) else { return }
+            lifetime.invalidate()
+            actions.dismiss()
+        }
     }
 }

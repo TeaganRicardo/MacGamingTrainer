@@ -42,10 +42,9 @@ struct TrainerProfileManagerView: View {
     var body: some View {
         let presentationID = lifetime.id
         TrainerSheetScaffold(title: labels.title, icon: TrainerSemanticIcon.Tool.profiles, width: 620, minimumWidth: 360) {
-            ProgressView().controlSize(.small).frame(width: 16, height: 16)
+            TrainerLoadingIndicator()
                 .opacity(busy || selection.saving ? 1 : 0)
                 .accessibilityHidden(!busy && !selection.saving)
-                .accessibilityLabel(localization.localized("host.operation.inProgress"))
                 .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: busy || selection.saving)
             Button {
                 guard lifetime.accepts(presentationID), canAct else { return }
@@ -63,7 +62,6 @@ struct TrainerProfileManagerView: View {
                 TrainerTextField(title: labels.name, text: $selection.draftName)
                     .frame(maxWidth: .infinity)
                 TrainerPrimaryActionButton(title: labels.save,
-                    systemImage: TrainerSemanticIcon.Action.save,
                     enabled: canAct && !selection.trimmedName.isEmpty,
                     widthRole: .sheet) {
                     guard lifetime.accepts(presentationID), canAct, let request = selection.beginSave() else { return }
@@ -83,7 +81,7 @@ struct TrainerProfileManagerView: View {
                     .trainerPicker(.form, state: canAct ? .interactive : .unavailable)
                     HStack {
                         TrainerPrimaryActionButton(title: labels.load,
-                            systemImage: TrainerSemanticIcon.Action.load, enabled: canUseSelection,
+                            enabled: canUseSelection,
                             widthRole: .sheet) {
                             guard lifetime.accepts(presentationID), canUseSelection else { return }
                             actions.load(selection.selectedName)

@@ -11,7 +11,7 @@ struct TrainerShortcutBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 6)
             .frame(minWidth: theme.shortcutBadgeMinimumWidth, alignment: .center)
-            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 6))
+            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: theme.compactCornerRadius))
     }
 }
 

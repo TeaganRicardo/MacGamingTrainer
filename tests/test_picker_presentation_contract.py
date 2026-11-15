@@ -110,6 +110,16 @@ def picker_modifier_segment(source: str, picker_match: re.Match, owner_start: in
     return source[cursor:owner_start]
 
 
+def picker_trailing_segment(source: str, owner_match: re.Match) -> str:
+    # Inspect modifiers immediately following `.trainerPicker(...)`, even across
+    # multiple lines.
+    owner_end = matching_delimiter_end(source, owner_match.end() - 1, "(", ")")
+    cursor = owner_end
+    while cursor < len(source) and source[cursor].isspace():
+        cursor += 1
+    return source[cursor:]
+
+
 # Guard the scanner itself: disabled menu entries are valid and must not be
 # confused with a raw disabled modifier on the Picker.
 _fixture = """Picker("Section", selection: $section) {
@@ -121,6 +131,7 @@ _fixture_picker = re.search(r"(?<![A-Za-z])Picker\s*\(", _fixture)
 _fixture_owner = re.search(r"\.trainerPicker\(", _fixture)
 assert _fixture_picker and _fixture_owner
 assert ".disabled(" not in picker_modifier_segment(_fixture, _fixture_picker, _fixture_owner.start())
+assert not picker_trailing_segment(_fixture, _fixture_owner).startswith(".disabled(")
 
 _fixture_bad = """Picker("Section", selection: $section) { Text("A").tag("a") }
 .labelsHidden()
@@ -131,12 +142,33 @@ _fixture_owner = re.search(r"\.trainerPicker\(", _fixture_bad)
 assert _fixture_picker and _fixture_owner
 assert ".disabled(" in picker_modifier_segment(_fixture_bad, _fixture_picker, _fixture_owner.start())
 
+_fixture_multiline_bad = """Picker("Facility", selection: $facility) { Text("A").tag("a") }
+.labelsHidden()
+.trainerPicker(
+    .rowAction,
+    state: .unavailable
+)
+.disabled(true)"""
+_fixture_multiline_owner = re.search(r"\.trainerPicker\(", _fixture_multiline_bad)
+assert _fixture_multiline_owner
+assert picker_trailing_segment(_fixture_multiline_bad, _fixture_multiline_owner).startswith(".disabled(")
+
+assert ".preferredColorScheme(" not in app_source
+tool_windows_source = (ROOT / "Sources/Core/UI/TrainerToolWindows.swift").read_text()
+assert "window.appearance = NSAppearance(named: .darkAqua)" in tool_windows_source
+
 for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
     for swift_path in source_root.rglob("*.swift"):
         relative = swift_path.relative_to(ROOT)
         source = swift_path.read_text()
+        assert ".preferredColorScheme(" not in source, (
+            f"{relative}: appearance must be owned at the AppKit window/application boundary"
+        )
         if relative == Path("Sources/Core/UI/Primitives/TrainerPicker.swift"):
             continue
+        assert ".pickerStyle(" not in source, (
+            f"{relative}: Picker style must be owned solely by TrainerPicker.swift"
+        )
         picker_matches = list(re.finditer(r"(?<![A-Za-z])Picker\s*\(", source))
         if not picker_matches:
             continue
@@ -158,8 +190,9 @@ for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sourc
                 f"{relative}: Picker #{index + 1} applies native disabled state before the Core owner"
             )
         assert ".trainerPickerWidth(" not in source, f"{relative}: width-only Picker path remains"
-        assert not re.search(r"\.trainerPicker\([^\n]*\)\s*\.disabled\(", source), (
-            f"{relative}: Picker availability bypasses the Core presentation state"
-        )
+        for owner_match in owner_matches:
+            assert not picker_trailing_segment(source, owner_match).startswith(".disabled("), (
+                f"{relative}: Picker availability bypasses the Core presentation state"
+            )
 
 print("picker_presentation_contract_ok")

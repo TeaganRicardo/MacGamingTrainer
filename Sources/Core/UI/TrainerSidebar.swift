@@ -155,7 +155,7 @@ struct TrainerSidebarCard<Actions: View>: View {
                 .disabled(!selected)
                 .accessibilityHidden(!selected)
         }
-        .padding(14)
+        .padding(theme.sidebarCardPadding)
         .trainerSurface(selected ? .raised : .panel, cornerRadius: theme.cardCornerRadius)
         // A collapsed module has one card-sized mouse target, including its
         // insets. The real header Button retains keyboard/AX activation. Only
@@ -179,12 +179,12 @@ struct TrainerSidebar<Card: View>: View {
     init(@ViewBuilder card: () -> Card) { self.card = card() }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             card
             Spacer()
         }
-        .padding(18)
-        .frame(width: 260)
+        .padding(theme.sidebarPadding)
+        .frame(width: theme.sidebarWidth)
         .trainerSurface(.sidebar)
     }
 }

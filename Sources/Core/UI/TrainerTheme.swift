@@ -42,6 +42,24 @@ struct TrainerTheme {
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
+    let sidebarWidth: CGFloat
+    let sidebarPadding: CGFloat
+    let sidebarCardPadding: CGFloat
+    let rowContentSpacing: CGFloat
+    let rowIconSpacing: CGFloat
+    let rowIconSize: CGFloat
+    let rowGlyphSize: CGFloat
+    let rowGlyphActiveOpacity: Double
+    let rowGlyphIdleOpacity: Double
+    let listCardPadding: CGFloat
+    let noticePadding: CGFloat
+    let noticeFillOpacity: Double
+    let compactFieldWidth: CGFloat
+    let disabledOpacity: Double
+    let unavailableOpacity: Double
+    let selectionHighlightOpacity: Double
+    let popoverDetailsWidth: CGFloat
+    let toastMaxWidth: CGFloat
 
     static let standard = TrainerTheme(
         // Opaque graphite surfaces keep the accepted dark identity predictable
@@ -86,7 +104,25 @@ struct TrainerTheme {
         pickerActionLabelWidth: 200,
         sheetPadding: 28,
         sheetSpacing: 16,
-        emptyStatePadding: 24
+        emptyStatePadding: 24,
+        sidebarWidth: 260,
+        sidebarPadding: 18,
+        sidebarCardPadding: 14,
+        rowContentSpacing: 16,
+        rowIconSpacing: 14,
+        rowIconSize: 40,
+        rowGlyphSize: 20,
+        rowGlyphActiveOpacity: 0.12,
+        rowGlyphIdleOpacity: 0.045,
+        listCardPadding: 12,
+        noticePadding: 12,
+        noticeFillOpacity: 0.08,
+        compactFieldWidth: 58,
+        disabledOpacity: 0.45,
+        unavailableOpacity: 0.65,
+        selectionHighlightOpacity: 0.14,
+        popoverDetailsWidth: 360,
+        toastMaxWidth: 560
     )
 
     func boundaryColor(for contrast: ColorSchemeContrast) -> Color {

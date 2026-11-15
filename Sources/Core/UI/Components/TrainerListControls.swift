@@ -128,20 +128,17 @@ struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
-    let systemImage: String?
     let enabled: Bool
     let widthRole: TrainerActionWidthRole
     let action: () -> Void
 
     init(
         title: String,
-        systemImage: String? = nil,
         enabled: Bool = true,
         widthRole: TrainerActionWidthRole = .automatic,
         action: @escaping () -> Void
     ) {
         self.title = title
-        self.systemImage = systemImage
         self.enabled = enabled
         self.widthRole = widthRole
         self.action = action
@@ -166,7 +163,6 @@ struct TrainerSecondaryActionButton: View {
     @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
-    let systemImage: String?
     let enabled: Bool
     let latched: Bool
     let subduedLatched: Bool
@@ -177,7 +173,6 @@ struct TrainerSecondaryActionButton: View {
 
     init(
         title: String,
-        systemImage: String? = nil,
         enabled: Bool = true,
         latched: Bool = false,
         subduedLatched: Bool = false,
@@ -187,7 +182,6 @@ struct TrainerSecondaryActionButton: View {
         action: @escaping () -> Void
     ) {
         self.title = title
-        self.systemImage = systemImage
         self.enabled = enabled
         self.latched = latched
         self.subduedLatched = subduedLatched
@@ -328,6 +322,7 @@ struct TrainerEmptyState: View {
 }
 
 struct TrainerInlineNotice<Content: View>: View {
+    @Environment(\.trainerTheme) private var theme
     let color: Color
     let content: Content
 
@@ -338,8 +333,8 @@ struct TrainerInlineNotice<Content: View>: View {
 
     var body: some View {
         content
-            .padding(10)
-            .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
+            .padding(theme.noticePadding)
+            .background(color.opacity(theme.noticeFillOpacity), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
     }
 }
 
@@ -353,7 +348,7 @@ struct TrainerListCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(12)
+            .padding(theme.listCardPadding)
             .background(theme.subtleFill.opacity(0.875), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
     }
 }

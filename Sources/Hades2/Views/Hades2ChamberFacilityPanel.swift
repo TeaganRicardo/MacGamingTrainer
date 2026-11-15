@@ -32,12 +32,10 @@ struct Hades2ChamberFacilityPanel: View {
                 .rowAction,
                 state: model.canGenerateFacility ? .interactive : .unavailable
             )
-            .disabled(!model.canGenerateFacility)
             .accessibilityIdentifier("hades2.facility.selection")
             TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChamberFacility))
             TrainerSecondaryActionButton(
                 title: text("hades2.facility.generate"),
-                systemImage: TrainerSemanticIcon.Action.generate,
                 enabled: model.canGenerateFacility,
                 helpText: text("hades2.facility.help"),
                 accessibilityLabel: text("hades2.facility.title")

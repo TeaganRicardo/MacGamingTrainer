@@ -94,7 +94,6 @@ private struct WindowCloseBridge: NSViewRepresentable {
             TrainerGamePages(application: application)
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
-                .preferredColorScheme(.dark)
                 .environmentObject(localization)
                 .background(WindowCloseBridge(
                     delegate: delegate, application: application,

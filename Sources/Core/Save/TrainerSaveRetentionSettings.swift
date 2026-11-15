@@ -3,6 +3,7 @@ import SwiftUI
 struct TrainerSaveRetentionSettings: View {
     @ObservedObject var model: TrainerSaveManagerModel
     let onClose: () -> Void
+    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var count = ""
     @State private var mebibytes = ""
@@ -17,10 +18,10 @@ struct TrainerSaveRetentionSettings: View {
     }
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.save.retention.title"), icon: "clock.badge.checkmark", width: 500) {
+        TrainerSheetScaffold(title: localization.localized("host.save.retention.title"), icon: TrainerSemanticIcon.Tool.retention, width: 500) {
             EmptyView()
         } content: {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: theme.sheetSpacing) {
                 Text(localization.localized("host.save.retention.rule"))
                     .font(.callout)
                 HStack {
@@ -44,11 +45,15 @@ struct TrainerSaveRetentionSettings: View {
                 if !model.error.isEmpty {
                     Text(localization.presentation(model.error, arguments: model.errorArguments))
                         .font(.caption)
+                        .foregroundStyle(theme.warning)
+                        .textSelection(.enabled)
                 }
             }
         } footer: {
             HStack {
-                Button(localization.localized("host.cancel"), action: onClose).disabled(model.busy)
+                Button(localization.localized("host.cancel"), action: onClose)
+                    .disabled(model.busy)
+                    .keyboardShortcut(.cancelAction)
                 Spacer()
                 TrainerPrimaryActionButton(title: localization.localized("host.save.retention.save"), enabled: !model.busy && values != nil, widthRole: .sheet) {
                     guard let values else { return }

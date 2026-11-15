@@ -5,7 +5,7 @@ view = (ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift").read_text(encod
 controls = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text(encoding="utf-8")
 
 header = view[view.index('TrainerSheetScaffold(title: localization.localized("host.saveManagement")'):view.index('} content: {')]
-assert 'Label(localization.localized("host.refresh"), systemImage: "arrow.clockwise")' in header
+assert 'Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)' in header
 assert 'TrainerPrimaryActionButton(' in header
 assert 'title: localization.localized("host.save.createBackup")' in header
 assert header.index('Label(localization.localized("host.refresh")') < header.index('title: localization.localized("host.save.createBackup")')
@@ -15,7 +15,7 @@ assert 'TrainerPrimaryActionButton(' in footer
 assert 'title: localization.localized("host.done")' in footer
 
 menu = view[view.index('TrainerOverflowMenu(enabled: !model.busy)'):view.index('    private var deleteTitle')]
-assert 'Label(localization.localized("host.rename"), systemImage: "pencil")' in menu
+assert 'Label(localization.localized("host.rename"), systemImage: TrainerSemanticIcon.Action.rename)' in menu
 assert 'beginRename(snapshot)' in menu
 
 assert 'TrainerInlineNameEditor(' in view

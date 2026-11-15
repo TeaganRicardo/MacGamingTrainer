@@ -31,7 +31,7 @@ assert ".init(.saveManagement, localization: localization, enabled: canUseBacken
 assert 'case .saveManagement: "host.saveManagement"' in shared_management
 assert "title: localization.localized(common.titleKey)" in shared_management
 assert "[saveEditor, saveManagement].compactMap { $0 }" in shared_management
-assert "TrainerSecondaryActionButton(title: action.title, systemImage: action.icon," in shared_management
+assert "TrainerSecondaryActionButton(title: action.title," in shared_management
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
 assert 'localization.localized(primaryActionTitleKey)' in status_controls
 assert 'return "host.connectGame"' in status_controls and 'return "host.disconnectGame"' in status_controls

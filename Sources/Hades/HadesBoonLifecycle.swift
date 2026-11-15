@@ -43,7 +43,6 @@ struct HadesEffectLifecycleControls: View {
 
                 TrainerSecondaryActionButton(
                     title: text("hades.apply"),
-                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: canApplyUses,
                     widthRole: .compactRow
                 ) {
@@ -61,7 +60,6 @@ struct HadesEffectLifecycleControls: View {
             if trait.canRefresh == true {
                 TrainerSecondaryActionButton(
                     title: text("hades.refreshEffect"),
-                    systemImage: TrainerSemanticIcon.Concept.refresh,
                     enabled: model.canMutate,
                     widthRole: .compactRow
                 ) {
@@ -72,7 +70,6 @@ struct HadesEffectLifecycleControls: View {
             if trait.canExpire == true {
                 TrainerSecondaryActionButton(
                     title: text(trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing"),
-                    systemImage: trait.blessing == nil ? "hourglass.bottomhalf.filled" : "bolt.fill",
                     enabled: model.canMutate && trait.canRemove,
                     widthRole: .compactRow
                 ) {

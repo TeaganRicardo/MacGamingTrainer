@@ -244,7 +244,6 @@ struct MetricFixture: View {
     @State private var amount = "33"
     @State private var counter = "44"
     @State private var stat = "55"
-    @State private var inline = "66"
     @State private var multiplier = "77"
     @State private var gain = "88"
 
@@ -267,9 +266,6 @@ struct MetricFixture: View {
             TrainerStatMetricCard(title: title("属性", "Stat"), icon: "circle", text: $stat,
                 focus: $focus, focusValue: "stat", suffix: "%", locked: false,
                 supported: true, available: true, editable: false, onLock: {})
-            TrainerInlineStatEditor(title: title("行内属性", "Inline"), text: $inline,
-                focus: $focus, focusValue: "inline", suffix: "%", locked: false,
-                supported: true, available: true, editable: true, onLockChange: { _ in })
             TrainerFeatureMultiplierRow(title: title("倍率", "Multiplier"), icon: "circle",
                 state: state, text: $multiplier, shortcutText: nil, action: {})
             TrainerFeatureMultiplierRow(title: title("增益倍率", "Gain multiplier"), icon: "circle",
@@ -341,9 +337,9 @@ struct Main {
                 let inputs = Dictionary(uniqueKeysWithValues: fields(in: metrics).map { ($0.stringValue, $0) })
                 let expected = language == .en
                     ? ["11": "Current Energy", "22": "Maximum Energy", "33": "Amount", "44": "Counter",
-                       "55": "Stat", "66": "Inline", "77": "Multiplier", "88": "Gain multiplier"]
+                       "55": "Stat", "77": "Multiplier", "88": "Gain multiplier"]
                     : ["11": "当前能量", "22": "能量上限", "33": "数量", "44": "计数",
-                       "55": "属性", "66": "行内属性", "77": "倍率", "88": "增益倍率"]
+                       "55": "属性", "77": "倍率", "88": "增益倍率"]
                 check(inputs.count == expected.count, "shared metric fixture did not mount every numeric input")
                 for (value, name) in expected {
                     check(inputs[value]?.accessibilityLabel() == name,

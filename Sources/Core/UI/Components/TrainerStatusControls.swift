@@ -55,7 +55,7 @@ struct TrainerConnectionStatusCard: View {
             )
             .contentTransition(.opacity)
             .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: primaryActionTitleKey)
-            Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
+            Button(action: onRefresh) { Image(systemName: TrainerSemanticIcon.Tool.refreshStatus) }
                 .help(localization.localized("host.refreshStatusHelp"))
                 .accessibilityLabel(localization.localized("host.refreshStatus"))
                 .disabled(!backendAvailable || !actionsEnabled)
@@ -74,5 +74,17 @@ struct TrainerPillBadge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(color.opacity(0.10), in: Capsule())
+    }
+}
+
+/// Shared small spinner used by host sheets and save-editor toolbars during busy work.
+struct TrainerLoadingIndicator: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .frame(width: 16, height: 16)
+            .accessibilityLabel(localization.localized("host.operation.inProgress"))
     }
 }

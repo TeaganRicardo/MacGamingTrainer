@@ -51,13 +51,13 @@ struct TrainerIconLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: theme.rowIconSpacing) {
             glyph
                 .font(.title3)
                 .foregroundStyle(tint ?? theme.accent)
-                .frame(width: 20, height: 20)
-                .frame(width: 40, height: 40)
-                .background((tint ?? theme.accent).opacity(emphasized ? 0.12 : 0.045), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius, style: .continuous))
+                .frame(width: theme.rowGlyphSize, height: theme.rowGlyphSize)
+                .frame(width: theme.rowIconSize, height: theme.rowIconSize)
+                .background((tint ?? theme.accent).opacity(emphasized ? theme.rowGlyphActiveOpacity : theme.rowGlyphIdleOpacity), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius, style: .continuous))
                 .accessibilityHidden(true)
             Text(title)
                 .font(.subheadline.weight(.medium))
@@ -131,7 +131,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                HStack(spacing: 16) {
+                HStack(spacing: theme.rowContentSpacing) {
                     TrainerIconLabel(title: title, glyph: glyph, tint: tint, emphasized: emphasized)
                         .help(helpText)
                     Spacer(minLength: 8)

@@ -269,7 +269,6 @@ struct Hades2SaveEditorView: View {
             }
         }
         .labelsHidden()
-        .pickerStyle(.menu)
         .trainerPicker(.rowValue,
             state: model.busy || model.profile.isEmpty ? .unavailable : .interactive)
     }
@@ -619,7 +618,6 @@ struct Hades2SaveEditorView: View {
                     .disabled(model.busy || !model.documentCurrent)
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
-                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: !model.busy && model.hasWriteTarget && model.documentCurrent,
                     widthRole: .sheet
                 ) {

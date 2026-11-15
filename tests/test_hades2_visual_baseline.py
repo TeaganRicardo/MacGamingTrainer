@@ -49,10 +49,12 @@ assert '.toggleStyle(.switch)' in toggle
 assert '.controlSize(.regular)' in toggle
 assert '.tint(tint ?? theme.accent)' in toggle
 assert features.count('tint: state.indicatorColor') >= 2
-assert 'HStack(spacing: 16)' in row
+assert 'HStack(spacing: theme.rowContentSpacing)' in row
+assert 'rowContentSpacing: 16' in theme
 assert features.count('TrainerLabeledControlRow(') == 2
 assert 'TrainerIconLabel(' in row
-assert '.frame(width: 40, height: 40)' in row
+assert '.frame(width: theme.rowIconSize, height: theme.rowIconSize)' in row
+assert 'rowIconSize: 40' in theme
 assert 'theme.rowHorizontalPadding' in row
 assert 'theme.rowMinimumHeight' in row
 assert '.background(theme.panel)' in row
@@ -71,7 +73,8 @@ assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric_block
 assert 'HStack(spacing: 2)' in stats
 assert stats.count('.frame(width: 54)') >= 2
 assert 'HStack(spacing: 3)' in stats
-assert '.frame(width: 58)' in stats
+assert '.frame(width: theme.compactFieldWidth)' in stats
+assert 'compactFieldWidth: 58' in theme
 assert 'TrainerDisclosureButton(' in view
 disclosure_button = disclosure[disclosure.index('struct TrainerDisclosureButton'):]
 assert 'HStack(spacing: 5)' in disclosure_button
@@ -98,8 +101,8 @@ assert 'theme.panelPadding' not in save_editor
 assert 'theme.inlineRowVerticalPadding' in save_editor
 
 # Stat/resource geometry stays on the old baseline.
-assert '.frame(width: 58)' in stats
-assert 'TrainerRow(opacity:' in stats
+assert '.frame(width: theme.compactFieldWidth)' in stats
+assert 'TrainerRow(' not in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(' in resource
 assert 'text: $amount' in resource

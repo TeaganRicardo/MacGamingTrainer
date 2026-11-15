@@ -554,7 +554,6 @@ private struct HadesCatalogView: View {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
             TrainerSecondaryActionButton(
                 title: text("hades.acquire"),
-                systemImage: TrainerSemanticIcon.Action.acquire,
                 enabled: model.canMutate && model.canAcceptRuntimeAction
                     && selectedChaosBlessing != nil
                     && chaosCurses.contains(where: { $0.id == model.selectedChaosCurse }),
@@ -620,7 +619,6 @@ private struct HadesCatalogView: View {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
             TrainerSecondaryActionButton(
                 title: text("hades.acquire"),
-                systemImage: TrainerSemanticIcon.Action.acquire,
                 enabled: selected?.acquirable != false
                     && selected != nil && model.canMutate && model.canAcceptRuntimeAction,
                 widthRole: .compactRow
@@ -805,7 +803,6 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 )
                 TrainerSecondaryActionButton(
                     title: text("hades.setLevel"),
-                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: false,
                     widthRole: .compactRow,
                     action: {}
@@ -831,7 +828,6 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 .trainerPicker(.compactValue, state: .unavailable)
                 TrainerSecondaryActionButton(
                     title: text("hades.setRarity"),
-                    systemImage: TrainerSemanticIcon.Action.apply,
                     enabled: false,
                     widthRole: .compactRow,
                     action: {}
@@ -935,7 +931,6 @@ private struct HadesCurrentTraitRow: View {
                     )
                     TrainerSecondaryActionButton(
                         title: text("hades.setLevel"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyLevel,
                         widthRole: .compactRow
                     ) {
@@ -970,7 +965,6 @@ private struct HadesCurrentTraitRow: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades.setRarity"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyRarity,
                         widthRole: .compactRow
                     ) {

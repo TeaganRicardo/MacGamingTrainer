@@ -659,7 +659,6 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitLevel(trait),
                         widthRole: .compactRow
                     ) {
@@ -672,7 +671,6 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         widthRole: .compactRow,
                         action: {}
@@ -704,7 +702,6 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: canApplyTraitRarity(trait),
                         widthRole: .compactRow
                     ) {
@@ -720,7 +717,6 @@ struct Hades2TrainerView: View {
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyRarity"),
-                        systemImage: TrainerSemanticIcon.Action.apply,
                         enabled: false,
                         widthRole: .compactRow,
                         action: {}
@@ -760,7 +756,6 @@ struct Hades2TrainerView: View {
             ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
-                    systemImage: ShortcutAction.matureGarden.icon,
                     enabled: model.canMatureGarden) {
                     _ = model.matureGarden()
                 }
@@ -1327,7 +1322,6 @@ struct Hades2TrainerView: View {
         } action: {
             TrainerSecondaryActionButton(
                 title: text(model.selectedWorldExitLease != nil ? "hades2.worldActions.cancel" : "hades2.worldActions.apply"),
-                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.selectedWorldExitActionAvailable,
                 latched: model.selectedWorldExitLease != nil,
                 subduedLatched: true,
@@ -1380,7 +1374,6 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text(pending ? "hades2.worldActions.cancel" : "hades2.worldActions.apply"),
-                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.occurrenceActionAvailable,
                 latched: pending,
                 subduedLatched: true,
@@ -1556,7 +1549,6 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
-                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireChaosPair
                             && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
                             && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
@@ -1614,7 +1606,6 @@ struct Hades2TrainerView: View {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
-                        systemImage: TrainerSemanticIcon.Action.acquire,
                         enabled: model.canAcquireExactReward
                             && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
                         widthRole: .compactRow
@@ -1653,7 +1644,6 @@ struct Hades2TrainerView: View {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
                 TrainerSecondaryActionButton(
                     title: text("hades2.spawn.open"),
-                    systemImage: ShortcutAction.openSellTraits.icon,
                     enabled: model.canOpenSellTraits,
                     widthRole: .compactRow
                 ) { _ = model.openSellTraits() }
