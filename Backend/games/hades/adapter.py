@@ -494,13 +494,18 @@ class HadesAdapter(GameAdapter):
             'presentation': error.presentation,
             'arguments': list(getattr(error, 'arguments', ()) or ()),
         }
-        if error.code == 'time_warp_verify_failed' and error.arguments:
-            try:
-                observed = float(error.arguments[-1])
-                if 0 <= observed <= 10:
-                    self._game_speed_actual = observed
-            except (TypeError, ValueError):
-                pass
+        if error.code == 'time_warp_verify_failed':
+            # A corrupted TimeScale or inconsistent auto-reset/step flag leaves
+            # the effective applied speed unverified. Retain a numeric observed
+            # speed only when the controller explicitly reports one.
+            self._game_speed_actual = None
+            if error.arguments:
+                try:
+                    observed = float(error.arguments[-1])
+                    if math.isfinite(observed) and 0 <= observed <= 10:
+                        self._game_speed_actual = observed
+                except (TypeError, ValueError):
+                    pass
         if error.code in ('outcome_unknown', 'restart_required') or not getattr(self.runtime, 'connected', True):
             self._game_speed_actual = None
             if not getattr(self.runtime, 'connected', True):
