@@ -149,11 +149,41 @@ class HadesSimulationTimeWarp:
                 diagnostic=f'Observed sgg::App::TimeScale out of supported range: {observed}',
             )
 
+    def _expected_owner_flags(self, time_scale, no_fixed_step_raw):
+        baseline_step = b'\x00' if no_fixed_step_raw == b'\x01' else b'\x01'
+        use_fixed_step = (
+            b'\x00'
+            if time_scale == 0.0 or time_scale > self.FIXED_STEP_MAXIMUM
+            else baseline_step
+        )
+        auto_reset = b'\x00' if time_scale == 1.0 else b'\x01'
+        return use_fixed_step, auto_reset
+
     def current_speed(self):
         def read_op(app_instance_addr, auto_reset_addr, no_fixed_step_addr):
             snapshot = self._read_snapshot(app_instance_addr, auto_reset_addr, no_fixed_step_addr)
-            time_scale = snapshot[5]
+            _, auto_reset_raw, no_fixed_step_raw, use_fixed_step_raw, _, time_scale = snapshot
             self._verify_finite_range(time_scale)
+            expected_fixed_step, expected_auto_reset = self._expected_owner_flags(
+                time_scale, no_fixed_step_raw
+            )
+            if (auto_reset_raw != expected_auto_reset
+                    or use_fixed_step_raw != expected_fixed_step):
+                expected = (
+                    f'autoReset={expected_auto_reset[0]}, fixedStep={expected_fixed_step[0]}'
+                )
+                observed = (
+                    f'autoReset={auto_reset_raw[0]}, fixedStep={use_fixed_step_raw[0]}'
+                )
+                raise AdapterError(
+                    'time_warp_verify_failed',
+                    'host.timeWarp.error.verifyFailed',
+                    arguments=(expected, observed),
+                    diagnostic=(
+                        f'sgg::App::TimeScale={time_scale:g} has inconsistent '
+                        f'engine clock control flags: expected {expected}, observed {observed}'
+                    ),
+                )
             return time_scale
 
         return self._with_stopped_process(read_op)
@@ -181,16 +211,12 @@ class HadesSimulationTimeWarp:
             self._verify_finite_non_negative(current_scale, target=f'{effective_speed:g}')
 
             expected_fixed_step = b'\x00' if no_fixed_step_raw == b'\x01' else b'\x01'
-            # At 0x, FixedStep stops calling sgg::App::Update, which freezes input and
-            # starves HadesLuaTransport._boundary(). Above 5x, UpdateAndDraw clamps the
-            # FixedStep accumulator at 0.083333336s (5 steps/frame at 60Hz). Routing
-            # 0x and >5x through the engine's built-in variable-step branch resolves both.
-            target_fixed_step = (
-                b'\x00'
-                if effective_speed == 0.0 or effective_speed > self.FIXED_STEP_MAXIMUM
-                else expected_fixed_step
+            # At 0x, FixedStep stops calling sgg::App::Update, freezing input and
+            # starving the LLDB boundary. Above 5x, the fixed-step accumulator has
+            # a five-step limit. The variable-step branch avoids both constraints.
+            target_fixed_step, target_auto_reset = self._expected_owner_flags(
+                effective_speed, no_fixed_step_raw
             )
-            target_auto_reset = b'\x00' if effective_speed == 1.0 else b'\x01'
             if effective_speed == 1.0:
                 packed_speed = _ONE_FLOAT32
 
