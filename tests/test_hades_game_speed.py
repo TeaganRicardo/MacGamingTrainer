@@ -112,6 +112,19 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-') as directory:
     }
     runtime.speed_error = None
 
+    # Inconsistent engine-owner flags invalidate an earlier applied receipt.
+    # The observed string is diagnostic state, not a numeric applied speed.
+    adapter._record_game_speed_error(AdapterError(
+        'time_warp_verify_failed', 'host.timeWarp.error.verifyFailed',
+        arguments=('autoReset=1, fixedStep=1', 'autoReset=0, fixedStep=1'),
+    ))
+    state = adapter.dispatch('status', {}, 'status-after-clock-drift')
+    assert state['features']['gameSpeed'] == {
+        'desired': 3.0, 'actual': None, 'active': None,
+        'errorPresentation': 'host.timeWarp.error.verifyFailed',
+        'errorArguments': ['autoReset=1, fixedStep=1', 'autoReset=0, fixedStep=1'],
+    }
+
     state = adapter.dispatch('disable_all', {}, 'disable')
     assert store.load() == DEFAULT_PREFERENCES
     assert runtime.speed == 1.0 and state['features']['gameSpeed']['desired'] == 1.0
