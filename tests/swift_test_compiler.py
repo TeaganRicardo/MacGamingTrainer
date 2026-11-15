@@ -28,6 +28,7 @@ Equivalence and staleness guarantees:
 from __future__ import annotations
 
 import fcntl
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -38,7 +39,7 @@ import tempfile
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
 CACHE_FORMAT_VERSION = 1
 MODULE_NAME = "MGTTestSupport"
@@ -287,7 +288,19 @@ def _prune_cache(cache_dir: Path, keep_name: str) -> None:
             continue
     candidates.sort(key=lambda item: item[0], reverse=True)
     for _, stale_dir in candidates[MAX_CACHE_ENTRIES - 1:]:
-        shutil.rmtree(stale_dir, ignore_errors=True)
+        # A separate test process may be linking against this static module.
+        # Pruning must respect the same per-key lock used by active readers.
+        lock_path = cache_dir / ".locks" / f"{stale_dir.name}.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+") as lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                continue
+            try:
+                shutil.rmtree(stale_dir, ignore_errors=True)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _sdk_args(toolchain: Mapping[str, str], existing_flags: Sequence[str]) -> list[str]:
@@ -378,6 +391,32 @@ def _ensure_support_module(
                 raise
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _pinned_cached_entry(
+    cache_dir: Path,
+    key: str,
+    build_entry: Callable[[], Path],
+) -> Iterator[Path]:
+    """Hold a shared per-key lease through harness linking.
+
+    The builder's exclusive lock ends before linking. If another compiler
+    pruned this key during that gap, rebuild instead of linking a missing
+    module. Pruners skip entries with an active shared lease.
+    """
+    for _ in range(3):
+        entry_dir = build_entry()
+        lock_path = cache_dir / ".locks" / f"{key[:24]}.lock"
+        with lock_path.open("a+") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            try:
+                if _valid_cached_entry(entry_dir, key):
+                    yield entry_dir
+                    return
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    raise SwiftCompilerError("Swift test support cache entry was repeatedly evicted before linking")
 
 
 def _write_harness_shims(
@@ -477,32 +516,34 @@ def compile_swift_test(
         file_records=file_records,
     )
     resolved_cache_dir = cache_dir if cache_dir is not None else default_cache_dir(env)
-    module_dir = _ensure_support_module(
-        swiftc=compiler,
-        toolchain=toolchain,
-        support_sources=support_list,
-        support_flags=normalized_support_flags,
-        cache_dir=resolved_cache_dir,
-        key=key,
-        cwd=cwd,
-        child_env=child_env,
-    )
+    def build_entry() -> Path:
+        return _ensure_support_module(
+            swiftc=compiler,
+            toolchain=toolchain,
+            support_sources=support_list,
+            support_flags=normalized_support_flags,
+            cache_dir=resolved_cache_dir,
+            key=key,
+            cwd=cwd,
+            child_env=child_env,
+        )
 
-    with tempfile.TemporaryDirectory(prefix="mgt-swift-shim-") as shim_root:
-        shimmed = _write_harness_shims(harness_list, Path(shim_root))
-        link_flags = [f for f in flags if f != "-whole-module-optimization"]
-        cmd = [
-            compiler,
-            *_sdk_args(toolchain, link_flags),
-            *link_flags,
-            "-I",
-            str(module_dir),
-            "-L",
-            str(module_dir),
-            f"-l{MODULE_NAME}",
-            *map(str, shimmed),
-            "-o",
-            str(output_path),
-        ]
-        subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
+    with _pinned_cached_entry(resolved_cache_dir, key, build_entry) as module_dir:
+        with tempfile.TemporaryDirectory(prefix="mgt-swift-shim-") as shim_root:
+            shimmed = _write_harness_shims(harness_list, Path(shim_root))
+            link_flags = [f for f in flags if f != "-whole-module-optimization"]
+            cmd = [
+                compiler,
+                *_sdk_args(toolchain, link_flags),
+                *link_flags,
+                "-I",
+                str(module_dir),
+                "-L",
+                str(module_dir),
+                f"-l{MODULE_NAME}",
+                *map(str, shimmed),
+                "-o",
+                str(output_path),
+            ]
+            subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
     return output_path
