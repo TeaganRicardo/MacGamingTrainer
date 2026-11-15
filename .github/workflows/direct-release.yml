@@ -11,6 +11,9 @@ on:
 concurrency:
   group: direct-release
   cancel-in-progress: false
+  # Preserve every queued release trigger; the default single-pending mode can
+  # replace a version bump with a later metadata-only push that then skips.
+  queue: max
 
 permissions:
   actions: write
