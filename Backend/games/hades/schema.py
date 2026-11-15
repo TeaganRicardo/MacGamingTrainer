@@ -20,8 +20,8 @@ DEFAULT_FEATURES = {
     'dashBonus': 0,
 }
 # Game-native simulation speed is a durable module preference, but it must
-# never enter the Lua resident feature document. Its multiplier is owned by
-# the Hades Lua bridge and composes with the game's own AdjustSimulationSpeed.
+# never enter the Lua resident feature document. Hades owns it directly on
+# sgg::App::TimeScale at the native debugger boundary.
 DEFAULT_PREFERENCES = {
     **DEFAULT_FEATURES,
     'boonRarityTarget': 'Heroic',
