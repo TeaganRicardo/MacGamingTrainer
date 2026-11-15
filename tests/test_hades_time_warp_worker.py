@@ -243,8 +243,8 @@ assert not tainted_transport.attached and tainted_transport.detaches == 1
 assert struct.unpack('<f', tainted_transport.memory[
     tainted_transport.APP_PTR + APP_TIME_SCALE_OFFSET
 ])[0] == 1.0, 'tainted EOF detached while 0x clock lease survived'
-assert tainted_transport.memory[0x100010] == b'\\x00'
-assert tainted_transport.memory[tainted_transport.APP_PTR + APP_USE_FIXED_STEP_OFFSET] == b'\\x01'
+assert tainted_transport.memory[0x100010] == b'\x00'
+assert tainted_transport.memory[tainted_transport.APP_PTR + APP_USE_FIXED_STEP_OFFSET] == b'\x01'
 
 # A failed last-chance cleanup must preserve the debugger attachment; after
 # the transport is writable again, EOF cleanup may be retried without replay.
