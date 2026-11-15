@@ -10,6 +10,8 @@ from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from search_ui_harness import SEARCH_JOURNEY
 from native_picker_harness import NATIVE_PICKER
 from macos_fixture_policy import FixtureWatchdogExpired, launch_fixture
+from fixture_budgets.hades import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 import shutil
 import subprocess
 import sys
@@ -2227,11 +2229,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}
     generated = folder / 'ActiveGame.generated.swift'
     subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
-    sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades').rglob('*.swift')) + [
-        ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
-        generated, folder / 'main.swift']
+    support_sources = (
+        sorted((ROOT / 'Sources/Core').rglob('*.swift'))
+        + sorted((ROOT / 'Sources/Hades').rglob('*.swift'))
+        + [ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', generated]
+    )
     binary = folder / 'frontend'
-    subprocess.run([shutil.which('swiftc'), '-parse-as-library', *map(str, sources), '-o', str(binary)], check=True, cwd=ROOT)
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[ROOT / 'tests/fixtures/swift/NativeAccessibility.swift', folder / 'main.swift'],
+        output=binary,
+        cwd=ROOT,
+    )
 
     # Compile once and give Save editing, runtime recovery, feedback and management
     # their own workers: a separate recovery process stops unrelated editor work from
@@ -2281,7 +2290,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         print('hades_frontend_launch:' + journey, flush=True)
         try:
             proc = launch_fixture([str(binary), str(case_folder), sys.executable, journey],
-                                  journey=JOURNEY_IDS[journey],
+                                  journey=JOURNEY_IDS[journey], budgets=JOURNEY_BUDGETS,
                                   phase_file=case_folder / 'native-phase.txt',
                                   diagnostics=(case_folder / 'commands.jsonl',
                                                case_folder / 'replies.jsonl',

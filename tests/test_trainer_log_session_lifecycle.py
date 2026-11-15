@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_runtime import JOURNEY_BUDGETS
 import shutil
 import subprocess
 import tempfile
@@ -705,7 +706,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-log-session-") as td:
         cwd=ROOT,
         text=True,
         capture_output=True,
-        journey='native.trainer_log_session_lifecycle',
+        journey='native.trainer_log_session_lifecycle', budgets=JOURNEY_BUDGETS,
     )
     if proc.returncode != 0:
         print(proc.stdout)

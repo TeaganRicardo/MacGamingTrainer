@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_save import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 """Native Save workbench journeys against real temporary Save transactions."""
 import hashlib
 import json
@@ -35,23 +37,27 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-player-journey-") as temporary
         [sys.executable, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
         check=True, cwd=ROOT,
     )
-    sources = (
+    support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-           ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
-           ROOT / "tests/fixtures/swift/SaveEditorPlayerJourney.swift", generated]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
     )
     binary = base / "save-player-journey"
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
-        check=True, cwd=ROOT,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            ROOT / "tests/fixtures/swift/SaveEditorPlayerJourney.swift",
+        ],
+        output=binary,
+        swiftc=SWIFTC,
+        cwd=ROOT,
     )
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                PYTHONPATH=str(ROOT / "Backend"), MGT_SAVE_JOURNEY_FIXTURE=str(base))
     result = launch_fixture(
         [str(binary), sys.executable, str(ROOT / "tests/fixtures/hades2/save_editor_player_journey.py")],
-        check=False, cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_editor_player_journey',
+        check=False, cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_editor_player_journey', budgets=JOURNEY_BUDGETS,
     )
     if result.returncode:
         print(result.stdout)

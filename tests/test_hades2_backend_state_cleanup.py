@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 Swift state cleanup test")
@@ -411,14 +412,16 @@ extension Hades2TrainerModel {
         check=True,
         cwd=ROOT,
     )
-    sources = (
+    support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + [path for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")) if path.name != "Hades2Model.swift"]
-        + [testable_model, generated, main_path]
+        + [testable_model, generated]
     )
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
-        check=True,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[main_path],
+        output=binary,
+        swiftc=SWIFTC,
         cwd=ROOT,
     )
     env = dict(os.environ)

@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 from macos_fixture_policy import FixtureWatchdogExpired, launch_fixture
+from fixture_budgets.multi_game import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 
 WORKER = r'''
@@ -632,12 +634,16 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         main = project / "main.swift"
         main.write_text(HARNESS)
         binary = project / "real-navigation"
-        sources = sorted((project / "Sources").rglob("*.swift")) + [
-            root / "tests/fixtures/swift/NativeAccessibility.swift",
-            root / "tests/fixtures/swift/InMemoryDefaults.swift", generated, main,
-        ]
-        subprocess.run([shutil.which("swiftc"), "-parse-as-library", *map(str, sources), "-o", str(binary)],
-                       check=True, cwd=project)
+        compile_swift_test(
+            support_sources=[
+                *sorted((project / "Sources").rglob("*.swift")),
+                root / "tests/fixtures/swift/InMemoryDefaults.swift",
+                generated,
+            ],
+            harness_sources=[root / "tests/fixtures/swift/NativeAccessibility.swift", main],
+            output=binary,
+            cwd=project,
+        )
         home = project / "home"
         home.mkdir()
         env = {**os.environ, "HOME": str(home), "CFFIXED_USER_HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1"}
@@ -650,7 +656,7 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
         journey = ("multi_game_navigation.startup" if startup_only
                    else "multi_game_navigation.journey")
         try:
-            result = launch_fixture(arguments, journey=journey, cwd=project, env=env,
+            result = launch_fixture(arguments, journey=journey, budgets=JOURNEY_BUDGETS, cwd=project, env=env,
                                     capture_output=True, text=True)
         except FixtureWatchdogExpired:
             _failure_diagnostics(project)

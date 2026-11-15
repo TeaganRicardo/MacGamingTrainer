@@ -507,6 +507,100 @@ def test_list_and_manifest_are_consistent():
     assert listed == declared, f"--list drifted from the manifest: {listed ^ declared}"
 
 
+def test_baseline_cache_reuses_green_clean_run_and_isolates_failures():
+    """Sharing an owning test runs its green baseline once, never reusing red runs."""
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-cache-") as tmp:
+        target = Path(tmp) / "target.py"
+        original = "X = 1\nY = 1\n"
+        target.write_text(original, encoding="utf-8")
+        m1 = mutation_gate.Mutation(
+            ident="m1", invariant="X preserved", path=target,
+            old="X = 1", new="X = 2", test="tests/test_shared_ok.py",
+        )
+        m2 = mutation_gate.Mutation(
+            ident="m2", invariant="Y preserved", path=target,
+            old="Y = 1", new="Y = 2", test="tests/test_shared_ok.py",
+        )
+        calls: list[str] = []
+        original_run = mutation_gate._run
+        original_token = mutation_gate.success_token_for
+
+        def fake_run_green(test: str, **kw):
+            calls.append(test)
+            if target.read_text(encoding="utf-8") == original:
+                return subprocess.CompletedProcess([test], 0, stdout="shared_ok\n", stderr="")
+            return subprocess.CompletedProcess([test], 1, stdout="", stderr="AssertionError: broken")
+
+        mutation_gate.success_token_for = lambda test: "shared_ok"
+        mutation_gate._run = fake_run_green
+        try:
+            results = mutation_gate.run_mutations([m1, m2])
+        finally:
+            mutation_gate._run = original_run
+            mutation_gate.success_token_for = original_token
+
+        assert [r.outcome for r in results] == ["caught", "caught"], results
+        assert len(calls) == 3, ("expected 1 clean + 2 mutated runs, got", len(calls))
+        assert target.read_text(encoding="utf-8") == original
+
+        # Failing clean baselines must not be cached across mutations.
+        calls.clear()
+
+        def fake_run_red(test: str, **kw):
+            calls.append(test)
+            return subprocess.CompletedProcess([test], 1, stdout="", stderr="AssertionError: baseline red")
+
+        mutation_gate.success_token_for = lambda test: "shared_ok"
+        mutation_gate._run = fake_run_red
+        try:
+            red_results = mutation_gate.run_mutations([m1, m2])
+        finally:
+            mutation_gate._run = original_run
+            mutation_gate.success_token_for = original_token
+
+        assert all(r.outcome == "error" and "RED" in r.detail for r in red_results), red_results
+        assert len(calls) == 2, calls
+        assert target.read_text(encoding="utf-8") == original
+
+
+def test_baseline_cache_fails_closed_on_clean_hash_drift():
+    """Tracked clean-hash drift blocks cached baseline reuse and further mutation."""
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-drift-") as tmp:
+        target = Path(tmp) / "target.py"
+        original = "A = 1\n"
+        target.write_text(original, encoding="utf-8")
+        m = mutation_gate.Mutation(
+            ident="m-drift", invariant="A preserved", path=target,
+            old="A = 1", new="A = 2", test="tests/test_drift_ok.py",
+        )
+        expected_hashes = mutation_gate._clean_baseline_hashes([m])
+        cache = {
+            m.test: (
+                subprocess.CompletedProcess([m.test], 0, stdout="drift_ok\n", stderr=""),
+                "drift_ok",
+            )
+        }
+        # External drift between mutations must fail closed without calling _run.
+        target.write_text("A = 1\n# drifted\n", encoding="utf-8")
+
+        calls: list[str] = []
+        original_run = mutation_gate._run
+        original_token = mutation_gate.success_token_for
+        mutation_gate.success_token_for = lambda test: "drift_ok"
+        mutation_gate._run = lambda test, **kw: calls.append(test)
+        try:
+            res = mutation_gate.run_mutation(
+                m, baseline_cache=cache, expected_clean_hashes=expected_hashes,
+            )
+        finally:
+            mutation_gate._run = original_run
+            mutation_gate.success_token_for = original_token
+
+        assert res.outcome == "error", res
+        assert "drifted" in res.detail and "SHA-256" in res.detail, res.detail
+        assert not calls, ("_run must not execute after clean-hash drift", calls)
+
+
 if __name__ == "__main__":
     test_manifest_is_valid()
     test_success_tokens_come_from_owning_tests()
@@ -525,6 +619,8 @@ if __name__ == "__main__":
     test_the_artifact_rule_rejects_evidence_outside_the_repository()
     test_gate_reports_a_real_surviving_mutant_as_failure()
     test_list_and_manifest_are_consistent()
+    test_baseline_cache_reuses_green_clean_run_and_isolates_failures()
+    test_baseline_cache_fails_closed_on_clean_hash_drift()
 
     # Every test in this file must actually be called. A test that is defined but
     # never registered is silently dead, and that is how a guard disappears

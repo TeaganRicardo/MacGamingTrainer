@@ -35,76 +35,6 @@ PROFILE_VARIABLE = "MGT_MACOS_RUNNER_LABEL"
 SOURCE_VARIABLE = "HEAD_SHA"
 TIMINGS_VARIABLE = "MGT_FIXTURE_TIMINGS"
 
-# Hosted values are the previously effective ARM64 budgets. They are hang
-# containment, not performance targets: each one stays well above the measured
-# journey time so a slow-but-correct run is never reported as a stall. Tighten a
-# value only with controlled evidence, and never below the observed tail.
-JOURNEY_BUDGETS: dict[str, float] = {
-    # Hades I native journeys (tests/test_hades_frontend.py).
-    # Five hosted observations span 40.1s to 54.0s. A gate must clear the
-    # observed maximum by at least one observed spread (13.9s), and 65s did not.
-    "hades.save_editor": 80.0,
-    # Five hosted runs on macos-26/ARM64 span 19.0s to 29.6s. The earlier 30s
-    # gate left 0.4s of headroom on a passing run, which is not containment.
-    "hades.recovery": 45.0,
-    # Same native connection-fault assertions as recovery, now isolated from
-    # unrelated AX/control work. Retain the established 45s outer watchdog.
-    "hades.interlock": 45.0,
-    "hades.management": 30.0,
-    "hades.slider": 20.0,
-    # Seven hosted runs on macos-26/ARM64 after #717/#719 expanded hierarchy
-    # geometry checks span 15.255s to 20.124s (spread 4.869s); 20s expired
-    # after hades_visual_hierarchy_ok printed. Give the journey real margin.
-    "hades.hierarchy": 30.0,
-    "hades.disclosure": 60.0,
-    "hades.search": 20.0,
-    # Hades II native journeys (tests/test_hades2_view_state_flow.py).
-    # Shares exerciseVisualHierarchy and exerciseRoomPickerAlignment with Hades I.
-    "hades2.hierarchy": 30.0,
-    "hades2.slider": 20.0,
-    "hades2.disclosure": 60.0,
-    "hades2.search": 20.0,
-    "hades2.state_flow": 30.0,
-    "hades2.world_exit": 30.0,
-    "hades2.live_trait_flow": 30.0,
-    "hades2.save_editor": 30.0,
-    # Shared ownership journeys.
-    "reference_fixture.suffix_identity": 30.0,
-    "runtime_text_edit.completion": 60.0,
-    "multi_game_navigation.startup": 30.0,
-    "multi_game_navigation.journey": 45.0,
-    # Remaining native entrypoints retain their former containment ceiling,
-    # with a 20s minimum for the shortest journeys. Hosted timings are retained
-    # before any later tightening; no performance assertion is added here.
-    'native.trainer_text_field_appearance': 20.0,
-    'native.trainer_search_field_appearance': 20.0,
-    'native.core_save_batch_delete_round20': 20.0,
-    'native.core_save_rename_completion_round24': 20.0,
-    'native.core_save_manager_lifecycle_u01_u02.1': 20.0,
-    'native.core_save_manager_lifecycle_u01_u02.2': 20.0,
-    'native.hades2_run_log_watcher': 20.0,
-    'native.trainer_log_session_lifecycle': 30.0,
-    'native.backend_stderr_liveness': 20.0,
-    'native.disclosure_settle_classification': 120.0,
-    'native.viewport_feedback': 45.0,
-    'native.hades2_force_enable_rerolls_frontend': 30.0,
-    'native.hades2_gathering_frontend': 30.0,
-    'native.hades2_chaos_gate_frontend': 30.0,
-    'native.hades2_save_editor_player_journey': 60.0,
-    'native.hades2_advanced_save_frontend': 60.0,
-    'native.hades2_save_record_frontend': 60.0,
-    'native.reference_fixture_session_integration': 45.0,
-    'native.trainer_tool_windows': 20.0,
-    'native.hades2_repeated_actions_frontend': 30.0,
-    'native.host_target_ownership': 20.0,
-    'native.core_save_retention_controls': 45.0,
-    'native.mapped_slider_interaction': 20.0,
-    'native.hades2_save_container_frontend': 60.0,
-    'multi_game.context_state': 90.0,
-    'multi_game.context_navigation': 90.0,
-    'native_effect_query.image_identity': 30.0,
-}
-
 MAXIMUM_BUDGET_SECONDS = 300.0
 # Local development has no verified profile. A bounded floor replaces the
 # retired global multiplier: a loaded laptop is not a CI failure, and a genuine
@@ -147,8 +77,11 @@ class FixtureWatchdogExpired(RuntimeError):
         self.stderr = stderr
 
 
-def _validate_journey_budgets() -> None:
-    for journey, seconds in JOURNEY_BUDGETS.items():
+def validate_journey_budgets(budgets: Mapping[str, float]) -> None:
+    """Ensure a domain journey-budget table is non-empty and within policy bounds."""
+    if not isinstance(budgets, Mapping) or not budgets:
+        raise FixturePolicyError("domain journey budgets must be a non-empty mapping")
+    for journey, seconds in budgets.items():
         if not isinstance(journey, str) or not journey or journey != journey.strip():
             raise FixturePolicyError(f"invalid macOS fixture journey name: {journey!r}")
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
@@ -157,9 +90,6 @@ def _validate_journey_budgets() -> None:
             raise FixturePolicyError(
                 f"{journey}: budget {seconds!r} must be within (0, {MAXIMUM_BUDGET_SECONDS:g}]"
             )
-
-
-_validate_journey_budgets()
 
 
 def resolve_profile(environ: Mapping[str, str] | None = None) -> str:
@@ -184,12 +114,14 @@ def resolve_profile(environ: Mapping[str, str] | None = None) -> str:
     return HOSTED_PROFILE
 
 
-def resolve_budget(journey: str, environ: Mapping[str, str] | None = None) -> FixtureBudget:
+def resolve_budget(journey: str, environ: Mapping[str, str] | None = None, *,
+                   budgets: Mapping[str, float]) -> FixtureBudget:
     """Resolve one journey's watchdog for the active profile."""
-    if journey not in JOURNEY_BUDGETS:
+    validate_journey_budgets(budgets)
+    if journey not in budgets:
         raise FixturePolicyError(f"undeclared macOS fixture journey: {journey!r}")
     profile = resolve_profile(environ)
-    hosted = JOURNEY_BUDGETS[journey]
+    hosted = budgets[journey]
     if profile == HOSTED_PROFILE:
         seconds = hosted
     else:
@@ -427,11 +359,12 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
 
 
 def launch_fixture(argv: Sequence[str], *, journey: str,
+                   budgets: Mapping[str, float],
                    environ: Mapping[str, str] | None = None,
                    phase_file: Path | None = None,
                    diagnostics: Iterable[Path] = (), **kwargs) -> subprocess.CompletedProcess:
     """Resolve, announce and enforce one journey's watchdog."""
-    budget = resolve_budget(journey, environ)
+    budget = resolve_budget(journey, environ, budgets=budgets)
     print(f"macos_fixture_watchdog_start {budget.describe()}", flush=True)
     return run_watchdog(argv, budget=budget, environ=environ, phase_file=phase_file,
                         diagnostics=diagnostics, **kwargs)

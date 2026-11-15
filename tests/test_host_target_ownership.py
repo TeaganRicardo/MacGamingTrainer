@@ -1,4 +1,5 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_runtime import JOURNEY_BUDGETS
 """Exercise real App admission with inert UI/backend and isolated OS processes."""
 import json
 from pathlib import Path
@@ -316,7 +317,7 @@ import Foundation
             launch_fixture(
                 [str(swift_binary), str(process.pid), expected],
                 check=True,
-                journey='native.host_target_ownership',
+                journey='native.host_target_ownership', budgets=JOURNEY_BUDGETS,
                 cwd=ROOT,
             )
         finally:

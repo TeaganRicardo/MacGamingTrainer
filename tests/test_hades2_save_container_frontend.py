@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_save import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 """Actual container controls through the temporary production Save backend."""
 import json
 import os
@@ -26,20 +28,25 @@ with tempfile.TemporaryDirectory(prefix="mgt-container-save-journey-") as tempor
     home.mkdir()
     generated = base / "ActiveGame.generated.swift"
     subprocess.run([sys.executable, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True, cwd=ROOT)
-    sources = (sorted((ROOT / "Sources/Core").rglob("*.swift"))
-               + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-               + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-                  ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
-                  ROOT / "tests/fixtures/swift/SaveContainerPlayerJourney.swift", generated])
+    support_sources = (sorted((ROOT / "Sources/Core").rglob("*.swift"))
+                       + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
+                       + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated])
     swiftc = shutil.which("swiftc")
     if not swiftc:
         raise SystemExit("swiftc required")
     binary = base / "advanced-save-journey"
-    subprocess.run([swiftc, "-parse-as-library", *map(str, sources), "-o", str(binary)], check=True, cwd=ROOT)
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+                         ROOT / "tests/fixtures/swift/SaveContainerPlayerJourney.swift"],
+        output=binary,
+        swiftc=swiftc,
+        cwd=ROOT,
+    )
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
                PYTHONPATH=str(ROOT / "Backend"), MGT_SAVE_JOURNEY_FIXTURE=str(base), MGT_SAVE_CONTAINER_FIXTURE="1")
     result = launch_fixture([str(binary), sys.executable, str(ROOT / "tests/fixtures/hades2/save_editor_player_journey.py")],
-                            cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_container_frontend')
+                            cwd=ROOT, env=env, text=True, capture_output=True, journey='native.hades2_save_container_frontend', budgets=JOURNEY_BUDGETS)
     if result.returncode:
         print(result.stdout)
         print(result.stderr)

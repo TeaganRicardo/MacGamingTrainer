@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_panels import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 import json
 """Exercise the Hades input admission seam without starting or attaching to the game."""
 import os
@@ -509,21 +511,24 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-repeat-actions-") as td:
         [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(binding_path)],
         check=True, cwd=ROOT,
     )
-    sources = [
+    support_sources = [
         *sorted((ROOT / "Sources/Core").rglob("*.swift")),
         *sorted((ROOT / "Sources/Hades2").rglob("*.swift")),
+        ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
         binding_path,
-        swift_path,
     ]
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary_path)],
-        check=True, cwd=ROOT,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[swift_path],
+        output=binary_path,
+        swiftc=SWIFTC,
+        cwd=ROOT,
     )
     env = dict(os.environ)
     env["HOME"] = str(home_path)
     result = launch_fixture(
         [str(binary_path), PYTHON, str(worker_path)],
-        cwd=ROOT, env=env, capture_output=True, text=True, journey='native.hades2_repeated_actions_frontend',
+        cwd=ROOT, env=env, capture_output=True, text=True, journey='native.hades2_repeated_actions_frontend', budgets=JOURNEY_BUDGETS,
     )
     if result.returncode:
         print(result.stdout)

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import re
 import shutil
@@ -709,7 +710,28 @@ def check_manifest(mutations: list[Mutation]) -> list[str]:
     return problems
 
 
-def run_mutation(m: Mutation) -> Result:
+def _clean_baseline_hashes(mutations: list[Mutation]) -> dict[Path, bytes]:
+    """Record clean SHA-256 digests for every mutable target before execution."""
+    return {
+        path: hashlib.sha256(path.read_bytes()).digest()
+        for path in sorted({m.path for m in mutations})
+    }
+
+
+def _find_drifted_target(expected_hashes: dict[Path, bytes]) -> Optional[Path]:
+    """Return the first tracked file whose current bytes differ from baseline."""
+    for path, expected in expected_hashes.items():
+        if hashlib.sha256(path.read_bytes()).digest() != expected:
+            return path
+    return None
+
+
+def run_mutation(
+    m: Mutation,
+    *,
+    baseline_cache: Optional[dict[str, tuple[subprocess.CompletedProcess, str]]] = None,
+    expected_clean_hashes: Optional[dict[Path, bytes]] = None,
+) -> Result:
     """Break one invariant and require the owning test to notice.
 
     Two properties make the result mean anything, and both were missing in the
@@ -727,6 +749,16 @@ def run_mutation(m: Mutation) -> Result:
     different reason* than a crash. A mutation that only crashes is reported
     as an error, never as a catch.
     """
+    if expected_clean_hashes is not None:
+        drifted = _find_drifted_target(expected_clean_hashes)
+        if drifted is not None:
+            return Result(
+                m,
+                "error",
+                f"tracked target {drifted} drifted from its clean baseline SHA-256; "
+                "refusing cached baseline or further mutation",
+            )
+
     original = _read(m.path)
     if m.old not in original:
         return Result(m, "skipped", "anchor disappeared between check and run")
@@ -735,19 +767,26 @@ def run_mutation(m: Mutation) -> Result:
         token = success_token_for(m.test)
     except ValueError as error:
         return Result(m, "error", str(error))
-    clean = _run(m.test)
-    if clean.returncode != 0:
-        return Result(
-            m, "error",
-            "the owning test is RED before mutation, so this invariant cannot "
-            "be proven; fix the test first",
-            _tail(clean.stderr))
-    if token and token not in (clean.stdout or ""):
-        return Result(
-            m, "error",
-            f"the owning test did not print its success token {token!r}, so a "
-            "crashed run cannot be told apart from a real catch",
-            _tail(clean.stdout))
+
+    cached = baseline_cache.get(m.test) if baseline_cache is not None else None
+    if cached is not None and cached[1] == token:
+        clean = cached[0]
+    else:
+        clean = _run(m.test)
+        if clean.returncode != 0:
+            return Result(
+                m, "error",
+                "the owning test is RED before mutation, so this invariant cannot "
+                "be proven; fix the test first",
+                _tail(clean.stderr))
+        if token and token not in (clean.stdout or ""):
+            return Result(
+                m, "error",
+                f"the owning test did not print its success token {token!r}, so a "
+                "crashed run cannot be told apart from a real catch",
+                _tail(clean.stdout))
+        if baseline_cache is not None:
+            baseline_cache[m.test] = (clean, token)
 
     try:
         m.path.write_text(original.replace(m.old, m.new, 1), encoding="utf-8")
@@ -756,6 +795,17 @@ def run_mutation(m: Mutation) -> Result:
         return Result(m, "error", "test timed out under mutation")
     finally:
         m.path.write_text(original, encoding="utf-8")
+
+    if expected_clean_hashes is not None:
+        drifted = _find_drifted_target(expected_clean_hashes)
+        if drifted is not None:
+            if baseline_cache is not None:
+                baseline_cache.clear()
+            return Result(
+                m,
+                "error",
+                f"tracked target {drifted} failed clean SHA-256 restore verification",
+            )
 
     if mutated.returncode == 0:
         if m.equivalent_reason:
@@ -770,6 +820,20 @@ def run_mutation(m: Mutation) -> Result:
             "assertion, so the invariant was not actually policed",
             _tail(mutated.stderr))
     return Result(m, "caught", stderr_tail=_tail(mutated.stderr))
+
+
+def run_mutations(mutations: list[Mutation]) -> list[Result]:
+    """Run mutations while reusing verified green clean baselines per owning test."""
+    expected_hashes = _clean_baseline_hashes(mutations)
+    baseline_cache: dict[str, tuple[subprocess.CompletedProcess, str]] = {}
+    return [
+        run_mutation(
+            m,
+            baseline_cache=baseline_cache,
+            expected_clean_hashes=expected_hashes,
+        )
+        for m in mutations
+    ]
 
 
 def verify_clean_tree() -> Optional[str]:
@@ -843,7 +907,7 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    results = [run_mutation(m) for m in mutations]
+    results = run_mutations(mutations)
 
     survivors = [r for r in results if r.outcome == "survived"]
     skipped = [r for r in results if r.outcome == "skipped"]

@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 from native_picker_harness import NATIVE_PICKER
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only runtime text-edit behavior")
@@ -1002,7 +1004,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         traced.write_text(text)
         sources[sources.index(source)] = traced
     binary = td / "text_edit"
-    subprocess.run([SWIFTC, "-parse-as-library", *map(str,sources), str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"), str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(generated), str(main), "-o", str(binary)], check=True)
+    compile_swift_test(
+        support_sources=[*sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated],
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        output=binary,
+        swiftc=SWIFTC,
+    )
     # Each journey retains its own bounded behavioral waits below. The outer
     # process budget only covers SwiftUI/AppKit startup and compilation-host
     # variance on shared CI runners; it must not expire after all assertions
@@ -1014,7 +1021,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
         env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
         print(f"runtime_text_edit_completion_launch:{journey}", flush=True)
         result = launch_fixture([str(binary), PYTHON, str(worker), journey], env=env,
-                                journey="runtime_text_edit.completion",
+                                journey="runtime_text_edit.completion", budgets=JOURNEY_BUDGETS,
                                 capture_output=True, text=True)
         print(result.stdout, end="", flush=True)
         print(result.stderr, end="", file=sys.stderr, flush=True)

@@ -1,4 +1,6 @@
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.core_save import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 """Exercise automatic-backup policy/protection through real native controls.
 
 The synthetic app talks to the real Core JSONL router and Save service, using
@@ -275,10 +277,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-retention-controls-") as temporary:
         localized = directory / f"{language}.lproj"
         localized.mkdir()
         shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
-    subprocess.run([SWIFTC, "-parse-as-library", *map(str, sorted((ROOT / "Sources/Core").rglob("*.swift"))),
-                    str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
-                    str(ROOT / "tests/fixtures/swift/NativeAccessibility.swift"), str(harness), "-o", str(binary)],
-                   cwd=ROOT, check=True)
+    compile_swift_test(
+        support_sources=[
+            *sorted((ROOT / "Sources/Core").rglob("*.swift")),
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+        ],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            harness,
+        ],
+        output=binary,
+        swiftc=SWIFTC,
+        cwd=ROOT,
+    )
     (directory / "home").mkdir()
     environment = dict(os.environ, HOME=str(directory / "home"))
-    launch_fixture([str(binary), sys.executable, str(worker)], cwd=ROOT, env=environment, check=True, journey='native.core_save_retention_controls')
+    launch_fixture([str(binary), sys.executable, str(worker)], cwd=ROOT, env=environment, check=True, journey='native.core_save_retention_controls', budgets=JOURNEY_BUDGETS)

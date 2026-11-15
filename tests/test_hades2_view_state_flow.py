@@ -14,6 +14,8 @@ from disclosure_ui_harness import DISCLOSURE_JOURNEY
 from native_picker_harness import NATIVE_PICKER
 from search_ui_harness import SEARCH_JOURNEY
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_flow import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")
@@ -834,26 +836,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
         check=True,
         cwd=ROOT,
     )
-    sources = (
+    support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [
-            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
-            generated,
-            main_path,
-        ]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
     )
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
-        check=True,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            main_path,
+        ],
+        output=binary,
+        swiftc=SWIFTC,
         cwd=ROOT,
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
     env["CFFIXED_USER_HOME"] = str(home)
     hierarchy = launch_fixture([str(binary), PYTHON, str(worker_path), "hierarchy"],
-                               journey="hades2.hierarchy",
+                               journey="hades2.hierarchy", budgets=JOURNEY_BUDGETS,
                                cwd=ROOT, env=env, text=True, capture_output=True)
     if hierarchy.returncode != 0:
         print(hierarchy.stdout)
@@ -867,7 +869,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     slider_worker = td / "slider_worker.py"
     shutil.copy2(worker_path, slider_worker)
     slider_proc = launch_fixture(
-        [str(binary), PYTHON, str(slider_worker), "slider"], journey="hades2.slider",
+        [str(binary), PYTHON, str(slider_worker), "slider"], journey="hades2.slider", budgets=JOURNEY_BUDGETS,
         cwd=ROOT, env=env, text=True, capture_output=True,
     )
     if slider_proc.returncode != 0:
@@ -879,7 +881,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     disclosure_worker = td / "disclosure_worker.py"
     shutil.copy2(worker_path, disclosure_worker)
     disclosure_proc = launch_fixture(
-        [str(binary), PYTHON, str(disclosure_worker), "disclosure"], journey="hades2.disclosure",
+        [str(binary), PYTHON, str(disclosure_worker), "disclosure"], journey="hades2.disclosure", budgets=JOURNEY_BUDGETS,
         cwd=ROOT, env=env, text=True, capture_output=True,
     )
     if disclosure_proc.returncode != 0:
@@ -889,7 +891,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     assert "hades2_disclosure_module_journey_ok" in disclosure_proc.stdout, disclosure_proc.stdout
     print(disclosure_proc.stdout.strip())
     search_proc = launch_fixture([str(binary), PYTHON, str(worker_path), "search"],
-                                 journey="hades2.search",
+                                 journey="hades2.search", budgets=JOURNEY_BUDGETS,
                                  cwd=ROOT, env=env, text=True, capture_output=True)
     if search_proc.returncode != 0:
         print(search_proc.stdout)
@@ -901,7 +903,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     shutil.copy2(worker_path, world_exit_worker)
     world_exit_proc = launch_fixture(
         [str(binary), PYTHON, str(world_exit_worker), "world_exit"],
-        journey="hades2.world_exit",
+        journey="hades2.world_exit", budgets=JOURNEY_BUDGETS,
         cwd=ROOT, env=env, text=True, capture_output=True,
     )
     if world_exit_proc.returncode != 0:
@@ -912,7 +914,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     print(world_exit_proc.stdout.strip())
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
-        journey="hades2.state_flow",
+        journey="hades2.state_flow", budgets=JOURNEY_BUDGETS,
         cwd=ROOT,
         env=env,
         text=True,

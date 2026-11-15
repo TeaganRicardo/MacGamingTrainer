@@ -8,6 +8,8 @@ import textwrap
 from pathlib import Path
 
 from macos_fixture_policy import launch_fixture
+from fixture_budgets.hades2_save import JOURNEY_BUDGETS
+from swift_test_compiler import compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 Save Editor frontend test")
@@ -2158,21 +2160,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
         check=True,
         cwd=ROOT,
     )
-    sources = (
+    support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", ROOT / "tests/fixtures/swift/NativeAccessibility.swift", generated, main_path]
+        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
     )
-    subprocess.run(
-        [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
-        check=True,
+    compile_swift_test(
+        support_sources=support_sources,
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main_path],
+        output=binary,
+        swiftc=SWIFTC,
         cwd=ROOT,
     )
     env = dict(os.environ)
     env["HOME"] = str(home)
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path)],
-        journey="hades2.save_editor",
+        journey="hades2.save_editor", budgets=JOURNEY_BUDGETS,
         cwd=ROOT,
         env=env,
         text=True,

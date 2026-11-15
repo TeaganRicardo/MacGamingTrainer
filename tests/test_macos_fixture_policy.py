@@ -4,6 +4,7 @@ The policy exists so that a slow-but-correct native journey, a stalled process
 and an unmet semantic predicate stay three different outcomes. These checks are
 portable: they never require AppKit or a hosted runner.
 """
+import importlib
 import os
 import signal
 import subprocess
@@ -15,13 +16,16 @@ from pathlib import Path
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
 sys.path.insert(0, str(TESTS))
+sys.path.insert(0, str(ROOT / "Tools"))
 
+import macos_fixture_policy
 from macos_fixture_policy import (
-    HOSTED_PROFILE, JOURNEY_BUDGETS, LOCAL_MINIMUM_SECONDS, LOCAL_PROFILE,
+    HOSTED_PROFILE, LOCAL_MINIMUM_SECONDS, LOCAL_PROFILE,
     MAXIMUM_BUDGET_SECONDS, PROFILE_VARIABLE,
     FixtureBudget, FixturePolicyError, FixtureWatchdogExpired,
-    resolve_budget, resolve_profile, run_watchdog,
+    resolve_budget, resolve_profile, run_watchdog, validate_journey_budgets,
 )
+from select_macos_pr_tests import PR_DEFERRED, load_macos_only_tests, selected_tests, source_directories
 
 HOSTED = {"GITHUB_ACTIONS": "true", PROFILE_VARIABLE: HOSTED_PROFILE, "RUNNER_ARCH": "ARM64"}
 
@@ -98,22 +102,52 @@ else:
 
 # --- Budget resolution --------------------------------------------------------
 
-for journey, hosted in JOURNEY_BUDGETS.items():
-    assert 0 < hosted <= MAXIMUM_BUDGET_SECONDS, journey
-    resolved = resolve_budget(journey, HOSTED)
-    assert resolved.profile == HOSTED_PROFILE and resolved.seconds == hosted, journey
-    local = resolve_budget(journey, {})
-    assert local.profile == LOCAL_PROFILE, journey
-    assert local.seconds == min(MAXIMUM_BUDGET_SECONDS, max(hosted, LOCAL_MINIMUM_SECONDS)), journey
-    assert local.seconds >= hosted, journey
-    assert "budget=" in resolved.describe(), journey
+assert not hasattr(macos_fixture_policy, "JOURNEY_BUDGETS"), (
+    "domain journey budgets belong in tests/fixture_budgets/*.py, not in "
+    "tests/macos_fixture_policy.py where one adjustment fans out across every consumer"
+)
+assert not (TESTS / "fixture_budgets/__init__.py").exists(), (
+    "tests/fixture_budgets must stay a namespace package without __init__.py so "
+    "dependency discovery never links domain consumers through a shared module"
+)
+
+DOMAIN_MODULES = sorted((TESTS / "fixture_budgets").glob("*.py"))
+assert DOMAIN_MODULES, "expected per-domain budget modules under tests/fixture_budgets/"
+
+JOURNEY_BUDGETS: dict[str, float] = {}
+MODULE_BUDGETS: dict[str, dict[str, float]] = {}
+for module_path in DOMAIN_MODULES:
+    module = importlib.import_module(f"fixture_budgets.{module_path.stem}")
+    budgets = module.JOURNEY_BUDGETS
+    validate_journey_budgets(budgets)
+    overlap = set(JOURNEY_BUDGETS) & set(budgets)
+    assert not overlap, f"duplicate journey budgets in {module_path.name}: {sorted(overlap)}"
+    MODULE_BUDGETS[module_path.stem] = budgets
+    JOURNEY_BUDGETS.update(budgets)
+
+    for journey, hosted in budgets.items():
+        assert 0 < hosted <= MAXIMUM_BUDGET_SECONDS, journey
+        resolved = resolve_budget(journey, HOSTED, budgets=budgets)
+        assert resolved.profile == HOSTED_PROFILE and resolved.seconds == hosted, journey
+        local = resolve_budget(journey, {}, budgets=budgets)
+        assert local.profile == LOCAL_PROFILE, journey
+        assert local.seconds == min(MAXIMUM_BUDGET_SECONDS, max(hosted, LOCAL_MINIMUM_SECONDS)), journey
+        assert local.seconds >= hosted, journey
+        assert "budget=" in resolved.describe(), journey
 
 try:
-    resolve_budget("hades.undeclared", HOSTED)
+    resolve_budget("hades.undeclared", HOSTED, budgets=MODULE_BUDGETS["hades"])
 except FixturePolicyError as error:
     assert "undeclared" in str(error), error
 else:
     raise AssertionError("undeclared journey inherited a budget")
+
+try:
+    resolve_budget("anything", HOSTED, budgets={})
+except FixturePolicyError as error:
+    assert "non-empty" in str(error), error
+else:
+    raise AssertionError("empty domain budget table accepted")
 
 # A timeout is containment, not a latency gate: no budget may sit so close to a
 # measured journey that ordinary variance reads as a hang.
@@ -233,12 +267,29 @@ assert not (TESTS / "test_macos_outer_timeout_budget.py").exists()
 assert not (TESTS / "test_hades2_save_editor_frontend_budget.py").exists()
 
 declared = set()
+consumer_domains: dict[str, set[str]] = {}
 for name, journeys in CONSUMERS.items():
     source = (TESTS / name).read_text(encoding="utf-8")
     assert "from macos_fixture_policy import" in source, name
+    assert "from fixture_budgets." in source, name
     assert "launch_fixture" in source, name
+    assert "budgets=" in source, name
     assert "scaled_outer_timeout" not in source, name
     assert "MGT_MACOS_OUTER_TIMEOUT_SCALE" not in source, name
+    for domain_name, budgets in MODULE_BUDGETS.items():
+        if f"from fixture_budgets.{domain_name} import" in source:
+            consumer_domains.setdefault(domain_name, set())
+            for journey in journeys:
+                assert journey in budgets, (name, domain_name, journey)
+            # Support harnesses feed into top-level macOS tests in the inventory.
+            if name == "real_module_navigation_harness.py":
+                consumer_domains[domain_name].add("test_multi_game_contexts.py")
+            elif name == "multi_game_context_harness.py":
+                consumer_domains[domain_name].update(
+                    {"test_multi_game_contexts.py", "test_multi_game_context_state.py"}
+                )
+            else:
+                consumer_domains[domain_name].add(name)
     for journey in journeys:
         assert f'"{journey}"' in source or f"'{journey}'" in source, (name, journey)
         declared.add(journey)
@@ -247,6 +298,17 @@ assert declared == set(JOURNEY_BUDGETS), (
     "declared journeys and owned journeys diverged: "
     f"{sorted(declared ^ set(JOURNEY_BUDGETS))}"
 )
+
+# Fan-out isolation proof: calibrating one domain budget selects only its
+# owning tests, never the full 28+ PR native fixture suite.
+INVENTORY = load_macos_only_tests()
+SOURCES = source_directories()
+for domain_name, owners in consumer_domains.items():
+    selected = set(selected_tests([f"tests/fixture_budgets/{domain_name}.py"], INVENTORY, SOURCES))
+    assert selected == owners, (domain_name, selected, owners)
+    pr_selected = selected - PR_DEFERRED.keys()
+    assert len(pr_selected) <= 6, f"domain budget {domain_name} fanned out too broadly: {pr_selected}"
+assert selected_tests(["tests/fixture_budgets/hades.py"], INVENTORY, SOURCES) == ["test_hades_frontend.py"]
 
 for path in sorted((ROOT / "Tools").rglob("*")) + sorted((ROOT / ".github").rglob("*.yml")):
     if not path.is_file() or path.suffix not in {".py", ".sh", ".yml", ".json", ".txt"}:
