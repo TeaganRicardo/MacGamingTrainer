@@ -465,8 +465,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
         check=True,
         cwd=ROOT,
     )
-    # This harness drives the live-trait model only; it never builds a
-    # TrainerLocalizationStore, so it does not need the in-memory defaults.
+    # Include InMemoryDefaults.swift so this harness shares the cached
+    # Core+Hades2 support module cleanly with sibling frontend harnesses.
     support_sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))

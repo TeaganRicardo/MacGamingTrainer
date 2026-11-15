@@ -75,13 +75,18 @@ def _is_temp_path(path: Path) -> bool:
     return any(root == resolved or root in resolved.parents for root in temp_roots)
 
 
-@lru_cache(maxsize=8)
-def probe_toolchain(swiftc: str, sdk_root: str = "", developer_dir: str = "") -> dict[str, str]:
-    """Capture compiler and macOS SDK identity strings for cache keying."""
-    env = dict(os.environ)
+@lru_cache(maxsize=16)
+def _probe_toolchain_cached(
+    swiftc: str,
+    cleaned_sdk: str,
+    developer_dir: str,
+    path_env: str,
+) -> dict[str, str]:
+    env: dict[str, str] = {}
+    if path_env:
+        env["PATH"] = path_env
     if developer_dir:
         env["DEVELOPER_DIR"] = developer_dir
-    cleaned_sdk = sdk_root.strip()
     # Apple's /usr/bin/python3 shim injects CommandLineTools SDKROOT into child
     # processes; ignore that shim path so xcrun discovers the selected Xcode SDK
     # (which includes SwiftUIMacros/Xcode plugins) instead of failing on CLT.
@@ -89,7 +94,6 @@ def probe_toolchain(swiftc: str, sdk_root: str = "", developer_dir: str = "") ->
         env["SDKROOT"] = cleaned_sdk
         resolved_sdk = cleaned_sdk
     else:
-        env.pop("SDKROOT", None)
         resolved_sdk = ""
     resolved_swiftc = str(Path(swiftc).resolve())
     version = subprocess.check_output(
@@ -139,6 +143,24 @@ def probe_toolchain(swiftc: str, sdk_root: str = "", developer_dir: str = "") ->
         "developer_dir": developer_dir,
         "arch": platform.machine(),
     }
+
+
+def probe_toolchain(
+    swiftc: str,
+    sdk_root: str = "",
+    developer_dir: str = "",
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Capture compiler and macOS SDK identity strings for cache keying."""
+    base_env = os.environ if environ is None else environ
+    cleaned_sdk = (sdk_root or base_env.get("SDKROOT", "")).strip()
+    dev_dir = (developer_dir or base_env.get("DEVELOPER_DIR", "")).strip()
+    path_env = base_env.get("PATH", os.environ.get("PATH", ""))
+    return _probe_toolchain_cached(swiftc, cleaned_sdk, dev_dir, path_env)
+
+
+probe_toolchain.cache_clear = _probe_toolchain_cached.cache_clear
 
 
 def resolve_swiftc(swiftc: str | None = None) -> str:
@@ -277,6 +299,8 @@ def _sdk_args(toolchain: Mapping[str, str], existing_flags: Sequence[str]) -> li
 
 def _subprocess_env(base_env: Mapping[str, str], toolchain: Mapping[str, str]) -> dict[str, str]:
     child_env = dict(base_env)
+    if "PATH" not in child_env and "PATH" in os.environ:
+        child_env["PATH"] = os.environ["PATH"]
     sdk_path = toolchain.get("sdk_path", "")
     if sdk_path:
         child_env["SDKROOT"] = sdk_path
@@ -405,7 +429,7 @@ def compile_swift_test(
     output_path = Path(output)
     sdk_env = env.get("SDKROOT", "").strip()
     dev_env = env.get("DEVELOPER_DIR", "").strip()
-    toolchain = probe_toolchain(compiler, sdk_env, dev_env)
+    toolchain = probe_toolchain(compiler, sdk_env, dev_env, environ=env)
     child_env = _subprocess_env(env, toolchain)
 
     cache_enabled = env.get(CACHE_ENV_VAR, "1").strip().lower() not in {"0", "false", "no", "off"}

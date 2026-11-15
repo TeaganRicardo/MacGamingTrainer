@@ -312,6 +312,40 @@ def test_clt_sdk_shim_ignored_for_xcode_discovery() -> None:
     assert stc._subprocess_env({"SDKROOT": clt_sdk}, tc)["SDKROOT"] == xcode_sdk
     assert "SDKROOT" not in stc._subprocess_env({"SDKROOT": clt_sdk}, {"sdk_path": ""})
 
+    # Custom environ must not leak os.environ DEVELOPER_DIR/SDKROOT, and changing
+    # os.environ DEVELOPER_DIR must miss the cached probe instead of reusing stale values.
+    stc.probe_toolchain.cache_clear()
+    try:
+        seen_envs.clear()
+        with mock.patch.dict(
+            os.environ,
+            {"DEVELOPER_DIR": "/Applications/Xcode_Old.app/Contents/Developer", "SDKROOT": "/Old.sdk"},
+            clear=False,
+        ), mock.patch.object(stc.os, "uname", return_value=fake_uname), mock.patch.object(
+            stc.subprocess, "check_output", side_effect=fake_check_output
+        ):
+            isolated = stc.probe_toolchain("/usr/bin/swiftc", environ={})
+            assert isolated["developer_dir"] == "", isolated
+            for _, passed_env in seen_envs:
+                assert "DEVELOPER_DIR" not in passed_env, passed_env
+                assert "SDKROOT" not in passed_env, passed_env
+
+            tc_old = stc.probe_toolchain("/usr/bin/swiftc")
+            assert tc_old["developer_dir"] == "/Applications/Xcode_Old.app/Contents/Developer"
+
+        with mock.patch.dict(
+            os.environ,
+            {"DEVELOPER_DIR": "/Applications/Xcode_New.app/Contents/Developer", "SDKROOT": "/New.sdk"},
+            clear=False,
+        ), mock.patch.object(stc.os, "uname", return_value=fake_uname), mock.patch.object(
+            stc.subprocess, "check_output", side_effect=fake_check_output
+        ):
+            tc_new = stc.probe_toolchain("/usr/bin/swiftc")
+            assert tc_new["developer_dir"] == "/Applications/Xcode_New.app/Contents/Developer"
+            assert tc_new["sdk_path"] == "/New.sdk"
+    finally:
+        stc.probe_toolchain.cache_clear()
+
 
 def test_real_darwin_equivalence_and_cache_hit() -> None:
     """When run on macOS with swiftc, cached cold/warm builds match direct MGT_SWIFT_TEST_CACHE=0."""
