@@ -502,7 +502,7 @@ class HadesAdapter(GameAdapter):
             if error.arguments:
                 try:
                     observed = float(error.arguments[-1])
-                    if math.isfinite(observed) and 0 <= observed <= 10:
+                    if 0 <= observed <= 10:
                         self._game_speed_actual = observed
                 except (TypeError, ValueError):
                     pass
