@@ -47,13 +47,24 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
         # when exercising non-temp repo semantics so the temp hierarchy guard stays exact.
         real_core = ROOT / "Sources/Core/Runtime/TrainerJSON.swift"
         real_defaults = ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"
+        # A temporary checkout is correctly uncached in production. Model a
+        # stable source checkout here so this key test is location-independent.
+        def stable_repo_records(paths):
+            original = stc._is_temp_path
+            stable = {real_core.resolve(), real_defaults.resolve()}
+            with mock.patch.object(
+                stc, "_is_temp_path",
+                side_effect=lambda p: False if Path(p).resolve() in stable else original(p),
+            ):
+                return stc._support_file_records(paths)
+
         gen_a = Path(gen_dir_a) / "ActiveGame.generated.swift"
         gen_b = Path(gen_dir_b) / "ActiveGame.generated.swift"
         gen_a.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
         gen_b.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
 
-        records_a, cacheable_a = stc._support_file_records([real_core, real_defaults, gen_a])
-        records_b, cacheable_b = stc._support_file_records([real_core, real_defaults, gen_b])
+        records_a, cacheable_a = stable_repo_records([real_core, real_defaults, gen_a])
+        records_b, cacheable_b = stable_repo_records([real_core, real_defaults, gen_b])
         assert cacheable_a and cacheable_b, (cacheable_a, cacheable_b)
         assert records_a == records_b, "identical ActiveGame.generated.swift bytes must share cache across temp dirs"
 
@@ -65,12 +76,12 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
 
         # Generated content change invalidates key.
         gen_b.write_text("// generated\nlet activeGameID = \"hades\"\n", encoding="utf-8")
-        records_b2, _ = stc._support_file_records([real_core, real_defaults, gen_b])
+        records_b2, _ = stable_repo_records([real_core, real_defaults, gen_b])
         k_gen_changed = stc.compute_support_key(toolchain=tc, support_flags=flags, file_records=records_b2)
         assert k_gen_changed != k_base
 
         # File order change invalidates key.
-        records_reordered, _ = stc._support_file_records([real_defaults, real_core, gen_a])
+        records_reordered, _ = stable_repo_records([real_defaults, real_core, gen_a])
         assert (
             stc.compute_support_key(toolchain=tc, support_flags=flags, file_records=records_reordered)
             != k_base
@@ -113,7 +124,7 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
         # Non-generated temp files disable cacheability so patched trees never collide.
         ephemeral = Path(gen_dir_a) / "PatchedSource.swift"
         ephemeral.write_text("let patched = true\n", encoding="utf-8")
-        _, cacheable_ephemeral = stc._support_file_records([real_core, ephemeral, gen_a])
+        _, cacheable_ephemeral = stable_repo_records([real_core, ephemeral, gen_a])
         assert not cacheable_ephemeral
 
         # Non-temp repo paths with identical bytes in different checkouts produce
@@ -477,7 +488,17 @@ struct EquivalenceHarness {
         cold_bin = work / "cold"
         warm_bin = work / "warm"
 
-        stc.compile_swift_test(
+        # Keep this equivalence check valid if the repository itself was
+        # checked out below /tmp; only the generated binding is ephemeral.
+        def compile_from_checkout(**kwargs):
+            original = stc._is_temp_path
+            with mock.patch.object(
+                stc, "_is_temp_path",
+                side_effect=lambda p: False if Path(p).resolve().is_relative_to(ROOT.resolve()) else original(p),
+            ):
+                return stc.compile_swift_test(**kwargs)
+
+        compile_from_checkout(
             support_sources=support,
             harness_sources=[harness],
             output=direct_bin,
@@ -488,7 +509,7 @@ struct EquivalenceHarness {
         )
         assert not cache_dir.exists()
 
-        stc.compile_swift_test(
+        compile_from_checkout(
             support_sources=support,
             harness_sources=[harness],
             output=cold_bin,
@@ -500,7 +521,7 @@ struct EquivalenceHarness {
         entries = [p for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
         assert len(entries) == 1
 
-        stc.compile_swift_test(
+        compile_from_checkout(
             support_sources=support,
             harness_sources=[harness],
             output=warm_bin,
