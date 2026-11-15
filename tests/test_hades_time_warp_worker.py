@@ -225,11 +225,12 @@ for operation in ('disconnect', 'close'):
 # An already-tainted transport keeps explicit disconnect blocked with restart_required,
 # yet EOF close still releases the debugger instead of crashing before transport.close().
 tainted_transport = MemoryTransport()
-tainted_transport.tainted = True
 tainted_worker = HadesTimeWarpWorker(
     transport=tainted_transport,
     time_warp_factory=HadesSimulationTimeWarp,
 )
+assert tainted_worker.dispatch('time_warp.set_speed', {'value': 0.0})['gameSpeed'] == 0.0
+tainted_transport.tainted = True
 try:
     tainted_worker.dispatch('disconnect', {})
 except AdapterError as error:
@@ -239,5 +240,37 @@ else:
 assert tainted_transport.attached and tainted_transport.detaches == 0
 tainted_worker.close()
 assert not tainted_transport.attached and tainted_transport.detaches == 1
+assert struct.unpack('<f', tainted_transport.memory[
+    tainted_transport.APP_PTR + APP_TIME_SCALE_OFFSET
+])[0] == 1.0, 'tainted EOF detached while 0x clock lease survived'
+assert tainted_transport.memory[0x100010] == b'\\x00'
+assert tainted_transport.memory[tainted_transport.APP_PTR + APP_USE_FIXED_STEP_OFFSET] == b'\\x01'
+
+# A failed last-chance cleanup must preserve the debugger attachment; after
+# the transport is writable again, EOF cleanup may be retried without replay.
+failed_cleanup_transport = MemoryTransport()
+failed_cleanup_worker = HadesTimeWarpWorker(
+    transport=failed_cleanup_transport,
+    time_warp_factory=HadesSimulationTimeWarp,
+)
+assert failed_cleanup_worker.dispatch('time_warp.set_speed', {'value': 0.0})['gameSpeed'] == 0.0
+failed_cleanup_transport.tainted = True
+original_write = failed_cleanup_transport.write_memory
+def fail_cleanup_write(address, data):
+    raise AdapterError('memory_error', 'hades.error.debuggerCall', diagnostic='write denied')
+failed_cleanup_transport.write_memory = fail_cleanup_write
+try:
+    failed_cleanup_worker.close()
+except AdapterError as error:
+    assert error.code == 'outcome_unknown'
+else:
+    raise AssertionError('failed tainted EOF cleanup detached')
+assert failed_cleanup_transport.attached and failed_cleanup_transport.detaches == 0
+failed_cleanup_transport.write_memory = original_write
+failed_cleanup_worker.close()
+assert not failed_cleanup_transport.attached and failed_cleanup_transport.detaches == 1
+assert struct.unpack('<f', failed_cleanup_transport.memory[
+    failed_cleanup_transport.APP_PTR + APP_TIME_SCALE_OFFSET
+])[0] == 1.0
 
 print('hades_game_native_simulation_time_warp_worker_contract_ok')
