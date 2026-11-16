@@ -444,11 +444,12 @@ func commands(at url: URL) -> [[String: Any]] {
         pump()
         check(!editor.canApply, "active edit did not guard Apply while typing")
         sendEsc(to: reopenedSheetWindow)
-        wait("Esc during active edit dismissed cleanly without leaking activeEdits") {
-            window.attachedSheet == nil && editor.canApply
+        wait("Esc Done committed valid typed edit without leaking activeEdits") {
+            window.attachedSheet == nil && editor.canApply &&
+                editor.review.actions.contains(where: { $0.id == "row:container" })
         }
 
-        // Recovery failure while typed sheet is open: Cancel remains responsive and dismisses cleanly.
+        // Recovery failure while typed sheet is open: explicit Cancel is still safe.
         guard let recoveryTypedBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               recoveryTypedBtn.enabled, recoveryTypedBtn.press() else {
             fail("Edit Typed Value button missing before recovery check")
@@ -467,6 +468,12 @@ func commands(at url: URL) -> [[String: Any]] {
         stateCheck: do {
             editor.openSelection()
             wait("reopened clean save document after recovery test") { !editor.busy && !editor.queryLoading && editor.canEditRows }
+        }
+        // Done is now an actual staged typed edit; restore the empty review state
+        // before checking the independent basket-remove path below.
+        editor.cancel(baseline: editor.baselineGeneration)
+        wait("explicit discard cleared the previously accepted typed edit") {
+            !editor.busy && editor.review.count == 0
         }
         guard let switchAgainForRemove = namedNativeControl(root, role: "AXCheckBox", name: "Boolean Switch"),
               switchAgainForRemove.press() else { fail("switch missing before trash remove") }
