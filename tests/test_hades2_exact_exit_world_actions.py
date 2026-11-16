@@ -62,6 +62,30 @@ assert(type(second.doorToken) == "string" and second.doorToken ~= ""
 assert(first.reward == "RoomMoneyDrop" and second.reward == "MaxManaDrop")
 assert(targetExists(first, "reward", "MaxHealthDrop"),
   "selected exit lacks a native-eligible ordinary reward target")
+assert(type(first.targetDiagnostics) == "table"
+    and first.targetDiagnostics.targetCount > 0,
+  "target observation omitted bounded availability diagnostics")
+assert(first.targetDiagnostics.reward.storeName == "RunProgress"
+    and first.targetDiagnostics.reward.candidateCount > 0,
+  "reward diagnostics did not report the native store and candidate count")
+assert(first.targetDiagnostics.routes.roomSetName == "F"
+    and first.targetDiagnostics.routes.candidateCountByCategory.combat > 0,
+  "route diagnostics did not report the native room set and category counts")
+
+-- Sparse status/action replies omit expensive global catalogs. The exact-exit
+-- target catalog must remain available for the same physical door/token.
+local sparseRNG = nativeRandomCalls
+local sparseStatus = M.dispatch("status", { includeCatalogs = false })
+local sparseFirst = sparseStatus.worldActions.exits[1]
+assert(sparseFirst.doorToken == first.doorToken
+    and targetExists(sparseFirst, "reward", "MaxHealthDrop")
+    and targetExists(sparseFirst, "roomCategory", "combat"),
+  "sparse status erased the cached exact-exit target catalog")
+assert(type(sparseFirst.targetDiagnostics) == "table"
+    and sparseFirst.targetDiagnostics.targetCount == #sparseFirst.targets,
+  "sparse status erased target diagnostics")
+assert(nativeRandomCalls == sparseRNG,
+  "sparse status re-probed a stable target catalog or consumed RNG")
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
@@ -100,7 +124,10 @@ SessionMapState = previousSession
 -- game's RNG. Random-dependent predicates fail closed for generic categories.
 probeEligibilityUsesRandom = true
 local beforeEligibilityProbe = nativeRandomCalls
-assert(not targetExists(exitByObject(1), "roomCategory", "combat"))
+local eligibilityBlocked = exitByObject(1)
+assert(not targetExists(eligibilityBlocked, "roomCategory", "combat"))
+assert(eligibilityBlocked.targetDiagnostics.routes.reason == "room_eligibility_requires_rng",
+  "random-dependent room eligibility did not report its fail-closed reason")
 assert(nativeRandomCalls == beforeEligibilityProbe,
   "IsRoomEligible inspection consumed native RNG")
 probeEligibilityUsesRandom = false
@@ -108,8 +135,12 @@ assert(targetExists(exitByObject(1), "roomCategory", "combat"))
 RoomData.F_Forced01.RandomForced = true
 probeForceUsesRandom = true
 local beforeForceProbe = nativeRandomCalls
-assert(not targetExists(exitByObject(1), "roomCategory", "combat"),
+local forceBlocked = exitByObject(1)
+assert(not targetExists(forceBlocked, "roomCategory", "combat"),
   "random-dependent native force logic exposed a generic route")
+assert(forceBlocked.targetDiagnostics.routes.reason == "room_force_requires_rng"
+    and forceBlocked.targetDiagnostics.routes.randomForceRoom == "F_Forced01",
+  "random-dependent native force did not report its blocking room")
 assert(nativeRandomCalls == beforeForceProbe,
   "IsRoomForced inspection consumed native RNG")
 probeForceUsesRandom = false
@@ -375,6 +406,12 @@ local replacement = CreateRoom(RoomData.F_Combat01, { SkipChooseReward = true, S
 replacement.ChosenRewardType = "MaxManaDrop"
 AssignRoomToExitDoor(rerollDoor, replacement)
 CreateDoorRewardPreview(rerollDoor)
+local sparseAfterReroll = M.dispatch("status", { includeCatalogs = false }).worldActions.exits[1]
+assert(sparseAfterReroll.doorToken ~= beforeReroll.doorToken
+    and targetExists(sparseAfterReroll, "roomCategory", "combat"),
+  "sparse status reused a stale target catalog after native door replacement")
+assert(sparseAfterReroll.targetDiagnostics.roomName == "F_Combat01",
+  "replacement door diagnostics still describe the previous native room")
 local afterReroll = exitByObject(1)
 assert(afterReroll.doorToken ~= beforeReroll.doorToken and afterReroll.activeLease == nil,
   "native target replacement retained stale exact-exit authority")

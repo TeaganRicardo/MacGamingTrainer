@@ -931,6 +931,31 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=reply.metrics.localize_duration
             asynchronous_unknown=reply.outcome_unknown
             decoded=self._merge_resident_reply(reply)
+            if command in ('status','apply_world_exit','cancel_world_exit'):
+                world_actions=raw_decoded.get('worldActions')
+                exits=world_actions.get('exits') if isinstance(world_actions,dict) else None
+                observed=[]
+                if isinstance(exits,list):
+                    for row in exits:
+                        if not isinstance(row,dict):continue
+                        diagnostic=row.get('targetDiagnostics')
+                        if not isinstance(diagnostic,dict):continue
+                        observed.append({
+                            'ordinal':row.get('ordinal'),
+                            'room':row.get('roomName'),
+                            'targetCount':diagnostic.get('targetCount'),
+                            'reason':diagnostic.get('reason'),
+                            'reward':diagnostic.get('reward'),
+                            'routes':diagnostic.get('routes'),
+                        })
+                if observed and (
+                    command in ('status','apply_world_exit','cancel_world_exit')
+                    or any(row.get('targetCount') == 0 for row in observed)
+                ):
+                    logging.info(
+                        'WorldActions target catalog diagnostics command=%s exits=%s',
+                        command,observed
+                    )
             if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
                 self._adopt_lua_preferences(raw_decoded)
             # Runtime observation skips durable Hades desired-state projection,
