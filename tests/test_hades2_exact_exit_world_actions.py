@@ -124,7 +124,10 @@ SessionMapState = previousSession
 -- game's RNG. Random-dependent predicates fail closed for generic categories.
 probeEligibilityUsesRandom = true
 local beforeEligibilityProbe = nativeRandomCalls
-assert(not targetExists(exitByObject(1), "roomCategory", "combat"))
+local eligibilityBlocked = exitByObject(1)
+assert(not targetExists(eligibilityBlocked, "roomCategory", "combat"))
+assert(eligibilityBlocked.targetDiagnostics.routes.reason == "room_eligibility_requires_rng",
+  "random-dependent room eligibility did not report its fail-closed reason")
 assert(nativeRandomCalls == beforeEligibilityProbe,
   "IsRoomEligible inspection consumed native RNG")
 probeEligibilityUsesRandom = false
@@ -132,8 +135,12 @@ assert(targetExists(exitByObject(1), "roomCategory", "combat"))
 RoomData.F_Forced01.RandomForced = true
 probeForceUsesRandom = true
 local beforeForceProbe = nativeRandomCalls
-assert(not targetExists(exitByObject(1), "roomCategory", "combat"),
+local forceBlocked = exitByObject(1)
+assert(not targetExists(forceBlocked, "roomCategory", "combat"),
   "random-dependent native force logic exposed a generic route")
+assert(forceBlocked.targetDiagnostics.routes.reason == "room_force_requires_rng"
+    and forceBlocked.targetDiagnostics.routes.randomForceRoom == "F_Forced01",
+  "random-dependent native force did not report its blocking room")
 assert(nativeRandomCalls == beforeForceProbe,
   "IsRoomForced inspection consumed native RNG")
 probeForceUsesRandom = false
@@ -405,8 +412,6 @@ assert(sparseAfterReroll.doorToken ~= beforeReroll.doorToken
   "sparse status reused a stale target catalog after native door replacement")
 assert(sparseAfterReroll.targetDiagnostics.roomName == "F_Combat01",
   "replacement door diagnostics still describe the previous native room")
-local afterReroll = exitByObject(1)
-CreateDoorRewardPreview(rerollDoor)
 local afterReroll = exitByObject(1)
 assert(afterReroll.doorToken ~= beforeReroll.doorToken and afterReroll.activeLease == nil,
   "native target replacement retained stale exact-exit authority")
