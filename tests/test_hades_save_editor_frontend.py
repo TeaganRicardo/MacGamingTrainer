@@ -332,6 +332,41 @@ func commands(at url: URL) -> [[String: Any]] {
         }
         wait("paging previous returned to offset 0") { !editor.queryLoading && editor.offset == 0 }
 
+        // A new search must invalidate old page navigation before the debounce fires.
+        // Navigating in that window must not cancel the search or carry its old offset.
+        guard let nextForSearch = namedNativeControl(root, role: "AXButton", name: nextTitle),
+              nextForSearch.enabled, nextForSearch.press() else {
+            fail("could not enter second page before search debounce test")
+        }
+        wait("second page reopened") { !editor.queryLoading && editor.offset == 40 }
+        let beforeSearchQueries = commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count
+        editor.search = "filtered"
+        check(!editor.canPreviousPage && !editor.canNextPage,
+              "new search allowed navigation with stale page context")
+        editor.nextPage()
+        editor.previousPage()
+        wait("search debounce reset offset without an intervening page request") {
+            let queries = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }
+            guard queries.count == beforeSearchQueries + 1,
+                  let params = queries.last?["params"] as? [String: Any] else { return false }
+            return !editor.queryLoading && editor.offset == 0
+                && params["query"] as? String == "filtered"
+                && params["offset"] as? Int == 0
+        }
+        check(!editor.canPreviousPage && editor.canNextPage,
+              "successful new search retained stale Back history")
+        editor.search = ""
+        wait("cleared search returned to first page") {
+            let queries = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }
+            guard queries.count == beforeSearchQueries + 2,
+                  let params = queries.last?["params"] as? [String: Any] else { return false }
+            return !editor.queryLoading && editor.offset == 0
+                && params["query"] as? String == ""
+                && params["offset"] as? Int == 0
+        }
+
         let beforeRefresh = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
         guard let refreshRowsBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.refreshRows")),
               refreshRowsBtn.enabled, refreshRowsBtn.press() else {
@@ -525,6 +560,16 @@ func commands(at url: URL) -> [[String: Any]] {
         editor.search = "fail-query"
         editor.query()
         wait("query failure surfaced") { !editor.queryLoading && !editor.failures.isEmpty }
+        check(!editor.canNextPage && !editor.canPreviousPage,
+              "failed search must not enable stale paging")
+        let beforeRejectedPaging = commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count
+        editor.nextPage()
+        editor.previousPage()
+        check(commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count == beforeRejectedPaging, "failed search allowed a stale page request")
 
         window.performClose(nil); pump()
         session.stop(); pump()
