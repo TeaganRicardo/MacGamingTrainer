@@ -418,11 +418,17 @@ func commands(at url: URL) -> [[String: Any]] {
         wait("invalid JSON stayed open with failed draft") { window.attachedSheet === sheetWindow && !editor.canApply }
         check(sheetWindow.makeFirstResponder(jsonEditor), "failed to refocus HadesSaveJSONEditor after error")
         sendEsc(to: sheetWindow)
-        wait("Esc on focused HadesSaveJSONEditor discarded invalid draft and restored Apply") {
+        check(window.attachedSheet === sheetWindow && !editor.canApply,
+              "Esc must use Done semantics: invalid JSON stays editable until corrected or explicitly cancelled")
+        guard let invalidCancel = namedNativeControl(sheet, role: "AXButton", name: text("host.cancel")),
+              invalidCancel.enabled, invalidCancel.press() else {
+            fail("explicit Cancel missing after rejected Done")
+        }
+        wait("explicit Cancel discarded invalid draft and restored Apply") {
             window.attachedSheet == nil && editor.failures["row:container"] == nil && editor.canApply
         }
 
-        // Reopen typed editor, keep active edits dirty in HadesSaveJSONEditor, and hit Esc -> no leaked activeEdits.
+        // Reopen typed editor: Esc is Done and must commit valid edits without leaked activeEdits.
         guard let editTypedAgain = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               editTypedAgain.enabled, editTypedAgain.press() else {
             fail("Edit Typed Value button missing on reopen")
