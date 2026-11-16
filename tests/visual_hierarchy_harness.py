@@ -45,7 +45,7 @@ private struct VisualHierarchyFixture: View {
             VStack(alignment: .leading, spacing: TrainerTheme.standard.pageSpacing) {
                 TrainerPageHeader(title: presentation.headerTitle) { EmptyView() }
                 TrainerSection(title: title("Run values", "当前数值"), icon: "chart.bar") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    TrainerMetricGrid {
                         TrainerVitalMetricCard(title: title("Health", "生命值"), icon: "heart", tint: .red,
                             current: $state.current, maximum: $state.maximum, focus: $state.focus,
                             currentField: "current", maximumField: "maximum",
@@ -292,6 +292,8 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
         exerciseWorldExitDualPickerLayout()
         return
     }
+    exerciseMetricGridRowParity()
+    exerciseAcquisitionLayoutGeometry()
     let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
     let theme = TrainerTheme.standard
     // System accessibility environment values are read-only. Exercise the
@@ -586,7 +588,104 @@ func exerciseVisualHierarchy(descriptor: GameModuleDescriptor, presentation: Tra
             window.close()
         }
     }
-    exerciseAcquisitionLayoutGeometry()
+}
+
+private struct MetricCardFrameProbe: NSViewRepresentable {
+    final class View: NSView {}
+    func makeNSView(context: Context) -> View { View() }
+    func updateNSView(_ view: View, context: Context) {}
+}
+
+private func metricCardProbeViews(_ root: NSView) -> [NSView] {
+    if root is MetricCardFrameProbe.View { return [root] }
+    return root.subviews.flatMap(metricCardProbeViews)
+}
+
+private struct MetricGridParityFixture: View {
+    @ObservedObject var state: VisualHierarchyState
+
+    var body: some View {
+        TrainerMetricGrid {
+            TrainerVitalMetricCard(title: "Health", icon: "heart", tint: .pink,
+                current: $state.current, maximum: $state.maximum, focus: $state.focus,
+                currentField: "current", maximumField: "maximum",
+                locked: false, editable: true, onLock: {})
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+            TrainerAmountMetricCard(title: "Gold", icon: "circle", tint: .yellow,
+                text: $state.amount, focus: $state.focus, focusValue: "amount",
+                locked: false, editable: true, onLock: {})
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+            TrainerStatMetricCard(title: "Speed", icon: "figure.walk",
+                text: $state.stat, focus: $state.focus, focusValue: "stat", suffix: "%",
+                locked: false, supported: true, available: true, editable: true, onLock: {})
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+            TrainerCounterMetricCard(title: "God Gauge", icon: "bolt.fill",
+                tint: TrainerTheme.standard.accent, text: $state.counter, focus: $state.focus,
+                focusValue: "counter", detail: nil, editable: true)
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+            TrainerMultiplierMetricCard(title: "Damage", icon: "flame",
+                text: $state.stat, focus: $state.focus, focusValue: "mult", suffix: "×", editable: true)
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+            TrainerCounterMetricCard(title: "Hex Charge", icon: "moon.stars",
+                tint: .purple, text: $state.counter, focus: $state.focus,
+                focusValue: "counter2", detail: "Cost 100", editable: true)
+                .background(MetricCardFrameProbe().allowsHitTesting(false).accessibilityHidden(true))
+        }
+        .frame(width: 960, alignment: .topLeading)
+        .padding(16)
+        .preferredColorScheme(.dark)
+        .trainerTheme(.standard)
+    }
+}
+
+@MainActor
+private func exerciseMetricGridRowParity() {
+    let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+    let state = VisualHierarchyState()
+    let host = NSHostingView(rootView: MetricGridParityFixture(state: state).environmentObject(localization))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 420),
+        styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.appearance = NSAppearance(named: .darkAqua)
+    window.contentView = host
+    host.frame = NSRect(x: 0, y: 0, width: 1000, height: 420)
+    window.layoutIfNeeded()
+    host.layoutSubtreeIfNeeded()
+    hierarchyPump(0.05)
+    host.layoutSubtreeIfNeeded()
+
+    let probes = metricCardProbeViews(host)
+    hierarchyCheck(probes.count == 6, "expected 6 metric card frame probes, got \(probes.count)")
+    let frames = probes.map { $0.convert($0.bounds, to: host) }.sorted { lhs, rhs in
+        if abs(lhs.minY - rhs.minY) > 4 {
+            return host.isFlipped ? (lhs.minY < rhs.minY) : (lhs.minY > rhs.minY)
+        }
+        return lhs.minX < rhs.minX
+    }
+    let row0 = Array(frames.prefix(4))
+    let row1 = Array(frames.dropFirst(4))
+    for card in row0 {
+        hierarchyCheck(abs(card.height - row0[0].height) < 1.0,
+            "TrainerMetricGrid row 0 card heights diverged (e.g. lockless counter card shorter): heights=\(row0.map(\.height))")
+    }
+    for card in row1 {
+        hierarchyCheck(abs(card.height - row1[0].height) < 1.0,
+            "TrainerMetricGrid row 1 card heights diverged: heights=\(row1.map(\.height))")
+    }
+    let singleFields = hierarchyFields(host).filter { ["12345", "20", "3"].contains($0.stringValue) }
+    hierarchyCheck(singleFields.count >= 5, "expected single-value metric fields, got \(singleFields.count)")
+    let row0Fields = singleFields
+        .map { ($0.convert($0.bounds, to: host), $0.accessibilityLabel() ?? "") }
+        .filter { $0.0.midY >= row0[0].minY - 1 && $0.0.midY <= row0[0].maxY + 1 }
+    hierarchyCheck(row0Fields.count >= 3, "expected single-value fields in row 0, got \(row0Fields.count)")
+    let firstFieldY = row0Fields[0].0.midY
+    for (fieldRect, label) in row0Fields {
+        hierarchyCheck(abs(fieldRect.midY - firstFieldY) < 1.0,
+            "row 0 value field vertical alignment diverged on \(label): \(row0Fields)")
+    }
+    window.contentView = nil
+    window.close()
+    print("metric_grid_row_parity_ok")
 }
 
 

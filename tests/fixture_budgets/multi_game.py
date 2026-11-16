@@ -7,4 +7,5 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "multi_game_navigation.journey": 45.0,
     "multi_game.context_state": 90.0,
     "multi_game.context_navigation": 90.0,
+    "multi_game.cross_module_geometry": 60.0,
 }

@@ -714,6 +714,6 @@ assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation
 metric = card[card.index('struct TrainerMetricCard'):]
 assert 'minHeight: 82' not in metric
 assert '.padding(.top, 6)' in metric and '.padding(.bottom, 8)' in metric
-assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric
+assert '.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)' in metric
 
 print('hades2_catalog_localization_ui_ok')

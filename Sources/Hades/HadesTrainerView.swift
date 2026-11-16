@@ -98,15 +98,14 @@ struct HadesTrainerView: View {
     }
 
     private var runDataSection: some View {
-        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
-            TrainerSectionHeader(
-                title: text(HadesWorkbenchSection.values.titleKey),
-                icon: HadesWorkbenchSection.values.icon
-            ) {
-                TrainerDisclosureButton(isExpanded: $model.numericControlsExpanded,
-                    expandTitle: text("hades.section.expand"), collapseTitle: text("hades.section.collapse"))
-                    .accessibilityIdentifier("hades.numericDisclosure")
-            }
+        TrainerSection(
+            title: text(HadesWorkbenchSection.values.titleKey),
+            icon: HadesWorkbenchSection.values.icon
+        ) {
+            TrainerDisclosureButton(isExpanded: $model.numericControlsExpanded,
+                expandTitle: text("hades.section.expand"), collapseTitle: text("hades.section.collapse"))
+                .accessibilityIdentifier("hades.numericDisclosure")
+        } content: {
             VStack(spacing: 0) {
                 TrainerMetricGrid {
                     TrainerVitalMetricCard(
@@ -658,6 +657,7 @@ private struct HadesCatalogView: View {
 private struct HadesCurrentTraitsPanel: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
     @State private var search = ""
     @State private var selection = ""
     @State private var selectedTraitName = ""
@@ -731,11 +731,15 @@ private struct HadesCurrentTraitsPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
-                Label(text("hades.currentTraits"), systemImage: TrainerSemanticIcon.Concept.controls)
-                    .font(.subheadline.weight(.medium))
-                    .fixedSize()
+                TrainerIconLabel(
+                    title: text("hades.currentTraits"),
+                    icon: TrainerSemanticIcon.Concept.controls,
+                    tint: model.canMutate ? theme.accent : theme.inactive,
+                    emphasized: model.canMutate
+                )
+                .fixedSize()
 
                 Picker(text("hades.currentTraits"), selection: $selection) {
                     if pickerSections.allSatisfy({ $0.items.isEmpty }) {

@@ -226,5 +226,10 @@
   ],
   "test_hades_shortcut_semantics.py": [
     "tests/swift_test_compiler.py"
+  ],
+  "test_cross_module_geometry_macos.py": [
+    "tests/macos_fixture_policy.py",
+    "tests/fixture_budgets/multi_game.py",
+    "tests/swift_test_compiler.py"
   ]
 }

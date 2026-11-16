@@ -70,6 +70,7 @@ CONSUMERS = {
     'test_mapped_slider_interaction.py': ('native.mapped_slider_interaction',),
     'test_hades2_save_container_frontend.py': ('native.hades2_save_container_frontend',),
     'multi_game_context_harness.py': ('multi_game.context_state', 'multi_game.context_navigation'),
+    'test_cross_module_geometry_macos.py': ('multi_game.cross_module_geometry',),
     'test_native_effect_query_macos.py': ('native_effect_query.image_identity',),
 }
 

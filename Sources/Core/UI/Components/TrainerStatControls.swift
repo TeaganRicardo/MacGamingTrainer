@@ -99,8 +99,12 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
-            if let detail {
-                Text(detail).font(.caption2).foregroundStyle(.secondary)
+            ZStack(alignment: .trailing) {
+                // Reserve TrainerLockButton's footprint so lockless counter cards match sibling header height and value alignment.
+                TrainerLockSlot()
+                if let detail {
+                    Text(detail).font(.caption2).foregroundStyle(.secondary)
+                }
             }
         } content: {
             TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
