@@ -4,6 +4,7 @@ struct HadesEffectLifecycleControls: View {
     @ObservedObject var model: HadesTrainerModel
     let trait: HadesCurrentTrait
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
     @State private var uses = HadesNumberDraft(value: 0)
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
@@ -26,7 +27,7 @@ struct HadesEffectLifecycleControls: View {
                 TrainerNumberField(
                     text: Binding(get: { uses.text }, set: { uses.update($0) }),
                     accessibilityLabel: text("hades.remainingUses"),
-                    width: 64,
+                    width: theme.inlineFieldWidth,
                     enabled: model.canMutate && trait.canSetUses == true,
                     onEditingChanged: { active in
                         if active { uses.begin(target: model.target) } else { uses.end() }

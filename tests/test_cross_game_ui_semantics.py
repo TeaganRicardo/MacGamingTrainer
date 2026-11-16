@@ -473,5 +473,100 @@ for path, adjusted, controlled in (
     assert 'text("' + adjusted + '") + " " +' in view_source, path
     assert 'text("' + controlled + '")' in view_source, path
 
+# Batch 2 (#750): Hades I & II main workbench parity & Hades I room shortcuts.
+theme_source = (ROOT / "Sources/Core/UI/TrainerTheme.swift").read_text()
+assert "inlineFieldWidth: 64" in theme_source and "occurrenceFieldWidth: 82" in theme_source
+
+# 1. Game Speed panels share helpText, inlineFieldWidth, and row-aligned actual/pending inset.
+hades_speed = hades_view.split("private var gameSpeedPanel: some View {", 1)[1].split(
+    "private var boonRarityPanel:", 1
+)[0]
+hades2_speed = hades2_view.split("private var gameSpeedPanel: some View {", 1)[1].split(
+    "private var presentedContent:", 1
+)[0]
+for label, block in (("Hades I gameSpeed", hades_speed), ("Hades II gameSpeed", hades2_speed)):
+    assert "helpText:" in block, label
+    assert "width: theme.inlineFieldWidth" in block, label
+    assert ".padding(.horizontal, theme.rowHorizontalPadding)" in block, label
+    assert ".padding(.bottom, theme.inlineRowVerticalPadding)" in block, label
+
+# 2. Hades II Traits & Occurrence & Exact Acquisition align with TrainerNumberField + Theme widths.
+hades2_traits_block = hades2_view.split("private var currentRunTraitsPanel: some View {", 1)[1].split(
+    "private func currentRunTraitRemovalLabel(", 1
+)[0] + hades2_view.split("private func currentRunTraitCommonControls(", 1)[1].split(
+    "private var resourceSection: some View {", 1
+)[0]
+assert "HStack(spacing: TrainerTraitManagerLayout.rowSpacing)" in hades2_traits_block
+assert "TrainerTextField(" not in hades2_traits_block
+assert hades2_traits_block.count("TrainerNumberField(") >= 3
+assert hades2_traits_block.count("widthRole: .compactRow") >= 4
+occurrence_source = (ROOT / "Sources/Hades2/Views/Hades2OccurrenceSetting.swift").read_text()
+assert "TrainerNumberField(" in occurrence_source and "width: theme.occurrenceFieldWidth" in occurrence_source
+assert "TrainerTextField(" not in occurrence_source
+assert hades_view.count("width: theme.inlineFieldWidth") >= 3
+assert hades2_view.count("width: theme.inlineFieldWidth") >= 3
+
+# 3. Both spawnRow and HadesWorldReward follow active-language-first labels (no forced "Zh · En" in EN).
+spawn_row_block = hades2_view.split("private func spawnRow(", 1)[1].split("private func multiplierRow(", 1)[0]
+assert "itemLabel: exactItemLabel" in spawn_row_block
+assert "var bilingualName:" not in hades_types
+assert "func label(for language: TrainerPresentationLanguage) -> String" in hades_types
+rooms_source = (ROOT / "Sources/Hades/HadesRoomsPanel.swift").read_text()
+assert "itemLabel: { $0.label(for: localization.language) }" in rooms_source
+
+# 4. HadesRoomsPanel matches Hades2View card order, 1pt dividers, availability tinting, and 7 room shortcuts.
+assert "VStack(spacing: 0)" not in rooms_source
+assert "VStack(spacing: 1)" in rooms_source
+assert "Color.clear" not in rooms_source
+assert "tint: theme.accent" not in rooms_source
+rooms_body = rooms_source.split("var body: some View {", 1)[1]
+for first, second in (
+    ("worldExitRow", "worldOccurrenceRow"),
+    ("worldOccurrenceRow", "chamberObjectRow"),
+    ("chamberObjectRow", "chaosGateRow"),
+    ("chaosGateRow", "spawnRow(.olympian"),
+):
+    assert rooms_body.index(first) < rooms_body.index(second), (first, second)
+for action in ("applyWorldExit", "applyWorldOccurrence", "generateChamberObject", "generateChaosGate"):
+    assert f"model.shortcutText(.{action})" in rooms_source, action
+for group_shortcut in ("spawnOlympian", "spawnPickup", "spawnSpecial"):
+    assert f"case .{group_shortcut}:" in hades_nav, group_shortcut
+
+# 5. All 21 Hades I shortcut actions have unique labels in both zh-CN and en.
+hades_ordered_block = hades_nav.split("static let orderedShortcutActions: [HadesShortcutAction] = [", 1)[1].split("]", 1)[0]
+hades_actions = re.findall(r"\.([A-Za-z][A-Za-z0-9_]*)", hades_ordered_block)
+assert len(hades_actions) == 21 and len(set(hades_actions)) == 21, hades_actions
+assert hades_actions[-1] == "disableAll"
+assert [a for a in ("generateFishing", "applyWorldExit", "applyWorldOccurrence", "generateChamberObject", "generateChaosGate") if a in hades_actions] == [
+    "generateFishing", "applyWorldExit", "applyWorldOccurrence", "generateChamberObject", "generateChaosGate"
+]
+hades_shortcut_keys = {
+    "disableAll": "host.disableAll",
+    "decreaseGameSpeed": "hades.shortcut.decreaseGameSpeed",
+    "increaseGameSpeed": "hades.shortcut.increaseGameSpeed",
+    "applyWorldExit": "hades.worldActions.modifyExit",
+    "applyWorldOccurrence": "hades.occurrence.title",
+    "generateChamberObject": "hades.chamberObject",
+    "spawnOlympian": "hades.shortcut.spawnOlympian",
+    "spawnPickup": "hades.shortcut.spawnPickup",
+    "spawnSpecial": "hades.shortcut.spawnSpecial",
+    "acquireChaosPair": "hades.shortcut.acquireChaosPair",
+    "acquireExactBoon": "hades.shortcut.acquireExactBoon",
+}
+host_strings = {}
+for language in ("zh-CN", "en"):
+    table = (ROOT / "Resources/Localization" / f"{language}.lproj" / "Host.strings").read_text()
+    m = re.search(r'"host\.disableAll"\s*=\s*"([^"]+)"', table)
+    assert m, language
+    host_strings[language] = {"host.disableAll": m.group(1)}
+for language in ("zh-CN", "en"):
+    resolved = []
+    for action in hades_actions:
+        key = hades_shortcut_keys.get(action, f"hades.{action}")
+        text = host_strings[language].get(key) or hades_labels[key][language]
+        assert text.strip(), (language, action, key)
+        resolved.append(text)
+    assert len(resolved) == len(set(resolved)), (language, resolved)
+
 
 print("cross_game_ui_semantics_ok")

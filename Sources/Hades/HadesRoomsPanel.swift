@@ -23,8 +23,8 @@ struct HadesGatheringPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            TrainerLabeledControlRow(title: text("hades.gainResource"), icon: TrainerSemanticIcon.Action.acquire, tint: theme.accent, emphasized: false, layout: .pickerAction) {
+        VStack(spacing: 1) {
+            TrainerLabeledControlRow(title: text("hades.gainResource"), icon: TrainerSemanticIcon.Action.acquire, tint: model.canMutate ? theme.accent : theme.inactive, emphasized: false, layout: .pickerAction) {
                 Picker(text("hades.resources"), selection: $resource) {
                     Text(text("hades.money")).tag("Money")
                     ForEach(model.resourceCatalog) { row in
@@ -40,7 +40,7 @@ struct HadesGatheringPanel: View {
                 )
                 TrainerSecondaryActionButton(title: text("hades.gain"), enabled: model.canMutate, action: gain)
             }
-            TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
+            TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: model.canMutate && model.world?.canFish == true ? theme.accent : theme.inactive, emphasized: false) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
                 TrainerSecondaryActionButton(
                     title: text("hades.generate"),
@@ -58,7 +58,6 @@ struct HadesRoomsPanel: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @State private var chamberObject = "trove"
 
     private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
     private var doors: [HadesWorldDoor] { model.world?.doors ?? [] }
@@ -82,9 +81,6 @@ struct HadesRoomsPanel: View {
     }
     private func occurrenceLabel(_ target: HadesWorldOccurrenceTarget) -> String {
         text("hades.occurrence.target.\(target.sourceId)")
-    }
-    private func action(_ command: String, operation: String, params: [String: Any] = [:]) {
-        model.worldAction(command, roomID: model.world?.roomId, params: params, operation: operation)
     }
 
     /// The world catalog assigns each reward its section; sections keep catalog order.
@@ -119,7 +115,7 @@ struct HadesRoomsPanel: View {
             emptyLabel: text("hades.spawn.noItems"),
             actionTitle: text("hades.generate"),
             shortcutText: model.shortcutText(group.shortcut),
-            itemLabel: \.bilingualName,
+            itemLabel: { $0.label(for: localization.language) },
             onAction: { _ = model.spawnReward($0, in: group) }
         )
     }
@@ -194,7 +190,7 @@ struct HadesRoomsPanel: View {
             )
             .accessibilityIdentifier("hades.worldActions.target")
         } shortcut: {
-            Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
         } action: {
             TrainerSecondaryActionButton(
                 title: text(model.selectedWorldExitLease != nil ? "hades.cancel" : "hades.apply"),
@@ -247,6 +243,7 @@ struct HadesRoomsPanel: View {
                 state: model.canSelectWorldOccurrence && !pending && !targets.isEmpty
                     ? .interactive : .unavailable
             )
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldOccurrence))
             TrainerSecondaryActionButton(
                 title: text(pending ? "hades.cancel" : "hades.apply"),
                 enabled: model.worldOccurrenceActionAvailable,
@@ -259,50 +256,68 @@ struct HadesRoomsPanel: View {
         }
     }
 
+    private var chamberObjectRow: some View {
+        TrainerLabeledControlRow(
+            title: text("hades.chamberObject"),
+            icon: HadesWorkbenchIcon.chamberObject,
+            tint: model.canSelectChamberObject ? theme.accent : theme.inactive,
+            emphasized: false,
+            layout: .pickerAction
+        ) {
+            Picker(text("hades.chamberObject"), selection: $model.selectedChamberObject) {
+                ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
+            }
+            .labelsHidden()
+            .trainerPicker(.rowAction, state: model.canSelectChamberObject ? .interactive : .unavailable)
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChamberObject))
+            TrainerSecondaryActionButton(
+                title: text("hades.generate"),
+                enabled: model.chamberObjectActionAvailable
+            ) {
+                _ = model.generateSelectedChamberObject()
+            }
+        }
+    }
+
+    private var chaosGateRow: some View {
+        TrainerLabeledControlRow(
+            title: text("hades.generateChaosGate"),
+            icon: TrainerSemanticIcon.Context.portal,
+            tint: model.canMutate && model.world?.canChaos == true ? theme.accent : theme.inactive,
+            emphasized: false
+        ) {
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
+            TrainerSecondaryActionButton(
+                title: text("hades.generate"),
+                enabled: model.canMutate && model.world?.canChaos == true
+            ) { model.generateChaosGate() }
+        }
+        .help(text("hades.chaosGateHelp"))
+    }
+
     var body: some View {
         TrainerSection(title: text(HadesWorkbenchSection.rooms.titleKey), icon: HadesWorkbenchSection.rooms.icon) {
-            VStack(spacing: 0) {
-                TrainerLabeledControlRow(title: text("hades.generateChaosGate"), icon: TrainerSemanticIcon.Context.portal, tint: theme.accent, emphasized: false) {
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
-                    TrainerSecondaryActionButton(
-                        title: text("hades.generate"),
-                        enabled: model.canMutate && model.world?.canChaos == true
-                    ) { model.generateChaosGate() }
-                }
-                .help(text("hades.chaosGateHelp"))
-                TrainerLabeledControlRow(title: text("hades.chamberObject"), icon: HadesWorkbenchIcon.chamberObject, tint: theme.accent, emphasized: false, layout: .pickerAction) {
-                    Picker(text("hades.chamberObject"), selection: $chamberObject) {
-                        ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
-                    }
-                    .labelsHidden().trainerPicker(.rowAction, state: model.world?.objects.isEmpty == false ? .interactive : .unavailable)
-                    TrainerSecondaryActionButton(title: text("hades.generate"),
-                                                 enabled: model.canMutate && model.world?.objects.isEmpty == false) {
-                        guard model.world?.objects.contains(chamberObject) == true else { return }
-                        action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])
-                    }
-                }
-            }
-            .trainerGroupedRows()
+            worldExitRow
+                .trainerGroupedRows()
 
-            // As in Hades II, the Generate reward rows follow the Chaos Gate.
-            VStack(spacing: 0) {
+            worldOccurrenceRow
+                .trainerGroupedRows()
+
+            chamberObjectRow
+                .trainerGroupedRows()
+
+            chaosGateRow
+                .trainerGroupedRows()
+
+            VStack(spacing: 1) {
                 spawnRow(.olympian, title: "hades.spawn.olympianBoons", icon: TrainerSemanticIcon.Section.effects)
                 spawnRow(.pickup, title: "hades.spawn.pickupRewards", icon: TrainerSemanticIcon.Section.inventory)
                 spawnRow(.special, title: "hades.spawn.characterRewards", icon: TrainerSemanticIcon.Context.characterReward)
             }
             .trainerGroupedRows()
-
-            VStack(spacing: 0) {
-                worldExitRow
-                worldOccurrenceRow
-            }
-            .trainerGroupedRows()
         }
         .onChange(of: doors, initial: true) { _, _ in
             model.repairWorldActionSelection()
-        }
-        .onChange(of: model.world?.objects, initial: true) { _, values in
-            if let values, !values.contains(chamberObject) { chamberObject = values.first ?? "trove" }
         }
     }
 }

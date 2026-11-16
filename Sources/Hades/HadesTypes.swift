@@ -157,9 +157,19 @@ struct HadesWorldReward: Decodable, Identifiable {
     func name(language: TrainerPresentationLanguage) -> String {
         names[language.rawValue] ?? names["en"] ?? id
     }
-    /// Both official names, "中文 · English", as Hades II labels generated rewards.
-    var bilingualName: String {
-        [names["zh-CN"], names["en"]].compactMap { $0 }.joined(separator: " · ")
+    /// Language-first label matching Hades II's exactItemLabel: English UI
+    /// shows English only, while Chinese UI pairs "中文 · English".
+    func label(for language: TrainerPresentationLanguage) -> String {
+        if language == .en {
+            return names["en"] ?? names["zh-CN"] ?? id
+        }
+        guard let primary = names["zh-CN"], !primary.isEmpty else {
+            return names["en"] ?? id
+        }
+        if let english = names["en"], !english.isEmpty, english != primary {
+            return "\(primary) · \(english)"
+        }
+        return primary
     }
 }
 
@@ -288,7 +298,9 @@ struct HadesNumberDraft {
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
     case decreaseGameSpeed, increaseGameSpeed
-    case boonRarityEnabled, generateFishing, generateChaosGate, acquireChaosPair, acquireExactBoon
+    case boonRarityEnabled, generateFishing
+    case applyWorldExit, applyWorldOccurrence, generateChamberObject, generateChaosGate
+    case acquireChaosPair, acquireExactBoon
     case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
     var id: String { rawValue }
@@ -297,6 +309,9 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
         case .disableAll: "host.disableAll"
         case .decreaseGameSpeed: "hades.shortcut.decreaseGameSpeed"
         case .increaseGameSpeed: "hades.shortcut.increaseGameSpeed"
+        case .applyWorldExit: "hades.worldActions.modifyExit"
+        case .applyWorldOccurrence: "hades.occurrence.title"
+        case .generateChamberObject: "hades.chamberObject"
         case .spawnOlympian: "hades.shortcut.spawnOlympian"
         case .spawnPickup: "hades.shortcut.spawnPickup"
         case .spawnSpecial: "hades.shortcut.spawnSpecial"

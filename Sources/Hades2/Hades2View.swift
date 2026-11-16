@@ -514,7 +514,7 @@ struct Hades2TrainerView: View {
 
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
                 Label(text("hades2.traits.manager"), systemImage: TrainerSemanticIcon.Concept.controls)
                     .font(.subheadline.weight(.medium))
                     .fixedSize()
@@ -576,9 +576,12 @@ struct Hades2TrainerView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                TrainerTextField(
-                    title: text("hades2.traits.remainingUses"),
+                TrainerNumberField(
                     text: $traitRemainingUsesInput,
+                    placeholder: "—",
+                    accessibilityLabel: text("hades2.traits.remainingUses"),
+                    width: theme.inlineFieldWidth,
+                    enabled: model.canMutateTraits && trait.canSetRemainingUses,
                     onEditingChanged: tracking(.traitRemainingUses),
                     onCommit: { completion in
                         guard completion.changed else { return completion.text }
@@ -590,12 +593,11 @@ struct Hades2TrainerView: View {
                     }
                 )
                 .id(trait.id)
-                .frame(width: 58)
-                .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
                 TrainerSecondaryActionButton(
                     title: text("hades2.traits.apply"),
-                    enabled: canApplyTraitRemainingUses(trait)
+                    enabled: canApplyTraitRemainingUses(trait),
+                    widthRole: .compactRow
                 ) {
                     model.setTraitRemainingUses(
                         trait,
@@ -605,7 +607,8 @@ struct Hades2TrainerView: View {
 
                 TrainerSecondaryActionButton(
                     title: text("hades2.traits.expireNow"),
-                    enabled: model.canMutateTraits && trait.canExpire
+                    enabled: model.canMutateTraits && trait.canExpire,
+                    widthRole: .compactRow
                 ) {
                     model.expireTrait(trait)
                 }
@@ -613,7 +616,8 @@ struct Hades2TrainerView: View {
         } else if trait.canAdvanceLifecycle {
             TrainerSecondaryActionButton(
                 title: text("hades2.traits.chaos.advance"),
-                enabled: model.canMutateTraits
+                enabled: model.canMutateTraits,
+                widthRole: .compactRow
             ) {
                 model.advanceTraitLifecycle(trait)
             }
@@ -644,7 +648,12 @@ struct Hades2TrainerView: View {
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TrainerTextField(title: "—", text: traitLevelInput(trait), accessibilityLabel: text("hades2.traits.targetLevel"),
+                    TrainerNumberField(
+                        text: traitLevelInput(trait),
+                        placeholder: "—",
+                        accessibilityLabel: text("hades2.traits.targetLevel"),
+                        width: theme.compactFieldWidth,
+                        enabled: model.canMutateTraits && trait.canIncreaseLevel,
                         onCommit: { completion in
                             guard completion.changed else { return completion.text }
                             let raw = completion.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -652,10 +661,9 @@ struct Hades2TrainerView: View {
                                 return completion.rejected(message: text("hades2.input.invalid"))
                             }
                             return String(level)
-                        })
-                        .id(trait.id)
-                        .frame(width: 58)
-                        .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
+                        }
+                    )
+                    .id(trait.id)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
@@ -665,9 +673,13 @@ struct Hades2TrainerView: View {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
                 } else {
-                    TrainerTextField(title: "—", text: .constant(""), accessibilityLabel: text("hades2.traits.targetLevel"))
-                        .frame(width: 58)
-                        .disabled(true)
+                    TrainerNumberField(
+                        text: .constant(""),
+                        placeholder: "—",
+                        accessibilityLabel: text("hades2.traits.targetLevel"),
+                        width: theme.compactFieldWidth,
+                        enabled: false
+                    )
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
@@ -815,13 +827,14 @@ struct Hades2TrainerView: View {
             TrainerLabeledControlRow(
                 title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
                 tint: model.canEditDesired ? theme.accent : theme.inactive,
-                emphasized: model.canEditDesired
+                emphasized: model.canEditDesired,
+                helpText: text("hades2.gameSpeed.hint")
             ) {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
                     accessibilityLabel: text("hades2.gameSpeed.a11y"),
-                    width: 62,
+                    width: theme.inlineFieldWidth,
                     enabled: model.canEditDesired && model.featureSupport["gameSpeed"] == true,
                     onEditingChanged: tracking(.gameSpeed),
                     onCommit: completing(.gameSpeed)
@@ -850,7 +863,10 @@ struct Hades2TrainerView: View {
                 let key = abs(actual - model.gameSpeed) < 0.000001
                     ? "host.timeWarp.actual" : "host.timeWarp.pending"
                 Text(localization.presentation(key, arguments: [speedNumber(actual)]))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.bottom, theme.inlineRowVerticalPadding)
             }
         }
         .trainerGroupedRows()
@@ -1455,7 +1471,7 @@ struct Hades2TrainerView: View {
                 text: $model.acquisitionLevel,
                 accessibilityLabel: text("hades2.acquisition.level"),
                 accessibilityIdentifier: "hades2.acquisition.level",
-                width: 76,
+                width: theme.inlineFieldWidth,
                 enabled: model.acquisitionSupportsLevel,
                 onCommit: { value in
                     guard let level = Int(value.text), (1...999_999).contains(level) else {
@@ -1690,9 +1706,7 @@ struct Hades2TrainerView: View {
             emptyLabel: text("hades2.spawn.noItems"),
             actionTitle: text("hades2.spawn.generate"),
             shortcutText: model.shortcutText(shortcut),
-            itemLabel: { option in
-                option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
-            },
+            itemLabel: exactItemLabel,
             onAction: onAction
         )
     }

@@ -55,6 +55,8 @@ struct TrainerTheme {
     let noticePadding: CGFloat
     let noticeFillOpacity: Double
     let compactFieldWidth: CGFloat
+    let inlineFieldWidth: CGFloat
+    let occurrenceFieldWidth: CGFloat
     let disabledOpacity: Double
     let unavailableOpacity: Double
     let selectionHighlightOpacity: Double
@@ -118,6 +120,8 @@ struct TrainerTheme {
         noticePadding: 12,
         noticeFillOpacity: 0.08,
         compactFieldWidth: 58,
+        inlineFieldWidth: 64,
+        occurrenceFieldWidth: 82,
         disabledOpacity: 0.45,
         unavailableOpacity: 0.65,
         selectionHighlightOpacity: 0.14,

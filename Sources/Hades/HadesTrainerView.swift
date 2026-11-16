@@ -221,7 +221,7 @@ struct HadesTrainerView: View {
                     text: gameSpeedInputBinding,
                     placeholder: "1.0",
                     accessibilityLabel: text(HadesFeature.gameSpeed.key),
-                    width: 62,
+                    width: theme.inlineFieldWidth,
                     enabled: model.canEditIntent,
                     onEditingChanged: { active in
                         gameSpeedEditing = active
@@ -263,7 +263,10 @@ struct HadesTrainerView: View {
                 let key = abs(actual - model.number(.gameSpeed)) < 0.000001
                     ? "host.timeWarp.actual" : "host.timeWarp.pending"
                 Text(localization.presentation(key, arguments: [speedNumber(actual)]))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.bottom, theme.inlineRowVerticalPadding)
             }
         }
         .onChange(of: model.number(.gameSpeed), initial: true) { _, value in
@@ -476,7 +479,7 @@ private struct HadesCatalogView: View {
                 text: $model.acquisitionLevel,
                 accessibilityLabel: text("hades.level"),
                 accessibilityIdentifier: "hades.acquisition.level",
-                width: 64,
+                width: theme.inlineFieldWidth,
                 enabled: model.acquisitionSupportsLevel,
                 onCommit: { completion in
                     guard let level = Int(completion.text), (1...100).contains(level) else {
@@ -572,7 +575,7 @@ private struct HadesCatalogView: View {
                         text: $model.acquisitionEncounters,
                         accessibilityLabel: text("hades.chaosEncounters"),
                         accessibilityIdentifier: "hades.acquisition.encounters",
-                        width: 64,
+                        width: theme.inlineFieldWidth,
                         enabled: true,
                         onCommit: { completion in
                             guard let count = Int(completion.text), (1...100).contains(count) else {
@@ -797,7 +800,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 TrainerNumberField(
                     text: .constant(""),
                     accessibilityLabel: text("hades.level"),
-                    width: 58,
+                    width: theme.compactFieldWidth,
                     enabled: false,
                     onCommit: { $0.text }
                 )
@@ -919,7 +922,7 @@ private struct HadesCurrentTraitRow: View {
                         text: $level,
                         accessibilityLabel: text("hades.level"),
                         accessibilityIdentifier: "hades.currentTrait.level",
-                        width: 58,
+                        width: theme.compactFieldWidth,
                         enabled: model.canMutate && trait.canEdit && entry?.supportsLevel != false,
                         onEditingChanged: { active in if active { owner = model.target } },
                         onCommit: { completion in
