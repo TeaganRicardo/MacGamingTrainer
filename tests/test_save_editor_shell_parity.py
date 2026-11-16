@@ -56,7 +56,7 @@ assert "struct TrainerSaveEditorPagingBar" in core
 for source in (hades, hades2):
     assert "TrainerSaveEditorPagingBar(" in source
     assert "TrainerLoadingIndicator()" in source
-    assert "TrainerInlineNotice(color: theme.warning)" in source
+    assert "TrainerInlineNotice(color: theme.warning" in source
     assert "TrainerSemanticIcon.Concept.refresh" in source
     assert "model.query(offset: model.offset)" in source
     assert "TrainerSemanticIcon.Feedback.toastSuccess" in source
@@ -86,11 +86,13 @@ for modal_name, modal_source in (("HadesSaveTypedEditor", hades), ("Hades2SaveAd
     assert "TrainerSheetScaffold(" in modal_source, modal_name
     assert "TrainerPrimaryActionButton(" in modal_source, modal_name
     assert ".keyboardShortcut(.defaultAction)" in modal_source, modal_name
-    assert ".trainerSheetEscapeDismiss(" in modal_source, modal_name
+    assert ".trainerSheetDoneGestures(" in modal_source, modal_name
     assert ".interactiveDismissDisabled(" in modal_source, modal_name
 assert "TrainerLoadingIndicator()" in advanced_sheet
 assert "ProgressView()" not in advanced_sheet
-assert ".keyboardShortcut(.cancelAction)" in hades
+assert "action: cancelSheet" in hades
+assert "onCancel: finishSheet" in hades
+assert "private func finishSheet()" in hades
 
 assert "TrainerSemanticIcon.Section.inventory" in grouping
 assert "TrainerSemanticIcon.Tool.saveHistory" in grouping
