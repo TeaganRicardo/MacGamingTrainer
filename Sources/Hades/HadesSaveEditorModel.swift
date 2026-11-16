@@ -395,7 +395,8 @@ final class HadesSaveEditorModel: ObservableObject {
                 self.failures["query"] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return
             }
             self.rows = query.rows; self.total = query.total; self.offset = query.offset; self.pageLimit = query.limit
-            self.pageHistory = acceptedHistory
+            // A server-rebased offset invalidates the originally requested Back path.
+            self.pageHistory = query.offset == requestedOffset ? acceptedHistory : []
             self.breadcrumbs = query.breadcrumbs; self.parentID = query.parentId; self.readyGeneration = baseline
         }
     }
