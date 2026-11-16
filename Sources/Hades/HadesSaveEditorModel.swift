@@ -250,6 +250,16 @@ final class HadesSaveEditorModel: ObservableObject {
     private let session: TrainerBackendSession
     private var language: TrainerPresentationLanguage = .en
     private let requests = TrainerSaveEditorReplyCoordinator()
+    private struct PageScope: Equatable {
+        let domain: String
+        let language: String
+        let search: String
+        let parentID: String?
+    }
+    private var acceptedPageScope: PageScope?
+    private var currentPageScope: PageScope {
+        PageScope(domain: domain.rawValue, language: language.rawValue, search: search, parentID: parentID)
+    }
     private var pageHistory: [Int] = []
     private var typedEntries: Set<String> = []
     private var blockingRequests = 0
@@ -364,6 +374,7 @@ final class HadesSaveEditorModel: ObservableObject {
     private var canPage: Bool {
         !busy && !applying && !queryLoading
             && workspaceID != nil && baselineGeneration != nil && readyGeneration == baselineGeneration
+            && acceptedPageScope == currentPageScope
     }
     var canPreviousPage: Bool { canPage && offset > 0 }
     var canNextPage: Bool { canPage && pageLimit > 0 && offset + pageLimit < total }
@@ -379,25 +390,32 @@ final class HadesSaveEditorModel: ObservableObject {
     }
     func query(offset requestedOffset: Int = 0, historyOnSuccess: [Int]? = nil) {
         guard !applying, let workspaceID, let baseline = baselineGeneration else { return }
-        // Keep history unchanged until the backend acknowledges a valid page.
+        // Only the accepted result's search/domain/path can supply page navigation.
+        // A new scope starts at page zero even if a refresh races the search debounce.
+        let scope = currentPageScope
+        let sameScope = acceptedPageScope == scope
+        let pageOffset = sameScope ? requestedOffset : 0
+        let acceptedHistory = sameScope
+            ? (historyOnSuccess ?? (pageOffset == 0 ? [] : pageHistory)) : []
         // A rejected, cancelled or stale query must not alter Back navigation.
-        let acceptedHistory = historyOnSuccess ?? (requestedOffset == 0 ? [] : pageHistory)
         searchTask?.cancel()
         var params: [String: Any] = ["domain": domain.rawValue, "language": language.rawValue,
-            "query": search, "offset": requestedOffset, "limit": Self.pageSize]
+            "query": search, "offset": pageOffset, "limit": Self.pageSize]
         if let parentID { params["parentId"] = parentID }
         queryLoading = true
         perform("query", params: params, scope: "query", workspace: workspaceID, blocking: false,
                 lane: .query,
                 finished: { [weak self] in self?.queryLoading = false }) { [weak self] result in
             guard let self, let query: Query = self.decode(result, scope: "query") else { return }
-            guard query.baselineGeneration == baseline, query.rows.allSatisfy({ $0.baselineGeneration == baseline }) else {
+            guard self.currentPageScope == scope, query.baselineGeneration == baseline,
+                  query.rows.allSatisfy({ $0.baselineGeneration == baseline }) else {
                 self.failures["query"] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return
             }
             self.rows = query.rows; self.total = query.total; self.offset = query.offset; self.pageLimit = query.limit
             // A server-rebased offset invalidates the originally requested Back path.
-            self.pageHistory = query.offset == requestedOffset ? acceptedHistory : []
+            self.pageHistory = query.offset == pageOffset && query.parentId == scope.parentID ? acceptedHistory : []
             self.breadcrumbs = query.breadcrumbs; self.parentID = query.parentId; self.readyGeneration = baseline
+            self.acceptedPageScope = self.currentPageScope
         }
     }
     func detail(_ id: String, typed: Bool = false, baseline: String? = nil) {
