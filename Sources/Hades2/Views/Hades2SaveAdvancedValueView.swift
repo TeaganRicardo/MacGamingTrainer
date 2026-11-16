@@ -148,7 +148,7 @@ struct Hades2SaveAdvancedValueView: View {
         }
         .trainerDismissTextEditingOnClickAway()
         .interactiveDismissDisabled(model.busy)
-        .trainerSheetEscapeDismiss(enabled: !model.busy) { dismiss() }
+        .trainerSheetDoneGestures(enabled: !model.busy) { dismiss() }
         .onAppear { load(preservingDraft: false) }
         .onDisappear { requestID = UUID() }
         .onChange(of: localization.language) { _, _ in load(preservingDraft: loaded) }

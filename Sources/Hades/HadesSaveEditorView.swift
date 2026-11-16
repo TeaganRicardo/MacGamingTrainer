@@ -180,13 +180,12 @@ struct HadesSaveEditorView: View {
     @ViewBuilder
     private var failuresNotice: some View {
         if !model.failures.isEmpty {
-            TrainerInlineNotice(color: theme.warning) {
+            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(model.failures.keys.sorted(), id: \.self) { key in
                         if let failure = model.failures[key] {
                             Text(localization.string(failure))
                                 .font(.caption)
-                                .foregroundStyle(theme.warning)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .contentTransition(.opacity)
                                 .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: failure)
@@ -357,11 +356,11 @@ struct HadesSaveEditorView: View {
 
     private var paging: some View {
         TrainerSaveEditorPagingBar(
-            summary: "\(model.offset + 1)–\(min(model.total, model.offset + model.pageLimit)) / \(model.total)",
+            summary: "\(model.total == 0 ? 0 : model.offset + 1)–\(min(model.total, model.offset + model.pageLimit)) / \(model.total)",
             previousTitle: text("hades.saveEditor.previous"),
             nextTitle: text("hades.saveEditor.next"),
-            canPrevious: model.offset > 0 && !model.queryLoading,
-            canNext: model.offset + model.pageLimit < model.total && !model.queryLoading,
+            canPrevious: model.canPreviousPage,
+            canNext: model.canNextPage,
             onPrevious: model.previousPage,
             onNext: model.nextPage
         )
@@ -772,12 +771,12 @@ private struct HadesSaveTypedEditor: View {
                     }
                     if append {
                         Text(text("hades.saveEditor.key")).font(.caption)
-                        HadesSaveJSONEditor(title: text("hades.saveEditor.key"), text: $appendKey, focused: $editingKey, onCancel: cancelSheet)
+                        HadesSaveJSONEditor(title: text("hades.saveEditor.key"), text: $appendKey, focused: $editingKey, onCancel: finishSheet)
                             .frame(height: 70)
                             .overlay(RoundedRectangle(cornerRadius: theme.compactCornerRadius).stroke(theme.accent.opacity(0.35)))
                             .disabled(staging)
                     }
-                    HadesSaveJSONEditor(title: row.name, text: $json, focused: $editing, onCancel: cancelSheet)
+                    HadesSaveJSONEditor(title: row.name, text: $json, focused: $editing, onCancel: finishSheet)
                         .frame(minHeight: 280)
                         .overlay(RoundedRectangle(cornerRadius: theme.compactCornerRadius).stroke(theme.accent.opacity(0.35)))
                         .disabled(staging)
@@ -812,7 +811,6 @@ private struct HadesSaveTypedEditor: View {
                     widthRole: .sheet,
                     action: cancelSheet
                 )
-                .keyboardShortcut(.cancelAction)
                 if action != nil {
                     TrainerSecondaryActionButton(
                         title: text("hades.remove"),
@@ -834,18 +832,17 @@ private struct HadesSaveTypedEditor: View {
                     enabled: !model.busy && !staging && model.canEdit(row),
                     widthRole: .sheet
                 ) {
-                    guard !model.busy else { return }
-                    if native {
-                        if !model.hasFailedDraft(row) { model.dismissDetail() }
-                    } else { commit(closeWhenAccepted: true) }
-                    editing = false; editingKey = false
+                    finishSheet()
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
         .trainerDismissTextEditingOnClickAway()
         .interactiveDismissDisabled(model.busy || staging)
-        .trainerSheetEscapeDismiss(enabled: !model.busy && !staging, perform: cancelSheet)
+        .trainerSheetDoneGestures(
+            enabled: !model.busy && !staging && model.canEdit(row),
+            perform: finishSheet
+        )
         .onChange(of: editingKey) { _, active in
             model.editingChanged(row.id + ":key", baseline: row.baselineGeneration, active: active)
         }
@@ -862,6 +859,17 @@ private struct HadesSaveTypedEditor: View {
             initial = json; initialKey = appendKey; initialAppend = append
         }
     }
+    private func finishSheet() {
+        guard !model.busy && !staging && model.canEdit(row) else { return }
+        if native {
+            if !model.hasFailedDraft(row) { model.dismissDetail() }
+        } else {
+            commit(closeWhenAccepted: true)
+        }
+        editing = false
+        editingKey = false
+    }
+
     private func cancelSheet() {
         guard !model.busy && !staging else { return }
         discarding = true

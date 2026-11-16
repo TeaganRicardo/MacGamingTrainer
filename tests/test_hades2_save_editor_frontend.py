@@ -2020,7 +2020,10 @@ struct Main {
             fail("choosing a source silently read/rebased the loaded document")
         }
         backupModel.openSelection()
-        pumpUntil { !backupModel.busy && backupModel.workspaceID != backupWorkspace }
+        // Opening the document clears the old rows, then starts an independent,
+        // nonblocking query. Wait for its projection before asserting replacement.
+        pumpUntil { !backupModel.busy && !backupModel.querying
+            && backupModel.workspaceID != backupWorkspace && !backupModel.items.isEmpty }
         guard let reRead = commands(at: commandLog).last(where: { $0["command"] as? String == "save_editor_open" }),
               let reReadParams = reRead["params"] as? [String: Any],
               let reReadTarget = reReadParams["target"] as? [String: String],

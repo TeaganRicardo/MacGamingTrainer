@@ -100,7 +100,7 @@ struct TrainerFeedbackDetails: View {
                 Button(localization.localized("host.viewLog"), action: onOpenLog)
                 Spacer()
                 Button(localization.localized("host.feedback.closeDetails"), action: onClose)
-                    .keyboardShortcut(.cancelAction)
+                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(theme.panelPadding)

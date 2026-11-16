@@ -118,15 +118,16 @@ struct TrainerDiagnosticsView: View {
                     guard lifetime.accepts(presentationID) else { return }
                     lifetime.invalidate()
                     actions.dismiss()
-                }.keyboardShortcut(.defaultAction)
+                }
+                .disabled(busy)
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .onAppear { lifetime.appear() }
-        .onDisappear { lifetime.invalidate() }
-        .onExitCommand {
-            guard lifetime.accepts(presentationID) else { return }
+        .trainerSheetDoneGestures(enabled: lifetime.accepts(presentationID) && !busy) {
             lifetime.invalidate()
             actions.dismiss()
         }
+        .onAppear { lifetime.appear() }
+        .onDisappear { lifetime.invalidate() }
     }
 }

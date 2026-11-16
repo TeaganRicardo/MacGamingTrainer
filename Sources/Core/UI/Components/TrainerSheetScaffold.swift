@@ -105,23 +105,33 @@ private struct TrainerSheetHeaderLayout: Layout {
     }
 }
 
+/// Shared completion gesture owner for modal sheets and transient tool panels.
+/// The footer's Done button and these entry points must call the same callback.
+/// The native editor gets the first opportunity to finish an IME composition;
+/// multiline NSTextView uses Shift-Return for newline; marked text remains native.
 extension View {
-    /// Dismiss a sheet on Escape when no text editor or field editor owns focus.
-    func trainerSheetEscapeDismiss(enabled: Bool = true, perform action: @escaping () -> Void) -> some View {
+    func trainerSheetDoneGestures(
+        enabled: Bool = true,
+        outsideWindowClicks: Bool = false,
+        perform action: @escaping () -> Void
+    ) -> some View {
         background(
-            TrainerSheetEscapeMonitor(enabled: enabled, action: action)
+            TrainerSheetDoneMonitor(enabled: enabled, outsideWindowClicks: outsideWindowClicks, action: action)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         )
     }
+
 }
 
-private struct TrainerSheetEscapeMonitor: NSViewRepresentable {
+private struct TrainerSheetDoneMonitor: NSViewRepresentable {
     let enabled: Bool
+    let outsideWindowClicks: Bool
     let action: () -> Void
 
     final class HostView: NSView {
         var enabled = true
+        var outsideWindowClicks = false
         var action: (() -> Void)?
         private var monitor: Any?
 
@@ -129,21 +139,52 @@ private struct TrainerSheetEscapeMonitor: NSViewRepresentable {
             super.viewDidMoveToWindow()
             stop()
             guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, self.enabled,
-                      let window = self.window,
-                      event.window === window,
-                      window.attachedSheet == nil,
-                      event.keyCode == 53,
-                      event.modifierFlags.intersection([.command, .option, .control, .function]).isEmpty else {
-                    return event
+            monitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+            ) { [weak self] event in
+                guard let self, self.enabled, let window = self.window,
+                      window.isVisible, window.attachedSheet == nil else { return event }
+
+                if event.type == .keyDown {
+                    guard event.window === window, !event.isARepeat,
+                          [36, 53, 76].contains(Int(event.keyCode)),
+                          event.modifierFlags.intersection([.command, .option, .control, .shift, .function]).isEmpty
+                    else { return event }
+                    return self.finish(event, in: window)
                 }
-                if window.firstResponder is NSTextView {
-                    return event
-                }
-                self.action?()
-                return nil
+
+                guard let clickedWindow = event.window, clickedWindow !== window else { return event }
+                let parentSheetClick = window.sheetParent.map { $0 === clickedWindow } ?? false
+                let otherToolWindowClick = self.outsideWindowClicks && window.sheetParent == nil
+                    && window.isKeyWindow && clickedWindow.styleMask.contains(.titled)
+                    && clickedWindow.level == .normal
+                guard parentSheetClick || otherToolWindowClick else { return event }
+                return self.finish(event, in: window)
             }
+        }
+
+        private func finish(_ event: NSEvent, in window: NSWindow) -> NSEvent? {
+            if let editor = window.firstResponder as? NSTextView {
+                if editor.hasMarkedText() { return event }
+                if !editor.isFieldEditor {
+                    // Both keys and outside clicks are Done. Shift-Return is
+                    // still available for a newline in a multiline JSON draft.
+                    action?()
+                    return nil
+                }
+                // Commit ordinary TextField editing before invoking Done. A
+                // rejecting field editor keeps its sheet and draft intact.
+                guard window.makeFirstResponder(nil) else { return event }
+                DispatchQueue.main.async { [weak self, weak window] in
+                    guard let self, self.enabled, let window,
+                          self.window === window, window.attachedSheet == nil else { return }
+                    self.action?()
+                }
+            } else {
+                action?()
+            }
+            // A click on the blocked parent must never also activate its controls.
+            return nil
         }
 
         func stop() {
@@ -157,12 +198,14 @@ private struct TrainerSheetEscapeMonitor: NSViewRepresentable {
     func makeNSView(context: Context) -> HostView {
         let view = HostView()
         view.enabled = enabled
+        view.outsideWindowClicks = outsideWindowClicks
         view.action = action
         return view
     }
 
     func updateNSView(_ view: HostView, context: Context) {
         view.enabled = enabled
+        view.outsideWindowClicks = outsideWindowClicks
         view.action = action
     }
 

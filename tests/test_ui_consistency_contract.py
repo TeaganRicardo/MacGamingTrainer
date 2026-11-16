@@ -398,15 +398,28 @@ retention_source = (ROOT / "Sources/Core/Save/TrainerSaveRetentionSettings.swift
 profile_source = (CORE_UI / "Components/TrainerProfileManagerView.swift").read_text()
 diagnostics_source = (CORE_UI / "Components/TrainerDiagnosticsView.swift").read_text()
 issues_source = (CORE_UI / "TrainerCurrentIssues.swift").read_text()
-assert '.keyboardShortcut(.cancelAction)' in issues_source and '.onExitCommand(perform: onClose)' in issues_source
-assert '.keyboardShortcut(.cancelAction)' in profile_source
-assert '.keyboardShortcut(.defaultAction)' in diagnostics_source and '.onExitCommand' in diagnostics_source
-assert '.keyboardShortcut(.defaultAction)' in shortcut_sheet and '.onExitCommand' in shortcut_sheet
-assert '.keyboardShortcut(.defaultAction)' in save_manager_source and '.onExitCommand' in save_manager_source
-assert 'guard !model.busy, editingID == nil else { return }' in save_manager_source
-assert save_manager_source.count('.keyboardShortcut(.cancelAction)') >= 1
-assert save_manager_source.count('.keyboardShortcut(.defaultAction)') >= 2
-assert '.keyboardShortcut(.cancelAction)' in retention_source
+sheet_completion = (CORE_UI / "Components/TrainerSheetScaffold.swift").read_text()
+assert "struct TrainerSheetDoneMonitor: NSViewRepresentable" in sheet_completion
+assert "NSEvent.addLocalMonitorForEvents" in sheet_completion
+assert "editor.hasMarkedText()" in sheet_completion
+assert "if !editor.isFieldEditor" in sheet_completion
+assert "[36, 53, 76].contains(Int(event.keyCode))" in sheet_completion
+assert "clickedWindow.styleMask.contains(.titled)" in sheet_completion
+assert "window.attachedSheet == nil" in sheet_completion
+assert "window.makeFirstResponder(nil)" in sheet_completion
+assert '.keyboardShortcut(.defaultAction)' in issues_source and '.onExitCommand(perform: onClose)' in issues_source
+for source in (profile_source, diagnostics_source, shortcut_sheet, save_manager_source, retention_source):
+    assert '.keyboardShortcut(.defaultAction)' in source
+    assert '.trainerSheetDoneGestures(' in source
+assert "outsideWindowClicks: true" in save_manager_source
+assert "guard !model.busy, editingID == nil," in save_manager_source
+assert "enabled: !model.busy && editingID == nil" in save_manager_source
+restore_confirmation = save_manager_source.split("private struct TrainerSaveRestoreConfirmationView", 1)[1]
+assert "trainerSheetDoneGestures(perform: onCancel)" in restore_confirmation
+assert ".keyboardShortcut(.defaultAction)" in restore_confirmation
+assert '.keyboardShortcut(.defaultAction)' not in restore_confirmation.split(
+    'TrainerPrimaryActionButton(title: localization.localized("host.restore")', 1
+)[1]
 
 # Top-level module sections share TrainerSection (never bare @ViewBuilder siblings in pageSpacing),
 # TrainerMetricCard stretches to grid row height while counter cards reserve lock-slot height, and

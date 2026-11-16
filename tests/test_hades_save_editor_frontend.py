@@ -312,11 +312,60 @@ func commands(at url: URL) -> [[String: Any]] {
             fail("unified TrainerSaveEditorPagingBar buttons missing or misconfigured")
         }
         wait("paging next moved to offset 40") { !editor.queryLoading && editor.offset == 40 }
+        check(editor.canPreviousPage, "previous eligibility missing after next-page reply")
+        let beforeBusyPage = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
+        editor.query(offset: editor.offset)
+        check(editor.queryLoading && !editor.canNextPage && !editor.canPreviousPage,
+              "pagination should be locked by active query")
+        editor.nextPage()
+        editor.previousPage()
+        wait("explicit refresh query completed without queued page navigation") {
+            !editor.queryLoading && commands(at: commandLog).filter {
+                $0["command"] as? String == "save_editor_query"
+            }.count == beforeBusyPage + 1
+        }
+        check(editor.offset == 40 && editor.canPreviousPage,
+              "rejected navigation mutated the visible page or history")
         guard let prevAgain = namedNativeControl(root, role: "AXButton", name: prevTitle),
               prevAgain.enabled, prevAgain.press() else {
             fail("previous page button did not re-enable on offset 40")
         }
         wait("paging previous returned to offset 0") { !editor.queryLoading && editor.offset == 0 }
+
+        // A new search must invalidate old page navigation before the debounce fires.
+        // Navigating in that window must not cancel the search or carry its old offset.
+        guard let nextForSearch = namedNativeControl(root, role: "AXButton", name: nextTitle),
+              nextForSearch.enabled, nextForSearch.press() else {
+            fail("could not enter second page before search debounce test")
+        }
+        wait("second page reopened") { !editor.queryLoading && editor.offset == 40 }
+        let beforeSearchQueries = commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count
+        editor.search = "filtered"
+        check(!editor.canPreviousPage && !editor.canNextPage,
+              "new search allowed navigation with stale page context")
+        editor.nextPage()
+        editor.previousPage()
+        wait("search debounce reset offset without an intervening page request") {
+            let queries = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }
+            guard queries.count == beforeSearchQueries + 1,
+                  let params = queries.last?["params"] as? [String: Any] else { return false }
+            return !editor.queryLoading && editor.offset == 0
+                && params["query"] as? String == "filtered"
+                && params["offset"] as? Int == 0
+        }
+        check(!editor.canPreviousPage && editor.canNextPage,
+              "successful new search retained stale Back history")
+        editor.search = ""
+        wait("cleared search returned to first page") {
+            let queries = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }
+            guard queries.count == beforeSearchQueries + 2,
+                  let params = queries.last?["params"] as? [String: Any] else { return false }
+            return !editor.queryLoading && editor.offset == 0
+                && params["query"] as? String == ""
+                && params["offset"] as? Int == 0
+        }
 
         let beforeRefresh = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
         guard let refreshRowsBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.refreshRows")),
@@ -367,6 +416,31 @@ func commands(at url: URL) -> [[String: Any]] {
         }
         wait("Revise sheet dismissed") { window.attachedSheet == nil }
 
+        // The same Done path handles Return and a click on the blocked sheet parent.
+        guard let reviseReturn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.revise")),
+              reviseReturn.enabled, reviseReturn.press() else { fail("Revise not available for Return path") }
+        wait("Revise sheet reopened for Return") { window.attachedSheet != nil }
+        let keySheetWindow = window.attachedSheet!
+        let returnEvent = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: keySheetWindow.windowNumber,
+            context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+            isARepeat: false, keyCode: 36
+        )!
+        app.sendEvent(returnEvent)
+        wait("Return used Revise Done and closed the sheet") { window.attachedSheet == nil }
+
+        guard let reviseOutside = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.revise")),
+              reviseOutside.enabled, reviseOutside.press() else { fail("Revise not available for outside-click path") }
+        wait("Revise sheet reopened for outside click") { window.attachedSheet != nil }
+        let outsideEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown, location: CGPoint(x: 12, y: 12), modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1
+        )!
+        app.sendEvent(outsideEvent)
+        wait("parent-window click used Revise Done and closed sheet") { window.attachedSheet == nil }
+
         guard let editTypedBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               editTypedBtn.enabled, editTypedBtn.press() else {
             fail("Edit Typed Value button missing on complex container row")
@@ -404,11 +478,17 @@ func commands(at url: URL) -> [[String: Any]] {
         wait("invalid JSON stayed open with failed draft") { window.attachedSheet === sheetWindow && !editor.canApply }
         check(sheetWindow.makeFirstResponder(jsonEditor), "failed to refocus HadesSaveJSONEditor after error")
         sendEsc(to: sheetWindow)
-        wait("Esc on focused HadesSaveJSONEditor discarded invalid draft and restored Apply") {
+        check(window.attachedSheet === sheetWindow && !editor.canApply,
+              "Esc must use Done semantics: invalid JSON stays editable until corrected or explicitly cancelled")
+        guard let invalidCancel = namedNativeControl(sheet, role: "AXButton", name: text("host.cancel")),
+              invalidCancel.enabled, invalidCancel.press() else {
+            fail("explicit Cancel missing after rejected Done")
+        }
+        wait("explicit Cancel discarded invalid draft and restored Apply") {
             window.attachedSheet == nil && editor.failures["row:container"] == nil && editor.canApply
         }
 
-        // Reopen typed editor, keep active edits dirty in HadesSaveJSONEditor, and hit Esc -> no leaked activeEdits.
+        // Reopen typed editor: Esc is Done and must commit valid edits without leaked activeEdits.
         guard let editTypedAgain = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               editTypedAgain.enabled, editTypedAgain.press() else {
             fail("Edit Typed Value button missing on reopen")
@@ -424,11 +504,12 @@ func commands(at url: URL) -> [[String: Any]] {
         pump()
         check(!editor.canApply, "active edit did not guard Apply while typing")
         sendEsc(to: reopenedSheetWindow)
-        wait("Esc during active edit dismissed cleanly without leaking activeEdits") {
-            window.attachedSheet == nil && editor.canApply
+        wait("Esc Done committed valid typed edit without leaking activeEdits") {
+            window.attachedSheet == nil && editor.canApply &&
+                editor.review.actions.contains(where: { $0.id == "row:container" })
         }
 
-        // Recovery failure while typed sheet is open: Cancel remains responsive and dismisses cleanly.
+        // Recovery failure while typed sheet is open: explicit Cancel is still safe.
         guard let recoveryTypedBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               recoveryTypedBtn.enabled, recoveryTypedBtn.press() else {
             fail("Edit Typed Value button missing before recovery check")
@@ -447,6 +528,12 @@ func commands(at url: URL) -> [[String: Any]] {
         stateCheck: do {
             editor.openSelection()
             wait("reopened clean save document after recovery test") { !editor.busy && !editor.queryLoading && editor.canEditRows }
+        }
+        // Done is now an actual staged typed edit; restore the empty review state
+        // before checking the independent basket-remove path below.
+        editor.cancel(baseline: editor.baselineGeneration)
+        wait("explicit discard cleared the previously accepted typed edit") {
+            !editor.busy && editor.review.count == 0
         }
         guard let switchAgainForRemove = namedNativeControl(root, role: "AXCheckBox", name: "Boolean Switch"),
               switchAgainForRemove.press() else { fail("switch missing before trash remove") }
@@ -473,6 +560,16 @@ func commands(at url: URL) -> [[String: Any]] {
         editor.search = "fail-query"
         editor.query()
         wait("query failure surfaced") { !editor.queryLoading && !editor.failures.isEmpty }
+        check(!editor.canNextPage && !editor.canPreviousPage,
+              "failed search must not enable stale paging")
+        let beforeRejectedPaging = commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count
+        editor.nextPage()
+        editor.previousPage()
+        check(commands(at: commandLog).filter {
+            $0["command"] as? String == "save_editor_query"
+        }.count == beforeRejectedPaging, "failed search allowed a stale page request")
 
         window.performClose(nil); pump()
         session.stop(); pump()

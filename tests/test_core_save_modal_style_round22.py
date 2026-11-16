@@ -26,8 +26,9 @@ for source in (hades_save_view, hades2_advanced_view):
     assert "TrainerSheetScaffold(" in source
     assert "TrainerInlineNotice(" in source
     assert ".keyboardShortcut(.defaultAction)" in source
-    assert ".trainerSheetEscapeDismiss(" in source
-assert "struct TrainerSheetEscapeMonitor" in sheet
+    assert ".trainerSheetDoneGestures(" in source
+assert "struct TrainerSheetDoneMonitor" in sheet
+assert "NSEvent.addLocalMonitorForEvents" in sheet
 assert "TrainerOverflowMenu(" in hades_save_view
 assert "TrainerCheckboxControl(" in hades_save_view
 assert "TrainerToggleControl(" in hades_save_view

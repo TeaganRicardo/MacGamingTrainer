@@ -51,9 +51,9 @@ struct TrainerSaveRetentionSettings: View {
             }
         } footer: {
             HStack {
-                Button(localization.localized("host.cancel"), action: onClose)
-                    .disabled(model.busy)
-                    .keyboardShortcut(.cancelAction)
+                Button(localization.localized("host.done"), action: onClose)
+                    .disabled(model.busy || saving)
+                    .keyboardShortcut(.defaultAction)
                 Spacer()
                 TrainerPrimaryActionButton(title: localization.localized("host.save.retention.save"), enabled: !model.busy && values != nil, widthRole: .sheet) {
                     guard let values else { return }
@@ -67,7 +67,8 @@ struct TrainerSaveRetentionSettings: View {
         }
         .onAppear(perform: refreshDrafts)
         .onChange(of: model.retention) { _, _ in refreshDrafts() }
-        .interactiveDismissDisabled(model.busy)
+        .interactiveDismissDisabled(model.busy || saving)
+        .trainerSheetDoneGestures(enabled: !model.busy && !saving, perform: onClose)
     }
 
     private func setEditing(_ field: String, _ active: Bool) {

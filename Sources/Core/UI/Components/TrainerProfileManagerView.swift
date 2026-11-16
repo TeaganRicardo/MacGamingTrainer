@@ -110,8 +110,13 @@ struct TrainerProfileManagerView: View {
                 Button(localization.localized("host.done")) {
                     guard lifetime.accepts(presentationID) else { return }
                     dismiss()
-                }.keyboardShortcut(.cancelAction)
+                }
+                .disabled(busy || selection.saving)
+                .keyboardShortcut(.defaultAction)
             }
+        }
+        .trainerSheetDoneGestures(enabled: lifetime.accepts(presentationID) && !busy && !selection.saving) {
+            dismiss()
         }
         .onChange(of: entries, initial: true) { _, _ in reconcileSelection() }
         .onChange(of: selection.savedNameToSelect) { _, _ in reconcileSelection() }
