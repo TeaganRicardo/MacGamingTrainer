@@ -108,7 +108,7 @@ private struct TrainerSheetHeaderLayout: Layout {
 /// Shared completion gesture owner for modal sheets and transient tool panels.
 /// The footer's Done button and these entry points must call the same callback.
 /// The native editor gets the first opportunity to finish an IME composition;
-/// multiline NSTextView uses Shift-Return for newline and owns its own Esc.
+/// multiline NSTextView uses Shift-Return for newline; marked text remains native.
 extension View {
     func trainerSheetDoneGestures(
         enabled: Bool = true,
@@ -160,7 +160,8 @@ private struct TrainerSheetDoneMonitor: NSViewRepresentable {
                 guard let clickedWindow = event.window, clickedWindow !== window else { return event }
                 let parentSheetClick = window.sheetParent.map { $0 === clickedWindow } ?? false
                 let otherToolWindowClick = self.outsideWindowClicks && window.sheetParent == nil
-                    && window.isKeyWindow
+                    && window.isKeyWindow && clickedWindow.styleMask.contains(.titled)
+                    && clickedWindow.level == .normal
                 guard parentSheetClick || otherToolWindowClick else { return event }
                 return self.finish(event, in: window)
             }
@@ -170,10 +171,8 @@ private struct TrainerSheetDoneMonitor: NSViewRepresentable {
             if let editor = window.firstResponder as? NSTextView {
                 if editor.hasMarkedText() { return event }
                 if !editor.isFieldEditor {
-                    // The multiline editor owns Esc (cancelOperation) and this
-                    // monitor owns plain Return / outside clicks. Shift-Return
-                    // remains available to insert a newline in a JSON draft.
-                    if event.type == .keyDown && event.keyCode == 53 { return event }
+                    // Both keys and outside clicks are Done. Shift-Return is
+                    // still available for a newline in a multiline JSON draft.
                     action?()
                     return nil
                 }
