@@ -108,7 +108,7 @@ private struct TrainerSheetHeaderLayout: Layout {
 /// Shared completion gesture owner for modal sheets and transient tool panels.
 /// The footer's Done button and these entry points must call the same callback.
 /// The native editor gets the first opportunity to finish an IME composition;
-/// multiline NSTextView retains Return for newline and handles Esc itself.
+/// multiline NSTextView uses Shift-Return for newline and owns its own Esc.
 extension View {
     func trainerSheetDoneGestures(
         enabled: Bool = true,
@@ -168,8 +168,14 @@ private struct TrainerSheetDoneMonitor: NSViewRepresentable {
 
         private func finish(_ event: NSEvent, in window: NSWindow) -> NSEvent? {
             if let editor = window.firstResponder as? NSTextView {
-                if editor.hasMarkedText() || !editor.isFieldEditor {
-                    return event
+                if editor.hasMarkedText() { return event }
+                if !editor.isFieldEditor {
+                    // The multiline editor owns Esc (cancelOperation) and this
+                    // monitor owns plain Return / outside clicks. Shift-Return
+                    // remains available to insert a newline in a JSON draft.
+                    if event.type == .keyDown && event.keyCode == 53 { return event }
+                    action?()
+                    return nil
                 }
                 // Commit ordinary TextField editing before invoking Done. A
                 // rejecting field editor keeps its sheet and draft intact.
