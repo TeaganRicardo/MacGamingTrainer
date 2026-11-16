@@ -122,10 +122,6 @@ extension View {
         )
     }
 
-    /// Kept as a compatibility alias for existing sheet presentation tests.
-    func trainerSheetEscapeDismiss(enabled: Bool = true, perform action: @escaping () -> Void) -> some View {
-        trainerSheetDoneGestures(enabled: enabled, perform: action)
-    }
 }
 
 private struct TrainerSheetDoneMonitor: NSViewRepresentable {
