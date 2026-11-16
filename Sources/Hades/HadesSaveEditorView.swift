@@ -186,7 +186,6 @@ struct HadesSaveEditorView: View {
                         if let failure = model.failures[key] {
                             Text(localization.string(failure))
                                 .font(.caption)
-                                .foregroundStyle(theme.warning)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .contentTransition(.opacity)
                                 .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: failure)
@@ -204,7 +203,7 @@ struct HadesSaveEditorView: View {
     @ViewBuilder
     private var recoveryNotice: some View {
         if let recovery = model.recoveryPath {
-            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
+            TrainerInlineNotice(color: theme.warning) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.saveEditor.recovery"))
                         .font(.caption)
