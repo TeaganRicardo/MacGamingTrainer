@@ -312,6 +312,20 @@ func commands(at url: URL) -> [[String: Any]] {
             fail("unified TrainerSaveEditorPagingBar buttons missing or misconfigured")
         }
         wait("paging next moved to offset 40") { !editor.queryLoading && editor.offset == 40 }
+        check(editor.canPreviousPage, "previous eligibility missing after next-page reply")
+        let beforeBusyPage = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
+        editor.query(offset: editor.offset)
+        check(editor.queryLoading && !editor.canNextPage && !editor.canPreviousPage,
+              "pagination should be locked by active query")
+        editor.nextPage()
+        editor.previousPage()
+        wait("explicit refresh query completed without queued page navigation") {
+            !editor.queryLoading && commands(at: commandLog).filter {
+                $0["command"] as? String == "save_editor_query"
+            }.count == beforeBusyPage + 1
+        }
+        check(editor.offset == 40 && editor.canPreviousPage,
+              "rejected navigation mutated the visible page or history")
         guard let prevAgain = namedNativeControl(root, role: "AXButton", name: prevTitle),
               prevAgain.enabled, prevAgain.press() else {
             fail("previous page button did not re-enable on offset 40")
