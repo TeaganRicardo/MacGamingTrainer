@@ -948,8 +948,14 @@ class Hades2Adapter(GameAdapter):
                             'reward':diagnostic.get('reward'),
                             'routes':diagnostic.get('routes'),
                         })
-                if observed:
-                    logging.info('WorldActions target catalog diagnostics=%s',observed)
+                if observed and (
+                    command in ('status','apply_world_exit','cancel_world_exit')
+                    or any(row.get('targetCount') == 0 for row in observed)
+                ):
+                    logging.info(
+                        'WorldActions target catalog diagnostics command=%s exits=%s',
+                        command,observed
+                    )
             if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
                 self._adopt_lua_preferences(raw_decoded)
             # Runtime observation skips durable Hades desired-state projection,
