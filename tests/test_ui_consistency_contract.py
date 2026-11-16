@@ -321,6 +321,7 @@ for action_surface in (
     ROOT / "Sources/Core/UI/Components/TrainerProfileManagerView.swift",
     ROOT / "Sources/Hades/HadesSaveEditorView.swift",
     ROOT / "Sources/Hades2/Views/Hades2SaveEditorView.swift",
+    ROOT / "Sources/Hades2/Views/Hades2SaveAdvancedValueView.swift",
 ):
     assert "widthRole: .sheet" in action_surface.read_text(), action_surface
 

@@ -260,6 +260,20 @@ private func fields(_ view: NSView) -> [NSTextField] {
                 "reopening the table lost its membership correction")
         press(membershipSheet, "host.done")
         until("membership draft editor did not dismiss") { window.attachedSheet == nil }
+        // Reopen, edit TrainerTextField so firstResponder moves to SheetPresentationWindow, then press Esc.
+        membershipSheet = openValue(membershipRow)
+        edit(fields(membershipSheet).first { $0.placeholderString == text("hades2.saveEditor.advanced.key") }!, "  escaped draft  ")
+        let attachedSheet = window.attachedSheet!
+        let escEvent = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: attachedSheet.windowNumber,
+            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+            isARepeat: false, keyCode: 53
+        )!
+        app.sendEvent(escEvent)
+        until("Esc did not dismiss Hades2SaveAdvancedValueView after TrainerTextField ended editing") {
+            window.attachedSheet == nil
+        }
 
         membership("hades2.saveEditor.advanced.addMember", key: "Added", value: "{\"luaType\":\"number\",\"value\":42}")
         let initialAdded = model.pendingActions.first!

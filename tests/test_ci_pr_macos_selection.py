@@ -140,6 +140,11 @@ expected_routes = {
     "Sources/Core/Runtime/TrainerLogSink.swift": {"test_trainer_log_session_lifecycle.py"},
     "Sources/Core/Runtime/BackendProcess.swift": {"test_backend_stderr_liveness.py"},
     "Sources/Core/Save/TrainerSaveRetentionSettings.swift": {"test_core_save_retention_controls.py"},
+    "Sources/Core/UI/Components/TrainerSaveEditorShell.swift": {
+        "test_hades_save_editor_frontend.py",
+        "test_hades2_save_editor_frontend.py",
+    },
+    "Sources/Hades/HadesSaveEditorView.swift": {"test_hades_save_editor_frontend.py"},
     "Sources/Hades2/Services/Hades2RunLogWatcher.swift": {"test_hades2_run_log_watcher.py"},
     "Sources/Hades2/Views/Hades2ChaosGatePanel.swift": {"test_hades2_chaos_gate_frontend.py"},
     "Sources/Hades2/Views/Hades2GatheringPanel.swift": {"test_hades2_gathering_frontend.py"},

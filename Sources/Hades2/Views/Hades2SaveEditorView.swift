@@ -25,6 +25,7 @@ struct Hades2SaveEditorView: View {
     @State private var section: Hades2SaveWorkbenchSection = .all
     @State private var confirmingSource = false
     @State private var advancedEditingEntry: Hades2SaveEditorEntry?
+    @State private var retiredDraftsExpanded = false
 
     init(model: Hades2SaveEditorModel) {
         _model = StateObject(wrappedValue: model)
@@ -115,16 +116,26 @@ struct Hades2SaveEditorView: View {
             }
             if !model.retiredDrafts.isEmpty {
                 Divider()
-                DisclosureGroup(text("hades2.saveEditor.retiredDrafts")) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(model.retiredDrafts) { draft in
-                                Text(draft.name).font(.caption.weight(.semibold))
-                                Text(draft.text).font(.caption.monospaced()).textSelection(.enabled)
-                            }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.frame(maxHeight: 120)
-                }.padding(theme.controlPadding)
+                VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                    TrainerDisclosureButton(
+                        isExpanded: $retiredDraftsExpanded,
+                        expandTitle: text("hades2.saveEditor.retiredDrafts"),
+                        collapseTitle: text("hades2.saveEditor.retiredDrafts")
+                    )
+                    TrainerDisclosure(isExpanded: retiredDraftsExpanded) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                                ForEach(model.retiredDrafts) { draft in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(draft.name).font(.caption.weight(.semibold))
+                                        Text(draft.text).font(.caption.monospaced()).textSelection(.enabled)
+                                    }
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }.frame(maxHeight: 120)
+                    }
+                }
+                .padding(theme.controlPadding)
             }
             VStack(spacing: 0) {
                 if let receipt = model.lastApplyReceipt {
@@ -183,7 +194,11 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.baselineGeneration) { _, _ in
             advancedEditingEntry = nil
+            retiredDraftsExpanded = false
             section = .all
+        }
+        .onChange(of: model.retiredDrafts.isEmpty) { _, empty in
+            if empty { retiredDraftsExpanded = false }
         }
     }
 
@@ -273,15 +288,25 @@ struct Hades2SaveEditorView: View {
             state: model.busy || model.profile.isEmpty ? .unavailable : .interactive)
     }
 
-    @ViewBuilder
     private var saveScopeTrailing: some View {
-        if section == .advanced && !model.advancedPath.isEmpty {
+        HStack(spacing: theme.compactControlSpacing) {
+            if section == .advanced && !model.advancedPath.isEmpty {
+                Button {
+                    model.leaveAdvanced()
+                } label: {
+                    Label(text("hades2.saveEditor.up"), systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+            }
             Button {
-                model.leaveAdvanced()
+                model.query(offset: model.offset)
             } label: {
-                Label(text("hades2.saveEditor.up"), systemImage: "chevron.left")
+                Image(systemName: TrainerSemanticIcon.Concept.refresh)
             }
             .buttonStyle(.borderless)
+            .disabled(model.workspaceID == nil || model.busy)
+            .help(text("hades2.saveEditor.refreshRows"))
+            .accessibilityLabel(text("hades2.saveEditor.refreshRows"))
         }
     }
 
@@ -292,7 +317,7 @@ struct Hades2SaveEditorView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
             } else if resultPhase == .loading {
-                ProgressView()
+                TrainerLoadingIndicator()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
             } else if resultPhase == .empty {
@@ -369,7 +394,7 @@ struct Hades2SaveEditorView: View {
             .padding(.vertical, theme.sectionSpacing)
         } else {
             VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
-                HStack(spacing: 14) {
+                HStack(spacing: theme.sectionSpacing) {
                     Text(fieldTitle(entry, in: entity))
                         .font(.callout)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -440,21 +465,33 @@ struct Hades2SaveEditorView: View {
            let removed = model.pendingActions.first(where: { $0.entryID == entry.id }), !removed.afterPresent {
             Text(text("hades2.saveEditor.advanced.removed")).font(.caption).foregroundStyle(.secondary)
             if let before = removed.typedBefore, removed.beforePresent {
-                Button(text("hades2.saveEditor.advanced.restore")) {
+                TrainerSecondaryActionButton(
+                    title: text("hades2.saveEditor.advanced.restore"),
+                    enabled: !model.busy,
+                    widthRole: .sheet
+                ) {
                     model.stage(entryID: entry.id, operation: "set", value: before.object, baseline: entry.baselineGeneration)
-                }.disabled(model.busy)
+                }
             }
         } else if entry.domain == "advanced" &&
                     (entry.typedValue != nil || ["table", "binary", "nil"].contains(entry.valueType)) {
-            Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
-                .accessibilityIdentifier("saveEditor.editValue." + entry.id)
-                .disabled(model.busy)
+            TrainerSecondaryActionButton(
+                title: text("hades2.saveEditor.advanced.editValue"),
+                enabled: !model.busy,
+                widthRole: .sheet
+            ) {
+                advancedEditingEntry = entry
+            }
+            .accessibilityIdentifier("saveEditor.editValue." + entry.id)
         } else if entry.id.hasPrefix("dialogueReset:") {
-            Button(entry.displayName) {
+            TrainerSecondaryActionButton(
+                title: entry.displayName,
+                enabled: !model.busy,
+                widthRole: .sheet
+            ) {
                 model.stage(entryID: entry.id, operation: "set", value: false, baseline: entry.baselineGeneration)
             }
             .accessibilityIdentifier("saveEditor.reset." + entry.rawID)
-            .disabled(model.busy)
         } else if entry.valueType == "boolean" {
             TrainerToggleControl(
                 title: entry.displayName,
@@ -501,7 +538,7 @@ struct Hades2SaveEditorView: View {
 
     @ViewBuilder
     private func advancedEntry(_ entry: Hades2SaveEditorEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
             Text(entry.displayName)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
@@ -540,16 +577,24 @@ struct Hades2SaveEditorView: View {
             if entry.editable {
                 if entry.childCount != nil { editorControl(entry) }
                 else if !["binary", "nil"].contains(entry.valueType) && entry.typedValue == nil {
-                    Button(text("hades2.saveEditor.advanced.editValue")) { advancedEditingEntry = entry }
-                        .accessibilityIdentifier("saveEditor.editValue." + entry.id)
-                        .disabled(model.busy)
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.saveEditor.advanced.editValue"),
+                        enabled: !model.busy,
+                        widthRole: .sheet
+                    ) {
+                        advancedEditingEntry = entry
+                    }
+                    .accessibilityIdentifier("saveEditor.editValue." + entry.id)
                 }
                 if entry.mutationKinds.contains("unset") {
-                    Button(text("hades2.saveEditor.advanced.removeField")) {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.saveEditor.advanced.removeField"),
+                        enabled: !model.busy,
+                        widthRole: .sheet
+                    ) {
                         model.stage(entryID: entry.id, operation: "unset", value: nil, baseline: entry.baselineGeneration)
                     }
                     .accessibilityIdentifier("saveEditor.unset." + entry.id)
-                    .disabled(model.busy)
                 }
             }
             if let warning = entry.warning {
@@ -568,25 +613,15 @@ struct Hades2SaveEditorView: View {
     }
 
     private var pagingControls: some View {
-        HStack(spacing: theme.compactControlSpacing) {
-            Text(pageSummary)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button { model.previousPage() } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(model.busy || model.offset == 0)
-            .accessibilityLabel(text("hades2.saveEditor.previousPage"))
-            .help(text("hades2.saveEditor.previousPage"))
-            Button { model.nextPage() } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(model.busy || model.offset + Hades2SaveEditorModel.pageSize >= model.total)
-            .accessibilityLabel(text("hades2.saveEditor.nextPage"))
-            .help(text("hades2.saveEditor.nextPage"))
-        }
-        .buttonStyle(.borderless)
+        TrainerSaveEditorPagingBar(
+            summary: pageSummary,
+            previousTitle: text("hades2.saveEditor.previousPage"),
+            nextTitle: text("hades2.saveEditor.nextPage"),
+            canPrevious: !model.busy && model.offset > 0,
+            canNext: !model.busy && model.offset + Hades2SaveEditorModel.pageSize < model.total,
+            onPrevious: model.previousPage,
+            onNext: model.nextPage
+        )
     }
 
     private var pageSummary: String {
@@ -597,11 +632,9 @@ struct Hades2SaveEditorView: View {
         ])
     }
 
-
-
     private var reviewDrawer: some View {
         let baseline = model.baselineGeneration
-        return VStack(alignment: .leading, spacing: 9) {
+        return VStack(alignment: .leading, spacing: theme.controlPadding) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(text("hades2.saveEditor.review"))
@@ -614,8 +647,13 @@ struct Hades2SaveEditorView: View {
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(text("hades2.saveEditor.cancelChanges")) { model.cancel(baseline: baseline) }
-                    .disabled(model.busy || !model.documentCurrent)
+                TrainerSecondaryActionButton(
+                    title: text("hades2.saveEditor.cancelChanges"),
+                    enabled: !model.busy && model.documentCurrent,
+                    widthRole: .sheet
+                ) {
+                    model.cancel(baseline: baseline)
+                }
                 TrainerPrimaryActionButton(
                     title: text("hades2.saveEditor.apply"),
                     enabled: !model.busy && model.hasWriteTarget && model.documentCurrent,
@@ -630,7 +668,7 @@ struct Hades2SaveEditorView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             ScrollView {
-                VStack(spacing: 8) {
+                VStack(spacing: theme.compactControlSpacing) {
                     ForEach(model.pendingActions) { action in
                         stagedAction(action)
                     }
@@ -644,83 +682,84 @@ struct Hades2SaveEditorView: View {
 
     @ViewBuilder
     private func stagedAction(_ action: Hades2SaveEditorAction) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 9) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(action.name)
-                        .font(.callout.weight(.medium))
-                        .lineLimit(1)
-                    if action.entityName != action.name {
-                        Text(action.entityName)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+        TrainerListCard {
+            VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                HStack(spacing: theme.compactControlSpacing) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(action.name)
+                            .font(.callout.weight(.medium))
                             .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                editorControl(
-                    action.editorEntry,
-                    identity: "basket:" + action.entryID
-                )
-                Button {
-                    model.unstage(entryID: action.entryID, baseline: action.baselineGeneration)
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help(text("hades2.saveEditor.basket.remove"))
-                .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
-                .accessibilityIdentifier("saveEditor.remove." + action.entryID)
-                .disabled(model.busy)
-            }
-            if let host = action.hostName, !action.content.contains(host) {
-                Text(host).font(.callout).textSelection(.enabled)
-            }
-            ForEach(Array(action.content.enumerated()), id: \.offset) { _, line in
-                Text(line).font(.callout).textSelection(.enabled)
-            }
-            editFailure(action.editorEntry)
-            HStack(spacing: 6) {
-                Text(action.domain == "advanced"
-                     ? typedReviewValue(action.typedBefore, present: action.beforePresent)
-                     : reviewValue(action.before, for: action))
-                .foregroundStyle(.secondary)
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
-                Text(action.domain == "advanced"
-                     ? typedReviewValue(action.typedAfter, present: action.afterPresent)
-                     : reviewValue(action.after, for: action))
-                Spacer()
-            }
-            .font(.caption.monospacedDigit())
-            if !action.effects.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(action.effects) { effect in
-                        HStack(spacing: 6) {
-                            Text(effect.name ?? effect.rawID)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(effect.beforeDisplay ?? reviewValue(
-                                effect.before,
-                                operation: effect.operation,
-                                domain: effect.domain
-                            ))
-                            .foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right")
+                        if action.entityName != action.name {
+                            Text(action.entityName)
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
-                            Text(effect.afterDisplay ?? reviewValue(
-                                effect.after,
-                                operation: effect.operation,
-                                domain: effect.domain
-                            ))
+                                .lineLimit(1)
                         }
-                        .font(.caption2.monospacedDigit())
                     }
+                    Spacer(minLength: theme.compactControlSpacing)
+                    editorControl(
+                        action.editorEntry,
+                        identity: "basket:" + action.entryID
+                    )
+                    Button {
+                        model.unstage(entryID: action.entryID, baseline: action.baselineGeneration)
+                    } label: {
+                        Image(systemName: TrainerSemanticIcon.Action.remove)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(text("hades2.saveEditor.basket.remove"))
+                    .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
+                    .accessibilityIdentifier("saveEditor.remove." + action.entryID)
+                    .disabled(model.busy)
                 }
-                .padding(.leading, 12)
+                if let host = action.hostName, !action.content.contains(host) {
+                    Text(host).font(.callout).textSelection(.enabled)
+                }
+                ForEach(Array(action.content.enumerated()), id: \.offset) { _, line in
+                    Text(line).font(.callout).textSelection(.enabled)
+                }
+                editFailure(action.editorEntry)
+                HStack(spacing: theme.compactControlSpacing) {
+                    Text(action.domain == "advanced"
+                         ? typedReviewValue(action.typedBefore, present: action.beforePresent)
+                         : reviewValue(action.before, for: action))
+                    .foregroundStyle(.secondary)
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(.secondary)
+                    Text(action.domain == "advanced"
+                         ? typedReviewValue(action.typedAfter, present: action.afterPresent)
+                         : reviewValue(action.after, for: action))
+                    Spacer()
+                }
+                .font(.caption.monospacedDigit())
+                if !action.effects.isEmpty {
+                    VStack(alignment: .leading, spacing: theme.compactControlSpacing / 2) {
+                        ForEach(action.effects) { effect in
+                            HStack(spacing: theme.compactControlSpacing) {
+                                Text(effect.name ?? effect.rawID)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(effect.beforeDisplay ?? reviewValue(
+                                    effect.before,
+                                    operation: effect.operation,
+                                    domain: effect.domain
+                                ))
+                                .foregroundStyle(.secondary)
+                                Image(systemName: "arrow.right")
+                                    .foregroundStyle(.secondary)
+                                Text(effect.afterDisplay ?? reviewValue(
+                                    effect.after,
+                                    operation: effect.operation,
+                                    domain: effect.domain
+                                ))
+                            }
+                            .font(.caption2.monospacedDigit())
+                        }
+                    }
+                    .padding(.leading, theme.sectionSpacing)
+                }
             }
         }
-        .padding(.vertical, 3)
     }
 
     private func applyReceipt(_ receipt: Hades2SaveEditorApplyReceipt) -> some View {
@@ -736,8 +775,8 @@ struct Hades2SaveEditorView: View {
         )
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: theme.compactControlSpacing) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(theme.accent)
+                Image(systemName: TrainerSemanticIcon.Feedback.toastSuccess)
+                    .foregroundStyle(theme.success)
                 Text(text("hades2.saveEditor.applyOutcome.title"))
                     .font(.callout.weight(.semibold))
             }

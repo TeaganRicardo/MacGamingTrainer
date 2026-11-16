@@ -46,7 +46,7 @@ struct TrainerSaveEditorWindowHeader: View {
                 .disabled(!doneEnabled)
         }
         .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, 15)
+        .padding(.vertical, theme.sectionSpacing)
     }
 }
 
@@ -221,6 +221,40 @@ struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: Vi
             .accessibilityHidden(!hasReview)
         }
         .animation(TrainerMotion.animation(.disclosure, reduceMotion: reduceMotion), value: hasReview)
+    }
+}
+
+struct TrainerSaveEditorPagingBar: View {
+    @Environment(\.trainerTheme) private var theme
+
+    let summary: String
+    let previousTitle: String
+    let nextTitle: String
+    let canPrevious: Bool
+    let canNext: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+
+    var body: some View {
+        HStack(spacing: theme.compactControlSpacing) {
+            Text(summary)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button(action: onPrevious) {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(!canPrevious)
+            .help(previousTitle)
+            .accessibilityLabel(previousTitle)
+            Button(action: onNext) {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!canNext)
+            .help(nextTitle)
+            .accessibilityLabel(nextTitle)
+        }
+        .buttonStyle(.borderless)
     }
 }
 

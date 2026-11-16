@@ -98,8 +98,16 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Core/UI/Components/TrainerDisclosure.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerMetricGrid.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerListControls.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Components/TrainerSheetScaffold.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerSheetScaffold.swift": (
+        *_CORE_SHARED_UI_TESTS,
+        "test_hades_save_editor_frontend.py",
+        "test_hades2_advanced_save_frontend.py",
+    ),
     "Sources/Core/UI/Components/TrainerSheetLifetime.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerSaveEditorShell.swift": (
+        "test_hades_save_editor_frontend.py",
+        "test_hades2_save_editor_frontend.py",
+    ),
     "Sources/Core/UI/Components/TrainerProfileManagerView.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerDiagnosticsView.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift": _CORE_SHARED_UI_TESTS,
@@ -111,6 +119,8 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
 
     # Two-module Host & reveal owners
     "Sources/Hades/HadesTrainerView.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades/HadesSaveEditorView.swift": ("test_hades_save_editor_frontend.py",),
+    "Sources/Hades/HadesSaveEditorModel.swift": ("test_hades_save_editor_frontend.py",),
     "Sources/Hades/HadesTypes.swift": ("test_hades_shortcut_semantics.py",),
     "Sources/Hades/HadesRoomsPanel.swift": ("test_hades_shortcut_semantics.py",),
     "Sources/Hades/HadesWorkbenchNavigation.swift": ("test_multi_game_contexts.py", "test_hades_shortcut_semantics.py"),
