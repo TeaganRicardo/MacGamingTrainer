@@ -180,7 +180,7 @@ struct HadesSaveEditorView: View {
     @ViewBuilder
     private var failuresNotice: some View {
         if !model.failures.isEmpty {
-            TrainerInlineNotice(color: theme.warning) {
+            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(model.failures.keys.sorted(), id: \.self) { key in
                         if let failure = model.failures[key] {
@@ -204,7 +204,7 @@ struct HadesSaveEditorView: View {
     @ViewBuilder
     private var recoveryNotice: some View {
         if let recovery = model.recoveryPath {
-            TrainerInlineNotice(color: theme.warning) {
+            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(text("hades.saveEditor.recovery"))
                         .font(.caption)
@@ -357,11 +357,11 @@ struct HadesSaveEditorView: View {
 
     private var paging: some View {
         TrainerSaveEditorPagingBar(
-            summary: "\(model.offset + 1)–\(min(model.total, model.offset + model.pageLimit)) / \(model.total)",
+            summary: "\(model.total == 0 ? 0 : model.offset + 1)–\(min(model.total, model.offset + model.pageLimit)) / \(model.total)",
             previousTitle: text("hades.saveEditor.previous"),
             nextTitle: text("hades.saveEditor.next"),
-            canPrevious: model.offset > 0 && !model.queryLoading,
-            canNext: model.offset + model.pageLimit < model.total && !model.queryLoading,
+            canPrevious: model.canPreviousPage,
+            canNext: model.canNextPage,
             onPrevious: model.previousPage,
             onNext: model.nextPage
         )
