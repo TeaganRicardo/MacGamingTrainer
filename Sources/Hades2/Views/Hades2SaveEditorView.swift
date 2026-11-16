@@ -69,7 +69,7 @@ struct Hades2SaveEditorView: View {
             Divider()
             ForEach(model.operationFailures.keys.sorted(by: { $0.rawValue < $1.rawValue }), id: \.rawValue) { command in
                 if let failure = model.operationFailures[command] {
-                    TrainerInlineNotice(color: theme.warning) {
+                    TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
                         Text(localization.string(failure))
                             .font(.caption)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,7 +92,7 @@ struct Hades2SaveEditorView: View {
                 saveScopeTrailing
             }
             if let queryFailure = model.queryFailure {
-                TrainerInlineNotice(color: theme.warning) {
+                TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
                     Text(localization.string(queryFailure))
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
