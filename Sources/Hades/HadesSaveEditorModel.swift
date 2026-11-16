@@ -360,11 +360,28 @@ final class HadesSaveEditorModel: ObservableObject {
         let task = DispatchWorkItem { [weak self] in self?.query() }
         searchTask = task; DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
     }
-    func nextPage() { pageHistory.append(offset); query(offset: offset + pageLimit) }
-    func previousPage() { query(offset: pageHistory.popLast() ?? 0) }
-    func query(offset requestedOffset: Int = 0) {
+    /// Paging is a document operation: reject while a write or another query owns the view.
+    private var canPage: Bool {
+        !busy && !applying && !queryLoading
+            && workspaceID != nil && baselineGeneration != nil && readyGeneration == baselineGeneration
+    }
+    var canPreviousPage: Bool { canPage && offset > 0 }
+    var canNextPage: Bool { canPage && pageLimit > 0 && offset + pageLimit < total }
+
+    func nextPage() {
+        guard canNextPage else { return }
+        query(offset: offset + pageLimit, historyOnSuccess: pageHistory + [offset])
+    }
+    func previousPage() {
+        guard canPreviousPage else { return }
+        query(offset: pageHistory.last ?? max(0, offset - pageLimit),
+              historyOnSuccess: Array(pageHistory.dropLast()))
+    }
+    func query(offset requestedOffset: Int = 0, historyOnSuccess: [Int]? = nil) {
         guard !applying, let workspaceID, let baseline = baselineGeneration else { return }
-        if requestedOffset == 0 { pageHistory = [] }
+        // Keep history unchanged until the backend acknowledges a valid page.
+        // A rejected, cancelled or stale query must not alter Back navigation.
+        let acceptedHistory = historyOnSuccess ?? (requestedOffset == 0 ? [] : pageHistory)
         searchTask?.cancel()
         var params: [String: Any] = ["domain": domain.rawValue, "language": language.rawValue,
             "query": search, "offset": requestedOffset, "limit": Self.pageSize]
@@ -378,6 +395,7 @@ final class HadesSaveEditorModel: ObservableObject {
                 self.failures["query"] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return
             }
             self.rows = query.rows; self.total = query.total; self.offset = query.offset; self.pageLimit = query.limit
+            self.pageHistory = acceptedHistory
             self.breadcrumbs = query.breadcrumbs; self.parentID = query.parentId; self.readyGeneration = baseline
         }
     }
