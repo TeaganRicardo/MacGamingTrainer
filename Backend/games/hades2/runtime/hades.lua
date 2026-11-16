@@ -9792,7 +9792,7 @@ if __MacGamingTrainerV1 == nil then
       return not not result, usedRandom
     end
 
-    local function routeCandidates(door, diagnostics)
+    local function routeCandidatesWithDiagnostics(door, diagnostics)
       diagnostics = diagnostics or {}
       local function unavailable(reason)
         diagnostics.reason = reason
@@ -9895,7 +9895,13 @@ if __MacGamingTrainerV1 == nil then
       return result
     end
 
-    local function rewardCandidates(door, diagnostics)
+    -- Preserve the established internal helper shape for native apply paths;
+    -- observation diagnostics use the richer companion below.
+    local function routeCandidates(door)
+      return routeCandidatesWithDiagnostics(door)
+    end
+
+    local function rewardCandidatesWithDiagnostics(door, diagnostics)
       diagnostics = diagnostics or {}
       local function unavailable(reason)
         diagnostics.reason = reason
@@ -9977,6 +9983,10 @@ if __MacGamingTrainerV1 == nil then
       return result
     end
 
+    local function rewardCandidates(door)
+      return rewardCandidatesWithDiagnostics(door)
+    end
+
     local function targetCatalogForDoor(door, doorToken, refresh)
       local cached = targetCatalogs[door]
       if not refresh and type(cached) == "table" and cached.doorToken == doorToken then
@@ -9988,10 +9998,10 @@ if __MacGamingTrainerV1 == nil then
         reward = {},
         routes = {},
       }
-      for _, candidate in ipairs(rewardCandidates(door, diagnostics.reward)) do
+      for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, diagnostics.reward)) do
         targets[#targets + 1] = { kind = "reward", id = candidate.id }
       end
-      local routes = routeCandidates(door, diagnostics.routes)
+      local routes = routeCandidatesWithDiagnostics(door, diagnostics.routes)
       if type(routes) == "table" then
         for _, kind in ipairs(routeOrder) do
           if type(routes[kind]) == "table" and #routes[kind] > 0 then
