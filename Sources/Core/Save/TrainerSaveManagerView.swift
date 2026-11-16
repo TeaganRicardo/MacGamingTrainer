@@ -125,18 +125,20 @@ struct TrainerSaveManagerView: View {
                 Spacer()
                 TrainerPrimaryActionButton(
                     title: localization.localized("host.done"),
-                    enabled: !model.busy,
+                    enabled: !model.busy && editingID == nil,
                     widthRole: .sheet,
                     action: closeSheet
                 )
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .interactiveDismissDisabled(model.busy)
-        .onExitCommand {
-            guard !model.busy, editingID == nil else { return }
-            closeSheet()
-        }
+        .interactiveDismissDisabled(model.busy || editingID != nil)
+        .trainerSheetDoneGestures(
+            enabled: !model.busy && editingID == nil && restoreCandidate == nil
+                && !showRetention && !confirmDelete,
+            outsideWindowClicks: true,
+            perform: closeSheet
+        )
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -359,6 +361,8 @@ struct TrainerSaveManagerView: View {
     }
 
     private func closeSheet() {
+        guard !model.busy, editingID == nil,
+              restoreCandidate == nil, !showRetention, !confirmDelete else { return }
         if let closeWindow { closeWindow() } else { dismiss() }
     }
 
@@ -405,10 +409,10 @@ private struct TrainerSaveRestoreConfirmationView: View {
             HStack {
                 Spacer()
                 Button(localization.localized("host.cancel"), action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                TrainerPrimaryActionButton(title: localization.localized("host.restore"), widthRole: .sheet, action: onRestore)
                     .keyboardShortcut(.defaultAction)
+                TrainerPrimaryActionButton(title: localization.localized("host.restore"), widthRole: .sheet, action: onRestore)
             }
         }
+        .trainerSheetDoneGestures(perform: onCancel)
     }
 }
