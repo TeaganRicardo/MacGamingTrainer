@@ -931,7 +931,7 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=reply.metrics.localize_duration
             asynchronous_unknown=reply.outcome_unknown
             decoded=self._merge_resident_reply(reply)
-            if command in ('status','apply_world_exit','cancel_world_exit'):
+            if isinstance(raw_decoded.get('worldActions'),dict):
                 world_actions=raw_decoded.get('worldActions')
                 exits=world_actions.get('exits') if isinstance(world_actions,dict) else None
                 observed=[]
