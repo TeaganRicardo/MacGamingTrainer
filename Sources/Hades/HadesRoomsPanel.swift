@@ -31,19 +31,19 @@ struct HadesGatheringPanel: View {
                         Text(row.name(language: localization.language.rawValue)).tag(row.id)
                     }
                 }
-                .labelsHidden().trainerPicker(.rowAction)
+                .labelsHidden().trainerPicker(.rowAction, state: model.canMutate ? .interactive : .unavailable)
                 TrainerNumberField(
                     text: $amount, accessibilityLabel: text("hades.gainAmount"), width: 72,
                     enabled: model.canMutate,
                     onEditingChanged: { editing in if editing { capturedTarget = model.target } },
                     onCommit: { $0.text }
                 )
-                TrainerSecondaryActionButton(title: text("hades.gain"), systemImage: TrainerSemanticIcon.Action.acquire, enabled: model.canMutate, action: gain)
+                TrainerSecondaryActionButton(title: text("hades.gain"), enabled: model.canMutate, action: gain)
             }
             TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: theme.accent, emphasized: false) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
                 TrainerSecondaryActionButton(
-                    title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                    title: text("hades.generate"),
                     enabled: model.canMutate && model.world?.canFish == true,
                     helpText: fishingHelp,
                     accessibilityLabel: text("hades.generateFishing")
@@ -198,7 +198,6 @@ struct HadesRoomsPanel: View {
         } action: {
             TrainerSecondaryActionButton(
                 title: text(model.selectedWorldExitLease != nil ? "hades.cancel" : "hades.apply"),
-                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.selectedWorldExitActionAvailable,
                 latched: model.selectedWorldExitLease != nil,
                 subduedLatched: true,
@@ -250,7 +249,6 @@ struct HadesRoomsPanel: View {
             )
             TrainerSecondaryActionButton(
                 title: text(pending ? "hades.cancel" : "hades.apply"),
-                systemImage: TrainerSemanticIcon.Action.apply,
                 enabled: model.worldOccurrenceActionAvailable,
                 latched: pending,
                 subduedLatched: true,
@@ -267,7 +265,7 @@ struct HadesRoomsPanel: View {
                 TrainerLabeledControlRow(title: text("hades.generateChaosGate"), icon: TrainerSemanticIcon.Context.portal, tint: theme.accent, emphasized: false) {
                     TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
                     TrainerSecondaryActionButton(
-                        title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                        title: text("hades.generate"),
                         enabled: model.canMutate && model.world?.canChaos == true
                     ) { model.generateChaosGate() }
                 }
@@ -277,7 +275,7 @@ struct HadesRoomsPanel: View {
                         ForEach(model.world?.objects ?? [], id: \.self) { item in Text(termName(item)).tag(item) }
                     }
                     .labelsHidden().trainerPicker(.rowAction, state: model.world?.objects.isEmpty == false ? .interactive : .unavailable)
-                    TrainerSecondaryActionButton(title: text("hades.generate"), systemImage: TrainerSemanticIcon.Action.generate,
+                    TrainerSecondaryActionButton(title: text("hades.generate"),
                                                  enabled: model.canMutate && model.world?.objects.isEmpty == false) {
                         guard model.world?.objects.contains(chamberObject) == true else { return }
                         action("generate_chamber_object", operation: "hades.chamberObject", params: ["object": chamberObject])

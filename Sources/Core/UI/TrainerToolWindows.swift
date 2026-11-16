@@ -94,13 +94,13 @@ final class TrainerToolWindowStore: NSObject, ObservableObject, NSWindowDelegate
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
         )
         window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
         window.title = title
         window.delegate = self
         let root = TrainerToolWindowRoot(store: self, content: content.view)
             .environmentObject(localization)
             .trainerTheme(theme)
             .tint(theme.accent)
-            .preferredColorScheme(.dark)
             .environment(\.trainerToolWindows, actions(localization: localization, theme: theme))
             .environment(\.trainerCloseToolWindow, { [weak window] in window?.performClose(nil) })
         let controller = NSHostingController(rootView: root)

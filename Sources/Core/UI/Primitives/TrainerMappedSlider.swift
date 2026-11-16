@@ -91,7 +91,7 @@ struct TrainerMappedSlider: View {
             )
         }
         .frame(height: 24)
-        .opacity(interactive ? 1 : 0.55)
+        .opacity(interactive ? 1 : theme.disabledOpacity)
         .focusable(interactive)
         .focused($focused)
         .onMoveCommand { direction in

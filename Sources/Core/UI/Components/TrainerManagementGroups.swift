@@ -118,7 +118,7 @@ struct TrainerManagementGroups: View {
 
     private func buttons(_ actions: [TrainerManagementAction]) -> some View {
         ForEach(actions) { action in
-            TrainerSecondaryActionButton(title: action.title, systemImage: action.icon,
+            TrainerSecondaryActionButton(title: action.title,
                                          enabled: action.isEnabled, action: action.perform)
                 .accessibilityIdentifier("trainer.management.\(action.id)")
         }
@@ -158,8 +158,10 @@ struct TrainerManagementCommandMenu: Commands {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 { Divider() }
                 ForEach(groups[index].actions) { action in
-                    Button(action.title, action: action.perform)
-                        .disabled(!action.isEnabled)
+                    Button(action: action.perform) {
+                        Label(action.title, systemImage: action.icon)
+                    }
+                    .disabled(!action.isEnabled)
                 }
             }
         }

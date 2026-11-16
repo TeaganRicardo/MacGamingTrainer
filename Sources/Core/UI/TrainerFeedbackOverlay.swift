@@ -53,9 +53,9 @@ struct TrainerFeedbackOverlay: View {
 
     private var icon: String {
         switch notice?.tone {
-        case .success: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        default: return "info.circle.fill"
+        case .success: return TrainerSemanticIcon.Feedback.toastSuccess
+        case .warning: return TrainerSemanticIcon.Feedback.toastWarning
+        default: return TrainerSemanticIcon.Feedback.toastInfo
         }
     }
 
@@ -87,7 +87,7 @@ struct TrainerFeedbackOverlay: View {
                             guard interactiveNoticeID == notice.id else { return }
                             onDismiss(notice.id)
                         } label: {
-                            Image(systemName: "xmark")
+                            Image(systemName: TrainerSemanticIcon.Action.dismiss)
                         }
                         .accessibilityLabel(localization.localized("host.feedback.collapse"))
                         .help(localization.localized("host.feedback.collapse"))
@@ -100,7 +100,7 @@ struct TrainerFeedbackOverlay: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(maxWidth: 560)
+                .frame(maxWidth: theme.toastMaxWidth)
                 .background {
                     RoundedRectangle(cornerRadius: theme.controlCornerRadius)
                         .fill(theme.panelRaised).allowsHitTesting(false)

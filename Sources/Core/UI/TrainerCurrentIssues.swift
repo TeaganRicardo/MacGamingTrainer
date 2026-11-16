@@ -50,7 +50,7 @@ struct TrainerCurrentIssuesEntry: View {
         Group {
             if !issues.isEmpty {
                 Button(action: onShowDetails) {
-                    Label(localization.localized("host.feedback.currentIssues"), systemImage: "exclamationmark.circle")
+                    Label(localization.localized("host.feedback.currentIssues"), systemImage: TrainerSemanticIcon.Tool.currentIssues)
                         .font(.callout)
                 }
                 .popover(isPresented: Binding(
@@ -73,16 +73,17 @@ struct TrainerCurrentIssuesEntry: View {
 }
 
 struct TrainerFeedbackDetails: View {
+    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let issues: [TrainerCurrentIssue]
     let onOpenLog: () -> Void
     let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             Text(localization.localized("host.feedback.currentIssues")).font(.headline)
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: theme.sheetSpacing) {
                     ForEach(issues) { issue in
                         VStack(alignment: .leading, spacing: 4) {
                             if let title = issue.title { Text(localization.string(title)).font(.subheadline.weight(.medium)) }
@@ -99,10 +100,12 @@ struct TrainerFeedbackDetails: View {
                 Button(localization.localized("host.viewLog"), action: onOpenLog)
                 Spacer()
                 Button(localization.localized("host.feedback.closeDetails"), action: onClose)
+                    .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(20)
-        .frame(width: 360)
+        .padding(theme.panelPadding)
+        .frame(width: theme.popoverDetailsWidth)
         .trainerSurface(.canvas)
+        .onExitCommand(perform: onClose)
     }
 }

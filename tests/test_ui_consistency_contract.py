@@ -352,3 +352,57 @@ assert "subviews[1]" in dual_picker_layout and "subviews[2]" in dual_picker_layo
 assert "minimumShortcutWidth" in dual_picker_layout and "minimumActionWidth" in dual_picker_layout
 assert "minimumPickerWidth: 144" in dual_picker_layout
 assert "case .layoutAllocated:" in theme
+
+# Core action buttons accept no dead `systemImage` parameter, dead inline stat
+# editors stay deleted, and shared notice/spinner/lock primitives stay single-owner.
+assert "systemImage: String?" not in primary_button
+for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
+    for swift_path in source_root.rglob("*.swift"):
+        relative = swift_path.relative_to(ROOT)
+        source = swift_path.read_text()
+        assert "TrainerInlineStatEditor" not in source, f"{relative} revived deleted TrainerInlineStatEditor"
+
+banner_source = (CORE_UI / "Primitives/TrainerMessageBanner.swift").read_text()
+assert ".padding(theme.noticePadding)" in banner_source
+assert "color.opacity(theme.noticeFillOpacity)" in banner_source
+assert ".padding(theme.noticePadding)" in primary_button
+assert "color.opacity(theme.noticeFillOpacity)" in primary_button
+
+assert "struct TrainerLoadingIndicator: View" in status
+for loading_surface in (
+    ROOT / "Sources/Core/UI/Components/TrainerProfileManagerView.swift",
+    ROOT / "Sources/Core/UI/Components/TrainerDiagnosticsView.swift",
+    ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift",
+    ROOT / "Sources/Core/UI/Components/TrainerSaveEditorShell.swift",
+):
+    assert "TrainerLoadingIndicator()" in loading_surface.read_text(), loading_surface
+
+assert "struct TrainerLockSlot: View" in lock_button
+assert "TrainerLockSlot()" in (CORE_UI / "Components/TrainerStatControls.swift").read_text()
+assert "TrainerLockSlot()" in occurrence_setting
+
+# Global disable-all converges strictly on Control+Option+Backspace without menu
+# key equivalents bypassing Carbon/capture monitors.
+hotkey_chord_source = (ROOT / "Sources/Core/Input/HotkeyChord.swift").read_text()
+assert "static let disableAllChord = HotkeyChord(" in hotkey_chord_source
+assert "keyCode: 51," in hotkey_chord_source
+assert "modifiers: HotkeyChord.controlModifier | HotkeyChord.optionModifier," in hotkey_chord_source
+assert 'keyLabel: "⌫"' in hotkey_chord_source
+assert 'Label(action.title, systemImage: action.icon)' in core_management
+assert '.keyboardShortcut(' not in core_management
+
+# Core modal sheets/popovers declare explicit Return/Esc dismissal matching text-draft safety.
+save_manager_source = (ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift").read_text()
+retention_source = (ROOT / "Sources/Core/Save/TrainerSaveRetentionSettings.swift").read_text()
+profile_source = (CORE_UI / "Components/TrainerProfileManagerView.swift").read_text()
+diagnostics_source = (CORE_UI / "Components/TrainerDiagnosticsView.swift").read_text()
+issues_source = (CORE_UI / "TrainerCurrentIssues.swift").read_text()
+assert '.keyboardShortcut(.cancelAction)' in issues_source and '.onExitCommand(perform: onClose)' in issues_source
+assert '.keyboardShortcut(.cancelAction)' in profile_source
+assert '.keyboardShortcut(.defaultAction)' in diagnostics_source and '.onExitCommand' in diagnostics_source
+assert '.keyboardShortcut(.defaultAction)' in shortcut_sheet and '.onExitCommand' in shortcut_sheet
+assert '.keyboardShortcut(.defaultAction)' in save_manager_source and '.onExitCommand' in save_manager_source
+assert 'guard !model.busy, editingID == nil else { return }' in save_manager_source
+assert save_manager_source.count('.keyboardShortcut(.cancelAction)') >= 1
+assert save_manager_source.count('.keyboardShortcut(.defaultAction)') >= 2
+assert '.keyboardShortcut(.cancelAction)' in retention_source

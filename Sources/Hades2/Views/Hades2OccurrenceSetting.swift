@@ -47,13 +47,12 @@ struct Hades2OccurrenceSetting: View {
             if hasOverride {
                 TrainerResetButton(title: resetLabel, enabled: enabled, action: onReset)
             } else {
-                Color.clear.frame(width: 26, height: 24)
+                TrainerLockSlot()
             }
             if let onGenerate, let generateLabel {
                 TrainerShortcutBadgeSlot(text: generateShortcutText)
                 TrainerSecondaryActionButton(
                     title: generateLabel,
-                    systemImage: TrainerSemanticIcon.Action.generate,
                     enabled: canGenerate,
                     helpText: generateHelp,
                     accessibilityLabel: title + " " + generateLabel,

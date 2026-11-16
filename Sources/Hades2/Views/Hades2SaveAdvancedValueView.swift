@@ -69,7 +69,7 @@ struct Hades2SaveAdvancedValueView: View {
                             Text(text("hades2.saveEditor.advanced.type.string")).tag("string")
                             Text(text("hades2.saveEditor.advanced.type.number")).tag("number")
                             Text(text("hades2.saveEditor.advanced.type.boolean")).tag("boolean")
-                        }.trainerPicker(.rowValue)
+                        }.trainerPicker(.rowValue, state: editable ? .interactive : .unavailable)
                         TrainerTextField(title: text("hades2.saveEditor.advanced.key"), text: membershipBinding(\.key))
                     }
                     TrainerTextField(title: text("hades2.saveEditor.advanced.memberValue"), text: membershipBinding(\.value))

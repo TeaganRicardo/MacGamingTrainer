@@ -20,19 +20,18 @@ struct TrainerSaveManagerView: View {
     @State private var showRetention = false
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: "externaldrive.fill", width: 780) {
-            if model.busy { ProgressView() }
-            Button { model.reveal() } label: { Label(localization.localized("host.save.openFolder"), systemImage: "folder") }
+        TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: TrainerSemanticIcon.Tool.saveManagement, width: 780) {
+            if model.busy { TrainerLoadingIndicator() }
+            Button { model.reveal() } label: { Label(localization.localized("host.save.openFolder"), systemImage: TrainerSemanticIcon.Tool.saveFolder) }
                 .disabled(model.busy)
-            Button { model.refresh() } label: { Label(localization.localized("host.refresh"), systemImage: "arrow.clockwise") }
+            Button { model.refresh() } label: { Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh) }
                 .disabled(model.busy)
             Button { showRetention = true } label: {
-                Label(localization.localized("host.save.retention.title"), systemImage: "clock.badge.checkmark")
+                Label(localization.localized("host.save.retention.title"), systemImage: TrainerSemanticIcon.Tool.retention)
             }
             .disabled(model.busy || model.retention == nil)
             TrainerPrimaryActionButton(
                 title: localization.localized("host.save.createBackup"),
-                systemImage: "plus",
                 enabled: !model.busy,
                 widthRole: .sheet,
                 action: { model.backup() }
@@ -41,7 +40,7 @@ struct TrainerSaveManagerView: View {
             if let pending = model.pendingRestore {
                 TrainerInlineNotice(color: pending.indeterminate ? theme.warning : theme.deferred) {
                     HStack(spacing: 10) {
-                        Image(systemName: "clock.arrow.circlepath")
+                        Image(systemName: TrainerSemanticIcon.Tool.saveHistory)
                         Text(pendingRestoreText(pending))
                             .font(.caption)
                             .foregroundStyle(pending.indeterminate ? theme.warning : theme.deferred)
@@ -55,7 +54,7 @@ struct TrainerSaveManagerView: View {
             if !model.recoveryPaths.isEmpty {
                 TrainerInlineNotice(color: theme.warning) {
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle")
+                        Image(systemName: TrainerSemanticIcon.Feedback.warning)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(localization.localized("host.save.recoveryCopiesWarning"))
                                 .font(.caption)
@@ -73,12 +72,12 @@ struct TrainerSaveManagerView: View {
             }
 
             if !model.error.isEmpty {
-                TrainerMessageBanner(text: localization.presentation(model.error, arguments: model.errorArguments), icon: "exclamationmark.triangle", color: theme.warning)
+                TrainerMessageBanner(text: localization.presentation(model.error, arguments: model.errorArguments), icon: TrainerSemanticIcon.Feedback.warning, color: theme.warning)
             } else if !model.notice.isEmpty {
-                TrainerMessageBanner(text: localization.presentation(model.notice, arguments: model.noticeArguments), icon: "checkmark.circle", color: theme.success)
+                TrainerMessageBanner(text: localization.presentation(model.notice, arguments: model.noticeArguments), icon: TrainerSemanticIcon.Feedback.success, color: theme.success)
             }
             if !model.observationWarning.isEmpty {
-                TrainerMessageBanner(text: localization.localized(model.observationWarning), icon: "exclamationmark.triangle", color: theme.warning)
+                TrainerMessageBanner(text: localization.localized(model.observationWarning), icon: TrainerSemanticIcon.Feedback.warning, color: theme.warning)
             }
 
             if let usage = model.storageUsage {
@@ -95,26 +94,21 @@ struct TrainerSaveManagerView: View {
             }
             if let retention = model.retention {
                 if retention.overBudget {
-                    TrainerMessageBanner(text: localization.localized("host.save.retention.overBudget"), icon: "externaldrive.badge.exclamationmark", color: theme.warning)
+                    TrainerMessageBanner(text: localization.localized("host.save.retention.overBudget"), icon: TrainerSemanticIcon.Feedback.storageWarning, color: theme.warning)
                 }
                 if !retention.warning.isEmpty {
-                    TrainerMessageBanner(text: localization.localized("host.save.retention.warning." + retention.warning), icon: "exclamationmark.triangle", color: theme.warning)
+                    TrainerMessageBanner(text: localization.localized("host.save.retention.warning." + retention.warning), icon: TrainerSemanticIcon.Feedback.warning, color: theme.warning)
                 }
             }
 
-            TrainerSection(title: localization.localized("host.save.history"), icon: "clock.arrow.circlepath") {
+            TrainerSection(title: localization.localized("host.save.history"), icon: TrainerSemanticIcon.Tool.saveHistory) {
                 if !selectedIDs.isEmpty {
                     selectionActions
                 }
 
                 ScrollView {
                     if model.snapshots.isEmpty {
-                        VStack(spacing: 1) {
-                            TrainerRow {
-                                TrainerEmptyState(text: localization.localized("host.save.empty"))
-                            }
-                        }
-                        .trainerGroupedRows()
+                        TrainerEmptyState(text: localization.localized("host.save.empty"))
                     } else {
                         LazyVStack(spacing: 1) {
                             ForEach(model.snapshots) { snapshot in
@@ -133,12 +127,16 @@ struct TrainerSaveManagerView: View {
                     title: localization.localized("host.done"),
                     enabled: !model.busy,
                     widthRole: .sheet,
-                    action: { if let closeWindow { closeWindow() } else { dismiss() } }
+                    action: closeSheet
                 )
                 .keyboardShortcut(.defaultAction)
             }
         }
         .interactiveDismissDisabled(model.busy)
+        .onExitCommand {
+            guard !model.busy, editingID == nil else { return }
+            closeSheet()
+        }
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -186,7 +184,7 @@ struct TrainerSaveManagerView: View {
                 deleteIDs = selectedIDs
                 confirmDelete = true
             } label: {
-                Label(localization.localized("host.deleteSelected"), systemImage: "trash")
+                Label(localization.localized("host.deleteSelected"), systemImage: TrainerSemanticIcon.Action.remove)
             }
             .disabled(model.busy)
         }
@@ -277,7 +275,7 @@ struct TrainerSaveManagerView: View {
                                 managedBackupEditor(snapshot)
                             }
                         } label: {
-                            Label(localization.localized("host.save.edit"), systemImage: "square.and.pencil")
+                            Label(localization.localized("host.save.edit"), systemImage: TrainerSemanticIcon.Action.edit)
                         }
                         .disabled(!snapshot.valid)
                     }
@@ -285,25 +283,25 @@ struct TrainerSaveManagerView: View {
                         Button {
                             model.protect(id: snapshot.id, protected: !snapshot.protected)
                         } label: {
-                            Label(localization.localized(snapshot.protected ? "host.save.allowAutomaticCleanup" : "host.save.keepBackup"), systemImage: snapshot.protected ? "lock.open" : "lock")
+                            Label(localization.localized(snapshot.protected ? "host.save.allowAutomaticCleanup" : "host.save.keepBackup"), systemImage: snapshot.protected ? TrainerSemanticIcon.Action.unprotect : TrainerSemanticIcon.Action.protect)
                         }
                     }
                     Button {
                         beginRename(snapshot)
                     } label: {
-                        Label(localization.localized("host.rename"), systemImage: "pencil")
+                        Label(localization.localized("host.rename"), systemImage: TrainerSemanticIcon.Action.rename)
                     }
                     Button {
                         model.reveal(id: snapshot.id)
                     } label: {
-                        Label(localization.localized("host.showInFinder"), systemImage: "folder")
+                        Label(localization.localized("host.showInFinder"), systemImage: TrainerSemanticIcon.Tool.saveFolder)
                     }
                     Divider()
                     Button(role: .destructive) {
                         deleteIDs = [snapshot.id]
                         confirmDelete = true
                     } label: {
-                        Label(localization.localized("host.delete"), systemImage: "trash")
+                        Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)
                     }
                 }
             }
@@ -360,6 +358,10 @@ struct TrainerSaveManagerView: View {
         }
     }
 
+    private func closeSheet() {
+        if let closeWindow { closeWindow() } else { dismiss() }
+    }
+
     private func cancelRename() {
         editingID = nil
         renameText = ""
@@ -374,10 +376,10 @@ private struct TrainerSaveRestoreConfirmationView: View {
     let onRestore: () -> Void
 
     var body: some View {
-        TrainerSheetScaffold(title: localization.localized("host.save.restoreTitle"), icon: "arrow.counterclockwise", width: 460) {
+        TrainerSheetScaffold(title: localization.localized("host.save.restoreTitle"), icon: TrainerSemanticIcon.Action.restore, width: 460) {
             EmptyView()
         } content: {
-            TrainerSection(title: localization.localized("host.save.restoreOptions"), icon: "arrow.counterclockwise") {
+            TrainerSection(title: localization.localized("host.save.restoreOptions"), icon: TrainerSemanticIcon.Action.restore) {
                 VStack(spacing: 1) {
                     TrainerRow {
                         VStack(alignment: .leading, spacing: 6) {
@@ -403,7 +405,9 @@ private struct TrainerSaveRestoreConfirmationView: View {
             HStack {
                 Spacer()
                 Button(localization.localized("host.cancel"), action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                 TrainerPrimaryActionButton(title: localization.localized("host.restore"), widthRole: .sheet, action: onRestore)
+                    .keyboardShortcut(.defaultAction)
             }
         }
     }

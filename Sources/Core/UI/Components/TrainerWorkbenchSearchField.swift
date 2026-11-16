@@ -73,8 +73,8 @@ struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
                                 .focusable(false)
                                 .padding(.horizontal, 8)
                                 .background {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(theme.accent.opacity(presentation.selectedID == entry.id ? 0.14 : 0))
+                                    RoundedRectangle(cornerRadius: theme.compactCornerRadius)
+                                        .fill(theme.accent.opacity(presentation.selectedID == entry.id ? theme.selectionHighlightOpacity : 0))
                                         .animation(TrainerMotion.animation(.selection, reduceMotion: reduceMotion),
                                                    value: presentation.selectedID)
                                 }

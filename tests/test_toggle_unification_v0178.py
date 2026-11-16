@@ -43,7 +43,7 @@ assert 'Color(red: 0.43, green: 0.56, blue: 0.48)' not in theme
 
 # Every shared switch-using row routes through TrainerToggleControl.
 assert features.count('TrainerToggleControl(') >= 2
-assert 'TrainerToggleControl(' in stats
+assert 'TrainerToggleControl(' not in stats and 'Toggle(' not in stats
 assert '.toggleStyle(.switch)' not in features
 assert '.toggleStyle(.switch)' not in stats
 

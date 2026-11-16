@@ -662,7 +662,7 @@ private struct ExactBoonAcquisitionGeometryFixture: View {
                     .accessibilityIdentifier("acquisition.chaos.curse")
                     TrainerShortcutBadgeSlot(text: "⌃⌥G")
                     TrainerSecondaryActionButton(title: label("Apply", "应用"),
-                        systemImage: TrainerSemanticIcon.Action.acquire, enabled: true,
+                        enabled: true,
                         widthRole: .compactRow) {}
                 }
                 if gameID == "hades" {
@@ -699,7 +699,7 @@ private struct ExactBoonAcquisitionGeometryFixture: View {
                     .accessibilityIdentifier("acquisition.exact.target")
                     TrainerShortcutBadgeSlot(text: "⌃⌥E")
                     TrainerSecondaryActionButton(title: label("Apply", "应用"),
-                        systemImage: TrainerSemanticIcon.Action.acquire, enabled: true,
+                        enabled: true,
                         widthRole: .compactRow) {}
                 }
             }

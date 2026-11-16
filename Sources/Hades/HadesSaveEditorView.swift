@@ -317,7 +317,7 @@ struct HadesSaveEditorView: View {
                 Text(text("hades.saveEditor.changes") + " (\(model.review.count))").font(.headline)
                 Spacer()
                 Button(text("hades.saveEditor.discard")) { model.cancel(baseline: baseline) }.disabled(model.busy || !model.canEditRows)
-                TrainerPrimaryActionButton(title: text("hades.apply"), systemImage: TrainerSemanticIcon.Action.apply, enabled: model.canApply, widthRole: .sheet) { model.apply(baseline: baseline) }
+                TrainerPrimaryActionButton(title: text("hades.apply"), enabled: model.canApply, widthRole: .sheet) { model.apply(baseline: baseline) }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.controlPadding) {
@@ -436,7 +436,7 @@ private struct HadesSaveEditorField: View {
             })) {
                 Text(displayValue).tag(-1)
                 ForEach(choices.indices, id: \.self) { Text(choices[$0].name).tag($0) }
-            }.labelsHidden().trainerPicker(.rowValue)
+            }.labelsHidden().trainerPicker(.rowValue, state: model.canEdit(row) ? .interactive : .unavailable)
         } else if case .some(.boolean(let enabled)) = value {
             Toggle(row.name, isOn: Binding(get: { enabled }, set: {
                 model.stage(row.id, operation: "set", value: HadesSaveValue.boolean($0).object, workspace: workspace, baseline: row.baselineGeneration)

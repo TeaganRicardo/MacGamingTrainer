@@ -20,7 +20,7 @@ struct TrainerSaveEditorWindowHeader: View {
 
     var body: some View {
         HStack(spacing: theme.sectionSpacing) {
-            Image(systemName: "externaldrive.badge.gearshape")
+            Image(systemName: TrainerSemanticIcon.Tool.saveEditor)
                 .font(.title3)
                 .foregroundStyle(theme.accent)
             Text(title)
@@ -30,7 +30,7 @@ struct TrainerSaveEditorWindowHeader: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if busy {
-                ProgressView().controlSize(.small)
+                TrainerLoadingIndicator()
             }
             Spacer()
             if let refreshTitle, let onRefresh {
@@ -153,7 +153,7 @@ struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
             .disabled(!searchEnabled)
 
             if loading {
-                ProgressView().controlSize(.small)
+                TrainerLoadingIndicator()
             }
 
             scope

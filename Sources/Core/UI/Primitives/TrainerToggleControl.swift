@@ -119,3 +119,12 @@ struct TrainerLockButton: View {
         .help(localization.localized(locked ? "host.unlockValue" : "host.lockValue", arguments: [title]))
     }
 }
+
+/// Reserves `TrainerLockButton`'s footprint so unlocked sibling controls match height and alignment.
+struct TrainerLockSlot: View {
+    var body: some View {
+        Color.clear
+            .frame(width: 26, height: 24)
+            .accessibilityHidden(true)
+    }
+}
