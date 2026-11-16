@@ -105,6 +105,19 @@ enum HadesSaveEditorDomain: String, CaseIterable, Identifiable, Decodable {
     case resources, progression, equipment, relationships, narrative, statistics, history, advanced
     var id: String { rawValue }
     var titleKey: String { "hades.saveEditor.domain." + rawValue }
+
+    var sectionIcon: String {
+        switch self {
+        case .resources: return TrainerSemanticIcon.Section.inventory
+        case .progression: return "rectangle.stack.fill"
+        case .equipment: return "bolt.shield.fill"
+        case .relationships: return "person.2.fill"
+        case .narrative: return "text.book.closed.fill"
+        case .statistics: return "chart.bar.fill"
+        case .history: return TrainerSemanticIcon.Tool.saveHistory
+        case .advanced: return TrainerSemanticIcon.Tool.profiles
+        }
+    }
 }
 
 struct HadesSaveFile: Decodable, Identifiable, Equatable {
@@ -380,12 +393,16 @@ final class HadesSaveEditorModel: ObservableObject {
     }
     func dismissDetail() { requests.invalidate(.detail); editingRow = nil; editingTyped = false }
     func discardDraft(_ row: HadesSaveEditorRow, workspace captured: String?) {
-        guard ownsMutation(captured, row.baselineGeneration) else { return }
-        failedDrafts.remove(draftKey(row.id, row.baselineGeneration))
-        activeEdits.remove(draftKey(row.id, row.baselineGeneration))
-        activeEdits.remove(draftKey(row.id + ":key", row.baselineGeneration))
-        failures.removeValue(forKey: row.id); editRevision += 1
-        dismissDetail()
+        if captured == workspaceID, row.baselineGeneration == baselineGeneration {
+            failedDrafts.remove(draftKey(row.id, row.baselineGeneration))
+            activeEdits.remove(draftKey(row.id, row.baselineGeneration))
+            activeEdits.remove(draftKey(row.id + ":key", row.baselineGeneration))
+            failures.removeValue(forKey: row.id)
+            editRevision += 1
+        }
+        if editingRow?.id == row.id && editingRow?.baselineGeneration == row.baselineGeneration {
+            dismissDetail()
+        }
     }
     func commit(_ row: HadesSaveEditorRow, text: String, workspace captured: String?) -> String {
         guard ownsMutation(captured, row.baselineGeneration) else { stale(row.id); return text }

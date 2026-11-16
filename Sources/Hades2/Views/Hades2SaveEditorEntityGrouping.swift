@@ -22,16 +22,16 @@ struct Hades2SaveEditorResultSection: Identifiable {
         switch id {
         case "characters": return "person.2.fill"
         case "quests": return "list.bullet.clipboard"
-        case "resources": return "shippingbox.fill"
+        case "resources": return TrainerSemanticIcon.Section.inventory
         case "arcana": return "rectangle.stack.fill"
         case "weapons": return "bolt.shield.fill"
         case "tools": return "hammer.fill"
         case "familiars": return "pawprint.fill"
-        case "runs": return "clock.arrow.circlepath"
+        case "runs": return TrainerSemanticIcon.Tool.saveHistory
         case "statistics": return "chart.bar.fill"
-        case "objectives": return "checkmark.circle"
+        case "objectives": return TrainerSemanticIcon.Feedback.success
         case "world": return "building.2.fill"
-        case "advanced": return "square.stack.3d.up"
+        case "advanced": return TrainerSemanticIcon.Tool.profiles
         default: return "text.book.closed.fill"
         }
     }

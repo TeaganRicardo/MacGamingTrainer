@@ -33,68 +33,122 @@ struct Hades2SaveAdvancedValueView: View {
     private var editable: Bool { loaded && (detail?.editable ?? entry.editable) && !model.busy && entry.baselineGeneration == model.baselineGeneration }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
+        TrainerSheetScaffold(title: entry.displayName, icon: TrainerSemanticIcon.Action.edit, width: 780) {
+            if loading { TrainerLoadingIndicator() }
+        } content: {
+            VStack(alignment: .leading, spacing: theme.sectionSpacing) {
+                TrainerInlineNotice(color: theme.warning) {
+                    Text(detail?.warning ?? entry.warning ?? text("hades2.saveEditor.advanced.unknownImpact"))
+                        .font(.caption)
+                        .foregroundStyle(theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let failure {
+                    TrainerInlineNotice(color: theme.warning) {
+                        HStack(spacing: theme.compactControlSpacing) {
+                            Text(localization.string(failure))
+                                .font(.caption)
+                                .foregroundStyle(theme.warning)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            TrainerSecondaryActionButton(
+                                title: text("hades2.saveEditor.advanced.retry"),
+                                enabled: !model.busy,
+                                widthRole: .sheet
+                            ) {
+                                load(preservingDraft: loaded)
+                            }
+                        }
+                    }
+                }
+                if loaded {
+                    Text(text("hades2.saveEditor.advanced.typedHint"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TrainerTextField(
+                        title: text("hades2.saveEditor.advanced.typedValue"), text: $valueDraft,
+                        accessibilityLabel: entry.displayName + " · " + text("hades2.saveEditor.advanced.typedValue"),
+                        onCommit: { edit in
+                            model.completeTypedEdit(entry, text: edit.text, changed: edit.changed)
+                        }
+                    )
+                    .disabled(!editable || !mutations.contains("set"))
+                    if let reason = detail?.readOnlyReason {
+                        Text(reason).font(.caption).foregroundStyle(theme.warning)
+                    }
+                    if let correction = model.editFailures[entry.id] {
+                        TrainerInlineNotice(color: theme.warning) {
+                            Text(localization.string(correction))
+                                .font(.caption)
+                                .foregroundStyle(theme.warning)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    if mutations.contains("addMembership") || mutations.contains("removeMembership") {
+                        Divider()
+                        Text(text("hades2.saveEditor.advanced.membership")).font(.callout.weight(.medium))
+                        HStack(spacing: theme.compactControlSpacing) {
+                            Picker(text("hades2.saveEditor.advanced.keyType"), selection: membershipBinding(\.keyType)) {
+                                Text(text("hades2.saveEditor.advanced.type.string")).tag("string")
+                                Text(text("hades2.saveEditor.advanced.type.number")).tag("number")
+                                Text(text("hades2.saveEditor.advanced.type.boolean")).tag("boolean")
+                            }.trainerPicker(.rowValue, state: editable ? .interactive : .unavailable)
+                            TrainerTextField(title: text("hades2.saveEditor.advanced.key"), text: membershipBinding(\.key))
+                        }
+                        TrainerTextField(title: text("hades2.saveEditor.advanced.memberValue"), text: membershipBinding(\.value))
+                        HStack(spacing: theme.compactControlSpacing) {
+                            TrainerSecondaryActionButton(
+                                title: text("hades2.saveEditor.advanced.addMember"),
+                                enabled: editable && mutations.contains("addMembership"),
+                                widthRole: .sheet
+                            ) {
+                                membership("addMembership")
+                            }
+                            TrainerSecondaryActionButton(
+                                title: text("hades2.saveEditor.advanced.removeMember"),
+                                enabled: editable && mutations.contains("removeMembership"),
+                                widthRole: .sheet
+                            ) {
+                                membership("removeMembership")
+                            }
+                        }
+                        if let memberFailure = membershipDraft.failure {
+                            TrainerInlineNotice(color: theme.warning) {
+                                Text(localization.string(memberFailure))
+                                    .font(.caption)
+                                    .foregroundStyle(theme.warning)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    if mutations.contains("unset") {
+                        TrainerSecondaryActionButton(
+                            title: text("hades2.saveEditor.advanced.removeField"),
+                            enabled: editable,
+                            widthRole: .sheet
+                        ) {
+                            model.stage(entryID: entry.id, operation: "unset", value: nil, baseline: entry.baselineGeneration)
+                        }
+                    }
+                }
+            }
+        } footer: {
             HStack {
-                Text(entry.displayName).font(.headline).textSelection(.enabled)
                 Spacer()
-                Button(localization.localized("host.done")) { dismiss() }.disabled(model.busy)
-            }
-            Text(detail?.warning ?? entry.warning ?? text("hades2.saveEditor.advanced.unknownImpact"))
-                .font(.caption).foregroundStyle(theme.warning).fixedSize(horizontal: false, vertical: true)
-            if loading { ProgressView().controlSize(.small) }
-            if let failure {
-                Text(localization.string(failure)).foregroundStyle(theme.warning)
-                Button(text("hades2.saveEditor.advanced.retry")) { load(preservingDraft: loaded) }
-            }
-            if loaded {
-                Text(text("hades2.saveEditor.advanced.typedHint"))
-                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                TrainerTextField(
-                    title: text("hades2.saveEditor.advanced.typedValue"), text: $valueDraft,
-                    accessibilityLabel: entry.displayName + " · " + text("hades2.saveEditor.advanced.typedValue"),
-                    onCommit: { edit in
-                        model.completeTypedEdit(entry, text: edit.text, changed: edit.changed)
-                    }
-                )
-                .disabled(!editable || !mutations.contains("set"))
-                if let reason = detail?.readOnlyReason { Text(reason).font(.caption).foregroundStyle(theme.warning) }
-                if let correction = model.editFailures[entry.id] {
-                    Text(localization.string(correction)).font(.caption).foregroundStyle(theme.warning)
+                TrainerPrimaryActionButton(
+                    title: localization.localized("host.done"),
+                    enabled: !model.busy,
+                    widthRole: .sheet
+                ) {
+                    dismiss()
                 }
-                if mutations.contains("addMembership") || mutations.contains("removeMembership") {
-                    Divider()
-                    Text(text("hades2.saveEditor.advanced.membership")).font(.callout.weight(.medium))
-                    HStack {
-                        Picker(text("hades2.saveEditor.advanced.keyType"), selection: membershipBinding(\.keyType)) {
-                            Text(text("hades2.saveEditor.advanced.type.string")).tag("string")
-                            Text(text("hades2.saveEditor.advanced.type.number")).tag("number")
-                            Text(text("hades2.saveEditor.advanced.type.boolean")).tag("boolean")
-                        }.trainerPicker(.rowValue, state: editable ? .interactive : .unavailable)
-                        TrainerTextField(title: text("hades2.saveEditor.advanced.key"), text: membershipBinding(\.key))
-                    }
-                    TrainerTextField(title: text("hades2.saveEditor.advanced.memberValue"), text: membershipBinding(\.value))
-                    HStack {
-                        Button(text("hades2.saveEditor.advanced.addMember")) { membership("addMembership") }
-                            .disabled(!editable || !mutations.contains("addMembership"))
-                        Button(text("hades2.saveEditor.advanced.removeMember")) { membership("removeMembership") }
-                            .disabled(!editable || !mutations.contains("removeMembership"))
-                    }
-                    if let memberFailure = membershipDraft.failure {
-                        Text(localization.string(memberFailure)).font(.caption).foregroundStyle(theme.warning)
-                    }
-                }
-                if mutations.contains("unset") {
-                    Button(text("hades2.saveEditor.advanced.removeField")) {
-                        model.stage(entryID: entry.id, operation: "unset", value: nil, baseline: entry.baselineGeneration)
-                    }.disabled(!editable)
-                }
+                .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(theme.pagePadding)
-        .frame(width: 780)
-        .trainerSurface(.canvas)
         .trainerDismissTextEditingOnClickAway()
         .interactiveDismissDisabled(model.busy)
+        .trainerSheetEscapeDismiss(enabled: !model.busy) { dismiss() }
         .onAppear { load(preservingDraft: false) }
         .onDisappear { requestID = UUID() }
         .onChange(of: localization.language) { _, _ in load(preservingDraft: loaded) }

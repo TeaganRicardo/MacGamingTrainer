@@ -62,6 +62,7 @@ shared_labels = {
     "hades.diagnostics.export": "hades2.diagnostics.export",
     "hades.saveEditor.title": "hades2.saveEditor.title",
     "hades.saveEditor.search": "hades2.saveEditor.workbench.search",
+    "hades.saveEditor.refreshRows": "hades2.saveEditor.refreshRows",
     "hades.saveEditor.empty": "hades2.saveEditor.empty",
     "hades.saveEditor.previous": "hades2.saveEditor.previousPage",
     "hades.saveEditor.next": "hades2.saveEditor.nextPage",
@@ -567,6 +568,12 @@ for language in ("zh-CN", "en"):
         assert text.strip(), (language, action, key)
         resolved.append(text)
     assert len(resolved) == len(set(resolved)), (language, resolved)
+
+# Batch 3 (#751): Hades I Save Editor domains own semantic section icons matching Core/Hades II.
+hades_save_model = (ROOT / "Sources/Hades/HadesSaveEditorModel.swift").read_text()
+assert "var sectionIcon: String" in hades_save_model
+for domain_case in ("resources", "progression", "equipment", "relationships", "narrative", "statistics", "history", "advanced"):
+    assert f"case .{domain_case}:" in hades_save_model, domain_case
 
 
 print("cross_game_ui_semantics_ok")

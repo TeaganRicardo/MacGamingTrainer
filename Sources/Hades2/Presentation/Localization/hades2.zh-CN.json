@@ -512,6 +512,7 @@
     "hades2.saveEditor.childCount": "{0} 个子项",
     "hades2.saveEditor.ambiguousPath": "重复的底层字段，无法安全进入",
     "hades2.saveEditor.pageSummary": "第 {0}–{1} 项，共 {2} 项",
+    "hades2.saveEditor.refreshRows": "刷新当前文档的显示",
     "hades2.saveEditor.previousPage": "上一页",
     "hades2.saveEditor.nextPage": "下一页",
     "hades2.saveEditor.review": "修改预览",

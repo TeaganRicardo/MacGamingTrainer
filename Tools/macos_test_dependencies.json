@@ -219,6 +219,11 @@
     "Tools/clean_signing_metadata.py",
     "Tools/publish_module_build.py"
   ],
+  "test_hades_save_editor_frontend.py": [
+    "tests/macos_fixture_policy.py",
+    "tests/fixture_budgets/hades.py",
+    "tests/swift_test_compiler.py"
+  ],
   "test_hades_shortcut_semantics.py": [
     "tests/swift_test_compiler.py"
   ]

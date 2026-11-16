@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Standard modal/sheet chrome shared by game modules. Width is intentionally a
@@ -101,5 +102,71 @@ private struct TrainerSheetHeaderLayout: Layout {
             rowHeight = max(rowHeight, size.height)
         }
         return (CGSize(width: available, height: y + rowHeight), frames)
+    }
+}
+
+extension View {
+    /// Dismiss a sheet on Escape when no text editor or field editor owns focus.
+    func trainerSheetEscapeDismiss(enabled: Bool = true, perform action: @escaping () -> Void) -> some View {
+        background(
+            TrainerSheetEscapeMonitor(enabled: enabled, action: action)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        )
+    }
+}
+
+private struct TrainerSheetEscapeMonitor: NSViewRepresentable {
+    let enabled: Bool
+    let action: () -> Void
+
+    final class HostView: NSView {
+        var enabled = true
+        var action: (() -> Void)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, self.enabled,
+                      let window = self.window,
+                      event.window === window,
+                      window.attachedSheet == nil,
+                      event.keyCode == 53,
+                      event.modifierFlags.intersection([.command, .option, .control, .function]).isEmpty else {
+                    return event
+                }
+                if window.firstResponder is NSTextView {
+                    return event
+                }
+                self.action?()
+                return nil
+            }
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+        deinit { stop() }
+    }
+
+    func makeNSView(context: Context) -> HostView {
+        let view = HostView()
+        view.enabled = enabled
+        view.action = action
+        return view
+    }
+
+    func updateNSView(_ view: HostView, context: Context) {
+        view.enabled = enabled
+        view.action = action
+    }
+
+    static func dismantleNSView(_ view: HostView, coordinator: ()) {
+        view.stop()
     }
 }

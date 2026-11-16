@@ -1430,6 +1430,16 @@ struct Main {
             || !archived.contains(where: { $0.contains("unfinished member key") && $0.contains("unfinished member value") }) {
             fail("structural Apply silently lost copyable inline/typed/membership draft text")
         }
+        window.contentView?.layoutSubtreeIfNeeded(); pump(0.10)
+        if nativeAccessibilityControls(window.contentView!).contains(where: { $0.role == "AXDisclosureTriangle" }) {
+            fail("retiredDrafts still renders an isolated AXDisclosureTriangle instead of TrainerDisclosureButton")
+        }
+        let retiredTitle = Hades2GameModule.resolveText(key: "hades2.saveEditor.retiredDrafts", localization: localization)
+        guard let retiredToggle = namedNativeControl(window.contentView!, role: "AXButton", name: retiredTitle),
+              retiredToggle.press() else {
+            fail("TrainerDisclosureButton for retiredDrafts missing")
+        }
+        pump(0.20)
         if model.textDrafts[retiredInline.id] != nil || model.typedDrafts[retiredTyped.id] != nil
             || model.membershipDrafts[retiredTyped.id] != nil || model.editFailures[retiredInline.id] != nil
             || model.editFailures[retiredTyped.id] != nil || obsoleteDetailWasConsumed {
@@ -1755,6 +1765,18 @@ struct Main {
                 fail("The named previous-page action did not become available")
             }
             pumpUntil { !model.querying && model.offset == 0 }
+            let refreshRowsName = Hades2GameModule.resolveText(key: "hades2.saveEditor.refreshRows", localization: localization)
+            let beforeRowsRefresh = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
+            guard let refreshRows = namedNativeControl(content, role: "AXButton", name: refreshRowsName),
+                  refreshRows.enabled,
+                  refreshRows.help == refreshRowsName,
+                  refreshRows.press() else {
+                fail("Hades II Save Editor workbench refresh action missing")
+            }
+            pumpUntil {
+                !model.querying
+                    && commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count > beforeRowsRefresh
+            }
         }
         localization.language = .en
         model.search = "ash"

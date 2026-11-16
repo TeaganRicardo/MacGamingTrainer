@@ -40,6 +40,7 @@ CONSUMERS = {
         "hades2.search", "hades2.world_exit", "hades2.state_flow",
     ),
     "test_hades2_save_editor_frontend.py": ("hades2.save_editor",),
+    "test_hades_save_editor_frontend.py": ("hades.save_editor_frontend",),
     "test_hades2_model_flow.py": ("hades2.live_trait_flow",),
     "test_runtime_text_edit_completion.py": ("runtime_text_edit.completion",),
     "real_module_navigation_harness.py": (
@@ -308,7 +309,10 @@ for domain_name, owners in consumer_domains.items():
     assert selected == owners, (domain_name, selected, owners)
     pr_selected = selected - PR_DEFERRED.keys()
     assert len(pr_selected) <= 6, f"domain budget {domain_name} fanned out too broadly: {pr_selected}"
-assert selected_tests(["tests/fixture_budgets/hades.py"], INVENTORY, SOURCES) == ["test_hades_frontend.py"]
+assert selected_tests(["tests/fixture_budgets/hades.py"], INVENTORY, SOURCES) == [
+    "test_hades_frontend.py",
+    "test_hades_save_editor_frontend.py",
+]
 
 for path in sorted((ROOT / "Tools").rglob("*")) + sorted((ROOT / ".github").rglob("*.yml")):
     if not path.is_file() or path.suffix not in {".py", ".sh", ".yml", ".json", ".txt"}:

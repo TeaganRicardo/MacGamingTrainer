@@ -512,6 +512,7 @@
     "hades2.saveEditor.childCount": "{0} children",
     "hades2.saveEditor.ambiguousPath": "Duplicate physical key · cannot open",
     "hades2.saveEditor.pageSummary": "{0}–{1} of {2}",
+    "hades2.saveEditor.refreshRows": "Refresh Current Document View",
     "hades2.saveEditor.previousPage": "Previous Page",
     "hades2.saveEditor.nextPage": "Next Page",
     "hades2.saveEditor.review": "Review Changes",
