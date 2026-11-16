@@ -381,6 +381,31 @@ func commands(at url: URL) -> [[String: Any]] {
         }
         wait("Revise sheet dismissed") { window.attachedSheet == nil }
 
+        // The same Done path handles Return and a click on the blocked sheet parent.
+        guard let reviseReturn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.revise")),
+              reviseReturn.enabled, reviseReturn.press() else { fail("Revise not available for Return path") }
+        wait("Revise sheet reopened for Return") { window.attachedSheet != nil }
+        let keySheetWindow = window.attachedSheet!
+        let returnEvent = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: keySheetWindow.windowNumber,
+            context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+            isARepeat: false, keyCode: 36
+        )!
+        app.sendEvent(returnEvent)
+        wait("Return used Revise Done and closed the sheet") { window.attachedSheet == nil }
+
+        guard let reviseOutside = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.revise")),
+              reviseOutside.enabled, reviseOutside.press() else { fail("Revise not available for outside-click path") }
+        wait("Revise sheet reopened for outside click") { window.attachedSheet != nil }
+        let outsideEvent = NSEvent.mouseEvent(
+            with: .leftMouseDown, location: CGPoint(x: 12, y: 12), modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 1, clickCount: 1, pressure: 1
+        )!
+        app.sendEvent(outsideEvent)
+        wait("parent-window click used Revise Done and closed sheet") { window.attachedSheet == nil }
+
         guard let editTypedBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.editTyped")),
               editTypedBtn.enabled, editTypedBtn.press() else {
             fail("Edit Typed Value button missing on complex container row")
