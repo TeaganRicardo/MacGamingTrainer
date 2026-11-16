@@ -28,16 +28,17 @@ required = (
     'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
     'TrainerPillBadge', 'TrainerEmptyState',
-    'TrainerSheetScaffold', 'TrainerSectionHeader', 'TrainerMappedSlider',
+    'TrainerSheetScaffold', 'TrainerSection', 'TrainerMappedSlider',
     'TrainerSearchField',
 )
 for name in required:
     assert f'struct {name}' in core_ui, name
     assert name in product_views, name
 
-# The base card is the primitive the metric wrappers build on; the product
-# renders through the wrappers, so only its existence is required.
+# The base card and section header are primitives the shared wrappers build on;
+# products render through the wrappers, so only their existence is required.
 assert 'struct TrainerMetricCard' in core_ui
+assert 'struct TrainerSectionHeader' in core_ui
 
 assert 'struct TrainerSelectableListRow' not in core_ui
 

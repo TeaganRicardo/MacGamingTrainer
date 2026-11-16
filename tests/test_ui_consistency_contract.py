@@ -407,3 +407,37 @@ assert 'guard !model.busy, editingID == nil else { return }' in save_manager_sou
 assert save_manager_source.count('.keyboardShortcut(.cancelAction)') >= 1
 assert save_manager_source.count('.keyboardShortcut(.defaultAction)') >= 2
 assert '.keyboardShortcut(.cancelAction)' in retention_source
+
+# Top-level module sections share TrainerSection (never bare @ViewBuilder siblings in pageSpacing),
+# TrainerMetricCard stretches to grid row height while counter cards reserve lock-slot height, and
+# both trait-management headers use the same TrainerIconLabel badge format.
+status_components = (CORE_UI / "StatusComponents.swift").read_text()
+assert "struct TrainerSection<Accessory: View, Content: View>: View" in status_components
+assert "VStack(alignment: .leading, spacing: theme.sectionSpacing)" in status_components
+assert "extension TrainerSection where Accessory == EmptyView" in status_components
+hades1_view = (HADES1 / "HadesTrainerView.swift").read_text()
+hades1_run_data = hades1_view.split("private var runDataSection: some View {", 1)[1].split(
+    "private var commonSection: some View {", 1
+)[0]
+hades2_run_data = view.split("private var statusAndSessionSection: some View {", 1)[1].split(
+    "private var commonSection: some View {", 1
+)[0]
+assert "TrainerSection(" in hades1_run_data and "TrainerSection(" in hades2_run_data
+assert "@ViewBuilder\n    private var statusAndSessionSection" not in view
+
+metric_card_source = (CORE_UI / "Primitives/TrainerCard.swift").read_text()
+stat_controls_source = (CORE_UI / "Components/TrainerStatControls.swift").read_text()
+counter_block = stat_controls_source.split("struct TrainerCounterMetricCard", 1)[1].split(
+    "struct TrainerStatMetricCard", 1
+)[0]
+assert ".frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)" in metric_card_source
+assert "TrainerLockSlot()" in counter_block
+
+hades1_traits = hades1_view.split("private struct HadesCurrentTraitsPanel:", 1)[1].split(
+    "private struct HadesCurrentTraitPlaceholderRow:", 1
+)[0]
+hades2_traits = view.split("private var currentRunTraitsPanel: some View {", 1)[1].split(
+    "private func currentRunTraitContextualControls", 1
+)[0]
+assert 'TrainerIconLabel(' in hades1_traits and 'Label(text("hades.currentTraits")' not in hades1_traits
+assert 'TrainerIconLabel(' in hades2_traits and 'Label(text("hades2.traits.manager")' not in hades2_traits

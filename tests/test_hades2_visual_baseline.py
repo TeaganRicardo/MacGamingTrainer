@@ -69,7 +69,7 @@ metric_block = card[card.index('struct TrainerMetricCard'):]
 assert '.padding(.top, 6)' in metric_block
 assert '.padding(.bottom, 8)' in metric_block
 assert 'minHeight: 82' not in metric_block
-assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric_block
+assert '.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)' in metric_block
 assert 'HStack(spacing: 2)' in stats
 assert stats.count('.frame(width: 54)') >= 2
 assert 'HStack(spacing: 3)' in stats

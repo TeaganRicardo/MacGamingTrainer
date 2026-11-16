@@ -310,15 +310,18 @@ struct Hades2TrainerView: View {
         }
     }
 
-    @ViewBuilder
     private var statusAndSessionSection: some View {
-        TrainerSectionHeader(title: text("hades2.section.runData"), icon: Hades2WorkbenchSection.values.icon) {
+        TrainerSection(
+            title: text("hades2.section.runData"),
+            icon: Hades2WorkbenchSection.values.icon
+        ) {
             TrainerDisclosureButton(isExpanded: $model.numericControlsExpanded,
                 expandTitle: text("hades2.section.expand"), collapseTitle: text("hades2.section.collapse"))
                 .accessibilityIdentifier("hades2.numericDisclosure")
+        } content: {
+            sessionStatsPanel
         }
         .trainerSectionTarget(Hades2WorkbenchSection.values.id)
-        sessionStatsPanel
     }
 
     private var commonSection: some View {
@@ -513,11 +516,15 @@ struct Hades2TrainerView: View {
     }
 
     private var currentRunTraitsPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
-                Label(text("hades2.traits.manager"), systemImage: TrainerSemanticIcon.Concept.controls)
-                    .font(.subheadline.weight(.medium))
-                    .fixedSize()
+                TrainerIconLabel(
+                    title: text("hades2.traits.manager"),
+                    icon: TrainerSemanticIcon.Concept.controls,
+                    tint: model.canMutateTraits ? theme.accent : theme.inactive,
+                    emphasized: model.canMutateTraits
+                )
+                .fixedSize()
 
                 Picker(text("hades2.traits.manager"), selection: $managedTraitSelection) {
                     if currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }) {

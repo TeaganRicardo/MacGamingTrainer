@@ -46,7 +46,7 @@ struct TrainerMetricCard<Content: View, Accessory: View>: View {
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .trainerSurface(.panel, cornerRadius: theme.cardCornerRadius)
     }
 }

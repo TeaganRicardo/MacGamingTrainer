@@ -92,11 +92,12 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Core/UI/Primitives/TrainerToggleControl.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerFeatureControls.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/TrainerShell.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/StatusComponents.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Primitives/TrainerRow.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Primitives/TrainerCard.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/StatusComponents.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
+    "Sources/Core/UI/Primitives/TrainerRow.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
+    "Sources/Core/UI/Primitives/TrainerCard.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
     "Sources/Core/UI/Components/TrainerDisclosure.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Components/TrainerMetricGrid.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerMetricGrid.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
+    "Sources/Core/UI/Components/TrainerStatControls.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
     "Sources/Core/UI/Components/TrainerListControls.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerSheetScaffold.swift": (
         *_CORE_SHARED_UI_TESTS,
@@ -118,7 +119,7 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Core/UI/TrainerToolWindows.swift": ("test_trainer_tool_windows.py",),
 
     # Two-module Host & reveal owners
-    "Sources/Hades/HadesTrainerView.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades/HadesTrainerView.swift": ("test_multi_game_contexts.py", "test_cross_module_geometry_macos.py"),
     "Sources/Hades/HadesSaveEditorView.swift": ("test_hades_save_editor_frontend.py",),
     "Sources/Hades/HadesSaveEditorModel.swift": ("test_hades_save_editor_frontend.py",),
     "Sources/Hades/HadesTypes.swift": ("test_hades_shortcut_semantics.py",),
@@ -127,7 +128,7 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Hades/HadesModule.swift": ("test_multi_game_contexts.py", "test_hades_shortcut_semantics.py"),
     "Sources/Hades2/Hades2Module.swift": ("test_multi_game_contexts.py",),
     "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift": ("test_multi_game_contexts.py",),
-    "Sources/Hades2/Hades2View.swift": ("test_multi_game_contexts.py", "test_runtime_text_edit_completion.py"),
+    "Sources/Hades2/Hades2View.swift": ("test_multi_game_contexts.py", "test_runtime_text_edit_completion.py", "test_cross_module_geometry_macos.py"),
     "Sources/Hades2/Hades2Model.swift": (
         "test_multi_game_contexts.py",
         "test_runtime_text_edit_completion.py",

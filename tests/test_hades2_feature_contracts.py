@@ -169,7 +169,7 @@ assert "case .disableAll: TrainerSemanticIcon.Tool.disableAll" in core_managemen
 assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management
 visible_actions.append("disableAll")
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
-root = source_section(view, "private var rootContent: some View {", "@ViewBuilder\n    private var statusAndSessionSection")
+root = source_section(view, "private var rootContent: some View {", "private var statusAndSessionSection: some View {")
 assert all(section in root for section in ("statusAndSessionSection", "commonSection", "boonsSection", "resourceSection", "roomsSection", "management"))
 assert "gardenQoL" not in view
 damage = source_section(view, "private var damageMetric: some View {", "private var boonRarityPanel:")
