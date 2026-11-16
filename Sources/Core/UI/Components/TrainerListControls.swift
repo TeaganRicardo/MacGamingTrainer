@@ -321,20 +321,30 @@ struct TrainerEmptyState: View {
     }
 }
 
+/// A semantic notice surface. The caller explicitly owns whether its text is
+/// warning-colored or retains mixed/secondary presentation (e.g. recovery paths).
 struct TrainerInlineNotice<Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let color: Color
+    let foreground: Color?
     let content: Content
 
-    init(color: Color, @ViewBuilder content: () -> Content) {
+    init(color: Color, foreground: Color? = nil, @ViewBuilder content: () -> Content) {
         self.color = color
+        self.foreground = foreground
         self.content = content()
     }
 
     var body: some View {
-        content
-            .padding(theme.noticePadding)
-            .background(color.opacity(theme.noticeFillOpacity), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
+        Group {
+            if let foreground {
+                content.foregroundStyle(foreground)
+            } else {
+                content
+            }
+        }
+        .padding(theme.noticePadding)
+        .background(color.opacity(theme.noticeFillOpacity), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
     }
 }
 
