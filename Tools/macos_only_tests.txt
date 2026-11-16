@@ -32,6 +32,7 @@ test_hades2_save_container_frontend.py
 test_global_hotkey_routing.py
 test_multi_game_contexts.py
 test_hades_frontend.py
+test_hades_shortcut_semantics.py
 test_hades2_model_flow.py
 test_multi_game_context_state.py
 test_hades_process_identity_macos.py

@@ -849,18 +849,24 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
             .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
-             .boonRarityEnabled,.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
+             .boonRarityEnabled,.generateFishing,.applyWorldExit,.applyWorldOccurrence,.generateChamberObject,
+             .generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
              .acquireChaosPair,.acquireExactBoon,.disableAll],
               "shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
-        // The Generate rows follow the Chaos Gate, so earlier defaults keep their keys.
+        // Room shortcuts follow visible room order before Chaos Gate/Generate rows.
         check(HadesShortcutAction.generateFishing.defaultChord.displayText=="⌃⌥Q"
-              && HadesShortcutAction.generateChaosGate.defaultChord.displayText=="⌃⌥W",
-              "adding the Generate row shortcuts moved an existing default")
-        check(HadesWorkbenchCatalog.shortcutActions(in:.rooms)==[.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial],
-              "Generate row shortcuts left the rooms section")
+              && HadesShortcutAction.applyWorldExit.defaultChord.displayText=="⌃⌥W"
+              && HadesShortcutAction.applyWorldOccurrence.defaultChord.displayText=="⌃⌥E"
+              && HadesShortcutAction.generateChamberObject.defaultChord.displayText=="⌃⌥R"
+              && HadesShortcutAction.generateChaosGate.defaultChord.displayText=="⌃⌥T",
+              "adding room shortcuts broke visible default key assignment")
+        check(HadesWorkbenchCatalog.shortcutActions(in:.rooms)==[
+            .applyWorldExit,.applyWorldOccurrence,.generateChamberObject,.generateChaosGate,
+            .spawnOlympian,.spawnPickup,.spawnSpecial],
+              "room action shortcuts left the rooms section or drifted from visible order")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -1839,7 +1845,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
 
         // Generate reward follows Hades II: one Core grouped row per world
-        // catalog group with its sections and "中文 · English" labels, the
+        // catalog group with its sections and active-language labels, the
         // shortcut badge before Generate, and a shortcut acting on the selection
         // the row shows.
         recordPhase("recovery: Generate reward rows")
@@ -1852,13 +1858,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
             let title=HadesPresentation.text(key,language:localization.language)
             return nativeAccessibilityControls(host).first { $0.role=="AXPopUpButton" && nativePickerHasName($0,title) }
         }
-        /// The catalog's sections in order, each header "# title" then its "中文 · English" items.
+        /// The catalog's sections in order, each header "# title" then active-language labels.
         func expectedMenu(_ group: HadesRewardGroup, headers: [String]) -> [String] {
             let offered=model.rewards(in:group)
             let sections=offered.map(\.section).reduce(into:[String]()) { if !$0.contains($1) { $0.append($1) } }
             check(sections.count==headers.count,"Generate row sections drifted from the catalog: \(sections)")
+            let currentLanguage = localization.language
             return zip(sections,headers).flatMap { section, header in
-                ["# "+header]+offered.filter { $0.section==section }.map(\.bilingualName)
+                ["# "+header]+offered.filter { $0.section==section }.map { $0.label(for: currentLanguage) }
             }
         }
         func generateButton(near chord: String) -> NativeAccessibilityControl? {
@@ -1870,32 +1877,35 @@ func pump(_ seconds: TimeInterval = 0.1) {
         for (group,key) in rewardRows {
             let shown=model.rewards(in:group).first!
             let picker=requireNativeControl("Generate row picker "+key,in:host) { _ in rewardPicker(key) }
-            check(model.selectedRewards[group]==shown.id && picker.valueText==shown.bilingualName && picker.enabled,
-                  "Generate row did not show its first catalog reward bilingually: "+key+" value="+(picker.valueText ?? "nil"))
+            let expectedLabel = shown.label(for: localization.language)
+            check(model.selectedRewards[group]==shown.id && picker.valueText==expectedLabel && picker.enabled,
+                  "Generate row did not show its first catalog reward in active language: "+key+" value="+(picker.valueText ?? "nil"))
             checkBadgePrecedes(model.shortcutText(group.shortcut),action:generateTitle)
             check(generateButton(near:model.shortcutText(group.shortcut))?.enabled==true,"Generate row action unavailable: "+key)
         }
-        check(HadesShortcutAction.spawnOlympian.defaultChord.displayText=="⌃⌥E"
-              && HadesShortcutAction.spawnPickup.defaultChord.displayText=="⌃⌥R"
-              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥T",
+        check(HadesShortcutAction.spawnOlympian.defaultChord.displayText=="⌃⌥Y"
+              && HadesShortcutAction.spawnPickup.defaultChord.displayText=="⌃⌥U"
+              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥I",
               "Generate row shortcuts did not take the next free derived defaults")
         // A real menu shows the catalog sections and moves the model-held
         // selection that both the button and the shortcut generate.
         let pickupExpected=expectedMenu(.pickup,headers:["Resources & Standard Drops","Meta Resources"])
         let gems=model.rewards(in:.pickup).first { $0.id=="GemDrop" }!
-        let pickupMoves=pickupExpected.filter { !$0.hasPrefix("# ") }.firstIndex(of:gems.bilingualName)!
+        let gemsEnglish = gems.label(for: .en)
+        let pickupMoves=pickupExpected.filter { !$0.hasPrefix("# ") }.firstIndex(of:gemsEnglish)!
         let pickupMenu=selectNativePicker(rewardPicker("hades.spawn.pickupRewards")!,in:window,moving:pickupMoves,opening:.accessibility)
-        check(pickupMenu==pickupExpected,"Generate row menu lost its catalog sections or bilingual items: \(pickupMenu)")
+        check(pickupMenu==pickupExpected,"Generate row menu lost its catalog sections or active-language items: \(pickupMenu)")
         wait("native pickup choice selects Gemstones") {
-            model.selectedRewards[.pickup]=="GemDrop" && rewardPicker("hades.spawn.pickupRewards")?.valueText==gems.bilingualName
+            model.selectedRewards[.pickup]=="GemDrop" && rewardPicker("hades.spawn.pickupRewards")?.valueText==gemsEnglish
         }
         localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
         let poseidon=model.rewards(in:.olympian)[1]
+        let poseidonChinese = poseidon.label(for: .zhCN)
         let olympianMenu=selectNativePicker(rewardPicker("hades.spawn.olympianBoons")!,in:window,moving:1,opening:.accessibility)
         check(olympianMenu==expectedMenu(.olympian,headers:["奥林匹斯诸神"]),
               "Chinese Generate row lost its section title or 中文 · English items: \(olympianMenu)")
         wait("native Olympian choice selects the next god") {
-            model.selectedRewards[.olympian]==poseidon.id && rewardPicker("hades.spawn.olympianBoons")?.valueText==poseidon.bilingualName
+            model.selectedRewards[.olympian]==poseidon.id && rewardPicker("hades.spawn.olympianBoons")?.valueText==poseidonChinese
         }
         check(rewardPicker("hades.spawn.characterRewards")?.valueText=="卡俄斯 · Chaos",
               "the character-reward row lost Chaos's bilingual label")
@@ -1931,7 +1941,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "an unmodified shortcut was refused or not applied: \(String(describing:capture.issue))")
         checkBadgePrecedes("F6",action:generateTitle)
         model.resetShortcuts();host.layoutSubtreeIfNeeded();pump()
-        check(model.shortcutText(.spawnSpecial)=="⌃⌥T","shortcut reset did not restore the derived default")
+        check(model.shortcutText(.spawnSpecial)=="⌃⌥I","shortcut reset did not restore the derived default")
 
         // Core metric cards commit through Hades I's completion owner: a live
         // amount routes to the hero captured when its edit began, a multiplier
@@ -2181,7 +2191,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             // Without a hero every one-shot is refused as in Hades II: no
             // request, a transient warning and no retained issue. The Generate
             // rows share that gate with their shortcuts.
-            for action in [HadesShortcutAction.generateFishing,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial] {
+            for action in [HadesShortcutAction.generateFishing,.applyWorldExit,.applyWorldOccurrence,
+                           .generateChamberObject,.generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial] {
                 model.dismissFeedback(model.feedback?.id ?? UUID())
                 model.performShortcut(action.rawValue);pump()
                 check(model.feedback?.text.key=="hades.shortcut.unavailable" && model.feedback?.tone == .warning,

@@ -34,6 +34,9 @@ extension HadesShortcutAction {
         case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .generateFishing: TrainerSemanticIcon.Context.fishing
+        case .applyWorldExit: TrainerSemanticIcon.Context.doorway
+        case .applyWorldOccurrence: TrainerSemanticIcon.Context.characterReward
+        case .generateChamberObject: HadesWorkbenchIcon.chamberObject
         case .generateChaosGate: TrainerSemanticIcon.Context.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
@@ -168,6 +171,9 @@ enum HadesWorkbenchCatalog {
         .increaseGameSpeed,
         .boonRarityEnabled,
         .generateFishing,
+        .applyWorldExit,
+        .applyWorldOccurrence,
+        .generateChamberObject,
         .generateChaosGate,
         .spawnOlympian,
         .spawnPickup,
@@ -185,7 +191,8 @@ enum HadesWorkbenchCatalog {
         switch action {
         case .boonRarityEnabled, .acquireChaosPair, .acquireExactBoon: .boons
         case .generateFishing: .resources
-        case .generateChaosGate, .spawnOlympian, .spawnPickup, .spawnSpecial: .rooms
+        case .applyWorldExit, .applyWorldOccurrence, .generateChamberObject,
+             .generateChaosGate, .spawnOlympian, .spawnPickup, .spawnSpecial: .rooms
         case .disableAll: .management
         default: .common
         }
@@ -210,8 +217,7 @@ enum HadesWorkbenchCatalog {
                       "hades.chaosBlessing", "hades.chaosCurse",
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
             (.resources, ["hades.resources", "hades.gainResource"]),
-            (.rooms, ["hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards",
-                      "hades.worldActions.modifyExit", "hades.occurrence.title", "hades.chamberObject"]),
+            (.rooms, ["hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards"]),
             (.management, ["host.refreshStatus", "hades.saveEditor.title", "host.saveManagement", "host.shortcutSettings",
                            "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
                            "host.viewLogHistory", "host.clearCompletedLogs"]),

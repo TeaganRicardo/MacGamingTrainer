@@ -31,6 +31,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedWorldExitToken = ""
     @Published var selectedWorldExitTarget = ""
     @Published var selectedWorldOccurrenceTarget = ""
+    @Published var selectedChamberObject = "trove"
     @Published private(set) var worldRewards: [HadesWorldReward] = []
     /// The shown selection of each Generate row; its shortcut generates it.
     @Published var selectedRewards: [HadesRewardGroup: String] = [:]
@@ -120,6 +121,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canMutate && canAcceptRuntimeAction else { return false }
         if worldOccurrenceLease != nil { return true }
         return worldOccurrenceTargets.contains { $0.id == selectedWorldOccurrenceTarget }
+    }
+    var canSelectChamberObject: Bool {
+        canMutate && world?.objects.isEmpty == false
+    }
+    var chamberObjectActionAvailable: Bool {
+        guard canMutate && canAcceptRuntimeAction else { return false }
+        return world?.objects.contains(selectedChamberObject) == true
     }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
     var connectionDetailText: TrainerTextToken {
@@ -339,6 +347,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         } else if !worldOccurrenceTargets.contains(where: { $0.id == selectedWorldOccurrenceTarget }) {
             selectedWorldOccurrenceTarget = worldOccurrenceTargets.first?.id ?? ""
         }
+
+        let objects = world?.objects ?? []
+        if !objects.contains(selectedChamberObject) {
+            selectedChamberObject = objects.first ?? "trove"
+        }
     }
 
     @discardableResult
@@ -382,6 +395,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             "apply_world_occurrence", roomID: world?.roomId,
             params: ["targetID": selectedWorldOccurrenceTarget],
             operation: "hades.occurrence.title", completion: completion
+        )
+    }
+
+    @discardableResult
+    func generateSelectedChamberObject(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard chamberObjectActionAvailable else { return false }
+        return worldAction(
+            "generate_chamber_object", roomID: world?.roomId,
+            params: ["object": selectedChamberObject],
+            operation: "hades.chamberObject", completion: completion
         )
     }
 
@@ -645,6 +668,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return hostActionsEnabled
         case .generateFishing:
             return canMutate && world?.canFish == true
+        case .applyWorldExit:
+            return selectedWorldExitActionAvailable
+        case .applyWorldOccurrence:
+            return worldOccurrenceActionAvailable
+        case .generateChamberObject:
+            return chamberObjectActionAvailable
         case .generateChaosGate:
             return canMutate && world?.canChaos == true
         case .acquireChaosPair, .acquireExactBoon:
@@ -665,6 +694,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         TrainerHotkeyFeedbackPlayer.play(success ? .completed : .rejected)
     }
 
+    private static func playDeferredShortcutResult(_ success: Bool) {
+        TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
+    }
+
     func performShortcut(_ rawValue: String) {
         guard !shortcutSettingsPresented, let action = HadesShortcutAction(rawValue: rawValue) else {
             rejectShortcut(rawValue); return
@@ -678,6 +711,18 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return
         }
         guard canPerformShortcut(action) else { rejectShortcut(rawValue); return }
+        if action == .applyWorldExit {
+            if !toggleSelectedWorldExit(completion: Self.playDeferredShortcutResult) { rejectShortcut(rawValue) }
+            return
+        }
+        if action == .applyWorldOccurrence {
+            if !toggleWorldOccurrence(completion: Self.playDeferredShortcutResult) { rejectShortcut(rawValue) }
+            return
+        }
+        if action == .generateChamberObject {
+            if !generateSelectedChamberObject(completion: Self.playOneShotShortcutResult) { rejectShortcut(rawValue) }
+            return
+        }
         if action == .acquireExactBoon {
             if !acquireSelectedTrait(completion: Self.playOneShotShortcutResult),
                acquisitionRarityAdjustment == .none { rejectShortcut(rawValue) }
@@ -870,6 +915,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""
         selectedWorldOccurrenceTarget = ""
+        selectedChamberObject = "trove"
     }
 }
 

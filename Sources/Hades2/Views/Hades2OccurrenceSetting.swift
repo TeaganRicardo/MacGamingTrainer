@@ -29,16 +29,15 @@ struct Hades2OccurrenceSetting: View {
             tint: hasOverride ? theme.accent : theme.inactive,
             emphasized: hasOverride, helpText: probabilityHelp
         ) {
-            TrainerTextField(
-                title: nativeLabel,
+            TrainerNumberField(
                 text: $input,
+                placeholder: nativeLabel,
                 accessibilityLabel: title + " " + probabilityLabel,
+                width: theme.occurrenceFieldWidth,
+                enabled: enabled,
                 onEditingChanged: onEditingChanged,
-                onCommit: onCommit,
-                alignment: .center
+                onCommit: onCommit
             )
-            .frame(width: 82)
-            .disabled(!enabled)
             .help(probabilityHelp)
             Text(input.isEmpty ? "" : "%")
                 .font(.subheadline)

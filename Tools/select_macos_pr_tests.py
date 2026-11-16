@@ -111,8 +111,10 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
 
     # Two-module Host & reveal owners
     "Sources/Hades/HadesTrainerView.swift": ("test_multi_game_contexts.py",),
-    "Sources/Hades/HadesWorkbenchNavigation.swift": ("test_multi_game_contexts.py",),
-    "Sources/Hades/HadesModule.swift": ("test_multi_game_contexts.py",),
+    "Sources/Hades/HadesTypes.swift": ("test_hades_shortcut_semantics.py",),
+    "Sources/Hades/HadesRoomsPanel.swift": ("test_hades_shortcut_semantics.py",),
+    "Sources/Hades/HadesWorkbenchNavigation.swift": ("test_multi_game_contexts.py", "test_hades_shortcut_semantics.py"),
+    "Sources/Hades/HadesModule.swift": ("test_multi_game_contexts.py", "test_hades_shortcut_semantics.py"),
     "Sources/Hades2/Hades2Module.swift": ("test_multi_game_contexts.py",),
     "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift": ("test_multi_game_contexts.py",),
     "Sources/Hades2/Hades2View.swift": ("test_multi_game_contexts.py", "test_runtime_text_edit_completion.py"),
