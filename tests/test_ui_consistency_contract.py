@@ -401,7 +401,9 @@ issues_source = (CORE_UI / "TrainerCurrentIssues.swift").read_text()
 sheet_completion = (CORE_UI / "Components/TrainerSheetScaffold.swift").read_text()
 assert "struct TrainerSheetDoneMonitor: NSViewRepresentable" in sheet_completion
 assert "NSEvent.addLocalMonitorForEvents" in sheet_completion
-assert "editor.hasMarkedText() || !editor.isFieldEditor" in sheet_completion
+assert "editor.hasMarkedText()" in sheet_completion
+assert "if !editor.isFieldEditor" in sheet_completion
+assert "event.keyCode == 53" in sheet_completion
 assert "window.attachedSheet == nil" in sheet_completion
 assert "window.makeFirstResponder(nil)" in sheet_completion
 assert '.keyboardShortcut(.defaultAction)' in issues_source and '.onExitCommand(perform: onClose)' in issues_source
