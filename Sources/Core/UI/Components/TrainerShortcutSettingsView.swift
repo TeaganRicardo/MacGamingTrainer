@@ -103,23 +103,20 @@ struct TrainerShortcutSettingsView: View {
         } footer: {
             HStack {
                 Spacer()
-                Button(localization.localized("host.done")) {
-                    guard lifetime.accepts(presentationID) else { return }
-                    lifetime.invalidate()
-                    capture.cancel()
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
+                Button(localization.localized("host.done"), action: finishSheet)
+                    .disabled(capture.capturingActionID != nil)
+                    .keyboardShortcut(.defaultAction)
             }
         }
+        .trainerSheetDoneGestures(
+            enabled: lifetime.accepts(presentationID) && isPresented && capture.capturingActionID == nil,
+            perform: finishSheet
+        )
         .onAppear { lifetime.appear() }
         .onDisappear { lifetime.invalidate(); capture.cancel() }
         .onExitCommand {
+            // During capture the hotkey controller owns Esc and must not close the sheet.
             if capture.capturingActionID != nil { capture.cancel() }
-            else if lifetime.accepts(presentationID) {
-                lifetime.invalidate()
-                isPresented = false
-            }
         }
         .onChange(of: isPresented) { _, visible in
             if visible { lifetime.appear() }
@@ -139,6 +136,13 @@ struct TrainerShortcutSettingsView: View {
                 capture.cancel()
             }
         }
+    }
+
+    private func finishSheet() {
+        guard lifetime.isActive, isPresented, capture.capturingActionID == nil else { return }
+        lifetime.invalidate()
+        capture.cancel()
+        isPresented = false
     }
 
     private func shortcutLabel(_ value: String) -> some View {
