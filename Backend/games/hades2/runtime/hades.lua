@@ -9914,87 +9914,178 @@ if __MacGamingTrainerV1 == nil then
 
     local function rewardCandidatesWithDiagnostics(door, diagnostics)
       diagnostics = diagnostics or {}
-      local function unavailable(reason)
-        diagnostics.reason = reason
+      local room = editableDoor(door) and door.Room or nil
+      if type(room) ~= "table" then
+        diagnostics.reason = "exit_room_unavailable"
         diagnostics.candidateCount = 0
         return {}
       end
-      local room = editableDoor(door) and door.Room or nil
-      if type(room) ~= "table" then return unavailable("exit_room_unavailable") end
       diagnostics.roomName = tostring(room.Name or "")
-      if room.NoReward then return unavailable("room_no_reward") end
-      if room.DeferReward then return unavailable("room_reward_deferred") end
-      if room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil then
-        return unavailable("room_has_forced_reward")
-      end
-      if room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
-          or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion" then
-        return unavailable("room_has_fixed_reward_category")
-      end
+      local locked = room.NoReward and "room_no_reward"
+        or (room.DeferReward and "room_reward_deferred")
+        or ((room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil)
+          and "room_has_forced_reward")
+        or ((room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
+          or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion")
+          and "room_has_fixed_reward_category") or nil
+
       local storeName = room.RewardStoreName
       diagnostics.storeName = type(storeName) == "string" and storeName or ""
-      if type(storeName) ~= "string" or storeName == "" then
-        return unavailable("reward_store_name_missing")
-      end
       local stores = type(CurrentRun) == "table" and CurrentRun.RewardStores or nil
-      local store = type(stores) == "table" and stores[storeName] or nil
-      if type(store) ~= "table" then return unavailable("reward_store_unavailable") end
-      diagnostics.storeCount = #store
-      if type(IsRoomRewardEligible) ~= "function" then
-        return unavailable("reward_eligibility_unavailable")
+      local currentStore = type(stores) == "table" and stores[storeName] or nil
+      diagnostics.storeCount = type(currentStore) == "table" and #currentStore or 0
+      if locked == nil and (type(storeName) ~= "string" or storeName == "") then
+        locked = "reward_store_name_missing"
       end
-      local result, seen = {}, {}
+      local referenceStore
+      if type(GetRewardStoreData) == "function" and type(storeName) == "string" then
+        local ok, source = pcall(GetRewardStoreData, storeName)
+        if ok and type(source) == "table" then referenceStore = source end
+      end
+      if referenceStore == nil and type(RewardStoreData) == "table" then
+        referenceStore = RewardStoreData[storeName]
+      end
+      local runProgress = type(RewardStoreData) == "table"
+        and RewardStoreData.RunProgress or nil
+      if locked == nil and type(currentStore) ~= "table"
+          and type(referenceStore) ~= "table" then
+        locked = "reward_store_unavailable"
+      end
+
+      local previously = {}
+      local source = currentSource()
+      if type(source) == "table" and type(source.OfferedRewards) == "table" then
+        for objectId, offered in pairs(source.OfferedRewards) do
+          if objectId ~= door.ObjectId and type(offered) == "table"
+              and type(offered.Type) == "string" then
+            previously[#previously + 1] = {
+              RewardType = offered.Type, ForceLootName = offered.ForceLootName,
+            }
+          end
+        end
+      end
+
+      local gods, eligibleGods, godEligibilityKnown = {}, {}, false
+      if type(LootData) == "table" then
+        for name, data in pairs(LootData) do
+          if type(name) == "string" and string.sub(name, -7) == "Upgrade"
+              and type(data) == "table" and data.GodLoot == true
+              and type(data.DoorIcon) == "string" and not data.DebugOnly then
+            gods[#gods + 1] = name
+          end
+        end
+        table.sort(gods)
+      end
+      if #gods > 0 and type(GetEligibleLootNames) == "function" then
+        local ok, names, random = pcall(nativeProbeWithoutRNG, GetEligibleLootNames)
+        if ok and type(names) == "table" and not random then
+          godEligibilityKnown = true
+          for _, name in pairs(names) do eligibleGods[name] = true end
+        end
+      end
+      local godLimit = false
+      if #gods > 0 and type(ReachedMaxGods) == "function" then
+        local ok, limit, random = pcall(nativeProbeWithoutRNG, ReachedMaxGods)
+        godLimit = ok and not random and limit == true
+      end
+
+      local result, byID = {}, {}
       local inspected, ineligible, randomDependent, probeErrors = 0, 0, 0, 0
-      for _, reward in ipairs(store) do
-        if type(reward) == "table" and type(reward.Name) == "string"
-            and reward.Name ~= "Story" and reward.Name ~= "Shop"
-            and reward.Name ~= "Empty" and reward.Name ~= "Devotion" then
-          inspected = inspected + 1
-          local probeReward = {}
-          for key, value in pairs(reward) do probeReward[key] = value end
-          local ok, eligible, usesRandom = pcall(
+      local enabledCount = 0
+      local function offer(reward, forceLootName)
+        local id = forceLootName or reward.ForceLootName or reward.Name
+        if type(id) ~= "string" or id == "" then return end
+        inspected = inspected + 1
+        local problem = locked
+        if problem == nil and type(IsRoomRewardEligible) ~= "function" then
+          problem = "reward_eligibility_unavailable"
+        end
+        if problem == nil then
+          local probe = {}
+          for key, value in pairs(reward) do probe[key] = value end
+          local ok, eligible, random = pcall(
             nativeProbeWithoutRNG,
-            IsRoomRewardEligible, CurrentRun, room, probeReward, {}, { Door = door }
+            IsRoomRewardEligible, CurrentRun, room, probe, previously, { Door = door }
           )
           if not ok then
+            problem = "reward_eligibility_probe_error"
             probeErrors = probeErrors + 1
             if diagnostics.probeError == nil then
               diagnostics.probeError = string.sub(tostring(eligible), 1, 160)
             end
-          elseif usesRandom then
+          elseif random then
+            problem = "reward_eligibility_requires_rng"
             randomDependent = randomDependent + 1
           elseif not eligible then
+            problem = "reward_not_available"
             ineligible = ineligible + 1
-          else
-            local target = reward.ForceLootName or reward.Name
-            if type(target) == "string" and not seen[target] then
-              seen[target] = true
-              result[#result + 1] = {
-                id = target, rewardType = reward.Name,
-                forceLoot = reward.ForceLootName, reward = reward,
-              }
+          end
+        end
+        if problem == nil and forceLootName ~= nil then
+          if not godEligibilityKnown or not eligibleGods[forceLootName] then
+            problem = godLimit and "god_limit" or "god_not_eligible"
+          end
+          for _, other in ipairs(previously) do
+            if other.RewardType == "Boon" and other.ForceLootName == forceLootName then
+              problem = "reward_not_available"
+              break
             end
           end
         end
+        local candidate = {
+          id = id, rewardType = reward.Name,
+          forceLoot = forceLootName or reward.ForceLootName,
+          reward = reward, enabled = problem == nil, reason = problem,
+        }
+        local old = byID[id]
+        if old == nil then
+          result[#result + 1] = candidate
+          byID[id] = #result
+          if candidate.enabled then enabledCount = enabledCount + 1 end
+        elseif candidate.enabled and not result[old].enabled then
+          result[old] = candidate
+          enabledCount = enabledCount + 1
+        end
+      end
+      local function scan(store)
+        if type(store) ~= "table" then return end
+        for _, reward in ipairs(store) do
+          if type(reward) == "table" and type(reward.Name) == "string"
+              and reward.Name ~= "Story" and reward.Name ~= "Shop"
+              and reward.Name ~= "Empty" and reward.Name ~= "Devotion" then
+            if reward.Name == "Boon" and reward.ForceLootName == nil and #gods > 0 then
+              for _, name in ipairs(gods) do offer(reward, name) end
+            else
+              offer(reward, nil)
+            end
+          end
+        end
+      end
+      -- A spent native reward deck is a selection-pool detail. A manual
+      -- exit edit may use a supported template reward without refilling or
+      -- mutating the native deck during catalog observation.
+      scan(currentStore)
+      if referenceStore ~= currentStore then scan(referenceStore) end
+      if runProgress ~= currentStore and runProgress ~= referenceStore then
+        scan(runProgress)
       end
       diagnostics.inspectedRewardCount = inspected
       diagnostics.ineligibleRewardCount = ineligible
       diagnostics.randomDependentRewardCount = randomDependent
       diagnostics.probeErrorCount = probeErrors
-      diagnostics.candidateCount = #result
-      if #result > 0 then
+      diagnostics.candidateCount = enabledCount
+      diagnostics.disabledCandidateCount = #result - enabledCount
+      if enabledCount > 0 then
         diagnostics.reason = "available"
-      elseif probeErrors > 0 then
-        diagnostics.reason = "reward_eligibility_probe_error"
-      elseif randomDependent > 0 then
-        diagnostics.reason = "reward_eligibility_requires_rng"
       else
-        diagnostics.reason = "no_native_eligible_reward"
+        diagnostics.reason = locked or (probeErrors > 0 and "reward_eligibility_probe_error")
+          or (randomDependent > 0 and "reward_eligibility_requires_rng")
+          or "no_native_eligible_reward"
       end
       return result
     end
 
-    local function rewardCandidates(door)
+        local function rewardCandidates(door)
       return rewardCandidatesWithDiagnostics(door)
     end
 
@@ -10108,7 +10199,7 @@ if __MacGamingTrainerV1 == nil then
 
         local function rewardCandidate(door, target)
       for _, candidate in ipairs(rewardCandidates(door)) do
-        if candidate.id == target then return candidate end
+        if candidate.id == target and candidate.enabled then return candidate end
       end
       return nil
     end
