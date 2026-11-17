@@ -9956,16 +9956,11 @@ if __MacGamingTrainerV1 == nil then
       if referenceStore == nil and type(RewardStoreData) == "table" then
         referenceStore = RewardStoreData[storeName]
       end
-      local runProgress = type(RewardStoreData) == "table"
-        and RewardStoreData.RunProgress or nil
-      local metaProgress = type(RewardStoreData) == "table"
-        and RewardStoreData.MetaProgress or nil
-      if locked == nil and type(currentStore) ~= "table"
-          and type(referenceStore) ~= "table" then
+      if locked == nil and type(currentStore) ~= "table" then
         locked = "reward_store_unavailable"
       end
 
-      local previously = {}
+      local previously, excludedGods = {}, {}
       local source = currentSource()
       if type(source) == "table" and type(source.OfferedRewards) == "table" then
         for objectId, offered in pairs(source.OfferedRewards) do
@@ -9974,11 +9969,15 @@ if __MacGamingTrainerV1 == nil then
             previously[#previously + 1] = {
               RewardType = offered.Type, ForceLootName = offered.ForceLootName,
             }
+            if offered.Type == "Boon" and type(offered.ForceLootName) == "string" then
+              excludedGods[#excludedGods + 1] = offered.ForceLootName
+            end
           end
         end
       end
 
       local gods, eligibleGods, godEligibilityKnown = {}, {}, false
+      local godEligibilityReason = "god_eligibility_unavailable"
       if type(LootData) == "table" then
         for name, data in pairs(LootData) do
           if type(name) == "string" and string.sub(name, -7) == "Upgrade"
@@ -9989,23 +9988,31 @@ if __MacGamingTrainerV1 == nil then
         end
         table.sort(gods)
       end
+      local godLimit = false
       if #gods > 0 and type(GetEligibleLootNames) == "function" then
-        local ok, names, random = pcall(nativeProbeWithoutRNG, GetEligibleLootNames)
+        local ok, names, random = pcall(
+          nativeProbeWithoutRNG, GetEligibleLootNames, excludedGods
+        )
         if ok and type(names) == "table" and not random then
           godEligibilityKnown = true
+          godEligibilityReason = nil
           for _, name in pairs(names) do eligibleGods[name] = true end
+        elseif random then
+          godEligibilityReason = "god_eligibility_requires_rng"
         end
       end
-      local godLimit = false
       if #gods > 0 and type(ReachedMaxGods) == "function" then
-        local ok, limit, random = pcall(nativeProbeWithoutRNG, ReachedMaxGods)
+        local ok, limit, random = pcall(
+          nativeProbeWithoutRNG, ReachedMaxGods, excludedGods
+        )
         godLimit = ok and not random and limit == true
       end
 
       local result, byID = {}, {}
       local inspected, ineligible, randomDependent, probeErrors = 0, 0, 0, 0
-      local enabledCount = 0
-      local function offer(reward, forceLootName)
+      local enabledCount, currentEligibleCount = 0, 0
+      local currentEligibleIDs = {}
+      local function offer(reward, forceLootName, sourceKind)
         local id = forceLootName or reward.ForceLootName or reward.Name
         if type(id) ~= "string" or id == "" then return end
         inspected = inspected + 1
@@ -10035,21 +10042,27 @@ if __MacGamingTrainerV1 == nil then
           end
         end
         if problem == nil and forceLootName ~= nil then
-          if not godEligibilityKnown or not eligibleGods[forceLootName] then
+          if not godEligibilityKnown then
+            problem = godEligibilityReason or "god_eligibility_unavailable"
+          elseif not eligibleGods[forceLootName] then
             problem = godLimit and "god_limit" or "god_not_eligible"
           end
-          for _, other in ipairs(previously) do
-            if other.RewardType == "Boon" and other.ForceLootName == forceLootName then
-              problem = "reward_not_available"
-              break
-            end
-          end
+        end
+        if problem == nil and sourceKind == "reference" and currentEligibleCount > 0 then
+          -- Native ChooseRoomReward only refills its current store after it has
+          -- no eligible entries. A different reward store is never a valid
+          -- fallback for this physical exit.
+          problem = "reward_not_in_current_store"
         end
         local candidate = {
           id = id, rewardType = reward.Name,
           forceLoot = forceLootName or reward.ForceLootName,
           reward = reward, enabled = problem == nil, reason = problem,
         }
+        if sourceKind == "current" and candidate.enabled and not currentEligibleIDs[id] then
+          currentEligibleIDs[id] = true
+          currentEligibleCount = currentEligibleCount + 1
+        end
         local old = byID[id]
         if old == nil then
           result[#result + 1] = candidate
@@ -10060,30 +10073,24 @@ if __MacGamingTrainerV1 == nil then
           enabledCount = enabledCount + 1
         end
       end
-      local function scan(store)
+      local function scan(store, sourceKind)
         if type(store) ~= "table" then return end
         for _, reward in ipairs(store) do
           if type(reward) == "table" and type(reward.Name) == "string"
               and reward.Name ~= "Story" and reward.Name ~= "Shop"
               and reward.Name ~= "Empty" and reward.Name ~= "Devotion" then
             if reward.Name == "Boon" and reward.ForceLootName == nil and #gods > 0 then
-              for _, name in ipairs(gods) do offer(reward, name) end
+              for _, name in ipairs(gods) do offer(reward, name, sourceKind) end
             else
-              offer(reward, nil)
+              offer(reward, nil, sourceKind)
             end
           end
         end
       end
-      -- A spent native reward deck is a selection-pool detail. A manual
-      -- exit edit may use a supported template reward without refilling or
-      -- mutating the native deck during catalog observation.
-      scan(currentStore)
-      if referenceStore ~= currentStore then scan(referenceStore) end
-      if runProgress ~= currentStore and runProgress ~= referenceStore then
-        scan(runProgress)
-      end
-      if metaProgress ~= currentStore and metaProgress ~= referenceStore
-          and metaProgress ~= runProgress then scan(metaProgress) end
+      scan(currentStore, "current")
+      if referenceStore ~= currentStore then scan(referenceStore, "reference") end
+      diagnostics.currentStoreEligibleTargetCount = currentEligibleCount
+      diagnostics.refillRequired = currentEligibleCount == 0 and type(currentStore) == "table"
       diagnostics.inspectedRewardCount = inspected
       diagnostics.ineligibleRewardCount = ineligible
       diagnostics.randomDependentRewardCount = randomDependent
