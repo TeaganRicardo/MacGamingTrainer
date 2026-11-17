@@ -334,7 +334,7 @@ def dynamic_key_references(sources):
     # registered and translated in both languages.
     def world_action_suffixes(name):
         body = require_capture(
-            rf"private static let {name}: Set<String> = \\[(.*?)\\]",
+            rf"private static let {name}: Set<String> = \[(.*?)\]",
             swift_view, name, re.DOTALL,
         )
         result = set(re.findall(r'"([A-Za-z][A-Za-z0-9_]*)"', body))
