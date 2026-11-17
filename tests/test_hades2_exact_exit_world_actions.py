@@ -120,6 +120,15 @@ local randomReward = targetRow(exitByObject(1), "reward", "MaxHealthDrop")
 assert(randomReward ~= nil and randomReward.enabled == false
     and randomReward.reason == "reward_eligibility_requires_rng",
   "random-dependent native reward must remain visible but disabled")
+local randomRewardApply = pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = exitByObject(1).doorToken,
+    kind = "reward", target = "MaxHealthDrop",
+    requestId = "blocked-random-reward", includeCatalogs = true,
+  })
+end)
+assert(not randomRewardApply,
+  "a disabled reward must be rejected at the resident mutation seam")
 assert(SessionMapState == observedSession
     and SessionMapState.RequirementChecksThisFrame == 17
     and nativeRandomCalls == beforeRewardProbeRNG,
@@ -164,6 +173,15 @@ local disabledCombat = targetRow(hardForced, "roomCategory", "combat")
 assert(disabledCombat ~= nil and disabledCombat.enabled == false
     and disabledCombat.reason == "native_forced_room_present",
   "hard forced progression must keep alternatives visible and blocked")
+local forcedRouteApply = pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = hardForced.doorToken,
+    kind = "roomCategory", target = "combat",
+    requestId = "blocked-forced-route", includeCatalogs = true,
+  })
+end)
+assert(not forcedRouteApply,
+  "a disabled native forced route must be rejected by the resident")
 nativeRoomForced.F_Forced01 = nil
 
 -- Reward edits mutate only the selected native exit and retain the same
@@ -599,6 +617,14 @@ local duplicateGod = targetRow(exitByObject(1), "reward", "ApolloUpgrade")
 assert(duplicateGod and duplicateGod.enabled == false
     and duplicateGod.reason == "reward_not_available",
   "a sibling god reward must remain visible but unavailable")
+local duplicateGodApply = pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = exitByObject(1).doorToken,
+    kind = "reward", target = "ApolloUpgrade",
+    requestId = "blocked-duplicate-god", includeCatalogs = true,
+  })
+end)
+assert(not duplicateGodApply, "duplicate god target was accepted despite being greyed")
 CurrentRun.CurrentRoom.OfferedRewards[2] = nil
 GetEligibleLootNames = function() return { "ApolloUpgrade" } end
 local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
