@@ -10101,9 +10101,9 @@ if __MacGamingTrainerV1 == nil then
         return depth < data.ForceAtBiomeDepth and "biome_depth_too_low"
           or "biome_depth_too_high"
       end
-      if data.ForceAtBiomeDepthMax ~= nil and depth > data.ForceAtBiomeDepthMax then
-        return "biome_depth_too_high"
-      end
+      -- ForceAtBiomeDepthMax bounds the *chance to force* a room in native
+      -- IsRoomForced; native IsRoomEligible does not use it as a hard
+      -- exclusion. Never invent a max-depth prohibition from this field.
       if data.MaxCreationsThisRun ~= nil
           and number(type(run.RoomCreations) == "table" and run.RoomCreations[data.Name]) >= data.MaxCreationsThisRun then
         return "max_creations_this_run"
