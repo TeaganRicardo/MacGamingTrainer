@@ -691,7 +691,19 @@
     "hades2.worldActions.unavailable.source_next_room_set": "即将进入下一区域",
     "hades2.worldActions.unavailable.source_persistent_door_rooms": "该出口保持原有路线",
     "hades2.worldActions.unavailable.source_route_is_native_owned": "剧情锁定出口",
-    "hades2.worldActions.unavailable.source_uses_previous_room_set": "该出口返回上一区域"
+    "hades2.worldActions.unavailable.source_uses_previous_room_set": "该出口返回上一区域",
+    "hades2.worldActions.unavailable.reward_not_in_current_store": "不在此出口的奖励池中",
+    "hades2.worldActions.unavailable.god_eligibility_unavailable": "神祇资格信息不可用",
+    "hades2.worldActions.unavailable.god_eligibility_requires_rng": "神祇资格依赖随机判定",
+    "hades2.worldActions.unavailable.room_debug_only": "仅供开发调试的房间",
+    "hades2.worldActions.unavailable.room_excluded_by_exit_rules": "此出口规则排除了该房间",
+    "hades2.worldActions.unavailable.room_same_as_source": "不能选择当前房间",
+    "hades2.worldActions.unavailable.room_linked_route_required": "需要关联路线",
+    "hades2.worldActions.unavailable.room_wrong_wing_end": "不符合当前分支的房间类型",
+    "hades2.worldActions.unavailable.room_miniboss_wing_required": "需要精英战分支",
+    "hades2.worldActions.unavailable.room_requires_indoor": "需要室内房间",
+    "hades2.worldActions.unavailable.room_max_creations_per_room": "当前房间已生成过",
+    "hades2.worldActions.unavailable.room_max_appearances_this_run": "本局已进入过"
   },
   "language": "zh-CN"
 }
