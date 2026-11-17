@@ -9810,7 +9810,7 @@ if __MacGamingTrainerV1 == nil then
       local source = currentSource()
       local sourceData = type(RoomData[source.Name]) == "table" and RoomData[source.Name] or source
       local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
-      local roomSetName = args.RoomSetName or source.RoomSetName or sourceData.RoomSetName or "F"
+      local roomSetName = args.RoomSetName or source.RoomSetName or "F"
       diagnostics.roomSetName = tostring(roomSetName)
       local roomSet = RoomSets[roomSetName]
       if type(roomSet) ~= "table" then return unavailable("room_set_unavailable") end
