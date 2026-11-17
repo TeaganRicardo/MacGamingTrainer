@@ -716,6 +716,39 @@ CurrentRun.RoomCreations.P_Story01 = 1
 local spentStory = targetRow(exitByObject(1), "roomCategory", "story")
 assert(spentStory and spentStory.enabled == false,
   "one-per-run story destination must remain visible and disabled")
+
+RoomData.P_MiniBoss02.MaxCreationsPerRoom = 1
+CurrentRun.CurrentRoom.RoomCreations.P_MiniBoss02 = 1
+local perRoomLimit = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
+assert(perRoomLimit and perRoomLimit.enabled == false
+    and perRoomLimit.reason == "room_max_creations_per_room",
+  "per-room creation limit did not explain the disabled miniboss")
+RoomData.P_MiniBoss02.MaxCreationsPerRoom = nil
+CurrentRun.CurrentRoom.RoomCreations.P_MiniBoss02 = nil
+
+RoomData.P_MiniBoss02.RequiresLinked = true
+local linkedOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
+assert(linkedOnly and linkedOnly.enabled == false
+    and linkedOnly.reason == "room_linked_route_required",
+  "linked-room requirement did not explain the disabled target")
+RoomData.P_MiniBoss02.RequiresLinked = nil
+
+RoomData.P_MiniBoss02.DebugOnly = true
+local debugOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
+assert(debugOnly and debugOnly.enabled == false
+    and debugOnly.reason == "room_debug_only",
+  "developer-only room was not retained with a disabled reason")
+RoomData.P_MiniBoss02.DebugOnly = nil
+
+RoomData.P_Story01.MaxAppearancesThisRun = 1
+CurrentRun.RoomCountCache.P_Story01 = 1
+local seenStory = targetRow(exitByObject(1), "roomCategory", "story")
+assert(seenStory and seenStory.enabled == false
+    and seenStory.reason == "room_max_appearances_this_run",
+  "run-wide room appearance limit did not explain the disabled story room")
+RoomData.P_Story01.MaxAppearancesThisRun = nil
+CurrentRun.RoomCountCache.P_Story01 = nil
+
 IsRoomEligible = priorEligible
 
 print("hades2_exact_exit_world_actions_ok")
