@@ -9838,8 +9838,7 @@ if __MacGamingTrainerV1 == nil then
           if not ok then
             diagnostics.probeErrorRoom = tostring(data.Name or roomName)
             diagnostics.probeError = string.sub(tostring(eligible), 1, 160)
-            diagnostics.inspectedRoomCount = inspected
-            return unavailable("room_eligibility_probe_error")
+            eligible = false
           end
           if usedRandom then
             -- An opaque candidate is individually excluded. Never suppress
@@ -9853,23 +9852,20 @@ if __MacGamingTrainerV1 == nil then
             if not forceOK then
               diagnostics.probeErrorRoom = tostring(data.Name or roomName)
               diagnostics.probeError = string.sub(tostring(forced), 1, 160)
-              diagnostics.inspectedRoomCount = inspected
-              diagnostics.eligibleRoomCount = eligibleCount
-              return unavailable("room_force_probe_error")
             end
-            if forceUsesRandom then
+            if forceOK and forceUsesRandom then
               -- A probabilistic native force is not a deterministic progress
               -- lock. Do not advance native RNG merely to inspect the menu.
               diagnostics.randomForceRoom = tostring(data.Name or roomName)
               forced = false
             end
-            if forced then
+            if forceOK and forced then
               -- Deterministic forced progression still takes precedence, but
               -- inspect the entire set to expose the blocked alternatives.
               hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
               diagnostics.forcedRoom = hardForcedRoom
             end
-            local kind = routeKind(data.Name)
+            local kind = forceOK and routeKind(data.Name) or nil
             if kind ~= nil then
               result[kind] = result[kind] or {}
               result[kind][#result[kind] + 1] = data
