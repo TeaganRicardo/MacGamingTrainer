@@ -9817,16 +9817,24 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.roomSetCount = #roomSet
 
       local otherDoors = {}
-      for _, offered in pairs(MapState.OfferedExitDoors or {}) do
-        -- Native ChooseNextRoomData receives the other offered doors. The
-        -- current door has no assigned room when its native route is chosen;
-        -- including its already-generated room here falsely suppresses
-        -- AlwaysForceOncePerRoom candidates during a later edit.
-        if type(offered) == "table" and offered ~= door then
+      local offeredDoors = MapState.OfferedExitDoors or {}
+      if type(CollapseTableOrdered) == "function" then
+        offeredDoors = CollapseTableOrdered(offeredDoors)
+      end
+      local unavailableDoorIds = type(source) == "table" and source.UnavailableDoorIds or nil
+      -- DoUnlockRoomExits walks the collapsed door list in order. When it
+      -- chooses this door, only earlier doors have generated Room objects;
+      -- later doors (and this door itself) are still unassigned. Recreate
+      -- that exact otherDoors view so AlwaysForceOncePerRoom and related
+      -- predicates do not observe future/current destinations.
+      for _, offered in ipairs(offeredDoors) do
+        if offered == door then break end
+        if type(offered) == "table" and type(offered.Room) == "table"
+            and not (type(unavailableDoorIds) == "table"
+              and unavailableDoorIds[offered.ObjectId] ~= nil) then
           otherDoors[#otherDoors + 1] = offered
         end
       end
-      table.sort(otherDoors, function(a,b) return number(a.ObjectId) < number(b.ObjectId) end)
       local result = {}
       local inspected, eligibleCount, ineligibleCount = 0, 0, 0
       local hardForcedRoom = nil
