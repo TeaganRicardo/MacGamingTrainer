@@ -634,7 +634,7 @@
     "hades2.worldActions.noExit": "No Editable Exit",
     "hades2.worldActions.noTarget": "No Available Target",
     "hades2.worldActions.unknownTarget": "Current Target",
-    "hades2.worldActions.gods": "God Blessings",
+    "hades2.worldActions.gods": "{term:productTerms.olympianGroup}",
     "hades2.worldActions.rewards": "Rewards",
     "hades2.worldActions.routes": "Room Categories",
     "hades2.worldActions.route.combat": "Combat",
