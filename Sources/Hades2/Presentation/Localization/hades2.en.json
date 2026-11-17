@@ -703,7 +703,8 @@
     "hades2.worldActions.unavailable.room_miniboss_wing_required": "Requires a miniboss wing",
     "hades2.worldActions.unavailable.room_requires_indoor": "Requires an indoor room",
     "hades2.worldActions.unavailable.room_max_creations_per_room": "Already created in this room",
-    "hades2.worldActions.unavailable.room_max_appearances_this_run": "Already visited this run"
+    "hades2.worldActions.unavailable.room_max_appearances_this_run": "Already visited this run",
+    "hades2.worldActions.unavailable.room_required_tags_missing": "Required room tags are unavailable"
   },
   "language": "en"
 }
