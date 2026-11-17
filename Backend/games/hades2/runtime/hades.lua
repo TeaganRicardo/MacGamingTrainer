@@ -9823,6 +9823,7 @@ if __MacGamingTrainerV1 == nil then
       table.sort(otherDoors, function(a,b) return number(a.ObjectId) < number(b.ObjectId) end)
       local result = {}
       local inspected, eligibleCount, ineligibleCount = 0, 0, 0
+      local hardForcedRoom = nil
       for _, roomName in ipairs(roomSet) do
         local data = type(roomName) == "table" and roomName or RoomData[roomName]
         if type(data) == "table" then
@@ -9841,9 +9842,10 @@ if __MacGamingTrainerV1 == nil then
             return unavailable("room_eligibility_probe_error")
           end
           if usedRandom then
+            -- An opaque candidate is individually excluded. Never suppress
+            -- unrelated rooms because one eligibility probe uses native RNG.
             diagnostics.randomEligibilityRoom = tostring(data.Name or roomName)
-            diagnostics.inspectedRoomCount = inspected
-            return unavailable("room_eligibility_requires_rng")
+            eligible = false
           end
           if eligible then
             eligibleCount = eligibleCount + 1
@@ -9856,21 +9858,26 @@ if __MacGamingTrainerV1 == nil then
               return unavailable("room_force_probe_error")
             end
             if forceUsesRandom then
+              -- A probabilistic native force is not a deterministic progress
+              -- lock. Do not advance native RNG merely to inspect the menu.
               diagnostics.randomForceRoom = tostring(data.Name or roomName)
-              diagnostics.inspectedRoomCount = inspected
-              diagnostics.eligibleRoomCount = eligibleCount
-              return unavailable("room_force_requires_rng")
+              forced = false
             end
             if forced then
-              diagnostics.forcedRoom = tostring(data.Name or roomName)
-              diagnostics.inspectedRoomCount = inspected
-              diagnostics.eligibleRoomCount = eligibleCount
-              return unavailable("native_forced_room_present")
+              -- Deterministic forced progression still takes precedence, but
+              -- inspect the entire set to expose the blocked alternatives.
+              hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
+              diagnostics.forcedRoom = hardForcedRoom
             end
             local kind = routeKind(data.Name)
             if kind ~= nil then
               result[kind] = result[kind] or {}
               result[kind][#result[kind] + 1] = data
+              if kind == "miniboss" then
+                -- Exact locally defined miniboss rooms share the ordinary
+                -- category reservation/late-commit owner.
+                result[data.Name] = { data }
+              end
             end
           else
             ineligibleCount = ineligibleCount + 1
@@ -9891,6 +9898,10 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.eligibleRoomCount = eligibleCount
       diagnostics.ineligibleRoomCount = ineligibleCount
       diagnostics.candidateCount = totalCandidates
+      if hardForcedRoom ~= nil then
+        diagnostics.reason = "native_forced_room_present"
+        return nil
+      end
       diagnostics.reason = totalCandidates > 0 and "available" or "no_native_eligible_route"
       return result
     end
