@@ -187,7 +187,7 @@ class Hades2PreferenceStore:
         values=desired_feature_defaults()
         values.update(
             boonRarity=default_boon_rarity(),
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},gatheringProbabilities={},chaosGateProbability=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},biomeTimerFrozen=False,gatheringProbabilities={},chaosGateProbability=None,
         )
         return values
 
@@ -209,6 +209,7 @@ class Hades2PreferenceStore:
         result['statLocks']=_normalize_stat_locks(raw.get('statLocks'))
         result['vitalLocks']=normalize_vital_locks(raw.get('vitalLocks'))
         result['resourceLocks']=_normalize_resource_locks(raw.get('resourceLocks'))
+        if type(raw.get('biomeTimerFrozen')) is bool:result['biomeTimerFrozen']=raw['biomeTimerFrozen']
         if result.get('infiniteMoney'):
             result['resourceLocks'].pop('Money',None)
         result['elementLocks']=_normalize_element_locks(raw.get('elementLocks'))

@@ -143,7 +143,7 @@ def disconnected_capabilities():
     return {
         'setFeature':False,
         'setHealth':False,'setMana':False,'setArmor':False,
-        'setRerolls':False,'setSpellCharge':False,'setResource':False,
+        'setRerolls':False,'setSpellCharge':False,'setBiomeTime':False,'setResource':False,
         'setStats':False,'setElements':False,'matureGarden':False,
         'traitInventory':False,'traitMutation':False,'roomContext':False,
         'sellTraits':False,'specialChoice':False,'acquireExactReward':False,

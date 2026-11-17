@@ -14,6 +14,7 @@ enum Hades2Command: String {
     case setVital = "set_vital"
     case setCounter = "set_counter"
     case lockVital = "lock_vital"
+    case lockBiomeTime = "lock_biome_time"
     case setResource = "set_resource"
     case lockResource = "lock_resource"
     case setRerolls = "set_rerolls"

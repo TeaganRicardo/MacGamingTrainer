@@ -136,7 +136,7 @@ def _set_vital(raw):
 
 def _set_counter(raw):
     params = _params(raw)
-    if params.get("counter") != "spellCharge":
+    if params.get("counter") not in ("spellCharge", "biomeTime"):
         raise ValueError("未知局内计数器。")
     value = params.get("value")
     if (
@@ -146,7 +146,16 @@ def _set_counter(raw):
         or not 0 <= value <= MAX_AMOUNT
     ):
         raise ValueError(f"巫咒充能必须为 0–{MAX_AMOUNT}。")
+    if params["counter"] == "biomeTime" and value % 1 != 0:
+        raise ValueError("区域限时必须使用整数秒。")
     return params
+
+
+def _lock_biome_time(raw):
+    params = _params(raw)
+    if type(params.get("locked")) is not bool:
+        raise ValueError("区域限时锁定状态必须为布尔值。")
+    return {"locked": params["locked"]}
 
 
 def _lock_vital(raw):
@@ -657,6 +666,7 @@ _COMMAND_SPECS = (
     _spec("set_vital", validate=_set_vital),
     _spec("set_counter", validate=_set_counter),
     _spec("lock_vital", validate=_lock_vital),
+    _spec("lock_biome_time", validate=_lock_biome_time),
     _spec("set_resource", request_id=True, validate=_set_resource),
     _spec("lock_resource", request_id=True, validate=_lock_resource),
     _spec("set_rerolls", request_id=True, validate=_set_rerolls),

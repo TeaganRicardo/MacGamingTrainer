@@ -137,6 +137,8 @@ class Hades2DesiredStateReconciler:
             available = _mapping(observed.get("statAvailable"))
             stat = params["stat"]
             return cls._capability(observed, "setStats") and available.get(stat) is True
+        if command == "lock_biome_time":
+            return cls._capability(observed, "setFeature")
         if command in ("set_vital", "lock_vital"):
             return cls._capability(observed, {
                 "health": "setHealth", "mana": "setMana", "armor": "setArmor",
@@ -390,6 +392,14 @@ class Hades2DesiredStateReconciler:
                         request_id=True,
                     )
                 )
+
+        wanted_frozen = desired.get("biomeTimerFrozen") is True
+        if force_full or observed.get("biomeTimeLocked") is not wanted_frozen:
+            action = _Action(
+                "lock_biome_time", {"locked": wanted_frozen}, "biomeTimer",
+            )
+            if wanted_frozen: lock_updates.append(action)
+            else: lock_releases.append(action)
 
         wanted_rerolls = desired.get("rerollsLock")
         observed_rerolls_locked = bool(observed.get("rerollsLocked"))
