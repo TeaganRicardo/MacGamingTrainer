@@ -10148,6 +10148,10 @@ if __MacGamingTrainerV1 == nil then
           and ContainsAll(args.ExcludedRewards, data.RewardTypes) then
         return "room_excluded_by_exit_rules"
       end
+      if type(args.RequireTags) == "table" and type(ContainsAll) == "function"
+          and (type(data.Tags) ~= "table" or not ContainsAll(data.Tags, args.RequireTags)) then
+        return "room_required_tags_missing"
+      end
       if source.Name == name then return "room_same_as_source" end
       local linkedTarget = source.LinkedRoom == name
       if not linkedTarget and type(source.LinkedRooms) == "table"
@@ -10179,22 +10183,22 @@ if __MacGamingTrainerV1 == nil then
           or "biome_depth_too_high"
       end
       if data.MaxCreationsPerRoom ~= nil
-          and type(source.RoomCreations) == "table"
+          and type(source.RoomCreations) == "table" and source.RoomCreations[name] ~= nil
           and number(source.RoomCreations[name]) >= data.MaxCreationsPerRoom then
         return "room_max_creations_per_room"
       end
       if data.MaxAppearancesThisRun ~= nil
-          and type(run.RoomCountCache) == "table"
+          and type(run.RoomCountCache) == "table" and run.RoomCountCache[name] ~= nil
           and number(run.RoomCountCache[name]) >= data.MaxAppearancesThisRun then
         return "room_max_appearances_this_run"
       end
       if data.MaxAppearancesThisBiome ~= nil
-          and type(run.BiomeRoomCountCache) == "table"
+          and type(run.BiomeRoomCountCache) == "table" and run.BiomeRoomCountCache[name] ~= nil
           and number(run.BiomeRoomCountCache[name]) >= data.MaxAppearancesThisBiome then
         return "max_appearances_this_biome"
       end
       if data.MaxCreationsThisRun ~= nil
-          and type(run.RoomCreations) == "table"
+          and type(run.RoomCreations) == "table" and run.RoomCreations[name] ~= nil
           and number(run.RoomCreations[name]) >= data.MaxCreationsThisRun then
         return "max_creations_this_run"
       end
