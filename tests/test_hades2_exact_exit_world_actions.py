@@ -32,11 +32,16 @@ local function exitByObject(id)
   error("missing observed exit " .. tostring(id))
 end
 
-local function targetExists(row, kind, target)
+local function targetRow(row, kind, target)
   for _, candidate in ipairs(row.targets or {}) do
-    if candidate.kind == kind and candidate.id == target then return true end
+    if candidate.kind == kind and candidate.id == target then return candidate end
   end
-  return false
+  return nil
+end
+
+local function targetExists(row, kind, target)
+  local candidate = targetRow(row, kind, target)
+  return candidate ~= nil and candidate.enabled ~= false
 end
 
 local door1, door2 = MapState.OfferedExitDoors[1], MapState.OfferedExitDoors[2]
@@ -111,8 +116,10 @@ assert(SessionMapState == observedSession
     and nativeRandomCalls == beforeRewardProbeRNG,
   "reward catalog inspection mutated native frame counters or RNG")
 rewardUsesRandom = true
-assert(not targetExists(exitByObject(1), "reward", "MaxHealthDrop"),
-  "random-dependent native reward eligibility was presented as guaranteed")
+local randomReward = targetRow(exitByObject(1), "reward", "MaxHealthDrop")
+assert(randomReward ~= nil and randomReward.enabled == false
+    and randomReward.reason == "reward_eligibility_requires_rng",
+  "random-dependent native reward must remain visible but disabled")
 assert(SessionMapState == observedSession
     and SessionMapState.RequirementChecksThisFrame == 17
     and nativeRandomCalls == beforeRewardProbeRNG,
@@ -126,8 +133,11 @@ probeEligibilityUsesRandom = true
 local beforeEligibilityProbe = nativeRandomCalls
 local eligibilityBlocked = exitByObject(1)
 assert(not targetExists(eligibilityBlocked, "roomCategory", "combat"))
-assert(eligibilityBlocked.targetDiagnostics.routes.reason == "room_eligibility_requires_rng",
-  "random-dependent room eligibility did not report its fail-closed reason")
+assert(targetRow(eligibilityBlocked, "roomCategory", "combat") ~= nil
+    and targetRow(eligibilityBlocked, "roomCategory", "combat").enabled == false,
+  "random-dependent room eligibility must retain a disabled category")
+assert(eligibilityBlocked.targetDiagnostics.routes.randomEligibilityRoom ~= nil,
+  "random-dependent room eligibility was not diagnosed")
 assert(nativeRandomCalls == beforeEligibilityProbe,
   "IsRoomEligible inspection consumed native RNG")
 probeEligibilityUsesRandom = false
@@ -136,16 +146,25 @@ RoomData.F_Forced01.RandomForced = true
 probeForceUsesRandom = true
 local beforeForceProbe = nativeRandomCalls
 local forceBlocked = exitByObject(1)
-assert(not targetExists(forceBlocked, "roomCategory", "combat"),
-  "random-dependent native force logic exposed a generic route")
-assert(forceBlocked.targetDiagnostics.routes.reason == "room_force_requires_rng"
-    and forceBlocked.targetDiagnostics.routes.randomForceRoom == "F_Forced01",
-  "random-dependent native force did not report its blocking room")
+assert(targetExists(forceBlocked, "roomCategory", "combat"),
+  "probabilistic native force must not suppress otherwise legal room choices")
+assert(forceBlocked.targetDiagnostics.routes.randomForceRoom == "F_Forced01",
+  "random-dependent native force did not report the affected room")
 assert(nativeRandomCalls == beforeForceProbe,
   "IsRoomForced inspection consumed native RNG")
 probeForceUsesRandom = false
 RoomData.F_Forced01.RandomForced = nil
 assert(targetExists(exitByObject(1), "roomCategory", "combat"))
+
+-- A deterministic native forced room is a hard progression constraint.
+-- Show alternatives disabled rather than removing them from the picker.
+nativeRoomForced.F_Forced01 = true
+local hardForced = exitByObject(1)
+local disabledCombat = targetRow(hardForced, "roomCategory", "combat")
+assert(disabledCombat ~= nil and disabledCombat.enabled == false
+    and disabledCombat.reason == "native_forced_room_present",
+  "hard forced progression must keep alternatives visible and blocked")
+nativeRoomForced.F_Forced01 = nil
 
 -- Reward edits mutate only the selected native exit and retain the same
 -- physical-door/target identity. Cancel restores the exact original descriptor.
