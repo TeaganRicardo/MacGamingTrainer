@@ -664,7 +664,7 @@
     "hades2.worldActions.unavailable.door_forced_room_set": "This exit has a fixed room set",
     "hades2.worldActions.unavailable.door_has_predetermined_destination": "Predetermined destination",
     "hades2.worldActions.unavailable.door_returns_to_previous_room": "Returns to previous room",
-    "hades2.worldActions.unavailable.game_state_requirements": "Story prerequisites not met",
+    "hades2.worldActions.unavailable.game_state_requirements": "Room prerequisites not met",
     "hades2.worldActions.unavailable.global_forced_destination": "Global destination is forced",
     "hades2.worldActions.unavailable.god_limit": "God limit reached",
     "hades2.worldActions.unavailable.god_not_eligible": "God unavailable this run",
