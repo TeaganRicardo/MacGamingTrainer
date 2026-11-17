@@ -582,6 +582,7 @@ LootData.ApolloUpgrade = { Name = "ApolloUpgrade", GodLoot = true,
 LootData.ZeusUpgrade = { Name = "ZeusUpgrade", GodLoot = true,
   DoorIcon = "BoonDropZeusPreview" }
 RewardStoreData.RunProgress = { { Name = "Boon", AllowDuplicates = true } }
+RewardStoreData.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
 GetEligibleLootNames = function() return { "ApolloUpgrade", "ZeusUpgrade" } end
 ReachedMaxGods = function() return false end
 setRoomSet("F")
@@ -590,6 +591,8 @@ local godExit = exitByObject(1)
 assert(targetExists(godExit, "reward", "ApolloUpgrade")
     and targetExists(godExit, "reward", "ZeusUpgrade"),
   "native Boon template did not enumerate distinct Olympian targets")
+assert(targetExists(godExit, "reward", "MetaCurrencyDrop"),
+  "native meta-progress template was hidden on a run-progress exit")
 local originalGodDoor = MapState.OfferedExitDoors[1]
 local originalGodRoom = originalGodDoor.Room
 local appliedGod = M.dispatch("apply_world_exit", {
