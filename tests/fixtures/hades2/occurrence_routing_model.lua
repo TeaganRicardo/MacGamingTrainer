@@ -162,6 +162,12 @@ IsRoomEligible = function(run, currentRoom, nextRoomData, args)
 end
 
 IsRoomForced = function(run, currentRoom, nextRoomData, args, otherDoors)
+  if nextRoomData.AlwaysForceOncePerRoom and type(otherDoors) == "table" then
+    for _, door in ipairs(otherDoors) do
+      if door.Room ~= nil and door.Room.Name == nextRoomData.Name then return false end
+    end
+    return true
+  end
   if probeForceUsesRandom and nextRoomData.RandomForced then
     return GetRandomValue({ false, true })
   end
