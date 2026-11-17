@@ -604,7 +604,9 @@ RewardStoreData.RunProgress = {
 }
 RewardStoreData.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
 CurrentRun.RewardStores.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
+local lastExcludedGods = {}
 GetEligibleLootNames = function(excluded)
+  lastExcludedGods = excluded or {}
   local names = { "ApolloUpgrade", "ZeusUpgrade" }
   for _, name in ipairs(excluded or {}) do
     for index = #names, 1, -1 do
@@ -613,7 +615,10 @@ GetEligibleLootNames = function(excluded)
   end
   return names
 end
-ReachedMaxGods = function(excluded) return false end
+ReachedMaxGods = function(excluded)
+  lastExcludedGods = excluded or {}
+  return false
+end
 setRoomSet("F")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 local godExit = exitByObject(1)
@@ -653,6 +658,12 @@ local duplicateGod = targetRow(exitByObject(1), "reward", "ApolloUpgrade")
 assert(duplicateGod and duplicateGod.enabled == false
     and duplicateGod.reason == "reward_not_available",
   "a sibling god reward must remain visible but unavailable")
+local excludedApollo = false
+for _, name in ipairs(lastExcludedGods) do
+  if name == "ApolloUpgrade" then excludedApollo = true end
+end
+assert(excludedApollo,
+  "native GetEligibleLootNames/ReachedMaxGods did not receive sibling-door exclusions")
 local duplicateGodApply = pcall(function()
   M.dispatch("apply_world_exit", {
     doorToken = exitByObject(1).doorToken,
@@ -667,6 +678,14 @@ local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
 assert(unavailableGod and unavailableGod.enabled == false
     and unavailableGod.reason == "god_not_eligible",
   "unavailable god must remain in the catalog with a native reason")
+CurrentRun.LootTypeHistory = { ApolloUpgrade = true }
+GetEligibleLootNames = function(excluded) return { "ApolloUpgrade" } end
+ReachedMaxGods = function(excluded) return true end
+local maxGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
+assert(maxGod and maxGod.enabled == false and maxGod.reason == "god_limit",
+  "the native max-gods-per-run limit was not exposed as a disabled target")
+CurrentRun.LootTypeHistory = {}
+ReachedMaxGods = function(excluded) return false end
 
 -- When the selected native deck has no eligible entries, ChooseRoomReward
 -- refills from GetRewardStoreData for that same store. The catalog may enable
