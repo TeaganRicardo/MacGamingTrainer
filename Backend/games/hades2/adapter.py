@@ -65,7 +65,8 @@ def clear_active(state,preserve_desired=False):
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
     state['worldActions']={'exits':[]}
-    state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
+    state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,
+                 biomeTime=None,biomeTimeLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
         for item in stats.values():
@@ -240,6 +241,7 @@ class Hades2Adapter(GameAdapter):
         for key in ('health','mana','armor'):
             self.state[key+'Locked']=key in vital
         resources=self.preferences.get('resourceLocks',{}) if isinstance(self.preferences.get('resourceLocks'),dict) else {}
+        self.state['biomeTimeLocked']=self.preferences.get('biomeTimerFrozen') is True
         self.state['moneyLocked']='Money' in resources
         if 'Money' in resources:self.state['money']=resources['Money']
         for item in self.state.get('resources',[]):

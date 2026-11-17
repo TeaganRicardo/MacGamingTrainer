@@ -46,6 +46,21 @@ assert Hades2PreferenceStore.defaults()["biomeTimerFrozen"] is False
 assert Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})["biomeTimerFrozen"] is True
 assert Hades2PreferenceStore.normalize({"biomeTimerFrozen": 1})["biomeTimerFrozen"] is False
 
+from games.hades2.adapter import Hades2Adapter, clear_active
+shadow = Hades2Adapter.__new__(Hades2Adapter)
+shadow.state = {"biomeTime": 150, "biomeTimeLocked": False}
+shadow._time_warp_speed = None
+shadow.preferences = Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})
+shadow._overlay_preferences()
+assert shadow.state["biomeTimeLocked"] is True
+clear_active(shadow.state, preserve_desired=True)
+assert shadow.state["biomeTime"] is None and shadow.state["biomeTimeLocked"] is False
+shadow._overlay_preferences()
+assert shadow.state["biomeTimeLocked"] is True
+shadow.preferences["biomeTimerFrozen"] = False
+shadow._overlay_preferences()
+assert shadow.state["biomeTimeLocked"] is False
+
 diff = Hades2DesiredStateReconciler(None)
 def biome_actions(desired, observed):
     return [
