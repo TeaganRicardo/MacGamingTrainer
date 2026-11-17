@@ -1239,15 +1239,12 @@ struct Hades2TrainerView: View {
         "AphroditeUpgrade",
         "ApolloUpgrade",
         "AresUpgrade",
-        "ArtemisUpgrade",
-        "AthenaUpgrade",
         "DemeterUpgrade",
         "HephaestusUpgrade",
         "HeraUpgrade",
         "HermesUpgrade",
         "HestiaUpgrade",
         "PoseidonUpgrade",
-        "SeleneUpgrade",
         "ZeusUpgrade",
     ]
 
