@@ -664,7 +664,7 @@
     "hades2.worldActions.unavailable.door_forced_room_set": "该出口房间集合已固定",
     "hades2.worldActions.unavailable.door_has_predetermined_destination": "预设目的地已固定",
     "hades2.worldActions.unavailable.door_returns_to_previous_room": "该出口返回之前房间",
-    "hades2.worldActions.unavailable.game_state_requirements": "剧情前置条件未满足",
+    "hades2.worldActions.unavailable.game_state_requirements": "房间前置条件未满足",
     "hades2.worldActions.unavailable.global_forced_destination": "全局目标已强制指定",
     "hades2.worldActions.unavailable.god_limit": "已达到本局神祇数量上限",
     "hades2.worldActions.unavailable.god_not_eligible": "该神祇本局不可用",
