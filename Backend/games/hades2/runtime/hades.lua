@@ -10155,6 +10155,10 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       local reason = diagnostics.routes.reason
+      if diagnostics.routes.sourceSafety ~= nil
+          and diagnostics.routes.sourceSafety ~= "safe" then
+        reason = diagnostics.routes.sourceSafety
+      end
       for _, kind in ipairs(routeOrder) do
         local example = categories[kind]
         if example ~= nil then
