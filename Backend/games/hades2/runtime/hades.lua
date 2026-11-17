@@ -9968,7 +9968,7 @@ if __MacGamingTrainerV1 == nil then
         for name, data in pairs(LootData) do
           if type(name) == "string" and string.sub(name, -7) == "Upgrade"
               and type(data) == "table" and data.GodLoot == true
-              and type(data.DoorIcon) == "string" and not data.DebugOnly then
+              and not data.DebugOnly then
             gods[#gods + 1] = name
           end
         end
