@@ -115,7 +115,45 @@ probeForceUsesRandom = false
 IsRoomEligible = function(run, currentRoom, nextRoomData, args)
   if probeEligibilityUsesRandom then GetRandomValue({ true, false }) end
   if type(nextRoomData) ~= "table" then return false end
+  args = args or {}
+  if nextRoomData.DebugOnly then return false end
   if roomEligible[nextRoomData.Name] == false then return false end
+  if type(args.ExcludedNames) == "table" and args.ExcludedNames[nextRoomData.Name] then return false end
+  if type(args.ExcludedTypes) == "table" and args.ExcludedTypes[nextRoomData.Type] then return false end
+  if nextRoomData.Name == currentRoom.Name then return false end
+  if nextRoomData.RequiresLinked and currentRoom.LinkedRoom ~= nextRoomData.Name
+      and not (type(currentRoom.LinkedRooms) == "table"
+        and (function()
+          for _, name in ipairs(currentRoom.LinkedRooms) do
+            if name == nextRoomData.Name then return true end
+          end
+          return false
+        end)()) then return false end
+  if currentRoom.RequireWingEndMiniBoss and nextRoomData.WingEndRoom
+      and not nextRoomData.WingEndMiniBoss and not nextRoomData.AllowAsAnyWingEnd then return false end
+  if not currentRoom.RequireWingEndMiniBoss and nextRoomData.WingEndRoom
+      and nextRoomData.WingEndMiniBoss and not nextRoomData.AllowAsAnyWingEnd then return false end
+  if args.OutdoorRequiresIndoorTag and type(currentRoom.Tags) == "table"
+      and type(nextRoomData.Tags) == "table" then
+    local outdoor = false
+    for _, tag in ipairs(currentRoom.Tags) do if tag == "Outdoor" then outdoor = true end end
+    local indoor = false
+    for _, tag in ipairs(nextRoomData.Tags) do if tag == "Indoor" then indoor = true end end
+    if outdoor and not indoor then return false end
+  end
+  if nextRoomData.MaxCreationsPerRoom ~= nil
+      and type(currentRoom.RoomCreations) == "table"
+      and (currentRoom.RoomCreations[nextRoomData.Name] or 0) >= nextRoomData.MaxCreationsPerRoom then
+    return false
+  end
+  if nextRoomData.MaxAppearancesThisRun ~= nil
+      and (run.RoomCountCache[nextRoomData.Name] or 0) >= nextRoomData.MaxAppearancesThisRun then
+    return false
+  end
+  if nextRoomData.MaxAppearancesThisBiome ~= nil
+      and (run.BiomeRoomCountCache[nextRoomData.Name] or 0) >= nextRoomData.MaxAppearancesThisBiome then
+    return false
+  end
   if nextRoomData.MaxCreationsThisRun ~= nil
       and (run.RoomCreations[nextRoomData.Name] or 0) >= nextRoomData.MaxCreationsThisRun then
     return false
