@@ -10104,10 +10104,57 @@ if __MacGamingTrainerV1 == nil then
       return rewardCandidatesWithDiagnostics(door)
     end
 
-    local function roomUnavailableReason(data, routeReason)
+    local function roomUnavailableReason(data, routeReason, door, routeDiagnostics)
       if routeReason ~= nil and routeReason ~= "available"
           and routeReason ~= "no_native_eligible_route" then return routeReason end
+      routeDiagnostics = routeDiagnostics or {}
+      local name = tostring(data.Name or "")
+      if routeDiagnostics.randomEligibilityRooms
+          and routeDiagnostics.randomEligibilityRooms[name] then
+        return "room_eligibility_requires_rng"
+      end
+      if routeDiagnostics.probeErrorRooms
+          and routeDiagnostics.probeErrorRooms[name] then
+        return "room_eligibility_probe_error"
+      end
+      if routeDiagnostics.forceProbeErrorRooms
+          and routeDiagnostics.forceProbeErrorRooms[name] then
+        return "room_force_probe_error"
+      end
+      if data.DebugOnly then return "room_debug_only" end
+
       local run = type(CurrentRun) == "table" and CurrentRun or {}
+      local source = currentSource() or {}
+      local args = type(door) == "table" and type(door.ChooseRoomArgs) == "table"
+        and door.ChooseRoomArgs or {}
+      if type(args.ExcludedNames) == "table" and args.ExcludedNames[name] then
+        return "room_excluded_by_exit_rules"
+      end
+      if type(args.ExcludedTypes) == "table" and args.ExcludedTypes[data.Type] then
+        return "room_excluded_by_exit_rules"
+      end
+      if type(args.ExcludedRewards) == "table" and type(data.RewardTypes) == "table"
+          and #data.RewardTypes > 0 and type(ContainsAll) == "function"
+          and ContainsAll(args.ExcludedRewards, data.RewardTypes) then
+        return "room_excluded_by_exit_rules"
+      end
+      if source.Name == name then return "room_same_as_source" end
+      if data.RequiresLinked and source.LinkedRoom ~= name
+          and not contains(source.LinkedRooms, name) then
+        return "room_linked_route_required"
+      end
+      if source.RequireWingEndMiniBoss and data.WingEndRoom
+          and not data.WingEndMiniBoss and not data.AllowAsAnyWingEnd then
+        return "room_wrong_wing_end"
+      end
+      if not source.RequireWingEndMiniBoss and data.WingEndRoom
+          and data.WingEndMiniBoss and not data.AllowAsAnyWingEnd then
+        return "room_miniboss_wing_required"
+      end
+      if args.OutdoorRequiresIndoorTag and contains(source.Tags, "Outdoor")
+          and not contains(data.Tags, "Indoor") then
+        return "room_requires_indoor"
+      end
       local depth = number(run.BiomeDepthCache)
       if data.ForceAtBiomeDepthMin ~= nil and depth < data.ForceAtBiomeDepthMin then
         return "biome_depth_too_low"
@@ -10116,22 +10163,40 @@ if __MacGamingTrainerV1 == nil then
         return depth < data.ForceAtBiomeDepth and "biome_depth_too_low"
           or "biome_depth_too_high"
       end
-      -- ForceAtBiomeDepthMax bounds the *chance to force* a room in native
-      -- IsRoomForced; native IsRoomEligible does not use it as a hard
-      -- exclusion. Never invent a max-depth prohibition from this field.
-      if data.MaxCreationsThisRun ~= nil
-          and number(type(run.RoomCreations) == "table" and run.RoomCreations[data.Name]) >= data.MaxCreationsThisRun then
-        return "max_creations_this_run"
+      if data.MaxCreationsPerRoom ~= nil
+          and type(source.RoomCreations) == "table"
+          and number(source.RoomCreations[name]) >= data.MaxCreationsPerRoom then
+        return "room_max_creations_per_room"
+      end
+      if data.MaxAppearancesThisRun ~= nil
+          and type(run.RoomCountCache) == "table"
+          and number(run.RoomCountCache[name]) >= data.MaxAppearancesThisRun then
+        return "room_max_appearances_this_run"
       end
       if data.MaxAppearancesThisBiome ~= nil
-          and number(type(run.BiomeRoomCountCache) == "table" and run.BiomeRoomCountCache[data.Name]) >= data.MaxAppearancesThisBiome then
+          and type(run.BiomeRoomCountCache) == "table"
+          and number(run.BiomeRoomCountCache[name]) >= data.MaxAppearancesThisBiome then
         return "max_appearances_this_biome"
       end
-      if data.GameStateRequirements ~= nil then return "game_state_requirements" end
+      if data.MaxCreationsThisRun ~= nil
+          and type(run.RoomCreations) == "table"
+          and number(run.RoomCreations[name]) >= data.MaxCreationsThisRun then
+        return "max_creations_this_run"
+      end
+      if data.GameStateRequirements ~= nil and type(IsGameStateEligible) == "function" then
+        local ok, eligible, usedRandom = pcall(
+          nativeProbeWithoutRNG, IsGameStateEligible, data, data.GameStateRequirements, args
+        )
+        if not ok then return "room_eligibility_probe_error" end
+        if usedRandom then return "room_eligibility_requires_rng" end
+        if not eligible then return "game_state_requirements" end
+      elseif data.GameStateRequirements ~= nil then
+        return "game_state_requirements"
+      end
       return "native_ineligible"
     end
 
-    local function targetCatalogForDoor(door, doorToken, refresh)
+        local function targetCatalogForDoor(door, doorToken, refresh)
       local cached = targetCatalogs[door]
       if not refresh and type(cached) == "table" and cached.doorToken == doorToken then
         return cached.targets, cached.diagnostics
@@ -10186,7 +10251,7 @@ if __MacGamingTrainerV1 == nil then
           targets[#targets + 1] = {
             kind = "roomCategory", id = kind,
             enabled = enabled,
-            reason = enabled and nil or roomUnavailableReason(example, reason),
+            reason = enabled and nil or roomUnavailableReason(example, reason, door, diagnostics.routes),
           }
           if enabled then enabledCount = enabledCount + 1 end
         end
@@ -10200,7 +10265,7 @@ if __MacGamingTrainerV1 == nil then
         targets[#targets + 1] = {
           kind = "roomCategory", id = name,
           enabled = enabled,
-          reason = enabled and nil or roomUnavailableReason(namedMinibosses[name], reason),
+          reason = enabled and nil or roomUnavailableReason(namedMinibosses[name], reason, door, diagnostics.routes),
         }
         if enabled then enabledCount = enabledCount + 1 end
       end
