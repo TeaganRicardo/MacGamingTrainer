@@ -9943,6 +9943,8 @@ if __MacGamingTrainerV1 == nil then
       end
       local runProgress = type(RewardStoreData) == "table"
         and RewardStoreData.RunProgress or nil
+      local metaProgress = type(RewardStoreData) == "table"
+        and RewardStoreData.MetaProgress or nil
       if locked == nil and type(currentStore) ~= "table"
           and type(referenceStore) ~= "table" then
         locked = "reward_store_unavailable"
@@ -10065,6 +10067,8 @@ if __MacGamingTrainerV1 == nil then
       if runProgress ~= currentStore and runProgress ~= referenceStore then
         scan(runProgress)
       end
+      if metaProgress ~= currentStore and metaProgress ~= referenceStore
+          and metaProgress ~= runProgress then scan(metaProgress) end
       diagnostics.inspectedRewardCount = inspected
       diagnostics.ineligibleRewardCount = ineligible
       diagnostics.randomDependentRewardCount = randomDependent
