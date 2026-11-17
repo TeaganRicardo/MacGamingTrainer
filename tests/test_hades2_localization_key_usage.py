@@ -16,6 +16,9 @@ DYNAMIC_PREFIXES = {
     "hades2.gathering.family.",
     "hades2.gathering.collection.",
     "hades2.reward.",
+    "hades2.worldActions.god.",
+    "hades2.worldActions.room.",
+    "hades2.worldActions.unavailable.",
     "hades2.element.",
     "hades2.rarity.",
     "hades2.traits.family.",
@@ -326,11 +329,31 @@ def dynamic_key_references(sources):
     result_groups = set(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', require_capture(
         r'let order = \[(.*?)\]', grouping, "Save Editor result groups", re.DOTALL)))
 
+    # Every dynamic World Actions suffix is a finite, production-owned UI
+    # catalog. No prefix wildcard: newly supported native IDs/reasons must be
+    # registered and translated in both languages.
+    def world_action_suffixes(name):
+        body = require_capture(
+            rf"private static let {name}: Set<String> = \\[(.*?)\\]",
+            swift_view, name, re.DOTALL,
+        )
+        result = set(re.findall(r'"([A-Za-z][A-Za-z0-9_]*)"', body))
+        if len(result) != len(re.findall(r'"([A-Za-z][A-Za-z0-9_]*)"', body)):
+            raise AssertionError(f"Duplicate World Actions suffix in {name}")
+        return result
+
+    world_action_gods = world_action_suffixes("worldActionGodIDs")
+    world_action_rooms = world_action_suffixes("worldActionRoomIDs")
+    world_action_reasons = world_action_suffixes("worldActionUnavailableReasonIDs")
+
     suffixes = {
         "hades2.occurrence.target.": occurrence_ids,
         "hades2.gathering.family.": families,
         "hades2.gathering.collection.": families,
         "hades2.reward.": reward_ids,
+        "hades2.worldActions.god.": world_action_gods,
+        "hades2.worldActions.room.": world_action_rooms,
+        "hades2.worldActions.unavailable.": world_action_reasons,
         "hades2.element.": element_ids,
         "hades2.rarity.": rarities,
         "hades2.traits.family.": trait_families,
