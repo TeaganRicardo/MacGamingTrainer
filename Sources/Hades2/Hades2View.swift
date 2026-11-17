@@ -1235,8 +1235,68 @@ struct Hades2TrainerView: View {
         Hades2BoonRarityPanel(model: model)
     }
 
+    private static let worldActionGodIDs: Set<String> = [
+        "AphroditeUpgrade",
+        "ApolloUpgrade",
+        "AresUpgrade",
+        "ArtemisUpgrade",
+        "AthenaUpgrade",
+        "DemeterUpgrade",
+        "HephaestusUpgrade",
+        "HeraUpgrade",
+        "HermesUpgrade",
+        "HestiaUpgrade",
+        "PoseidonUpgrade",
+        "SeleneUpgrade",
+        "ZeusUpgrade",
+    ]
+
+    private static let worldActionRoomIDs: Set<String> = [
+        "P_MiniBoss01",
+        "P_MiniBoss02",
+    ]
+
+    private static let worldActionUnavailableReasonIDs: Set<String> = [
+        "biome_depth_too_high",
+        "biome_depth_too_low",
+        "door_forced_destination",
+        "door_forced_room_set",
+        "door_has_predetermined_destination",
+        "door_returns_to_previous_room",
+        "game_state_requirements",
+        "global_forced_destination",
+        "god_limit",
+        "god_not_eligible",
+        "max_appearances_this_biome",
+        "max_creations_this_run",
+        "native_forced_room_present",
+        "native_ineligible",
+        "no_native_eligible_reward",
+        "no_room_route",
+        "reward_eligibility_probe_error",
+        "reward_eligibility_requires_rng",
+        "reward_not_available",
+        "reward_store_name_missing",
+        "reward_store_unavailable",
+        "room_eligibility_probe_error",
+        "room_eligibility_requires_rng",
+        "room_force_probe_error",
+        "room_force_requires_rng",
+        "room_has_fixed_reward_category",
+        "room_has_forced_reward",
+        "room_no_reward",
+        "room_reward_deferred",
+        "room_set_unavailable",
+        "source_forced_room_set",
+        "source_linked_destination",
+        "source_next_room_set",
+        "source_persistent_door_rooms",
+        "source_route_is_native_owned",
+        "source_uses_previous_room_set",
+    ]
+
     private func worldActionTargetLabel(kind: String, id: String) -> String {
-        if kind == "roomCategory", id.contains("_MiniBoss") {
+        if kind == "roomCategory", Self.worldActionRoomIDs.contains(id) {
             let key = "hades2.worldActions.room.\(id)"
             let localized = text(key)
             return localized == key ? id : localized
@@ -1251,7 +1311,7 @@ struct Hades2TrainerView: View {
             default: return id
             }
         }
-        if kind == "reward", id.hasSuffix("Upgrade") {
+        if kind == "reward", Self.worldActionGodIDs.contains(id) {
             let key = "hades2.worldActions.god.\(id)"
             let localized = text(key)
             if localized != key { return localized }
@@ -1282,7 +1342,9 @@ struct Hades2TrainerView: View {
     private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget) -> String {
         let label = worldActionTargetLabel(kind: target.kind, id: target.id)
         guard !target.enabled else { return label }
-        let reasonKey = "hades2.worldActions.unavailable.\(target.reason ?? "native_ineligible")"
+        let reasonID = target.reason.flatMap { Self.worldActionUnavailableReasonIDs.contains($0) ? $0 : nil }
+            ?? "native_ineligible"
+        let reasonKey = "hades2.worldActions.unavailable.\(reasonID)"
         let localized = text(reasonKey)
         let reason = localized == reasonKey
             ? text("hades2.worldActions.unavailable.native_ineligible") : localized
