@@ -145,6 +145,8 @@ def _set_counter(raw):
         or not math.isfinite(value)
         or not 0 <= value <= MAX_AMOUNT
     ):
+        if params["counter"] == "biomeTime":
+            raise ValueError("区域限时必须为 0–999999 秒。")
         raise ValueError(f"巫咒充能必须为 0–{MAX_AMOUNT}。")
     if params["counter"] == "biomeTime" and value % 1 != 0:
         raise ValueError("区域限时必须使用整数秒。")
