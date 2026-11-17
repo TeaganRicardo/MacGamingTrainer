@@ -1236,6 +1236,11 @@ struct Hades2TrainerView: View {
     }
 
     private func worldActionTargetLabel(kind: String, id: String) -> String {
+        if kind == "roomCategory", id.contains("_MiniBoss") {
+            let key = "hades2.worldActions.room.\(id)"
+            let localized = text(key)
+            return localized == key ? id : localized
+        }
         if kind == "roomCategory" {
             switch id {
             case "combat": return text("hades2.worldActions.route.combat")
@@ -1245,9 +1250,6 @@ struct Hades2TrainerView: View {
             case "miniboss": return text("hades2.worldActions.route.miniboss")
             default: return id
             }
-        }
-        if kind == "roomCategory", id.contains("_MiniBoss") {
-            return text("hades2.worldActions.room.\(id)")
         }
         if kind == "reward", id.hasSuffix("Upgrade") {
             let key = "hades2.worldActions.god.\(id)"
