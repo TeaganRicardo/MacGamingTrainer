@@ -1361,6 +1361,8 @@ struct Hades2TrainerView: View {
     private var worldExitPanel: some View {
         let exit = model.selectedWorldExit
         let rewardTargets = exit?.targets.filter { $0.kind == "reward" } ?? []
+        let godTargets = rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
+        let ordinaryRewardTargets = rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
         let routeTargets = exit?.targets.filter { $0.kind == "roomCategory" } ?? []
         let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
         return TrainerDualPickerActionRow(
@@ -1399,9 +1401,18 @@ struct Hades2TrainerView: View {
                     Text(worldActionTargetLabel(kind: lease.kind, id: lease.target))
                         .tag(lease.kind + ":" + lease.target)
                 }
-                if !rewardTargets.isEmpty {
+                if !godTargets.isEmpty {
+                    Section(text("hades2.worldActions.gods")) {
+                        ForEach(godTargets, id: \.stableID) { target in
+                            Text(worldActionTargetDisplay(target))
+                                .tag(target.stableID)
+                                .disabled(!target.enabled)
+                        }
+                    }
+                }
+                if !ordinaryRewardTargets.isEmpty {
                     Section(text("hades2.worldActions.rewards")) {
-                        ForEach(rewardTargets, id: \.stableID) { target in
+                        ForEach(ordinaryRewardTargets, id: \.stableID) { target in
                             Text(worldActionTargetDisplay(target))
                                 .tag(target.stableID)
                                 .disabled(!target.enabled)
