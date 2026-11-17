@@ -43,6 +43,15 @@ struct Hades2PresentationReference: Equatable {
 struct Hades2WorldActionTarget: Identifiable, Equatable {
     let kind: String
     let id: String
+    let enabled: Bool
+    let reason: String?
+
+    init(kind: String, id: String, enabled: Bool = true, reason: String? = nil) {
+        self.kind = kind
+        self.id = id
+        self.enabled = enabled
+        self.reason = reason
+    }
 
     var identity: String { kind + ":" + id }
     var idValue: String { identity }
@@ -396,7 +405,11 @@ struct Hades2StatePatch {
             let targets = (exit["targets"] as? [[String: Any]] ?? []).compactMap { target -> Hades2WorldActionTarget? in
                 guard let kind = target["kind"] as? String, !kind.isEmpty,
                       let id = target["id"] as? String, !id.isEmpty else { return nil }
-                return Hades2WorldActionTarget(kind: kind, id: id)
+                return Hades2WorldActionTarget(
+                    kind: kind, id: id,
+                    enabled: target["enabled"] as? Bool ?? true,
+                    reason: target["reason"] as? String
+                )
             }
             let lease: Hades2WorldActionLease?
             if let value = exit["activeLease"] as? [String: Any],
