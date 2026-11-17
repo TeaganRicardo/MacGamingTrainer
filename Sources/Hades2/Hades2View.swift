@@ -1293,10 +1293,13 @@ struct Hades2TrainerView: View {
     ]
 
     private func worldActionTargetLabel(kind: String, id: String) -> String {
-        if kind == "roomCategory", Self.worldActionRoomIDs.contains(id) {
-            let key = "hades2.worldActions.room.\(id)"
-            let localized = text(key)
-            return localized == key ? id : localized
+        if kind == "roomCategory", id.contains("_MiniBoss") {
+            if Self.worldActionRoomIDs.contains(id) {
+                let key = "hades2.worldActions.room.\(id)"
+                let localized = text(key)
+                if localized != key { return localized }
+            }
+            return "\(text("hades2.worldActions.route.miniboss")) · \(id)"
         }
         if kind == "roomCategory" {
             switch id {
