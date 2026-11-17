@@ -184,6 +184,21 @@ assert(not forcedRouteApply,
   "a disabled native forced route must be rejected by the resident")
 nativeRoomForced.F_Forced01 = nil
 
+-- The current exit is not part of native ChooseNextRoomData's otherDoors
+-- when its original destination is selected. A current-room match must not
+-- suppress AlwaysForceOncePerRoom on that same physical exit.
+local originalForcedDoorRoom = door1.Room
+local originalOnceFlag = RoomData.F_Forced01.AlwaysForceOncePerRoom
+RoomData.F_Forced01.AlwaysForceOncePerRoom = true
+door1.Room = DeepCopyTable(RoomData.F_Forced01)
+local forcedOnce = exitByObject(1)
+local forcedOnceTarget = targetRow(forcedOnce, "roomCategory", "combat")
+assert(forcedOnceTarget and forcedOnceTarget.enabled == false
+    and forcedOnceTarget.reason == "native_forced_room_present",
+  "current door's existing room incorrectly suppressed native once-per-room force")
+door1.Room = originalForcedDoorRoom
+RoomData.F_Forced01.AlwaysForceOncePerRoom = originalOnceFlag
+
 -- Reward edits mutate only the selected native exit and retain the same
 -- physical-door/target identity. Cancel restores the exact original descriptor.
 local originalRoom1, originalRoom2 = door1.Room, door2.Room
