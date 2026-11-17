@@ -10250,8 +10250,7 @@ if __MacGamingTrainerV1 == nil then
         and RoomData[source.Name] or nil
       local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
       local roomSetName = args.RoomSetName
-        or (type(source) == "table" and source.RoomSetName)
-        or (type(sourceData) == "table" and sourceData.RoomSetName) or "F"
+        or (type(source) == "table" and source.RoomSetName) or "F"
       local roomSet = type(RoomSets) == "table" and RoomSets[roomSetName] or nil
       local categories, namedMinibosses = {}, {}
       for _, roomName in ipairs(type(roomSet) == "table" and roomSet or {}) do
