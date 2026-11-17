@@ -394,7 +394,7 @@ class Hades2DesiredStateReconciler:
                 )
 
         wanted_frozen = desired.get("biomeTimerFrozen") is True
-        if force_full or observed.get("biomeTimeLocked") is not wanted_frozen:
+        if observed.get("biomeTimeLocked", False) is not wanted_frozen:
             action = _Action(
                 "lock_biome_time", {"locked": wanted_frozen}, "biomeTimer",
             )

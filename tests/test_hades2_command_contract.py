@@ -116,7 +116,7 @@ names = [row["name"] for row in metadata]
 assert names == [
     "scan", "status", "connect", "disconnect", "launch",
     "disable_all", "runtime_reset", "reset_desired", "set_desired",
-    "set_vital", "set_counter", "lock_vital",
+    "set_vital", "set_counter", "lock_vital", "lock_biome_time",
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "generate_chaos_gate", "generate_chamber_facility", "mature_garden", "set_stat", "set_element", "lock_element",

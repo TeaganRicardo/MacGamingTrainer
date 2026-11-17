@@ -1609,12 +1609,11 @@ if __MacGamingTrainerV1 == nil then
     return { run = run, taint = taint, owner = owner }
   end)()
   -- The Vow of Time has a single carried balance. Suppress only its native
-  -- UpdateTimers deduction; the ordinary IGT, curses and keepsake timers tick.
-  -- Mask ActiveBiomeTimer for this synchronous native call, never across a
-  -- room transition or a coroutine. The separate penalty loop only needs
-  -- suppression while the balance is positive (the lock is ineffective after
-  -- expiry until the user restores positive time).
-  local function updateWithBiomeTimerLock(original, elapsed)
+  -- UpdateTimers deduction; ordinary IGT, curses and keepsake timers still tick.
+  -- The separate expiry penalty loop is independent. The lock is effective
+  -- only while the stored balance is positive, so no expired timer can falsely
+  -- appear safe.
+  function M.updateWithBiomeTimerLock(original, elapsed)
     local run = CurrentRun
     if not M.biomeTimerFrozen or type(run) ~= "table" or not run.ActiveBiomeTimer
         or not finite(run.BiomeTime) or run.BiomeTime <= 0 then
@@ -1668,7 +1667,7 @@ if __MacGamingTrainerV1 == nil then
         wrapper = function(elapsed)
           if M.guardWrapper == wrapper then synchronize() end
           local result
-          if M.guardWrapper == wrapper then result = updateWithBiomeTimerLock(original, elapsed)
+          if M.guardWrapper == wrapper then result = M.updateWithBiomeTimerLock(original, elapsed)
           else result = original(elapsed) end
           if M.guardWrapper == wrapper and M.enforceLocksInternal then M.enforceLocksInternal() end
           return result
@@ -1795,7 +1794,7 @@ if __MacGamingTrainerV1 == nil then
     wrapper = function(elapsed)
       if M.guardWrapper == wrapper then synchronize() end
       local result
-      if M.guardWrapper == wrapper then result = updateWithBiomeTimerLock(original, elapsed)
+      if M.guardWrapper == wrapper then result = M.updateWithBiomeTimerLock(original, elapsed)
       else result = original(elapsed) end
       if M.guardWrapper == wrapper then enforceLocks() end
       return result
@@ -11912,8 +11911,8 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "lock_biome_time" then
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
-      -- Desired intent is session-scoped and may be replayed before entering
-      -- a timed run. A nonpositive balance cannot be frozen against expiry.
+      -- Desired intent can replay before a timed run; a nonpositive balance
+      -- remains expired until a positive value is explicitly restored.
       M.biomeTimerFrozen = params.locked
       if params.locked then installGuard()
       elseif not anyDesired() and not anyRuntimeActive() then releaseGuard() end
