@@ -9960,7 +9960,7 @@ if __MacGamingTrainerV1 == nil then
         locked = "reward_store_unavailable"
       end
 
-      local previously, excludedGods = {}, {}
+      local previously, excludedGods, siblingGods = {}, {}, {}
       local source = currentSource()
       if type(source) == "table" and type(source.OfferedRewards) == "table" then
         for objectId, offered in pairs(source.OfferedRewards) do
@@ -9971,6 +9971,7 @@ if __MacGamingTrainerV1 == nil then
             }
             if offered.Type == "Boon" and type(offered.ForceLootName) == "string" then
               excludedGods[#excludedGods + 1] = offered.ForceLootName
+              siblingGods[offered.ForceLootName] = true
             end
           end
         end
@@ -10042,7 +10043,9 @@ if __MacGamingTrainerV1 == nil then
           end
         end
         if problem == nil and forceLootName ~= nil then
-          if not godEligibilityKnown then
+          if siblingGods[forceLootName] then
+            problem = "reward_not_available"
+          elseif not godEligibilityKnown then
             problem = godEligibilityReason or "god_eligibility_unavailable"
           elseif not eligibleGods[forceLootName] then
             problem = godLimit and "god_limit" or "god_not_eligible"
