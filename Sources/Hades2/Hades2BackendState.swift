@@ -135,6 +135,8 @@ struct Hades2StatePatch {
     let armor: Hades2FieldPatch<Double>
     let armorLocked: Bool?
     let spellCharge: Hades2FieldPatch<Double>
+    let biomeTime: Hades2FieldPatch<Double>
+    let biomeTimeLocked: Bool?
     let spellChargeCost: Hades2FieldPatch<Double>
     let money: Hades2FieldPatch<Double>
     let runCount: Hades2FieldPatch<Int>
@@ -270,6 +272,8 @@ struct Hades2StatePatch {
         armor = Self.numberField(payload, "armor")
         armorLocked = payload["armorLocked"] as? Bool
         spellCharge = Self.numberField(payload, "spellCharge")
+        biomeTime = Self.numberField(payload, "biomeTime")
+        biomeTimeLocked = payload["biomeTimeLocked"] as? Bool
         spellChargeCost = Self.numberField(payload, "spellChargeCost")
         money = Self.numberField(payload, "money")
         runCount = Self.field(payload, "runCount", Int.self)

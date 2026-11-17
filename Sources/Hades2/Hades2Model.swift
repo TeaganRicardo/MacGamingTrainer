@@ -8,7 +8,7 @@ struct Hades2RuntimeIssuePresentation: Hashable {
 
 enum Hades2RuntimeTextEdit {
     case vital(String, field: String), resource(String), rerolls, element(String)
-    case stat(String), counter(String), multiplier(String), gameSpeed
+    case stat(String), counter(String), biomeTime, multiplier(String), gameSpeed
     case gathering(Hades2GatheringFamily), chaosGate
 }
 
@@ -186,6 +186,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var armor: Double?
     @Published var armorLocked = false
     @Published var spellCharge: Double?
+    @Published var biomeTime: Double?
+    @Published var biomeTimeLocked = false
     @Published var spellChargeCost: Double?
     @Published var money: Double?
     @Published var runCount: Int?
@@ -327,6 +329,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var canSetRerolls: Bool { connected && capabilities["setRerolls"] == true && !exiting }
     var canSetSpellCharge: Bool { connected && capabilities["setSpellCharge"] == true && !exiting }
+    var canSetBiomeTime: Bool { connected && capabilities["setBiomeTime"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     // Consecutive drop requests remain individually queued while unrelated
     // modal/lifecycle actions retain the existing single-flight barrier.
@@ -712,6 +715,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !armorLocked { armor = nil }
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
+        biomeTime = nil
         gatheringTargets = [:]
         chaosGateTarget = nil
         facilityOptions = []
@@ -828,6 +832,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             repairWorldActionSelection()
             repairOccurrenceSelection()
         }
+        if patch.biomeTime.isPresent { biomeTime = patch.biomeTime.value }
+        if let value = patch.biomeTimeLocked { biomeTimeLocked = value }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
@@ -1221,6 +1227,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
+    static func displayBiomeTime(_ time: Double?) -> String {
+        guard let time, time.isFinite, abs(time) <= 999_999 else { return "" }
+        let whole = Int(time.rounded(.down))
+        let magnitude = abs(whole)
+        return String(format: "%@%02d:%02d", whole < 0 ? "-" : "", magnitude / 60, magnitude % 60)
+    }
+
+    static func parseBiomeTime(_ text: String) -> Int? {
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.contains(":") {
+            let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2, let minutes = Int(parts[0]), let seconds = Int(parts[1]),
+                  minutes >= 0, (0..<60).contains(seconds), minutes <= 16_666 else { return nil }
+            let total = minutes * 60 + seconds
+            return total <= 999_999 ? total : nil
+        }
+        guard let seconds = Int(raw), (0...999_999).contains(seconds) else { return nil }
+        return seconds
+    }
+
     private func amountValue(_ text: String) -> Int? {
         guard let value = Int(text), (0...999_999).contains(value) else { return nil }
         return value
@@ -1271,6 +1297,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             localTarget = locks[id] != true
             // An unlocked stat remains a local target until its explicit lock action.
             apply = { if locks[id] == true { self.setStat(id, text: $0, locked: true) } }
+        case .biomeTime:
+            current = biomeTime; available = canSetBiomeTime && current != nil
+            apply = { self.setCounter("biomeTime", text: $0) }
         case let .counter(id):
             current = id == "spellCharge" ? spellCharge : nil
             available = canSetSpellCharge && current != nil
@@ -1292,6 +1321,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .chaosGate:
             current = chaosGateProbability; range = 0...100; available = canEditDesired
             apply = { if let probability = Double($0) { self.setChaosGateProbability(probability) } }
+        }
+        if case .biomeTime = edit {
+            let restored = Self.displayBiomeTime(biomeTime)
+            guard generation == editGeneration else { return restored }
+            guard changed else { return restored }
+            guard available && !busy && pendingBlockingRequests == 0 && protocolCompatible else {
+                onRejection("hades2.input.unavailable")
+                presentFeedback(presentation("hades2.input.unavailable"), tone: .warning)
+                return restored
+            }
+            guard let target = Self.parseBiomeTime(text), !(biomeTimeLocked && target == 0) else {
+                onRejection("hades2.input.invalid")
+                presentFeedback(presentation("hades2.input.invalid"), tone: .warning)
+                return restored
+            }
+            if biomeTime != Double(target) { apply(String(target)) }
+            return Self.displayBiomeTime(Double(target))
         }
         func canonical(_ value: Double?) -> String {
             guard let value, value.isFinite else { return "" }
@@ -1346,6 +1392,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             title: "hades2.op.updateVital",
             titleArguments: [titleKey]
         )
+    }
+
+    func lockBiomeTime(_ locked: Bool) {
+        guard connected && !exiting else { return }
+        guard !locked || (canSetBiomeTime && (biomeTime ?? 0) > 0) else { return }
+        send(.lockBiomeTime(locked: locked),
+             title: locked ? "hades2.op.lockBiomeTime" : "hades2.op.unlockBiomeTime")
     }
 
     func lockVital(_ vital: String, locked: Bool) {
@@ -1907,6 +1960,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setCounter(_ counter: String, text: String) {
+        if counter == "biomeTime" {
+            guard canSetBiomeTime, let target = Self.parseBiomeTime(text),
+                  !(biomeTimeLocked && target == 0) else { return }
+            if biomeTime == Double(target) { return }
+            sendEdit(request: .setCounter(counter: "biomeTime", value: Double(target)),
+                     title: "hades2.op.updateBiomeTime")
+            return
+        }
         guard counter == "spellCharge", canSetSpellCharge, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if counter == "spellCharge", let current = spellCharge, abs(current - value) < 0.0001 { return }
         sendEdit(request: .setCounter(counter: counter, value: value), title: "hades2.op.updateCounter")

@@ -10,6 +10,7 @@ enum Hades2Request {
     case setVital(vital: String, field: String, value: Double)
     case setCounter(counter: String, value: Double)
     case lockVital(vital: String, locked: Bool)
+    case lockBiomeTime(locked: Bool)
     case setResource(resource: String, amount: Int)
     case lockResource(resource: String, locked: Bool)
     case setRerolls(amount: Int)
@@ -72,6 +73,7 @@ enum Hades2Request {
         case .setVital: return .setVital
         case .setCounter: return .setCounter
         case .lockVital: return .lockVital
+        case .lockBiomeTime: return .lockBiomeTime
         case .setResource: return .setResource
         case .lockResource: return .lockResource
         case .setRerolls: return .setRerolls
@@ -153,6 +155,8 @@ enum Hades2Request {
             return ["counter": counter, "value": value]
         case .lockVital(let vital, let locked):
             return ["vital": vital, "locked": locked]
+        case .lockBiomeTime(let locked):
+            return ["locked": locked]
         case .setResource(let resource, let amount):
             return ["resource": resource, "amount": amount]
         case .lockResource(let resource, let locked):

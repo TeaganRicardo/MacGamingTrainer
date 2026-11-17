@@ -13,6 +13,7 @@ struct Hades2ViewConnectionSnapshot: Equatable {
     let maxMana: Double?
     let armor: Double?
     let spellCharge: Double?
+    let biomeTime: Double?
 }
 
 struct Hades2ViewStatSnapshot: Equatable {
