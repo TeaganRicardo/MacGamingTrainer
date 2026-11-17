@@ -691,7 +691,19 @@
     "hades2.worldActions.unavailable.source_next_room_set": "Transition to next region",
     "hades2.worldActions.unavailable.source_persistent_door_rooms": "Persistent exit route",
     "hades2.worldActions.unavailable.source_route_is_native_owned": "Story-locked exit",
-    "hades2.worldActions.unavailable.source_uses_previous_room_set": "Returning to previous region"
+    "hades2.worldActions.unavailable.source_uses_previous_room_set": "Returning to previous region",
+    "hades2.worldActions.unavailable.reward_not_in_current_store": "Not in this exit's reward pool",
+    "hades2.worldActions.unavailable.god_eligibility_unavailable": "God eligibility unavailable",
+    "hades2.worldActions.unavailable.god_eligibility_requires_rng": "God eligibility depends on chance",
+    "hades2.worldActions.unavailable.room_debug_only": "Developer-only room",
+    "hades2.worldActions.unavailable.room_excluded_by_exit_rules": "Excluded by this exit's rules",
+    "hades2.worldActions.unavailable.room_same_as_source": "Same as the current room",
+    "hades2.worldActions.unavailable.room_linked_route_required": "Requires a linked route",
+    "hades2.worldActions.unavailable.room_wrong_wing_end": "Wrong room for this wing",
+    "hades2.worldActions.unavailable.room_miniboss_wing_required": "Requires a miniboss wing",
+    "hades2.worldActions.unavailable.room_requires_indoor": "Requires an indoor room",
+    "hades2.worldActions.unavailable.room_max_creations_per_room": "Already created in this room",
+    "hades2.worldActions.unavailable.room_max_appearances_this_run": "Already visited this run"
   },
   "language": "en"
 }
