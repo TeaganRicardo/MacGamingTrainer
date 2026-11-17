@@ -1292,6 +1292,7 @@ struct Hades2TrainerView: View {
         "room_miniboss_wing_required",
         "room_no_reward",
         "room_requires_indoor",
+        "room_required_tags_missing",
         "room_same_as_source",
         "room_reward_deferred",
         "room_set_unavailable",
