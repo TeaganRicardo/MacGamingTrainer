@@ -9818,7 +9818,13 @@ if __MacGamingTrainerV1 == nil then
 
       local otherDoors = {}
       for _, offered in pairs(MapState.OfferedExitDoors or {}) do
-        if type(offered) == "table" then otherDoors[#otherDoors + 1] = offered end
+        -- Native ChooseNextRoomData receives the other offered doors. The
+        -- current door has no assigned room when its native route is chosen;
+        -- including its already-generated room here falsely suppresses
+        -- AlwaysForceOncePerRoom candidates during a later edit.
+        if type(offered) == "table" and offered ~= door then
+          otherDoors[#otherDoors + 1] = offered
+        end
       end
       table.sort(otherDoors, function(a,b) return number(a.ObjectId) < number(b.ObjectId) end)
       local result = {}
@@ -9836,22 +9842,31 @@ if __MacGamingTrainerV1 == nil then
             nativeProbeWithoutRNG, IsRoomEligible, CurrentRun, source, probe, args
           )
           if not ok then
-            diagnostics.probeErrorRoom = tostring(data.Name or roomName)
+            local name = tostring(data.Name or roomName)
+            diagnostics.probeErrorRoom = name
             diagnostics.probeError = string.sub(tostring(eligible), 1, 160)
+            diagnostics.probeErrorRooms = diagnostics.probeErrorRooms or {}
+            diagnostics.probeErrorRooms[name] = true
             eligible = false
           end
           if usedRandom then
             -- An opaque candidate is individually excluded. Never suppress
             -- unrelated rooms because one eligibility probe uses native RNG.
-            diagnostics.randomEligibilityRoom = tostring(data.Name or roomName)
+            local name = tostring(data.Name or roomName)
+            diagnostics.randomEligibilityRoom = name
+            diagnostics.randomEligibilityRooms = diagnostics.randomEligibilityRooms or {}
+            diagnostics.randomEligibilityRooms[name] = true
             eligible = false
           end
           if eligible then
             eligibleCount = eligibleCount + 1
             local forceOK, forced, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
             if not forceOK then
-              diagnostics.probeErrorRoom = tostring(data.Name or roomName)
+              local name = tostring(data.Name or roomName)
+              diagnostics.probeErrorRoom = name
               diagnostics.probeError = string.sub(tostring(forced), 1, 160)
+              diagnostics.forceProbeErrorRooms = diagnostics.forceProbeErrorRooms or {}
+              diagnostics.forceProbeErrorRooms[name] = true
             end
             if forceOK and forceUsesRandom then
               -- A probabilistic native force is not a deterministic progress
