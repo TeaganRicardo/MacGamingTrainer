@@ -1246,6 +1246,14 @@ struct Hades2TrainerView: View {
             default: return id
             }
         }
+        if kind == "roomCategory", id.contains("_MiniBoss") {
+            return text("hades2.worldActions.room.\(id)")
+        }
+        if kind == "reward", id.hasSuffix("Upgrade") {
+            let key = "hades2.worldActions.god.\(id)"
+            let localized = text(key)
+            if localized != key { return localized }
+        }
         let localized: String?
         switch id {
         case "RoomMoneyDrop": localized = rewardLabel("RoomMoneyDrop")
@@ -1267,6 +1275,16 @@ struct Hades2TrainerView: View {
             return option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
         }
         return id
+    }
+
+    private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget) -> String {
+        let label = worldActionTargetLabel(kind: target.kind, id: target.id)
+        guard !target.enabled else { return label }
+        let reasonKey = "hades2.worldActions.unavailable.\(target.reason ?? "native_ineligible")"
+        let localized = text(reasonKey)
+        let reason = localized == reasonKey
+            ? text("hades2.worldActions.unavailable.native_ineligible") : localized
+        return "\(label) · \(reason)"
     }
 
     private func worldExitLabel(_ exit: Hades2WorldExit) -> String {
@@ -1320,20 +1338,22 @@ struct Hades2TrainerView: View {
                 if !rewardTargets.isEmpty {
                     Section(text("hades2.worldActions.rewards")) {
                         ForEach(rewardTargets, id: \.stableID) { target in
-                            Text(worldActionTargetLabel(kind: target.kind, id: target.id))
+                            Text(worldActionTargetDisplay(target))
                                 .tag(target.stableID)
+                                .disabled(!target.enabled)
                         }
                     }
                 }
                 if !routeTargets.isEmpty {
                     Section(text("hades2.worldActions.routes")) {
                         ForEach(routeTargets, id: \.stableID) { target in
-                            Text(worldActionTargetLabel(kind: target.kind, id: target.id))
+                            Text(worldActionTargetDisplay(target))
                                 .tag(target.stableID)
+                                .disabled(!target.enabled)
                         }
                     }
                 }
-                if exit != nil && rewardTargets.isEmpty && routeTargets.isEmpty && exit?.activeLease == nil {
+                if exit != nil && !((exit?.targets ?? []).contains { $0.enabled }) && exit?.activeLease == nil {
                     Text(text("hades2.worldActions.noTarget")).tag("")
                 }
             }
