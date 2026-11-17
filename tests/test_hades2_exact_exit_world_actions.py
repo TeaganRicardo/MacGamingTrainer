@@ -198,6 +198,9 @@ assert(forcedOnceTarget and forcedOnceTarget.enabled == false
   "current door's existing room incorrectly suppressed native once-per-room force")
 door1.Room = originalForcedDoorRoom
 RoomData.F_Forced01.AlwaysForceOncePerRoom = originalOnceFlag
+-- Restoring the physical room descriptor intentionally advances the ABA-safe
+-- door epoch. Refresh both tokens before later apply/cancel assertions.
+first, second = exitByObject(1), exitByObject(2)
 
 -- Reward edits mutate only the selected native exit and retain the same
 -- physical-door/target identity. Cancel restores the exact original descriptor.
