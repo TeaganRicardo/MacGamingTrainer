@@ -93,6 +93,17 @@ EncounterData = {
 }
 EnemyData = {}
 
+Contains = function(values, wanted)
+  if type(values) ~= "table" then return false end
+  for _, value in pairs(values) do if value == wanted then return true end end
+  return false
+end
+ContainsAll = function(values, required)
+  if type(values) ~= "table" or type(required) ~= "table" then return false end
+  for _, wanted in ipairs(required) do if not Contains(values, wanted) then return false end end
+  return true
+end
+
 roomEligible = {}
 encounterEligible = {}
 nativeRoomForced = {}
