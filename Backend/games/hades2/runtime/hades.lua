@@ -9998,6 +9998,33 @@ if __MacGamingTrainerV1 == nil then
       return rewardCandidatesWithDiagnostics(door)
     end
 
+    local function roomUnavailableReason(data, routeReason)
+      if routeReason ~= nil and routeReason ~= "available"
+          and routeReason ~= "no_native_eligible_route" then return routeReason end
+      local run = type(CurrentRun) == "table" and CurrentRun or {}
+      local depth = number(run.BiomeDepthCache)
+      if data.ForceAtBiomeDepthMin ~= nil and depth < data.ForceAtBiomeDepthMin then
+        return "biome_depth_too_low"
+      end
+      if data.ForceAtBiomeDepth ~= nil and depth ~= data.ForceAtBiomeDepth then
+        return depth < data.ForceAtBiomeDepth and "biome_depth_too_low"
+          or "biome_depth_too_high"
+      end
+      if data.ForceAtBiomeDepthMax ~= nil and depth > data.ForceAtBiomeDepthMax then
+        return "biome_depth_too_high"
+      end
+      if data.MaxCreationsThisRun ~= nil
+          and number(type(run.RoomCreations) == "table" and run.RoomCreations[data.Name]) >= data.MaxCreationsThisRun then
+        return "max_creations_this_run"
+      end
+      if data.MaxAppearancesThisBiome ~= nil
+          and number(type(run.BiomeRoomCountCache) == "table" and run.BiomeRoomCountCache[data.Name]) >= data.MaxAppearancesThisBiome then
+        return "max_appearances_this_biome"
+      end
+      if data.GameStateRequirements ~= nil then return "game_state_requirements" end
+      return "native_ineligible"
+    end
+
     local function targetCatalogForDoor(door, doorToken, refresh)
       local cached = targetCatalogs[door]
       if not refresh and type(cached) == "table" and cached.doorToken == doorToken then
@@ -10009,19 +10036,68 @@ if __MacGamingTrainerV1 == nil then
         reward = {},
         routes = {},
       }
+      local enabledCount = 0
       for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, diagnostics.reward)) do
-        targets[#targets + 1] = { kind = "reward", id = candidate.id }
+        local enabled = candidate.enabled ~= false
+        targets[#targets + 1] = {
+          kind = "reward", id = candidate.id,
+          enabled = enabled,
+          reason = enabled and nil or candidate.reason or "reward_not_available",
+        }
+        if enabled then enabledCount = enabledCount + 1 end
       end
       local routes = routeCandidatesWithDiagnostics(door, diagnostics.routes)
-      if type(routes) == "table" then
-        for _, kind in ipairs(routeOrder) do
-          if type(routes[kind]) == "table" and #routes[kind] > 0 then
-            targets[#targets + 1] = { kind = "roomCategory", id = kind }
+      local source = currentSource()
+      local sourceData = type(source) == "table" and type(RoomData) == "table"
+        and RoomData[source.Name] or nil
+      local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+      local roomSetName = args.RoomSetName
+        or (type(source) == "table" and source.RoomSetName)
+        or (type(sourceData) == "table" and sourceData.RoomSetName) or "F"
+      local roomSet = type(RoomSets) == "table" and RoomSets[roomSetName] or nil
+      local categories, namedMinibosses = {}, {}
+      for _, roomName in ipairs(type(roomSet) == "table" and roomSet or {}) do
+        local data = type(roomName) == "table" and roomName
+          or (type(RoomData) == "table" and RoomData[roomName])
+        if type(data) == "table" then
+          local kind = routeKind(data.Name)
+          if kind ~= nil then
+            categories[kind] = categories[kind] or data
+            if kind == "miniboss" then namedMinibosses[data.Name] = data end
           end
         end
       end
+      local reason = diagnostics.routes.reason
+      for _, kind in ipairs(routeOrder) do
+        local example = categories[kind]
+        if example ~= nil then
+          local enabled = type(routes) == "table"
+            and type(routes[kind]) == "table" and #routes[kind] > 0
+          targets[#targets + 1] = {
+            kind = "roomCategory", id = kind,
+            enabled = enabled,
+            reason = enabled and nil or roomUnavailableReason(example, reason),
+          }
+          if enabled then enabledCount = enabledCount + 1 end
+        end
+      end
+      local names = {}
+      for name in pairs(namedMinibosses) do names[#names + 1] = name end
+      table.sort(names)
+      for _, name in ipairs(names) do
+        local enabled = type(routes) == "table"
+          and type(routes[name]) == "table" and #routes[name] > 0
+        targets[#targets + 1] = {
+          kind = "roomCategory", id = name,
+          enabled = enabled,
+          reason = enabled and nil or roomUnavailableReason(namedMinibosses[name], reason),
+        }
+        if enabled then enabledCount = enabledCount + 1 end
+      end
       diagnostics.targetCount = #targets
-      diagnostics.reason = #targets > 0 and "available" or "no_legal_target"
+      diagnostics.enabledTargetCount = enabledCount
+      diagnostics.disabledTargetCount = #targets - enabledCount
+      diagnostics.reason = enabledCount > 0 and "available" or "no_legal_target"
       targetCatalogs[door] = {
         doorToken = doorToken,
         targets = targets,
@@ -10030,7 +10106,7 @@ if __MacGamingTrainerV1 == nil then
       return targets, diagnostics
     end
 
-    local function rewardCandidate(door, target)
+        local function rewardCandidate(door, target)
       for _, candidate in ipairs(rewardCandidates(door)) do
         if candidate.id == target then return candidate end
       end
