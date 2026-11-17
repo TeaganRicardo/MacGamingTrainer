@@ -557,6 +557,103 @@ assert(type(safelyEntered) == "table" and safelyEntered.Name == "F_Combat01"
   "sibling preview cleanup failure aborted accepted native door use")
 assert(M.dispatch("status", { includeCatalogs = false }).worldActions.occurrence == nil)
 
+-- Real-shaped god loot sources are stable targets independent of the
+-- temporarily depleted RunProgress deck. Locked gods stay visible.
+LootData.ApolloUpgrade = { Name = "ApolloUpgrade", GodLoot = true,
+  DoorIcon = "BoonDropApolloPreview" }
+LootData.ZeusUpgrade = { Name = "ZeusUpgrade", GodLoot = true,
+  DoorIcon = "BoonDropZeusPreview" }
+RewardStoreData.RunProgress = { { Name = "Boon", AllowDuplicates = true } }
+GetEligibleLootNames = function() return { "ApolloUpgrade", "ZeusUpgrade" } end
+ReachedMaxGods = function() return false end
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local godExit = exitByObject(1)
+assert(targetExists(godExit, "reward", "ApolloUpgrade")
+    and targetExists(godExit, "reward", "ZeusUpgrade"),
+  "native Boon template did not enumerate distinct Olympian targets")
+local originalGodDoor = MapState.OfferedExitDoors[1]
+local originalGodRoom = originalGodDoor.Room
+local appliedGod = M.dispatch("apply_world_exit", {
+  doorToken = godExit.doorToken, kind = "reward",
+  target = "ApolloUpgrade", requestId = "specific-god",
+  includeCatalogs = true,
+})
+assert(originalGodDoor.Room == originalGodRoom
+    and originalGodRoom.ChosenRewardType == "Boon"
+    and originalGodRoom.ForceLootName == "ApolloUpgrade",
+  "exact exit reward did not force the selected god natively")
+local godLease = appliedGod.worldActions.exits[1].activeLease
+assert(godLease ~= nil)
+M.dispatch("cancel_world_exit", {
+  doorToken = godExit.doorToken, leaseToken = godLease.leaseToken,
+  requestId = "cancel-specific-god", includeCatalogs = true,
+})
+assert(originalGodDoor.Room == originalGodRoom
+    and originalGodRoom.ForceLootName ~= "ApolloUpgrade",
+  "cancelling a god reward did not restore the actual native door")
+CurrentRun.CurrentRoom.OfferedRewards[2] = {
+  Type = "Boon", ForceLootName = "ApolloUpgrade",
+}
+local duplicateGod = targetRow(exitByObject(1), "reward", "ApolloUpgrade")
+assert(duplicateGod and duplicateGod.enabled == false
+    and duplicateGod.reason == "reward_not_available",
+  "a sibling god reward must remain visible but unavailable")
+CurrentRun.CurrentRoom.OfferedRewards[2] = nil
+GetEligibleLootNames = function() return { "ApolloUpgrade" } end
+local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
+assert(unavailableGod and unavailableGod.enabled == false
+    and unavailableGod.reason == "god_not_eligible",
+  "unavailable god must remain in the catalog with a native reason")
+
+-- P-region named minibosses and story rooms are presented even while
+-- hard biome/run eligibility gates make them unavailable.
+RoomData.P_MiniBoss01 = {
+  Name = "P_MiniBoss01", RoomSetName = "P",
+  ForceAtBiomeDepthMin = 4, ForceAtBiomeDepthMax = 7,
+  MaxCreationsThisRun = 1,
+}
+RoomData.P_MiniBoss02 = {
+  Name = "P_MiniBoss02", RoomSetName = "P",
+  ForceAtBiomeDepthMin = 4, ForceAtBiomeDepthMax = 7,
+  MaxCreationsThisRun = 1,
+}
+table.insert(RoomSets.P, "P_MiniBoss01")
+table.insert(RoomSets.P, "P_MiniBoss02")
+local priorEligible = IsRoomEligible
+IsRoomEligible = function(run, source, room, args)
+  if room.ForceAtBiomeDepthMin ~= nil
+      and run.BiomeDepthCache < room.ForceAtBiomeDepthMin then return false end
+  return priorEligible(run, source, room, args)
+end
+setRoomSet("P")
+CurrentRun.BiomeDepthCache = 3
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local early = exitByObject(1)
+for _, name in ipairs({ "P_MiniBoss01", "P_MiniBoss02" }) do
+  local choice = targetRow(early, "roomCategory", name)
+  assert(choice and choice.enabled == false
+      and choice.reason == "biome_depth_too_low",
+    "early P miniboss must be listed as disabled")
+end
+CurrentRun.BiomeDepthCache = 5
+local mature = exitByObject(1)
+assert(targetExists(mature, "roomCategory", "P_MiniBoss01")
+    and targetExists(mature, "roomCategory", "P_MiniBoss02"),
+  "P minibosses were not enabled at native depth five")
+CurrentRun.RoomCreations.P_MiniBoss01 = 1
+local spent = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss01")
+assert(spent and spent.enabled == false
+    and spent.reason == "max_creations_this_run",
+  "used-once P miniboss must remain visible and disabled")
+assert(targetExists(exitByObject(1), "roomCategory", "P_MiniBoss02"),
+  "spent miniboss incorrectly blocked a different miniboss option")
+CurrentRun.RoomCreations.P_Story01 = 1
+local spentStory = targetRow(exitByObject(1), "roomCategory", "story")
+assert(spentStory and spentStory.enabled == false,
+  "one-per-run story destination must remain visible and disabled")
+IsRoomEligible = priorEligible
+
 print("hades2_exact_exit_world_actions_ok")
 """
 
