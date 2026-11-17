@@ -50,6 +50,7 @@ from games.hades2.adapter import Hades2Adapter, clear_active
 shadow = Hades2Adapter.__new__(Hades2Adapter)
 shadow.state = {"biomeTime": 150, "biomeTimeLocked": False}
 shadow._time_warp_speed = None
+shadow._time_warp_error = None
 shadow.preferences = Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})
 shadow._overlay_preferences()
 assert shadow.state["biomeTimeLocked"] is True
