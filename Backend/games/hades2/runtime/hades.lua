@@ -10149,8 +10149,12 @@ if __MacGamingTrainerV1 == nil then
         return "room_excluded_by_exit_rules"
       end
       if source.Name == name then return "room_same_as_source" end
-      if data.RequiresLinked and source.LinkedRoom ~= name
-          and not contains(source.LinkedRooms, name) then
+      local linkedTarget = source.LinkedRoom == name
+      if not linkedTarget and type(source.LinkedRooms) == "table"
+          and type(Contains) == "function" then
+        linkedTarget = Contains(source.LinkedRooms, name)
+      end
+      if data.RequiresLinked and not linkedTarget then
         return "room_linked_route_required"
       end
       if source.RequireWingEndMiniBoss and data.WingEndRoom
@@ -10161,8 +10165,9 @@ if __MacGamingTrainerV1 == nil then
           and data.WingEndMiniBoss and not data.AllowAsAnyWingEnd then
         return "room_miniboss_wing_required"
       end
-      if args.OutdoorRequiresIndoorTag and contains(source.Tags, "Outdoor")
-          and not contains(data.Tags, "Indoor") then
+      if args.OutdoorRequiresIndoorTag and type(source.Tags) == "table"
+          and type(Contains) == "function" and Contains(source.Tags, "Outdoor")
+          and (type(data.Tags) ~= "table" or not Contains(data.Tags, "Indoor")) then
         return "room_requires_indoor"
       end
       local depth = number(run.BiomeDepthCache)
