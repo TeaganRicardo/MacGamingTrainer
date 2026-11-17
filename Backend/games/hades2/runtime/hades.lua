@@ -10246,8 +10246,6 @@ if __MacGamingTrainerV1 == nil then
       end
       local routes = routeCandidatesWithDiagnostics(door, diagnostics.routes)
       local source = currentSource()
-      local sourceData = type(source) == "table" and type(RoomData) == "table"
-        and RoomData[source.Name] or nil
       local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
       local roomSetName = args.RoomSetName
         or (type(source) == "table" and source.RoomSetName) or "F"
