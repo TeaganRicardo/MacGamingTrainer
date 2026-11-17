@@ -581,18 +581,36 @@ LootData.ApolloUpgrade = { Name = "ApolloUpgrade", GodLoot = true,
   DoorIcon = "BoonDropApolloPreview" }
 LootData.ZeusUpgrade = { Name = "ZeusUpgrade", GodLoot = true,
   DoorIcon = "BoonDropZeusPreview" }
-RewardStoreData.RunProgress = { { Name = "Boon", AllowDuplicates = true } }
+local currentRunStore = CurrentRun.RewardStores.RunProgress
+currentRunStore[#currentRunStore + 1] = { Name = "Boon", AllowDuplicates = true }
+RewardStoreData.RunProgress = {
+  { Name = "Boon", AllowDuplicates = true },
+  { Name = "HermesUpgrade", GameStateRequirements = {} },
+}
 RewardStoreData.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
-GetEligibleLootNames = function() return { "ApolloUpgrade", "ZeusUpgrade" } end
-ReachedMaxGods = function() return false end
+CurrentRun.RewardStores.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
+GetEligibleLootNames = function(excluded)
+  local names = { "ApolloUpgrade", "ZeusUpgrade" }
+  for _, name in ipairs(excluded or {}) do
+    for index = #names, 1, -1 do
+      if names[index] == name then table.remove(names, index) end
+    end
+  end
+  return names
+end
+ReachedMaxGods = function(excluded) return false end
 setRoomSet("F")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 local godExit = exitByObject(1)
 assert(targetExists(godExit, "reward", "ApolloUpgrade")
     and targetExists(godExit, "reward", "ZeusUpgrade"),
   "native Boon template did not enumerate distinct Olympian targets")
-assert(targetExists(godExit, "reward", "MetaCurrencyDrop"),
-  "native meta-progress template was hidden on a run-progress exit")
+assert(not targetRow(godExit, "reward", "MetaCurrencyDrop"),
+  "MetaProgress reward leaked into a RunProgress exit")
+local offDeckHermes = targetRow(godExit, "reward", "HermesUpgrade")
+assert(offDeckHermes and offDeckHermes.enabled == false
+    and offDeckHermes.reason == "reward_not_in_current_store",
+  "reference-store-only reward must stay visible but disabled while native deck has choices")
 local originalGodDoor = MapState.OfferedExitDoors[1]
 local originalGodRoom = originalGodDoor.Room
 local appliedGod = M.dispatch("apply_world_exit", {
@@ -634,6 +652,23 @@ local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
 assert(unavailableGod and unavailableGod.enabled == false
     and unavailableGod.reason == "god_not_eligible",
   "unavailable god must remain in the catalog with a native reason")
+
+-- When the selected native deck has no eligible entries, ChooseRoomReward
+-- refills from GetRewardStoreData for that same store. The catalog may enable
+-- those refill candidates, but must never borrow a different store.
+CurrentRun.RewardStores.RunProgress = {}
+local refilled = exitByObject(1)
+assert(targetExists(refilled, "reward", "HermesUpgrade"),
+  "empty native RunProgress deck did not expose its own refill candidates")
+local metaRoom = originalGodDoor.Room
+local priorStoreName = metaRoom.RewardStoreName
+metaRoom.RewardStoreName = "MetaProgress"
+local metaOnly = exitByObject(1)
+assert(targetExists(metaOnly, "reward", "MetaCurrencyDrop"),
+  "MetaProgress reward was unavailable on an exit using the native MetaProgress store")
+metaRoom.RewardStoreName = priorStoreName
+CurrentRun.RewardStores.RunProgress = currentRunStore
+
 
 -- P-region named minibosses and story rooms are presented even while
 -- hard biome/run eligibility gates make them unavailable.
