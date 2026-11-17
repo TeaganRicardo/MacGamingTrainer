@@ -184,22 +184,29 @@ assert(not forcedRouteApply,
   "a disabled native forced route must be rejected by the resident")
 nativeRoomForced.F_Forced01 = nil
 
--- The current exit is not part of native ChooseNextRoomData's otherDoors
--- when its original destination is selected. A current-room match must not
--- suppress AlwaysForceOncePerRoom on that same physical exit.
-local originalForcedDoorRoom = door1.Room
-local originalOnceFlag = RoomData.F_Forced01.AlwaysForceOncePerRoom
-RoomData.F_Forced01.AlwaysForceOncePerRoom = true
-door1.Room = DeepCopyTable(RoomData.F_Forced01)
-local forcedOnce = exitByObject(1)
-local forcedOnceTarget = targetRow(forcedOnce, "roomCategory", "combat")
-assert(forcedOnceTarget and forcedOnceTarget.enabled == false
-    and forcedOnceTarget.reason == "native_forced_room_present",
-  "current door's existing room incorrectly suppressed native once-per-room force")
-door1.Room = originalForcedDoorRoom
-RoomData.F_Forced01.AlwaysForceOncePerRoom = originalOnceFlag
--- Restoring the physical room descriptor intentionally advances the ABA-safe
--- door epoch. Refresh both tokens before later apply/cancel assertions.
+-- Native DoUnlockRoomExits evaluates doors in order. The current door
+-- and later doors have no assigned Room when IsRoomForced runs for this door.
+local originalForcedDoor1Room, originalForcedDoor2Room = door1.Room, door2.Room
+local originalOnceFlag = RoomData.F_Story01.AlwaysForceOncePerRoom
+RoomData.F_Story01.AlwaysForceOncePerRoom = true
+door2.Room = DeepCopyTable(RoomData.F_Story01)
+local forcedForFirst = exitByObject(1)
+local forcedForFirstTarget = targetRow(forcedForFirst, "roomCategory", "combat")
+assert(forcedForFirstTarget and forcedForFirstTarget.enabled == false
+    and forcedForFirstTarget.reason == "native_forced_room_present",
+  "a later door's already-generated room incorrectly suppressed native force on an earlier door")
+
+door1.Room = DeepCopyTable(RoomData.F_Story01)
+local laterDoor = exitByObject(2)
+local laterStory = targetRow(laterDoor, "roomCategory", "story")
+assert(laterStory and laterStory.enabled == true,
+  "an earlier door's forced-once room incorrectly blocked the later door's other-room choices")
+
+door1.Room = originalForcedDoor1Room
+door2.Room = originalForcedDoor2Room
+RoomData.F_Story01.AlwaysForceOncePerRoom = originalOnceFlag
+-- Restoring the physical room descriptors intentionally advances the
+-- ABA-safe door epochs. Refresh both tokens before later apply/cancel checks.
 first, second = exitByObject(1), exitByObject(2)
 
 -- Reward edits mutate only the selected native exit and retain the same
