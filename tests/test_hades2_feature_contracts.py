@@ -46,7 +46,15 @@ for reward_id in (
     assert f'rewardLabel("{reward_id}")' in view
 assert "local function rewardCandidates(door)" in lua
 assert "IsRoomRewardEligible" in lua
-assert 'targets[#targets + 1] = { kind = "reward", id = candidate.id }' in lua
+# #763: the native exit catalog now preserves disabled rewards and provides
+# an explicit availability reason; check the owner shape instead of the
+# retired only-eligible one-line literal.
+world_catalog = lua.split('local function targetCatalogForDoor(door, doorToken, refresh)', 1)[1]
+world_catalog = world_catalog.split('local function rewardCandidate(door, target)', 1)[0]
+assert 'kind = "reward", id = candidate.id' in world_catalog
+assert 'enabled = enabled' in world_catalog
+assert 'reason = enabled and nil or candidate.reason' in world_catalog
+assert 'kind = "roomCategory", id = name' in world_catalog
 assert 'kind = "roomCategory"' in lua
 assert 'installHook("LeaveRoom"' in lua
 assert 'command == "set_next_room_reward"' not in lua
