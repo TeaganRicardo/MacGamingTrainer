@@ -9616,6 +9616,12 @@ if __MacGamingTrainerV1 == nil then
       if type(door) ~= "table" or type(door.Room) ~= "table"
           or door.ObjectId == nil or door.ReadyToUse ~= true or door.SkipUnlock then return false end
       if door.ReturnToPreviousRoom or door.ReturnToPreviousRoomName then return false end
+      local source = currentSource()
+      if type(source) == "table" and type(source.UnavailableDoorIds) == "table" then
+        for _, unavailableID in ipairs(source.UnavailableDoorIds) do
+          if unavailableID == door.ObjectId then return false end
+        end
+      end
       return type(MapState) == "table" and type(MapState.OfferedExitDoors) == "table"
         and MapState.OfferedExitDoors[door.ObjectId] == door
     end
