@@ -64,7 +64,8 @@ func nativePickerHasName(_ picker: NativeAccessibilityControl, _ name: String) -
 /// then their choices, as the real popup presented them.
 @MainActor @discardableResult
 func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindow,
-                        moving steps: Int, opening: NativePickerOpening) -> [String] {
+                        moving steps: Int, opening: NativePickerOpening,
+                        inspectMenu: ((NSMenu) -> Void)? = nil) -> [String] {
     precondition(picker.role == "AXPopUpButton" && picker.enabled && !picker.frame.isEmpty,
                  "selection must address an enabled real native popup")
     if case .accessibility = opening {
@@ -222,6 +223,7 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
                     if #available(macOS 14.0, *), item.isSectionHeader { return "# " + item.title }
                     return item.title
                 }
+                inspectMenu?(menu)
                 guard choices.filter({ $0.state == .on }).count == 1,
                       let selected = choices.firstIndex(where: { $0.state == .on }),
                       choices.indices.contains(selected + steps) else {

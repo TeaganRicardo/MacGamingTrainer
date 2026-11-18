@@ -564,7 +564,9 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             "reward": "MetaCardPointsCommonDrop",
             "targets": [
                 ["kind": "reward", "id": "WeaponUpgrade"],
+                ["kind": "reward", "id": "ZeusUpgrade", "enabled": false, "reason": "god_limit"],
                 ["kind": "roomCategory", "id": "story"],
+                ["kind": "roomCategory", "id": "P_MiniBoss01", "enabled": false, "reason": "biome_depth_too_low"],
             ],
         ],
     ]
@@ -678,8 +680,21 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             && targetPicker()?.enabled == true
     }
 
-    // 2. Select Route Category -> Story in the real target popup menu.
-    let targetMenu = selectNativePicker(targetPicker()!, in: window, moving: 1, opening: .pointer)
+    // 2. Inspect real NSMenuItem availability and skip disabled choices with
+    // native keyboard navigation. Disabled god/reward/room remain visible with
+    // localized reasons; Apply continues to accept only an enabled selection.
+    let disabledReasonIDs = ["god_limit", "biome_depth_too_low"]
+    let targetMenu = selectNativePicker(targetPicker()!, in: window, moving: 1,
+                                        opening: .pointer, inspectMenu: { menu in
+        for reasonID in disabledReasonIDs {
+            let key = "hades2.worldActions.unavailable.\(reasonID)"
+            let suffix = " · " + Hades2GameModule.resolveText(key: key, localization: localization)
+            let matching = menu.items.filter { !$0.isHidden && $0.title.hasSuffix(suffix) }
+            guard matching.count == 1 && !matching[0].isEnabled else {
+                fail("native picker must show exactly one disabled \(reasonID) option: \(menu.items.map { ($0.title, $0.isEnabled) })")
+            }
+        }
+    })
     let rewardsHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.rewards", localization: localization)
     let routesHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.routes", localization: localization)
     guard targetMenu.count >= 4 && targetMenu.contains(rewardsHeader) && targetMenu.contains(routesHeader) else {
