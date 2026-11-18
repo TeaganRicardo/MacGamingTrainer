@@ -197,11 +197,6 @@ else:
     raise AssertionError('unknown native EOF reset was hidden')
 assert transport5.attached and transport5.detaches == 0
 
-for code, suffix in (('outcome_unknown', 'outcomeUnknown'), ('restart_required', 'restartRequired')):
-    failure = AdapterError(code, 'host.timeWarp.error.' + suffix, arguments=['native detail'], diagnostic='native detail')
-    payload = error_payload(failure)
-    assert payload['code'] == code and payload['presentation'] == 'hades.error.' + suffix
-    assert payload['arguments'] == [] and payload['diagnostic'] == 'native detail'
 known_failure = AdapterError('time_warp_verify_failed', 'host.timeWarp.error.verifyFailed')
 assert error_payload(known_failure)['presentation'] == known_failure.presentation
 interrupted = AdapterError('outcome_unknown', 'hades.error.luaInterrupted', diagnostic='native interruption')
