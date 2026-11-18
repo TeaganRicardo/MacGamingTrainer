@@ -146,10 +146,11 @@ if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, bus
     fail("backend loss did not preserve fallback recovery intent")
 }
 
-// A terminal module state can veto automatic backend churn.
+// Host-owned recovery eligibility (quit, incompatible protocol, no restartable
+// session) vetoes automatic backend churn.
 policy.targetActivated()
 if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: false) {
-    fail("backend restarted while host actions were terminally disabled")
+    fail("backend restarted while Host recovery was not allowed")
 }
 
 // Explicit debugger detach suppresses reconnect, but does not require killing or

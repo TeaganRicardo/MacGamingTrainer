@@ -89,20 +89,7 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
             operationToken: model.operation, statusToken: model.statusTitle,
             detailToken: model.connectionDetailText, selected: selected, onSelect: onSelect
         ) {
-            TrainerConnectionStatusCard(
-                connected: model.connected,
-                backendAvailable: model.backendAvailable,
-                actionsEnabled: model.hostActionsEnabled,
-                restartEnabled: context.backendRestartAllowed,
-                onRefresh: {
-                    targetMonitor.refresh()
-                    model.refreshFromHost()
-                },
-                onPrimary: context.toggleConnection,
-                onRestart: model.restartBackendFromHost,
-                targetRunning: targetMonitor.isRunning,
-                onLaunch: launchAction
-            )
+            context.connectionStatusCard(onLaunch: launchAction)
             Module.makeSidebarActions(model: model)
         }
         .environment(\.trainerNavigateToSection, navigation.navigate)

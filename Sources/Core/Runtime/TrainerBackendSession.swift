@@ -62,6 +62,9 @@ final class TrainerBackendSession {
     var isRunning: Bool { client.isRunning }
     var isStarted: Bool { client.isStarted }
     var currentStatus: TrainerBackendStatus { status }
+    /// `restart()` needs the configuration recorded by a `start()` that got
+    /// past script resolution; before that, a restart request is a no-op.
+    var canRestart: Bool { !terminationRequested && configuration != nil }
 
     func start(
         descriptor: GameModuleDescriptor,
