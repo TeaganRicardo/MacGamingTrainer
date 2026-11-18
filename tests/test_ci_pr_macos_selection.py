@@ -187,7 +187,6 @@ _REFS = current_reference_prefixes(ROOT)
 _RES = current_app_resource_sources(ROOT)
 _NON_BEHAVIOR_MACOS_EXACT = frozenset({
     ".gitignore",
-    "ACTIVE_GAME_ID",
     "AppIcon.icns",
     "ContractFixtures/host_protocol_v6.json",
     "Info.plist",
