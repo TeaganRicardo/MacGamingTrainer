@@ -41,3 +41,20 @@ STEAM_LAUNCH_URL = f'steam://rungameid/{STEAM_APP_ID}'
 # Preserve the existing Hades II data location. New game modules should use a
 # namespaced directory under MacGamingTrainer/<game-id> unless migration requires otherwise.
 DATA = HOME / 'Library/Application Support/MacGamingTrainer'
+
+
+def supported_reference_path(name: str, module_file: Path = Path(__file__)) -> Path:
+    """Locate a supported-build reference file declared as a packaged app resource.
+
+    Only `@supportedBuild/<name>` appResources reach the packaged app, at their
+    declared destination; development execution reads the module-declared
+    reference directory. An undeclared file is never read in either mode.
+    """
+    destinations = [item.get('destination') for item in _RAW_MODULE.get('appResources', ())
+                    if isinstance(item, dict) and item.get('source') == '@supportedBuild/' + name]
+    if len(destinations) != 1 or not isinstance(destinations[0], str):
+        raise LookupError(f'Hades II reference file {name!r} is not a declared supportedBuild app resource.')
+    resource_root = Path(module_file).resolve().parents[3]
+    if resource_root.name == 'Resources' and resource_root.parent.name == 'Contents':
+        return resource_root / destinations[0]
+    return resource_root / SUPPORTED_BUILD['referenceDirectory'] / name

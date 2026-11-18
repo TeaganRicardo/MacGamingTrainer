@@ -1,0 +1,30 @@
+{
+  "target": {
+    "gameVersion": "1.143476",
+    "steamBuild": "25481925"
+  },
+  "hashing": {
+    "algorithm": "sha256",
+    "input": "Exact bytes of each named file in the installed game's Contents/Resources/Content/Scripts directory (sources/Scripts in the source archive named by ui_terminology.json sourceEvidence).",
+    "normalization": "None. No BOM, newline or encoding normalization: the shipped CRLF bytes are hashed as read by save_investigation._capture_native. AppleDouble ._* files are never inputs.",
+    "update": "docs/development/supported-game-build-update.md"
+  },
+  "owners": {
+    "storyReset": {
+      "consumer": "Backend/games/hades2/save_investigation.py",
+      "verifies": "StoryResetData.TextLines as the native reset boundary that authorizes installed-source dialogue investigation and dialogue edits.",
+      "files": {
+        "StoryResetData.lua": "58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e"
+      }
+    },
+    "questRewardOwners": {
+      "consumer": "Backend/games/hades2/save_quest_rewards.py",
+      "verifies": "CashOutQuest, AddResource and the resource OnAdded/last-resource policies replayed by offline quest reward grants.",
+      "files": {
+        "QuestLogLogic.lua": "0dff8cb49c54715ffe13c1c2986553087688e9dbd2aec3fa1fe61943ba91c254",
+        "ResourceData.lua": "94b2dc9edc22c34b213ab78dea42f2dc76c80cbcfde14104cbe772b254a29b03",
+        "ResourceLogic.lua": "809bdf80b277179d45c420ec3873eebc36e7aca5f3e30d79ad4df01ddf8f82a0"
+      }
+    }
+  }
+}

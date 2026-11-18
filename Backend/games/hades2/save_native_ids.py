@@ -8,12 +8,6 @@ Quest IDs come from QuestOrderData; resources are top-level ResourceData entries
 excluding abstract Base* templates. Recheck these IDs on target-build changes.
 """
 
-QUEST_REWARD_OWNER_SHA256 = {
-    "ResourceLogic.lua": "809bdf80b277179d45c420ec3873eebc36e7aca5f3e30d79ad4df01ddf8f82a0",
-    "QuestLogLogic.lua": "0dff8cb49c54715ffe13c1c2986553087688e9dbd2aec3fa1fe61943ba91c254",
-    "ResourceData.lua": "94b2dc9edc22c34b213ab78dea42f2dc76c80cbcfde14104cbe772b254a29b03",
-}
-
 QUEST_IDS = frozenset((
     "QuestRescueFatesTrue", "QuestHelpOdysseus", "QuestHelpDora", "QuestHelpArachne", "QuestHelpNarcissusAndEcho",
     "QuestWakeHypnos", "QuestFirstSurfaceClear", "QuestFirstUnderworldClear", "QuestUnlockMoros", "QuestBeatHecate",
@@ -94,7 +88,7 @@ OBJECTIVE_IDS = frozenset((
 ))
 
 # Native StoryResetData.TextLines from the module-declared source snapshot.
-# StoryResetData.lua SHA-256 58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e
+# The snapshot's installed_source_hashes.json owns the verified source digest.
 # A native-authored reset target is necessary, not sufficient, to authorize an
 # individual edit: companion narrative/gift/run owners are validated separately.
 STORY_RESET_TEXT_IDS = frozenset("""

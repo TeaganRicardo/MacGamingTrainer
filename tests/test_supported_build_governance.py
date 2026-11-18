@@ -102,11 +102,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     generated = module_dir / "native/SupportedBuildIdentity.h"
     generated.parent.mkdir()
     terms_path = reference_dir / "ui_terminology.json"
+    hashes_path = reference_dir / "installed_source_hashes.json"
     catalog_path = module_dir / "catalog.json"
+    valid_hashes = {"target": {"gameVersion": "1.42", "steamBuild": "123"},
+                    "owners": {"reset": {"files": {"Reset.lua": "b" * 64}}}}
+    packaged_hashes = [{"source": "@supportedBuild/installed_source_hashes.json", "destination": "example.hashes.json"}]
 
-    def write(build_value=None, symbol_data=None, terms_value=None, header_value=None, catalog_value=None):
+    def write(build_value=None, symbol_data=None, terms_value=None, header_value=None, catalog_value=None,
+              hashes_value=None, resources_value=None):
         value = build if build_value is None else build_value
-        module.write_text(json.dumps({"id": "example", "displayName": "Example", "supportedBuild": value}), encoding="utf-8")
+        module.write_text(json.dumps({"id": "example", "displayName": "Example", "supportedBuild": value,
+                                      "appResources": packaged_hashes if resources_value is None else resources_value}),
+                          encoding="utf-8")
+        hashes_path.write_text(json.dumps(valid_hashes if hashes_value is None else hashes_value), encoding="utf-8")
         symbols.write_text(json.dumps({"symbols": {"lua_gettop": {"rva": 1}}} if symbol_data is None
                                       else symbol_data), encoding="utf-8")
         terms_path.write_text(json.dumps({"target": {"gameVersion": "1.42", "steamBuild": "123"}}
@@ -136,6 +144,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     should_reject(symbol_data={"uuid": build["uuid"], "symbols": {}})
     should_reject(terms_value={"target": {"gameVersion": "1.43", "steamBuild": "123"}})
     should_reject(terms_value={"target": {"gameVersion": "1.42", "steamBuild": "456"}})
+    # Trusted installed-source digests belong to the declared image. Their
+    # owner/file/digest shape is validated by the runtime consumer and tested
+    # in test_hades2_installed_source_hashes.py.
+    should_reject(hashes_value={**valid_hashes, "target": {"gameVersion": "1.42", "steamBuild": "456"}})
+    should_reject(hashes_value={**valid_hashes, "target": {"gameVersion": "1.43", "steamBuild": "123"}})
+    # A packaged supportedBuild resource must exist in the declared snapshot.
+    should_reject(resources_value=[{"source": "@supportedBuild/absent.json", "destination": "absent.json"}])
     should_reject(catalog_value={
         "game": "example", "steamBuildID": "456", "sourceEvidence": {"files": {}}
     })

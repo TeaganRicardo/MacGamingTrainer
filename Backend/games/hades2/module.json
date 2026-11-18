@@ -47,6 +47,10 @@
       "destination": "ui_terminology.json"
     },
     {
+      "source": "@supportedBuild/installed_source_hashes.json",
+      "destination": "hades2.installed_source_hashes.json"
+    },
+    {
       "source": "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json",
       "destination": "hades2.zh-CN.json"
     },

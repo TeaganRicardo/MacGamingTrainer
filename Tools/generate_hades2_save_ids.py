@@ -194,7 +194,7 @@ def main():
     quests_source, quest_hash = read(args.scripts / "QuestData.lua")
     resources_source, resource_hash = read(args.scripts / "ResourceData.lua")
     objectives_source, objective_hash = read(args.scripts / "ObjectiveData.lua")
-    reset_source, reset_hash = read(args.scripts / "StoryResetData.lua")
+    reset_source, _ = read(args.scripts / "StoryResetData.lua")
     quests = quest_ids(quests_source)
     resources = resource_ids(resources_source)
     objectives = objective_ids(objectives_source)
@@ -235,7 +235,7 @@ def main():
     print(
         "\n# Native StoryResetData.TextLines from target "
         f"{args.version} / Steam {args.steam_build}.\n"
-        f"# StoryResetData.lua SHA-256 {reset_hash}\n"
+        "# The snapshot's installed_source_hashes.json owns the verified source digest.\n"
         "# A native-authored reset target is necessary, not sufficient, to authorize an\n"
         "# individual edit: companion narrative/gift/run owners are validated separately.\n"
         f'STORY_RESET_TEXT_IDS = frozenset("""\n{render_words(reset_text)}\n""".split())'

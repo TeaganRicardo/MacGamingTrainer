@@ -9,14 +9,8 @@ from typing import Any, Mapping
 
 
 def _reference_path(module_file: Path = Path(__file__)) -> Path:
-    module_file = module_file.resolve()
-    resource_root = module_file.parents[3]
-    bundled_reference = resource_root / "ui_terminology.json"
-
-    if resource_root.name == "Resources" and resource_root.parent.name == "Contents":
-        return bundled_reference
-    from .config import SUPPORTED_BUILD
-    return module_file.parents[3] / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
+    from .config import supported_reference_path
+    return supported_reference_path("ui_terminology.json", module_file)
 
 
 class TermClass(str, Enum):

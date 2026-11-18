@@ -185,7 +185,12 @@ assert TESTS - reachable == set(), sorted(TESTS - reachable)
 # packaging assets, profiling fixtures, or Linux-contracted generators/schemas).
 _REFS = current_reference_prefixes(ROOT)
 _RES = current_app_resource_sources(ROOT)
+# Packaged data read only by the portable backend: Linux tests own its behavior
+# and build.sh refuses a product whose declared app resource is not packaged.
+_HADES2_REFERENCE = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(
+    encoding="utf-8"))["supportedBuild"]["referenceDirectory"]
 _NON_BEHAVIOR_MACOS_EXACT = frozenset({
+    _HADES2_REFERENCE + "/installed_source_hashes.json",
     ".gitignore",
     "AppIcon.icns",
     "ContractFixtures/host_protocol_v6.json",
