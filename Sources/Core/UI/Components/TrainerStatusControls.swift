@@ -5,7 +5,10 @@ struct TrainerConnectionStatusCard: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let connected: Bool
     let backendAvailable: Bool
+    /// Module request gate for connect/disconnect/launch/refresh.
     let actionsEnabled: Bool
+    /// Host-owned recovery eligibility used while the backend is unavailable.
+    let restartEnabled: Bool
     let onRefresh: () -> Void
     let onPrimary: () -> Void
     let onRestart: () -> Void
@@ -16,6 +19,7 @@ struct TrainerConnectionStatusCard: View {
         connected: Bool,
         backendAvailable: Bool,
         actionsEnabled: Bool,
+        restartEnabled: Bool,
         onRefresh: @escaping () -> Void,
         onPrimary: @escaping () -> Void,
         onRestart: @escaping () -> Void,
@@ -25,6 +29,7 @@ struct TrainerConnectionStatusCard: View {
         self.connected = connected
         self.backendAvailable = backendAvailable
         self.actionsEnabled = actionsEnabled
+        self.restartEnabled = restartEnabled
         self.onRefresh = onRefresh
         self.onPrimary = onPrimary
         self.onRestart = onRestart
@@ -39,6 +44,8 @@ struct TrainerConnectionStatusCard: View {
         return "host.connectGame"
     }
 
+    var primaryActionEnabled: Bool { backendAvailable ? actionsEnabled : restartEnabled }
+
     func performPrimaryAction() {
         if !backendAvailable { onRestart() }
         else if !connected && !targetRunning, let onLaunch { onLaunch() }
@@ -49,7 +56,7 @@ struct TrainerConnectionStatusCard: View {
         HStack(spacing: 8) {
             TrainerPrimaryActionButton(
                 title: localization.localized(primaryActionTitleKey),
-                enabled: actionsEnabled,
+                enabled: primaryActionEnabled,
                 widthRole: .connection,
                 action: performPrimaryAction
             )

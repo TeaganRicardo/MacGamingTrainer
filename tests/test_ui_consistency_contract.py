@@ -72,7 +72,13 @@ assert 'busy: model.busy' in host
 assert 'targetRunning: targetMonitor.isRunning' in host
 assert 'Text(localization.string(statusToken))' not in status
 assert 'Text(localization.string(detailToken))' not in status
-assert 'operationToken: model.operation' not in host[host.index('TrainerConnectionStatusCard('):host.index('Module.makeSidebarActions') ]
+# The Host composes the sidebar connection card once, in the game Context.
+host_context = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text()
+assert 'context.connectionStatusCard(' in host
+card_composition = host_context[host_context.index('func connectionStatusCard('):]
+card_composition = card_composition[:card_composition.index('\n    }\n')]
+assert 'TrainerConnectionStatusCard(' in card_composition
+assert 'operationToken' not in card_composition
 assert "struct TrainerSecondaryActionButton" in primary_button
 assert ".help(helpText ?? \"\")" in primary_button
 assert ".accessibilityLabel(accessibilityLabel ?? title)" in primary_button

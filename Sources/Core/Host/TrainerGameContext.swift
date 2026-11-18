@@ -132,6 +132,49 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
 
     var canTerminate: Bool { !model.busy && !saveManager.busy && toolWindows.canCloseAll }
 
+    /// Host-owned backend recovery eligibility for both the automatic restart
+    /// opportunity and the connection card's restart action. It reads the
+    /// session directly instead of a module request gate such as
+    /// `hostActionsEnabled`, which is false precisely while the backend is
+    /// unavailable. An incompatible protocol would fail again with the same
+    /// backend, and quit owns the session from its first step. Restarting the
+    /// worker never clears the session's unknown-outcome target trust gate.
+    /// A session whose startup never recorded a configuration cannot restart.
+    var backendRestartAllowed: Bool {
+        let status = session.currentStatus
+        return !terminationRequested && session.canRestart && !status.busy && status.protocolCompatible
+    }
+
+    /// Consumes the pending automatic backend-restart opportunity with the
+    /// Host-owned eligibility. Callers apply the foreground/launch and
+    /// unknown-outcome gates of `reconcileAutomaticConnection` first.
+    func consumeAutomaticBackendRestart() -> Bool {
+        guard connectionPolicy.consumeAutomaticBackendRestartIfEligible(
+            backendAvailable: model.backendAvailable, busy: model.busy, recoveryAllowed: backendRestartAllowed
+        ) else { return false }
+        model.restartBackendFromHost()
+        return true
+    }
+
+    /// The sidebar connection card's single production composition. The module
+    /// request gate governs connect/launch/refresh; restart uses Host eligibility.
+    func connectionStatusCard(onLaunch: (() -> Void)?) -> TrainerConnectionStatusCard {
+        TrainerConnectionStatusCard(
+            connected: model.connected,
+            backendAvailable: model.backendAvailable,
+            actionsEnabled: model.hostActionsEnabled,
+            restartEnabled: backendRestartAllowed,
+            onRefresh: { [targetMonitor, model] in
+                targetMonitor.refresh()
+                model.refreshFromHost()
+            },
+            onPrimary: toggleConnection,
+            onRestart: model.restartBackendFromHost,
+            targetRunning: targetMonitor.isRunning,
+            onLaunch: onLaunch
+        )
+    }
+
     func toggleConnection() {
         guard !terminationRequested else { return }
         connectionPolicy.userWillToggleConnection(currentlyConnected: model.connected)
@@ -215,12 +258,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
             return
         }
         guard connectionPolicy.backgroundConnectionAllowed || NSApp.isActive else { return }
-        if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
-            backendAvailable: model.backendAvailable, busy: model.busy, actionsEnabled: model.hostActionsEnabled
-        ) {
-            model.restartBackendFromHost()
-            return
-        }
+        if consumeAutomaticBackendRestart() { return }
         let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed
         guard connectionPolicy.consumeAutomaticConnectIfEligible(
             backendAvailable: model.backendAvailable, busy: model.busy,

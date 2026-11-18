@@ -37,6 +37,7 @@ assert "model.enabled.toggle()" not in fixture_source, (
 )
 
 harness = r"""
+import AppKit
 import Foundation
 
 func fail(_ message: String) -> Never {
@@ -78,7 +79,7 @@ func connectionCard(backend: Bool = true, connected: Bool = false,
                     running: Bool = false, supportsLaunch: Bool = true) -> TrainerConnectionStatusCard {
     TrainerConnectionStatusCard(
         connected: connected,
-        backendAvailable: backend, actionsEnabled: true,
+        backendAvailable: backend, actionsEnabled: true, restartEnabled: true,
         onRefresh: { selectedActions.append("refresh") },
         onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
         onRestart: { selectedActions.append("restart") }, targetRunning: running,
@@ -120,6 +121,83 @@ if missingModel.backendStatus.error.contains("/definitely/missing") {
 }
 if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
     fail("startup diagnostic detail did not reach logging")
+}
+
+// A session whose startup failed before recording a configuration cannot
+// restart, so the Host must not offer an action that would do nothing.
+let missingRestart = MainActor.assumeIsolated { () -> (allowed: Bool, enabled: Bool) in
+    _ = NSApplication.shared
+    let context = TrainerGameContext<ReferenceFixtureGameModule>(model: missingModel, session: missingSession)
+    let card = context.connectionStatusCard(onLaunch: nil)
+    return (context.backendRestartAllowed, card.primaryActionEnabled)
+}
+if missingRestart.allowed || missingRestart.enabled {
+    fail("Host offered a restart that a never-configured session cannot perform")
+}
+
+// A worker that keeps exiting exhausts the session's bounded recovery. That
+// unavailable state is exactly when the Host must keep restart reachable. The
+// script lives in the test's temporary HOME, which the runner removes.
+guard let temporaryHome = ProcessInfo.processInfo.environment["HOME"] else { fail("HOME is not set") }
+let exitingScript = URL(fileURLWithPath: temporaryHome).appendingPathComponent("mgt-exiting-backend.py")
+do { try "import sys\nsys.exit(3)\n".write(to: exitingScript, atomically: true, encoding: .utf8) }
+catch { fail("could not write the exiting backend fixture: \(error)") }
+let exhaustedSession = TrainerBackendSession(
+    client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
+)
+let exhaustedModel = ReferenceFixtureModel(session: exhaustedSession, backendScriptURL: exitingScript)
+func waitForExhaustedBackend(_ stage: String) {
+    guard waitUntil(15.0, {
+        let status = exhaustedModel.backendStatus
+        return !status.backendAvailable && !status.busy && status.errorCode != nil
+    }) else {
+        fail("exiting backend did not exhaust recovery (\(stage)): \(exhaustedModel.backendStatus)")
+    }
+}
+// `TrainerBackendSession.restart()` synchronously marks the session busy with
+// the restart operation and clears any earlier notice, so a new request is
+// distinguishable from a previous cycle's "restarted" notice.
+func requireRestartRequested(_ stage: String) {
+    let status = exhaustedSession.currentStatus
+    guard status.busy, status.operation.key == "host.restartBackend", status.notice.isEmpty else {
+        fail("\(stage) did not reach the backend session: \(status)")
+    }
+}
+waitForExhaustedBackend("startup")
+// The module request gate is false exactly while the backend is down; it must
+// not disable either Host recovery path.
+if exhaustedModel.hostActionsEnabled {
+    fail("an unavailable backend unexpectedly accepts module requests")
+}
+let exhaustedContext = MainActor.assumeIsolated {
+    TrainerGameContext<ReferenceFixtureGameModule>(model: exhaustedModel, session: exhaustedSession)
+}
+// The session journey runs with its target process alive, so the Context holds
+// a pending automatic restart opportunity for this target lifetime.
+let automaticRestart = MainActor.assumeIsolated { () -> (allowed: Bool, consumed: Bool) in
+    let allowed = exhaustedContext.backendRestartAllowed
+    let consumed = exhaustedContext.consumeAutomaticBackendRestart()
+    if consumed { requireRestartRequested("automatic restart") }
+    return (allowed, consumed)
+}
+if !automaticRestart.allowed || !automaticRestart.consumed {
+    fail("Host automatic restart is unreachable for an unavailable backend: \(automaticRestart)")
+}
+waitForExhaustedBackend("after automatic restart")
+let manualRestart = MainActor.assumeIsolated { () -> (title: String, enabled: Bool) in
+    let card = exhaustedContext.connectionStatusCard(onLaunch: nil)
+    let result = (card.primaryActionTitleKey, card.primaryActionEnabled)
+    if result.1 {
+        card.performPrimaryAction()
+        requireRestartRequested("restart action")
+    }
+    return result
+}
+if manualRestart.title != "host.restartBackend" || !manualRestart.enabled {
+    fail("Host restart action is unreachable for an unavailable backend: \(manualRestart)")
+}
+if !exhaustedSession.currentStatus.requiresTargetRestart {
+    fail("worker restart cleared the unknown-outcome target trust gate")
 }
 
 // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real

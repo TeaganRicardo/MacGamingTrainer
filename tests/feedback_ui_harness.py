@@ -31,7 +31,7 @@ private struct FeedbackPresentationFixture: View {
         VStack(spacing: 12) {
             FeedbackEditorProbe(field: editor).frame(height: 24)
             TrainerConnectionStatusCard(connected: state.connected, backendAvailable: true,
-                actionsEnabled: !state.busy, onRefresh: { state.requests += 1 },
+                actionsEnabled: !state.busy, restartEnabled: !state.busy, onRefresh: { state.requests += 1 },
                 onPrimary: { state.requests += 1; state.busy = true }, onRestart: { state.requests += 1 })
             TrainerFeedbackOverlay(notice: state.notice, onDismiss: state.dismiss,
                 onDetails: { state.detailsID = $0 }, detailsNoticeID: state.detailsID)

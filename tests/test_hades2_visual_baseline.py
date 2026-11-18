@@ -113,6 +113,7 @@ assert 'localization.localized(locked ? "host.unlockValue" : "host.lockValue", a
 print('hades2_visual_baseline_v0175_ok')
 
 # Connection chrome is globally hosted so every game gets identical layout/behavior.
-host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
+# The Host owns the connection card: TrainerHost renders the Context's composition.
+host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text() + (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
 assert 'TrainerConnectionStatusCard(' in host
 assert 'TrainerConnectionStatusCard(' not in all_hades
