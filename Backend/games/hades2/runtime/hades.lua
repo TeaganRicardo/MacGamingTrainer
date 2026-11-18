@@ -10277,9 +10277,74 @@ if __MacGamingTrainerV1 == nil then
       return "native_ineligible"
     end
 
-        local function targetCatalogForDoor(door, doorToken, refresh)
+        local function stableValueSignature(value, depth)
+      if type(value) ~= "table" then return tostring(value) end
+      local keys = {}
+      for key in pairs(value) do keys[#keys + 1] = key end
+      table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+      local parts = {}
+      for _, key in ipairs(keys) do
+        local item = value[key]
+        local encoded
+        if type(item) == "table" then
+          encoded = depth > 0 and stableValueSignature(item, depth - 1) or identity(item)
+        else
+          encoded = tostring(item)
+        end
+        parts[#parts + 1] = type(key) .. ":" .. tostring(key) .. "=" .. encoded
+      end
+      return "{" .. table.concat(parts, ";") .. "}"
+    end
+
+    local function catalogContextSignature()
+      local run = type(CurrentRun) == "table" and CurrentRun or {}
+      local source = currentSource() or {}
+      local hero = currentHero() or {}
+      local game = type(GameState) == "table" and GameState or {}
+      local parts = {
+        tostring(run.BiomeDepthCache), tostring(run.RunDepthCache),
+        tostring(run.EnteredBiomes), tostring(run.NumRerolls),
+        tostring(run.MaxGodsPerRun), tostring(run.NextRewardStoreName),
+        tostring(run.ActiveBounty), tostring(run.IsDreamRun),
+        stableValueSignature(run.RoomsEntered, 1),
+        stableValueSignature(run.RoomCreations, 1),
+        stableValueSignature(run.RoomCountCache, 1),
+        stableValueSignature(run.BiomeRoomCountCache, 1),
+        stableValueSignature(run.LootTypeHistory, 1),
+        stableValueSignature(source.UnavailableDoorIds, 1),
+        stableValueSignature(source.RoomCreations, 1),
+        stableValueSignature(source.OfferedRewards, 2),
+        stableValueSignature(source.NextRoomSet, 1),
+        stableValueSignature(source.LinkedRooms, 1),
+        stableValueSignature(source.PredeterminedDoorRooms, 1),
+        tostring(source.DoAnomalies), tostring(source.RoomSetName),
+        tostring(source.ForceNextRoomSet), tostring(source.UsePreviousRoomSet),
+        tostring(source.PersistentRoomForDoors), tostring(source.RequireWingEndMiniBoss),
+        stableValueSignature(hero.Traits, 2),
+        stableValueSignature(hero.Weapons, 2),
+        stableValueSignature(game.TextLinesRecord, 1),
+        stableValueSignature(game.EncountersCompletedCache, 1),
+        stableValueSignature(game.EncountersOccurredCache, 1),
+        stableValueSignature(game.WorldUpgrades, 1),
+        stableValueSignature(game.WorldUpgradesAdded, 1),
+        stableValueSignature(game.LifetimeResourcesGained, 1),
+        stableValueSignature(game.PackagedBountyClears, 1),
+        tostring(game.CompletedRunsCache),
+      }
+      for _, offered in ipairs(nativeOfferedExitDoorArray()) do
+        parts[#parts + 1] = tostring(offered.ObjectId) .. ":" .. routeSignature(offered)
+          .. ":" .. stableValueSignature(offered.ChooseRoomArgs, 2)
+        local storeName = type(offered.Room) == "table" and offered.Room.RewardStoreName or nil
+        local store = type(run.RewardStores) == "table" and run.RewardStores[storeName] or nil
+        parts[#parts + 1] = tostring(storeName) .. ":" .. stableValueSignature(store, 2)
+      end
+      return table.concat(parts, "|")
+    end
+
+    local function targetCatalogForDoor(door, doorToken, refresh, contextSignature)
       local cached = targetCatalogs[door]
-      if not refresh and type(cached) == "table" and cached.doorToken == doorToken then
+      if not refresh and type(cached) == "table" and cached.doorToken == doorToken
+          and cached.contextSignature == contextSignature then
         return cached.targets, cached.diagnostics
       end
       local targets = setmetatable({}, arrayMeta)
@@ -10353,6 +10418,7 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.reason = enabledCount > 0 and "available" or "no_legal_target"
       targetCatalogs[door] = {
         doorToken = doorToken,
+        contextSignature = contextSignature,
         targets = targets,
         diagnostics = diagnostics,
       }
@@ -10753,11 +10819,17 @@ if __MacGamingTrainerV1 == nil then
       end
       if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table"
           or currentSource() == nil or currentHero() == nil then return result end
+      -- Sparse Host replies may omit a full catalog request, but sibling door
+      -- rewards/routes and run eligibility can still change in place. A cheap
+      -- state fingerprint refreshes cached catalogs only when those inputs do.
+      local contextSignature = catalogContextSignature()
       for _, door in pairs(MapState.OfferedExitDoors) do
         if editableDoor(door) then
           local lease = activeLease(door)
           local doorToken = tokenFor(door)
-          local targets, targetDiagnostics = targetCatalogForDoor(door, doorToken, includeTargets == true)
+          local targets, targetDiagnostics = targetCatalogForDoor(
+            door, doorToken, includeTargets == true, contextSignature
+          )
           local row = {
             doorToken = doorToken, objectId = door.ObjectId,
             roomName = door.Room.Name,
