@@ -855,20 +855,21 @@ assert(debugOnly and debugOnly.enabled == false
   "developer-only room was not retained with a disabled reason")
 RoomData.P_MiniBoss02.DebugOnly = nil
 
-local originalChooseArgs = door1.ChooseRoomArgs
+local currentDoor1 = MapState.OfferedExitDoors[1]
+local originalChooseArgs = currentDoor1.ChooseRoomArgs
 RoomData.P_MiniBoss02.Tags = { "Outdoor" }
-door1.ChooseRoomArgs = { RequireTags = { "Indoor" } }
+currentDoor1.ChooseRoomArgs = { RequireTags = { "Indoor" } }
 local requiredTags = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
 assert(requiredTags and requiredTags.enabled == false
     and requiredTags.reason == "room_required_tags_missing",
   "required native room tags did not explain the disabled target")
-door1.ChooseRoomArgs = { OutdoorRequiresIndoorTag = true }
+currentDoor1.ChooseRoomArgs = { OutdoorRequiresIndoorTag = true }
 CurrentRun.CurrentRoom.Tags = { "Outdoor" }
 local indoorOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
 assert(indoorOnly and indoorOnly.enabled == false
     and indoorOnly.reason == "room_requires_indoor",
   "outdoor-to-indoor route restriction did not explain the disabled target")
-door1.ChooseRoomArgs = originalChooseArgs
+currentDoor1.ChooseRoomArgs = originalChooseArgs
 CurrentRun.CurrentRoom.Tags = nil
 RoomData.P_MiniBoss02.Tags = nil
 
