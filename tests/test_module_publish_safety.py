@@ -1,5 +1,6 @@
 import json
 import plistlib
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -103,10 +104,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     assert not (result / 'keep.txt').exists()
     assert external_marker.read_text() == 'external app must survive'
 
-# The one supported marker migration is the historical unified product:
-# identical product Bundle identity, identical two-module inventory, old marker
-# hades2 -> new marker all. Module-only diagnostic output remains isolated.
-with tempfile.TemporaryDirectory(prefix='mgt-product-marker-migration-') as temporary:
+# Publication compares only the selected-module marker. An output marked
+# hades2 is never adopted by the unified product, even with an identical product
+# Bundle identity and module inventory; the one-time #693 marker migration of
+# local dist/ output is retired.
+with tempfile.TemporaryDirectory(prefix='mgt-product-marker-identity-') as temporary:
     root = Path(temporary)
     source = root / 'staging/Mac Gaming Trainer.app'
     legacy = root / 'dist/Mac Gaming Trainer.app'
@@ -115,6 +117,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-marker-migration-') as temp
     make_identity_app(source, 'all')
     make_identity_app(legacy, 'hades2')
     with patch.object(publisher, 'clean_signing_metadata'), patch.object(publisher, '_verify_signature'):
+        try:
+            publisher.publish_app(source, legacy.parent, 'Mac Gaming Trainer')
+        except ValueError as error:
+            assert 'belongs to hades2' in str(error)
+        else:
+            raise AssertionError('unified product replaced an output owned by hades2')
+        assert publisher._module_id(legacy) == 'hades2'
+        shutil.rmtree(legacy)
         published = publisher.publish_app(source, legacy.parent, 'Mac Gaming Trainer')
         assert published == legacy
         assert publisher._module_id(published) == 'all'
@@ -122,8 +132,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-marker-migration-') as temp
         publisher.publish_app(source, legacy.parent, 'Mac Gaming Trainer')
         assert publisher._module_id(legacy) == 'all'
 
-    # A diagnostic Hades II app has a different Bundle identity and only one
-    # module; it cannot masquerade as the old unified product during migration.
+    # A diagnostic Hades II app cannot be replaced by the unified product.
     diagnostic_dist = root / 'diagnostic-dist'
     diagnostic_dist.mkdir()
     diagnostic = diagnostic_dist / 'Mac Gaming Trainer.app'
@@ -135,7 +144,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-marker-migration-') as temp
         except ValueError as error:
             assert 'belongs to hades2' in str(error)
         else:
-            raise AssertionError('diagnostic Hades II output was accepted as a legacy unified product')
+            raise AssertionError('unified product replaced diagnostic Hades II output')
         assert publisher._module_id(diagnostic) == 'hades2'
 
     # A product output cannot be replaced by a diagnostic build either.
