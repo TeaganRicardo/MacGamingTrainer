@@ -104,6 +104,28 @@ assert(#unavailableWorld.exits == 1 and unavailableWorld.exits[1].objectId == 2,
 CurrentRun.CurrentRoom.UnavailableDoorIds = originalUnavailableDoorIds
 first, second = exitByObject(1), exitByObject(2)
 
+-- Native IsRoomEligible / IsRoomForced pass a mutable args table through
+-- IsGameStateEligible. Catalog observation must isolate those diagnostic
+-- writes just as it isolates SessionMapState and room descriptor Tags.
+local nativeProbeEligible = IsRoomEligible
+local nativeProbeForced = IsRoomForced
+IsRoomEligible = function(run, source, room, args)
+  args.FirstFailedRequirement = "fixture eligibility probe"
+  return nativeProbeEligible(run, source, room, args)
+end
+IsRoomForced = function(run, source, room, args, otherDoors)
+  args.ForceProbeMutation = true
+  return nativeProbeForced(run, source, room, args, otherDoors)
+end
+local readOnlyArgs = door1.ChooseRoomArgs
+local readOnlyExit = exitByObject(1)
+assert(readOnlyArgs.FirstFailedRequirement == nil
+    and readOnlyArgs.ForceProbeMutation == nil,
+  "native room eligibility observation mutated the actual door ChooseRoomArgs")
+IsRoomEligible = nativeProbeEligible
+IsRoomForced = nativeProbeForced
+first, second = exitByObject(1), exitByObject(2)
+
 -- IsRoomRewardEligible calls native game-state requirements, which may count
 -- checks and sample ChanceToPlay. Catalog inspection must do neither and must
 -- hide rewards whose eligibility depends on native RNG.
