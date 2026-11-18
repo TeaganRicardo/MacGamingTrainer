@@ -1443,8 +1443,8 @@ struct Hades2TrainerView: View {
                     Section(text("hades2.worldActions.gods")) {
                         ForEach(godTargets, id: \.stableID) { target in
                             Text(worldActionTargetDisplay(target))
+                                .selectionDisabled(!target.enabled)
                                 .tag(target.stableID)
-                                .disabled(!target.enabled)
                         }
                     }
                 }
@@ -1452,8 +1452,8 @@ struct Hades2TrainerView: View {
                     Section(text("hades2.worldActions.rewards")) {
                         ForEach(ordinaryRewardTargets, id: \.stableID) { target in
                             Text(worldActionTargetDisplay(target))
+                                .selectionDisabled(!target.enabled)
                                 .tag(target.stableID)
-                                .disabled(!target.enabled)
                         }
                     }
                 }
@@ -1461,8 +1461,8 @@ struct Hades2TrainerView: View {
                     Section(text("hades2.worldActions.routes")) {
                         ForEach(routeTargets, id: \.stableID) { target in
                             Text(worldActionTargetDisplay(target))
+                                .selectionDisabled(!target.enabled)
                                 .tag(target.stableID)
-                                .disabled(!target.enabled)
                         }
                     }
                 }
