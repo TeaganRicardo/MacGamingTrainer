@@ -94,6 +94,16 @@ assert(nativeRandomCalls == sparseRNG,
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
+-- Native DoUnlockRoomExits removes UnavailableDoorIds before choosing or
+-- previewing exits. A retained stale map entry must not become editable.
+local originalUnavailableDoorIds = CurrentRun.CurrentRoom.UnavailableDoorIds
+CurrentRun.CurrentRoom.UnavailableDoorIds = { 1 }
+local unavailableWorld = world()
+assert(#unavailableWorld.exits == 1 and unavailableWorld.exits[1].objectId == 2,
+  "native unavailable door slot was exposed as an editable exit")
+CurrentRun.CurrentRoom.UnavailableDoorIds = originalUnavailableDoorIds
+first, second = exitByObject(1), exitByObject(2)
+
 -- IsRoomRewardEligible calls native game-state requirements, which may count
 -- checks and sample ChanceToPlay. Catalog inspection must do neither and must
 -- hide rewards whose eligibility depends on native RNG.
