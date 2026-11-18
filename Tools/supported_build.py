@@ -122,16 +122,8 @@ def validate_supported_build(module: Path, *, root: Path = ROOT, verify_generate
         if not isinstance(target, dict) or target.get("steamBuild") != build["steamBuildID"] or (
                 "bundleVersion" in build and target.get("gameVersion") != "1." + build["bundleVersion"]):
             raise ValueError(f"{game_id}: installed source hashes do not match supportedBuild")
-        owners = data.get("owners")
-        if not isinstance(owners, dict) or not owners:
-            raise ValueError(f"{game_id}: installed source hashes declare no owners")
-        for owner, declaration in owners.items():
-            files = declaration.get("files") if isinstance(declaration, dict) else None
-            if not isinstance(files, dict) or not files or not all(
-                    name and "/" not in name and "\\" not in name
-                    and isinstance(digest, str) and _SHA256.fullmatch(digest)
-                    for name, digest in files.items()):
-                raise ValueError(f"{game_id}: installed source hashes for {owner} are malformed")
+        # Owner/file/digest shape is validated by its runtime consumer
+        # (`games.hades2.save_investigation`), whose test reads this snapshot.
 
     for item in raw.get("appResources", []):
         if not isinstance(item, dict) or not isinstance(item.get("source"), str):

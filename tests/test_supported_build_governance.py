@@ -144,13 +144,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     should_reject(symbol_data={"uuid": build["uuid"], "symbols": {}})
     should_reject(terms_value={"target": {"gameVersion": "1.43", "steamBuild": "123"}})
     should_reject(terms_value={"target": {"gameVersion": "1.42", "steamBuild": "456"}})
-    # Trusted installed-source digests belong to the declared image and are well formed.
+    # Trusted installed-source digests belong to the declared image. Their
+    # owner/file/digest shape is validated by the runtime consumer and tested
+    # in test_hades2_installed_source_hashes.py.
     should_reject(hashes_value={**valid_hashes, "target": {"gameVersion": "1.42", "steamBuild": "456"}})
     should_reject(hashes_value={**valid_hashes, "target": {"gameVersion": "1.43", "steamBuild": "123"}})
-    should_reject(hashes_value={**valid_hashes, "owners": {}})
-    should_reject(hashes_value={**valid_hashes, "owners": {"reset": {"files": {}}}})
-    should_reject(hashes_value={**valid_hashes, "owners": {"reset": {"files": {"Reset.lua": "B" * 64}}}})
-    should_reject(hashes_value={**valid_hashes, "owners": {"reset": {"files": {"../Reset.lua": "b" * 64}}}})
     # A packaged supportedBuild resource must exist in the declared snapshot.
     should_reject(resources_value=[{"source": "@supportedBuild/absent.json", "destination": "absent.json"}])
     should_reject(catalog_value={

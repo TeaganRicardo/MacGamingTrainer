@@ -120,6 +120,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-source-hashes-game-") as temporary:
         "bad digest": json.dumps({"owners": {"storyReset": {"files": {"StoryResetData.lua": "F" * 64}},
                                              "questRewardOwners": {"files": {"ResourceLogic.lua": "0" * 63}}}}),
         "absent owner": json.dumps({"owners": {"other": {"files": {"Other.lua": "0" * 64}}}}),
+        "path in file name": json.dumps({"owners": {"storyReset": {"files": {"../StoryResetData.lua": "0" * 64}},
+                                                    "questRewardOwners": {"files": {"ResourceLogic.lua": "0" * 64}}}}),
     }
     for label, text in invalid.items():
         path = base / ("invalid-" + label.replace(" ", "-") + ".json")
