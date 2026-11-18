@@ -25,6 +25,12 @@ local function world()
   return status.worldActions
 end
 
+local function sparseWorld()
+  local status = M.dispatch("status", { includeCatalogs = false })
+  assert(type(status.worldActions) == "table", "sparse status lacks World Actions observation")
+  return status.worldActions
+end
+
 local function exitByObject(id)
   for _, row in ipairs(world().exits) do
     if row.objectId == id then return row end
@@ -710,13 +716,22 @@ M.dispatch("cancel_world_exit", {
 assert(originalGodDoor.Room == originalGodRoom
     and originalGodRoom.ForceLootName ~= "ApolloUpgrade",
   "cancelling a god reward did not restore the actual native door")
+local beforeSiblingChange = exitByObject(1)
+local stableDoorToken = beforeSiblingChange.doorToken
 CurrentRun.CurrentRoom.OfferedRewards[2] = {
   Type = "Boon", ForceLootName = "ApolloUpgrade",
 }
-local duplicateGod = targetRow(exitByObject(1), "reward", "ApolloUpgrade")
+local sparseWithSiblingReward = sparseWorld()
+local sparseExit = nil
+for _, row in ipairs(sparseWithSiblingReward.exits) do
+  if row.objectId == 1 then sparseExit = row end
+end
+assert(sparseExit and sparseExit.doorToken == stableDoorToken,
+  "sibling reward mutation unexpectedly replaced the selected physical door token")
+local duplicateGod = targetRow(sparseExit, "reward", "ApolloUpgrade")
 assert(duplicateGod and duplicateGod.enabled == false
     and duplicateGod.reason == "reward_not_available",
-  "a sibling god reward must remain visible but unavailable")
+  "sparse status reused a stale catalog after a sibling god reward changed")
 local excludedApollo = false
 for _, name in ipairs(lastExcludedGods) do
   if name == "ApolloUpgrade" then excludedApollo = true end
@@ -732,6 +747,13 @@ local duplicateGodApply = pcall(function()
 end)
 assert(not duplicateGodApply, "duplicate god target was accepted despite being greyed")
 CurrentRun.CurrentRoom.OfferedRewards[2] = nil
+local sparseAfterSiblingClear = sparseWorld()
+local restoredExit = nil
+for _, row in ipairs(sparseAfterSiblingClear.exits) do
+  if row.objectId == 1 then restoredExit = row end
+end
+assert(restoredExit and targetExists(restoredExit, "reward", "ApolloUpgrade"),
+  "sparse status failed to re-enable a god after its sibling reservation was removed")
 GetEligibleLootNames = function() return { "ApolloUpgrade" } end
 local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
 assert(unavailableGod and unavailableGod.enabled == false
