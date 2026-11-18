@@ -9787,10 +9787,18 @@ if __MacGamingTrainerV1 == nil then
       return result[2], usedRandom
     end
 
+    local function copyProbeArgs(args)
+      local copied = {}
+      if type(args) == "table" then
+        for key, value in pairs(args) do copied[key] = value end
+      end
+      return copied
+    end
+
     local function couldBeForced(data, args, otherDoors)
       if type(IsRoomForced) ~= "function" then return true, false end
       local result, usedRandom = nativeProbeWithoutRNG(
-        IsRoomForced, CurrentRun, currentSource(), data, args or {}, otherDoors
+        IsRoomForced, CurrentRun, currentSource(), data, copyProbeArgs(args), otherDoors
       )
       -- A random-dependent force decision remains opaque. Keep the same
       -- fail-closed behavior while distinguishing it from a deterministic
@@ -9861,7 +9869,7 @@ if __MacGamingTrainerV1 == nil then
           local probe = {}
           for key, value in pairs(data) do probe[key] = value end
           local ok, eligible, usedRandom = pcall(
-            nativeProbeWithoutRNG, IsRoomEligible, CurrentRun, source, probe, args
+            nativeProbeWithoutRNG, IsRoomEligible, CurrentRun, source, probe, copyProbeArgs(args)
           )
           if not ok then
             local name = tostring(data.Name or roomName)
@@ -10225,8 +10233,11 @@ if __MacGamingTrainerV1 == nil then
         return "max_creations_this_run"
       end
       if data.GameStateRequirements ~= nil and type(IsGameStateEligible) == "function" then
+        local probeData = {}
+        for key, value in pairs(data) do probeData[key] = value end
         local ok, eligible, usedRandom = pcall(
-          nativeProbeWithoutRNG, IsGameStateEligible, data, data.GameStateRequirements, args
+          nativeProbeWithoutRNG, IsGameStateEligible, probeData,
+          data.GameStateRequirements, copyProbeArgs(args)
         )
         if not ok then return "room_eligibility_probe_error" end
         if usedRandom then return "room_eligibility_requires_rng" end
