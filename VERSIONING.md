@@ -82,7 +82,7 @@ Independent compatibility revisions remain integers with narrower meanings:
 - Host protocol version: JSONL envelope/request compatibility owned by Core.
 - Module `protocolVersion`: per-module frontend/backend compatibility. Different modules may use different values.
 - Manifest, persistence, preference, profile, and save schema versions: migration/serialization contracts.
-- Hades II resident runtime revision: resident Lua source/runtime identity and acceptance discipline.
+- Resident runtime revision (each module that declares `residentRuntime`): resident source/runtime identity and acceptance discipline.
 
 These values advance only when their own contract changes. They do not mirror product SemVer and do not automatically force a particular SemVer increment.
 
