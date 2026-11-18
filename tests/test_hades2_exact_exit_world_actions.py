@@ -127,6 +127,21 @@ IsRoomEligible = nativeProbeEligible
 IsRoomForced = nativeProbeForced
 first, second = exitByObject(1), exitByObject(2)
 
+-- Native anomaly replacement owns rooms marked AllowAnomalyReplacement.
+-- Such a room cannot be presented as the final destination of an exact route.
+local originalDoAnomalies = CurrentRun.CurrentRoom.DoAnomalies
+local originalAnomalyFlag = RoomData.F_Combat01.AllowAnomalyReplacement
+CurrentRun.CurrentRoom.DoAnomalies = true
+RoomData.F_Combat01.AllowAnomalyReplacement = true
+local anomalyExit = exitByObject(1)
+local anomalyCombat = targetRow(anomalyExit, "roomCategory", "combat")
+assert(anomalyCombat and anomalyCombat.enabled == false
+    and anomalyCombat.reason == "source_anomaly_replacement",
+  "exact route picker bypassed native anomaly replacement")
+CurrentRun.CurrentRoom.DoAnomalies = originalDoAnomalies
+RoomData.F_Combat01.AllowAnomalyReplacement = originalAnomalyFlag
+first, second = exitByObject(1), exitByObject(2)
+
 -- IsRoomRewardEligible calls native game-state requirements, which may count
 -- checks and sample ChanceToPlay. Catalog inspection must do neither and must
 -- hide rewards whose eligibility depends on native RNG.
