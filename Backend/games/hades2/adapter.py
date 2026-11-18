@@ -65,7 +65,8 @@ def clear_active(state,preserve_desired=False):
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
     state['worldActions']={'exits':[]}
-    state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
+    state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,
+                 biomeTime=None,biomeTimeLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
         for item in stats.values():
@@ -240,6 +241,7 @@ class Hades2Adapter(GameAdapter):
         for key in ('health','mana','armor'):
             self.state[key+'Locked']=key in vital
         resources=self.preferences.get('resourceLocks',{}) if isinstance(self.preferences.get('resourceLocks'),dict) else {}
+        self.state['biomeTimeLocked']=self.preferences.get('biomeTimerFrozen') is True
         self.state['moneyLocked']='Money' in resources
         if 'Money' in resources:self.state['money']=resources['Money']
         for item in self.state.get('resources',[]):
@@ -409,6 +411,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences['resourceLocks']={str(item['id']):item.get('count',0) for item in decoded.get('resources',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
         if decoded.get('moneyLocked'):self.preferences['resourceLocks']['Money']=decoded.get('money',0)
         self.preferences['rerollsLock']=decoded.get('rerolls') if decoded.get('rerollsLocked') else None
+        self.preferences['biomeTimerFrozen']=decoded.get('biomeTimeLocked') is True
         self.preferences['elementLocks']={str(item['id']):item.get('count',0) for item in decoded.get('elements',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
         self.preferences=canonicalize_damage(self.preferences,legacy_toggle_veto=False)
 
@@ -486,6 +489,12 @@ class Hades2Adapter(GameAdapter):
                 if not isinstance(row,dict) or type(row.get('count')) is not int:return False
                 locks[resource]=row['count']
             self.preferences['resourceLocks']=locks
+            return True
+
+        if command=='lock_biome_time':
+            locked=params.get('locked')
+            if type(locked) is not bool or decoded.get('biomeTimeLocked') is not locked:return False
+            self.preferences['biomeTimerFrozen']=locked
             return True
 
         if command=='set_rerolls':

@@ -7,7 +7,7 @@ private typealias ViewState<Value> = SwiftUI.State<Value>
 
 struct Hades2TrainerView: View {
     private enum EditField: Hashable {
-        case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge
+        case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge, biomeTime
         case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier, gameSpeed
         case grasp, dodge, crit, chargeSpeed, moveSpeed, sprintSpeed, dashSpeed, attackSpeed, manaRegen, enemyDamage, enemyHealth
         case traitRemainingUses
@@ -33,6 +33,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var manaMaximum = ""
     @ViewState<String> private var armorCurrent = ""
     @ViewState<String> private var spellCharge = ""
+    @ViewState<String> private var biomeTime = ""
     @ViewState<Bool> private var vitalsInitialized = false
     @ViewState<String> private var coins = ""
     @ViewState<Bool> private var coinsInitialized = false
@@ -905,7 +906,8 @@ struct Hades2TrainerView: View {
             mana: model.mana,
             maxMana: model.maxMana,
             armor: model.armor,
-            spellCharge: model.spellCharge
+            spellCharge: model.spellCharge,
+            biomeTime: model.biomeTime
         )
     }
 
@@ -1016,6 +1018,7 @@ struct Hades2TrainerView: View {
             manaMaximum = number(maxMana)
             armorCurrent = number(armor)
             spellCharge = number(snapshot.spellCharge)
+            biomeTime = Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime)
             vitalsInitialized = true
         } else if vitalsInitialized {
             if focusedField != .healthCurrent, let value = snapshot.health { healthCurrent = number(value) }
@@ -1024,6 +1027,9 @@ struct Hades2TrainerView: View {
             if focusedField != .manaMax, let value = snapshot.maxMana { manaMaximum = number(value) }
             if focusedField != .armorCurrent, let value = snapshot.armor { armorCurrent = number(value) }
             if focusedField != .spellCharge, let value = snapshot.spellCharge { spellCharge = number(value) }
+            if focusedField != .biomeTime {
+                biomeTime = Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime)
+            }
         }
     }
 
@@ -1124,6 +1130,7 @@ struct Hades2TrainerView: View {
         manaMaximum = ""
         armorCurrent = ""
         spellCharge = ""
+        biomeTime = ""
         gameSpeedPreview = nil
         gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
         multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
@@ -1201,6 +1208,15 @@ struct Hades2TrainerView: View {
                 } ?? nil,
             edit: .counter("spellCharge")
         )
+        editableAmountMetric(
+            text("hades2.metric.biomeTime"), icon: TrainerSemanticIcon.Concept.timer,
+            text: $biomeTime, focus: .biomeTime,
+            color: .orange, locked: model.biomeTimeLocked,
+            enabled: model.canSetBiomeTime, edit: .biomeTime,
+            lockEnabled: (model.biomeTime ?? 0) > 0 || model.biomeTimeLocked
+        ) {
+            model.lockBiomeTime(!model.biomeTimeLocked)
+        }
         editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
         editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
         editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)

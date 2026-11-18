@@ -100,6 +100,9 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [
+ {'match': 'literal', 'message': '区域限时必须为 0–999999 秒。', 'key': 'hades2.error.biomeTimeRange'},
+ {'match': 'literal', 'message': '区域限时必须使用整数秒。', 'key': 'hades2.error.biomeTimeWholeSeconds'},
+ {'match': 'literal', 'message': '区域限时锁定状态必须为布尔值。', 'key': 'hades2.error.biomeTimeLockedBoolean'},
  {'match': 'literal', 'message': 'hades2.garden.unavailable', 'key': 'hades2.garden.unavailable', 'runtime': {'commands': ['mature_garden'], 'producer': {'kind': 'helper', 'name': 'prepareGardenMaturity'}}},
  {'match': 'literal', 'message': 'Disable Infinite Gold before selecting a fixed-value gold lock', 'key': 'hades2.error.infiniteMoneyLockConflict', 'runtime_only': True, 'runtime': {'commands': ['lock_resource'], 'producer': {'kind': 'command', 'name': 'lock_resource'}}},
  {'match': 'literal', 'message': 'Disable Infinite Rerolls before selecting a fixed-value reroll lock', 'key': 'hades2.error.infiniteRerollsLockConflict', 'runtime_only': True, 'runtime': {'commands': ['lock_rerolls'], 'producer': {'kind': 'command', 'name': 'lock_rerolls'}}},

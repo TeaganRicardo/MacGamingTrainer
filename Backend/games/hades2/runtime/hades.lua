@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 138 then
+if previousModule and previousModule.revision ~= 139 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 138 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 138,
+    version = 1, revision = 139,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -56,6 +56,7 @@ if __MacGamingTrainerV1 == nil then
       resourceMultiplierEnabled = false,
     },
     -- END GENERATED DURABLE DESIRED FEATURES
+    biomeTimerFrozen = false,
     resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {}, gatheringProbabilities = {},
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
@@ -1504,6 +1505,7 @@ if __MacGamingTrainerV1 == nil then
     M.vitalLocks = {}
     M.elementLocks = {}
     M.rerollsLock = nil
+    M.biomeTimerFrozen = false
     M.statTargets = {}
     M.nextOccurrenceTarget = nil
     M.nextOccurrenceToken = nil
@@ -1516,7 +1518,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
-    return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
+    return M.biomeTimerFrozen or next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
       or next(M.statTargets) ~= nil or M.nextOccurrenceTarget ~= nil
       or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
   end
@@ -1606,6 +1608,23 @@ if __MacGamingTrainerV1 == nil then
     end
     return { run = run, taint = taint, owner = owner }
   end)()
+  -- The Vow of Time has a single carried balance. Suppress only its native
+  -- UpdateTimers deduction; ordinary IGT, curses and keepsake timers still tick.
+  -- The separate expiry penalty loop is independent. The lock is effective
+  -- only while the stored balance is positive, so no expired timer can falsely
+  -- appear safe.
+  function M.updateWithBiomeTimerLock(original, elapsed)
+    local run = CurrentRun
+    if not M.biomeTimerFrozen or type(run) ~= "table" or not run.ActiveBiomeTimer
+        or not finite(run.BiomeTime) or run.BiomeTime <= 0 then
+      return original(elapsed)
+    end
+    run.ActiveBiomeTimer = false
+    local ok, result = pcall(original, elapsed)
+    if CurrentRun == run and run.ActiveBiomeTimer == false then run.ActiveBiomeTimer = true end
+    if not ok then error(result) end
+    return result
+  end
   local function synchronize()
     -- Keep already owned hooks on their captured owner. An uncertain native
     -- coroutine must never adopt a new owner or reinstall a replaced hook.
@@ -1647,7 +1666,9 @@ if __MacGamingTrainerV1 == nil then
         local wrapper
         wrapper = function(elapsed)
           if M.guardWrapper == wrapper then synchronize() end
-          local result = original(elapsed)
+          local result
+          if M.guardWrapper == wrapper then result = M.updateWithBiomeTimerLock(original, elapsed)
+          else result = original(elapsed) end
           if M.guardWrapper == wrapper and M.enforceLocksInternal then M.enforceLocksInternal() end
           return result
         end
@@ -1772,7 +1793,9 @@ if __MacGamingTrainerV1 == nil then
     local wrapper
     wrapper = function(elapsed)
       if M.guardWrapper == wrapper then synchronize() end
-      local result = original(elapsed)
+      local result
+      if M.guardWrapper == wrapper then result = M.updateWithBiomeTimerLock(original, elapsed)
+      else result = original(elapsed) end
       if M.guardWrapper == wrapper then enforceLocks() end
       return result
     end
@@ -8508,6 +8531,8 @@ if __MacGamingTrainerV1 == nil then
         setRerolls = M.runtimeOwners.rerollsAvailable() and type(UpdateRerollUI) == "function"
           and type(ShowRerollUI) == "function",
         setSpellCharge = M.runtimeOwners.heroAvailable(),
+        setBiomeTime = M.runtimeOwners.heroAvailable() and type(CurrentRun) == "table"
+          and CurrentRun.ActiveBiomeTimer == true and finite(CurrentRun.BiomeTime),
         matureGarden = gardenScopeToken ~= nil,
         setResource = resourceReady(),
         spawnReward = rewardOwner ~= nil, setStats = anyAvailableStat(statAvailable),
@@ -8562,6 +8587,9 @@ if __MacGamingTrainerV1 == nil then
       availableMana = availableMana, totalMaxMana = number(hero.MaxMana),
       armor = number(hero.HealthBuffer), armorLocked = M.vitalLocks.armor ~= nil,
       spellCharge = number(CurrentRun and CurrentRun.SpellCharge), spellChargeCost = spellChargeCost == nil and jsonNull or spellChargeCost,
+      biomeTime = (type(CurrentRun) == "table" and CurrentRun.ActiveBiomeTimer and finite(CurrentRun.BiomeTime))
+        and CurrentRun.BiomeTime or jsonNull,
+      biomeTimeLocked = M.biomeTimerFrozen,
       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
       -- Private resident receipt of the durable lock targets. These tables
@@ -11859,6 +11887,19 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_counter" then
       if not M.runtimeOwners.heroAvailable() then error("Current Hero owner is unavailable for counter editing") end
+      if params.counter == "biomeTime" then
+        if not (type(CurrentRun) == "table" and CurrentRun.ActiveBiomeTimer and finite(CurrentRun.BiomeTime)) then
+          error("Vow of Time is inactive or unavailable")
+        end
+        if not finite(params.value) or params.value < 0 or params.value > 999999 or params.value % 1 ~= 0 then
+          error("Biome time must be an integer number of seconds between 0 and 999999")
+        end
+        if M.biomeTimerFrozen and params.value <= 0 then
+          error("Restore a positive balance before freezing the biome timer")
+        end
+        CurrentRun.BiomeTime = params.value
+        return state(params.includeCatalogs)
+      end
       if params.counter ~= "spellCharge" then error("Unknown counter") end
       if not finite(params.value) or params.value < 0 or params.value > 999999 then error("Counter value must be 0..999999") end
       CurrentRun.SpellCharge = params.value
@@ -11866,6 +11907,15 @@ if __MacGamingTrainerV1 == nil then
       -- If the always-ready feature is desired, its invariant wins on the next
       -- guard pass; setting a lower value while it is enabled is therefore
       -- intentionally temporary.
+      return state(params.includeCatalogs)
+    end
+    if command == "lock_biome_time" then
+      if type(params.locked) ~= "boolean" then error("locked must be boolean") end
+      -- Desired intent can replay before a timed run; a nonpositive balance
+      -- remains expired until a positive value is explicitly restored.
+      M.biomeTimerFrozen = params.locked
+      if params.locked then installGuard()
+      elseif not anyDesired() and not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
     end
     if command == "lock_vital" then
@@ -12250,6 +12300,7 @@ if __MacGamingTrainerV1 == nil then
     set_stat = true,
     set_vital = true,
     lock_vital = true,
+    lock_biome_time = true,
     set_resource = true,
     lock_resource = true,
     set_rerolls = true,

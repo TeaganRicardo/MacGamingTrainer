@@ -436,6 +436,18 @@
       "arguments": [],
       "key": "hades2.error.featureCodeTooLong"
     },
+    "区域限时必须为 0–999999 秒。": {
+      "arguments": [],
+      "key": "hades2.error.biomeTimeRange"
+    },
+    "区域限时必须使用整数秒。": {
+      "arguments": [],
+      "key": "hades2.error.biomeTimeWholeSeconds"
+    },
+    "区域限时锁定状态必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.biomeTimeLockedBoolean"
+    },
     "原始备份损坏或与记录不匹配；拒绝覆盖游戏。": {
       "arguments": [],
       "key": "hades2.error.backupCorrupt"

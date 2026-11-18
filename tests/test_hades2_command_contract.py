@@ -116,7 +116,7 @@ names = [row["name"] for row in metadata]
 assert names == [
     "scan", "status", "connect", "disconnect", "launch",
     "disable_all", "runtime_reset", "reset_desired", "set_desired",
-    "set_vital", "set_counter", "lock_vital",
+    "set_vital", "set_counter", "lock_vital", "lock_biome_time",
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "generate_chaos_gate", "generate_chamber_facility", "mature_garden", "set_stat", "set_element", "lock_element",
@@ -186,6 +186,12 @@ expect_error(
     {"vital": "health", "field": "current", "value": 0},
     "生命值必须至少为 1。",
 )
+
+_, params = dispatch_runtime("set_counter", {"counter": "biomeTime", "value": 300})
+assert params == {"counter": "biomeTime", "value": 300}
+expect_error("set_counter", {"counter": "biomeTime", "value": 0.5}, "区域限时必须使用整数秒。")
+expect_error("set_counter", {"counter": "biomeTime", "value": -1}, "区域限时必须为 0–999999 秒。")
+expect_error("lock_biome_time", {"locked": 1}, "区域限时锁定状态必须为布尔值。")
 
 _, params = dispatch_runtime("set_counter", {"counter": "spellCharge", "value": 3})
 assert params == {"counter": "spellCharge", "value": 3}
