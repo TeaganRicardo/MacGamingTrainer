@@ -564,7 +564,6 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             "reward": "MetaCardPointsCommonDrop",
             "targets": [
                 ["kind": "reward", "id": "WeaponUpgrade"],
-                ["kind": "reward", "id": "MaxHealthDrop", "enabled": false, "reason": "reward_not_available"],
                 ["kind": "reward", "id": "ZeusUpgrade", "enabled": false, "reason": "god_limit"],
                 ["kind": "roomCategory", "id": "story"],
                 ["kind": "roomCategory", "id": "P_MiniBoss01", "enabled": false, "reason": "biome_depth_too_low"],
@@ -684,7 +683,7 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
     // 2. Inspect real NSMenuItem availability and skip disabled choices with
     // native keyboard navigation. Disabled god/reward/room remain visible with
     // localized reasons; Apply continues to accept only an enabled selection.
-    let disabledReasonIDs = ["god_limit", "reward_not_available", "biome_depth_too_low"]
+    let disabledReasonIDs = ["god_limit", "biome_depth_too_low"]
     let targetMenu = selectNativePicker(targetPicker()!, in: window, moving: 1,
                                         opening: .pointer, inspectMenu: { menu in
         for reasonID in disabledReasonIDs {
