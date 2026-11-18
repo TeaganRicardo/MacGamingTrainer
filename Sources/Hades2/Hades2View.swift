@@ -1251,7 +1251,94 @@ struct Hades2TrainerView: View {
         Hades2BoonRarityPanel(model: model)
     }
 
+    private static let worldActionGodIDs: Set<String> = [
+        "AphroditeUpgrade",
+        "ApolloUpgrade",
+        "AresUpgrade",
+        "DemeterUpgrade",
+        "HephaestusUpgrade",
+        "HeraUpgrade",
+        "HermesUpgrade",
+        "HestiaUpgrade",
+        "PoseidonUpgrade",
+        "ZeusUpgrade",
+    ]
+
+    private static let worldActionRoomIDs: Set<String> = [
+        "P_MiniBoss01",
+        "P_MiniBoss02",
+    ]
+
+    private static let worldActionUnavailableReasonIDs: Set<String> = [
+        "source_anomaly_replacement",
+        "door_unavailable",
+        "exit_room_unavailable",
+        "reward_eligibility_unavailable",
+        "room_data_unavailable",
+        "room_eligibility_unavailable",
+        "room_force_predicate_unavailable",
+        "room_sets_unavailable",
+        "source_unavailable",
+        "biome_depth_too_high",
+        "biome_depth_too_low",
+        "door_forced_destination",
+        "door_forced_room_set",
+        "door_has_predetermined_destination",
+        "door_returns_to_previous_room",
+        "game_state_requirements",
+        "global_forced_destination",
+        "god_eligibility_requires_rng",
+        "god_eligibility_unavailable",
+        "god_limit",
+        "god_not_eligible",
+        "max_appearances_this_biome",
+        "max_creations_this_run",
+        "native_forced_room_present",
+        "native_ineligible",
+        "no_native_eligible_reward",
+        "no_room_route",
+        "reward_eligibility_probe_error",
+        "reward_eligibility_requires_rng",
+        "reward_not_available",
+        "reward_not_in_current_store",
+        "reward_store_name_missing",
+        "reward_store_unavailable",
+        "room_debug_only",
+        "room_eligibility_probe_error",
+        "room_eligibility_requires_rng",
+        "room_excluded_by_exit_rules",
+        "room_force_probe_error",
+        "room_force_requires_rng",
+        "room_has_fixed_reward_category",
+        "room_has_forced_reward",
+        "room_linked_route_required",
+        "room_max_appearances_this_run",
+        "room_max_creations_per_room",
+        "room_miniboss_wing_required",
+        "room_no_reward",
+        "room_requires_indoor",
+        "room_required_tags_missing",
+        "room_same_as_source",
+        "room_reward_deferred",
+        "room_set_unavailable",
+        "room_wrong_wing_end",
+        "source_forced_room_set",
+        "source_linked_destination",
+        "source_next_room_set",
+        "source_persistent_door_rooms",
+        "source_route_is_native_owned",
+        "source_uses_previous_room_set",
+    ]
+
     private func worldActionTargetLabel(kind: String, id: String) -> String {
+        if kind == "roomCategory", id.contains("_MiniBoss") {
+            if Self.worldActionRoomIDs.contains(id) {
+                let key = "hades2.worldActions.room.\(id)"
+                let localized = text(key)
+                if localized != key { return localized }
+            }
+            return "\(text("hades2.worldActions.route.miniboss")) · \(id)"
+        }
         if kind == "roomCategory" {
             switch id {
             case "combat": return text("hades2.worldActions.route.combat")
@@ -1261,6 +1348,11 @@ struct Hades2TrainerView: View {
             case "miniboss": return text("hades2.worldActions.route.miniboss")
             default: return id
             }
+        }
+        if kind == "reward", Self.worldActionGodIDs.contains(id) {
+            let key = "hades2.worldActions.god.\(id)"
+            let localized = text(key)
+            if localized != key { return localized }
         }
         let localized: String?
         switch id {
@@ -1285,6 +1377,18 @@ struct Hades2TrainerView: View {
         return id
     }
 
+    private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget) -> String {
+        let label = worldActionTargetLabel(kind: target.kind, id: target.id)
+        guard !target.enabled else { return label }
+        let reasonID = target.reason.flatMap { Self.worldActionUnavailableReasonIDs.contains($0) ? $0 : nil }
+            ?? "native_ineligible"
+        let reasonKey = "hades2.worldActions.unavailable.\(reasonID)"
+        let localized = text(reasonKey)
+        let reason = localized == reasonKey
+            ? text("hades2.worldActions.unavailable.native_ineligible") : localized
+        return "\(label) · \(reason)"
+    }
+
     private func worldExitLabel(_ exit: Hades2WorldExit) -> String {
         let current = exit.reward.isEmpty
             ? (exit.roomName.isEmpty ? text("hades2.worldActions.unknownTarget") : exit.roomName)
@@ -1295,6 +1399,8 @@ struct Hades2TrainerView: View {
     private var worldExitPanel: some View {
         let exit = model.selectedWorldExit
         let rewardTargets = exit?.targets.filter { $0.kind == "reward" } ?? []
+        let godTargets = rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
+        let ordinaryRewardTargets = rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
         let routeTargets = exit?.targets.filter { $0.kind == "roomCategory" } ?? []
         let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
         return TrainerDualPickerActionRow(
@@ -1333,23 +1439,34 @@ struct Hades2TrainerView: View {
                     Text(worldActionTargetLabel(kind: lease.kind, id: lease.target))
                         .tag(lease.kind + ":" + lease.target)
                 }
-                if !rewardTargets.isEmpty {
-                    Section(text("hades2.worldActions.rewards")) {
-                        ForEach(rewardTargets, id: \.stableID) { target in
-                            Text(worldActionTargetLabel(kind: target.kind, id: target.id))
+                if !godTargets.isEmpty {
+                    Section(text("hades2.worldActions.gods")) {
+                        ForEach(godTargets, id: \.stableID) { target in
+                            Text(worldActionTargetDisplay(target))
                                 .tag(target.stableID)
+                                .disabled(!target.enabled)
+                        }
+                    }
+                }
+                if !ordinaryRewardTargets.isEmpty {
+                    Section(text("hades2.worldActions.rewards")) {
+                        ForEach(ordinaryRewardTargets, id: \.stableID) { target in
+                            Text(worldActionTargetDisplay(target))
+                                .tag(target.stableID)
+                                .disabled(!target.enabled)
                         }
                     }
                 }
                 if !routeTargets.isEmpty {
                     Section(text("hades2.worldActions.routes")) {
                         ForEach(routeTargets, id: \.stableID) { target in
-                            Text(worldActionTargetLabel(kind: target.kind, id: target.id))
+                            Text(worldActionTargetDisplay(target))
                                 .tag(target.stableID)
+                                .disabled(!target.enabled)
                         }
                     }
                 }
-                if exit != nil && rewardTargets.isEmpty && routeTargets.isEmpty && exit?.activeLease == nil {
+                if exit != nil && !((exit?.targets ?? []).contains { $0.enabled }) && exit?.activeLease == nil {
                     Text(text("hades2.worldActions.noTarget")).tag("")
                 }
             }

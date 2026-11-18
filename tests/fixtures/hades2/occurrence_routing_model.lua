@@ -93,6 +93,17 @@ EncounterData = {
 }
 EnemyData = {}
 
+Contains = function(values, wanted)
+  if type(values) ~= "table" then return false end
+  for _, value in pairs(values) do if value == wanted then return true end end
+  return false
+end
+ContainsAll = function(values, required)
+  if type(values) ~= "table" or type(required) ~= "table" then return false end
+  for _, wanted in ipairs(required) do if not Contains(values, wanted) then return false end end
+  return true
+end
+
 roomEligible = {}
 encounterEligible = {}
 nativeRoomForced = {}
@@ -115,15 +126,80 @@ probeForceUsesRandom = false
 IsRoomEligible = function(run, currentRoom, nextRoomData, args)
   if probeEligibilityUsesRandom then GetRandomValue({ true, false }) end
   if type(nextRoomData) ~= "table" then return false end
+  args = args or {}
+  if nextRoomData.DebugOnly then return false end
   if roomEligible[nextRoomData.Name] == false then return false end
+  if type(args.ExcludedNames) == "table" and args.ExcludedNames[nextRoomData.Name] then return false end
+  if type(args.ExcludedTypes) == "table" and args.ExcludedTypes[nextRoomData.Type] then return false end
+  if type(args.ExcludedRewards) == "table" and type(nextRoomData.RewardTypes) == "table"
+      and #nextRoomData.RewardTypes > 0 then
+    local allExcluded = true
+    for _, reward in ipairs(nextRoomData.RewardTypes) do
+      local found = false
+      for _, excluded in ipairs(args.ExcludedRewards) do if excluded == reward then found = true end end
+      if not found then allExcluded = false end
+    end
+    if allExcluded then return false end
+  end
+  if type(args.RequireTags) == "table" then
+    for _, required in ipairs(args.RequireTags) do
+      local found = false
+      for _, tag in ipairs(nextRoomData.Tags or {}) do if tag == required then found = true end end
+      if not found then return false end
+    end
+  end
+  if nextRoomData.Name == currentRoom.Name then return false end
+  if nextRoomData.RequiresLinked and currentRoom.LinkedRoom ~= nextRoomData.Name
+      and not (type(currentRoom.LinkedRooms) == "table"
+        and (function()
+          for _, name in ipairs(currentRoom.LinkedRooms) do
+            if name == nextRoomData.Name then return true end
+          end
+          return false
+        end)()) then return false end
+  if currentRoom.RequireWingEndMiniBoss and nextRoomData.WingEndRoom
+      and not nextRoomData.WingEndMiniBoss and not nextRoomData.AllowAsAnyWingEnd then return false end
+  if not currentRoom.RequireWingEndMiniBoss and nextRoomData.WingEndRoom
+      and nextRoomData.WingEndMiniBoss and not nextRoomData.AllowAsAnyWingEnd then return false end
+  if args.OutdoorRequiresIndoorTag and type(currentRoom.Tags) == "table"
+      and type(nextRoomData.Tags) == "table" then
+    local outdoor = false
+    for _, tag in ipairs(currentRoom.Tags) do if tag == "Outdoor" then outdoor = true end end
+    local indoor = false
+    for _, tag in ipairs(nextRoomData.Tags) do if tag == "Indoor" then indoor = true end end
+    if outdoor and not indoor then return false end
+  end
+  if nextRoomData.MaxCreationsPerRoom ~= nil
+      and type(currentRoom.RoomCreations) == "table"
+      and currentRoom.RoomCreations[nextRoomData.Name] ~= nil
+      and currentRoom.RoomCreations[nextRoomData.Name] >= nextRoomData.MaxCreationsPerRoom then
+    return false
+  end
+  if nextRoomData.MaxAppearancesThisRun ~= nil
+      and run.RoomCountCache[nextRoomData.Name] ~= nil
+      and run.RoomCountCache[nextRoomData.Name] >= nextRoomData.MaxAppearancesThisRun then
+    return false
+  end
+  if nextRoomData.MaxAppearancesThisBiome ~= nil
+      and run.BiomeRoomCountCache[nextRoomData.Name] ~= nil
+      and run.BiomeRoomCountCache[nextRoomData.Name] >= nextRoomData.MaxAppearancesThisBiome then
+    return false
+  end
   if nextRoomData.MaxCreationsThisRun ~= nil
-      and (run.RoomCreations[nextRoomData.Name] or 0) >= nextRoomData.MaxCreationsThisRun then
+      and run.RoomCreations[nextRoomData.Name] ~= nil
+      and run.RoomCreations[nextRoomData.Name] >= nextRoomData.MaxCreationsThisRun then
     return false
   end
   return true
 end
 
 IsRoomForced = function(run, currentRoom, nextRoomData, args, otherDoors)
+  if nextRoomData.AlwaysForceOncePerRoom and type(otherDoors) == "table" then
+    for _, door in ipairs(otherDoors) do
+      if door.Room ~= nil and door.Room.Name == nextRoomData.Name then return false end
+    end
+    return true
+  end
   if probeForceUsesRandom and nextRoomData.RandomForced then
     return GetRandomValue({ false, true })
   end

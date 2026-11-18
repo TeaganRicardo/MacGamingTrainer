@@ -309,7 +309,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var selectedWorldExitActionAvailable: Bool {
         guard canApplyWorldExit, let exit = selectedWorldExit else { return false }
         if exit.activeLease != nil { return true }
-        return exit.targets.contains { $0.stableID == selectedWorldExitTarget }
+        return exit.targets.contains { $0.stableID == selectedWorldExitTarget && $0.enabled }
     }
     var occurrenceActionAvailable: Bool {
         guard canApplyWorldAction else { return false }
@@ -1575,8 +1575,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             selectedWorldExitTarget = lease.kind + ":" + lease.target
             return
         }
-        if !exit.targets.contains(where: { $0.stableID == selectedWorldExitTarget }) {
-            selectedWorldExitTarget = exit.targets.first?.stableID ?? ""
+        if !exit.targets.contains(where: { $0.stableID == selectedWorldExitTarget && $0.enabled }) {
+            selectedWorldExitTarget = exit.targets.first(where: { $0.enabled })?.stableID ?? ""
         }
     }
 
@@ -1599,7 +1599,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
             return true
         }
-        guard let target = exit.targets.first(where: { $0.stableID == selectedWorldExitTarget }) else {
+        guard let target = exit.targets.first(where: { $0.stableID == selectedWorldExitTarget && $0.enabled }) else {
             return false
         }
         send(
