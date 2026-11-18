@@ -9907,8 +9907,15 @@ if __MacGamingTrainerV1 == nil then
           end
           if eligible then
             eligibleCount = eligibleCount + 1
-            local forceOK, forced, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
-            if not forceOK then
+            if source.DoAnomalies and data.AllowAnomalyReplacement then
+              -- Native ChooseNextRoomData replaces this destination with the
+              -- Anomaly room set. It is not a selectable final destination.
+              local name = tostring(data.Name or roomName)
+              diagnostics.anomalyReplacementRooms = diagnostics.anomalyReplacementRooms or {}
+              diagnostics.anomalyReplacementRooms[name] = true
+            else
+              local forceOK, forced, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
+              if not forceOK then
               local name = tostring(data.Name or roomName)
               diagnostics.probeErrorRoom = name
               diagnostics.probeError = string.sub(tostring(forced), 1, 160)
@@ -9927,14 +9934,15 @@ if __MacGamingTrainerV1 == nil then
               hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
               diagnostics.forcedRoom = hardForcedRoom
             end
-            local kind = forceOK and routeKind(data.Name) or nil
-            if kind ~= nil then
-              result[kind] = result[kind] or {}
-              result[kind][#result[kind] + 1] = data
-              if kind == "miniboss" then
-                -- Exact locally defined miniboss rooms share the ordinary
-                -- category reservation/late-commit owner.
-                result[data.Name] = { data }
+              local kind = forceOK and routeKind(data.Name) or nil
+              if kind ~= nil then
+                result[kind] = result[kind] or {}
+                result[kind][#result[kind] + 1] = data
+                if kind == "miniboss" then
+                  -- Exact locally defined miniboss rooms share the ordinary
+                  -- category reservation/late-commit owner.
+                  result[data.Name] = { data }
+                end
               end
             end
           else
@@ -10166,6 +10174,10 @@ if __MacGamingTrainerV1 == nil then
           and routeReason ~= "no_native_eligible_route" then return routeReason end
       routeDiagnostics = routeDiagnostics or {}
       local name = tostring(data.Name or "")
+      if routeDiagnostics.anomalyReplacementRooms
+          and routeDiagnostics.anomalyReplacementRooms[name] then
+        return "source_anomaly_replacement"
+      end
       if routeDiagnostics.randomEligibilityRooms
           and routeDiagnostics.randomEligibilityRooms[name] then
         return "room_eligibility_requires_rng"
