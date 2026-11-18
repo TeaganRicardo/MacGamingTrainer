@@ -15,7 +15,7 @@ SWIFTC = shutil.which("swiftc")
 assert SWIFTC, "swiftc is required for Host ownership behavior"
 
 app_source = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text()
-start = app_source.index("    convenience init() {") + len("    convenience init() {")
+start = app_source.index("    package convenience init() {") + len("    package convenience init() {")
 end = start
 level = 1
 while level:
