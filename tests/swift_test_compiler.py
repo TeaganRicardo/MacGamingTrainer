@@ -24,6 +24,12 @@ Equivalence and staleness guarantees:
   cached artifact is missing or corrupted.
 - Setting ``MGT_SWIFT_TEST_CACHE=0`` bypasses the cache completely and runs a
   single direct ``swiftc`` invocation for clean A/B equivalence checks.
+
+Module layout: the product compiles Core, each game and the App as separate
+Swift modules of one package (``Tools/module_support.py``). Until harnesses
+compile that layout themselves, every support set compiles as one module named
+like Core, in the same package. A game file's ``import TrainerCore`` is then a
+self-import the compiler ignores, and ``package`` declarations stay visible.
 """
 from __future__ import annotations
 
@@ -35,14 +41,24 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Iterable, Iterator, Mapping, Sequence
 
-CACHE_FORMAT_VERSION = 1
-MODULE_NAME = "MGTTestSupport"
+_TOOLS = Path(__file__).resolve().parents[1] / "Tools"
+if str(_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_TOOLS))
+from module_support import SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
+
+CACHE_FORMAT_VERSION = 2
+MODULE_NAME = SWIFT_CORE_MODULE
+PACKAGE_FLAGS = ("-package-name", SWIFT_PACKAGE_NAME)
+# Flags for a direct swiftc call that compiles Core and/or game sources together
+# with its harness as one test module.
+SINGLE_MODULE_FLAGS = ("-module-name", MODULE_NAME, *PACKAGE_FLAGS)
 MAX_CACHE_ENTRIES = 16
 CACHE_ENV_VAR = "MGT_SWIFT_TEST_CACHE"
 CACHE_DIR_ENV_VAR = "MGT_SWIFT_TEST_CACHE_DIR"
@@ -215,7 +231,7 @@ def normalize_support_flags(flags: Sequence[str] = ()) -> tuple[str, ...]:
             continue
         if flag in {"-parse-as-library", "-whole-module-optimization", "-enable-testing"}:
             continue
-        if flag == "-num-threads":
+        if flag in {"-num-threads", "-package-name"}:
             if index + 1 < len(flags):
                 skip_next = True
             continue
@@ -227,6 +243,7 @@ def normalize_support_flags(flags: Sequence[str] = ()) -> tuple[str, ...]:
         "-num-threads",
         threads,
         "-enable-testing",
+        *PACKAGE_FLAGS,
         *normalized,
     )
 
@@ -444,8 +461,13 @@ def _write_harness_shims(
 
 
 def _filter_direct_flags(flags: Sequence[str]) -> list[str]:
-    """Strip flags only meant for support-module multi-file builds if unwanted."""
-    return list(flags)
+    """Compile a direct (uncached) build as the single test module."""
+    direct = list(flags)
+    if "-package-name" not in direct:
+        direct += PACKAGE_FLAGS
+    if "-module-name" not in direct:
+        direct += ["-module-name", MODULE_NAME]
+    return direct
 
 
 def compile_swift_test(
@@ -493,12 +515,12 @@ def compile_swift_test(
         # Single-use temporary source tree (patched/copied sources): still
         # compile faster with WMO + threads, without writing shared cache entries
         # and while honoring caller library-vs-script parsing mode for harness files.
-        direct_flags = [
+        direct_flags = _filter_direct_flags([
             f
             for f in normalize_support_flags(flags)
             if f != "-enable-testing"
             and (f != "-parse-as-library" or "-parse-as-library" in flags)
-        ]
+        ])
         single_cmd = [
             compiler,
             *_sdk_args(toolchain, direct_flags),
@@ -532,6 +554,8 @@ def compile_swift_test(
         with tempfile.TemporaryDirectory(prefix="mgt-swift-shim-") as shim_root:
             shimmed = _write_harness_shims(harness_list, Path(shim_root))
             link_flags = [f for f in flags if f != "-whole-module-optimization"]
+            if "-package-name" not in link_flags:
+                link_flags += PACKAGE_FLAGS
             cmd = [
                 compiler,
                 *_sdk_args(toolchain, link_flags),

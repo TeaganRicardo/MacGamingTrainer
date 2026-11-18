@@ -1,6 +1,7 @@
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = r'''
@@ -178,7 +179,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hotkey-routing-") as directory:
     binary = Path(directory) / "test"
     main.write_text(SOURCE)
     subprocess.run([
-        "swiftc", str(ROOT / "Sources/Core/Input/HotkeyChord.swift"),
+        "swiftc", *SINGLE_MODULE_FLAGS, str(ROOT / "Sources/Core/Input/HotkeyChord.swift"),
         str(ROOT / "Sources/Core/Input/GlobalHotkeys.swift"),
         str(ROOT / "Sources/Core/Input/TrainerShortcutCapture.swift"),
         str(main), "-o", str(binary),

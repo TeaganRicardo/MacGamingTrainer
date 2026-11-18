@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -93,6 +94,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-json-numeric-input-") as temporary:
     base = Path(temporary)
     main, binary = base / "main.swift", base / "numeric-input"
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Input/TrainerJSONNumericInput.swift"),
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Input/TrainerJSONNumericInput.swift"),
                     str(main), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)

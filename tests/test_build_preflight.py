@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "Tools"))
+from module_support import SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
 
 
 def executable(path: Path, source: str) -> None:
@@ -39,11 +41,12 @@ fi
 exit 92
 """)
     executable(fakebin / "swiftc", """
-printf '%s\n' "$@" > "$MGT_FAKE_SWIFTC_LOG"
+{ printf '%s\n' "$@"; printf '%s\n' '--- end of invocation ---'; } >> "$MGT_FAKE_SWIFTC_LOG"
 case " $* " in
-    *" -typecheck "*) exit 0 ;;
+    *" -O "*|*" -emit-library "*|*" -o "*) ;;
+    *" -typecheck "*|*" -emit-module "*) exit 0 ;;
 esac
-echo "Unexpected non-typecheck compilation" >&2
+echo "Unexpected code-generating compilation" >&2
 exit 93
 """)
     # None of these distribution-only commands may run in typecheck mode.
@@ -68,18 +71,45 @@ exit 93
     assert invocation.returncode == 0, invocation.stdout + "\n" + invocation.stderr
     assert "MGT_BUILD_TIMING mode=typecheck selection=all phase=swift-typecheck" in invocation.stdout
     assert "Validated Swift product catalog" in invocation.stdout
-    arguments = log.read_text(encoding="utf-8").splitlines()
-    assert "-typecheck" in arguments, arguments
-    assert "-parse-as-library" in arguments, arguments
-    assert "-O" not in arguments, arguments
-    assert any(name.endswith("/Sources/App.swift") for name in arguments)
-    assert any(name.endswith("/Sources/Hades/HadesModule.swift") for name in arguments)
-    assert any(name.endswith("/Sources/Hades2/Hades2Module.swift") for name in arguments)
-    assert any(name.endswith("/ActiveGame.generated.swift") for name in arguments)
-    # The compile target is the product manifest's declaration, not a build.sh literal.
-    product = json.loads((ROOT / "app.json").read_text(encoding="utf-8"))
-    target = arguments[arguments.index("-target") + 1]
-    assert target == f"{product['architectures'][-1]}-apple-macosx{product['minimumMacOS']}", target
+    invocations = [
+        block.strip("\n").splitlines()
+        for block in log.read_text(encoding="utf-8").split("--- end of invocation ---\n")
+        if block.strip()
+    ]
+    modules = {arguments[arguments.index("-module-name") + 1]: arguments for arguments in invocations}
+    assert list(modules) == [SWIFT_CORE_MODULE, "Hades2", "Hades", SWIFT_APP_MODULE], list(modules)
+
+    def search_paths(arguments):
+        return [Path(arguments[index + 1]).name for index, value in enumerate(arguments) if value == "-I"]
+
+    def sources(arguments):
+        return [Path(value) for value in arguments if value.endswith(".swift")]
+
+    # Each module sees only the swiftmodules of its declared dependencies.
+    assert search_paths(modules[SWIFT_CORE_MODULE]) == []
+    assert search_paths(modules["Hades2"]) == [SWIFT_CORE_MODULE]
+    assert search_paths(modules["Hades"]) == [SWIFT_CORE_MODULE]
+    assert search_paths(modules[SWIFT_APP_MODULE]) == [SWIFT_CORE_MODULE, "Hades2", "Hades"]
+    assert all(source.is_relative_to(ROOT / "Sources/Core") for source in sources(modules[SWIFT_CORE_MODULE]))
+    assert ROOT / "Sources/Hades2/Hades2Module.swift" in sources(modules["Hades2"])
+    assert ROOT / "Sources/Hades/HadesModule.swift" in sources(modules["Hades"])
+    assert not any(source.is_relative_to(ROOT / "Sources/Hades2") for source in sources(modules["Hades"]))
+    assert [source.name for source in sources(modules["Hades"]) if not source.is_relative_to(ROOT)] == [
+        "GameBinding.generated.swift"
+    ]
+    assert [source.name for source in sources(modules[SWIFT_APP_MODULE])] == [
+        "App.swift", "TrainerGameCatalog.generated.swift"
+    ]
+    for name, arguments in modules.items():
+        assert "-parse-as-library" in arguments, (name, arguments)
+        assert arguments[arguments.index("-package-name") + 1] == SWIFT_PACKAGE_NAME, (name, arguments)
+        assert "-O" not in arguments and "-emit-library" not in arguments, (name, arguments)
+        expected_mode = "-typecheck" if name == SWIFT_APP_MODULE else "-emit-module"
+        assert expected_mode in arguments, (name, arguments)
+        # The compile target is the product manifest's declaration, not a build.sh literal.
+        product = json.loads((ROOT / "app.json").read_text(encoding="utf-8"))
+        target = arguments[arguments.index("-target") + 1]
+        assert target == f"{product['architectures'][-1]}-apple-macosx{product['minimumMacOS']}", target
     assert not output.exists(), "typecheck mode published an artifact"
     assert not list(isolated_tmp.iterdir()), "typecheck mode left temporary build state"
 

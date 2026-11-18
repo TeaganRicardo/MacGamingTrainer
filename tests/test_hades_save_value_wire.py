@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from games.hades.save_document import encode_lua
 from games.hades.save_values import from_typed
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 SWIFTC = shutil.which('swiftc')
 if not SWIFTC:
@@ -104,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-save-value-wire-') as tempora
     values_file, main, binary = base / 'HadesSaveValue.swift', base / 'main.swift', base / 'wire'
     values_file.write_text(value_source)
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Input/TrainerJSONNumericInput.swift'),
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Input/TrainerJSONNumericInput.swift'),
                     str(values_file), str(main), '-o', str(binary)], check=True)
     wire = subprocess.check_output([str(binary)], text=True)
 

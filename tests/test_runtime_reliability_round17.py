@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -234,6 +235,7 @@ with tempfile.TemporaryDirectory() as td:
     main_path.write_text(textwrap.dedent(harness))
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(main_path),

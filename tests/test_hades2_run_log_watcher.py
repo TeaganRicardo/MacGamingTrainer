@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -280,6 +281,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
     main.write_text(textwrap.dedent(main_source), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2RunLogWatcher.swift"),
         str(ROOT / "Sources/Core/Host/TrainerConnectionPolicy.swift"),

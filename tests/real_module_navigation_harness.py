@@ -147,7 +147,7 @@ final class StartupAvailabilityModel: ObservableObject, TrainerHostModel {
 
 struct StartupAvailabilityModule: TrainerGameModule {
     static let descriptor = GameModuleDescriptor(id: "startup_fixture", displayName: "Startup fixture",
-        backendGameID: "startup_fixture", targetProcessName: "InertContextStartupFixture",
+        targetProcessName: "InertContextStartupFixture",
         targetBundleIdentifier: "test.inert-context-startup-fixture",
         expectedHostProtocolVersion: HadesGameModule.descriptor.expectedHostProtocolVersion,
         expectedModuleProtocolVersion: HadesGameModule.descriptor.expectedModuleProtocolVersion,

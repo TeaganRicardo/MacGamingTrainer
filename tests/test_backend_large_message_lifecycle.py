@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which('swiftc')
@@ -236,7 +237,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-large-message-lifecycle-') as tempo
     harness = folder / 'main.swift'
     harness.write_text(HARNESS)
     binary = folder / 'lifecycle'
-    subprocess.run([SWIFTC, '-parse-as-library', str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, '-parse-as-library', str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
                     str(ROOT / 'Sources/Core/Runtime/BackendClient.swift'), str(harness), '-o', str(binary)],
                    cwd=ROOT, check=True)
     try:

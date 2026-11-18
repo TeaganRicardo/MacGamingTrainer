@@ -400,7 +400,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     shutil.copytree(ROOT / "Tools", project / "Tools")
     shutil.copy2(ROOT / "Info.plist", project / "Info.plist")
 
-    generated = project / "Generated/ActiveGameModule.swift"
+    generated = project / "Generated/GameBinding.swift"
     subprocess.run(
         [PYTHON, str(project / "Tools/generate_game_binding.py"), "reference_fixture", str(generated)],
         cwd=project,

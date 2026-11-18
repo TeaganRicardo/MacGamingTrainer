@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r'''
@@ -38,6 +39,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-document-generation-') as directory
     directory = Path(directory)
     main, binary = directory / 'main.swift', directory / 'generation'
     main.write_text(HARNESS)
-    subprocess.run([shutil.which('swiftc'), str(ROOT / 'Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift'),
+    subprocess.run([shutil.which('swiftc'), *SINGLE_MODULE_FLAGS, str(ROOT / 'Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift'),
         str(main), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=5)

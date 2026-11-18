@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -191,7 +192,7 @@ with tempfile.TemporaryDirectory() as td:
     main = td / "main.swift"
     binary = td / "mapping-test"
     main.write_text(textwrap.dedent(harness))
-    subprocess.run([SWIFTC, str(mapping), str(main), "-o", str(binary)], check=True, cwd=ROOT)
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(mapping), str(main), "-o", str(binary)], check=True, cwd=ROOT)
     subprocess.run([str(binary)], check=True, cwd=ROOT)
 
 print("mapped_slider_contract_ok")

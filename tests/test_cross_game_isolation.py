@@ -1,13 +1,29 @@
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Tools'))
+from module_support import SWIFT_APP_MODULE, SWIFT_CORE_MODULE  # noqa: E402
+from product_support import load_selection  # noqa: E402
 
-shared_paths = [
-    ROOT / 'Sources/App.swift',
-    ROOT / 'build.sh',
-]
-shared_paths += sorted((ROOT / 'Sources/Core').rglob('*.swift'))
-shared_paths += sorted((ROOT / 'Backend/core').rglob('*.py'))
+# Swift isolation is the compiler's: build.sh gives each Swift module only the
+# swiftmodules of its declared dependencies, so Core cannot import a game and a
+# game cannot import another game. This asserts that declared layout; the build
+# preflight test asserts build.sh passes exactly these search paths.
+selection = load_selection('all')
+layout = {module['name']: module for module in selection.normalized()['frontend']['swift']['modules']}
+games = [module.frontend.swift_module for module in selection.modules]
+assert list(layout) == [SWIFT_CORE_MODULE, *games, SWIFT_APP_MODULE], list(layout)
+assert layout[SWIFT_CORE_MODULE]['dependencies'] == []
+for game in games:
+    assert layout[game]['dependencies'] == [SWIFT_CORE_MODULE], (game, layout[game])
+assert layout[SWIFT_APP_MODULE]['dependencies'] == [SWIFT_CORE_MODULE, *games]
+for module in selection.modules:
+    isolated = load_selection(module.id).normalized()['frontend']['swift']['modules']
+    assert [item['name'] for item in isolated] == [SWIFT_CORE_MODULE, module.frontend.swift_module, SWIFT_APP_MODULE]
+
+# The Python boundary keeps its vocabulary check until #771 replaces it.
+shared_paths = sorted((ROOT / 'Backend/core').rglob('*.py'))
 shared_paths += [
     ROOT / 'Tools/module_support.py',
     ROOT / 'Tools/generate_game_binding.py',
@@ -31,10 +47,9 @@ for token in (
 ):
     assert token not in shared, token
 
-fixture_root = ROOT / 'ContractFixtures/reference_module'
+fixture_root = ROOT / 'ContractFixtures/reference_module/backend'
 fixture = '\n'.join(path.read_text() for path in fixture_root.rglob('*') if path.is_file())
-hades = '\n'.join(path.read_text() for path in (ROOT / 'Sources/Hades2').rglob('*.swift'))
-hades += '\n' + '\n'.join(
+hades = '\n'.join(
     path.read_text(errors='ignore')
     for path in (ROOT / 'Backend/games/hades2').rglob('*')
     if path.is_file() and path.suffix in {'.py', '.json', '.lua'}
@@ -50,18 +65,11 @@ assert not (ROOT / 'Sources/ReferenceFixture').exists()
 
 print('cross_game_isolation_ok')
 
-build = (ROOT / 'build.sh').read_text()
-assert 'SWIFT_SOURCES=("$ROOT/Sources/App.swift")' in build
-assert 'find "$ROOT/Sources/Core" -type f -name' in build
-assert 'find "$ROOT/$directory" -type f -name' in build
-assert build.index('find "$ROOT/Sources/Core"') < build.index('find "$ROOT/$directory"')
-for forbidden in ('case "$ACTIVE_GAME_ID"', 'if [[ "$ACTIVE_GAME_ID"', 'hades2)', 'reference_fixture)'):
-    assert forbidden not in build, forbidden
-
 core_ui = '\n'.join(path.read_text() for path in (ROOT / 'Sources/Core/UI').rglob('*.swift'))
 hades_ui = '\n'.join(path.read_text() for path in (ROOT / 'Sources/Hades2').rglob('*.swift'))
+fixture_ui = (ROOT / 'ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift').read_text()
 assert 'struct TrainerFeatureToggleRow' in core_ui
 assert 'TrainerFeatureToggleRow(' in hades_ui
-assert 'TrainerFeatureToggleRow(' in fixture
+assert 'TrainerFeatureToggleRow(' in fixture_ui
 
 print('shared_core_propagation_ok')

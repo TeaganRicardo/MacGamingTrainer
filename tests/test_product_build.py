@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / 'Tools'))
 import module_support
 import product_support
 import verify_module_build
-from generate_game_binding import generate
+from generate_game_binding import generate, generate_module_sources
 from module_support import ManifestError
 from build_module_native import build_libraries
 
@@ -81,15 +81,35 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
                         architectures=['arm64'], minimum_macos='14.0')
     assert compiled_arches == ['x86_64']
 
+    generated = project / 'Generated'
+    generate_module_sources(selection.modules, generated)
+    bindings = {module: (generated / module.lower() / 'GameBinding.generated.swift').read_text()
+                for module in ('One', 'Two')}
+    catalog = (generated / module_support.SWIFT_APP_MODULE / 'TrainerGameCatalog.generated.swift').read_text()
+    for name, other in (('One', 'Two'), ('Two', 'One')):
+        module = f'{name}Module'
+        binding = bindings[name]
+        assert 'import TrainerCore\n' in binding
+        assert f'package enum {module}Binding' in binding
+        assert f'TrainerGameContext<{module}>()' in binding
+        assert f'{module}.makeManagementCommands(model: context.model' in binding
+        assert f'if !application.terminationRequested && application.selectedGameID == {module}.descriptor.id,' in binding
+        # A game's generated binding never names another game.
+        assert f'{other}Module' not in binding and f'import {other.lower()}' not in binding
+        assert f'import {name.lower()}\n' in catalog
+        assert f'{module}Binding.makeContext()' in catalog
+        assert f'{module}Binding.makeManagementCommands(application: application' in catalog
+    assert 'typealias ActiveGameModule' not in ''.join(bindings.values()) + catalog
+    assert 'backendGameID' not in ''.join(bindings.values())
+    assert 'targetExecutablePathSuffix: "one/Game.macOS"' in bindings['One']
+
+    # Harnesses that still compile Core and games as one module use one file
+    # with the same declarations and no module imports.
     output = project / 'Generated.swift'
     generate(selection.modules, output, catalog=True)
-    generated = output.read_text()
-    for module in ('OneModule', 'TwoModule'):
-        assert f'TrainerGameContext<{module}>()' in generated
-        assert f'{module}.makeManagementCommands(model: context.model' in generated
-        assert f'if !application.terminationRequested && application.selectedGameID == {module}.descriptor.id,' in generated
-    assert 'typealias ActiveGameModule' not in generated
-    assert 'targetExecutablePathSuffix: "one/Game.macOS"' in generated
+    single = output.read_text()
+    assert 'import TrainerCore' not in single and 'import one' not in single
+    assert 'package enum OneModuleBinding' in single and 'enum TrainerGameCatalog' in single
 
     dist = project / 'dist'
     app = dist / 'Unified Trainer.app'

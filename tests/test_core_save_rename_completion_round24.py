@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -39,7 +40,7 @@ harness = r'''
 import Foundation
 
 struct GameModuleDescriptor {
-    let backendGameID: String
+    let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
 }
@@ -74,7 +75,7 @@ struct Runner {
         )
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
-            backendGameID: "test",
+            id: "test",
             expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 5
         )
@@ -136,6 +137,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-rename-completion-") as td:
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         "-parse-as-library",
         str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT/"Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT/"Sources/Core/Runtime/BackendClient.swift"),

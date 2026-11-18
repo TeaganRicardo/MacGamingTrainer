@@ -1,5 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 """Exercise shared search-field appearance and clear-action semantics on macOS."""
 import shutil
 import subprocess
@@ -118,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-search-field-appearance-") as tempo
     binary = directory / "search_field_appearance"
     swift.write_text(HARNESS)
     subprocess.run([
-        SWIFTC, "-parse-as-library",
+        SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library",
         str(ROOT / "Sources/Core/UI/TrainerTheme.swift"),
         str(ROOT / "Sources/Core/UI/TrainerMotion.swift"),
         str(ROOT / "Sources/Core/UI/Components/TrainerSearchField.swift"),

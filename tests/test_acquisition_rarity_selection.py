@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -56,5 +57,5 @@ with tempfile.TemporaryDirectory(prefix="mgt-706-rarity-") as directory:
     harness = folder / "main.swift"
     output = folder / "smoke"
     harness.write_text(HARNESS, encoding="utf-8")
-    subprocess.run([SWIFTC, "-parse-as-library", str(SOURCE), str(harness), "-o", str(output)], check=True, cwd=ROOT)
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", str(SOURCE), str(harness), "-o", str(output)], check=True, cwd=ROOT)
     subprocess.run([str(output)], check=True, cwd=ROOT)
