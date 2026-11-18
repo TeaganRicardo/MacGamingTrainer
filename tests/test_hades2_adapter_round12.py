@@ -34,6 +34,7 @@ class FakeTransport:
     def detach(self): self.pid = None; self.live = False
     def close(self): self.live = False
     def attach(self, pid): self.pid = pid; self.live = True
+    def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
 transport = FakeTransport()
 a = Hades2Adapter(transport=transport)

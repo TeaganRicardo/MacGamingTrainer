@@ -111,6 +111,7 @@ print('preferences_schema_v0180_ok')
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 adapter_base = Path(tempfile.mkdtemp(prefix='mgt-preference-adapter-'))
 prep.DATA = adapter_base
@@ -129,6 +130,7 @@ class FakeTransport:
     def alive(self): return True
     def detach(self): pass
     def close(self): pass
+    def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
 adapter = Hades2Adapter(transport=FakeTransport())
 adapter.state.update({
@@ -187,6 +189,7 @@ class OfflineTransport:
     def alive(self): return False
     def detach(self): pass
     def close(self): pass
+    def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
 profile_adapter = Hades2Adapter(transport=OfflineTransport())
 profile_path = profile_adapter.profile_service.path('bad-desired')

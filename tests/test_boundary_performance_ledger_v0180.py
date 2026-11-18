@@ -11,6 +11,7 @@ sys.path.insert(0, str(root/'Backend'))
 from core.adapter import AdapterError
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 
 class FakeTransport:
@@ -45,6 +46,9 @@ class FakeTransport:
 
     def close(self):
         self.detach()
+
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-boundary-ledger-v0180-'))

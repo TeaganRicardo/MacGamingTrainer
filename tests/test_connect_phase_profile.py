@@ -61,6 +61,9 @@ class FakeTransport:
     def close(self):
         self.detach()
 
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
+
 
 transport = FakeTransport()
 adapter = adapter_module.Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
