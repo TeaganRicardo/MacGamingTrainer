@@ -668,9 +668,14 @@ RewardStoreData.RunProgress = {
 }
 RewardStoreData.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
 CurrentRun.RewardStores.MetaProgress = { { Name = "MetaCurrencyDrop", AllowDuplicates = true } }
-local lastExcludedGods = {}
+local sawApolloExcluded = false
+local function observeExcludedGods(excluded)
+  for _, name in ipairs(excluded or {}) do
+    if name == "ApolloUpgrade" then sawApolloExcluded = true end
+  end
+end
 GetEligibleLootNames = function(excluded)
-  lastExcludedGods = excluded or {}
+  observeExcludedGods(excluded)
   local names = { "ApolloUpgrade", "ZeusUpgrade" }
   for _, name in ipairs(excluded or {}) do
     for index = #names, 1, -1 do
@@ -680,7 +685,7 @@ GetEligibleLootNames = function(excluded)
   return names
 end
 ReachedMaxGods = function(excluded)
-  lastExcludedGods = excluded or {}
+  observeExcludedGods(excluded)
   return false
 end
 setRoomSet("F")
@@ -731,11 +736,7 @@ local duplicateGod = targetRow(sparseExit, "reward", "ApolloUpgrade")
 assert(duplicateGod and duplicateGod.enabled == false
     and duplicateGod.reason == "reward_not_available",
   "sparse status reused a stale catalog after a sibling god reward changed")
-local excludedApollo = false
-for _, name in ipairs(lastExcludedGods) do
-  if name == "ApolloUpgrade" then excludedApollo = true end
-end
-assert(excludedApollo,
+assert(sawApolloExcluded,
   "native GetEligibleLootNames/ReachedMaxGods did not receive sibling-door exclusions")
 local duplicateGodApply = pcall(function()
   M.dispatch("apply_world_exit", {
