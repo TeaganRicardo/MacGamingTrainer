@@ -13,6 +13,7 @@ def read(path):
 view = read('Sources/Hades2/Hades2View.swift')
 types = read('Sources/Hades2/Hades2Types.swift')
 model = read('Sources/Hades2/Hades2Model.swift')
+backend_state = read('Sources/Hades2/Hades2BackendState.swift')
 store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
 navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
@@ -56,6 +57,24 @@ assert 'enabled = enabled' in world_catalog
 assert 'reason = enabled and nil or candidate.reason' in world_catalog
 assert 'kind = "roomCategory", id = name' in world_catalog
 assert 'kind = "roomCategory"' in lua
+
+# #763: disabled native targets survive the transport/model boundary and stay
+# visible in SwiftUI with a reason; both model selection repair and Apply are
+# gated on the authoritative enabled bit.
+world_exit_view = source_section(
+    view, "private var worldExitPanel: some View {", "private var nextOccurrencePanel: some View {"
+)
+assert 'Text(worldActionTargetDisplay(target))' in world_exit_view
+assert '.disabled(!target.enabled)' in world_exit_view
+assert 'private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget)' in view
+assert 'target.reason.flatMap' in view
+assert 'enabled: target["enabled"] as? Bool ?? true' in backend_state
+assert 'reason: target["reason"] as? String' in backend_state
+assert '$0.stableID == selectedWorldExitTarget && $0.enabled' in model
+assert 'exit.targets.first(where: { $0.stableID == selectedWorldExitTarget && $0.enabled })' in model
+assert 'return exit.targets.contains { $0.stableID == selectedWorldExitTarget && $0.enabled }' in model
+assert 'worldActionUnavailableReasonIDs' in view
+assert 'source_anomaly_replacement' in view
 assert 'installHook("LeaveRoom"' in lua
 assert 'command == "set_next_room_reward"' not in lua
 for retired in (
