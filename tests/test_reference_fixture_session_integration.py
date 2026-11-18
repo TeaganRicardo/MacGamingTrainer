@@ -154,13 +154,13 @@ func waitForExhaustedBackend(_ stage: String) {
         fail("exiting backend did not exhaust recovery (\(stage)): \(exhaustedModel.backendStatus)")
     }
 }
-func waitForRestartRequest(_ stage: String) {
-    guard waitUntil(2.0, {
-        exhaustedSession.currentStatus.operation.key == "host.restartBackend"
-            || exhaustedSession.currentStatus.notice == "host.backend.notice.restarted"
-            || exhaustedSession.currentStatus.busy
-    }) else {
-        fail("\(stage) did not reach the backend session: \(exhaustedSession.currentStatus)")
+// `TrainerBackendSession.restart()` synchronously marks the session busy with
+// the restart operation and clears any earlier notice, so a new request is
+// distinguishable from a previous cycle's "restarted" notice.
+func requireRestartRequested(_ stage: String) {
+    let status = exhaustedSession.currentStatus
+    guard status.busy, status.operation.key == "host.restartBackend", status.notice.isEmpty else {
+        fail("\(stage) did not reach the backend session: \(status)")
     }
 }
 waitForExhaustedBackend("startup")
@@ -175,23 +175,27 @@ let exhaustedContext = MainActor.assumeIsolated {
 // The session journey runs with its target process alive, so the Context holds
 // a pending automatic restart opportunity for this target lifetime.
 let automaticRestart = MainActor.assumeIsolated { () -> (allowed: Bool, consumed: Bool) in
-    (exhaustedContext.backendRestartAllowed, exhaustedContext.consumeAutomaticBackendRestart())
+    let allowed = exhaustedContext.backendRestartAllowed
+    let consumed = exhaustedContext.consumeAutomaticBackendRestart()
+    if consumed { requireRestartRequested("automatic restart") }
+    return (allowed, consumed)
 }
 if !automaticRestart.allowed || !automaticRestart.consumed {
     fail("Host automatic restart is unreachable for an unavailable backend: \(automaticRestart)")
 }
-waitForRestartRequest("automatic restart")
 waitForExhaustedBackend("after automatic restart")
 let manualRestart = MainActor.assumeIsolated { () -> (title: String, enabled: Bool) in
     let card = exhaustedContext.connectionStatusCard(onLaunch: nil)
     let result = (card.primaryActionTitleKey, card.primaryActionEnabled)
-    if result.1 { card.performPrimaryAction() }
+    if result.1 {
+        card.performPrimaryAction()
+        requireRestartRequested("restart action")
+    }
     return result
 }
 if manualRestart.title != "host.restartBackend" || !manualRestart.enabled {
     fail("Host restart action is unreachable for an unavailable backend: \(manualRestart)")
 }
-waitForRestartRequest("restart action")
 if !exhaustedSession.currentStatus.requiresTargetRestart {
     fail("worker restart cleared the unknown-outcome target trust gate")
 }
