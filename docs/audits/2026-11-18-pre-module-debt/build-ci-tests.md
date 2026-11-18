@@ -1,6 +1,6 @@
 # Tech-debt audit: build tooling, CI and test suite
 
-Worktree: `game-modules-tech-debt-bdb1d8` at `73697aef`. This was a read-only review. Commands run: `validate_game_module.py --all` (ok), `supported_build.py` (ok), `discover_linux_tests.py` (322 portable tests), `mutation_gate.py --list` with `check_manifest` (28 entries, 0 problems), the `ci_docs_only` / `select_macos_pr_tests` functions called in-process, and git log/diff queries. I did not run `build.sh`, macOS fixtures or CI.
+Source: `main@73697aef`. This was a read-only review. Commands run: `validate_game_module.py --all` (ok), `supported_build.py` (ok), `discover_linux_tests.py` (322 portable tests), `mutation_gate.py --list` with `check_manifest` (28 entries, 0 problems), the `ci_docs_only` / `select_macos_pr_tests` functions called in-process, and git log/diff queries. I did not run `build.sh`, macOS fixtures or CI.
 
 Labels used below:
 - **[F]**: confirmed fact, from a file:line reference or a mechanical check I ran.
