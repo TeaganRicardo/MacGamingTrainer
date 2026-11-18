@@ -2407,11 +2407,7 @@ if __MacGamingTrainerV1 == nil then
       for depth, column in ipairs(slotted.Talents or {}) do
         local keys = {}
         for slot in pairs(type(column) == "table" and column or {}) do keys[#keys + 1] = slot end
-        table.sort(keys, function(a, b)
-        local left, right = tostring(a), tostring(b)
-        if left == right then return type(a) < type(b) end
-        return left < right
-      end)
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
         for _, slot in ipairs(keys) do
           local node = column[slot]
           if type(node) == "table" and type(node.Name) == "string" then
@@ -10285,7 +10281,11 @@ if __MacGamingTrainerV1 == nil then
       if type(value) ~= "table" then return tostring(value) end
       local keys = {}
       for key in pairs(value) do keys[#keys + 1] = key end
-      table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+      table.sort(keys, function(a, b)
+        local left, right = tostring(a), tostring(b)
+        if left == right then return type(a) < type(b) end
+        return left < right
+      end)
       local parts = {}
       for _, key in ipairs(keys) do
         local item = value[key]
