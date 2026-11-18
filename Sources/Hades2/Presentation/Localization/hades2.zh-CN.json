@@ -712,7 +712,8 @@
     "hades2.worldActions.unavailable.room_force_predicate_unavailable": "原生强制路线检查不可用",
     "hades2.worldActions.unavailable.room_sets_unavailable": "房间集合数据不可用",
     "hades2.worldActions.unavailable.source_unavailable": "当前房间数据不可用",
-    "hades2.worldActions.unavailable.door_unavailable": "出口不可用"
+    "hades2.worldActions.unavailable.door_unavailable": "出口不可用",
+    "hades2.worldActions.unavailable.source_anomaly_replacement": "由原生异常路线替换"
   },
   "language": "zh-CN"
 }
