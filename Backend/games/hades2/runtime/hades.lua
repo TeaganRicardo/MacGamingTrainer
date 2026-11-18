@@ -9916,24 +9916,24 @@ if __MacGamingTrainerV1 == nil then
             else
               local forceOK, forced, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
               if not forceOK then
-              local name = tostring(data.Name or roomName)
-              diagnostics.probeErrorRoom = name
-              diagnostics.probeError = string.sub(tostring(forced), 1, 160)
-              diagnostics.forceProbeErrorRooms = diagnostics.forceProbeErrorRooms or {}
-              diagnostics.forceProbeErrorRooms[name] = true
-            end
-            if forceOK and forceUsesRandom then
-              -- A probabilistic native force is not a deterministic progress
-              -- lock. Do not advance native RNG merely to inspect the menu.
-              diagnostics.randomForceRoom = tostring(data.Name or roomName)
-              forced = false
-            end
-            if forceOK and forced then
-              -- Deterministic forced progression still takes precedence, but
-              -- inspect the entire set to expose the blocked alternatives.
-              hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
-              diagnostics.forcedRoom = hardForcedRoom
-            end
+                local name = tostring(data.Name or roomName)
+                diagnostics.probeErrorRoom = name
+                diagnostics.probeError = string.sub(tostring(forced), 1, 160)
+                diagnostics.forceProbeErrorRooms = diagnostics.forceProbeErrorRooms or {}
+                diagnostics.forceProbeErrorRooms[name] = true
+              end
+              if forceOK and forceUsesRandom then
+                -- A probabilistic native force is not a deterministic progress
+                -- lock. Do not advance native RNG merely to inspect the menu.
+                diagnostics.randomForceRoom = tostring(data.Name or roomName)
+                forced = false
+              end
+              if forceOK and forced then
+                -- Deterministic forced progression still takes precedence, but
+                -- inspect the entire set to expose the blocked alternatives.
+                hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
+                diagnostics.forcedRoom = hardForcedRoom
+              end
               local kind = forceOK and routeKind(data.Name) or nil
               if kind ~= nil then
                 result[kind] = result[kind] or {}
