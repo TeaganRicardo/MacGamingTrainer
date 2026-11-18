@@ -10,7 +10,6 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from core.adapter import GameAdapter, GameAdapterContext
-from core.game_spec import GameSpec
 from core.module_manifest import GameModuleManifest, ManifestError
 import core.protocol as core_protocol
 from core.protocol import (
@@ -107,13 +106,6 @@ assert fallback['ok'] is False and fallback['error']['code'] == 'protocol_error'
 assert fallback['error']['presentation'] == 'host.backend.error.protocolError'
 assert fallback['error']['diagnostic'] == 'backend reply could not be serialized as strict JSON'
 router.close(); assert adapter.closed
-
-# GameSpec stays distribution/layout agnostic until a game opts into a bundle.
-spec = GameSpec(id='other', display_name='Other', process_name='otherd', executable_path=Path('/opt/other/game'))
-assert spec.minimum_architecture is None and spec.app_bundle_path is None
-try: _ = spec.app_path
-except RuntimeError: pass
-else: raise AssertionError('generic GameSpec unexpectedly requires an app bundle')
 
 # Runtime manifest parses backend identity only; extra build/frontend keys are
 # deliberately ignored by Backend/core and belong to Tools/ validation.

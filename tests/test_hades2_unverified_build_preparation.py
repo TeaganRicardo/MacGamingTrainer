@@ -24,17 +24,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-verified-build-") as directory:
 
     old_values = {
         "GAME": preparation.GAME,
-        "GAME_SPEC": preparation.GAME_SPEC,
-        "STEAM_SPEC": preparation.STEAM_SPEC,
+        "GAME_EXECUTABLE": preparation.GAME_EXECUTABLE,
+        "STEAM_MANIFEST": preparation.STEAM_MANIFEST,
         "_uuid": preparation._uuid,
     }
     preparation.GAME = game
-    preparation.GAME_SPEC = SimpleNamespace(
-        app_path=game,
-        executable_path=executable,
-        minimum_architecture="arm64",
-    )
-    preparation.STEAM_SPEC = SimpleNamespace(manifest_path=manifest)
+    preparation.GAME_EXECUTABLE = executable
+    preparation.STEAM_MANIFEST = manifest
     preparation._uuid = lambda _path: SUPPORTED_BUILD["uuid"]
     try:
         identity = preparation.compatibility()
@@ -73,8 +69,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
     old_values = {
         "GAME": preparation.GAME,
         "DATA": preparation.DATA,
-        "GAME_SPEC": preparation.GAME_SPEC,
-        "STEAM_SPEC": preparation.STEAM_SPEC,
+        "GAME_EXECUTABLE": preparation.GAME_EXECUTABLE,
+        "STEAM_MANIFEST": preparation.STEAM_MANIFEST,
         "_require_stopped": preparation._require_stopped,
         "_uuid": preparation._uuid,
         "_entitlements": preparation._entitlements,
@@ -87,16 +83,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
     }
     preparation.GAME = game
     preparation.DATA = root / "trainer-data"
-    preparation.GAME_SPEC = SimpleNamespace(
-        app_path=game,
-        executable_path=executable,
-        executable_name="Hades II",
-        process_name="Hades2",
-        display_name="Hades II",
-        bundle_identifier="com.supergiantgames.hades2",
-        minimum_architecture="arm64",
-    )
-    preparation.STEAM_SPEC = SimpleNamespace(manifest_path=manifest)
+    preparation.GAME_EXECUTABLE = executable
+    preparation.STEAM_MANIFEST = manifest
     preparation._require_stopped = lambda: None
     preparation._uuid = lambda _path: unknown_uuid
 

@@ -13,7 +13,7 @@ from . import preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
-from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
+from .config import DATA, DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST, PROCESS_NAME, STEAM_APP_ID
 from .persistence import PersistenceError
 from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
@@ -124,12 +124,12 @@ class Hades2Adapter(GameAdapter):
             create_remote_time_warp=getattr(transport,'create_time_warp_controller',None)
             if callable(create_remote_time_warp):
                 time_warp_controller=create_remote_time_warp(
-                    helper_path,[GAME_SPEC.executable_name]
+                    helper_path,[GAME_EXECUTABLE_NAME]
                 )
             else:
                 from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
                 time_warp_controller=ProcessTimeWarpController(
-                    LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
+                    LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_EXECUTABLE_NAME]
                 )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
@@ -724,12 +724,12 @@ class Hades2Adapter(GameAdapter):
         except Exception:
             self.state['status']='incompatible'
             raise
-        result=subprocess.run(['/usr/bin/pgrep','-x',GAME_SPEC.process_name],capture_output=True,text=True,timeout=5)
+        result=subprocess.run(['/usr/bin/pgrep','-x',PROCESS_NAME],capture_output=True,text=True,timeout=5)
         if result.returncode not in (0,1):
             detail=(result.stderr or result.stdout).strip() or '未知错误'
-            raise RuntimeError(f'查询 {GAME_SPEC.display_name} 进程失败（{result.returncode}）：{detail}')
+            raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{result.returncode}）：{detail}')
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
-        if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
+        if len(pids)>1:raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。')
         pid=pids[0] if pids else None
         if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
             attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
@@ -755,7 +755,7 @@ class Hades2Adapter(GameAdapter):
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
             phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
-            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
+            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {DISPLAY_NAME} 并进入存档。')
             # A reconnect invalidates the prior native helper observation.
             # Resident-session attach separately owns Lua generation/bootstrap.
             self._invalidate_game_speed_observation()
@@ -1096,7 +1096,7 @@ class Hades2Adapter(GameAdapter):
     def metadata(self):
         metadata = super().metadata()
         metadata.update({
-            'steamAppId': STEAM_SPEC.app_id,
+            'steamAppId': STEAM_APP_ID,
             'transport': 'supergiant-lldb-lua',
         })
         return metadata
@@ -1118,6 +1118,6 @@ class Hades2Adapter(GameAdapter):
         try:
             self.disconnect()
         except Exception:
-            logging.exception('Graceful %s cleanup failed; attempting debugger detach.', GAME_SPEC.display_name)
+            logging.exception('Graceful %s cleanup failed; attempting debugger detach.', DISPLAY_NAME)
         finally:
             self.runtime.close()

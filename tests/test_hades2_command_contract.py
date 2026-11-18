@@ -580,7 +580,7 @@ try:
 
     probe.calls.clear()
     contract.dispatch("launch", {}, "launch")
-    assert system_events[-1][0] == ["/usr/bin/open", command_contract_module.STEAM_SPEC.launch_url]
+    assert system_events[-1][0] == ["/usr/bin/open", command_contract_module.STEAM_LAUNCH_URL]
     assert probe.calls == [("scan",)]
 
     probe.runtime.live = False

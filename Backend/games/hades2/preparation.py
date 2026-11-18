@@ -10,11 +10,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .config import DATA, GAME_SPEC, STEAM_SPEC, SUPPORTED_BUILD
+from .config import (
+    BUNDLE_IDENTIFIER, DATA, DISPLAY_NAME, GAME_APP, GAME_ARCHITECTURE, GAME_EXECUTABLE,
+    GAME_EXECUTABLE_NAME, GAME_SAVES, PROCESS_NAME, STEAM_MANIFEST, SUPPORTED_BUILD,
+)
 from .operation_budgets import SUBPROCESS_TIMEOUT_SECONDS
 
-GAME = GAME_SPEC.app_path
-SAVES = GAME_SPEC.save_path
+GAME = GAME_APP
+SAVES = GAME_SAVES
 VERSION = SUPPORTED_BUILD['bundleVersion']
 STEAM_BUILD = SUPPORTED_BUILD['steamBuildID']
 UUID = SUPPORTED_BUILD['uuid']
@@ -48,13 +51,13 @@ def run(*args):
 
 
 def _require_stopped():
-    if _command('/usr/bin/pgrep', '-x', GAME_SPEC.process_name, allowed=(0, 1)).returncode == 0:
-        raise RuntimeError(f'请先退出 {GAME_SPEC.display_name}；运行中不能修改签名或恢复存档。')
+    if _command('/usr/bin/pgrep', '-x', PROCESS_NAME, allowed=(0, 1)).returncode == 0:
+        raise RuntimeError(f'请先退出 {DISPLAY_NAME}；运行中不能修改签名或恢复存档。')
 
 
 def _uuid(exe):
     result = run('/usr/bin/xcrun', 'dwarfdump', '--uuid', str(exe)).decode()
-    architecture = GAME_SPEC.minimum_architecture
+    architecture = GAME_ARCHITECTURE
     pattern = r'UUID: ([A-Fa-f0-9-]+) \(' + re.escape(architecture) + r'\)' if architecture else r'UUID: ([A-Fa-f0-9-]+) \([^)]*\)'
     match = re.search(pattern, result)
     if not match:
@@ -67,10 +70,10 @@ def compatibility(strict=False):
     """Report version drift without blocking supported operations by default."""
     info = plistlib.loads((GAME / 'Contents/Info.plist').read_bytes())
     version = info.get('CFBundleVersion')
-    steam = STEAM_SPEC.manifest_path
+    steam = STEAM_MANIFEST
     match = re.search(r'"buildid"\s+"([0-9]+)"', steam.read_text())
     build = match.group(1) if match else None
-    uuid = _uuid(GAME_SPEC.executable_path)
+    uuid = _uuid(GAME_EXECUTABLE)
     compatible = version == VERSION and build == STEAM_BUILD and uuid == UUID
     warning = f'未经验证的游戏版本：version={version}, build={build}, UUID={uuid}。'
     if strict and not compatible:
@@ -110,7 +113,7 @@ def _records():
 
 
 def _verify_backup(root, record):
-    original = root / GAME_SPEC.executable_name
+    original = root / GAME_EXECUTABLE_NAME
     expected_sha256 = record.get('original_sha256')
     expected_uuid = record.get('uuid')
     if not isinstance(expected_sha256, str) or sha(original) != expected_sha256:
@@ -141,7 +144,7 @@ def _atomic_install(source, destination, expected_current, original_sha256=None,
     # checked in a separate directory outside the app, where Info.plist and
     # unsealed bundle resources cannot affect standalone signature verification.
     with tempfile.TemporaryDirectory(prefix='verification-', dir=backup_parent) as directory:
-        verified = Path(directory) / GAME_SPEC.executable_name
+        verified = Path(directory) / GAME_EXECUTABLE_NAME
         shutil.copy2(source, verified)
         if sha(verified) != expected_source:
             raise RuntimeError('独立验证副本校验失败；未修改游戏。')
@@ -186,10 +189,10 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
     entitlement_path = root / 'debug-entitlements.plist'
     entitlement_path.write_bytes(plistlib.dumps(permissions))
 
-    staged = root / (GAME_SPEC.executable_name + '.debug')
+    staged = root / (GAME_EXECUTABLE_NAME + '.debug')
     shutil.copy2(original, staged)
     run('/usr/bin/codesign', '--force', '--sign', '-', '--identifier',
-        GAME_SPEC.bundle_identifier, '--options', 'runtime',
+        BUNDLE_IDENTIFIER, '--options', 'runtime',
         '--entitlements', str(entitlement_path), str(staged))
     run('/usr/bin/codesign', '--verify', '--strict', str(staged))
     prepared_entitlements = _entitlements(staged)
@@ -206,7 +209,7 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
 def prepare():
     _require_stopped()
     identity = compatibility()
-    exe = GAME_SPEC.executable_path
+    exe = GAME_EXECUTABLE
     current = sha(exe)
 
     for root, record in _records():
@@ -234,7 +237,7 @@ def prepare():
     bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME), allowed=(0, 1))
 
     root = _backup_dir('signature')
-    original = root / GAME_SPEC.executable_name
+    original = root / GAME_EXECUTABLE_NAME
     shutil.copy2(exe, original)
     record = dict(identity, original_sha256=current, status='backed_up')
     _verify_backup(root, record)
@@ -260,7 +263,7 @@ def prepare():
 def restore():
     _require_stopped()
     compatibility()
-    exe = GAME_SPEC.executable_path
+    exe = GAME_EXECUTABLE
     current = sha(exe)
     for root, record in _records():
         if current == record.get('original_sha256'):
