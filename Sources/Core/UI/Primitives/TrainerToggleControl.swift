@@ -5,7 +5,7 @@ import SwiftUI
 /// system thumb animation. Feature rows may supply
 /// their neutral presentation tint so the switch and its corresponding
 /// indicator communicate the same phase.
-struct TrainerToggleControl: View {
+package struct TrainerToggleControl: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
@@ -15,7 +15,7 @@ struct TrainerToggleControl: View {
     let tint: Color?
     private let onChange: (Bool) -> Void
 
-    init(
+    package init(
         title: String,
         isOn: Bool,
         enabled: Bool = true,
@@ -31,7 +31,7 @@ struct TrainerToggleControl: View {
         self.onChange = { _ in action() }
     }
 
-    init(
+    package init(
         title: String,
         isOn: Bool,
         enabled: Bool = true,
@@ -47,7 +47,7 @@ struct TrainerToggleControl: View {
         self.onChange = onChange
     }
 
-    var body: some View {
+    package var body: some View {
         Toggle(title, isOn: Binding(get: { isOn }, set: onChange))
             .labelsHidden()
             .toggleStyle(.switch)
@@ -65,21 +65,21 @@ struct TrainerToggleControl: View {
 /// Shared checkbox implementation for game-specific option panels. Keeping the
 /// checkbox here prevents game modules from owning another Toggle rendering
 /// path while preserving the native checkbox appearance.
-struct TrainerCheckboxControl: View {
+package struct TrainerCheckboxControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let isOn: Bool
     let enabled: Bool
     private let onChange: (Bool) -> Void
 
-    init(title: String, isOn: Bool, enabled: Bool = true, onChange: @escaping (Bool) -> Void) {
+    package init(title: String, isOn: Bool, enabled: Bool = true, onChange: @escaping (Bool) -> Void) {
         self.title = title
         self.isOn = isOn
         self.enabled = enabled
         self.onChange = onChange
     }
 
-    var body: some View {
+    package var body: some View {
         Toggle(title, isOn: Binding(get: { isOn }, set: onChange))
             .toggleStyle(.checkbox)
             .disabled(!enabled)
@@ -121,8 +121,10 @@ struct TrainerLockButton: View {
 }
 
 /// Reserves `TrainerLockButton`'s footprint so unlocked sibling controls match height and alignment.
-struct TrainerLockSlot: View {
-    var body: some View {
+package struct TrainerLockSlot: View {
+    package init() {}
+
+    package var body: some View {
         Color.clear
             .frame(width: 26, height: 24)
             .accessibilityHidden(true)

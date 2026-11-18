@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TrainerVitalMetricCard<Field: Hashable>: View {
+package struct TrainerVitalMetricCard<Field: Hashable>: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
@@ -16,7 +16,23 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
     let editable: Bool
     let onLock: () -> Void
 
-    var body: some View {
+    package init(title: String, icon: String, tint: Color, current: Binding<String>, maximum: Binding<String>, focus: Binding<Field?>, currentField: Field, onCurrentCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }, onMaximumCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }, maximumField: Field, locked: Bool, editable: Bool, onLock: @escaping () -> Void) {
+        self.title = title
+        self.icon = icon
+        self.tint = tint
+        self._current = current
+        self._maximum = maximum
+        self.focus = focus
+        self.currentField = currentField
+        self.onCurrentCommit = onCurrentCommit
+        self.onMaximumCommit = onMaximumCommit
+        self.maximumField = maximumField
+        self.locked = locked
+        self.editable = editable
+        self.onLock = onLock
+    }
+
+    package var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
             TrainerLockButton(title: title, locked: locked, enabled: editable, action: onLock)
         } content: {
@@ -33,7 +49,7 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
     }
 }
 
-struct TrainerAmountMetricCard<Field: Hashable>: View {
+package struct TrainerAmountMetricCard<Field: Hashable>: View {
     let title: String
     let icon: String
     let tint: Color
@@ -47,7 +63,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
     let onLock: () -> Void
     var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
-    init(
+    package init(
         title: String,
         icon: String,
         tint: Color,
@@ -75,7 +91,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         self.onCommit = onCommit
     }
 
-    var body: some View {
+    package var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
             TrainerLockButton(title: title, locked: locked, enabled: editable && lockEnabled, action: onLock)
         } content: {
@@ -86,7 +102,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
     }
 }
 
-struct TrainerCounterMetricCard<Field: Hashable>: View {
+package struct TrainerCounterMetricCard<Field: Hashable>: View {
     let title: String
     let icon: String
     let tint: Color
@@ -97,7 +113,19 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
     var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
     let editable: Bool
 
-    var body: some View {
+    package init(title: String, icon: String, tint: Color, text: Binding<String>, focus: Binding<Field?>, focusValue: Field, detail: String?, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }, editable: Bool) {
+        self.title = title
+        self.icon = icon
+        self.tint = tint
+        self._text = text
+        self.focus = focus
+        self.focusValue = focusValue
+        self.detail = detail
+        self.onCommit = onCommit
+        self.editable = editable
+    }
+
+    package var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
             ZStack(alignment: .trailing) {
                 // Reserve TrainerLockButton's footprint so lockless counter cards match sibling header height and value alignment.
@@ -114,7 +142,7 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
     }
 }
 
-struct TrainerStatMetricCard<Field: Hashable>: View {
+package struct TrainerStatMetricCard<Field: Hashable>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
@@ -129,9 +157,24 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
     let onLock: () -> Void
     var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
+    package init(title: String, icon: String, text: Binding<String>, focus: Binding<Field?>, focusValue: Field, suffix: String, locked: Bool, supported: Bool, available: Bool, editable: Bool, onLock: @escaping () -> Void, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }) {
+        self.title = title
+        self.icon = icon
+        self._text = text
+        self.focus = focus
+        self.focusValue = focusValue
+        self.suffix = suffix
+        self.locked = locked
+        self.supported = supported
+        self.available = available
+        self.editable = editable
+        self.onLock = onLock
+        self.onCommit = onCommit
+    }
+
     private var isEditable: Bool { editable && supported && available }
 
-    var body: some View {
+    package var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
             TrainerLockButton(title: title, locked: locked, enabled: isEditable, action: onLock)
         } content: {
@@ -152,7 +195,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
 /// Numeric multiplier metric. Same card geometry, typography and suffix
 /// treatment as `TrainerStatMetricCard`, without the lock accessory: a
 /// multiplier carries no lock, so the header row is the label alone.
-struct TrainerMultiplierMetricCard<Field: Hashable>: View {
+package struct TrainerMultiplierMetricCard<Field: Hashable>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
@@ -163,7 +206,18 @@ struct TrainerMultiplierMetricCard<Field: Hashable>: View {
     let editable: Bool
     var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
-    var body: some View {
+    package init(title: String, icon: String, text: Binding<String>, focus: Binding<Field?>, focusValue: Field, suffix: String, editable: Bool, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }) {
+        self.title = title
+        self.icon = icon
+        self._text = text
+        self.focus = focus
+        self.focusValue = focusValue
+        self.suffix = suffix
+        self.editable = editable
+        self.onCommit = onCommit
+    }
+
+    package var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: theme.accent) {
             // Reserve the lock button's footprint so this card keeps the same
             // header height as its locked siblings in the same grid row.

@@ -1,25 +1,23 @@
 import Foundation
 import SwiftUI
 
-struct GameModuleDescriptor: Identifiable, Hashable, Sendable {
-    let id: String
-    let displayName: String
-    let backendGameID: String
-    let targetProcessName: String
-    let targetBundleIdentifier: String
+package struct GameModuleDescriptor: Identifiable, Hashable, Sendable {
+    package let id: String
+    package let displayName: String
+    package let targetProcessName: String
+    package let targetBundleIdentifier: String
     let targetExecutablePathSuffix: String
-    let expectedHostProtocolVersion: Int
-    let expectedModuleProtocolVersion: Int
+    package let expectedHostProtocolVersion: Int
+    package let expectedModuleProtocolVersion: Int
     let supportsSaveManagement: Bool
 
-    init(id: String, displayName: String, backendGameID: String,
+    package init(id: String, displayName: String,
          targetProcessName: String, targetBundleIdentifier: String,
          targetExecutablePathSuffix: String = "",
          expectedHostProtocolVersion: Int, expectedModuleProtocolVersion: Int,
          supportsSaveManagement: Bool) {
         self.id = id
         self.displayName = displayName
-        self.backendGameID = backendGameID
         self.targetProcessName = targetProcessName
         self.targetBundleIdentifier = targetBundleIdentifier
         self.targetExecutablePathSuffix = targetExecutablePathSuffix
@@ -29,8 +27,8 @@ struct GameModuleDescriptor: Identifiable, Hashable, Sendable {
     }
 }
 
-struct TrainerManagementActions {
-    let openSaveManagement: (() -> Void)?
+package struct TrainerManagementActions {
+    package let openSaveManagement: (() -> Void)?
 
     static let none = TrainerManagementActions(openSaveManagement: nil)
 }
@@ -40,18 +38,18 @@ private struct TrainerManagementActionsKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var trainerManagementActions: TrainerManagementActions {
+    package var trainerManagementActions: TrainerManagementActions {
         get { self[TrainerManagementActionsKey.self] }
         set { self[TrainerManagementActionsKey.self] = newValue }
     }
 }
 
-struct TrainerGamePresentation: Hashable {
+package struct TrainerGamePresentation: Hashable {
     let sidebarIconSystemName: String
     let platformLabel: String
     let headerTitle: String
 
-    init(sidebarIconSystemName: String = "gamecontroller.fill", platformLabel: String = "", headerTitle: String) {
+    package init(sidebarIconSystemName: String = "gamecontroller.fill", platformLabel: String = "", headerTitle: String) {
         self.sidebarIconSystemName = sidebarIconSystemName
         self.platformLabel = platformLabel
         self.headerTitle = headerTitle
@@ -60,7 +58,7 @@ struct TrainerGamePresentation: Hashable {
 
 /// The App owns application lifecycle. A game model only prepares its own
 /// runtime for committed termination after the Host has drained all contexts.
-protocol TrainerHostModel: ObservableObject {
+package protocol TrainerHostModel: ObservableObject {
     var backendAvailable: Bool { get }
     var busy: Bool { get }
     var connected: Bool { get }
@@ -88,26 +86,26 @@ protocol TrainerHostModel: ObservableObject {
 }
 
 extension TrainerHostModel {
-    func beginTerminationFromHost() {}
-    var launchActionFromHost: (() -> Void)? { nil }
+    package func beginTerminationFromHost() {}
+    package var launchActionFromHost: (() -> Void)? { nil }
     /// Automatic target connection carries only generic lifecycle context.
     /// Modules that do not care about launch timing keep the normal toggle path.
-    func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
+    package func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
         toggleConnectionFromHost()
     }
 
     /// App activation is a safe point for game modules to perform an optional
     /// foreground-only refresh. The default is deliberately a no-op because
     /// not every integration needs or can afford a live target boundary.
-    func hostDidBecomeActive() {}
+    package func hostDidBecomeActive() {}
 
     /// Definitive target launch/exit invalidates game-owned observations from
     /// the prior OS process lifetime. Modules without such state may ignore it.
-    func hostTargetLifetimeChanged(running: Bool) {}
+    package func hostTargetLifetimeChanged(running: Bool) {}
 
     /// Rich target identity is available to modules that own process-lifetime
     /// diagnostics. Existing modules can continue consuming only presence.
-    func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+    package func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
         hostTargetLifetimeChanged(running: observation.isRunning)
     }
 }
@@ -115,7 +113,7 @@ extension TrainerHostModel {
 /// Game modules supply business content and game-specific actions. The host
 /// always owns the shell/sidebar/header, so global chrome/theme changes apply
 /// to every game without relying on module authors to opt in.
-protocol TrainerGameModule {
+package protocol TrainerGameModule {
     associatedtype Model: TrainerHostModel
     associatedtype ContentView: View
     associatedtype SidebarActions: View
@@ -149,17 +147,19 @@ protocol TrainerGameModule {
 }
 
 extension TrainerGameModule {
-    static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { nil }
+    package static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { nil }
     /// A module without its own namespace has no module-owned text to resolve.
-    public static var presentationKeyPrefix: String { "" }
+    package static var presentationKeyPrefix: String { "" }
 
     /// Modules opt into viewport feedback without changing the shared Host or
     /// adding another session. The default contributes no view or empty space.
-    static func makeFeedback(model: Model) -> EmptyView { EmptyView() }
+    package static func makeFeedback(model: Model) -> EmptyView { EmptyView() }
 }
 
-struct TrainerEmptyCommands: Commands {
-    var body: some Commands {
+package struct TrainerEmptyCommands: Commands {
+    package init() {}
+
+    package var body: some Commands {
         CommandGroup(after: .appInfo) { EmptyView() }
     }
 }

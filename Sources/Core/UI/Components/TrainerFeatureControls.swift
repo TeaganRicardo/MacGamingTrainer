@@ -14,7 +14,7 @@ enum TrainerFeaturePhase: Equatable {
 /// supplies its own observations (support, activity, dormancy, an in-flight
 /// intent and whether its runtime can apply one now); Core derives the shared
 /// phase, tint and help so the same state reads the same in every game.
-struct TrainerFeaturePresentation: Equatable {
+package struct TrainerFeaturePresentation: Equatable {
     let enabled: Bool
     let supported: Bool
     let connected: Bool
@@ -23,6 +23,17 @@ struct TrainerFeaturePresentation: Equatable {
     let activationPending: Bool
     let canActivate: Bool
     let canEditDesired: Bool
+
+    package init(enabled: Bool, supported: Bool, connected: Bool, active: Bool, dormant: Bool, activationPending: Bool, canActivate: Bool, canEditDesired: Bool) {
+        self.enabled = enabled
+        self.supported = supported
+        self.connected = connected
+        self.active = active
+        self.dormant = dormant
+        self.activationPending = activationPending
+        self.canActivate = canActivate
+        self.canEditDesired = canEditDesired
+    }
 
     var phase: TrainerFeaturePhase {
         guard supported else { return .unsupported }
@@ -66,7 +77,7 @@ struct TrainerFeaturePresentation: Equatable {
     }
 
     @MainActor
-    func trainerControlState(using theme: TrainerTheme, localization: TrainerLocalizationStore) -> TrainerFeatureControlState {
+    package func trainerControlState(using theme: TrainerTheme, localization: TrainerLocalizationStore) -> TrainerFeatureControlState {
         TrainerFeatureControlState(
             isOn: enabled,
             isInteractive: isInteractive,
@@ -82,17 +93,27 @@ struct TrainerFeaturePresentation: Equatable {
 /// Pure presentation state for a feature control. Game modules translate their
 /// own runtime/desired-state semantics into this visual state; Core never knows
 /// why a feature is waiting, detached, unsupported, etc.
-struct TrainerFeatureControlState {
-    let isOn: Bool
-    let isInteractive: Bool
+package struct TrainerFeatureControlState {
+    package let isOn: Bool
+    package let isInteractive: Bool
     let canEditValue: Bool
-    let opacity: Double
-    let indicatorColor: Color
-    let helpText: String
+    package let opacity: Double
+    package let indicatorColor: Color
+    package let helpText: String
     let isWarning: Bool
+
+    package init(isOn: Bool, isInteractive: Bool, canEditValue: Bool, opacity: Double, indicatorColor: Color, helpText: String, isWarning: Bool) {
+        self.isOn = isOn
+        self.isInteractive = isInteractive
+        self.canEditValue = canEditValue
+        self.opacity = opacity
+        self.indicatorColor = indicatorColor
+        self.helpText = helpText
+        self.isWarning = isWarning
+    }
 }
 
-struct TrainerFeatureToggleRow: View {
+package struct TrainerFeatureToggleRow: View {
     let title: String
     let icon: String
     let state: TrainerFeatureControlState
@@ -102,7 +123,16 @@ struct TrainerFeatureToggleRow: View {
     let shortcutText: String?
     let action: () -> Void
 
-    var body: some View {
+    package init(title: String, icon: String, state: TrainerFeatureControlState, helpText: String = "", shortcutText: String?, action: @escaping () -> Void) {
+        self.title = title
+        self.icon = icon
+        self.state = state
+        self.helpText = helpText
+        self.shortcutText = shortcutText
+        self.action = action
+    }
+
+    package var body: some View {
         TrainerLabeledControlRow(title: title, icon: icon, tint: state.indicatorColor,
                                 emphasized: state.isOn, opacity: state.opacity, helpText: helpText) {
             TrainerShortcutBadgeSlot(text: shortcutText)
@@ -118,7 +148,7 @@ struct TrainerFeatureToggleRow: View {
     }
 }
 
-struct TrainerFeatureMultiplierRow: View {
+package struct TrainerFeatureMultiplierRow: View {
     let title: String
     let icon: String
     let state: TrainerFeatureControlState
@@ -128,7 +158,18 @@ struct TrainerFeatureMultiplierRow: View {
     let shortcutText: String?
     let action: () -> Void
 
-    var body: some View {
+    package init(title: String, icon: String, state: TrainerFeatureControlState, text: Binding<String>, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }, onEditingChanged: @escaping (Bool) -> Void = { _ in }, shortcutText: String?, action: @escaping () -> Void) {
+        self.title = title
+        self.icon = icon
+        self.state = state
+        self._text = text
+        self.onCommit = onCommit
+        self.onEditingChanged = onEditingChanged
+        self.shortcutText = shortcutText
+        self.action = action
+    }
+
+    package var body: some View {
         TrainerLabeledControlRow(title: title, icon: icon, tint: state.indicatorColor,
                                 emphasized: state.isOn, opacity: state.opacity) {
             TrainerNumberField(text: $text, placeholder: "2", accessibilityLabel: title, width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)

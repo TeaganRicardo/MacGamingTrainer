@@ -2,12 +2,12 @@ import SwiftUI
 
 /// A bounded projection of a module's current owner state, never a
 /// notification history. The module decides what is current; Core presents it.
-struct TrainerCurrentIssue: Identifiable, Equatable {
-    let id: String
-    let text: TrainerTextToken
+package struct TrainerCurrentIssue: Identifiable, Equatable {
+    package let id: String
+    package let text: TrainerTextToken
     let title: TrainerTextToken?
 
-    init(id: String, text: TrainerTextToken, title: TrainerTextToken? = nil) {
+    package init(id: String, text: TrainerTextToken, title: TrainerTextToken? = nil) {
         self.id = id
         self.text = text
         self.title = title
@@ -16,14 +16,22 @@ struct TrainerCurrentIssue: Identifiable, Equatable {
 
 /// The operation toast of a module page. A warning offers its details while
 /// the module still reports current issues; a routine notice only dismisses.
-struct TrainerOperationFeedback: View {
+package struct TrainerOperationFeedback: View {
     let notice: TrainerFeedbackNotice?
     let hasCurrentIssues: Bool
     let detailsNoticeID: UUID?
     let onDismiss: (UUID) -> Void
     let onShowDetails: (UUID) -> Void
 
-    var body: some View {
+    package init(notice: TrainerFeedbackNotice?, hasCurrentIssues: Bool, detailsNoticeID: UUID?, onDismiss: @escaping (UUID) -> Void, onShowDetails: @escaping (UUID) -> Void) {
+        self.notice = notice
+        self.hasCurrentIssues = hasCurrentIssues
+        self.detailsNoticeID = detailsNoticeID
+        self.onDismiss = onDismiss
+        self.onShowDetails = onShowDetails
+    }
+
+    package var body: some View {
         TrainerFeedbackOverlay(
             notice: notice,
             onDismiss: onDismiss,
@@ -36,7 +44,7 @@ struct TrainerOperationFeedback: View {
 /// The sidebar entry for a module's current issues. It exists only while the
 /// module reports an issue; the module owns whether its details are presented,
 /// and resolution or a hidden page retires that presentation.
-struct TrainerCurrentIssuesEntry: View {
+package struct TrainerCurrentIssuesEntry: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let issues: [TrainerCurrentIssue]
     let detailsPresented: Bool
@@ -44,7 +52,15 @@ struct TrainerCurrentIssuesEntry: View {
     let onCloseDetails: () -> Void
     let onOpenLog: () -> Void
 
-    var body: some View {
+    package init(issues: [TrainerCurrentIssue], detailsPresented: Bool, onShowDetails: @escaping () -> Void, onCloseDetails: @escaping () -> Void, onOpenLog: @escaping () -> Void) {
+        self.issues = issues
+        self.detailsPresented = detailsPresented
+        self.onShowDetails = onShowDetails
+        self.onCloseDetails = onCloseDetails
+        self.onOpenLog = onOpenLog
+    }
+
+    package var body: some View {
         // A transparent group takes no stack spacing while empty and still
         // observes the issues resolving.
         Group {

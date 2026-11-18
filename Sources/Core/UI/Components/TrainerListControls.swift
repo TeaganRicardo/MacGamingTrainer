@@ -1,13 +1,19 @@
 import AppKit
 import SwiftUI
 
-struct TrainerResetButton: View {
+package struct TrainerResetButton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let enabled: Bool
     let action: () -> Void
 
-    var body: some View {
+    package init(title: String, enabled: Bool, action: @escaping () -> Void) {
+        self.title = title
+        self.enabled = enabled
+        self.action = action
+    }
+
+    package var body: some View {
         Button(action: action) {
             Image(systemName: "arrow.uturn.backward")
                 .font(.caption.weight(.semibold))
@@ -26,7 +32,7 @@ struct TrainerResetButton: View {
     }
 }
 
-struct TrainerSectionButton: View {
+package struct TrainerSectionButton: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
     let title: String
@@ -35,7 +41,7 @@ struct TrainerSectionButton: View {
     let selected: Bool
     let action: () -> Void
 
-    init(title: String, detail: String? = nil, systemImage: String, selected: Bool = false,
+    package init(title: String, detail: String? = nil, systemImage: String, selected: Bool = false,
          action: @escaping () -> Void) {
         self.title = title
         self.detail = detail
@@ -44,7 +50,7 @@ struct TrainerSectionButton: View {
         self.action = action
     }
 
-    var body: some View {
+    package var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: systemImage).frame(width: 20)
@@ -77,7 +83,7 @@ struct TrainerSectionButton: View {
     }
 }
 
-enum TrainerActionWidthRole {
+package enum TrainerActionWidthRole {
     case automatic
     case compactRow
     case connection
@@ -123,7 +129,7 @@ private struct TrainerActionWidthModifier: ViewModifier {
     }
 }
 
-struct TrainerPrimaryActionButton: View {
+package struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -132,7 +138,7 @@ struct TrainerPrimaryActionButton: View {
     let widthRole: TrainerActionWidthRole
     let action: () -> Void
 
-    init(
+    package init(
         title: String,
         enabled: Bool = true,
         widthRole: TrainerActionWidthRole = .automatic,
@@ -144,7 +150,7 @@ struct TrainerPrimaryActionButton: View {
         self.action = action
     }
 
-    var body: some View {
+    package var body: some View {
         Button(action: action) {
             TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))
         }
@@ -158,7 +164,7 @@ struct TrainerPrimaryActionButton: View {
     }
 }
 
-struct TrainerSecondaryActionButton: View {
+package struct TrainerSecondaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerActionWidth) private var inheritedRowWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -171,7 +177,7 @@ struct TrainerSecondaryActionButton: View {
     let accessibilityLabel: String?
     let action: () -> Void
 
-    init(
+    package init(
         title: String,
         enabled: Bool = true,
         latched: Bool = false,
@@ -212,7 +218,7 @@ struct TrainerSecondaryActionButton: View {
         }
     }
 
-    var body: some View {
+    package var body: some View {
         styledButton
             .disabled(!enabled)
             .transaction { transaction in
@@ -281,17 +287,17 @@ struct TrainerSelectionControl: View {
     }
 }
 
-struct TrainerOverflowMenu<Content: View>: View {
+package struct TrainerOverflowMenu<Content: View>: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let enabled: Bool
     let content: Content
 
-    init(enabled: Bool = true, @ViewBuilder content: () -> Content) {
+    package init(enabled: Bool = true, @ViewBuilder content: () -> Content) {
         self.enabled = enabled
         self.content = content()
     }
 
-    var body: some View {
+    package var body: some View {
         Menu {
             content
         } label: {
@@ -309,11 +315,15 @@ struct TrainerOverflowMenu<Content: View>: View {
     }
 }
 
-struct TrainerEmptyState: View {
+package struct TrainerEmptyState: View {
     @Environment(\.trainerTheme) private var theme
     let text: String
 
-    var body: some View {
+    package init(text: String) {
+        self.text = text
+    }
+
+    package var body: some View {
         Text(text)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -323,19 +333,19 @@ struct TrainerEmptyState: View {
 
 /// A semantic notice surface. The caller explicitly owns whether its text is
 /// warning-colored or retains mixed/secondary presentation (e.g. recovery paths).
-struct TrainerInlineNotice<Content: View>: View {
+package struct TrainerInlineNotice<Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let color: Color
     let foreground: Color?
     let content: Content
 
-    init(color: Color, foreground: Color? = nil, @ViewBuilder content: () -> Content) {
+    package init(color: Color, foreground: Color? = nil, @ViewBuilder content: () -> Content) {
         self.color = color
         self.foreground = foreground
         self.content = content()
     }
 
-    var body: some View {
+    package var body: some View {
         Group {
             if let foreground {
                 content.foregroundStyle(foreground)
@@ -348,15 +358,15 @@ struct TrainerInlineNotice<Content: View>: View {
     }
 }
 
-struct TrainerListCard<Content: View>: View {
+package struct TrainerListCard<Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    package init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
-    var body: some View {
+    package var body: some View {
         content
             .padding(theme.listCardPadding)
             .background(theme.subtleFill.opacity(0.875), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
@@ -374,7 +384,7 @@ private struct TrainerGroupedRowsModifier: ViewModifier {
 }
 
 extension View {
-    func trainerGroupedRows() -> some View {
+    package func trainerGroupedRows() -> some View {
         modifier(TrainerGroupedRowsModifier())
     }
 }

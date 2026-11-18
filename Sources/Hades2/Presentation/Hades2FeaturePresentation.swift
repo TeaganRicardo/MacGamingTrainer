@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 extension Hades2TrainerModel {
     /// Hades II observations for one feature intent, in the shared Core phase model.

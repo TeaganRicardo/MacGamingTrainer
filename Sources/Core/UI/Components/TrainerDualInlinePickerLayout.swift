@@ -2,12 +2,19 @@ import SwiftUI
 
 /// Measures two inline label/native-Picker pairs independently, then reserves
 /// the optional shortcut and trailing action lanes. Used by exact-boon rows.
-struct TrainerDualInlinePickerLayout: Layout {
+package struct TrainerDualInlinePickerLayout: Layout {
     let minimumPickerWidth: CGFloat
     let maximumPickerWidth: CGFloat
     let minimumShortcutWidth: CGFloat
     let minimumActionWidth: CGFloat
     let spacing: CGFloat = 8
+
+    package init(minimumPickerWidth: CGFloat, maximumPickerWidth: CGFloat, minimumShortcutWidth: CGFloat, minimumActionWidth: CGFloat) {
+        self.minimumPickerWidth = minimumPickerWidth
+        self.maximumPickerWidth = maximumPickerWidth
+        self.minimumShortcutWidth = minimumShortcutWidth
+        self.minimumActionWidth = minimumActionWidth
+    }
 
     private func measuredSizes(of subviews: Subviews) -> [CGSize] {
         guard subviews.count >= 6 else { return subviews.map { $0.sizeThatFits(.unspecified) } }
@@ -35,7 +42,7 @@ struct TrainerDualInlinePickerLayout: Layout {
         return (pickerWidth, labelsWidth + trailingWidth + gaps + pickerWidth * 2)
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    package func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard subviews.count >= 6 else { return .zero }
         let sizes = measuredSizes(of: subviews)
         let minimumWidth = allocation(for: 0, sizes: sizes).occupied
@@ -48,7 +55,7 @@ struct TrainerDualInlinePickerLayout: Layout {
                       height: max(max(firstHeight, secondHeight), sizes.map(\.height).max() ?? 0))
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
+    package func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
                        subviews: Subviews, cache: inout ()) {
         guard subviews.count >= 6 else { return }
         let sizes = measuredSizes(of: subviews)

@@ -2,8 +2,8 @@ import SwiftUI
 
 /// A live permission check belongs to the action itself, so a menu/button
 /// captured before a busy or shutdown transition cannot rely on stale state.
-struct TrainerManagementAction: Identifiable {
-    enum Common: String {
+package struct TrainerManagementAction: Identifiable {
+    package enum Common: String {
         case refreshStatus, disableAll, shortcuts, log, logHistory, clearLogs, saveManagement
 
         var titleKey: String {
@@ -31,13 +31,13 @@ struct TrainerManagementAction: Identifiable {
         }
     }
 
-    let id: String
+    package let id: String
     let title: String
     let icon: String
     private let availability: () -> Bool
     private let handler: () -> Void
 
-    init(id: String, title: String, icon: String,
+    package init(id: String, title: String, icon: String,
          enabled: @escaping () -> Bool = { true }, action: @escaping () -> Void) {
         self.id = id
         self.title = title
@@ -47,7 +47,7 @@ struct TrainerManagementAction: Identifiable {
     }
 
     @MainActor
-    init(_ common: Common, localization: TrainerLocalizationStore,
+    package init(_ common: Common, localization: TrainerLocalizationStore,
          enabled: @escaping () -> Bool = { true }, action: @escaping () -> Void) {
         self.init(id: common.rawValue, title: localization.localized(common.titleKey),
                   icon: common.icon, enabled: enabled, action: action)
@@ -61,13 +61,13 @@ struct TrainerManagementAction: Identifiable {
     }
 }
 
-struct TrainerManagementGroup: Identifiable {
+package struct TrainerManagementGroup: Identifiable {
     struct Row {
         let actions: [TrainerManagementAction]
         var note: String? = nil
     }
 
-    let id: String
+    package let id: String
     let title: String
     let rows: [Row]
     var actions: [TrainerManagementAction] { rows.flatMap(\.actions) }
@@ -75,11 +75,17 @@ struct TrainerManagementGroup: Identifiable {
 
 /// One common grouping for the page and app menu. Optional document actions
 /// are supplied only where the owning Host/tool-window capability is available.
-struct TrainerManagementCatalog {
-    struct Titles {
+package struct TrainerManagementCatalog {
+    package struct Titles {
         let daily: String
         let settings: String
         let maintenance: String
+
+        package init(daily: String, settings: String, maintenance: String) {
+            self.daily = daily
+            self.settings = settings
+            self.maintenance = maintenance
+        }
     }
 
     let titles: Titles
@@ -96,7 +102,23 @@ struct TrainerManagementCatalog {
     var additionalMaintenance: [TrainerManagementAction] = []
     var maintenanceNote: String? = nil
 
-    var groups: [TrainerManagementGroup] {
+    package init(titles: TrainerManagementCatalog.Titles, refresh: TrainerManagementAction, disableAll: TrainerManagementAction, profiles: TrainerManagementAction, shortcuts: TrainerManagementAction, log: TrainerManagementAction, diagnostics: TrainerManagementAction, logHistory: TrainerManagementAction, clearLogs: TrainerManagementAction, saveEditor: TrainerManagementAction? = nil, saveManagement: TrainerManagementAction? = nil, additionalMaintenance: [TrainerManagementAction] = [], maintenanceNote: String? = nil) {
+        self.titles = titles
+        self.refresh = refresh
+        self.disableAll = disableAll
+        self.profiles = profiles
+        self.shortcuts = shortcuts
+        self.log = log
+        self.diagnostics = diagnostics
+        self.logHistory = logHistory
+        self.clearLogs = clearLogs
+        self.saveEditor = saveEditor
+        self.saveManagement = saveManagement
+        self.additionalMaintenance = additionalMaintenance
+        self.maintenanceNote = maintenanceNote
+    }
+
+    package var groups: [TrainerManagementGroup] {
         var maintenance: [TrainerManagementGroup.Row] = [
             .init(actions: [log, diagnostics]), .init(actions: [logHistory, clearLogs]),
         ]
@@ -112,9 +134,13 @@ struct TrainerManagementCatalog {
     }
 }
 
-struct TrainerManagementGroups: View {
+package struct TrainerManagementGroups: View {
     @Environment(\.trainerTheme) private var theme
     let groups: [TrainerManagementGroup]
+
+    package init(groups: [TrainerManagementGroup]) {
+        self.groups = groups
+    }
 
     private func buttons(_ actions: [TrainerManagementAction]) -> some View {
         ForEach(actions) { action in
@@ -124,7 +150,7 @@ struct TrainerManagementGroups: View {
         }
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 { Divider() }
@@ -149,11 +175,16 @@ struct TrainerManagementGroups: View {
     }
 }
 
-struct TrainerManagementCommandMenu: Commands {
+package struct TrainerManagementCommandMenu: Commands {
     let title: String
     let groups: [TrainerManagementGroup]
 
-    var body: some Commands {
+    package init(title: String, groups: [TrainerManagementGroup]) {
+        self.title = title
+        self.groups = groups
+    }
+
+    package var body: some Commands {
         CommandMenu(title) {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 { Divider() }

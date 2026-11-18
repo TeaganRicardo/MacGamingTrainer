@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 enum HadesFeature: String, CaseIterable, Identifiable {
     case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, gameSpeed

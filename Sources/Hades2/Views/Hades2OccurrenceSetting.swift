@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 /// Hades II's conditional occurrence setting: Native is absence of an override,
 /// while 0% and 100% are explicit desired values. A one-shot Generate action

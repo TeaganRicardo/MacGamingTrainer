@@ -9,12 +9,12 @@ private struct TrainerSelectedSectionKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var trainerNavigateToSection: (String) -> Void {
+    package var trainerNavigateToSection: (String) -> Void {
         get { self[TrainerSectionNavigationKey.self] }
         set { self[TrainerSectionNavigationKey.self] = newValue }
     }
 
-    var trainerSelectedSection: String? {
+    package var trainerSelectedSection: String? {
         get { self[TrainerSelectedSectionKey.self] }
         set { self[TrainerSelectedSectionKey.self] = newValue }
     }

@@ -11,8 +11,8 @@ struct TrainerSaveSnapshotPresentation: Equatable {
     }
 }
 
-struct TrainerSaveSnapshot: Identifiable, Equatable {
-    let id: String
+package struct TrainerSaveSnapshot: Identifiable, Equatable {
+    package let id: String
     let name: String
     let createdAt: String
     let fileCount: Int

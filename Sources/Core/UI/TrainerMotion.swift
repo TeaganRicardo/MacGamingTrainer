@@ -3,8 +3,8 @@ import SwiftUI
 /// Motion belongs to the interaction that changes presentation. Callers choose
 /// a role at that boundary; live observations and backend work never inherit a
 /// blanket animation. Native controls keep their own press/focus behavior.
-enum TrainerMotion {
-    enum Role {
+package enum TrainerMotion {
+    package enum Role {
         case directManipulation
         case selection
         case disclosure
@@ -23,7 +23,7 @@ enum TrainerMotion {
         }
     }
 
-    static func animation(_ role: Role, reduceMotion: Bool) -> Animation? {
+    package static func animation(_ role: Role, reduceMotion: Bool) -> Animation? {
         guard !reduceMotion else { return nil }
         switch role {
         case .directManipulation:

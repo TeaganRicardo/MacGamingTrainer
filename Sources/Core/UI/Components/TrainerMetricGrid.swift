@@ -2,9 +2,11 @@ import SwiftUI
 
 /// The bounded dashboard uses eager, stable children so collapsing additional
 /// rows cannot recycle native editors or their view-local drafts.
-struct TrainerMetricGrid: Layout {
+package struct TrainerMetricGrid: Layout {
     private let columns = 4
     private let spacing: CGFloat = 12
+
+    package init() {}
 
     private struct Metrics {
         let width: CGFloat
@@ -29,11 +31,11 @@ struct TrainerMetricGrid: Layout {
         return Metrics(width: width, columnWidth: columnWidth, rowHeights: rowHeights, spacing: spacing)
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    package func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         metrics(width: proposal.width, subviews: subviews).size
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    package func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let measured = metrics(width: bounds.width, subviews: subviews)
         var y = bounds.minY
         for index in subviews.indices {

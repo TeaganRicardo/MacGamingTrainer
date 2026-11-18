@@ -2,7 +2,7 @@ import AppKit
 import Combine
 
 /// The module validates and persists a shortcut; Core owns capture feedback.
-enum TrainerShortcutAssignmentResult: Equatable {
+package enum TrainerShortcutAssignmentResult: Equatable {
     case applied
     case conflict(actionID: String)
     case rejected(messageKey: String)

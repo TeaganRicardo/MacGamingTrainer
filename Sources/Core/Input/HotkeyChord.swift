@@ -2,18 +2,18 @@ import Foundation
 
 /// Serializable global-hotkey identity. Modifier bit values intentionally match
 /// Carbon's EventModifiers so the data layer stays Foundation-only.
-struct HotkeyChord: Equatable {
+package struct HotkeyChord: Equatable {
     static let commandModifier: UInt32 = 1 << 8
     static let shiftModifier: UInt32 = 1 << 9
-    static let optionModifier: UInt32 = 1 << 11
-    static let controlModifier: UInt32 = 1 << 12
+    package static let optionModifier: UInt32 = 1 << 11
+    package static let controlModifier: UInt32 = 1 << 12
     static let supportedModifierMask = commandModifier | shiftModifier | optionModifier | controlModifier
 
     let keyCode: UInt32
     let modifiers: UInt32
     let keyLabel: String
 
-    var displayText: String {
+    package var displayText: String {
         var prefix = ""
         if modifiers & Self.controlModifier != 0 { prefix += "⌃" }
         if modifiers & Self.optionModifier != 0 { prefix += "⌥" }
@@ -22,17 +22,17 @@ struct HotkeyChord: Equatable {
         return prefix + keyLabel
     }
 
-    var payload: [String: Any] {
+    package var payload: [String: Any] {
         ["keyCode": Int(keyCode), "modifiers": Int(modifiers), "keyLabel": keyLabel]
     }
 
-    init(keyCode: UInt32, modifiers: UInt32, keyLabel: String) {
+    package init(keyCode: UInt32, modifiers: UInt32, keyLabel: String) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.keyLabel = keyLabel
     }
 
-    init?(payload: Any) {
+    package init?(payload: Any) {
         guard let row = payload as? [String: Any],
               let keyCode = row["keyCode"] as? Int, (0...65535).contains(keyCode),
               let rawModifiers = row["modifiers"] as? Int, rawModifiers >= 0, rawModifiers <= Int(UInt32.max),
@@ -83,7 +83,7 @@ struct HotkeyChord: Equatable {
 
     /// Historical v4 migration only. Do not use this for active allocation:
     /// it deliberately exposes the released Control+Option key sequence.
-    static func controlOptionDefault(index: Int) -> HotkeyChord? {
+    package static func controlOptionDefault(index: Int) -> HotkeyChord? {
         guard legacyV4Keys.indices.contains(index) else { return nil }
         let key = legacyV4Keys[index]
         return HotkeyChord(
@@ -105,7 +105,7 @@ struct HotkeyChord: Equatable {
         )
     }
 
-    static func controlOptionDigit(_ digit: Int) -> HotkeyChord? {
+    package static func controlOptionDigit(_ digit: Int) -> HotkeyChord? {
         let keycodes: [Int: UInt32] = [0:29, 1:18, 2:19, 3:20, 4:21, 5:23, 6:22, 7:26, 8:28, 9:25]
         guard let keyCode = keycodes[digit] else { return nil }
         return HotkeyChord(
@@ -119,26 +119,26 @@ struct HotkeyChord: Equatable {
 
 /// Shared physical-key reservation and visible-order allocation. Modules own
 /// action identities, persistence and migrations; Core owns this pure policy.
-enum TrainerHotkeyLayout {
-    static let disableAllChord = HotkeyChord(
+package enum TrainerHotkeyLayout {
+    package static let disableAllChord = HotkeyChord(
         keyCode: 51,
         modifiers: HotkeyChord.controlModifier | HotkeyChord.optionModifier,
         keyLabel: "⌫"
     )
 
-    static func identity(_ chord: HotkeyChord) -> String {
+    package static func identity(_ chord: HotkeyChord) -> String {
         "\(chord.keyCode):\(chord.modifiers)"
     }
 
-    static func sameKeys(_ lhs: HotkeyChord, _ rhs: HotkeyChord) -> Bool {
+    package static func sameKeys(_ lhs: HotkeyChord, _ rhs: HotkeyChord) -> Bool {
         lhs.keyCode == rhs.keyCode && lhs.modifiers == rhs.modifiers
     }
 
-    static func isDisableAllChord(_ chord: HotkeyChord) -> Bool {
+    package static func isDisableAllChord(_ chord: HotkeyChord) -> Bool {
         sameKeys(chord, disableAllChord)
     }
 
-    static func defaultLayout<Action: Hashable>(
+    package static func defaultLayout<Action: Hashable>(
         orderedActions: [Action], dedicated: [Action: HotkeyChord]
     ) -> [Action: HotkeyChord] {
         var result = dedicated
@@ -157,7 +157,7 @@ enum TrainerHotkeyLayout {
         return result
     }
 
-    static func resolvedLayout<Action: Hashable>(
+    package static func resolvedLayout<Action: Hashable>(
         orderedActions: [Action], defaults: [Action: HotkeyChord],
         overrides: [Action: HotkeyChord], locked: [Action: HotkeyChord]
     ) -> [Action: HotkeyChord] {

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// One shared search-field treatment for feature panels and larger workbenches.
-struct TrainerSearchField: View {
+package struct TrainerSearchField: View {
     @Environment(\.trainerTheme) private var theme
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,7 +16,7 @@ struct TrainerSearchField: View {
     let onSubmit: () -> Void
     let onMoveSelection: ((Int) -> Bool)?
 
-    init(
+    package init(
         text: Binding<String>,
         placeholder: String,
         clearLabel: String? = nil,
@@ -69,7 +69,7 @@ struct TrainerSearchField: View {
         return onMoveSelection(offset) ? .handled : .ignored
     }
 
-    var body: some View {
+    package var body: some View {
         HStack(spacing: theme.compactControlSpacing) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)

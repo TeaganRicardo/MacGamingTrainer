@@ -1,9 +1,14 @@
 import Foundation
 
-struct TrainerProfileEntry: Identifiable, Equatable {
+package struct TrainerProfileEntry: Identifiable, Equatable {
     let name: String
     let updatedAt: String
-    var id: String { name }
+
+    package init(name: String, updatedAt: String) {
+        self.name = name
+        self.updatedAt = updatedAt
+    }
+    package var id: String { name }
     var title: String { updatedAt.isEmpty ? name : "\(name) · \(updatedAt)" }
 }
 

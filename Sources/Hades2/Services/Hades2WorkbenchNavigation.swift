@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 /// Hades II-specific presentation icons. Shared visual roles live in Core;
 /// these names describe concepts unique to this module.

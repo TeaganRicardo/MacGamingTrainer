@@ -6,10 +6,10 @@ import Foundation
 /// Atomically published process presence and definitive launch generation.
 /// Consumers must never see an intermediate running=true / old-generation
 /// snapshot from a single NSWorkspace didLaunch notification.
-struct TrainerTargetObservation: Equatable {
-    let isRunning: Bool
+package struct TrainerTargetObservation: Equatable {
+    package let isRunning: Bool
     let launchGeneration: UInt
-    let processIdentifier: pid_t?
+    package let processIdentifier: pid_t?
 
     init(isRunning: Bool, launchGeneration: UInt, processIdentifier: pid_t? = nil) {
         self.isRunning = isRunning

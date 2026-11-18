@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import TrainerCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var application: TrainerApplicationCoordinator?

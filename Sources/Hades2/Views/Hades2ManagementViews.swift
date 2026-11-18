@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import TrainerCore
 
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel

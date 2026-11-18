@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import TrainerCore
 
 struct Hades2RuntimeIssuePresentation: Hashable {
     let featureID: String

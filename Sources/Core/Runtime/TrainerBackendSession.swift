@@ -1,20 +1,22 @@
 import Foundation
 
-struct TrainerBackendStatus: Equatable {
-    var backendAvailable = false
-    var backendProtocolVersion: Int?
-    var backendModuleProtocolVersion: Int?
-    var protocolCompatible = true
-    var requiresTargetRestart = false
-    var busy = false
+package struct TrainerBackendStatus: Equatable {
+    package var backendAvailable = false
+    package var backendProtocolVersion: Int?
+    package var backendModuleProtocolVersion: Int?
+    package var protocolCompatible = true
+    package var requiresTargetRestart = false
+    package var busy = false
     /// Language-neutral operation identity shown while a request is in flight.
-    var operation = TrainerTextToken(key: "")
-    var errorCode: String?
+    package var operation = TrainerTextToken(key: "")
+    package var errorCode: String?
     /// Error keys are stored with their arguments so the owning module can render
     /// the sentence in the Host's live language.
-    var error = ""
-    var errorArguments: [String] = []
-    var notice = ""
+    package var error = ""
+    package var errorArguments: [String] = []
+    package var notice = ""
+
+    package init() {}
 }
 
 /// Runtime service around BackendClient. It is intentionally not ObservableObject:
@@ -25,7 +27,7 @@ struct TrainerBackendStatus: Equatable {
 /// unexpected worker exit gets a bounded restart attempt; once the worker is
 /// back, the host-level target-process coordinator decides whether to reconnect
 /// the active game. No window activation and no process polling are involved.
-final class TrainerBackendSession {
+package final class TrainerBackendSession {
     private struct Configuration {
         let descriptor: GameModuleDescriptor
         let scriptURL: URL
@@ -38,7 +40,7 @@ final class TrainerBackendSession {
 
     private let client: BackendClient
     private var status = TrainerBackendStatus()
-    private(set) var lifecycleID = UUID() {
+    package private(set) var lifecycleID = UUID() {
         didSet { Array(lifecycleObservers.values).forEach { $0(lifecycleID) } }
     }
     private var lifecycleObservers: [UUID: (UUID) -> Void] = [:]
@@ -59,14 +61,14 @@ final class TrainerBackendSession {
         self.client = client
     }
 
-    var isRunning: Bool { client.isRunning }
-    var isStarted: Bool { client.isStarted }
+    package var isRunning: Bool { client.isRunning }
+    package var isStarted: Bool { client.isStarted }
     var currentStatus: TrainerBackendStatus { status }
     /// `restart()` needs the configuration recorded by a `start()` that got
     /// past script resolution; before that, a restart request is a no-op.
     var canRestart: Bool { !terminationRequested && configuration != nil }
 
-    func start(
+    package func start(
         descriptor: GameModuleDescriptor,
         backendScriptURL: URL? = nil,
         applyPayload: @escaping ([String: Any]) -> Void,
@@ -101,7 +103,7 @@ final class TrainerBackendSession {
         }
     }
 
-    func send(
+    package func send(
         _ command: String,
         params: [String: Any] = [:],
         operation: String,
@@ -144,7 +146,7 @@ final class TrainerBackendSession {
     /// Restarts the worker in one action even when it is currently running.
     /// The old process remains owned until its termination callback fires, so a
     /// replacement worker cannot race the old stdout/LLDB state.
-    func restart() {
+    package func restart() {
         guard !terminationRequested, configuration != nil else { return }
         cancelRecovery()
         restartPending = true
@@ -168,11 +170,11 @@ final class TrainerBackendSession {
 
     /// Drain backend stderr already buffered by the process before exporting
     /// diagnostics. Backend restart/reconnect state is otherwise unchanged.
-    func flushDiagnostics() {
+    package func flushDiagnostics() {
         client.flushStderr()
     }
 
-    func stop(suppressTerminationError: Bool = true) {
+    package func stop(suppressTerminationError: Bool = true) {
         cancelRecovery()
         restartPending = false
         self.suppressTerminationError = suppressTerminationError
@@ -189,13 +191,13 @@ final class TrainerBackendSession {
         }
     }
 
-    func observeLifecycle(_ observer: @escaping (UUID) -> Void) -> UUID {
+    package func observeLifecycle(_ observer: @escaping (UUID) -> Void) -> UUID {
         let id = UUID()
         lifecycleObservers[id] = observer
         return id
     }
 
-    func removeLifecycleObserver(_ id: UUID) {
+    package func removeLifecycleObserver(_ id: UUID) {
         lifecycleObservers.removeValue(forKey: id)
     }
 
@@ -271,7 +273,7 @@ final class TrainerBackendSession {
         try client.start(
             scriptURL: configuration.scriptURL,
             expectation: BackendProtocolExpectation(
-                gameID: configuration.descriptor.backendGameID,
+                gameID: configuration.descriptor.id,
                 hostProtocolVersion: configuration.descriptor.expectedHostProtocolVersion,
                 moduleProtocolVersion: configuration.descriptor.expectedModuleProtocolVersion
             ),

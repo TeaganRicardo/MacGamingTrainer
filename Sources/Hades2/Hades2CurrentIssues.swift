@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 extension Hades2TrainerModel {
     var currentIssues: [TrainerCurrentIssue] {

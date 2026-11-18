@@ -2,20 +2,20 @@ import Foundation
 
 /// A native catalog determines the options that an exact acquisition accepts.
 /// Nil means the game owns rarity and the command must omit that parameter.
-struct TrainerAcquisitionRarityResolution: Equatable {
-    enum Adjustment: Equatable {
+package struct TrainerAcquisitionRarityResolution: Equatable {
+    package enum Adjustment: Equatable {
         case none
         case targetRestricted
         case gameControlled
     }
-    let rarity: String?
-    let adjustment: Adjustment
-    var requiresVisibleConfirmation: Bool { adjustment != .none }
+    package let rarity: String?
+    package let adjustment: Adjustment
+    package var requiresVisibleConfirmation: Bool { adjustment != .none }
 }
 
-enum TrainerAcquisitionRarity {
+package enum TrainerAcquisitionRarity {
     /// Reconcile the visible setting with the active native acquisition target.
-    static func resolve(
+    package static func resolve(
         previous: String?,
         supported: [String],
         nativeOrder: [String],

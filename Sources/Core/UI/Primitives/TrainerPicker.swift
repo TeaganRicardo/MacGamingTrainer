@@ -4,7 +4,7 @@ import SwiftUI
 /// Runtime/data reasons may change interaction, but they collapse into exactly
 /// these two states. Each state is the native macOS popup presentation for that
 /// state (enabled or disabled); Core never repaints the control.
-enum TrainerPickerPresentationState: Equatable {
+package enum TrainerPickerPresentationState: Equatable {
     case interactive
     case unavailable
 
@@ -40,7 +40,7 @@ private struct TrainerPickerPresentationModifier: ViewModifier {
 extension View {
     /// Shared Picker owner. Width is geometry only; availability selects the
     /// native enabled or disabled popup, never a repainted variant.
-    func trainerPicker(
+    package func trainerPicker(
         _ role: TrainerPickerWidthRole = .rowValue,
         state: TrainerPickerPresentationState = .interactive
     ) -> some View {

@@ -1,13 +1,17 @@
 import AppKit
 import SwiftUI
 
-struct TrainerGamePages: View {
+package struct TrainerGamePages: View {
     @ObservedObject var application: TrainerApplicationCoordinator
     @Environment(\.trainerTheme) private var theme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var body: some View {
+    package init(application: TrainerApplicationCoordinator) {
+        self.application = application
+    }
+
+    package var body: some View {
         HStack(spacing: 0) {
             TrainerSidebar {
                 ForEach(application.contexts) { context in

@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 extension HadesFeature {
     var icon: String {

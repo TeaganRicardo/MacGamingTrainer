@@ -26,16 +26,16 @@ extension EnvironmentValues {
 /// Subscribe to visibility at the narrowest view that actually needs it.
 /// The retained game-page root receives only the stable reference, so switching
 /// modules does not invalidate every control in both full workbench trees.
-struct TrainerGamePageVisibilityGate<Content: View>: View {
+package struct TrainerGamePageVisibilityGate<Content: View>: View {
     @Environment(\.trainerGamePageVisibility) private var visibility
     let content: (Bool) -> Content
 
-    init(@ViewBuilder content: @escaping (Bool) -> Content) {
+    package init(@ViewBuilder content: @escaping (Bool) -> Content) {
         self.content = content
     }
 
     @ViewBuilder
-    var body: some View {
+    package var body: some View {
         if let visibility {
             TrainerObservedGamePageVisibility(visibility: visibility, content: content)
         } else {
@@ -51,10 +51,14 @@ private struct TrainerObservedGamePageVisibility<Content: View>: View {
     var body: some View { content(visibility.isVisible) }
 }
 
-struct TrainerGamePageVisibilityObserver: View {
+package struct TrainerGamePageVisibilityObserver: View {
     let onChange: (Bool) -> Void
 
-    var body: some View {
+    package init(onChange: @escaping (Bool) -> Void) {
+        self.onChange = onChange
+    }
+
+    package var body: some View {
         TrainerGamePageVisibilityGate { visible in
             Color.clear
                 .frame(width: 0, height: 0)
@@ -64,8 +68,8 @@ struct TrainerGamePageVisibilityObserver: View {
 }
 
 @MainActor
-final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
-    let model: Module.Model
+package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
+    package let model: Module.Model
     let session: TrainerBackendSession
     let targetMonitor: TrainerTargetProcessMonitor
     let saveManager: TrainerSaveManagerModel
@@ -81,7 +85,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     private var previousConnected: Bool
     private var terminationRequested = false
 
-    convenience init() {
+    package convenience init() {
         let ownership = TrainerApplicationStartup.requireOwnership(
             targetProcessName: Module.descriptor.targetProcessName,
             targetBundleIdentifier: Module.descriptor.targetBundleIdentifier,
@@ -276,9 +280,9 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
 }
 
 @MainActor
-final class AnyTrainerGameContext: ObservableObject, Identifiable {
-    nonisolated let descriptor: GameModuleDescriptor
-    nonisolated var id: String { descriptor.id }
+package final class AnyTrainerGameContext: ObservableObject, Identifiable {
+    package nonisolated let descriptor: GameModuleDescriptor
+    package nonisolated var id: String { descriptor.id }
     let content: AnyView
     private let sidebarCard: (Bool, @escaping () -> Void) -> AnyView
     private let setPageVisible: (Bool) -> Void
@@ -289,7 +293,7 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
     private let closeWindows: () -> Void
     private var subscription: AnyCancellable?
 
-    init<Module>(_ context: TrainerGameContext<Module>) {
+    package init<Module>(_ context: TrainerGameContext<Module>) {
         descriptor = Module.descriptor
         storage = context
         content = AnyView(TrainerHostView(context: context))
@@ -316,7 +320,7 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
     }
     func pageVisibilityChanged(_ visible: Bool) { setPageVisible(visible) }
 
-    func typed<Module: TrainerGameModule>(as module: Module.Type) -> TrainerGameContext<Module>? {
+    package func typed<Module: TrainerGameModule>(as module: Module.Type) -> TrainerGameContext<Module>? {
         storage as? TrainerGameContext<Module>
     }
 
@@ -327,9 +331,9 @@ final class AnyTrainerGameContext: ObservableObject, Identifiable {
 }
 
 @MainActor
-final class TrainerApplicationCoordinator: ObservableObject {
+package final class TrainerApplicationCoordinator: ObservableObject {
     let contexts: [AnyTrainerGameContext]
-    @Published var selectedGameID: String {
+    @Published package var selectedGameID: String {
         didSet {
             // Cancel pending navigation synchronously, before SwiftUI updates
             // visibility. A captured old-page callback cannot scroll it later.
@@ -338,13 +342,13 @@ final class TrainerApplicationCoordinator: ObservableObject {
         }
     }
     private var subscriptions: Set<AnyCancellable> = []
-    @Published private(set) var terminationRequested = false
+    @Published package private(set) var terminationRequested = false
     private var terminationCompletion: (() -> Void)?
     private var nextTerminationIndex = 0
     private var finalizingContext = false
     private var finalizationStarted = false
 
-    init(contexts: [AnyTrainerGameContext]) {
+    package init(contexts: [AnyTrainerGameContext]) {
         precondition(!contexts.isEmpty)
         self.contexts = contexts
         selectedGameID = contexts[0].id
@@ -358,9 +362,9 @@ final class TrainerApplicationCoordinator: ObservableObject {
         }
     }
 
-    func context(id: String) -> AnyTrainerGameContext? { contexts.first { $0.id == id } }
+    package func context(id: String) -> AnyTrainerGameContext? { contexts.first { $0.id == id } }
 
-    func prepareForTermination(completion: @escaping () -> Void) {
+    package func prepareForTermination(completion: @escaping () -> Void) {
         terminationCompletion = completion
         terminationRequested = true
         GlobalHotkeys.selectGame(nil)

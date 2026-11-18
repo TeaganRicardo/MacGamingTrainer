@@ -3,15 +3,23 @@ import SwiftUI
 /// Game modules supply their own ordered actions, translated labels, icon
 /// semantics, live chord values and storage callbacks. This view knows none of
 /// their action identities, validation rules or persistence formats.
-struct TrainerShortcutSettingsEntry: Identifiable {
-    let id: String
+package struct TrainerShortcutSettingsEntry: Identifiable {
+    package let id: String
     let title: String
     let icon: String
     let chordText: String
     let isEditable: Bool
+
+    package init(id: String, title: String, icon: String, chordText: String, isEditable: Bool) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+        self.chordText = chordText
+        self.isEditable = isEditable
+    }
 }
 
-struct TrainerShortcutSettingsView: View {
+package struct TrainerShortcutSettingsView: View {
     @Binding private var isPresented: Bool
     let entries: [TrainerShortcutSettingsEntry]
     let registrationFailure: TrainerHotkeyRegistrationFailure?
@@ -26,7 +34,7 @@ struct TrainerShortcutSettingsView: View {
     @StateObject private var capture = TrainerShortcutCaptureController()
     @State private var lifetime = TrainerSheetLifetime()
 
-    init(
+    package init(
         isPresented: Binding<Bool>,
         entries: [TrainerShortcutSettingsEntry],
         registrationFailure: TrainerHotkeyRegistrationFailure? = nil,
@@ -42,7 +50,7 @@ struct TrainerShortcutSettingsView: View {
         self.onAssign = onAssign
     }
 
-    var body: some View {
+    package var body: some View {
         let presentationID = lifetime.id
         TrainerSheetScaffold(
             title: localization.localized("host.shortcutSettings"),

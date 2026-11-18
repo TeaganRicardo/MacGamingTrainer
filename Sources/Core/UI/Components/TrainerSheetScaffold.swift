@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Standard modal/sheet chrome shared by game modules. Width is intentionally a
 /// content decision; title typography, outer padding and vertical rhythm are not.
-struct TrainerSheetScaffold<HeaderActions: View, Content: View, Footer: View>: View {
+package struct TrainerSheetScaffold<HeaderActions: View, Content: View, Footer: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String?
@@ -13,7 +13,7 @@ struct TrainerSheetScaffold<HeaderActions: View, Content: View, Footer: View>: V
     let content: Content
     let footer: Footer
 
-    init(
+    package init(
         title: String,
         icon: String? = nil,
         width: CGFloat,
@@ -31,7 +31,7 @@ struct TrainerSheetScaffold<HeaderActions: View, Content: View, Footer: View>: V
         self.footer = footer()
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(alignment: .leading, spacing: theme.sheetSpacing) {
             TrainerSheetHeaderLayout(spacing: theme.compactControlSpacing) {
                 if let icon {
@@ -110,7 +110,7 @@ private struct TrainerSheetHeaderLayout: Layout {
 /// The native editor gets the first opportunity to finish an IME composition;
 /// multiline NSTextView uses Shift-Return for newline; marked text remains native.
 extension View {
-    func trainerSheetDoneGestures(
+    package func trainerSheetDoneGestures(
         enabled: Bool = true,
         outsideWindowClicks: Bool = false,
         perform action: @escaping () -> Void

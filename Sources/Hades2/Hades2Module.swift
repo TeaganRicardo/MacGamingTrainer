@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 struct Hades2GameModule: TrainerGameModule {
     // Identity/protocol descriptor is generated from module.json. Presentation

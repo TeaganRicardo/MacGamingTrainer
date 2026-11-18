@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 enum HadesPresentation {
     static func text(_ key: String, language: TrainerPresentationLanguage) -> String {

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import CoreFoundation
+import TrainerCore
 
 enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all

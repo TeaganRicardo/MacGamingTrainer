@@ -1,5 +1,6 @@
 import CoreFoundation
 import Foundation
+import TrainerCore
 
 /// An unfinished member request belongs to its table in the open document,
 /// including its correction when the structure sheet is temporarily closed.

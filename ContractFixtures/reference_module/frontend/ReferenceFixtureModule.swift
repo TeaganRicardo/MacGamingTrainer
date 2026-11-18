@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import TrainerCore
 
 final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     @Published private(set) var backendStatus = TrainerBackendStatus()

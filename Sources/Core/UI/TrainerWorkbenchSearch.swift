@@ -1,8 +1,8 @@
 import Foundation
 
 /// Matches supplied aliases without reordering the module's destinations.
-enum TrainerWorkbenchSearch {
-    static func matches<Entry>(
+package enum TrainerWorkbenchSearch {
+    package static func matches<Entry>(
         _ query: String, entries: [Entry], terms: (Entry) -> [String]
     ) -> [Entry] {
         let words = query.split(whereSeparator: \.isWhitespace).map { normalized(String($0)) }
