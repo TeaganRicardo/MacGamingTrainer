@@ -1254,6 +1254,7 @@ struct Hades2TrainerView: View {
     ]
 
     private static let worldActionUnavailableReasonIDs: Set<String> = [
+        "source_anomaly_replacement",
         "door_unavailable",
         "exit_room_unavailable",
         "reward_eligibility_unavailable",
