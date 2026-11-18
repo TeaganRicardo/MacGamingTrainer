@@ -77,8 +77,9 @@ created; observed unregistered counters remain editable with a purpose warning.
 `questClaim:<quest>` is a separate Boolean intent named **Grant reward and mark
 claimed / 发放奖励并标记已领取**. The shared byte-captured investigation index
 resolves literal quest rewards and named inheritance. Amounts are not copied
-into a second registry. `save_native_ids.py` owns the verified mutation-script
-digests; changing a staged reward's source invalidates its preview/apply.
+into a second registry. This snapshot's `installed_source_hashes.json` owns the
+verified mutation-script digests; changing a staged reward's source invalidates
+its preview/apply.
 
 For `CashOutQuest` (`QuestLogLogic.lua:211–224`) and `AddResource`
 (`ResourceLogic.lua:7–38`), the explicit offline transaction adds the reward to

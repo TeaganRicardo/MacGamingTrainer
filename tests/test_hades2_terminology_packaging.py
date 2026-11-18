@@ -80,6 +80,10 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
             "destination": "ui_terminology.json",
         },
         {
+            "source": "@supportedBuild/installed_source_hashes.json",
+            "destination": "hades2.installed_source_hashes.json",
+        },
+        {
             "source": "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json",
             "destination": "hades2.zh-CN.json",
         },

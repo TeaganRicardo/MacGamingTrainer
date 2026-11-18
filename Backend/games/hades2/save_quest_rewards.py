@@ -11,9 +11,9 @@ import re
 from . import save_advanced
 from .localization import official_display_names
 from .save_document import clone_lua_value, LuaTable
-from .save_investigation import _parse_lua_table, _scalar
+from .save_investigation import _parse_lua_table, _scalar, supported_source_hashes
 from .save_mutation_utils import add, effect, integer, owner, read
-from .save_native_ids import QUEST_IDS, RESOURCE_IDS, QUEST_REWARD_OWNER_SHA256
+from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 
 
 def _fields(definitions, name, active=()):
@@ -75,7 +75,13 @@ def _reward(root, name, investigation, *, native=None):
     if native is None:
         investigation._refresh()
         native = investigation.native
-    expected = getattr(investigation, "reward_owner_hashes", QUEST_REWARD_OWNER_SHA256)
+    expected = getattr(investigation, "reward_owner_hashes", None)
+    if expected is None:
+        try:
+            expected = supported_source_hashes("questRewardOwners")
+        except ValueError as error:
+            raise save_advanced.AdvancedMutationError(
+                "Save Editor quest reward mutation owners have no verified supported-build source hashes.") from error
     if any(native.get("scriptHashes", {}).get(key) != digest for key, digest in expected.items()):
         raise save_advanced.AdvancedMutationError("Save Editor quest reward mutation owners do not match their verified source capture.")
     fields = _fields(native.get("quests", {}), name)

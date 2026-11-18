@@ -85,8 +85,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
             "NPC_Child_01": ("HugZagreus",),
         }
         assert namespace["OBJECTIVE_LOCALIZATION_IDS"] == {"GiftPrompt": "Objective_GiveGift"}
-        for name in ("QuestData.lua", "ResourceData.lua", "ObjectiveData.lua", "StoryResetData.lua"):
+        for name in ("QuestData.lua", "ResourceData.lua", "ObjectiveData.lua"):
             raw_sha = hashlib.sha256((scripts / name).read_bytes()).hexdigest()
             assert f"{name} SHA-256 {raw_sha}" in generated, (name, newline)
+        # The trusted StoryReset digest has one owner: the supported-build snapshot.
+        reset_sha = hashlib.sha256((scripts / "StoryResetData.lua").read_bytes()).hexdigest()
+        assert reset_sha not in generated, newline
 
 print("hades2_save_native_ids_ok")

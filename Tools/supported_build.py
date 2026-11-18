@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 _HEADER_KEY = "nativeUUIDHeader"
 _REFERENCE_TOKEN = "@supportedBuild/"
+_SOURCE_HASHES = "installed_source_hashes.json"
 _UUID = re.compile(r"^[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DECIMAL = re.compile(r"^[1-9][0-9]*$")
@@ -112,10 +113,32 @@ def validate_supported_build(module: Path, *, root: Path = ROOT, verify_generate
         if target.get("gameVersion") != "1." + build["bundleVersion"] or target.get("steamBuild") != build["steamBuildID"]:
             raise ValueError(f"{game_id}: terminology reference does not match supportedBuild")
 
+    # Installed-source digests trusted by game code must be re-verified for
+    # every supported image: a carried-forward file still names its old build.
+    hashes = directory / _SOURCE_HASHES
+    if hashes.is_file():
+        data = json.loads(hashes.read_text(encoding="utf-8"))
+        target = data.get("target") if isinstance(data, dict) else None
+        if not isinstance(target, dict) or target.get("steamBuild") != build["steamBuildID"] or (
+                "bundleVersion" in build and target.get("gameVersion") != "1." + build["bundleVersion"]):
+            raise ValueError(f"{game_id}: installed source hashes do not match supportedBuild")
+        owners = data.get("owners")
+        if not isinstance(owners, dict) or not owners:
+            raise ValueError(f"{game_id}: installed source hashes declare no owners")
+        for owner, declaration in owners.items():
+            files = declaration.get("files") if isinstance(declaration, dict) else None
+            if not isinstance(files, dict) or not files or not all(
+                    name and "/" not in name and "\\" not in name
+                    and isinstance(digest, str) and _SHA256.fullmatch(digest)
+                    for name, digest in files.items()):
+                raise ValueError(f"{game_id}: installed source hashes for {owner} are malformed")
+
     for item in raw.get("appResources", []):
         if not isinstance(item, dict) or not isinstance(item.get("source"), str):
             raise ValueError(f"{game_id}: invalid appResource declaration")
-        resolved_resource_source(item["source"], build)
+        source = resolved_resource_source(item["source"], build)
+        if item["source"].startswith(_REFERENCE_TOKEN) and not (root / source).is_file():
+            raise ValueError(f"{game_id}: supportedBuild app resource is missing from the reference directory")
 
     header = build.get(_HEADER_KEY)
     if header is not None:

@@ -7,23 +7,59 @@ not predictions of future dialogue eligibility.
 """
 
 from collections import defaultdict, OrderedDict
+from functools import lru_cache
 import hashlib
 import json
 import math
 from pathlib import Path
 import re
+from types import MappingProxyType
 
 from .localization import _sjson_unescape, _clean_display_name
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import STORY_RESET_TEXT_IDS
 
-_SUPPORTED_STORY_SHA = "58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e"
+_SOURCE_HASHES = "installed_source_hashes.json"
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 _ASSIGN = re.compile(r"(?m)^[ \t]*([A-Za-z_][A-Za-z_0-9]*)[ \t]*=[ \t]*(?:\r?\n[ \t]*)?(\{)")
 _TEXT_FIELD = re.compile(r'\b(Id|Event|Speaker|DisplayName)\s*=\s*"((?:\\.|[^"\\])*)"')
 _CUE = re.compile(r'\bCue\s*=\s*"/VO/((?:\\.|[^"\\])*)"')
 _STRING = re.compile(r'^"((?:\\.|[^"\\])*)"$')
 _LUA_TOKENS = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[{}=,;\[\].()]|[^\s]', re.S)
 _NATIVE_CACHE = OrderedDict()
+
+
+@lru_cache(maxsize=2)
+def _source_hash_declaration(path):
+    try:
+        owners = json.loads(Path(path).read_text(encoding="utf-8"))["owners"]
+        if not isinstance(owners, dict):
+            raise TypeError("owners is not an object")
+        result = {}
+        for owner, declaration in owners.items():
+            files = declaration["files"]
+            if not isinstance(files, dict) or not files or not all(
+                    type(name) is str and name and "/" not in name and type(digest) is str
+                    and _SHA256.fullmatch(digest) for name, digest in files.items()):
+                raise ValueError(f"{owner} declares no well-formed raw-byte SHA-256 file set")
+            result[owner] = MappingProxyType(dict(files))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ValueError(f"{path}: {error!r}") from error
+    return MappingProxyType(result)
+
+
+def supported_source_hashes(owner):
+    """Raw-byte SHA-256 of installed scripts one owner verified for the supported build.
+
+    The supported-build reference snapshot owns these values. Missing, malformed
+    or empty data raises rather than trusting installed sources.
+    """
+    from .config import supported_reference_path
+    try:
+        declaration = _source_hash_declaration(str(supported_reference_path(_SOURCE_HASHES)))
+        return declaration[owner]
+    except (LookupError, ValueError) as error:
+        raise ValueError(f"Hades II supported-build source hashes for {owner!r} are unavailable: {error}") from error
 
 
 def _masked(text, *, lua):
@@ -476,10 +512,15 @@ def _cached(source, expected_hash):
 class NativeDialogueInvestigation:
     """Search current installed evidence with the caller's static save state."""
 
-    def __init__(self, game_path=None, *, expected_hash=_SUPPORTED_STORY_SHA):
+    def __init__(self, game_path=None, *, expected_hash=None):
         # Cache only source evidence, never a LuaTable from a mutable Save
         # document. Query/detail receive the workspace's current document.
         self.game_path = str(game_path) if game_path is not None else None
+        if expected_hash is None:
+            story_reset = supported_source_hashes("storyReset")
+            if set(story_reset) != {"StoryResetData.lua"}:
+                raise ValueError("Hades II storyReset source hashes must name exactly StoryResetData.lua.")
+            expected_hash = story_reset["StoryResetData.lua"]
         self.expected_hash = expected_hash
         self.native = None
         self._native_signature = None
