@@ -16,7 +16,9 @@ Backend/games/<id>/
   ...game-local services/transport...
 ```
 
-Register the game ID in the product module list in `app.json`. Ordinary module additions require no edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`. The build generates the typed catalog and management-command composition from that list. The [module onboarding runbook](docs/development/add-a-game-module.md) records optional-capability decisions, behavior-test registration, architecture identities and verification scope. A changed module needs a stable module-owned PR smoke entry; missing or entirely deferred coverage fails explicitly.
+Register the game ID in the product module list in `app.json`. Ordinary module additions require no edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`. The build generates the typed catalog and management-command composition from that list.
+
+The Swift product compiles as separate modules of one package: `TrainerCore` from `Sources/Core/**`, then one module per selected frontend named by its `Sources/<Game>` directory, then the App module from `Sources/App.swift` and the generated catalog. Each module sees only its declared dependencies (`Tools/product_support.py`), so Core cannot import a game and a game cannot import another game. Core marks the API that games use `package`; the rest of Core stays internal. Each game module receives a generated binding with its descriptor, the only game declaration the App sees. The [module onboarding runbook](docs/development/add-a-game-module.md) records optional-capability decisions, behavior-test registration, architecture identities and verification scope. A changed module needs a stable module-owned PR smoke entry; missing or entirely deferred coverage fails explicitly.
 
 Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
@@ -48,7 +50,7 @@ It stays outside normal runtime module paths, so discovery never exposes it as a
 
 The proof requires:
 
-- shared source graph = `Sources/App.swift + Sources/Core/** + selected frontends`;
+- Swift module graph = `TrainerCore` ← each selected frontend ← App, with no game-to-game edge;
 - no Hades/reference-fixture branch in Core, App, or build source selection;
 - isolated diagnostic output contains exactly its selected game module; unified output contains exactly the product module list;
 - a module without `saveManagement` generates `supportsSaveManagement: false` and receives `save_unsupported` for `core.save.*`;
