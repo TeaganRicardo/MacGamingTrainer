@@ -247,9 +247,8 @@ RoomData.F_Story01.AlwaysForceOncePerRoom = true
 door2.Room = DeepCopyTable(RoomData.F_Story01)
 local forcedForFirst = exitByObject(1)
 local forcedForFirstTarget = targetRow(forcedForFirst, "roomCategory", "combat")
-assert(forcedForFirstTarget and forcedForFirstTarget.enabled == false
-    and forcedForFirstTarget.reason == "native_forced_room_present",
-  "a later door's already-generated room incorrectly suppressed native force on an earlier door")
+assert(forcedForFirstTarget and forcedForFirstTarget.enabled == true,
+  "a later preassigned sibling room must suppress the same AlwaysForceOncePerRoom destination on this exit")
 
 door1.Room = DeepCopyTable(RoomData.F_Story01)
 local laterDoor = exitByObject(2)
