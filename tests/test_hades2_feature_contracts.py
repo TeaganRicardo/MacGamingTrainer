@@ -61,9 +61,9 @@ assert 'kind = "roomCategory"' in lua
 # #763: disabled native targets survive the transport/model boundary and stay
 # visible in SwiftUI with a reason; both model selection repair and Apply are
 # gated on the authoritative enabled bit.
-world_exit_view = source_section(
-    view, "private var worldExitPanel: some View {", "private var nextOccurrencePanel: some View {"
-)
+world_exit_start = view.index("private var worldExitPanel: some View {")
+world_exit_end = view.index("private var nextOccurrencePanel: some View {", world_exit_start)
+world_exit_view = view[world_exit_start:world_exit_end]
 assert 'Text(worldActionTargetDisplay(target))' in world_exit_view
 assert '.disabled(!target.enabled)' in world_exit_view
 assert 'private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget)' in view
