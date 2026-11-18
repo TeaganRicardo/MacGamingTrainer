@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from module_support import (
-    ROOT, SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME, AppBuildSpec,
-    ManifestError, load_manifest, load_product_declaration, normalized_manifest,
-    product_app_spec,
+    ROOT, AppBuildSpec, ManifestError, load_manifest, load_product_declaration,
+    normalized_manifest, product_app_spec,
 )
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME
 
 CORE_SWIFT_SOURCES = 'Sources/Core'
 APP_SWIFT_SOURCE = 'Sources/App.swift'

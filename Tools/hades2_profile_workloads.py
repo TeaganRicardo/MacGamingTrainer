@@ -14,7 +14,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / 'Tools') not in sys.path:
     sys.path.insert(0, str(ROOT / 'Tools'))
-from module_support import SWIFT_PACKAGE_NAME  # noqa: E402
+from swift_module_layout import SWIFT_PACKAGE_NAME  # noqa: E402
 
 
 def phase_summary(records, summarize):

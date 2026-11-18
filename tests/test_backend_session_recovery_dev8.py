@@ -61,7 +61,7 @@ target_transition = context_source[transition_start:context_source.index(
 harness = r'''
 import Foundation
 
-struct GameModuleDescriptor {
+package struct GameModuleDescriptor {
     let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int

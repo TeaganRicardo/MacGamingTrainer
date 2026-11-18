@@ -3,7 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
-from module_support import SWIFT_APP_MODULE, SWIFT_CORE_MODULE  # noqa: E402
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE  # noqa: E402
 from product_support import load_selection  # noqa: E402
 
 # Swift isolation is the compiler's: build.sh gives each Swift module only the

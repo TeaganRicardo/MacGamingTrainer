@@ -20,6 +20,7 @@ import module_support
 import product_support
 import verify_module_build
 from generate_game_binding import generate, generate_module_sources
+from swift_module_layout import SWIFT_APP_MODULE
 from module_support import ManifestError
 from build_module_native import build_libraries
 
@@ -85,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     generate_module_sources(selection.modules, generated)
     bindings = {module: (generated / module.lower() / 'GameBinding.generated.swift').read_text()
                 for module in ('One', 'Two')}
-    catalog = (generated / module_support.SWIFT_APP_MODULE / 'TrainerGameCatalog.generated.swift').read_text()
+    catalog = (generated / SWIFT_APP_MODULE / 'TrainerGameCatalog.generated.swift').read_text()
     for name, other in (('One', 'Two'), ('Two', 'One')):
         module = f'{name}Module'
         binding = bindings[name]

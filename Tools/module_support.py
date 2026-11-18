@@ -18,6 +18,7 @@ from resident_runtime import (
     ResidentRuntimeDeclarationError,
     parse_resident_runtime_declaration,
 )
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE
 
 _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 _BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
@@ -25,13 +26,6 @@ _MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
 _SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
 _ABSENT = object()
 
-# Swift module layout. Core, each game frontend and the App compile as separate
-# Swift modules of one package: games and the App import TrainerCore, the App
-# also imports each game, and nothing imports the App or another game. Core API
-# that games use is `package`; everything else keeps Swift's default access.
-SWIFT_PACKAGE_NAME = 'MacGamingTrainer'
-SWIFT_CORE_MODULE = 'TrainerCore'
-SWIFT_APP_MODULE = 'TrainerApp'
 _RESERVED_SWIFT_MODULES = frozenset({SWIFT_CORE_MODULE, SWIFT_APP_MODULE})
 
 

@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         'supported_build.py',
         'validate_game_module.py',
         'generate_game_binding.py',
+        'swift_module_layout.py',
     ):
         shutil.copy2(root / 'Tools' / name, tools / name)
 

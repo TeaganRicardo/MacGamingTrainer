@@ -68,7 +68,7 @@ lifecycle_harness = r'''
 import Foundation
 import Combine
 
-struct GameModuleDescriptor {
+package struct GameModuleDescriptor {
     let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int

@@ -1,6 +1,6 @@
 import Foundation
 
-struct GameModuleDescriptor {
+package struct GameModuleDescriptor {
     let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int

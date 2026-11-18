@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Tools"))
-from module_support import SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
 
 
 def executable(path: Path, source: str) -> None:

@@ -12,12 +12,11 @@ from pathlib import Path
 
 from module_support import (
     HOST_PROTOCOL_VERSION,
-    SWIFT_APP_MODULE,
-    SWIFT_CORE_MODULE,
     ManifestError,
     load_manifest,
     swift_string,
 )
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE
 
 HEADER = '// Generated from module manifests. Do not edit.\n'
 BINDING_FILENAME = 'GameBinding.generated.swift'

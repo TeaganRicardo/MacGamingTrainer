@@ -26,7 +26,7 @@ Equivalence and staleness guarantees:
   single direct ``swiftc`` invocation for clean A/B equivalence checks.
 
 Module layout: the product compiles Core, each game and the App as separate
-Swift modules of one package (``Tools/module_support.py``). Until harnesses
+Swift modules of one package (``Tools/swift_module_layout.py``). Until harnesses
 compile that layout themselves, every support set compiles as one module named
 like Core, in the same package. A game file's ``import TrainerCore`` is then a
 self-import the compiler ignores, and ``package`` declarations stay visible.
@@ -51,7 +51,7 @@ from typing import Callable, Iterable, Iterator, Mapping, Sequence
 _TOOLS = Path(__file__).resolve().parents[1] / "Tools"
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
-from module_support import SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
+from swift_module_layout import SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
 
 CACHE_FORMAT_VERSION = 2
 MODULE_NAME = SWIFT_CORE_MODULE
