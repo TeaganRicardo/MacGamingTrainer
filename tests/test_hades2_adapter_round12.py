@@ -12,8 +12,8 @@ sys.path.insert(0, str(root/'tests'))
 import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
 from games.hades2 import preparation as prep
-from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
-from games.hades2.schema import default_boon_rarity
+from games.hades2.adapter import Hades2Adapter
+from games.hades2.schema import STAT_RULES, TOGGLES, default_boon_rarity
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply

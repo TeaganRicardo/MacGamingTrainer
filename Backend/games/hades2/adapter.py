@@ -38,19 +38,6 @@ from .schema import (
     validate_chaos_gate_probability,
 )
 
-# Keep these imports public for established adapter-module consumers. In
-# particular, tests and downstream callers import STAT_RULES from here.
-__all__ = [
-    'MULTIPLIERS',
-    'STAT_RULES',
-    'TOGGLES',
-    'AdapterError',
-    'GameAdapter',
-    'GameAdapterContext',
-    'Hades2Adapter',
-    'TransportError',
-]
-
 TransportError = AdapterError
 
 def clear_active(state,preserve_desired=False):
