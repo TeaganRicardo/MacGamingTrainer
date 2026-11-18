@@ -1,6 +1,6 @@
 # Backend technical-debt audit (Python Core, Hades I, Hades II)
 
-- **Source:** worktree `claude/game-modules-tech-debt-bdb1d8` at `73697aef` (same as `main`, clean).
+- **Source:** `main@73697aef`.
 - **Mode:** read-only. Only one test was run: `python3 tests/test_host_watchdog_aggregate_budgets.py`, which passed.
 - **Scope:** `Backend/core/*.py`, `Backend/debugger/*`, `Backend/games/hades/*.py` and `Backend/games/hades2/*.py`. `runtime/hades.lua` got a structural pass only.
 - **Evidence labels:**

@@ -1,7 +1,7 @@
 # Swift-side technical-debt audit: what a third game module would inherit
 
 Scope: `Sources/App.swift`, `Sources/Core/**`, `Sources/Hades/**` (Hades I), `Sources/Hades2/**` (Hades II), `ContractFixtures/reference_module/frontend`, and the Swift seam emitted by `Tools/generate_game_binding.py`.
-Method: read-only source reading, grep and `git log -S`/`git show` at worktree HEAD `73697aef`. Nothing was built, run or tested.
+Method: read-only source reading, grep and `git log -S`/`git show` at `main@73697aef`. Nothing was built, run or tested.
 
 Evidence labels:
 - **[fact]**: read directly in the cited source.
