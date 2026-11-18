@@ -252,8 +252,8 @@ assert(forcedForFirstTarget and forcedForFirstTarget.enabled == true,
 
 door1.Room = DeepCopyTable(RoomData.F_Story01)
 local laterDoor = exitByObject(2)
-local laterStory = targetRow(laterDoor, "roomCategory", "story")
-assert(laterStory and laterStory.enabled == true,
+local laterCombat = targetRow(laterDoor, "roomCategory", "combat")
+assert(laterCombat and laterCombat.enabled == true,
   "an earlier door's forced-once room incorrectly blocked the later door's other-room choices")
 
 door1.Room = originalForcedDoor1Room
