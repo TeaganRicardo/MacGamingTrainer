@@ -704,7 +704,15 @@
     "hades2.worldActions.unavailable.room_requires_indoor": "Requires an indoor room",
     "hades2.worldActions.unavailable.room_max_creations_per_room": "Already created in this room",
     "hades2.worldActions.unavailable.room_max_appearances_this_run": "Already visited this run",
-    "hades2.worldActions.unavailable.room_required_tags_missing": "Required room tags are unavailable"
+    "hades2.worldActions.unavailable.room_required_tags_missing": "Required room tags are unavailable",
+    "hades2.worldActions.unavailable.exit_room_unavailable": "Exit room unavailable",
+    "hades2.worldActions.unavailable.reward_eligibility_unavailable": "Reward eligibility check unavailable",
+    "hades2.worldActions.unavailable.room_data_unavailable": "Room data unavailable",
+    "hades2.worldActions.unavailable.room_eligibility_unavailable": "Room eligibility check unavailable",
+    "hades2.worldActions.unavailable.room_force_predicate_unavailable": "Native forced-route check unavailable",
+    "hades2.worldActions.unavailable.room_sets_unavailable": "Room-set data unavailable",
+    "hades2.worldActions.unavailable.source_unavailable": "Source room unavailable",
+    "hades2.worldActions.unavailable.door_unavailable": "Exit unavailable"
   },
   "language": "en"
 }
