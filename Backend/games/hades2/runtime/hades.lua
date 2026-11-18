@@ -9612,18 +9612,49 @@ if __MacGamingTrainerV1 == nil then
       return physical .. ":" .. tostring(observation.epoch)
     end
 
+    local function nativeOfferedExitDoorArray()
+      if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table" then
+        return {}
+      end
+      local offered
+      if type(CollapseTableOrdered) == "function" then
+        local ok, result = pcall(CollapseTableOrdered, MapState.OfferedExitDoors)
+        if ok and type(result) == "table" then offered = result end
+      end
+      if offered == nil then
+        offered = {}
+        for _, door in pairs(MapState.OfferedExitDoors) do
+          offered[#offered + 1] = door
+        end
+        table.sort(offered, function(a, b)
+          return number(a and a.ObjectId) < number(b and b.ObjectId)
+        end)
+      end
+      -- Match RoomLogic.DoUnlockRoomExits: UnavailableDoorIds contains
+      -- positions in the collapsed native exit array, not ObjectIds.
+      local source = currentSource()
+      local unavailable = type(source) == "table" and source.UnavailableDoorIds or nil
+      if type(unavailable) == "table" then
+        for _, position in pairs(unavailable) do
+          local index = tonumber(position)
+          if index ~= nil and index >= 1 and index % 1 == 0 then
+            offered[index] = nil
+          end
+        end
+      end
+      return offered
+    end
+
     local function editableDoor(door)
       if type(door) ~= "table" or type(door.Room) ~= "table"
           or door.ObjectId == nil or door.ReadyToUse ~= true or door.SkipUnlock then return false end
       if door.ReturnToPreviousRoom or door.ReturnToPreviousRoomName then return false end
-      local source = currentSource()
-      if type(source) == "table" and type(source.UnavailableDoorIds) == "table" then
-        for _, unavailableID in ipairs(source.UnavailableDoorIds) do
-          if unavailableID == door.ObjectId then return false end
-        end
+      if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table"
+          or MapState.OfferedExitDoors[door.ObjectId] ~= door then return false end
+      for _, offered in ipairs(nativeOfferedExitDoorArray()) do
+        if offered == door then return true end
       end
-      return type(MapState) == "table" and type(MapState.OfferedExitDoors) == "table"
-        and MapState.OfferedExitDoors[door.ObjectId] == door
+      return false
     end
 
     local function activeLease(door)
@@ -9831,29 +9862,15 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.roomSetCount = #roomSet
 
       local otherDoors = {}
-      local offeredDoors = MapState.OfferedExitDoors or {}
-      if type(CollapseTableOrdered) == "function" then
-        offeredDoors = CollapseTableOrdered(offeredDoors)
-      else
-        offeredDoors = {}
-        for _, offered in pairs(MapState.OfferedExitDoors or {}) do
-          offeredDoors[#offeredDoors + 1] = offered
-        end
-        table.sort(offeredDoors, function(a, b)
-          return number(a and a.ObjectId) < number(b and b.ObjectId)
-        end)
-      end
-      local unavailableDoorIds = type(source) == "table" and source.UnavailableDoorIds or nil
-      -- Native ChooseNextRoomData receives the complete offered-door array.
-      -- IsRoomForced may inspect a preassigned room in *any other* slot,
-      -- including a later slot. Exclude only this exact door: unlike native
-      -- initial generation it already has a Room during edit/catalog reads,
-      -- and must not satisfy its own AlwaysForceOncePerRoom predicate.
+      local offeredDoors = nativeOfferedExitDoorArray()
+      -- Native ChooseNextRoomData receives the complete collapsed exit array
+      -- after positional UnavailableDoorIds have been removed. IsRoomForced
+      -- may inspect a preassigned room in any remaining sibling slot,
+      -- including a later slot. Exclude only this exact door so its existing
+      -- destination cannot satisfy its own AlwaysForceOncePerRoom predicate.
       for _, offered in ipairs(offeredDoors) do
         if type(offered) == "table" and offered ~= door
-            and type(offered.Room) == "table"
-            and not (type(unavailableDoorIds) == "table"
-              and unavailableDoorIds[offered.ObjectId] ~= nil) then
+            and type(offered.Room) == "table" then
           otherDoors[#otherDoors + 1] = offered
         end
       end
