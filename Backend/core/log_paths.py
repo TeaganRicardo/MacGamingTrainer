@@ -22,11 +22,3 @@ def trainer_log_directory(game_id, home=None):
     if game_directory.is_symlink() or resolved_game.parent != resolved_root:
         raise ValueError('trainer log directory escapes its root')
     return resolved_game
-
-
-def trainer_log_path(game_id, home=None):
-    """Return the contained legacy flat log path when that file is safe."""
-    path = trainer_log_directory(game_id, home=home) / 'trainer.log'
-    if path.is_symlink():
-        raise ValueError('trainer log path must not contain symlinks')
-    return path.resolve()

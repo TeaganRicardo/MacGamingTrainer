@@ -13,7 +13,7 @@ import lldb
 from core.operation_profile import profiled
 from core.adapter import AdapterError as TransportError
 
-from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from .config import DISPLAY_NAME, GAME_ARCHITECTURE, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 from .native_effect_query import prepare_native_query
 from .mailbox import Hades2CommandMailbox
 from .native_mailbox import prepare_command_mailbox, install_command_mailbox
@@ -90,7 +90,7 @@ class Hades2LuaTransport:
             try:
                 self.runtime_uuid=self.target.GetModuleAtIndex(0).GetUUIDString()
                 triple = self.target.GetTriple() or ''
-                required_arch = GAME_SPEC.minimum_architecture
+                required_arch = GAME_ARCHITECTURE
                 arch_ok = True
                 if required_arch == 'arm64':
                     arch_ok = triple.startswith(('arm64-', 'aarch64-'))
@@ -98,7 +98,7 @@ class Hades2LuaTransport:
                     arch_ok = triple.startswith(required_arch + '-')
                 if not self.runtime_uuid or not arch_ok:
                     requirement = required_arch or '受支持架构'
-                    raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。')
+                    raise TransportError('incompatible',f'{DISPLAY_NAME} 适配器需要 {requirement} 原生游戏。')
             finally:
                 profile['identity']=time.monotonic()-phase
 

@@ -13,7 +13,7 @@ import math
 import subprocess
 
 from . import preparation, save_advanced, save_container
-from .config import STEAM_SPEC
+from .config import STEAM_LAUNCH_URL
 from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
@@ -608,7 +608,7 @@ def _export_diagnostics(adapter, params):
 
 def _launch(adapter, params):
     subprocess.run(
-        ["/usr/bin/open", STEAM_SPEC.launch_url],
+        ["/usr/bin/open", STEAM_LAUNCH_URL],
         check=True,
         timeout=10,
         shell=False,

@@ -192,7 +192,6 @@ _HADES2_REFERENCE = json.loads((ROOT / "Backend/games/hades2/module.json").read_
 _NON_BEHAVIOR_MACOS_EXACT = frozenset({
     _HADES2_REFERENCE + "/installed_source_hashes.json",
     ".gitignore",
-    "ACTIVE_GAME_ID",
     "AppIcon.icns",
     "ContractFixtures/host_protocol_v6.json",
     "Info.plist",

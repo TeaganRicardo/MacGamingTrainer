@@ -87,7 +87,6 @@ assert_scope(
 for shared_backend_seam in (
     "Backend/core/__init__.py",
     "Backend/core/adapter.py",
-    "Backend/core/game_spec.py",
     "Backend/core/module_manifest.py",
     "Backend/core/protocol.py",
     "Backend/core/registry.py",

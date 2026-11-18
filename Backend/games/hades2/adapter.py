@@ -7,13 +7,13 @@ import time
 from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
-from core.process_time_warp import ProcessTimeWarpController, ProcessTimeWarpError
+from core.process_time_warp import ProcessTimeWarpError
 
 from . import preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
-from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
+from .config import DATA, DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST, PROCESS_NAME, STEAM_APP_ID
 from .persistence import PersistenceError
 from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
@@ -37,19 +37,6 @@ from .schema import (
     normalize_chaos_gate_probability,
     validate_chaos_gate_probability,
 )
-
-# Keep these imports public for established adapter-module consumers. In
-# particular, tests and downstream callers import STAT_RULES from here.
-__all__ = [
-    'MULTIPLIERS',
-    'STAT_RULES',
-    'TOGGLES',
-    'AdapterError',
-    'GameAdapter',
-    'GameAdapterContext',
-    'Hades2Adapter',
-    'TransportError',
-]
 
 TransportError = AdapterError
 
@@ -89,6 +76,38 @@ def mark_disconnected(state):
     state['featureErrorPresentations']={}
     state['capabilities']=disconnected_capabilities()
 
+def log_world_action_target_diagnostics(command,payload):
+    """#720 incident diagnostics for resident WorldActions exit target catalogs.
+
+    Status and exit commands log every exit that carries targetDiagnostics;
+    any other command logs them only when one exit's catalog is empty.
+    """
+    world_actions=payload.get('worldActions')
+    if not isinstance(world_actions,dict):return
+    exits=world_actions.get('exits')
+    observed=[]
+    if isinstance(exits,list):
+        for row in exits:
+            if not isinstance(row,dict):continue
+            diagnostic=row.get('targetDiagnostics')
+            if not isinstance(diagnostic,dict):continue
+            observed.append({
+                'ordinal':row.get('ordinal'),
+                'room':row.get('roomName'),
+                'targetCount':diagnostic.get('targetCount'),
+                'reason':diagnostic.get('reason'),
+                'reward':diagnostic.get('reward'),
+                'routes':diagnostic.get('routes'),
+            })
+    if observed and (
+        command in ('status','apply_world_exit','cancel_world_exit')
+        or any(row.get('targetCount') == 0 for row in observed)
+    ):
+        logging.info(
+            'WorldActions target catalog diagnostics command=%s exits=%s',
+            command,observed
+        )
+
 
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
@@ -121,16 +140,9 @@ class Hades2Adapter(GameAdapter):
             if transport is None:
                 raise ValueError('time_warp_controller is required with an injected resident_session.')
             helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
-            create_remote_time_warp=getattr(transport,'create_time_warp_controller',None)
-            if callable(create_remote_time_warp):
-                time_warp_controller=create_remote_time_warp(
-                    helper_path,[GAME_SPEC.executable_name]
-                )
-            else:
-                from debugger.lldb_time_warp import LLDBProcessTimeWarpDriver
-                time_warp_controller=ProcessTimeWarpController(
-                    LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
-                )
+            time_warp_controller=transport.create_time_warp_controller(
+                helper_path,[GAME_EXECUTABLE_NAME]
+            )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
         self._time_warp_speed=None;self._time_warp_pid=None;self._time_warp_error=None
@@ -724,12 +736,12 @@ class Hades2Adapter(GameAdapter):
         except Exception:
             self.state['status']='incompatible'
             raise
-        result=subprocess.run(['/usr/bin/pgrep','-x',GAME_SPEC.process_name],capture_output=True,text=True,timeout=5)
+        result=subprocess.run(['/usr/bin/pgrep','-x',PROCESS_NAME],capture_output=True,text=True,timeout=5)
         if result.returncode not in (0,1):
             detail=(result.stderr or result.stdout).strip() or '未知错误'
-            raise RuntimeError(f'查询 {GAME_SPEC.display_name} 进程失败（{result.returncode}）：{detail}')
+            raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{result.returncode}）：{detail}')
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
-        if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
+        if len(pids)>1:raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。')
         pid=pids[0] if pids else None
         if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
             attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
@@ -755,7 +767,7 @@ class Hades2Adapter(GameAdapter):
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
             phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
-            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
+            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {DISPLAY_NAME} 并进入存档。')
             # A reconnect invalidates the prior native helper observation.
             # Resident-session attach separately owns Lua generation/bootstrap.
             self._invalidate_game_speed_observation()
@@ -940,31 +952,7 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=reply.metrics.localize_duration
             asynchronous_unknown=reply.outcome_unknown
             decoded=self._merge_resident_reply(reply)
-            if isinstance(raw_decoded.get('worldActions'),dict):
-                world_actions=raw_decoded.get('worldActions')
-                exits=world_actions.get('exits') if isinstance(world_actions,dict) else None
-                observed=[]
-                if isinstance(exits,list):
-                    for row in exits:
-                        if not isinstance(row,dict):continue
-                        diagnostic=row.get('targetDiagnostics')
-                        if not isinstance(diagnostic,dict):continue
-                        observed.append({
-                            'ordinal':row.get('ordinal'),
-                            'room':row.get('roomName'),
-                            'targetCount':diagnostic.get('targetCount'),
-                            'reason':diagnostic.get('reason'),
-                            'reward':diagnostic.get('reward'),
-                            'routes':diagnostic.get('routes'),
-                        })
-                if observed and (
-                    command in ('status','apply_world_exit','cancel_world_exit')
-                    or any(row.get('targetCount') == 0 for row in observed)
-                ):
-                    logging.info(
-                        'WorldActions target catalog diagnostics command=%s exits=%s',
-                        command,observed
-                    )
+            log_world_action_target_diagnostics(command,raw_decoded)
             if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
                 self._adopt_lua_preferences(raw_decoded)
             # Runtime observation skips durable Hades desired-state projection,
@@ -1096,7 +1084,7 @@ class Hades2Adapter(GameAdapter):
     def metadata(self):
         metadata = super().metadata()
         metadata.update({
-            'steamAppId': STEAM_SPEC.app_id,
+            'steamAppId': STEAM_APP_ID,
             'transport': 'supergiant-lldb-lua',
         })
         return metadata
@@ -1118,6 +1106,6 @@ class Hades2Adapter(GameAdapter):
         try:
             self.disconnect()
         except Exception:
-            logging.exception('Graceful %s cleanup failed; attempting debugger detach.', GAME_SPEC.display_name)
+            logging.exception('Graceful %s cleanup failed; attempting debugger detach.', DISPLAY_NAME)
         finally:
             self.runtime.close()

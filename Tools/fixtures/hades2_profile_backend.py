@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Private offline worker: real owners, synthetic native functions/temp storage."""
-from dataclasses import replace
 import importlib.util
 import json
 import logging
@@ -144,8 +143,7 @@ def backend():
         (text / ('profile.' + language + '.sjson')).write_text('{ Texts = [\n' + '\n'.join(
             '{ Id = %s DisplayName = %s }' % (json.dumps(key), json.dumps('Synthetic ' + key))
             for key in sorted(identifiers)) + '\n] }\n', encoding='utf-8')
-    localization.GAME_SPEC = replace(localization.GAME_SPEC, app_bundle_path=game,
-        executable_path=game / 'Contents/MacOS/OfflineFixture', save_path=temporary / 'unused-saves')
+    localization.GAME_APP = game
     preparation.DATA = temporary / 'preferences'
     preparation.DATA.mkdir()
     transport = Hades2LuaTransport()

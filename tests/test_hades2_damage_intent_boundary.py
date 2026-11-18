@@ -18,6 +18,7 @@ sys.path.insert(0, str(root / 'tests'))
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-damage-intent-'))
 prep.DATA = base
@@ -45,6 +46,9 @@ class FakeTransport:
 
     def close(self):
         self.live = False
+
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
 
 
 adapter = Hades2Adapter(transport=FakeTransport())

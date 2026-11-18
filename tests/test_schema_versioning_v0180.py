@@ -12,6 +12,7 @@ from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import UnsupportedSchemaVersionError
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-schema-version-v0180-'))
 logging.disable(logging.CRITICAL)
@@ -110,6 +111,7 @@ try:
             })
         def detach(self): pass
         def close(self): pass
+        def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
     future_transport = FutureSchemaTransport()
     adapter = Hades2Adapter(transport=future_transport)

@@ -3,17 +3,8 @@ import sys
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
-from .lldb_worker import HadesLLDBWorker, close_worker, error_payload as runtime_error_payload
+from .lldb_worker import HadesLLDBWorker, close_worker, error_payload
 from .simulation_time_warp import HadesSimulationTimeWarp
-
-
-def error_payload(error):
-    payload = runtime_error_payload(error)
-    recovery = {'outcome_unknown': 'outcomeUnknown', 'restart_required': 'restartRequired'}
-    if payload['code'] in recovery and payload['presentation'].startswith('host.timeWarp.error.'):
-        payload['presentation'] = 'hades.error.' + recovery[payload['code']]
-        payload['arguments'] = []
-    return payload
 
 
 class HadesTimeWarpWorker(HadesLLDBWorker):

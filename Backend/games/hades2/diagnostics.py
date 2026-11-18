@@ -10,7 +10,7 @@ from core.log_paths import trainer_log_directory
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION
 
 from . import localization, preparation, schema
-from .config import GAME_SPEC
+from .config import DISPLAY_NAME
 from .operation_budgets import LLDB_DISCOVERY_TIMEOUT_SECONDS, LLDB_PYTHON_TIMEOUT_SECONDS
 from .schema import STAT_RULES
 
@@ -36,7 +36,7 @@ def build_diagnostics(adapter):
     add('协议版本',True,f'host {HOST_PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
     add('后端进程',True,sys.executable)
     add('Python',True,sys.version.split()[0]+' · '+platform.platform())
-    add(GAME_SPEC.display_name+' 安装',preparation.GAME.exists(),preparation.GAME)
+    add(DISPLAY_NAME+' 安装',preparation.GAME.exists(),preparation.GAME)
     symbols=Path(__file__).with_name('symbols.json')
     add('symbols.json',symbols.is_file(),symbols)
     add('存档目录',preparation.SAVES.exists(),preparation.SAVES)
@@ -59,12 +59,12 @@ def build_diagnostics(adapter):
     except Exception as error:add('LLDB Python',False,error)
 
     if runtime_observation_available:
-        add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
+        add(DISPLAY_NAME+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
     else:
         last_pid=last_known_state.get('pid')
         detail='状态暂不可得'
         if last_pid:detail+=f' · 最后已知 PID {last_pid}'
-        add(GAME_SPEC.display_name+' 进程',False,detail)
+        add(DISPLAY_NAME+' 进程',False,detail)
     add('Lua 连接',bool(state.get('connected')),state.get('status','unknown') if runtime_observation_available else '状态暂不可得')
     diag=state.get('runtimeDiagnostics',{}) if isinstance(state.get('runtimeDiagnostics'),dict) else {}
     add('Lua runtime revision',diag.get('revision') is not None,diag.get('revision','未连接'))

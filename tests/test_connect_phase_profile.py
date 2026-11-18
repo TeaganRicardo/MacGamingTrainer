@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
+from core.adapter import AdapterError
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.schema import TOGGLES
@@ -60,6 +61,9 @@ class FakeTransport:
 
     def close(self):
         self.detach()
+
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
 
 
 transport = FakeTransport()
@@ -157,7 +161,7 @@ print('connect_phase_profile_failure_paths_ok')
 class WaitingTransport(FakeTransport):
     def execute(self, source):
         self.last_duration = 2.750
-        raise adapter_module.TransportError('waiting', 'simulated waiting')
+        raise AdapterError('waiting', 'simulated waiting')
 
 
 waiting_transport = WaitingTransport()
@@ -198,7 +202,7 @@ print('connect_phase_profile_waiting_ok')
 class EarlyRuntimeTransport(FakeTransport):
     def execute(self, source):
         self.last_duration = 0.050
-        raise adapter_module.TransportError(
+        raise AdapterError(
             'lua_error',
             '[string "MacGamingTrainer"]:7: Unsupported game runtime: missing table SessionState',
         )

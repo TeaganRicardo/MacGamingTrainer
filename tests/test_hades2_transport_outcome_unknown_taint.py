@@ -310,6 +310,7 @@ import tempfile
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 
 class AsyncUnknownTransport:
@@ -333,6 +334,9 @@ class AsyncUnknownTransport:
             raise AdapterError('restart_required', 'tainted transport')
         self.calls.append(source)
         return json.dumps(self.payload)
+
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
 
 
 with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:

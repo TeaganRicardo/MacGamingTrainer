@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import diagnostics, schema
-from games.hades2.config import GAME_SPEC
+from games.hades2.config import DISPLAY_NAME
 from games.hades2.adapter import Hades2Adapter
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
@@ -67,7 +67,7 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
     assert checks["运行时状态刷新"]["ok"] is False
     assert "status refresh failed" in checks["运行时状态刷新"]["detail"]
     for name in (
-        GAME_SPEC.display_name + " 进程",
+        DISPLAY_NAME + " 进程",
         "Lua 连接",
         "Lua runtime revision",
         "当前场景",
@@ -75,7 +75,7 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
         "Run Count",
     ):
         assert checks[name]["ok"] is False, name
-    process_check = checks[GAME_SPEC.display_name + " 进程"]
+    process_check = checks[DISPLAY_NAME + " 进程"]
     assert "未运行" not in process_check["detail"]
     assert str(STALE_STATE["pid"]) in process_check["detail"]
     assert result["state"] == {}
