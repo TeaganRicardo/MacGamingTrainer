@@ -2407,7 +2407,11 @@ if __MacGamingTrainerV1 == nil then
       for depth, column in ipairs(slotted.Talents or {}) do
         local keys = {}
         for slot in pairs(type(column) == "table" and column or {}) do keys[#keys + 1] = slot end
-        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        table.sort(keys, function(a, b)
+        local left, right = tostring(a), tostring(b)
+        if left == right then return type(a) < type(b) end
+        return left < right
+      end)
         for _, slot in ipairs(keys) do
           local node = column[slot]
           if type(node) == "table" and type(node.Name) == "string" then
@@ -10303,7 +10307,9 @@ if __MacGamingTrainerV1 == nil then
       local game = type(GameState) == "table" and GameState or {}
       local parts = {
         tostring(run.BiomeDepthCache), tostring(run.RunDepthCache),
-        tostring(run.EnteredBiomes), tostring(run.NumRerolls),
+        tostring(run.EncounterDepth), tostring(run.BiomeEncounterDepth),
+        tostring(run.LastDevotionDepth), tostring(run.EnteredBiomes),
+        tostring(run.NumRerolls),
         tostring(run.MaxGodsPerRun), tostring(run.NextRewardStoreName),
         tostring(run.ActiveBounty), tostring(run.IsDreamRun),
         stableValueSignature(run.RoomsEntered, 1),
