@@ -132,6 +132,18 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
 
     var canTerminate: Bool { !model.busy && !saveManager.busy && toolWindows.canCloseAll }
 
+    /// Host-owned backend recovery eligibility for both the automatic restart
+    /// opportunity and the connection card's restart action. It reads the
+    /// session directly instead of a module request gate such as
+    /// `hostActionsEnabled`, which is false precisely while the backend is
+    /// unavailable. An incompatible protocol would fail again with the same
+    /// backend, and quit owns the session from its first step. Restarting the
+    /// worker never clears the session's unknown-outcome target trust gate.
+    var backendRestartAllowed: Bool {
+        let status = session.currentStatus
+        return !terminationRequested && !status.busy && status.protocolCompatible
+    }
+
     func toggleConnection() {
         guard !terminationRequested else { return }
         connectionPolicy.userWillToggleConnection(currentlyConnected: model.connected)
@@ -216,7 +228,7 @@ final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
         }
         guard connectionPolicy.backgroundConnectionAllowed || NSApp.isActive else { return }
         if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
-            backendAvailable: model.backendAvailable, busy: model.busy, actionsEnabled: model.hostActionsEnabled
+            backendAvailable: model.backendAvailable, busy: model.busy, recoveryAllowed: backendRestartAllowed
         ) {
             model.restartBackendFromHost()
             return

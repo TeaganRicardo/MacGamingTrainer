@@ -19,7 +19,7 @@ var policy = TrainerConnectionPolicy()
 // No target means no background restart/connect.
 policy.backendBecameUnavailable()
 policy.backendBecameAvailable()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("restarted backend without a running target")
 }
 if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
@@ -29,10 +29,10 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
 // A target launch can recover a missing backend first, then connect exactly once
 // when that backend becomes available.
 policy.targetStateChanged(running: true)
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("launch did not request missing backend recovery")
 }
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("backend restart request was not one-shot")
 }
 policy.backendBecameAvailable()
@@ -75,7 +75,7 @@ if !earlyActivation.targetRunning {
     fail("activation did not preserve running-state evidence for Save safety")
 }
 if earlyActivation.consumeAutomaticBackendRestartIfEligible(
-    backendAvailable: false, busy: false, actionsEnabled: true
+    backendAvailable: false, busy: false, recoveryAllowed: true
 ) {
     fail("unconfirmed launch restarted backend before definitive launch")
 }
@@ -122,10 +122,10 @@ if launchPolicy.backgroundConnectionAllowed {
 
 // Busy state defers the same bounded activation request instead of discarding it.
 policy.targetActivated()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("restarted backend while host was busy")
 }
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("deferred backend restart was lost")
 }
 policy.backendBecameAvailable()
@@ -139,16 +139,16 @@ if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false
 // An unexpected backend loss while the target is live becomes one fallback
 // restart request after the session-level recovery path is no longer busy.
 policy.backendBecameUnavailable()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("host raced session-level backend recovery")
 }
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("backend loss did not preserve fallback recovery intent")
 }
 
 // A terminal module state can veto automatic backend churn.
 policy.targetActivated()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: false) {
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: false) {
     fail("backend restarted while host actions were terminally disabled")
 }
 

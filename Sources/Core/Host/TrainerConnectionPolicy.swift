@@ -138,12 +138,14 @@ struct TrainerConnectionPolicy {
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
-    /// relevant and the Host is idle. `actionsEnabled` lets a module veto
-    /// recovery for terminal states such as an incompatible protocol.
+    /// relevant and the Host is idle. `recoveryAllowed` is the Host-owned restart
+    /// eligibility (`TrainerGameContext.backendRestartAllowed`), never a module
+    /// request gate: an unavailable backend is exactly when recovery must remain
+    /// reachable.
     mutating func consumeAutomaticBackendRestartIfEligible(
         backendAvailable: Bool,
         busy: Bool,
-        actionsEnabled: Bool
+        recoveryAllowed: Bool
     ) -> Bool {
         if backendAvailable {
             backendRestartRequested = false
@@ -153,7 +155,7 @@ struct TrainerConnectionPolicy {
               targetRunning,
               !awaitingDefinitiveLaunch,
               !busy,
-              actionsEnabled else { return false }
+              recoveryAllowed else { return false }
         backendRestartRequested = false
         return true
     }

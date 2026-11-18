@@ -93,6 +93,7 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
                 connected: model.connected,
                 backendAvailable: model.backendAvailable,
                 actionsEnabled: model.hostActionsEnabled,
+                restartEnabled: context.backendRestartAllowed,
                 onRefresh: {
                     targetMonitor.refresh()
                     model.refreshFromHost()

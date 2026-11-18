@@ -37,6 +37,7 @@ assert "model.enabled.toggle()" not in fixture_source, (
 )
 
 harness = r"""
+import AppKit
 import Foundation
 
 func fail(_ message: String) -> Never {
@@ -78,7 +79,7 @@ func connectionCard(backend: Bool = true, connected: Bool = false,
                     running: Bool = false, supportsLaunch: Bool = true) -> TrainerConnectionStatusCard {
     TrainerConnectionStatusCard(
         connected: connected,
-        backendAvailable: backend, actionsEnabled: true,
+        backendAvailable: backend, actionsEnabled: true, restartEnabled: true,
         onRefresh: { selectedActions.append("refresh") },
         onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
         onRestart: { selectedActions.append("restart") }, targetRunning: running,
@@ -121,6 +122,60 @@ if missingModel.backendStatus.error.contains("/definitely/missing") {
 if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
     fail("startup diagnostic detail did not reach logging")
 }
+
+// A worker that keeps exiting exhausts the session's bounded recovery. That
+// unavailable state is exactly when the Host must keep restart reachable.
+let exitingScript = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("mgt-exiting-backend-\(getpid()).py")
+do { try "import sys\nsys.exit(3)\n".write(to: exitingScript, atomically: true, encoding: .utf8) }
+catch { fail("could not write the exiting backend fixture: \(error)") }
+let exhaustedSession = TrainerBackendSession(
+    client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
+)
+let exhaustedModel = ReferenceFixtureModel(session: exhaustedSession, backendScriptURL: exitingScript)
+guard waitUntil(15.0, {
+    let status = exhaustedModel.backendStatus
+    return !status.backendAvailable && !status.busy && status.errorCode != nil
+}) else {
+    fail("exiting backend did not exhaust recovery: \(exhaustedModel.backendStatus)")
+}
+// The Host derives recovery from its own session state. The module request
+// gate (`hostActionsEnabled`) is false exactly while the backend is down, so
+// it must not disable the restart action or the automatic restart.
+if exhaustedModel.hostActionsEnabled {
+    fail("an unavailable backend unexpectedly accepts module requests")
+}
+let exhaustedRecovery = MainActor.assumeIsolated { () -> (allowed: Bool, enabled: Bool, title: String) in
+    _ = NSApplication.shared
+    let context = TrainerGameContext<ReferenceFixtureGameModule>(model: exhaustedModel, session: exhaustedSession)
+    let card = TrainerConnectionStatusCard(
+        connected: false, backendAvailable: exhaustedModel.backendAvailable,
+        actionsEnabled: exhaustedModel.hostActionsEnabled,
+        restartEnabled: context.backendRestartAllowed,
+        onRefresh: {}, onPrimary: { fail("unavailable backend routed to connect") },
+        onRestart: exhaustedModel.restartBackendFromHost
+    )
+    let result = (context.backendRestartAllowed, card.primaryActionEnabled, card.primaryActionTitleKey)
+    if result.0 && result.1 { card.performPrimaryAction() }
+    return result
+}
+if exhaustedRecovery.title != "host.restartBackend" {
+    fail("unavailable backend did not offer the restart action")
+}
+if !exhaustedRecovery.allowed || !exhaustedRecovery.enabled {
+    fail("Host restart is unreachable for an unavailable backend: \(exhaustedRecovery)")
+}
+guard waitUntil(2.0, {
+    exhaustedSession.currentStatus.operation.key == "host.restartBackend"
+        || exhaustedSession.currentStatus.notice == "host.backend.notice.restarted"
+        || exhaustedSession.currentStatus.busy
+}) else {
+    fail("restart action did not reach the backend session: \(exhaustedSession.currentStatus)")
+}
+if !exhaustedSession.currentStatus.requiresTargetRestart {
+    fail("worker restart cleared the unknown-outcome target trust gate")
+}
+try? FileManager.default.removeItem(at: exitingScript)
 
 // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
 // preferences directory; a real suite there cannot be cleaned up afterwards.
