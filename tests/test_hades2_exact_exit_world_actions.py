@@ -217,8 +217,9 @@ assert(not forcedRouteApply,
   "a disabled native forced route must be rejected by the resident")
 nativeRoomForced.F_Forced01 = nil
 
--- Native DoUnlockRoomExits evaluates doors in order. The current door
--- and later doors have no assigned Room when IsRoomForced runs for this door.
+-- Native ChooseNextRoomData receives the complete offered-door array.
+-- A preassigned sibling destination in any slot, including a later slot,
+-- participates in AlwaysForceOncePerRoom; the selected door itself does not.
 local originalForcedDoor1Room, originalForcedDoor2Room = door1.Room, door2.Room
 local originalOnceFlag = RoomData.F_Story01.AlwaysForceOncePerRoom
 RoomData.F_Story01.AlwaysForceOncePerRoom = true
