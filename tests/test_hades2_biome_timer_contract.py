@@ -1,5 +1,6 @@
 """Hades II Vow of Time: native balance, lock scope and durable replay."""
 import sys
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -81,7 +82,7 @@ assert diff._owner_available(
 )
 
 source = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-revision_match = __import__("re").search(r"version = 1, revision = (\d+),", source)
+revision_match = re.search(r"version = 1, revision = (\d+),", source)
 assert revision_match and int(revision_match.group(1)) >= 139
 assert "setBiomeTime = " in source and "biomeTimeLocked = M.biomeTimerFrozen" in source
 assert 'if command == "set_counter" then' in source
