@@ -1254,6 +1254,14 @@ struct Hades2TrainerView: View {
     ]
 
     private static let worldActionUnavailableReasonIDs: Set<String> = [
+        "door_unavailable",
+        "exit_room_unavailable",
+        "reward_eligibility_unavailable",
+        "room_data_unavailable",
+        "room_eligibility_unavailable",
+        "room_force_predicate_unavailable",
+        "room_sets_unavailable",
+        "source_unavailable",
         "biome_depth_too_high",
         "biome_depth_too_low",
         "door_forced_destination",
