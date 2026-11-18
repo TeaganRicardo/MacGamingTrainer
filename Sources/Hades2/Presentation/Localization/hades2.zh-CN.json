@@ -704,7 +704,15 @@
     "hades2.worldActions.unavailable.room_requires_indoor": "需要室内房间",
     "hades2.worldActions.unavailable.room_max_creations_per_room": "当前房间已生成过",
     "hades2.worldActions.unavailable.room_max_appearances_this_run": "本局已进入过",
-    "hades2.worldActions.unavailable.room_required_tags_missing": "缺少所需房间标签"
+    "hades2.worldActions.unavailable.room_required_tags_missing": "缺少所需房间标签",
+    "hades2.worldActions.unavailable.exit_room_unavailable": "出口房间不可用",
+    "hades2.worldActions.unavailable.reward_eligibility_unavailable": "奖励资格检查不可用",
+    "hades2.worldActions.unavailable.room_data_unavailable": "房间数据不可用",
+    "hades2.worldActions.unavailable.room_eligibility_unavailable": "房间资格检查不可用",
+    "hades2.worldActions.unavailable.room_force_predicate_unavailable": "原生强制路线检查不可用",
+    "hades2.worldActions.unavailable.room_sets_unavailable": "房间集合数据不可用",
+    "hades2.worldActions.unavailable.source_unavailable": "当前房间数据不可用",
+    "hades2.worldActions.unavailable.door_unavailable": "出口不可用"
   },
   "language": "zh-CN"
 }
