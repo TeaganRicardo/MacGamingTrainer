@@ -206,37 +206,104 @@ if [[ "$BUILD_MODE" == "full" && "$REQUIRES_LLDB" == "1" ]]; then
     fi
 fi
 
-GENERATED_SWIFT="$GENERATED_DIR/ActiveGame.generated.swift"
-"$PYTHON" "$BINDING_GENERATOR" "$GAME_SELECTION_CSV" "$GENERATED_SWIFT" --catalog
-grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT" || {
+# The App, Core and each selected game compile as separate Swift modules of one
+# package. Each module sees only the swiftmodules of its declared dependencies,
+# so Core cannot import a game and a game cannot import another game.
+SWIFT_PACKAGE_NAME="$(manifest_field frontend.swift.packageName)"
+[[ -n "$SWIFT_PACKAGE_NAME" ]] || { echo "Missing Swift package name." >&2; exit 1; }
+GENERATED_SWIFT_DIR="$GENERATED_DIR/swift-generated"
+SWIFT_SOURCE_LISTS="$GENERATED_DIR/swift-sources"
+SWIFT_MODULE_ORDER="$GENERATED_DIR/swift-modules.tsv"
+SWIFT_BUILD_DIR="$GENERATED_DIR/swift-build"
+"$PYTHON" "$BINDING_GENERATOR" "$GAME_SELECTION_CSV" --module-sources "$GENERATED_SWIFT_DIR"
+"$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "$GENERATED_SWIFT_DIR" "$SWIFT_SOURCE_LISTS" > "$SWIFT_MODULE_ORDER" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+manifest, root, generated, lists = map(Path, sys.argv[1:])
+lists.mkdir(parents=True, exist_ok=True)
+modules = json.loads(manifest.read_text(encoding='utf-8'))['frontend']['swift']['modules']
+roles = [module['role'] for module in modules]
+if roles[-1:] != ['app'] or roles.count('app') != 1:
+    raise SystemExit('The Swift layout must end with exactly one App module.')
+built = set()
+for module in modules:
+    name = module['name']
+    if any(dependency not in built for dependency in module['dependencies']):
+        raise SystemExit(f'Swift module {name} depends on a module not built before it.')
+    sources = []
+    for relative in module['sources']:
+        path = root / relative
+        if path.is_dir():
+            sources += sorted(path.rglob('*.swift'))
+        elif path.is_file() and path.suffix == '.swift':
+            sources.append(path)
+        else:
+            raise SystemExit(f'Missing Swift source for {name}: {relative}')
+    sources += sorted((generated / name).glob('*.swift'))
+    if not sources:
+        raise SystemExit(f'No Swift sources for module {name}.')
+    (lists / f'{name}.txt').write_text(''.join(f'{source}\n' for source in sources), encoding='utf-8')
+    print('\t'.join((name, module['role'], ','.join(module['dependencies']))))
+    built.add(name)
+PY
+grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT_DIR"/*/TrainerGameCatalog.generated.swift || {
     echo "Generated game catalog is invalid." >&2; exit 1;
 }
 
-SWIFT_SOURCES=("$ROOT/Sources/App.swift")
-while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/Sources/Core" -type f -name '*.swift' | sort)
-while IFS= read -r directory; do
-    [[ -d "$ROOT/$directory" ]] || { echo "Missing frontend directory: $directory" >&2; exit 1; }
-    while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/$directory" -type f -name '*.swift' | sort)
-done < <("$PYTHON" -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["frontend"]["sourceDirectories"]))' "$NORMALIZED_MANIFEST")
-SWIFT_SOURCES+=("$GENERATED_SWIFT")
-[[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
-
 record_build_timing "product-frontend-inputs"
+
+# compile_swift_modules MODE ARCH [BINARY]
+# typecheck: emit each library module's interface and typecheck the App.
+# optimized: build each library module as a static archive and link the App.
+compile_swift_modules() {
+    local mode="$1" arch="$2" binary="${3:-}"
+    local modules_root="$SWIFT_BUILD_DIR/$mode/$arch"
+    local name role dependencies dependency file module_dir
+    local archives=()
+    while IFS=$'\t' read -r name role dependencies; do
+        module_dir="$modules_root/$name"
+        mkdir -p "$module_dir"
+        local arguments=(
+            -parse-as-library
+            -target "${arch}-apple-macosx${MIN_MACOS}"
+            -sdk "$SDK"
+            -module-name "$name"
+            -package-name "$SWIFT_PACKAGE_NAME"
+        )
+        local search_paths=()
+        IFS=',' read -r -a search_paths <<< "$dependencies"
+        for dependency in ${search_paths[@]+"${search_paths[@]}"}; do
+            arguments+=(-I "$modules_root/$dependency")
+        done
+        local sources=()
+        while IFS= read -r file; do sources+=("$file"); done < "$SWIFT_SOURCE_LISTS/$name.txt"
+        if [[ "$role" == "app" && "$mode" == "typecheck" ]]; then
+            "$SWIFTC" -typecheck "${arguments[@]}" "${sources[@]}"
+        elif [[ "$role" == "app" ]]; then
+            "$SWIFTC" -O "${arguments[@]}" \
+                -framework SwiftUI -framework AppKit -framework Carbon \
+                "${sources[@]}" ${archives[@]+"${archives[@]}"} -o "$binary"
+        elif [[ "$mode" == "typecheck" ]]; then
+            "$SWIFTC" -emit-module -emit-module-path "$module_dir/$name.swiftmodule" \
+                "${arguments[@]}" "${sources[@]}"
+        else
+            "$SWIFTC" -O -emit-module -emit-module-path "$module_dir/$name.swiftmodule" \
+                -emit-library -static -o "$module_dir/lib$name.a" \
+                "${arguments[@]}" "${sources[@]}"
+            # Load every object so runtime conformance lookup sees the whole module.
+            archives+=(-Xlinker -force_load -Xlinker "$module_dir/lib$name.a")
+        fi
+    done < "$SWIFT_MODULE_ORDER"
+}
 
 # Compiler preflight is shared by normal builds and the lightweight PR path.
 for arch in "${ARCHITECTURES[@]}"; do
     # Semantic preflight catches cross-file access/type errors before the
     # optimized compiler path, where SwiftUI failures can otherwise crash with
     # an unhelpful constraint-solver stack dump.
-    "$SWIFTC" \
-        -typecheck \
-        -parse-as-library \
-        -target "${arch}-apple-macosx${MIN_MACOS}" \
-        -sdk "$SDK" \
-        -framework SwiftUI \
-        -framework AppKit \
-        -framework Carbon \
-        "${SWIFT_SOURCES[@]}"
+    compile_swift_modules typecheck "$arch"
 done
 record_build_timing "swift-typecheck"
 
@@ -336,17 +403,7 @@ record_build_timing "package-runtime"
 ARCH_BINARIES=()
 for arch in "${ARCHITECTURES[@]}"; do
     binary="$GENERATED_DIR/$EXECUTABLE.$arch"
-
-    "$SWIFTC" \
-        -parse-as-library \
-        -O \
-        -target "${arch}-apple-macosx${MIN_MACOS}" \
-        -sdk "$SDK" \
-        -framework SwiftUI \
-        -framework AppKit \
-        -framework Carbon \
-        "${SWIFT_SOURCES[@]}" \
-        -o "$binary"
+    compile_swift_modules optimized "$arch" "$binary"
     ARCH_BINARIES+=("$binary")
 done
 
