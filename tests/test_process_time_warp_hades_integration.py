@@ -13,6 +13,7 @@ from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.schema import TOGGLES, default_boon_rarity
 from core.process_time_warp import ProcessTimeWarpError
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
 prep.DATA = base
@@ -58,6 +59,9 @@ class FakeTransport:
             "boons": [],
             "rewards": [],
         })
+
+    def create_time_warp_controller(self, helper_path, image_names):
+        return FakeTimeWarpController()
 
 
 class FakeTimeWarp:

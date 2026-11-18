@@ -203,7 +203,7 @@ class MessageVisitor(ast.NodeVisitor):
         if isinstance(node, ast.JoinedStr):
             return "".join(self._shape(value) for value in node.values)
         if isinstance(node, ast.FormattedValue):
-            # `{GAME_SPEC.display_name}` is a runtime value, but a dotted
+            # `{MODULE_MANIFEST.display_name}` is a runtime value, but a dotted
             # attribute chain is a stable product name; treating it as opaque
             # `X` would hide the words the player actually sees.
             if isinstance(node.value, ast.Attribute):
@@ -235,7 +235,7 @@ class MessageVisitor(ast.NodeVisitor):
             # A variable holding an assembled message.
             return "X"
         if isinstance(node, ast.Attribute):
-            # `GAME_SPEC.display_name` is a stable product name the player sees
+            # `MODULE_MANIFEST.display_name` is a stable product name the player sees
             # verbatim, so its final component stands in as the value.
             return node.attr
         if isinstance(node, ast.Name):

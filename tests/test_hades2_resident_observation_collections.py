@@ -1,6 +1,5 @@
 """Retained collection transport preserves complete, fresh resident observations."""
 import copy
-from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -60,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
     session = Hades2ResidentSession(transport)
     try:
         with patch.object(resident_session, "localize_catalog", side_effect=localize), patch.object(
-            localization, "GAME_SPEC", replace(localization.GAME_SPEC, app_bundle_path=game),
+            localization, "GAME_APP", game,
         ), patch.object(resident_session.uuid, "uuid4", side_effect=install_nonce):
             # Count the expensive whole-inventory eligibility pass without
             # replacing its native owner after the retained-domain baseline.

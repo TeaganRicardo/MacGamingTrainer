@@ -122,6 +122,7 @@ try:
     # Lua desired values and then attempt to overwrite the preserved file.
     from games.hades2 import preparation as prep
     from games.hades2.adapter import Hades2Adapter
+    from hades2_resident_session_fakes import FakeTimeWarpController
 
     adapter_base = base/'blocked-adapter'
     adapter_base.mkdir()
@@ -141,6 +142,7 @@ try:
             })
         def detach(self): pass
         def close(self): pass
+        def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
     original_replace = persistence.os.replace
     persistence.os.replace = lambda source, destination: (_ for _ in ()).throw(OSError('rename denied'))

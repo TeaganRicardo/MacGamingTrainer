@@ -6,7 +6,7 @@ do not depend on localization.
 import re
 from pathlib import Path
 
-from .config import GAME_SPEC
+from .config import GAME_APP
 
 _OFFICIAL_TEXT_CACHE = {}
 
@@ -40,7 +40,7 @@ def _clean_display_name(value):
 
 def _load_official_display_names(language, game_path=None):
     language = str(language)
-    game = Path(game_path) if game_path is not None else GAME_SPEC.app_path
+    game = Path(game_path) if game_path is not None else GAME_APP
     cache_key = (str(game), language)
     cached = _OFFICIAL_TEXT_CACHE.get(cache_key)
     if cached is not None:

@@ -8,8 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
+from core.adapter import AdapterError
 from games.hades2 import preparation
-from games.hades2.adapter import Hades2Adapter, TransportError
+from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from games.hades2.schema import TOGGLES, default_boon_rarity
@@ -109,7 +110,7 @@ class PendingResidentSession(FakeResidentSession):
             value = bool(params.get('value'))
             if feature == 'invincibility' and value and self.fail_god_mode_once:
                 self.fail_god_mode_once = False
-                raise TransportError('lua_error', 'simulated durable feature failure')
+                raise AdapterError('lua_error', 'simulated durable feature failure')
             if feature in TOGGLES:
                 self.state['desiredFeatures'][feature] = value
                 self.state['activeFeatures'][feature] = value

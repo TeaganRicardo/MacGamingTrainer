@@ -7,8 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
+from core.adapter import AdapterError
 from games.hades2 import preparation
-from games.hades2.adapter import Hades2Adapter, TransportError
+from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
@@ -132,7 +133,7 @@ class ProfileSession(FakeResidentSession):
         })
         if self.fail_once:
             self.fail_once = False
-            raise TransportError(
+            raise AdapterError(
                 'lua_error',
                 'simulated known Lua command error before reconciliation',
             )
@@ -347,7 +348,7 @@ retry_adapter.profile_service.save('retry-unlocked', Hades2PreferenceStore.defau
 retry_session.fail_once = True
 try:
     retry_adapter.load_profile('retry-unlocked')
-except TransportError as error:
+except AdapterError as error:
     assert error.code == 'lua_error'
 else:
     raise AssertionError('expected first Profile reconciliation to fail')

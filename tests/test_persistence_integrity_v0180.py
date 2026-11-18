@@ -14,6 +14,7 @@ from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.profile_service import Hades2ProfileService
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-persistence-v0180-'))
 
@@ -78,6 +79,7 @@ class FakeTransport:
     def alive(self): return True
     def detach(self): pass
     def close(self): pass
+    def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
 adapter = Hades2Adapter(transport=FakeTransport())
 adapter.state['capabilities'] = dict(adapter.state.get('capabilities', {}), setFeature=True)

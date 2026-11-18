@@ -9,8 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
+from core.adapter import AdapterError
 from games.hades2 import preparation
-from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
+from games.hades2.adapter import Hades2Adapter, clear_active, mark_disconnected
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
@@ -104,10 +105,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     else: raise AssertionError('runtime applied before failed durable write')
     assert adapter.preferences == before and not calls
     adapter.preference_store.save = original_save
-    def failed_apply(command, params): raise TransportError('lua_error', 'fixture unavailable')
+    def failed_apply(command, params): raise AdapterError('lua_error', 'fixture unavailable')
     adapter.execute = failed_apply
     try: adapter.dispatch('set_chaos_gate_desired', {'probability': 100}, 'pending')
-    except TransportError: pass
+    except AdapterError: pass
     assert adapter.preferences['chaosGateProbability'] == 100 and adapter.preference_dirty
     class ConfirmingReconciler:
         def __init__(self):

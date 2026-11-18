@@ -1,5 +1,5 @@
 from . import localization
-from .config import GAME_SPEC
+from .config import DISPLAY_NAME
 
 _SPECIAL_SOURCE_LOCALIZATION_IDS = {
     'Artemis': 'NPC_Artemis_Field_01',
@@ -577,7 +577,7 @@ def localize_catalog(decoded):
     if fallback_special:
         missing=set(fallback_special)
         warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
-        message=(f'未从本机 {GAME_SPEC.display_name} 中文语言文件解析到 {len(missing)} 项角色奖励的官方中文名称，'
+        message=(f'未从本机 {DISPLAY_NAME} 中文语言文件解析到 {len(missing)} 项角色奖励的官方中文名称，'
                  '已保留并使用官方英文名或内部名称。')
         if message not in warnings:warnings.append(message)
         decoded['warnings']=warnings

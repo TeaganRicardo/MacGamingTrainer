@@ -1,6 +1,5 @@
 import sys
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -139,11 +138,7 @@ Section = { Id = "InventoryScreen_ResourcesTab" DisplayName = "Resources (fixtur
 """,
         encoding="utf-8",
     )
-    with patch.object(
-        localization,
-        "GAME_SPEC",
-        replace(localization.GAME_SPEC, app_bundle_path=game),
-    ):
+    with patch.object(localization, "GAME_APP", game):
         parsed = catalog.localize_catalog({
             "resources": [
                 {
