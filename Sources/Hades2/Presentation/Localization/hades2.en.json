@@ -712,7 +712,8 @@
     "hades2.worldActions.unavailable.room_force_predicate_unavailable": "Native forced-route check unavailable",
     "hades2.worldActions.unavailable.room_sets_unavailable": "Room-set data unavailable",
     "hades2.worldActions.unavailable.source_unavailable": "Source room unavailable",
-    "hades2.worldActions.unavailable.door_unavailable": "Exit unavailable"
+    "hades2.worldActions.unavailable.door_unavailable": "Exit unavailable",
+    "hades2.worldActions.unavailable.source_anomaly_replacement": "Replaced by native anomaly route"
   },
   "language": "en"
 }
