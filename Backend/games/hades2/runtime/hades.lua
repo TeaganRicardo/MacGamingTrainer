@@ -9820,16 +9820,24 @@ if __MacGamingTrainerV1 == nil then
       local offeredDoors = MapState.OfferedExitDoors or {}
       if type(CollapseTableOrdered) == "function" then
         offeredDoors = CollapseTableOrdered(offeredDoors)
+      else
+        offeredDoors = {}
+        for _, offered in pairs(MapState.OfferedExitDoors or {}) do
+          offeredDoors[#offeredDoors + 1] = offered
+        end
+        table.sort(offeredDoors, function(a, b)
+          return number(a and a.ObjectId) < number(b and b.ObjectId)
+        end)
       end
       local unavailableDoorIds = type(source) == "table" and source.UnavailableDoorIds or nil
-      -- DoUnlockRoomExits walks the collapsed door list in order. When it
-      -- chooses this door, only earlier doors have generated Room objects;
-      -- later doors (and this door itself) are still unassigned. Recreate
-      -- that exact otherDoors view so AlwaysForceOncePerRoom and related
-      -- predicates do not observe future/current destinations.
+      -- Native ChooseNextRoomData receives the complete offered-door array.
+      -- IsRoomForced may inspect a preassigned room in *any other* slot,
+      -- including a later slot. Exclude only this exact door: unlike native
+      -- initial generation it already has a Room during edit/catalog reads,
+      -- and must not satisfy its own AlwaysForceOncePerRoom predicate.
       for _, offered in ipairs(offeredDoors) do
-        if offered == door then break end
-        if type(offered) == "table" and type(offered.Room) == "table"
+        if type(offered) == "table" and offered ~= door
+            and type(offered.Room) == "table"
             and not (type(unavailableDoorIds) == "table"
               and unavailableDoorIds[offered.ObjectId] ~= nil) then
           otherDoors[#otherDoors + 1] = offered
