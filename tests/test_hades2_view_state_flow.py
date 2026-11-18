@@ -688,11 +688,11 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
     let targetMenu = selectNativePicker(targetPicker()!, in: window, moving: 1,
                                         opening: .pointer, inspectMenu: { menu in
         for reasonID in disabledReasonIDs {
-            let key = "hades2.worldActions.unavailable.\\(reasonID)"
+            let key = "hades2.worldActions.unavailable.\(reasonID)"
             let suffix = " · " + Hades2GameModule.resolveText(key: key, localization: localization)
             let matching = menu.items.filter { !$0.isHidden && $0.title.hasSuffix(suffix) }
             guard matching.count == 1 && !matching[0].isEnabled else {
-                fail("native picker must show exactly one disabled \\(reasonID) option: \\(menu.items.map { ($0.title, $0.isEnabled) })")
+                fail("native picker must show exactly one disabled \(reasonID) option: \(menu.items.map { ($0.title, $0.isEnabled) })")
             }
         }
     })
