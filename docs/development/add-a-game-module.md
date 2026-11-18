@@ -66,6 +66,22 @@ Shared semantics are contract assertions, not a quota of test files. Preserve ga
 
 When a gap in this table is a product defect, fix its production owner and nearest behavior test. Keep actual rendered App behavior, game actions, save loading, later game-authored persistence, accessibility speech and perceived performance with #429. A fixture or compiler pass cannot fill those acceptance cells.
 
+## Shared files a module still touches
+
+The contract above is the goal; these shared files still need edits or attention when a module is added. The [pre-module debt program (#766)](https://github.com/TeaganRicardo/MacGamingTrainer/issues/766) removes them; delete a row here when its owning change lands.
+
+| Shared file | When | Removal owner |
+| --- | --- | --- |
+| `Tools/macos_only_tests.txt`, `Tools/macos_test_dependencies.json` | Always: the module smoke entry and every helper it imports | #768 (derived inventory and dependencies) |
+| `tests/fixture_budgets/<id>.py` | Each native journey; an unknown journey fails closed | #772 (provisional budgets) |
+| `Tools/select_macos_pr_tests.py` tuples | Only if the module's journeys should run on Core changes | #768 (derived selector) |
+| `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
+| `tests/test_cross_game_isolation.py` | Core must not learn the module's vocabulary | #768 (compiler-enforced Swift module boundary), #771 (Python import boundary) |
+| `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
+| CI prerequisite steps in both workflows | The module's tests need a runtime other than Lua 5.2 | #772 (generic prerequisites) |
+
+Until #768 lands, all Swift sources compile as one module: give every top-level Swift type the module's prefix and every `UserDefaults` key a `<id>.` prefix.
+
 ## Run the owning lanes
 
 Run `python3 Tools/validate_game_module.py --all`, `python3 Tools/supported_build.py` and the affected narrow behavior tests before publication. Portable changes use Linux contracts. Ordinary Swift changes use selected native smoke and unified product typecheck. Entrypoint, module, native, package or build inputs require the full linked and signed product. Shared module/build boundaries also require the reference fixture matrix.
