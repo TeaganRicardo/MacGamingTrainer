@@ -94,13 +94,14 @@ assert(nativeRandomCalls == sparseRNG,
 assert(targetExists(first, "roomCategory", "combat"),
   "selected exit lacks a native-eligible generic room-category target")
 
--- Native DoUnlockRoomExits removes UnavailableDoorIds before choosing or
--- previewing exits. A retained stale map entry must not become editable.
+-- Native DoUnlockRoomExits removes positional UnavailableDoorIds from
+-- the collapsed exit array before choosing or previewing exits. A retained
+-- stale map entry must not become editable.
 local originalUnavailableDoorIds = CurrentRun.CurrentRoom.UnavailableDoorIds
-CurrentRun.CurrentRoom.UnavailableDoorIds = { 1 }
+CurrentRun.CurrentRoom.UnavailableDoorIds = { 2 }
 local unavailableWorld = world()
-assert(#unavailableWorld.exits == 1 and unavailableWorld.exits[1].objectId == 2,
-  "native unavailable door slot was exposed as an editable exit")
+assert(#unavailableWorld.exits == 1 and unavailableWorld.exits[1].objectId == 1,
+  "native positional unavailable door slot was exposed as an editable exit")
 CurrentRun.CurrentRoom.UnavailableDoorIds = originalUnavailableDoorIds
 first, second = exitByObject(1), exitByObject(2)
 
