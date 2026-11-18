@@ -50,7 +50,7 @@ assert "IsRoomRewardEligible" in lua
 # #763: the native exit catalog now preserves disabled rewards and provides
 # an explicit availability reason; check the owner shape instead of the
 # retired only-eligible one-line literal.
-world_catalog = lua.split('local function targetCatalogForDoor(door, doorToken, refresh)', 1)[1]
+world_catalog = lua.split('local function targetCatalogForDoor(', 1)[1]
 world_catalog = world_catalog.split('local function rewardCandidate(door, target)', 1)[0]
 assert 'kind = "reward", id = candidate.id' in world_catalog
 assert 'enabled = enabled' in world_catalog
