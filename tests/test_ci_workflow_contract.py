@@ -291,6 +291,10 @@ assert release_workflow.get('concurrency') == {
 }, release_workflow.get('concurrency')
 release_steps = steps(release_job)
 scope_index = next(i for i, step in enumerate(release_steps) if step.get('id') == 'release-scope')
+# A push releases only when Tools/release_tag.py's precheck reports a release
+# identity change since the previous push.
+scope_run = str(release_steps[scope_index].get('run') or '')
+assert re.search(r'^\s*needed=\$\(python3 Tools/release_tag\.py --push-precheck ', scope_run, re.M), scope_run
 for step in release_steps[scope_index + 1:]:
     assert "steps.release-scope.outputs.release_needed == 'true'" in conjuncts(step.get('if')), step
 
@@ -353,7 +357,7 @@ from macos_fixture_policy import HOSTED_PROFILE, PROFILE_VARIABLE  # noqa: E402
 macos_jobs = []
 for name, workflow in workflows.items():
     for job_id, job in workflow['jobs'].items():
-        labels = set(re.findall(r"\bmacos[\w.-]*", str(job['runs-on'])))
+        labels = set(re.findall(r"\bmacos[\w.-]*", str(job['runs-on']), re.I))
         if not labels:
             continue
         macos_jobs.append((name, job_id))
@@ -371,9 +375,10 @@ assert {name for name, _ in macos_jobs} == {'build2-macos.yml', 'module-build-ma
 for name, job_id in macos_jobs:
     for step in steps(workflows[name]['jobs'][job_id]):
         for line in runs(step).splitlines():
-            check = line.strip()
-            if check.startswith(('[[', '((')):
-                assert '||' in check or '&&' in check, (name, step.get('name'), check)
+            for check in (segment.strip() for segment in line.split(';')):
+                if check.startswith(('[[', '((')):
+                    action = check.split('&&', 1)[1].strip() if '&&' in check else ''
+                    assert '||' in check or action not in ('', ':', 'true'), (name, step.get('name'), check)
 
 # A pull request typechecks the unified App unless its diff needs the full
 # linked/signed build, which convergence always runs.
@@ -403,6 +408,11 @@ app_locators = [(name, located) for name in workflows for _, step in all_steps[n
 assert {name for name, _ in app_locators} == {'build2-macos.yml', 'module-build-matrix.yml'}, app_locators
 for name, located in app_locators:
     assert re.fullmatch(r'"?\$\(python3 Tools/verify_module_build\.py [^)]* --print-app\)"?', located), (name, located)
+# No step names the output directory or an App bundle itself, so a stale App in
+# dist can never be signed, verified or packaged in place of the selection.
+for name in workflows:
+    for _, step in all_steps[name]:
+        assert not re.search(r'\bdist\b|\.app\b', runs(step)), (name, step.get('name'))
 
 
 def option(run, flag):
