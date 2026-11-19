@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 session_source = (ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift').read_text(encoding='utf-8')
@@ -60,8 +61,8 @@ target_transition = context_source[transition_start:context_source.index(
 harness = r'''
 import Foundation
 
-struct GameModuleDescriptor {
-    let backendGameID: String
+package struct GameModuleDescriptor {
+    let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
 }
@@ -102,7 +103,7 @@ let waitBudget: TimeInterval = 4.0
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected worker path") }
 let worker = args[1]
-let descriptor = GameModuleDescriptor(backendGameID: "test", expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5)
+let descriptor = GameModuleDescriptor(id: "test", expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5)
 let backendProcess = BackendProcess(
     executableURL: URL(fileURLWithPath: ProcessInfo.processInfo.environment["MGT_DEV8_PYTHON"]!),
     argumentsPrefix: ["-u"],
@@ -404,6 +405,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
     main_path.write_text(textwrap.dedent(harness.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)), encoding='utf-8')
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
         str(ROOT / 'Sources/Core/Runtime/BackendClient.swift'),
         str(ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift'),

@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 extension HadesTrainerModel {
     /// Current owner state only. Rejected input and stale-target refusals are

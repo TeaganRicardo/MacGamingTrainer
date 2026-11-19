@@ -1,43 +1,43 @@
 import SwiftUI
 
-struct TrainerTheme {
+package struct TrainerTheme {
     let background: Color
-    let accent: Color
+    package let accent: Color
     let panel: Color
     let panelRaised: Color
     let sidebarBackground: Color
     let selectedFill: Color
     let deferred: Color
-    let warning: Color
-    let success: Color
+    package let warning: Color
+    package let success: Color
     let mutedFill: Color
     let subtleFill: Color
     let separator: Color
     let info: Color
-    let inactive: Color
-    let panelCornerRadius: CGFloat
+    package let inactive: Color
+    package let panelCornerRadius: CGFloat
     let cardCornerRadius: CGFloat
     let controlCornerRadius: CGFloat
-    let controlPadding: CGFloat
-    let compactControlSpacing: CGFloat
-    let compactCornerRadius: CGFloat
+    package let controlPadding: CGFloat
+    package let compactControlSpacing: CGFloat
+    package let compactCornerRadius: CGFloat
     let contentMinWidth: CGFloat
     let contentMinHeight: CGFloat
     let pagePadding: CGFloat
-    let pageSpacing: CGFloat
-    let sectionSpacing: CGFloat
+    package let pageSpacing: CGFloat
+    package let sectionSpacing: CGFloat
     let panelPadding: CGFloat
-    let rowHorizontalPadding: CGFloat
+    package let rowHorizontalPadding: CGFloat
     let rowMinimumHeight: CGFloat
-    let inlineRowVerticalPadding: CGFloat
+    package let inlineRowVerticalPadding: CGFloat
     let shortcutCaptureWidth: CGFloat
     let connectionActionWidth: CGFloat
-    let compactActionWidth: CGFloat
-    let shortcutBadgeMinimumWidth: CGFloat
-    let pickerCompactWidth: CGFloat
+    package let compactActionWidth: CGFloat
+    package let shortcutBadgeMinimumWidth: CGFloat
+    package let pickerCompactWidth: CGFloat
     let pickerStandardWidth: CGFloat
     let pickerWideWidth: CGFloat
-    let pickerActionMaxWidth: CGFloat
+    package let pickerActionMaxWidth: CGFloat
     let pickerActionLabelWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
@@ -54,16 +54,16 @@ struct TrainerTheme {
     let listCardPadding: CGFloat
     let noticePadding: CGFloat
     let noticeFillOpacity: Double
-    let compactFieldWidth: CGFloat
-    let inlineFieldWidth: CGFloat
-    let occurrenceFieldWidth: CGFloat
+    package let compactFieldWidth: CGFloat
+    package let inlineFieldWidth: CGFloat
+    package let occurrenceFieldWidth: CGFloat
     let disabledOpacity: Double
     let unavailableOpacity: Double
     let selectionHighlightOpacity: Double
     let popoverDetailsWidth: CGFloat
     let toastMaxWidth: CGFloat
 
-    static let standard = TrainerTheme(
+    package static let standard = TrainerTheme(
         // Opaque graphite surfaces keep the accepted dark identity predictable
         // under every window backdrop. Accent is reserved for actions/state.
         background: Color(red: 0.075, green: 0.078, blue: 0.090),
@@ -138,7 +138,7 @@ struct TrainerTheme {
     }
 }
 
-enum TrainerPickerWidthRole {
+package enum TrainerPickerWidthRole {
     case compactValue
     case rowValue
     case rowAction
@@ -219,14 +219,14 @@ private struct TrainerThemeKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var trainerTheme: TrainerTheme {
+    package var trainerTheme: TrainerTheme {
         get { self[TrainerThemeKey.self] }
         set { self[TrainerThemeKey.self] = newValue }
     }
 }
 
 extension View {
-    func trainerTheme(_ theme: TrainerTheme) -> some View {
+    package func trainerTheme(_ theme: TrainerTheme) -> some View {
         environment(\.trainerTheme, theme)
     }
 
@@ -234,16 +234,16 @@ extension View {
         modifier(TrainerPickerWidthModifier(role: role))
     }
 
-    func trainerPanel(padding: CGFloat? = nil, cornerRadius: CGFloat? = nil) -> some View {
+    package func trainerPanel(padding: CGFloat? = nil, cornerRadius: CGFloat? = nil) -> some View {
         modifier(TrainerPanelModifier(padding: padding, cornerRadius: cornerRadius))
     }
 
-    func trainerSurface(_ role: TrainerSurfaceRole, cornerRadius: CGFloat? = nil) -> some View {
+    package func trainerSurface(_ role: TrainerSurfaceRole, cornerRadius: CGFloat? = nil) -> some View {
         modifier(TrainerSurfaceModifier(role: role, cornerRadius: cornerRadius))
     }
 }
 
-enum TrainerSurfaceRole {
+package enum TrainerSurfaceRole {
     case canvas
     case sidebar
     case panel

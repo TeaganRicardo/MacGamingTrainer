@@ -27,19 +27,19 @@ struct BackendProtocolExpectation {
     let moduleProtocolVersion: Int
 }
 
-struct BackendFailure: Equatable {
+package struct BackendFailure: Equatable {
     let code: String
-    let presentation: String
+    package let presentation: String
     let diagnostic: String?
-    let recoveryPath: String?
+    package let recoveryPath: String?
     /// Optional positional arguments for a presentation key. A game module
     /// sends the bare key and the values it needs; Core carries them without
     /// knowing the wording, and the owning module renders the sentence.
-    let presentationArguments: [String]
-    var outcomeUnknown = false
+    package let presentationArguments: [String]
+    package var outcomeUnknown = false
 }
 
-struct BackendReply {
+package struct BackendReply {
     let requestID: String
     let command: String
     let hostProtocolVersion: Int
@@ -49,10 +49,10 @@ struct BackendReply {
     /// resolves the wording through the owning presentation layer.
     let operation: TrainerTextToken
     let announceSuccess: Bool
-    let success: Bool
-    let result: [String: Any]?
-    let state: [String: Any]?
-    let failure: BackendFailure?
+    package let success: Bool
+    package let result: [String: Any]?
+    package let state: [String: Any]?
+    package let failure: BackendFailure?
 }
 
 /// Game-agnostic request lifecycle around BackendProcess. It owns JSONL request

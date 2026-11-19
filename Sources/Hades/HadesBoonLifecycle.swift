@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 struct HadesEffectLifecycleControls: View {
     @ObservedObject var model: HadesTrainerModel

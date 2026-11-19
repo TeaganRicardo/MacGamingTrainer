@@ -3,12 +3,12 @@ import SwiftUI
 
 /// A tool supplies its own content and close policy. The Host owns the native
 /// window; modules keep document/session meaning inside their content owner.
-struct TrainerToolWindowContent {
+package struct TrainerToolWindowContent {
     let view: AnyView
     let canClose: () -> Bool
     let onClose: () -> Void
 
-    init<Content: View>(canClose: @escaping () -> Bool = { true },
+    package init<Content: View>(canClose: @escaping () -> Bool = { true },
                         onClose: @escaping () -> Void = {},
                         @ViewBuilder content: () -> Content) {
         view = AnyView(content())
@@ -17,8 +17,8 @@ struct TrainerToolWindowContent {
     }
 }
 
-struct TrainerToolWindowActions {
-    let open: (String, String, () -> TrainerToolWindowContent) -> Void
+package struct TrainerToolWindowActions {
+    package let open: (String, String, () -> TrainerToolWindowContent) -> Void
     static let none = TrainerToolWindowActions(open: { _, _, _ in })
 }
 
@@ -31,12 +31,12 @@ private struct TrainerCloseToolWindowKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var trainerToolWindows: TrainerToolWindowActions {
+    package var trainerToolWindows: TrainerToolWindowActions {
         get { self[TrainerToolWindowActionsKey.self] }
         set { self[TrainerToolWindowActionsKey.self] = newValue }
     }
 
-    var trainerCloseToolWindow: (() -> Void)? {
+    package var trainerCloseToolWindow: (() -> Void)? {
         get { self[TrainerCloseToolWindowKey.self] }
         set { self[TrainerCloseToolWindowKey.self] = newValue }
     }

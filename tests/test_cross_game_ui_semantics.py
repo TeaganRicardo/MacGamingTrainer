@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -152,7 +153,7 @@ precondition(terms.value(forTerm: "officialTerms.probe", language: .zhCN) == "è¿
              "Swift source fallback lost the manifest's bilingual reference")
 ''')
     binary = repository / "terminology-reference"
-    subprocess.run([swiftc, str(source), str(main), "-o", str(binary)], check=True)
+    subprocess.run([swiftc, *SINGLE_MODULE_FLAGS, str(source), str(main), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
 # Heal Fully was a redundant one-shot beside the durable Infinite Life control.

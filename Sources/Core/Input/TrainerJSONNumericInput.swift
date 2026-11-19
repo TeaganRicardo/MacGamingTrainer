@@ -2,10 +2,10 @@ import Foundation
 import CoreFoundation
 
 /// Parses user-authored JSON numbers before Foundation can round integer input.
-enum TrainerJSONNumericInput {
+package enum TrainerJSONNumericInput {
     /// User-editable numbers must satisfy the same integer precision policy
     /// when submitted again, including integers beyond decimal formatter limits.
-    static func numberText(_ value: Double) -> String {
+    package static func numberText(_ value: Double) -> String {
         if value == 0, value.sign == .minus { return "-0" }
         if let integer = exactIntegerDecimal(value) { return integer }
         return String(value)
@@ -13,7 +13,7 @@ enum TrainerJSONNumericInput {
 
     /// Writes the finite JSON values produced by typed Save owners without
     /// decimal reparsing or rounding the numbers in editable prefills.
-    static func jsonText(from object: Any) -> String {
+    package static func jsonText(from object: Any) -> String {
         func string(_ value: String) -> String {
             String(data: try! JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]), encoding: .utf8)!
         }
@@ -42,7 +42,7 @@ enum TrainerJSONNumericInput {
         return write(object, depth: 0)
     }
 
-    static func number(_ text: String, allowsInfinity: Bool = false) -> Double? {
+    package static func number(_ text: String, allowsInfinity: Bool = false) -> Double? {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if allowsInfinity {
             if ["inf", "+inf"].contains(text.lowercased()) { return .infinity }
@@ -91,7 +91,7 @@ enum TrainerJSONNumericInput {
     }
 
     /// Validates every numeric token, including nested typed table keys/values.
-    static func jsonObject(from text: String) -> Any? {
+    package static func jsonObject(from text: String) -> Any? {
         try? TrainerJSON.object(with: Data(text.utf8)) { token in
             number(token).map { NSNumber(value: $0) }
         }

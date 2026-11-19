@@ -3,13 +3,13 @@ import SwiftUI
 /// Shared control-row chrome for every game module. Feature/stat rows provide
 /// only their inner controls; horizontal inset, minimum height, panel fill and
 /// disabled/pending opacity stay host-wide.
-struct TrainerRow<Content: View>: View {
+package struct TrainerRow<Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let minimumHeight: CGFloat?
     let opacity: Double
     let content: Content
 
-    init(
+    package init(
         minimumHeight: CGFloat? = nil,
         opacity: Double = 1,
         @ViewBuilder content: () -> Content
@@ -19,7 +19,7 @@ struct TrainerRow<Content: View>: View {
         self.content = content()
     }
 
-    var body: some View {
+    package var body: some View {
         content
             .environment(\.trainerActionWidth, theme.compactActionWidth)
             .frame(maxWidth: .infinity, minHeight: minimumHeight ?? theme.rowMinimumHeight, alignment: .leading)
@@ -29,28 +29,28 @@ struct TrainerRow<Content: View>: View {
     }
 }
 
-struct TrainerIconLabel: View {
+package struct TrainerIconLabel: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let glyph: TrainerGlyph
     let tint: Color?
     let emphasized: Bool
 
-    init(title: String, icon: String, tint: Color? = nil, emphasized: Bool = false) {
+    package init(title: String, icon: String, tint: Color? = nil, emphasized: Bool = false) {
         self.title = title
         self.glyph = .system(icon)
         self.tint = tint
         self.emphasized = emphasized
     }
 
-    init(title: String, glyph: TrainerGlyph, tint: Color? = nil, emphasized: Bool = false) {
+    package init(title: String, glyph: TrainerGlyph, tint: Color? = nil, emphasized: Bool = false) {
         self.title = title
         self.glyph = glyph
         self.tint = tint
         self.emphasized = emphasized
     }
 
-    var body: some View {
+    package var body: some View {
         HStack(spacing: theme.rowIconSpacing) {
             glyph
                 .font(.title3)
@@ -66,12 +66,12 @@ struct TrainerIconLabel: View {
     }
 }
 
-enum TrainerLabeledControlLayout: Equatable {
+package enum TrainerLabeledControlLayout: Equatable {
     case natural
     case pickerAction
 }
 
-struct TrainerLabeledControlRow<Controls: View>: View {
+package struct TrainerLabeledControlRow<Controls: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let glyph: TrainerGlyph
@@ -82,7 +82,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
     let layout: TrainerLabeledControlLayout
     let controls: Controls
 
-    init(title: String, icon: String, tint: Color, emphasized: Bool,
+    package init(title: String, icon: String, tint: Color, emphasized: Bool,
          opacity: Double = 1, helpText: String = "",
          layout: TrainerLabeledControlLayout = .natural,
          @ViewBuilder controls: () -> Controls) {
@@ -96,7 +96,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
         self.controls = controls()
     }
 
-    init(title: String, glyph: TrainerGlyph, tint: Color, emphasized: Bool,
+    package init(title: String, glyph: TrainerGlyph, tint: Color, emphasized: Bool,
          opacity: Double = 1, helpText: String = "",
          layout: TrainerLabeledControlLayout = .natural,
          @ViewBuilder controls: () -> Controls) {
@@ -110,7 +110,7 @@ struct TrainerLabeledControlRow<Controls: View>: View {
         self.controls = controls()
     }
 
-    var body: some View {
+    package var body: some View {
         TrainerRow(opacity: opacity) {
             if layout == .pickerAction {
                 // SwiftUI's nested HStack can under-report the native size of

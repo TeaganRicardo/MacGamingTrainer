@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Shared discovery presentation. Entries, names, icons and reveal/navigation
 /// semantics stay with the module; this view does not receive a backend session.
-struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
+package struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
     @State private var pageVisible = true
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,6 +15,18 @@ struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
     let detail: (Entry) -> String
     let icon: (Entry) -> String
     let onNavigate: (Entry) -> Void
+
+    package init(text: Binding<String>, placeholder: String, clearLabel: String, emptyLabel: String, search: @escaping (String) -> [Entry], title: @escaping (Entry) -> String, detail: @escaping (Entry) -> String, icon: @escaping (Entry) -> String, onNavigate: @escaping (Entry) -> Void) {
+        self._text = text
+        self.placeholder = placeholder
+        self.clearLabel = clearLabel
+        self.emptyLabel = emptyLabel
+        self.search = search
+        self.title = title
+        self.detail = detail
+        self.icon = icon
+        self.onNavigate = onNavigate
+    }
     @State private var presentation = TrainerWorkbenchSearchPresentation<Entry.ID>()
     @State private var fieldWidth: CGFloat = 420
     @FocusState private var searchFocused: Bool
@@ -46,7 +58,7 @@ struct TrainerWorkbenchSearchField<Entry: Identifiable>: View {
         if pageVisible { searchFocused = true }
     }
 
-    var body: some View {
+    package var body: some View {
         TrainerSearchField(
             text: $text, placeholder: placeholder, clearLabel: clearLabel,
             focus: $searchFocused, onSubmit: submitSearch, onMoveSelection: moveSelection

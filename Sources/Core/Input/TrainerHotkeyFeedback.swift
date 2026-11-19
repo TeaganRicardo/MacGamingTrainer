@@ -3,7 +3,7 @@ import AppKit
 /// Game-agnostic feedback after a hotkey request has been processed.
 /// Modules own active/deferred/unconfirmed semantics; Core owns the audible
 /// feedback vocabulary and independent playback.
-enum TrainerHotkeyFeedback {
+package enum TrainerHotkeyFeedback {
     case enabled
     case deferred
     case disabled
@@ -49,10 +49,10 @@ private final class TrainerHotkeySoundVoices: NSObject, NSSoundDelegate {
     }
 }
 
-enum TrainerHotkeyFeedbackPlayer {
+package enum TrainerHotkeyFeedbackPlayer {
     private static let voices = TrainerHotkeySoundVoices()
 
-    static func play(_ feedback: TrainerHotkeyFeedback) {
+    package static func play(_ feedback: TrainerHotkeyFeedback) {
         voices.play(feedback)
     }
 }

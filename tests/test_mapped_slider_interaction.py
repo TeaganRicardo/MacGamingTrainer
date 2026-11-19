@@ -1,5 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 """Exercise actual mouse, keyboard and accessibility input on the shared slider."""
 import os
 from pathlib import Path
@@ -260,7 +261,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-slider-interaction-") as temporary:
         ROOT / "Sources/Core/UI/Primitives/TrainerMappedSlider.swift",
         ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
     ]
-    subprocess.run([SWIFTC, "-parse-as-library", *map(str, sources), str(harness), "-o", str(binary)],
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", *map(str, sources), str(harness), "-o", str(binary)],
                    cwd=ROOT, check=True)
     launch_fixture([str(binary)], cwd=ROOT, env=dict(os.environ, HOME=str(directory)),
                    check=True, journey='native.mapped_slider_interaction', budgets=JOURNEY_BUDGETS)

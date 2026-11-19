@@ -1,16 +1,21 @@
 import AppKit
 import SwiftUI
 
-enum TrainerFeedbackTone {
+package enum TrainerFeedbackTone {
     case information, success, warning
 }
 
 /// An ephemeral presentation event, separate from authoritative operation and
 /// recovery state. Equal text from a new operation receives a new identity.
-struct TrainerFeedbackNotice: Identifiable {
-    let id = UUID()
+package struct TrainerFeedbackNotice: Identifiable {
+    package let id = UUID()
     let text: TrainerTextToken
     let tone: TrainerFeedbackTone
+
+    package init(text: TrainerTextToken, tone: TrainerFeedbackTone) {
+        self.text = text
+        self.tone = tone
+    }
 }
 
 struct TrainerFeedbackOverlay: View {

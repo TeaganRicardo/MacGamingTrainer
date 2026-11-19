@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import Combine
+import TrainerCore
 
 // The wire representation preserves Lua types, physical table occurrences and
 // byte strings. Display text is never used as an edit or identity.

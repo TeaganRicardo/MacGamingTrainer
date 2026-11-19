@@ -1,6 +1,7 @@
 import Foundation
 import CoreFoundation
 import Combine
+import TrainerCore
 
 enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
     case entities

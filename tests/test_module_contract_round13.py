@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         'supported_build.py',
         'validate_game_module.py',
         'generate_game_binding.py',
+        'swift_module_layout.py',
     ):
         shutil.copy2(root / 'Tools' / name, tools / name)
 
@@ -112,20 +113,25 @@ router.close()
         assert refused.returncode != 0 and 'nativeLibraries' in refused.stderr, refused
     manifest.write_text(original_manifest)
 
-    generated = project / 'Generated/ActiveGameModule.swift'
+    generated = project / 'Generated'
     subprocess.run([
-        'python3', str(tools / 'generate_game_binding.py'), game_id, str(generated)
+        'python3', str(tools / 'generate_game_binding.py'), game_id, '--module-sources', str(generated)
     ], check=True, cwd=project, env=env)
-    text = generated.read_text()
-    assert 'typealias ActiveGameModule = ReferenceFixtureGameModule' in text
+    binding = generated / 'ReferenceFixture/GameBinding.generated.swift'
+    catalog = generated / 'TrainerApp/TrainerGameCatalog.generated.swift'
+    text = binding.read_text()
+    assert 'import TrainerCore\n' in text
+    assert 'package enum ReferenceFixtureGameModuleBinding' in text
     assert 'expectedHostProtocolVersion: 6' in text
     assert 'expectedModuleProtocolVersion: 1' in text
     assert 'supportsSaveManagement: false' in text
+    assert 'import ReferenceFixture\n' in catalog.read_text()
 
     core = sorted((project / 'Sources/Core').rglob('*.swift'))
     sources = [project / 'Sources/App.swift'] + core + [
         frontend / 'ReferenceFixtureModule.swift',
-        generated,
+        binding,
+        catalog,
     ]
     swiftc = shutil.which('swiftc')
     if not swiftc:

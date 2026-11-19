@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 struct HadesGatheringPanel: View {
     @ObservedObject var model: HadesTrainerModel

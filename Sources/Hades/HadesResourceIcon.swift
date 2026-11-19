@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 /// Hades I meta-currency identities. The resource id is the authority; the
 /// system symbol is only a compact discovery fallback while visible rows use

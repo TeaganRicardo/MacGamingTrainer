@@ -1,11 +1,16 @@
 import SwiftUI
 
-struct TrainerSaveEditorDocumentOption: Identifiable, Equatable {
-    let id: String
-    let title: String
+package struct TrainerSaveEditorDocumentOption: Identifiable, Equatable {
+    package let id: String
+    package let title: String
+
+    package init(id: String, title: String) {
+        self.id = id
+        self.title = title
+    }
 }
 
-struct TrainerSaveEditorWindowHeader: View {
+package struct TrainerSaveEditorWindowHeader: View {
     @Environment(\.trainerTheme) private var theme
 
     let title: String
@@ -18,7 +23,19 @@ struct TrainerSaveEditorWindowHeader: View {
     let onRefresh: (() -> Void)?
     let onDone: () -> Void
 
-    var body: some View {
+    package init(title: String, subtitle: String? = nil, busy: Bool, refreshTitle: String?, refreshEnabled: Bool, doneTitle: String, doneEnabled: Bool, onRefresh: (() -> Void)?, onDone: @escaping () -> Void) {
+        self.title = title
+        self.subtitle = subtitle
+        self.busy = busy
+        self.refreshTitle = refreshTitle
+        self.refreshEnabled = refreshEnabled
+        self.doneTitle = doneTitle
+        self.doneEnabled = doneEnabled
+        self.onRefresh = onRefresh
+        self.onDone = onDone
+    }
+
+    package var body: some View {
         HStack(spacing: theme.sectionSpacing) {
             Image(systemName: TrainerSemanticIcon.Tool.saveEditor)
                 .font(.title3)
@@ -50,7 +67,7 @@ struct TrainerSaveEditorWindowHeader: View {
     }
 }
 
-struct TrainerSaveEditorDocumentBar: View {
+package struct TrainerSaveEditorDocumentBar: View {
     @Environment(\.trainerTheme) private var theme
 
     let sourceLabel: String
@@ -67,7 +84,22 @@ struct TrainerSaveEditorDocumentBar: View {
     let targets: [TrainerSaveEditorDocumentOption]
     let targetEnabled: Bool
 
-    var body: some View {
+    package init(sourceLabel: String, sourcePlaceholder: String, sourceSelection: Binding<String>, sources: [TrainerSaveEditorDocumentOption], sourceEnabled: Bool, sourceRefreshTitle: String, onRefreshSources: @escaping () -> Void, targetLabel: String, targetPlaceholder: String, targetSelection: Binding<String>, targets: [TrainerSaveEditorDocumentOption], targetEnabled: Bool) {
+        self.sourceLabel = sourceLabel
+        self.sourcePlaceholder = sourcePlaceholder
+        self._sourceSelection = sourceSelection
+        self.sources = sources
+        self.sourceEnabled = sourceEnabled
+        self.sourceRefreshTitle = sourceRefreshTitle
+        self.onRefreshSources = onRefreshSources
+        self.targetLabel = targetLabel
+        self.targetPlaceholder = targetPlaceholder
+        self._targetSelection = targetSelection
+        self.targets = targets
+        self.targetEnabled = targetEnabled
+    }
+
+    package var body: some View {
         HStack(spacing: theme.sectionSpacing) {
             Text(sourceLabel)
                 .font(.caption)
@@ -110,7 +142,7 @@ struct TrainerSaveEditorDocumentBar: View {
     }
 }
 
-struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
+package struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
     @Environment(\.trainerTheme) private var theme
 
     @Binding var search: String
@@ -122,7 +154,7 @@ struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
     let scope: Scope
     let trailing: Trailing
 
-    init(
+    package init(
         search: Binding<String>,
         searchPlaceholder: String,
         clearLabel: String,
@@ -142,7 +174,7 @@ struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
         self.trailing = trailing()
     }
 
-    var body: some View {
+    package var body: some View {
         HStack(spacing: theme.sectionSpacing) {
             TrainerSearchField(
                 text: $search,
@@ -164,7 +196,7 @@ struct TrainerSaveEditorWorkbenchBar<Scope: View, Trailing: View>: View {
     }
 }
 
-struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: View {
+package struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.trainerTheme) private var theme
 
@@ -176,7 +208,7 @@ struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: Vi
     let paging: Paging
     let review: Review
 
-    init(
+    package init(
         identity: AnyHashable?,
         hasReview: Bool,
         busy: Bool,
@@ -194,7 +226,7 @@ struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: Vi
         self.review = review()
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(spacing: 0) {
             results
                 .id(identity)
@@ -224,7 +256,7 @@ struct TrainerSaveEditorWorkspace<Results: View, Paging: View, Review: View>: Vi
     }
 }
 
-struct TrainerSaveEditorPagingBar: View {
+package struct TrainerSaveEditorPagingBar: View {
     @Environment(\.trainerTheme) private var theme
 
     let summary: String
@@ -235,7 +267,17 @@ struct TrainerSaveEditorPagingBar: View {
     let onPrevious: () -> Void
     let onNext: () -> Void
 
-    var body: some View {
+    package init(summary: String, previousTitle: String, nextTitle: String, canPrevious: Bool, canNext: Bool, onPrevious: @escaping () -> Void, onNext: @escaping () -> Void) {
+        self.summary = summary
+        self.previousTitle = previousTitle
+        self.nextTitle = nextTitle
+        self.canPrevious = canPrevious
+        self.canNext = canNext
+        self.onPrevious = onPrevious
+        self.onNext = onNext
+    }
+
+    package var body: some View {
         HStack(spacing: theme.compactControlSpacing) {
             Text(summary)
                 .font(.caption.monospacedDigit())
@@ -269,7 +311,7 @@ private struct TrainerSaveEditorWindowModifier: ViewModifier {
 }
 
 extension View {
-    func trainerSaveEditorWindow() -> some View {
+    package func trainerSaveEditorWindow() -> some View {
         modifier(TrainerSaveEditorWindowModifier())
     }
 }

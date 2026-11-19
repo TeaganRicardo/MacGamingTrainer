@@ -85,7 +85,7 @@ struct TrainerDualPickerActionLayout: Layout {
     }
 }
 
-struct TrainerDualPickerActionRow<FirstPicker: View, SecondPicker: View, Shortcut: View, Action: View>: View {
+package struct TrainerDualPickerActionRow<FirstPicker: View, SecondPicker: View, Shortcut: View, Action: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
@@ -97,7 +97,7 @@ struct TrainerDualPickerActionRow<FirstPicker: View, SecondPicker: View, Shortcu
     let shortcut: Shortcut
     let action: Action
 
-    init(title: String, icon: String, tint: Color, emphasized: Bool,
+    package init(title: String, icon: String, tint: Color, emphasized: Bool,
          helpText: String = "",
          @ViewBuilder firstPicker: () -> FirstPicker,
          @ViewBuilder secondPicker: () -> SecondPicker,
@@ -114,7 +114,7 @@ struct TrainerDualPickerActionRow<FirstPicker: View, SecondPicker: View, Shortcu
         self.action = action()
     }
 
-    var body: some View {
+    package var body: some View {
         TrainerRow {
             TrainerDualPickerActionLayout(
                 labelWidth: theme.pickerActionLabelWidth,

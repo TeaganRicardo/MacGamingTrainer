@@ -10,6 +10,10 @@ from module_support import (
     ROOT, AppBuildSpec, ManifestError, load_manifest, load_product_declaration,
     normalized_manifest, product_app_spec,
 )
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME
+
+CORE_SWIFT_SOURCES = 'Sources/Core'
+APP_SWIFT_SOURCE = 'Sources/App.swift'
 
 
 @dataclass(frozen=True)
@@ -53,9 +57,9 @@ class BuildSelection:
                 'executable': self.app.executable,
             },
             'frontend': {
-                'sourceDirectories': [module.frontend.source_directory for module in self.modules],
                 'architectures': list(self.architectures),
                 'minimumMacOS': self.minimum_macos,
+                'swift': swift_layout(self.modules),
             },
             'buildRequirements': {
                 'lldbPython': any(module.requirements.lldb_python for module in self.modules),
@@ -67,6 +71,27 @@ class BuildSelection:
             },
             'appResources': resources,
         }
+
+
+def swift_layout(modules):
+    """Swift modules in build order, each seeing only its declared dependencies.
+
+    Core imports nothing of the product, each game imports only Core, and the
+    App imports Core and every selected game.
+    """
+    games = [module.frontend.swift_module for module in modules]
+    return {
+        'packageName': SWIFT_PACKAGE_NAME,
+        'modules': [
+            {'name': SWIFT_CORE_MODULE, 'role': 'core', 'sources': [CORE_SWIFT_SOURCES],
+             'dependencies': []},
+            *({'name': module.frontend.swift_module, 'role': 'game', 'gameID': module.id,
+               'sources': [module.frontend.source_directory], 'dependencies': [SWIFT_CORE_MODULE]}
+              for module in modules),
+            {'name': SWIFT_APP_MODULE, 'role': 'app', 'sources': [APP_SWIFT_SOURCE],
+             'dependencies': [SWIFT_CORE_MODULE, *games]},
+        ],
+    }
 
 
 def load_selection(selection='all'):
@@ -96,8 +121,10 @@ def load_selection(selection='all'):
     app = product_app_spec(raw, modules[0].app.executable)
     types = [module.frontend.module_type for module in modules]
     directories = [module.frontend.source_directory for module in modules]
-    if len(set(types)) != len(types) or len(set(directories)) != len(directories):
-        raise ManifestError('Product modules must have distinct frontend types and directories.')
+    swift_modules = [module.frontend.swift_module for module in modules]
+    if (len(set(types)) != len(types) or len(set(directories)) != len(directories)
+            or len(set(swift_modules)) != len(swift_modules)):
+        raise ManifestError('Product modules must have distinct frontend types, directories and Swift modules.')
     result = BuildSelection(modules, app, tuple(arches), minimum, True)
     result.normalized()  # Validate collisions before compilation or copying any output.
     return result

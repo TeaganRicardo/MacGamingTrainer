@@ -4,85 +4,85 @@
 /// Product modules choose a visual role, not an SF Symbol literal. Only roles
 /// demonstrated by multiple product surfaces belong here; domain-specific
 /// identities remain module-owned.
-enum TrainerSemanticIcon {
-    enum Section {
-        static let metrics = "gauge.with.dots.needle.67percent"
-        static let general = "bolt.fill"
-        static let effects = "sparkles"
-        static let inventory = "shippingbox.fill"
-        static let navigation = "door.left.hand.open"
-        static let settings = "gearshape.2.fill"
+package enum TrainerSemanticIcon {
+    package enum Section {
+        package static let metrics = "gauge.with.dots.needle.67percent"
+        package static let general = "bolt.fill"
+        package static let effects = "sparkles"
+        package static let inventory = "shippingbox.fill"
+        package static let navigation = "door.left.hand.open"
+        package static let settings = "gearshape.2.fill"
     }
 
-    enum Concept {
-        static let protection = "shield.fill"
-        static let vitality = "heart.fill"
-        static let energy = "drop.fill"
-        static let currency = "banknote.fill"
-        static let randomize = "dice.fill"
-        static let refresh = "arrow.triangle.2.circlepath"
-        static let capacity = "infinity"
-        static let quality = "star.circle.fill"
-        static let impact = "burst.fill"
-        static let movement = "figure.run"
-        static let actionSpeed = "bolt.fill"
-        static let timeScale = "speedometer"
-        static let item = "diamond.fill"
-        static let controls = "slider.horizontal.3"
-        static let defense = "shield.lefthalf.filled"
-        static let duration = "hourglass"
-        static let timer = "timer"
-        static let precision = "scope"
-        static let dash = "wind"
-        static let level = "arrow.up.circle.fill"
+    package enum Concept {
+        package static let protection = "shield.fill"
+        package static let vitality = "heart.fill"
+        package static let energy = "drop.fill"
+        package static let currency = "banknote.fill"
+        package static let randomize = "dice.fill"
+        package static let refresh = "arrow.triangle.2.circlepath"
+        package static let capacity = "infinity"
+        package static let quality = "star.circle.fill"
+        package static let impact = "burst.fill"
+        package static let movement = "figure.run"
+        package static let actionSpeed = "bolt.fill"
+        package static let timeScale = "speedometer"
+        package static let item = "diamond.fill"
+        package static let controls = "slider.horizontal.3"
+        package static let defense = "shield.lefthalf.filled"
+        package static let duration = "hourglass"
+        package static let timer = "timer"
+        package static let precision = "scope"
+        package static let dash = "wind"
+        package static let level = "arrow.up.circle.fill"
     }
 
-    enum Context {
-        static let fishing = "fish.fill"
-        static let portal = "circle.hexagongrid.fill"
+    package enum Context {
+        package static let fishing = "fish.fill"
+        package static let portal = "circle.hexagongrid.fill"
         static let reward = "gift.fill"
-        static let characterReward = "moon.stars.fill"
-        static let doorway = "door.left.hand.open"
+        package static let characterReward = "moon.stars.fill"
+        package static let doorway = "door.left.hand.open"
     }
 
-    enum Tool {
-        static let saveEditor = "externaldrive.badge.gearshape"
-        static let saveManagement = "externaldrive"
-        static let saveFolder = "folder"
-        static let saveHistory = "clock.arrow.circlepath"
+    package enum Tool {
+        package static let saveEditor = "externaldrive.badge.gearshape"
+        package static let saveManagement = "externaldrive"
+        package static let saveFolder = "folder"
+        package static let saveHistory = "clock.arrow.circlepath"
         static let retention = "clock.badge.checkmark"
-        static let profiles = "square.stack.3d.up"
-        static let shortcuts = "keyboard"
-        static let diagnostics = "stethoscope"
+        package static let profiles = "square.stack.3d.up"
+        package static let shortcuts = "keyboard"
+        package static let diagnostics = "stethoscope"
         static let exportDiagnostics = "square.and.arrow.up"
-        static let refreshStatus = "arrow.clockwise"
+        package static let refreshStatus = "arrow.clockwise"
         static let currentIssues = "exclamationmark.circle"
-        static let log = "doc.text.magnifyingglass"
-        static let logHistory = "clock.arrow.circlepath"
-        static let clearLogs = "trash"
-        static let disableAll = "power"
+        package static let log = "doc.text.magnifyingglass"
+        package static let logHistory = "clock.arrow.circlepath"
+        package static let clearLogs = "trash"
+        package static let disableAll = "power"
     }
 
-    enum Action {
-        static let acquire = "plus.circle.fill"
-        static let apply = "checkmark.circle.fill"
-        static let generate = "plus.circle.fill"
+    package enum Action {
+        package static let acquire = "plus.circle.fill"
+        package static let apply = "checkmark.circle.fill"
+        package static let generate = "plus.circle.fill"
         static let save = "square.and.arrow.down"
         static let load = "arrow.down.circle"
-        static let edit = "square.and.pencil"
-        static let rename = "pencil"
+        package static let edit = "square.and.pencil"
+        package static let rename = "pencil"
         static let protect = "lock"
         static let unprotect = "lock.open"
-        static let remove = "trash"
-        static let restore = "arrow.uturn.backward"
+        package static let remove = "trash"
+        package static let restore = "arrow.uturn.backward"
         static let dismiss = "xmark"
     }
 
-    enum Feedback {
-        static let success = "checkmark.circle"
+    package enum Feedback {
+        package static let success = "checkmark.circle"
         static let warning = "exclamationmark.triangle"
         static let storageWarning = "externaldrive.badge.exclamationmark"
-        static let toastSuccess = "checkmark.circle.fill"
+        package static let toastSuccess = "checkmark.circle.fill"
         static let toastWarning = "exclamationmark.triangle.fill"
         static let toastInfo = "info.circle.fill"
     }

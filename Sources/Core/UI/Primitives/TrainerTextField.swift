@@ -15,11 +15,11 @@ extension EnvironmentValues {
 
 /// The native field owns a draft until editing ends. The caller validates one
 /// completed value and returns the text to display; no keystroke is a commit.
-struct TrainerTextField: NSViewRepresentable {
-    enum Style { case plain, rounded }
-    struct Completion {
-        let text: String
-        let changed: Bool
+package struct TrainerTextField: NSViewRepresentable {
+    package enum Style { case plain, rounded }
+    package struct Completion {
+        package let text: String
+        package let changed: Bool
         private final class Validation { var message: String? }
         private let validation = Validation()
 
@@ -31,7 +31,7 @@ struct TrainerTextField: NSViewRepresentable {
         /// The game validates once at its existing completion owner. Returning
         /// the display text preserves its recovery policy while this result
         /// gives the originating field an explicit, localized rejection.
-        func rejected(message: String, restoring text: String? = nil) -> String {
+        package func rejected(message: String, restoring text: String? = nil) -> String {
             validation.message = message
             return text ?? self.text
         }
@@ -53,7 +53,21 @@ struct TrainerTextField: NSViewRepresentable {
     var alignment: NSTextAlignment = .left
     var font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    package init(title: String, text: Binding<String>, accessibilityLabel: String? = nil, accessibilityIdentifier: String? = nil, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }, onCancel: (() -> Void)? = nil, focusOnAppear: Bool = false, style: TrainerTextField.Style = .rounded, alignment: NSTextAlignment = .left, font: NSFont = .systemFont(ofSize: NSFont.systemFontSize)) {
+        self.title = title
+        self._text = text
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.onEditingChanged = onEditingChanged
+        self.onCommit = onCommit
+        self.onCancel = onCancel
+        self.focusOnAppear = focusOnAppear
+        self.style = style
+        self.alignment = alignment
+        self.font = font
+    }
+
+    package final class Coordinator: NSObject, NSTextFieldDelegate {
         private enum NativeLifetime { case live, suspending, retired }
         private struct SuspendedDraft {
             let generation: UInt
@@ -128,19 +142,19 @@ struct TrainerTextField: NSViewRepresentable {
                 onCancel: parent.onCancel)
             edit?.onEditingChanged(true)
         }
-        func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
+        package func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
             begin(validationMessage: (control as? Field)?.validationMessage)
             return true
         }
-        func controlTextDidBeginEditing(_ notification: Notification) {
+        package func controlTextDidBeginEditing(_ notification: Notification) {
             begin(validationMessage: (notification.object as? Field)?.validationMessage)
         }
-        func controlTextDidChange(_ notification: Notification) {
+        package func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField, let edit else { return }
             discardDraftBeforeNativeDisable()
             edit.text.wrappedValue = field.stringValue
         }
-        func controlTextDidEndEditing(_ notification: Notification) {
+        package func controlTextDidEndEditing(_ notification: Notification) {
             guard let field = notification.object as? NSTextField, let completed = edit else { return }
             edit = nil
             let draft = field.stringValue
@@ -157,7 +171,7 @@ struct TrainerTextField: NSViewRepresentable {
             }
             completed.onEditingChanged(false)
         }
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+        package func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
             if command == #selector(NSResponder.cancelOperation(_:)), !textView.hasMarkedText(),
                let cancelled = edit,
                let field = control as? NSTextField {
@@ -354,8 +368,8 @@ struct TrainerTextField: NSViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-    func makeNSView(context: Context) -> NSTextField {
+    package func makeCoordinator() -> Coordinator { Coordinator(self) }
+    package func makeNSView(context: Context) -> NSTextField {
         let field = Field(frame: .zero)
         field.focusOnAppear = focusOnAppear
         field.onFocus = { [weak coordinator = context.coordinator, weak field] in
@@ -371,7 +385,7 @@ struct TrainerTextField: NSViewRepresentable {
         field.stringValue = text
         return field
     }
-    func updateNSView(_ field: NSTextField, context: Context) {
+    package func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         if !disclosureExpanded {
             _ = context.coordinator.suspendForDisclosure(field)
@@ -392,10 +406,10 @@ struct TrainerTextField: NSViewRepresentable {
             (field as? Field)?.refreshObservation()
         }
     }
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
+    package func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
         CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: nsView.intrinsicContentSize.height)
     }
-    static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) { coordinator.cancel(field) }
+    package static func dismantleNSView(_ field: NSTextField, coordinator: Coordinator) { coordinator.cancel(field) }
 
     private func configure(_ field: NSTextField) {
         // Assigning unchanged AppKit properties during a SwiftUI update can
@@ -438,7 +452,7 @@ struct TrainerTextField: NSViewRepresentable {
         }
     }
 
-    static func editingTracker<Field: Hashable>(_ focus: Binding<Field?>, equals field: Field) -> (Bool) -> Void {
+    package static func editingTracker<Field: Hashable>(_ focus: Binding<Field?>, equals field: Field) -> (Bool) -> Void {
         { active in
             if active { focus.wrappedValue = field }
             else if focus.wrappedValue == field { focus.wrappedValue = nil }
@@ -487,7 +501,7 @@ private struct TrainerTextEditingClickObserver: NSViewRepresentable {
 }
 
 extension View {
-    func trainerDismissTextEditingOnClickAway() -> some View {
+    package func trainerDismissTextEditingOnClickAway() -> some View {
         background(TrainerTextEditingClickObserver().allowsHitTesting(false))
     }
 }

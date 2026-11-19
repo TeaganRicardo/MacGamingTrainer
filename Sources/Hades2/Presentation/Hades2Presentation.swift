@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 /// Hades-owned bilingual presentation.
 ///

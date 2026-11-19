@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 @MainActor
 enum Hades2ManagementCatalog {

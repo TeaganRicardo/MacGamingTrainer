@@ -1,5 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 """Native tool-window reuse and close ownership with isolated content."""
 import os
 from pathlib import Path
@@ -251,7 +252,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-tool-windows-") as directory:
     sources = ["Sources/Core/Runtime/TrainerJSON.swift", "Sources/Core/Runtime/BackendProcess.swift", "Sources/Core/Runtime/BackendClient.swift",
                "Sources/Core/Host/TrainerLocalization.swift", "Sources/Core/UI/TrainerTheme.swift",
                "Sources/Core/UI/TrainerToolWindows.swift", "tests/fixtures/swift/InMemoryDefaults.swift"]
-    subprocess.run([SWIFT, "-parse-as-library", *[str(ROOT / path) for path in sources],
+    subprocess.run([SWIFT, *SINGLE_MODULE_FLAGS, "-parse-as-library", *[str(ROOT / path) for path in sources],
                     str(main), "-o", str(binary)], check=True)
     env = dict(os.environ, HOME=str(root / "home"))
     (root / "home").mkdir()

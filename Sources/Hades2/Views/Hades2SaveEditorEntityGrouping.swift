@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 /// Presentation-only grouping. Mutation authority remains with each save descriptor.
 struct Hades2SaveEditorEntity: Identifiable {

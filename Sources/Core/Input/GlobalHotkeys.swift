@@ -28,18 +28,23 @@ extension HotkeyChord {
     }
 }
 
-struct HotkeyBinding {
+package struct HotkeyBinding {
     let actionID: String
     let chord: HotkeyChord
+
+    package init(actionID: String, chord: HotkeyChord) {
+        self.actionID = actionID
+        self.chord = chord
+    }
 }
 
-struct TrainerHotkeyRegistrationConflict: Equatable {
+package struct TrainerHotkeyRegistrationConflict: Equatable {
     let actionID: String
     let chordText: String
     let status: Int32
 }
 
-enum TrainerHotkeyRegistrationFailure: Equatable {
+package enum TrainerHotkeyRegistrationFailure: Equatable {
     case listenerInitialization(status: Int32)
     case registrationConflicts([TrainerHotkeyRegistrationConflict])
 }
@@ -130,7 +135,7 @@ private final class TrainerGlobalHotkeyRegistry {
     }
 }
 
-final class GlobalHotkeys {
+package final class GlobalHotkeys {
     private let registry = TrainerGlobalHotkeyRegistry.shared
     private let ownerID = UUID()
     private let gameID: String
@@ -144,7 +149,7 @@ final class GlobalHotkeys {
     static func beginShortcutCapture() -> UUID { TrainerGlobalHotkeyRegistry.shared.beginShortcutCapture() }
     static func endShortcutCapture(_ token: UUID) { TrainerGlobalHotkeyRegistry.shared.endShortcutCapture(token) }
 
-    init(gameID: String,
+    package init(gameID: String,
          registrationChanged: @escaping (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
          action: @escaping (String) -> Void) {
         self.gameID = gameID
@@ -154,7 +159,7 @@ final class GlobalHotkeys {
     }
 
     @discardableResult
-    func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
+    package func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
         self.bindings = bindings
         return updateRegistration()
     }

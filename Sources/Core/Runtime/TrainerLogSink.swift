@@ -7,17 +7,23 @@ import Foundation
 /// the Host. A target-process lifetime is persisted as a self-contained bundle:
 /// manifest.json plus separate Host, Backend and Runtime text streams. The Host
 /// remains the only writer/rotation/retention owner.
-final class TrainerLogSink {
+package final class TrainerLogSink {
     static let maximumSessionBytes = 4 * 1_048_576
     static let maximumHostFileSize = 1_048_576
     static let maximumCompletedSessions = 8
     static let maximumTotalBytes = 32 * 1_048_576
     static let maximumPendingBytes = 1_048_576
 
-    struct TargetIdentity: Equatable {
+    package struct TargetIdentity: Equatable {
         let processName: String
         let bundleIdentifier: String
         let processIdentifier: Int32?
+
+        package init(processName: String, bundleIdentifier: String, processIdentifier: Int32?) {
+            self.processName = processName
+            self.bundleIdentifier = bundleIdentifier
+            self.processIdentifier = processIdentifier
+        }
     }
 
     private enum SessionState: String, Codable {
@@ -113,7 +119,7 @@ final class TrainerLogSink {
 
     let url: URL
     let hostURL: URL
-    let historyURL: URL
+    package let historyURL: URL
 
     private let metadataURL: URL
     private let managedSessions: Bool
@@ -138,7 +144,7 @@ final class TrainerLogSink {
         self.managedSessions = false
     }
 
-    init(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    package init(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
         let gameDirectory = Self.moduleLogDirectory(gameID: gameID, homeDirectory: homeDirectory)
         self.url = gameDirectory.appendingPathComponent("trainer.log")
         self.hostURL = gameDirectory.appendingPathComponent("trainer-host.log")
@@ -172,7 +178,7 @@ final class TrainerLogSink {
         handles.removeAll()
     }
 
-    func append(_ line: String, source: String = "HOST") {
+    package func append(_ line: String, source: String = "HOST") {
         guard !line.isEmpty else { return }
 
         let bytes = min(Int.max - 128, line.utf8.count) + 128
@@ -211,7 +217,7 @@ final class TrainerLogSink {
         }
     }
 
-    func flush() {
+    package func flush() {
         queue.sync {
             for opened in handles.values {
                 try? opened.handle.synchronize()
@@ -221,7 +227,7 @@ final class TrainerLogSink {
 
     /// Enter or leave one OS target-process lifetime. Reconnects and Backend
     /// restarts never call this seam, so they remain inside the same session.
-    func targetLifetimeChanged(running: Bool, identity: TargetIdentity) {
+    package func targetLifetimeChanged(running: Bool, identity: TargetIdentity) {
         guard managedSessions else { return }
         queue.sync {
             do {
@@ -238,7 +244,7 @@ final class TrainerLogSink {
 
     /// Add runtime identity once the game-owned resident has reported it.
     /// This enriches the same OS target session; it never creates a new one.
-    func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: Int?) {
+    package func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: Int?) {
         guard managedSessions, gameVersion != nil || runtimeRevision != nil else { return }
         queue.sync { [weak self] in
             guard let self, var record = self.activeSession ?? self.loadCurrentSessionLocked(),
@@ -269,7 +275,7 @@ final class TrainerLogSink {
 
     /// Current target session log. This preserves the existing single-file
     /// caller contract by returning the Host stream inside the active bundle.
-    func currentLogURL() -> URL {
+    package func currentLogURL() -> URL {
         queue.sync {
             guard managedSessions else { return url }
             guard let record = activeSessionRecordLocked() else { return hostURL }
@@ -279,7 +285,7 @@ final class TrainerLogSink {
 
     /// Self-contained target session bundle for the current target lifetime.
     /// Returns nil when only Host/app context exists.
-    func currentSessionURL() -> URL? {
+    package func currentSessionURL() -> URL? {
         queue.sync {
             guard managedSessions, let record = activeSessionRecordLocked() else { return nil }
             return sessionDirectoryURL(for: record)
@@ -287,7 +293,7 @@ final class TrainerLogSink {
     }
 
     @discardableResult
-    func clearCompletedSessions() -> Bool {
+    package func clearCompletedSessions() -> Bool {
         guard managedSessions else { return false }
         return queue.sync {
             do {

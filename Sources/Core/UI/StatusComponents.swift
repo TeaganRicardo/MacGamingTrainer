@@ -54,14 +54,14 @@ struct TrainerSectionHeader<Accessory: View>: View {
     }
 }
 
-struct TrainerSection<Accessory: View, Content: View>: View {
+package struct TrainerSection<Accessory: View, Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
     let accessory: Accessory
     let content: Content
 
-    init(
+    package init(
         title: String,
         icon: String,
         @ViewBuilder accessory: () -> Accessory,
@@ -73,7 +73,7 @@ struct TrainerSection<Accessory: View, Content: View>: View {
         self.content = content()
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             TrainerSectionHeader(title: title, icon: icon) {
                 accessory
@@ -84,7 +84,7 @@ struct TrainerSection<Accessory: View, Content: View>: View {
 }
 
 extension TrainerSection where Accessory == EmptyView {
-    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+    package init(title: String, icon: String, @ViewBuilder content: () -> Content) {
         self.init(title: title, icon: icon, accessory: { EmptyView() }, content: content)
     }
 }

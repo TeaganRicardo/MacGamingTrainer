@@ -118,7 +118,7 @@ struct Main {
         enableNativeAccessibility()
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: URL(fileURLWithPath: args[1]), argumentsPrefix: ["-u"], forceKillDelay: 0.1)))
-        let descriptor = GameModuleDescriptor(id: "fixture", displayName: "Fixture", backendGameID: "fixture",
+        let descriptor = GameModuleDescriptor(id: "fixture", displayName: "Fixture",
             targetProcessName: "", targetBundleIdentifier: "", expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 1, supportsSaveManagement: true)
         try session.start(descriptor: descriptor, backendScriptURL: URL(fileURLWithPath: args[2]),

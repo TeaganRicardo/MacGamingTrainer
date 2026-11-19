@@ -85,10 +85,12 @@ struct TrainerPillBadge: View {
 }
 
 /// Shared small spinner used by host sheets and save-editor toolbars during busy work.
-struct TrainerLoadingIndicator: View {
+package struct TrainerLoadingIndicator: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
-    var body: some View {
+    package init() {}
+
+    package var body: some View {
         ProgressView()
             .controlSize(.small)
             .frame(width: 16, height: 16)

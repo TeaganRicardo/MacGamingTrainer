@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFT = shutil.which("swiftc")
@@ -148,6 +149,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
     subprocess.run(
         [
             SWIFT,
+            *SINGLE_MODULE_FLAGS,
             "-parse-as-library",
             # The token type lives in the Runtime layer, beside the wire identity
             # it travels with, so the Host store alone is no longer compilable.

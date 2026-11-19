@@ -43,6 +43,7 @@ MODULE_EXACT_PATHS = {
     "Tools/product_support.py",
     "Tools/publish_module_build.py",
     "Tools/supported_build.py",
+    "Tools/swift_module_layout.py",
     "Tools/verify_module_build.py",
     "Tools/python_runtime.json",
     "build.sh",

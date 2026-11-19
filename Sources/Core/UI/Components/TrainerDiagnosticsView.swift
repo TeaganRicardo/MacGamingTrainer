@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum TrainerDiagnosticStatus: String {
+package enum TrainerDiagnosticStatus: String {
     case passed, warning, failed, unknown
 
     var icon: String {
@@ -13,29 +13,49 @@ enum TrainerDiagnosticStatus: String {
     }
 }
 
-struct TrainerDiagnosticEntry: Identifiable {
-    let id: String
+package struct TrainerDiagnosticEntry: Identifiable {
+    package let id: String
     let name: String
     let detail: String
     let status: TrainerDiagnosticStatus
+
+    package init(id: String, name: String, detail: String, status: TrainerDiagnosticStatus) {
+        self.id = id
+        self.name = name
+        self.detail = detail
+        self.status = status
+    }
 }
 
-struct TrainerDiagnosticsLabels {
+package struct TrainerDiagnosticsLabels {
     let title: String
     let explanation: String
     let refresh: String
     let export: String
+
+    package init(title: String, explanation: String, refresh: String, export: String) {
+        self.title = title
+        self.explanation = explanation
+        self.refresh = refresh
+        self.export = export
+    }
 }
 
-struct TrainerDiagnosticsActions {
+package struct TrainerDiagnosticsActions {
     let refresh: () -> Void
     let export: () -> Void
     let dismiss: () -> Void
+
+    package init(refresh: @escaping () -> Void, export: @escaping () -> Void, dismiss: @escaping () -> Void) {
+        self.refresh = refresh
+        self.export = export
+        self.dismiss = dismiss
+    }
 }
 
 /// Generic diagnostic presentation. Check collection, safety, names and export
 /// contents belong to the caller; the summary counts the results actually shown.
-struct TrainerDiagnosticsView: View {
+package struct TrainerDiagnosticsView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -49,9 +69,19 @@ struct TrainerDiagnosticsView: View {
     var error = ""
     let actions: TrainerDiagnosticsActions
 
+    package init(labels: TrainerDiagnosticsLabels, checks: [TrainerDiagnosticEntry], busy: Bool, canRefresh: Bool, canExport: Bool, error: String = "", actions: TrainerDiagnosticsActions) {
+        self.labels = labels
+        self.checks = checks
+        self.busy = busy
+        self.canRefresh = canRefresh
+        self.canExport = canExport
+        self.error = error
+        self.actions = actions
+    }
+
     private var passed: Int { checks.filter { $0.status == .passed }.count }
 
-    var body: some View {
+    package var body: some View {
         let presentationID = lifetime.id
         TrainerSheetScaffold(title: labels.title, icon: TrainerSemanticIcon.Tool.diagnostics, width: 700, minimumWidth: 360) {
             Text("\(passed)/\(checks.count)").font(.headline).monospacedDigit()

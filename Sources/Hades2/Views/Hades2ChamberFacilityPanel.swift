@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 /// The options and one-shot scope tokens come from the live native chamber
 /// owner. The offline row remains visible, with no fabricated selectable props.

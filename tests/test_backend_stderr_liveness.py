@@ -1,5 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 """Backend stderr read/flush must remain live with an open, quiet worker."""
 import os
 import shutil
@@ -181,6 +182,7 @@ extension BackendProcess {
     harness_path.write_text(production + probe_extension + textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"),
         str(harness_path),
         "-o", str(binary),

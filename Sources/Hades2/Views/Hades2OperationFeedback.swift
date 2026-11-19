@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 struct Hades2OperationFeedback: View {
     @ObservedObject var model: Hades2TrainerModel

@@ -6,8 +6,8 @@ import Foundation
 /// draft text, page navigation, native edit semantics and backend transport.
 /// Retiring a window or replacing a document invalidates every outstanding
 /// reply even if the backend reuses a workspace ID or a baseline string.
-final class TrainerSaveEditorReplyCoordinator {
-    enum Lane: Hashable {
+package final class TrainerSaveEditorReplyCoordinator {
+    package enum Lane: Hashable {
         case inventory
         case open
         case query
@@ -16,7 +16,7 @@ final class TrainerSaveEditorReplyCoordinator {
         case review
     }
 
-    struct Ticket {
+    package struct Ticket {
         fileprivate let epoch: UUID
         fileprivate let backendGeneration: UUID
         fileprivate let lane: Lane?
@@ -28,15 +28,17 @@ final class TrainerSaveEditorReplyCoordinator {
 
     private var epoch = UUID()
     private(set) var backendGeneration = UUID()
-    private(set) var documentBackendGeneration: UUID?
+    package private(set) var documentBackendGeneration: UUID?
     private var revisions: [Lane: UInt64] = [:]
     private(set) var workspaceID: String?
     private(set) var baselineGeneration: String?
 
+    package init() {}
+
     /// A new explicit source read supersedes old queries and older source
     /// reads before either response arrives; the loaded document remains
     /// available until the new read is confirmed.
-    func beginNewDocumentRead() -> Ticket {
+    package func beginNewDocumentRead() -> Ticket {
         invalidateAllReplies()
         return capture(.open, bindsDocument: false)
     }
@@ -44,7 +46,7 @@ final class TrainerSaveEditorReplyCoordinator {
     /// Capture a request that either belongs to the current document or is
     /// independent of it (inventory and open). One lane accepts only its most
     /// recently issued request, regardless of callback arrival order.
-    func capture(_ lane: Lane? = nil, bindsDocument: Bool = true) -> Ticket {
+    package func capture(_ lane: Lane? = nil, bindsDocument: Bool = true) -> Ticket {
         if let lane { revisions[lane, default: 0] &+= 1 }
         return Ticket(
             epoch: epoch,
@@ -57,7 +59,7 @@ final class TrainerSaveEditorReplyCoordinator {
         )
     }
 
-    func accepts(_ ticket: Ticket) -> Bool {
+    package func accepts(_ ticket: Ticket) -> Bool {
         guard ticket.epoch == epoch, ticket.backendGeneration == backendGeneration else { return false }
         if ticket.bindsDocument {
             guard documentBackendGeneration == backendGeneration,
@@ -73,25 +75,25 @@ final class TrainerSaveEditorReplyCoordinator {
 
     /// Cancel a pending query/detail without touching staged edits or the
     /// current document. Debounce timers remain game-owned.
-    func invalidate(_ lane: Lane) {
+    package func invalidate(_ lane: Lane) {
         revisions[lane, default: 0] &+= 1
     }
 
-    func owns(workspaceID: String?, baselineGeneration: String?) -> Bool {
+    package func owns(workspaceID: String?, baselineGeneration: String?) -> Bool {
         guard let workspaceID, let baselineGeneration else { return false }
         return documentBackendGeneration == backendGeneration &&
             self.workspaceID == workspaceID && self.baselineGeneration == baselineGeneration
     }
 
     @discardableResult
-    func observeBackendGeneration(_ generation: UUID) -> Bool {
+    package func observeBackendGeneration(_ generation: UUID) -> Bool {
         guard generation != backendGeneration else { return false }
         backendGeneration = generation
         invalidateAllReplies()
         return workspaceID != nil
     }
 
-    func invalidateDocument() {
+    package func invalidateDocument() {
         documentBackendGeneration = nil
         invalidateAllReplies()
     }
@@ -99,7 +101,7 @@ final class TrainerSaveEditorReplyCoordinator {
     /// Called only after validating a successful open, target change or
     /// post-Apply baseline. A target change invalidates pending replies even
     /// when the backend workspace and generation strings stay unchanged.
-    func bind(workspaceID: String, baselineGeneration: String) {
+    package func bind(workspaceID: String, baselineGeneration: String) {
         invalidateAllReplies()
         self.workspaceID = workspaceID
         self.baselineGeneration = baselineGeneration
@@ -107,7 +109,7 @@ final class TrainerSaveEditorReplyCoordinator {
     }
 
     /// Tool close/reopen must not resurrect a reply from the retired window.
-    func retire() {
+    package func retire() {
         invalidateAllReplies()
         workspaceID = nil
         baselineGeneration = nil

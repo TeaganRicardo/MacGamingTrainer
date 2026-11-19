@@ -1,9 +1,11 @@
 import Foundation
 
-struct GameModuleDescriptor {
-    let backendGameID: String
+package struct GameModuleDescriptor {
+    let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
+    // --baseline-ref sources from before the Swift module split read this name.
+    var backendGameID: String { id }
 }
 let args = CommandLine.arguments
 let count = Int(args[3])!
@@ -19,7 +21,7 @@ func log(_ text: String) {
         }
     }
 }
-try session.start(descriptor: GameModuleDescriptor(backendGameID: "hades2", expectedHostProtocolVersion: 6,
+try session.start(descriptor: GameModuleDescriptor(id: "hades2", expectedHostProtocolVersion: 6,
     expectedModuleProtocolVersion: Int(args[4])!), backendScriptURL: URL(fileURLWithPath: args[1]),
     applyPayload: { value in payload.merge(value) { _, new in new }; applied += 1 },
     resetGameState: {}, log: log, onStatusChange: { _ in })

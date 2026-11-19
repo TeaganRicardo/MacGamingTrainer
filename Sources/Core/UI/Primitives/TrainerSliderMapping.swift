@@ -1,6 +1,6 @@
 import Foundation
 
-struct TrainerSliderMapping {
+package struct TrainerSliderMapping {
     let anchors: [Double]
     let step: Double
     let detents: [Double]
@@ -10,7 +10,7 @@ struct TrainerSliderMapping {
     var range: ClosedRange<Double> { anchors[0]...anchors[anchors.count - 1] }
     var marks: [Double] { anchors }
 
-    static func anchoredLogarithmic(
+    package static func anchoredLogarithmic(
         values: [Double],
         step: Double,
         detents: [Double] = [],

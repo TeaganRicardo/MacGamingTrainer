@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Retain the child hierarchy and drafts while animating structural visibility.
 /// Capability changes take effect immediately, independently of the layout phase.
-struct TrainerDisclosure<Content: View>: View {
+package struct TrainerDisclosure<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.trainerGamePageVisibility) private var pageVisibility
     @Environment(\.trainerDisclosureExpanded) private var parentExpanded
@@ -12,13 +12,13 @@ struct TrainerDisclosure<Content: View>: View {
     @State private var layoutExpanded: Bool
     @State private var focusAnchor = TrainerDisclosureFocusAnchor()
 
-    init(isExpanded: Bool, @ViewBuilder content: () -> Content) {
+    package init(isExpanded: Bool, @ViewBuilder content: () -> Content) {
         self.isExpanded = isExpanded
         self.content = content()
         _layoutExpanded = State(initialValue: isExpanded)
     }
 
-    var body: some View {
+    package var body: some View {
         content
             .fixedSize(horizontal: false, vertical: true)
             .frame(height: layoutExpanded ? nil : 0, alignment: .top)
@@ -50,14 +50,20 @@ struct TrainerDisclosure<Content: View>: View {
     }
 }
 
-struct TrainerDisclosureButton: View {
+package struct TrainerDisclosureButton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Binding var isExpanded: Bool
     let expandTitle: String
     let collapseTitle: String
 
-    var body: some View {
+    package init(isExpanded: Binding<Bool>, expandTitle: String, collapseTitle: String) {
+        self._isExpanded = isExpanded
+        self.expandTitle = expandTitle
+        self.collapseTitle = collapseTitle
+    }
+
+    package var body: some View {
         Button { isExpanded.toggle() } label: {
             HStack(spacing: 5) {
                 Text(isExpanded ? collapseTitle : expandTitle)

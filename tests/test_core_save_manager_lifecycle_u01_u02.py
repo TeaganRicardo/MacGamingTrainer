@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -67,8 +68,8 @@ lifecycle_harness = r'''
 import Foundation
 import Combine
 
-struct GameModuleDescriptor {
-    let backendGameID: String
+package struct GameModuleDescriptor {
+    let id: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
 }
@@ -100,7 +101,7 @@ struct Runner {
         )
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
-            backendGameID: "test",
+            id: "test",
             expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 5
         )
@@ -337,7 +338,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     environment = os.environ.copy()
     environment["HOME"] = str(home)
     subprocess.run([
-        SWIFTC, "-parse-as-library",
+        SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library",
         str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
@@ -367,7 +368,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-path-validation-") as td:
     binary = base / "path_validation"
     main_path.write_text(textwrap.dedent(path_harness), encoding="utf-8")
     subprocess.run([
-        SWIFTC, "-parse-as-library",
+        SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library",
         str(ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"),
         str(main_path), "-o", str(binary),
     ], check=True, cwd=ROOT)

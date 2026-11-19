@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 /// Explicit structure/type editing for Advanced. Ordinary scalar controls stay
 /// inline; this editor preserves table key types and non-UTF8 Lua strings.

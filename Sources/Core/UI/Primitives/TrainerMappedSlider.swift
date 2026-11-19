@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TrainerMappedSlider: View {
+package struct TrainerMappedSlider: View {
     @Binding var value: Double
     let mapping: TrainerSliderMapping
     let accessibilityLabel: String
@@ -19,9 +19,19 @@ struct TrainerMappedSlider: View {
     @FocusState private var focused: Bool
 
     private let thumbDiameter: CGFloat = 20
+
+    package init(value: Binding<Double>, mapping: TrainerSliderMapping, accessibilityLabel: String, accessibilityHint: String, enabled: Bool = true, onPreviewValue: ((Double?) -> Void)? = nil) {
+        self._value = value
+        self.mapping = mapping
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityHint = accessibilityHint
+        self.enabled = enabled
+        self.onPreviewValue = onPreviewValue
+    }
+
     private var interactive: Bool { enabled && environmentEnabled }
 
-    var body: some View {
+    package var body: some View {
         GeometryReader { proxy in
             let position = displayPosition ?? mapping.position(for: value)
             let geometry = TrainerSliderGeometry(width: Double(proxy.size.width), thumbDiameter: Double(thumbDiameter))

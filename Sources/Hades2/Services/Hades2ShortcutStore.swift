@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 /// Hades-specific shortcut persistence. Registration/capture mechanics live in
 /// Core; this store owns action semantics, derived defaults, explicit user

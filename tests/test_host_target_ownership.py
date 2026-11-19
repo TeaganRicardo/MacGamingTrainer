@@ -1,5 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 """Exercise real App admission with inert UI/backend and isolated OS processes."""
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ SWIFTC = shutil.which("swiftc")
 assert SWIFTC, "swiftc is required for Host ownership behavior"
 
 app_source = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text()
-start = app_source.index("    convenience init() {") + len("    convenience init() {")
+start = app_source.index("    package convenience init() {") + len("    package convenience init() {")
 end = start
 level = 1
 while level:
@@ -179,7 +180,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-ownership-") as temporary:
     source = temporary / "main.swift"
     binary = temporary / "host"
     source.write_text(harness)
-    subprocess.run([SWIFTC, "-parse-as-library", str(ROOT / "Sources/Core/Host/TrainerTargetOwnership.swift"),
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", str(ROOT / "Sources/Core/Host/TrainerTargetOwnership.swift"),
                     str(source), "-o", str(binary)], check=True, cwd=ROOT)
     directory = temporary / "ownership"
     directory.mkdir()
@@ -298,6 +299,7 @@ import Foundation
     subprocess.run(
         [
             SWIFTC,
+            *SINGLE_MODULE_FLAGS,
             "-parse-as-library",
             str(ROOT / "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift"),
             str(swift_source),

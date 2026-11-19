@@ -1,4 +1,5 @@
 import SwiftUI
+import TrainerCore
 
 struct HadesSettingsProfile: Decodable, Identifiable {
     let name: String

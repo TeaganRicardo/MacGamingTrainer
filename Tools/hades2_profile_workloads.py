@@ -12,6 +12,9 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / 'Tools') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'Tools'))
+from swift_module_layout import SWIFT_PACKAGE_NAME  # noqa: E402
 
 
 def phase_summary(records, summarize):
@@ -52,7 +55,8 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
         # Older --baseline-ref archives predate the shared JSON decoder.
         if (source / 'Sources/Core/Runtime/TrainerJSON.swift').exists():
             runtime_sources.append('TrainerJSON')
-        subprocess.run([compiler, '-O', *(str(source / ('Sources/Core/Runtime/' + name + '.swift'))
+        subprocess.run([compiler, '-O', '-package-name', SWIFT_PACKAGE_NAME,
+            *(str(source / ('Sources/Core/Runtime/' + name + '.swift'))
             for name in runtime_sources),
             str(main), '-o', str(binary)], check=True, capture_output=True, text=True, timeout=60)
         events = folder / 'events.log'

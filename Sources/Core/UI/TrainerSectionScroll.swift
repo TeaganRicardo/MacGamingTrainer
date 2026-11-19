@@ -290,7 +290,7 @@ private struct TrainerSectionTarget: NSViewRepresentable {
 }
 
 extension View {
-    func trainerSectionTarget(_ id: String) -> some View {
+    package func trainerSectionTarget(_ id: String) -> some View {
         self.id(id).background(TrainerSectionTarget(id: id).allowsHitTesting(false).accessibilityHidden(true))
     }
 }

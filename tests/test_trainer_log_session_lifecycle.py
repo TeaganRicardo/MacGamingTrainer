@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -697,6 +698,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-log-session-") as td:
     main.write_text(textwrap.dedent(main_source), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / "Sources/Core/Runtime/TrainerLogSink.swift"),
         str(main),
         "-o", str(binary),

@@ -1,4 +1,5 @@
 import Foundation
+import TrainerCore
 
 /// Typed Hades Host-command caller adapter. Wire command identity and Host
 /// timeout metadata are generated from the backend command contract; Hades

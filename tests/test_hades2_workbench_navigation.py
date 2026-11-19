@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
 from supported_build import supported_reference_directory
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 for path in ('Sources/Hades/HadesWorkbenchNavigation.swift',
              'Sources/Hades2/Views/Hades2HostActions.swift'):
     header_actions = (ROOT/path).read_text()
@@ -158,7 +159,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
     main = Path(temporary)/'main.swift'
     binary = Path(temporary)/'search'
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, str(ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift'),
+    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift'),
                     str(ROOT/'Sources/Core/UI/TrainerWorkbenchSearch.swift'),
                     str(ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
                     str(ROOT/'Sources/Hades2/Hades2Types.swift'),

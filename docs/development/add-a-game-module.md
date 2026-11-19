@@ -6,11 +6,13 @@ A normal module adds its backend directory, frontend directory, resources and be
 
 Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module ID and an adapter inside `games.<id>`. The shared validator checks layout, paths and independent diagnostic identity before compilation.
 
+`Sources/<Game>/` compiles as its own Swift module named `<Game>`. Its files `import TrainerCore` and see only Core's `package` declarations; the compiler rejects a reference to another game, and Core cannot import a game, so product Swift types need no game prefix. Swift test harnesses still compile Core and every game they load as one module until #768 WP1.1 migrates them, so until then a new top-level type name must not repeat one in Core or another game. The generated `<moduleType>Binding` is the only declaration the App sees, so keep the module's own types at the default access level. `UserDefaults` is still one shared domain: give every key a `<id>.` prefix.
+
 | Declaration | Use it when | Owning verification |
 | --- | --- | --- |
 | `targetApplication.bundleIdentifier` | The game has a stable native application identity | Target monitor and ownership tests, then actual game attach |
 | `targetApplication.executablePathSuffix` | A target has no Bundle ID or a generic executable basename | Generated descriptor and kernel executable-path matching; same-name unrelated processes must be rejected |
-| `frontend` | Every module | Generated binding, unified typecheck and isolated reference matrix when a shared boundary changes |
+| `frontend` | Every module | Generated binding in the game's Swift module, product module typecheck and isolated reference matrix when a shared boundary changes |
 | `app` | Diagnostic defaults need a specific name or Bundle ID | Module identity/output tests; it must differ from the product in `app.json` |
 | `supportedBuild` | Native symbols, offsets or injected code depend on an exact game image | [Supported build update runbook](supported-game-build-update.md), source-derived identities and actual game acceptance |
 | `nativeLibraries` | The module builds code loaded into the game | Declared target architecture, native compilation, package/signature and supported-image tests |
@@ -76,11 +78,8 @@ The contract above is the goal; these shared files still need edits or attention
 | An entry in `tests/fixture_budgets/` (for example `hades2_flow.py`, `multi_game.py`) | Each native journey; an unknown journey fails closed | #772 (provisional budgets) |
 | `Tools/select_macos_pr_tests.py` tuples | Only if the module's journeys should run on Core changes | #768 (derived selector) |
 | `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
-| `tests/test_cross_game_isolation.py` | Core must not learn the module's vocabulary | #768 (compiler-enforced Swift module boundary), #771 (Python import boundary) |
 | `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
 | Lua 5.2 prerequisite steps in `linux-contracts.yml` and `build2-macos.yml` | The module's tests need a different runtime | #772 (generic prerequisites) |
-
-Until #768 lands, all Swift sources compile as one module: give every top-level Swift type the module's prefix and every `UserDefaults` key a `<id>.` prefix.
 
 ## Run the owning lanes
 

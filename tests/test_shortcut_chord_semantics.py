@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which('swiftc')
@@ -288,6 +289,7 @@ with tempfile.TemporaryDirectory() as td:
     binary = Path(td) / 'shortcut-test'
     subprocess.run([
         swiftc,
+        *SINGLE_MODULE_FLAGS,
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
         str(ROOT / 'Sources/Core/UI/TrainerSemanticIcon.swift'),
         str(ROOT / 'Sources/Core/UI/TrainerWorkbenchSearch.swift'),

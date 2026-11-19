@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TrainerCore
 
 struct HadesSaveEditorView: View {
     @StateObject private var model: HadesSaveEditorModel

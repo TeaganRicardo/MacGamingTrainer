@@ -1,18 +1,29 @@
 import SwiftUI
 
-struct TrainerPickerSection<Item: Identifiable>: Identifiable {
-    let id: Int
-    let title: String
-    let items: [Item]
+package struct TrainerPickerSection<Item: Identifiable>: Identifiable {
+    package let id: Int
+    package let title: String
+    package let items: [Item]
+
+    package init(id: Int, title: String, items: [Item]) {
+        self.id = id
+        self.title = title
+        self.items = items
+    }
 }
 
 /// The selected item's lock, for a game that offers one on this editor.
-struct TrainerResourceLock {
+package struct TrainerResourceLock {
     let locked: Bool
     let toggle: () -> Void
+
+    package init(locked: Bool, toggle: @escaping () -> Void) {
+        self.locked = locked
+        self.toggle = toggle
+    }
 }
 
-struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
+package struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
@@ -30,7 +41,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     let onCommit: (TrainerTextField.Completion) -> String
     let onEditingChanged: (Bool) -> Void
 
-    init(
+    package init(
         title: String,
         icon: String,
         search: Binding<String>,
@@ -60,7 +71,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         self.onCommit = onCommit
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             HStack {
                 // Same icon treatment as every other functional row: the icon
@@ -120,7 +131,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     }
 }
 
-struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == String {
+package struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == String {
     let title: String?
     let icon: String?
     let pickerLabel: String
@@ -135,6 +146,22 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
     let shortcutText: String?
     let itemLabel: (Item) -> String
     let onAction: (String) -> Void
+
+    package init(title: String?, icon: String?, pickerLabel: String, selection: Binding<String>, sections: [TrainerPickerSection<Item>], enabled: Bool, actionEnabled: Bool? = nil, inline: Bool = false, emptyLabel: String, actionTitle: String, shortcutText: String?, itemLabel: @escaping (Item) -> String, onAction: @escaping (String) -> Void) {
+        self.title = title
+        self.icon = icon
+        self.pickerLabel = pickerLabel
+        self._selection = selection
+        self.sections = sections
+        self.enabled = enabled
+        self.actionEnabled = actionEnabled
+        self.inline = inline
+        self.emptyLabel = emptyLabel
+        self.actionTitle = actionTitle
+        self.shortcutText = shortcutText
+        self.itemLabel = itemLabel
+        self.onAction = onAction
+    }
 
     private var allItems: [Item] { sections.flatMap(\.items) }
     private var actionAvailable: Bool {
@@ -193,7 +220,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
         }
     }
 
-    var body: some View {
+    package var body: some View {
         Group {
             if inline {
                 if let title, let icon {

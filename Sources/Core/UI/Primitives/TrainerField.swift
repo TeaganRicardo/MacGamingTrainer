@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TrainerNumberField: View {
+package struct TrainerNumberField: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Binding var text: String
     let placeholder: String
@@ -12,7 +12,7 @@ struct TrainerNumberField: View {
     let onCommit: (TrainerTextField.Completion) -> String
     let onEditingChanged: (Bool) -> Void
 
-    init(text: Binding<String>, placeholder: String = "host.value", accessibilityLabel: String? = nil, accessibilityIdentifier: String? = nil, width: CGFloat = 90, enabled: Bool = true, alignment: TextAlignment = .center, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }) {
+    package init(text: Binding<String>, placeholder: String = "host.value", accessibilityLabel: String? = nil, accessibilityIdentifier: String? = nil, width: CGFloat = 90, enabled: Bool = true, alignment: TextAlignment = .center, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }) {
         self._text = text
         self.placeholder = placeholder
         self.accessibilityLabel = accessibilityLabel
@@ -24,7 +24,7 @@ struct TrainerNumberField: View {
         self.onEditingChanged = onEditingChanged
     }
 
-    var body: some View {
+    package var body: some View {
         TrainerTextField(title: localization.presentation(placeholder), text: $text,
             accessibilityLabel: accessibilityLabel,
             accessibilityIdentifier: accessibilityIdentifier,

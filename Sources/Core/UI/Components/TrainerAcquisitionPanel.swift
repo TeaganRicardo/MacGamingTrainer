@@ -3,7 +3,7 @@ import SwiftUI
 /// Shared visual structure for game-owned exact acquisition controls.
 /// The Host owns chrome, spacing and the search field; each game supplies
 /// its native target choices and validated acquisition settings.
-struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
+package struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
@@ -13,7 +13,7 @@ struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
     let settings: Settings
     let rows: Rows
 
-    init(
+    package init(
         title: String,
         icon: String,
         search: Binding<String>,
@@ -31,7 +31,7 @@ struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
         self.rows = rows()
     }
 
-    var body: some View {
+    package var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
             HStack(spacing: 10) {
                 TrainerIconLabel(

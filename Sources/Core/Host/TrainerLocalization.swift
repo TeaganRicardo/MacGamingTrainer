@@ -147,14 +147,14 @@ private extension Bundle {
     static let standard = Bundle.main
 }
 
-struct TrainerLanguageCommands: Commands {
+package struct TrainerLanguageCommands: Commands {
     @ObservedObject private var localization: TrainerLocalizationStore
 
-    init(localization: TrainerLocalizationStore) {
+    package init(localization: TrainerLocalizationStore) {
         _localization = ObservedObject(wrappedValue: localization)
     }
 
-    var body: some Commands {
+    package var body: some Commands {
         CommandMenu(localization.localized("host.language")) {
             Picker(localization.localized("host.language"), selection: $localization.language) {
                 Text(localization.localized("host.language.zhCN")).tag(TrainerPresentationLanguage.zhCN)

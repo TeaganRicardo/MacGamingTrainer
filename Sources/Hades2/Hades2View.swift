@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import TrainerCore
 
 // Select the property-wrapper type explicitly: CLT does not ship SwiftUIMacros.
 private typealias ViewState<Value> = SwiftUI.State<Value>

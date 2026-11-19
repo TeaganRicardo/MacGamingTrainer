@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct TrainerProfileManagerLabels {
+package struct TrainerProfileManagerLabels {
     let title: String
     let explanation: String
     let name: String
@@ -8,19 +8,43 @@ struct TrainerProfileManagerLabels {
     let save: String
     let load: String
     let empty: String
+
+    package init(title: String, explanation: String, name: String, picker: String, save: String, load: String, empty: String) {
+        self.title = title
+        self.explanation = explanation
+        self.name = name
+        self.picker = picker
+        self.save = save
+        self.load = load
+        self.empty = empty
+    }
 }
 
-struct TrainerProfileManagerActions {
+package struct TrainerProfileManagerActions {
     let refresh: () -> Void
     let save: (String, @escaping (Bool) -> Void) -> Void
     let load: (String) -> Void
     let delete: (String) -> Void
     let dismiss: () -> Void
+
+    package init(
+        refresh: @escaping () -> Void,
+        save: @escaping (String, @escaping (Bool) -> Void) -> Void,
+        load: @escaping (String) -> Void,
+        delete: @escaping (String) -> Void,
+        dismiss: @escaping () -> Void
+    ) {
+        self.refresh = refresh
+        self.save = save
+        self.load = load
+        self.delete = delete
+        self.dismiss = dismiss
+    }
 }
 
 /// Modules provide an inventory and commands; Core owns the complete sheet
 /// interaction without interpreting profile contents or application semantics.
-struct TrainerProfileManagerView: View {
+package struct TrainerProfileManagerView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -35,11 +59,21 @@ struct TrainerProfileManagerView: View {
     var error = ""
     let actions: TrainerProfileManagerActions
 
+    package init(labels: TrainerProfileManagerLabels, entries: [TrainerProfileEntry], busy: Bool, enabled: Bool, warning: String = "", error: String = "", actions: TrainerProfileManagerActions) {
+        self.labels = labels
+        self.entries = entries
+        self.busy = busy
+        self.enabled = enabled
+        self.warning = warning
+        self.error = error
+        self.actions = actions
+    }
+
     private var canAct: Bool { lifetime.isActive && enabled && !busy && !selection.saving }
     private var names: [String] { entries.map(\.name) }
     private var canUseSelection: Bool { canAct && names.contains(selection.selectedName) }
 
-    var body: some View {
+    package var body: some View {
         let presentationID = lifetime.id
         TrainerSheetScaffold(title: labels.title, icon: TrainerSemanticIcon.Tool.profiles, width: 620, minimumWidth: 360) {
             TrainerLoadingIndicator()

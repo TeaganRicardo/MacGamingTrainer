@@ -18,12 +18,15 @@ from resident_runtime import (
     ResidentRuntimeDeclarationError,
     parse_resident_runtime_declaration,
 )
+from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE
 
 _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 _BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
 _MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
 _SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
 _ABSENT = object()
+
+_RESERVED_SWIFT_MODULES = frozenset({SWIFT_CORE_MODULE, SWIFT_APP_MODULE})
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,11 @@ class FrontendBuildSpec:
     module_type: str
     architectures: tuple
     minimum_macos: str
+
+    @property
+    def swift_module(self):
+        """The game's Swift module is named by its `Sources/<Game>` directory."""
+        return Path(self.source_directory).name
 
 
 @dataclass(frozen=True)
@@ -207,6 +215,14 @@ def load_manifest(game_id: str) -> BuildManifest:
     if not isinstance(minimum_macos, str) or not _MACOS_VERSION_RE.fullmatch(minimum_macos):
         raise ManifestError('frontend.minimumMacOS must look like 14.0 or 14.4.1.')
     frontend_spec = FrontendBuildSpec(source_directory, module_type, tuple(arches), minimum_macos)
+    if (not _SWIFT_TYPE_RE.fullmatch(frontend_spec.swift_module)
+            or frontend_spec.swift_module in _RESERVED_SWIFT_MODULES):
+        raise ManifestError(
+            'frontend.sourceDirectory must end in a Swift module name other than '
+            + ' or '.join(sorted(_RESERVED_SWIFT_MODULES)) + '.'
+        )
+    if frontend_spec.swift_module == module_type:
+        raise ManifestError('frontend.moduleType must differ from its Swift module (source directory) name.')
 
     app_spec = app_spec_from_manifest(raw, runtime.id, runtime.display_name, executable)
 
@@ -291,6 +307,7 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         'backend': {'adapter': manifest.runtime.adapter},
         'frontend': {
             'sourceDirectory': manifest.frontend.source_directory,
+            'swiftModule': manifest.frontend.swift_module,
             'moduleType': manifest.frontend.module_type,
             'architectures': list(manifest.frontend.architectures),
             'minimumMacOS': manifest.frontend.minimum_macos,

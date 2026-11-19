@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from swift_test_compiler import SINGLE_MODULE_FLAGS
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Sources/Core/UI/Components/TrainerProfileSelection.swift"
@@ -84,7 +85,7 @@ precondition(TrainerProfileEntry(name: "Restored", updatedAt: "Today").title == 
 print("profile_selection_workflow_ok")
 ''', encoding="utf-8")
     binary = folder / "selection"
-    subprocess.run([swiftc, str(SOURCE), str(ROOT / "Sources/Core/UI/Components/TrainerSheetLifetime.swift"),
+    subprocess.run([swiftc, *SINGLE_MODULE_FLAGS, str(SOURCE), str(ROOT / "Sources/Core/UI/Components/TrainerSheetLifetime.swift"),
                     str(main), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
 
