@@ -14,6 +14,7 @@ import json
 import os
 import plistlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -352,7 +353,7 @@ from macos_fixture_policy import HOSTED_PROFILE, PROFILE_VARIABLE  # noqa: E402
 macos_jobs = []
 for name, workflow in workflows.items():
     for job_id, job in workflow['jobs'].items():
-        labels = set(re.findall(r"'(macos[\w.-]*)'", str(job['runs-on'])))
+        labels = set(re.findall(r"\bmacos[\w.-]*", str(job['runs-on'])))
         if not labels:
             continue
         macos_jobs.append((name, job_id))
@@ -365,6 +366,14 @@ for name, workflow in workflows.items():
         assert identity is not None, f'{name}: {job_id} never verifies its macOS toolchain'
         assert all(index > identity for index, run in enumerate(job_runs) if 'build.sh' in run), (name, job_id)
 assert {name for name, _ in macos_jobs} == {'build2-macos.yml', 'module-build-matrix.yml'}, macos_jobs
+# Hosted macOS steps run under /bin/bash 3.2, whose errexit ignores a failing
+# `[[ ]]` or `(( ))`: such a check must branch or exit explicitly.
+for name, job_id in macos_jobs:
+    for step in steps(workflows[name]['jobs'][job_id]):
+        for line in runs(step).splitlines():
+            check = line.strip()
+            if check.startswith(('[[', '((')):
+                assert '||' in check or '&&' in check, (name, step.get('name'), check)
 
 # A pull request typechecks the unified App unless its diff needs the full
 # linked/signed build, which convergence always runs.
@@ -390,14 +399,15 @@ for name in workflows:
 # Steps that act on a built App locate it through the selection-aware verifier,
 # never by listing the output directory.
 app_locators = [(name, located) for name in workflows for _, step in all_steps[name]
-                for located in re.findall(r'\bapp="\$\(([^)]*)\)"', runs(step))]
+                for located in re.findall(r'^\s*app=(.*)$', runs(step), re.M)]
 assert {name for name, _ in app_locators} == {'build2-macos.yml', 'module-build-matrix.yml'}, app_locators
 for name, located in app_locators:
-    assert 'Tools/verify_module_build.py' in located and '--print-app' in located, (name, located)
+    assert re.fullmatch(r'"?\$\(python3 Tools/verify_module_build\.py [^)]* --print-app\)"?', located), (name, located)
 
 
 def option(run, flag):
-    return re.findall(re.escape(flag) + r'\s+"?([^"\s\\]+)', run)
+    return [value.replace('${', '$').replace('}', '')
+            for value in re.findall(re.escape(flag) + r'\s+"?([^"\s\\]+)', run)]
 
 
 # Provenance names the workflow that produced the artifact; each verification
@@ -425,10 +435,20 @@ for name in workflows:
 assert release_job['runs-on'] == 'ubuntu-latest'
 release_runs = [runs(step) for step in release_steps]
 verified = next(index for index, run in enumerate(release_runs) if 'Tools/verify_build_provenance.py' in run)
-retagged = next(index for index, run in enumerate(release_runs)
-                if 'Tools/release_tag.py' in run and 'steps.version.outputs.tag' in run)
-published = next(index for index, run in enumerate(release_runs) if 'gh release create' in run)
+retagged = next((index for index, run in enumerate(release_runs)
+                 if 'Tools/release_tag.py' in run and 'steps.version.outputs.tag' in run), None)
+published = next((index for index, run in enumerate(release_runs) if 'gh release create' in run), None)
+assert None not in (retagged, published), 'release must re-derive its tag and publish through gh'
 assert verified < retagged < published, (verified, retagged, published)
+# Tools/release_tag.py reads local tags: the re-derivation after the
+# convergence wait must refresh them first, or it re-checks the checkout's tags.
+retag_lines = release_runs[retagged].splitlines()
+derive = next(index for index, line in enumerate(retag_lines) if 'Tools/release_tag.py' in line)
+assert any('git fetch' in line and '--tags' in line for line in retag_lines[:derive]), release_runs[retagged]
+assert re.search(r'^\s*test "\$tag" = "\$\{\{ steps\.version\.outputs\.tag \}\}"\s*$',
+                 release_runs[retagged], re.M), release_runs[retagged]
+# The published checksum sidecar is itself verified against the artifact.
+assert re.search(r'\b(sha256sum|shasum -a 256) -c\b', release_runs[verified]), release_runs[verified]
 assert option(release_runs[published], '--target') == ['$GITHUB_SHA'], release_runs[published]
 
 # Coverage evidence from every macOS check run is retained, even after a failed
@@ -463,16 +483,21 @@ def run_step(name, step_name, checkout, plist):
     (checkout / 'Info.plist').write_bytes(plistlib.dumps(plist))
     output = checkout.parent / 'github-output'
     output.write_text('')
-    script = runs(step).replace('/usr/libexec/PlistBuddy', str(buddy))
-    assert '${{' not in script, script
+    # The hand-rolled parser drops comment lines and indentation, so only a
+    # script without heredocs or expressions survives it verbatim.
+    assert '<<' not in runs(step) and '${{' not in runs(step), runs(step)
+    script = runs(step).replace('/usr/libexec/PlistBuddy', shlex.quote(str(buddy)))
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
     result = subprocess.run(['bash', '-e', '-c', script], cwd=checkout, capture_output=True, text=True,
-                            env={**os.environ, 'GITHUB_OUTPUT': str(output)})
+                            env={**environment, 'GITHUB_OUTPUT': str(output)})
     return result, dict(line.split('=', 1) for line in output.read_text().splitlines())
 
 
 def git(checkout, *arguments):
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
     return subprocess.run(['git', '-c', 'user.name=Contract', '-c', 'user.email=contract@example.invalid',
-                           *arguments], cwd=checkout, check=True, capture_output=True, text=True).stdout.strip()
+                           '-c', 'commit.gpgsign=false', *arguments], cwd=checkout, check=True,
+                          capture_output=True, text=True, env=environment).stdout.strip()
 
 
 # Both release identities come from Info.plist with distinct meanings (SemVer

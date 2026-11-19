@@ -150,8 +150,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-release-tags-") as tmp:
     assert release_identity_changed(repo, array_sha, recovered_sha) is True
 
 versioning = (ROOT / "VERSIONING.md").read_text(encoding="utf-8")
-# The release workflow's provenance → re-derived tag → exact-SHA publication
-# order is a parsed-model rule in test_ci_workflow_contract.py.
+# The release workflow's provenance/checksum → refreshed-tag re-derivation → exact-SHA
+# publication order is a parsed-model rule in test_ci_workflow_contract.py.
 assert 'vMAJOR.MINOR.PATCH+bBUILD' in versioning
 assert "Current product version:" not in versioning
 print("release_version_identity_ok")
