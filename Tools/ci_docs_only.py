@@ -24,6 +24,10 @@ PORTABLE_TOOL_PATHS = {
     "Tools/discover_linux_tests.py",
     "Tools/release_tag.py",
     "Tools/module_inventory.py",
+    # The mutation audit runs only in Build 2 macOS convergence; a PR that edits
+    # it has no macOS work to verify (tests/test_mutation_gate_contract.py is
+    # portable).
+    "Tools/mutation_gate.py",
     "Tools/run_linux_checks.sh",
     "Tools/ci_docs_only.py",
     "Tools/summarize_macos_coverage.py",

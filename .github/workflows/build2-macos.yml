@@ -5,18 +5,29 @@ name: Build 2 macOS
 on:
   pull_request:
   workflow_dispatch:
+  # Nightly convergence on main: the full macOS contracts (including the
+  # journeys deferred from pull requests), the mutation audit and the unified
+  # build, for earlier signal between releases. It is not release evidence:
+  # release-candidate packaging stays with explicit dispatch, and the release
+  # coordinator accepts only workflow_dispatch runs.
+  schedule:
+    - cron: '23 19 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  # The event is part of the group so a running nightly never holds a release's
+  # convergence dispatch on the same ref in the queue.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Single change-scope source for this lane. HEAD_SHA is the PR head (not the
-  # merge ref), so every consumer sees exactly the proposed changes.
-  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+  # merge ref), so every consumer sees exactly the proposed changes. Only a pull
+  # request has a diff base; dispatch and the schedule pass none, which the
+  # classifier treats as unknown scope and routes to every lane.
+  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
   HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
@@ -60,12 +71,13 @@ jobs:
     needs: scope
     if: ${{ always() }}
     runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest' }}
-    # Convergence runs the full native inventory, the resident mutation gate and
+    # Convergence (every event without a PR diff: dispatch and the nightly
+    # schedule) runs the full native inventory, the resident mutation gate and
     # the unified build in one job; a measured dispatch run reached the 30 minute
     # limit inside the build after the inventory had already passed, and was
     # cancelled with the deferred suites unverified. Pull requests keep the
     # original 30 minutes so their cost does not change.
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 60 || 30 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 60 }}
     env:
       # Pull requests and explicit convergence both run on the ARM64 profile.
       # The independent x64 pool was tried to avoid ARM64 queue starvation, but
@@ -138,7 +150,7 @@ jobs:
           echo "MGT_MACOS_SELECTION=$selection" >> "$GITHUB_ENV"
 
       - name: Cache Lua 5.2 runtime test dependency
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || steps.test-selection.outputs.lua52_native == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || steps.test-selection.outputs.lua52_native == 'true')
         id: lua52-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -146,7 +158,7 @@ jobs:
           key: lua-5.2.4-${{ runner.os }}-${{ runner.arch }}
 
       - name: Build Lua 5.2 runtime test dependency
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || steps.test-selection.outputs.lua52_native == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || steps.test-selection.outputs.lua52_native == 'true')
         run: |
           archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
           lua_root="$RUNNER_TEMP/lua-5.2.4"
@@ -187,8 +199,8 @@ jobs:
           test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
           echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
 
-      - name: Run full macOS contracts for release convergence
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+      - name: Run full macOS contracts for convergence
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
         # Timings are observation only; they must outlive the lane's temporary
         # directory so the coverage artifact can carry them. `runner` is not an
         # available context in a job-level env block, only in a step.
@@ -207,9 +219,10 @@ jobs:
       # Declared behavioural invariants, proven to fail when the code that
       # guards them is broken. Several of these tests compile Swift and drive
       # the real presentation and protocol paths, so this belongs in the
-      # macOS lane rather than the portable one.
+      # macOS lane rather than the portable one. The gate validates its anchors
+      # first; pull requests do not, so a moved anchor surfaces here.
       - name: Verify declared invariants fail under mutation
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
         run: python3 Tools/mutation_gate.py
 
       - name: Typecheck unified trainer on Swift PR
@@ -217,11 +230,11 @@ jobs:
         run: ./build.sh --typecheck --all
 
       - name: Build unified trainer
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_full_build == 'true')
         run: ./build.sh --all
 
       - name: Verify package
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name == 'workflow_dispatch' || needs.scope.outputs.needs_full_build == 'true')
+        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_full_build == 'true')
         run: |
           app="$(python3 Tools/verify_module_build.py all --print-app)"
           expected_version="${{ steps.version.outputs.version }}"
