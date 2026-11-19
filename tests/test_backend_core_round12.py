@@ -203,6 +203,7 @@ try:
 except ManifestError: pass
 else: raise AssertionError('runtime manifest accepted adapter outside its game package')
 
+# Kept (structural): shared backend code names no game, game data or debugger.
 core_text = '\n'.join(path.read_text() for path in (root/'Backend/core').glob('*.py'))
 for token in ('Hades II','WeaponCast','CurrentRun','TraitData','1145350','import lldb','SteamSpec'):
     assert token not in core_text, token

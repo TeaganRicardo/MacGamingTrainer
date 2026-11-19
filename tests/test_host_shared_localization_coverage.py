@@ -1,8 +1,11 @@
 from pathlib import Path
 import ast
 import json
+import os
+import subprocess
 import sys
 import re
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
@@ -309,19 +312,11 @@ assert not find_hades_vocabulary_leaks(neutral_probe), (
 actual_leaks = find_hades_vocabulary_leaks(shared_resource_texts)
 assert not actual_leaks, f"Hades terminology leaked into shared Host resources: {actual_leaks}"
 
+# Host/module presentation resolution and module registration are exercised
+# by test_host_localization_behavior.py; the language menu has no journey yet.
 localization = (ROOT / "Sources/Core/Host/TrainerLocalization.swift").read_text(encoding="utf-8")
-assert "func presentation(" in localization, "shared presentation values need one Host resolver"
-assert 'value.hasPrefix("host.")' in localization, "only Host-owned key tokens may be resolved through Host.strings"
 assert 'localization.localized("host.language.zhCN")' in localization
 assert 'localization.localized("host.language.en")' in localization
-
-# Core owns the token shape but never a module's vocabulary: a module supplies
-# its own namespace plus resolver, and Core stores only that closure. The token
-# lives in the Runtime layer, beside the wire identity it travels with.
-backend_client = (ROOT / "Sources/Core/Runtime/BackendClient.swift").read_text(encoding="utf-8")
-assert "struct TrainerTextToken" in backend_client, "modules need one language-neutral token type"
-assert "func registerModulePresentation(" in localization, "modules must be able to contribute their own keys"
-assert "func removeModulePresentation(" in localization, "a module namespace must be removable"
 
 # Enforce game-agnostic shared ownership from production sources instead of a
 # hand-picked Hades word list. The module manifest owns structural identity;
@@ -406,35 +401,19 @@ fixture_vocabulary_leaks = find_hades_vocabulary_leaks({
 })
 assert not fixture_vocabulary_leaks, f"reference fixture leaked Hades vocabulary: {fixture_vocabulary_leaks}"
 
-# These files own shared product presentation. They may still contain stable
-# identifiers, symbols, diagnostics, or product branding, but the known
-# user-visible Chinese literals below must not remain hard-coded.
-shared_files = {
-    "Sources/Core/UI/Components/TrainerFeatureControls.swift": ("开启", "关闭"),
-    "Sources/Core/UI/Components/TrainerListControls.swift": ("取消选择", "选择", "已选择", "未选择", "更多"),
-    "Sources/Core/UI/Components/TrainerResourceControls.swift": ("搜索名称或资源 ID", "没有匹配项目", "数量", "已锁定", "锁定"),
-    "Sources/Core/UI/Components/TrainerStatControls.swift": ("数值",),
-    "Sources/Core/UI/Primitives/TrainerField.swift": ("数值",),
-    "Sources/Core/UI/Components/TrainerStatusControls.swift": ("按需读取状态，不进行持续调试轮询", "重启后端"),
-    "Sources/Core/Save/TrainerSaveManagerView.swift": (
-        "存档管理", "打开存档目录", "刷新", "创建备份", "清除状态", "检测到上次恢复中断后保留的恢复副本",
-        "备份历史", "暂无存档备份", "永久删除", "删除所选", "选择以进行批量管理", "存档名称", "双击重命名",
-        "热备份", "个文件", "备份校验失败", "在 Finder 中显示", "删除所选存档", "恢复选项",
-        "恢复前保留当前存档",
-    ),
-}
-for relative, literals in shared_files.items():
-    source = (ROOT / relative).read_text(encoding="utf-8")
-    for literal in literals:
-        assert literal not in source, f"{relative} still hard-codes shared presentation: {literal}"
-
+# Kept (lint): Core presentation sources contain no Chinese text at all (string
+# literals, interpolations and comments alike); player text comes from
+# Host.strings or a module resolver. Runtime sources hold log and diagnostic
+# sentences, not presentation, and are exempt.
 save_model = (ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift").read_text(encoding="utf-8")
-for literal in (
-    "刷新存档", "创建存档备份", "重命名存档", "恢复存档", "取消等待恢复", "应用等待恢复",
-    "已创建存档备份", "已重命名存档", "恢复请求已提交", "已取消等待恢复", "已应用等待恢复",
-    "后端未运行", "存档操作未完成", "存档操作失败", "恢复副本保留在",
-):
-    assert literal not in save_model, f"Save model still stores localized presentation directly: {literal}"
+cjk = re.compile(r"[\u4e00-\u9fff]+")
+hard_coded = {
+    str(path.relative_to(ROOT)): sorted(set(cjk.findall(path.read_text(encoding="utf-8"))))
+    for path in sorted((ROOT / "Sources/Core").rglob("*.swift"))
+    if not path.is_relative_to(ROOT / "Sources/Core/Runtime")
+}
+hard_coded = {path: text for path, text in hard_coded.items() if text}
+assert not hard_coded, f"Core presentation hard-codes Chinese copy: {hard_coded}"
 for code in (
     "save_busy", "save_not_found", "save_unsupported", "staged_unavailable", "staged_indeterminate",
     "save_unsafe", "snapshot_invalid", "restore_failed", "rollback_failed",
@@ -453,8 +432,6 @@ for key in (
     "host.backend.notice.completed",
 ):
     assert key in session, key
-
-assert '\\(reply.operation)完成' not in session, "generic completion notice must not hard-code one language"
 
 
 # Core-owned AdapterError presentation must cross the Host localization seam.
@@ -482,18 +459,43 @@ for source_path in sorted(core_dir.glob("*.py")):
             )
 
 # Core protocol/server failures have their own generic keyed funnel. Raw
-# parser/server sentences may remain as diagnostics, but must never be assigned
-# to canonical presentation or passed directly as an error_reply presentation.
-protocol_source = (ROOT / "Backend/core/protocol.py").read_text(encoding="utf-8")
-server_source = (ROOT / "Backend/core/server.py").read_text(encoding="utf-8")
-assert "def core_error_reply(" in protocol_source
-assert "presentation = str(error)" not in protocol_source
-assert "presentation = '操作失败，请查看日志。'" not in protocol_source
-assert "router.error_reply(" not in server_source, (
-    "Core server framing bypasses the Host-owned core_error_reply presentation seam"
-)
-for raw in ("请求 ID 无效。", "同一请求 ID 的内容发生变化。", "请求包含不可序列化的 JSON 值。"):
-    assert raw not in protocol_source, f"Core protocol still exposes raw localized presentation: {raw}"
+# parser/server sentences may remain as diagnostics, but every failure reaches
+# the Host as a bilingual host.* presentation key. Drive the real server loop.
+SERVER_PROBE = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from core.adapter import GameAdapter, GameAdapterContext
+import core.server as server
+class Fixture(GameAdapter):
+    def __init__(self):
+        super().__init__(GameAdapterContext('fixture', 'Fixture', 1, None, {}))
+    def dispatch(self, command, params, request_id):
+        return {}
+    def close(self):
+        pass
+server.create_adapter = lambda game_id: Fixture()
+server.main(['--game', 'fixture'])
+"""
+with tempfile.TemporaryDirectory(prefix="mgt-core-error-presentation-") as temporary:
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("MGT_")}
+    environment.update(HOME=temporary, CFFIXED_USER_HOME=temporary)
+    requests = (
+        "not json",                                            # framing/decode failure
+        '{"id": "", "command": "status", "params": {}}',      # invalid request ID
+        '{"id": "a", "command": "status", "params": {}}',
+        '{"id": "a", "command": "other", "params": {}}',      # same ID, changed content
+        '{"id": "b", "command": "status", "params": {"v": NaN}}',  # non-strict JSON
+    )
+    served = subprocess.run([sys.executable, "-c", SERVER_PROBE, str(ROOT / "Backend")],
+                            input="\n".join(requests) + "\n", capture_output=True, text=True,
+                            env=environment, timeout=60)
+    replies = [json.loads(line) for line in served.stdout.splitlines() if line.strip()]
+    assert len(replies) == len(requests), (served.stdout, served.stderr)
+    assert [reply.get("ok") for reply in replies] == [False, False, True, False, False], replies
+    for error in (reply["error"] for reply in replies if reply.get("ok") is False):
+        key = error["presentation"]
+        assert key.startswith("host.") and key in zh and key in en, error
+        assert error.get("diagnostic"), f"Core failure lost its diagnostic: {error}"
 
 time_warp_source = (ROOT / "Backend/core/process_time_warp.py").read_text(encoding="utf-8")
 time_warp_keys = set(re.findall(r'"(host\.timeWarp\.error\.[^"]+)"', time_warp_source))

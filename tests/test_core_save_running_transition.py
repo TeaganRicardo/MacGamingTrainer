@@ -72,11 +72,7 @@ else:
 assert current.read_bytes() == b'current'
 assert probe_calls >= 1
 
-service_source = (ROOT / 'Backend/core/save_service.py').read_text()
-transaction_factory = service_source[
-    service_source.index('    def _transaction(self):'):
-    service_source.index('    def _staged_path(self):')
-]
-assert 'target_running_probe=self._running' in transaction_factory
+# CoreSaveService handing its live probe to this transaction is exercised by
+# the launch-during-restore race in test_core_save_service.py.
 
 print('core_save_running_transition_ok')
