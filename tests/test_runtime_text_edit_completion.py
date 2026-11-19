@@ -909,26 +909,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
                 notify()
                 RuntimeTextTrace.write("teardown-notification:after")
             }'''),
-            ("        func controlTextDidChange(_ notification: Notification) {", r'''
-        func controlTextDidChange(_ notification: Notification) {
+            ("        package func controlTextDidChange(_ notification: Notification) {", r'''
+        package func controlTextDidChange(_ notification: Notification) {
             RuntimeTextTrace.native("change \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title)")'''),
-            ("        func controlTextDidEndEditing(_ notification: Notification) {", r'''
-        func controlTextDidEndEditing(_ notification: Notification) {
+            ("        package func controlTextDidEndEditing(_ notification: Notification) {", r'''
+        package func controlTextDidEndEditing(_ notification: Notification) {
             RuntimeTextTrace.native("end:enter \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")
             defer { RuntimeTextTrace.write("end:exit \(ObjectIdentifier(self))") }'''),
             ("            let normalized = completed.onCommit(completion)", r'''
             RuntimeTextTrace.write("commit:before \(ObjectIdentifier(self)) draft=\(draft)")
             let normalized = completed.onCommit(completion)
             RuntimeTextTrace.write("commit:after \(ObjectIdentifier(self)) normalized=\(normalized)")'''),
-            ("        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {", r'''
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+            ("        package func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {", r'''
+        package func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
             RuntimeTextTrace.native("command \(ObjectIdentifier(self)) \(command) marked=\(textView.hasMarkedText())")'''),
             ("        func cancel(_ field: NSTextField) {", r'''
         func cancel(_ field: NSTextField) {
             RuntimeTextTrace.native("cancel:enter \(ObjectIdentifier(self)) \(parent.accessibilityLabel ?? parent.title) active=\(edit != nil)")
             defer { RuntimeTextTrace.write("cancel:exit \(ObjectIdentifier(self))") }'''),
-            ("    func updateNSView(_ field: NSTextField, context: Context) {", r'''
-    func updateNSView(_ field: NSTextField, context: Context) {
+            ("    package func updateNSView(_ field: NSTextField, context: Context) {", r'''
+    package func updateNSView(_ field: NSTextField, context: Context) {
         RuntimeTextTrace.updateDepth += 1
         let trace = RuntimeTextTrace.active
         if trace {
@@ -953,8 +953,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     private func configure(_ field: NSTextField) {
         RuntimeTextTrace.window("configure:enter", field: field)
         defer { RuntimeTextTrace.window("configure:exit", field: field) }'''),
-            ("    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {\n        CGSize(", r'''
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
+            ("    package func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {\n        CGSize(", r'''
+    package func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSTextField, context: Context) -> CGSize? {
         let trace = RuntimeTextTrace.active
         if trace { RuntimeTextTrace.write("size:enter field=\(ObjectIdentifier(nsView)) coordinator=\(ObjectIdentifier(context.coordinator))") }
         defer { if trace { RuntimeTextTrace.write("size:exit field=\(ObjectIdentifier(nsView))") } }

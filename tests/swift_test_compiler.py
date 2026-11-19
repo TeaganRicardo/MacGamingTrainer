@@ -4,7 +4,7 @@ Many macOS frontend and runtime harnesses recompile the exact same 100+ Swift
 files under ``Sources/Core`` and ``Sources/Hades*`` plus ``InMemoryDefaults``
 and ``ActiveGame.generated.swift``. Compiling that immutable support set once per
 exact toolchain/SDK/flag/source digest into a testable static module
-(``libMGTTestSupport.a`` + ``MGTTestSupport.swiftmodule``) turns ~40s repeat
+(``libTrainerCore.a`` + ``TrainerCore.swiftmodule``, see ``MODULE_NAME``) turns ~40s repeat
 compilations into ~1s incremental harness links while keeping clean isolation.
 
 Equivalence and staleness guarantees:
@@ -440,7 +440,7 @@ def _write_harness_shims(
     harness_sources: Sequence[Path],
     shim_dir: Path,
 ) -> list[Path]:
-    """Create temporary harness shims that import MGTTestSupport."""
+    """Create temporary harness shims that @testable-import the support module."""
     shim_dir.mkdir(parents=True, exist_ok=True)
     shimmed: list[Path] = []
     seen_names: dict[str, int] = {}

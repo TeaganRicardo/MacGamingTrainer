@@ -204,7 +204,7 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
             assert len(commands) == 1, commands
             assert "-emit-module" not in commands[0]
 
-            # 3. Corrupt libMGTTestSupport.a -> automatic rebuild without failing or reusing corrupt bits.
+            # 3. Corrupt the cached support library -> automatic rebuild without failing or reusing corrupt bits.
             (entry / f"lib{stc.MODULE_NAME}.a").write_bytes(b"corrupted!")
             commands.clear()
             stc.compile_swift_test(

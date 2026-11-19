@@ -158,6 +158,8 @@ def main(argv=None):
     parser.add_argument('--catalog', action='store_true',
                         help='Include the App catalog in single-module output.')
     args = parser.parse_args(argv)
+    if args.module_sources and args.catalog:
+        parser.error('--catalog applies only to single-module output; --module-sources always writes the catalog.')
     try:
         manifests = [load_manifest(game_id) for game_id in args.game_ids.split(',')]
         if args.module_sources:
