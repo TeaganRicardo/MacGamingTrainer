@@ -104,7 +104,6 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Core/UI/TrainerPickerActionLayout.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerDualPickerActionRow.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/Input/TrainerShortcutCapture.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Components/TrainerTraitManagerLayout.swift": ("test_cross_module_geometry_macos.py",),
     "Sources/Core/UI/Components/TrainerSheetScaffold.swift": (
         *_CORE_SHARED_UI_TESTS,
         "test_hades_save_editor_frontend.py",

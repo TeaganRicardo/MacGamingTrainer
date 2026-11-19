@@ -256,6 +256,22 @@ assert '.keyboardShortcut(.defaultAction)' not in restore_confirmation.split(
 assert ".onDisappear { lifetime.invalidate(); capture.cancel() }" in shortcut_sheet
 assert "if entry.isEditable {" in shortcut_sheet and "trainer.shortcut.fixed." in shortcut_sheet
 
+# Kept until a rendered check reaches it: the material editor's two-row layout
+# (title row; picker, amount and lock together on the second row).
+resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
+resource_editor = resource[
+    resource.index("struct TrainerResourceEditor"):
+    resource.index("struct TrainerGroupedOptionPicker")
+]
+assert resource_editor.count("HStack") == 2
+control_row_start = resource_editor.index("HStack(spacing: 12)")
+control_row_end = resource_editor.index("\n            }\n        }\n    }", control_row_start)
+control_row = resource_editor[control_row_start:control_row_end]
+assert "Picker(title" in control_row
+assert "TrainerNumberField(" in control_row
+assert "TrainerLockButton(" in control_row
+assert ".trainerPicker(.expanding, state:" in control_row
+
 # Kept until a rendered status check exists: the sidebar indicator's colour
 # priority, accessibility value and multi-line help.
 sidebar = (CORE_UI / "TrainerSidebar.swift").read_text()

@@ -340,26 +340,41 @@ MANAGEMENT_JOURNEY += FEEDBACK_JOURNEY + SHEET_JOURNEY + r'''
 // their theme lane, sheet and standalone actions keep their text-only width, and
 // a shortcut badge has one minimum whether shown directly or through a slot.
 private struct ActionGeometryFixture: View {
+    // Primary and secondary actions each own a copy of the role logic, so every
+    // role is rendered with both.
+    @ViewBuilder
+    private func action(_ primary: Bool, _ role: TrainerActionWidthRole, _ id: String) -> some View {
+        if primary {
+            TrainerPrimaryActionButton(title: "Go", widthRole: role) {}
+                .accessibilityIdentifier("geometry.\(id).primary")
+        } else {
+            TrainerSecondaryActionButton(title: "Go", widthRole: role) {}
+                .accessibilityIdentifier("geometry.\(id).secondary")
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TrainerRow {
-                HStack {
-                    Text("Row")
-                    Spacer()
-                    TrainerSecondaryActionButton(title: "Go") {}.accessibilityIdentifier("geometry.row")
+            ForEach([true, false], id: \.self) { primary in
+                TrainerRow {
+                    HStack {
+                        Text("Row")
+                        Spacer()
+                        action(primary, .automatic, "row")
+                    }
                 }
-            }
-            HStack(spacing: 0) {
-                Text("⟨")
-                TrainerSecondaryActionButton(title: "Go") {}.accessibilityIdentifier("geometry.automatic")
-                Text("⟩")
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 8) {
-                TrainerPrimaryActionButton(title: "Go", widthRole: .sheet) {}.accessibilityIdentifier("geometry.sheet")
-                TrainerPrimaryActionButton(title: "Go", widthRole: .compactRow) {}.accessibilityIdentifier("geometry.compactRow")
-                TrainerSecondaryActionButton(title: "Go", widthRole: .connection) {}.accessibilityIdentifier("geometry.connection")
-                Spacer(minLength: 0)
+                HStack(spacing: 0) {
+                    Text(primary ? "⟨" : "«")
+                    action(primary, .automatic, "automatic")
+                    Text(primary ? "⟩" : "»")
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    action(primary, .sheet, "sheet")
+                    action(primary, .compactRow, "compactRow")
+                    action(primary, .connection, "connection")
+                    Spacer(minLength: 0)
+                }
             }
             HStack(spacing: 8) {
                 TrainerSecondaryActionButton(title: "Go", latched: true, helpText: "Latched help",
@@ -385,7 +400,7 @@ private struct ActionGeometryFixture: View {
 func exerciseSharedActionGeometry() {
     let theme = TrainerTheme.standard
     let host = NSHostingView(rootView: ActionGeometryFixture())
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 260),
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 420),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = host
@@ -397,21 +412,26 @@ func exerciseSharedActionGeometry() {
         nativeAccessibilityControls(host).filter { $0.role == "AXStaticText" && $0.text == text }.map(\.frame)
             .sorted { $0.minX < $1.minX }
     }
-    let ids = ["row", "automatic", "sheet", "compactRow", "connection", "latched", "unlatched"]
+    let roles = ["row", "automatic", "sheet", "compactRow", "connection"]
+    let ids = roles.flatMap { ["\($0).primary", "\($0).secondary"] } + ["latched", "unlatched"]
     managementWait(host, "shared action geometry") {
         ids.allSatisfy { button($0) != nil } && texts("⌃1").count == 2
     }
     let width = { (id: String) in button(id)!.frame.width }
     print("native_action_geometry " + ids.map { "\($0)=\(width($0))" }.joined(separator: " ")); fflush(stdout)
-    managementCheck(abs(width("row") - theme.compactActionWidth) <= 1, "row action left the compact action column")
-    managementCheck(abs(width("compactRow") - theme.compactActionWidth) <= 1, "compact-row role lost its lane")
-    managementCheck(abs(width("connection") - theme.connectionActionWidth) <= 1, "connection role lost its lane")
-    let automatic = button("automatic")!.frame
-    let open = texts("⟨"), close = texts("⟩")
-    managementCheck(width("automatic") < theme.compactActionWidth - 8 && open.count == 1 && close.count == 1
-                    && abs(automatic.minX - open[0].maxX) <= 1 && abs(close[0].minX - automatic.maxX) <= 1,
-                    "standalone automatic action took a lane it was not given")
-    managementCheck(abs(width("sheet") - width("automatic")) <= 1, "sheet action stretched its text-only label")
+    for (kind, markers) in [("primary", ("⟨", "⟩")), ("secondary", ("«", "»"))] {
+        func role(_ name: String) -> String { name + "." + kind }
+        managementCheck(abs(width(role("row")) - theme.compactActionWidth) <= 1,
+                        kind + " row action left the compact action column")
+        managementCheck(abs(width(role("compactRow")) - theme.compactActionWidth) <= 1, kind + " compact-row role lost its lane")
+        managementCheck(abs(width(role("connection")) - theme.connectionActionWidth) <= 1, kind + " connection role lost its lane")
+        let automatic = button(role("automatic"))!.frame
+        let open = texts(markers.0), close = texts(markers.1)
+        managementCheck(automatic.width < theme.compactActionWidth - 8 && open.count == 1 && close.count == 1
+                        && abs(automatic.minX - open[0].maxX) <= 1 && abs(close[0].minX - automatic.maxX) <= 1,
+                        kind + " standalone automatic action took a lane it was not given")
+        managementCheck(abs(width(role("sheet")) - automatic.width) <= 1, kind + " sheet action stretched its text-only label")
+    }
     let latched = button("latched")!, unlatched = button("unlatched")!
     managementCheck(latched.label == "Latched action" && latched.help == "Latched help",
                     "secondary action lost its accessibility label or help")

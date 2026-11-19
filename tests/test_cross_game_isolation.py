@@ -63,8 +63,10 @@ for token in ('ReferenceFixture', 'reference_fixture'):
 assert not (ROOT / 'Backend/games/reference_fixture').exists()
 assert not (ROOT / 'Sources/ReferenceFixture').exists()
 
-# A shared Core control reaching both a real game and the reference fixture is
-# proved by the compiler: both call sites typecheck against TrainerCore in
-# `build.sh --typecheck --all` and the reference fixture's module build.
+# The reference fixture keeps exercising a shared Core control, so a Core
+# change reaches a second module. That the Core declaration still serves the
+# call sites is the compiler's (typecheck and the fixture's module build).
+fixture_ui = (ROOT / 'ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift').read_text()
+assert 'TrainerFeatureToggleRow(' in fixture_ui
 
 print('cross_game_isolation_ok')
