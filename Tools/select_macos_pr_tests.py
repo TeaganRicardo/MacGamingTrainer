@@ -71,7 +71,10 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     # Shared Core Save management owners
     "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift": _CORE_SAVE_MANAGER_TESTS,
     "Sources/Core/Save/TrainerSavePathValidator.swift": _CORE_SAVE_MANAGER_TESTS,
-    "Sources/Core/Save/TrainerSaveTypes.swift": _CORE_SAVE_MANAGER_TESTS,
+    "Sources/Core/Save/TrainerSaveTypes.swift": (
+        *_CORE_SAVE_MANAGER_TESTS,
+        "test_core_save_retention_controls.py",
+    ),
     "Sources/Core/Save/TrainerSaveManagerModel.swift": (
         *_CORE_SAVE_MANAGER_TESTS,
         "test_core_save_retention_controls.py",

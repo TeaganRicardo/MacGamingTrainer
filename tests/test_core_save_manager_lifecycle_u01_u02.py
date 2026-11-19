@@ -157,6 +157,30 @@ struct SupportedSaveTargetModule: TrainerGameModule {
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
+struct UnsupportedSaveTargetModule: TrainerGameModule {
+    static var descriptor: GameModuleDescriptor {
+        GameModuleDescriptor(
+            id: "no-save-target",
+            displayName: "No Save Target",
+            targetProcessName: "mgt_save_tgt",
+            targetBundleIdentifier: "",
+            targetExecutablePathSuffix: SaveContextConfig.targetSuffix,
+            expectedHostProtocolVersion: 6,
+            expectedModuleProtocolVersion: 5,
+            supportsSaveManagement: false
+        )
+    }
+    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE TARGET")
+    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
+}
+
 struct UnsupportedSaveModule: TrainerGameModule {
     static let descriptor = GameModuleDescriptor(
         id: "no-save",
@@ -314,6 +338,22 @@ struct Runner {
             customSnap.hot || customSnap.valid {
             fail("user-renamed snapshot did not preserve custom name or defaulted hot/valid")
         }
+        let omittedAuto = TrainerSaveSnapshot(row: [
+            "id": "omitted-auto",
+            "name": "Stored Name",
+            "localizedPresentation": ["en": ["name": "Localized Name"]],
+        ])!
+        if omittedAuto.automaticName || omittedAuto.displayName(for: "en") != "Stored Name" {
+            fail("snapshot with omitted automaticName defaulted to localized automatic display")
+        }
+        let stagedPending = TrainerPendingRestore(row: [
+            "snapshotId": "snap-1",
+            "preserveCurrent": true,
+            "stagedAt": "2026-11-19T00:00:00",
+        ])!
+        if stagedPending.indeterminate {
+            fail("pending restore with omitted indeterminate defaulted to indeterminate")
+        }
         var invalidFinished = false
         model.configureRetention(maxCount: 0, maxBytes: 1) { invalidFinished = !$0 }
         if !invalidFinished || model.busy { fail("invalid retention input dispatched backend work") }
@@ -444,6 +484,101 @@ struct Runner {
                 fail("staged restore apply on backend availability did not settle")
             }
             contextC = nil
+        }
+
+        // targetChanged(_:) guards: target start while backend available must not apply;
+        // target exit with supportsSaveManagement=false or backendAvailable=false must not apply.
+        do {
+            let modelD = StubHostModel()
+            var contextD: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelD, session: session)
+            let initBefore = dispatchedApplyStaged
+            modelD.backendAvailable = true
+            if !waitUntil(2.0, { dispatchedApplyStaged == initBefore + 1 && !contextD!.saveManager.busy }) {
+                fail("contextD initial backend availability apply did not settle")
+            }
+            let targetProcess = Process()
+            targetProcess.executableURL = URL(fileURLWithPath: args[4])
+            targetProcess.standardInput = FileHandle.nullDevice
+            targetProcess.standardOutput = FileHandle.nullDevice
+            targetProcess.standardError = FileHandle.nullDevice
+            try targetProcess.run()
+            defer {
+                if targetProcess.isRunning {
+                    targetProcess.terminate()
+                    targetProcess.waitUntilExit()
+                }
+            }
+            let beforeStart = dispatchedApplyStaged
+            if !waitUntil(1.0, { contextD!.targetMonitor.refresh(); return contextD!.targetMonitor.isRunning }) {
+                fail("contextD did not observe launched target")
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+            if dispatchedApplyStaged != beforeStart {
+                fail("targetChanged dispatched staged restore apply while target became running")
+            }
+            targetProcess.terminate()
+            targetProcess.waitUntilExit()
+            contextD = nil
+        }
+
+        do {
+            let targetProcess = Process()
+            targetProcess.executableURL = URL(fileURLWithPath: args[4])
+            targetProcess.standardInput = FileHandle.nullDevice
+            targetProcess.standardOutput = FileHandle.nullDevice
+            targetProcess.standardError = FileHandle.nullDevice
+            try targetProcess.run()
+            defer {
+                if targetProcess.isRunning {
+                    targetProcess.terminate()
+                    targetProcess.waitUntilExit()
+                }
+            }
+            let modelE = StubHostModel()
+            var contextE: TrainerGameContext<UnsupportedSaveTargetModule>? = TrainerGameContext(model: modelE, session: session)
+            if !waitUntil(1.0, { contextE!.targetMonitor.refresh(); return contextE!.targetMonitor.isRunning }) {
+                fail("contextE did not observe launched target")
+            }
+            modelE.backendAvailable = true
+            RunLoop.current.run(until: Date().addingTimeInterval(0.20))
+            let beforeExitE = dispatchedApplyStaged
+            targetProcess.terminate()
+            targetProcess.waitUntilExit()
+            contextE!.targetMonitor.refresh()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.20))
+            if dispatchedApplyStaged != beforeExitE {
+                fail("targetChanged dispatched staged restore apply when supportsSaveManagement is false")
+            }
+            contextE = nil
+        }
+
+        do {
+            let targetProcess = Process()
+            targetProcess.executableURL = URL(fileURLWithPath: args[4])
+            targetProcess.standardInput = FileHandle.nullDevice
+            targetProcess.standardOutput = FileHandle.nullDevice
+            targetProcess.standardError = FileHandle.nullDevice
+            try targetProcess.run()
+            defer {
+                if targetProcess.isRunning {
+                    targetProcess.terminate()
+                    targetProcess.waitUntilExit()
+                }
+            }
+            let modelF = StubHostModel()
+            var contextF: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelF, session: session)
+            if !waitUntil(1.0, { contextF!.targetMonitor.refresh(); return contextF!.targetMonitor.isRunning }) {
+                fail("contextF did not observe launched target")
+            }
+            let beforeExitF = dispatchedApplyStaged
+            targetProcess.terminate()
+            targetProcess.waitUntilExit()
+            contextF!.targetMonitor.refresh()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.20))
+            if dispatchedApplyStaged != beforeExitF {
+                fail("targetChanged dispatched staged restore apply while backendAvailable is false")
+            }
+            contextF = nil
         }
 
         model.backup()
