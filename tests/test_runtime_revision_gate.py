@@ -785,9 +785,3 @@ with make_repo('mgt-runtime-levelled-brackets-') as repo:
             f'stripping must not lose a real marker in {label}: {result.stderr!r}')
 
 print('runtime_revision_gate_ok')
-
-workflow = (ROOT / '.github/workflows/linux-contracts.yml').read_text(encoding='utf-8')
-assert 'fetch-depth: 0' in workflow
-assert 'Tools/check_runtime_revision.py' in workflow
-assert 'github.event.pull_request.base.sha' in workflow
-assert 'github.event.before' in workflow

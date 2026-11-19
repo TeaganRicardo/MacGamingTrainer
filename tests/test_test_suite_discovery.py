@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 macos_runner = ROOT / 'Tools/run_macos_checks.sh'
 linux_runner = ROOT / 'Tools/run_linux_checks.sh'
 macos_only_list = ROOT / 'Tools/macos_only_tests.txt'
-workflow = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 
 assert macos_runner.is_file(), 'macOS platform contract runner is missing'
 assert linux_runner.is_file(), 'Linux contract runner is missing'
@@ -40,10 +39,6 @@ assert 'if "$@"; then' in macos_text
 assert 'record_failure "$label (exit $status)"' in macos_text
 assert 'macOS contract suite failed in %d check(s)' in macos_text
 assert 'set -euo pipefail' not in macos_text
-assert 'bash Tools/run_macos_checks.sh' in workflow
-assert 'python3 tests/test_host_connection_policy_dev8.py' not in workflow
-assert 'python3 tests/test_hades2_run_log_watcher.py' not in workflow
-assert 'chmod +x build.sh Tools/*.py' not in workflow
 
 # Linux uses recursive discovery. The shared macOS-only list is the only
 # exclusion source, so new portable test_*.py files cannot miss the gate.

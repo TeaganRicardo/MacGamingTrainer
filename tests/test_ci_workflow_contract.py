@@ -5,11 +5,18 @@ PR smoke selection, runners, build). This file keeps only the workflow
 configuration that AGENTS.md states: PR/dispatch triggers and the nightly
 Build 2 macOS schedule, the stable required check contexts with their Ubuntu
 fast path, fail-closed scope decisions, the PR/convergence split, exact-SHA
-checkout, immutable actions and the pinned Python runtime. Rules read a parsed
-step model, never incidental line text.
+checkout, immutable actions and the pinned Python runtime, plus the
+toolchain, provenance and release wiring that only a dispatch would otherwise
+exercise. Rules read a parsed step model, never incidental line text; a step
+whose script is pure logic is executed instead.
 """
 import json
+import os
+import plistlib
 import re
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -306,5 +313,187 @@ for marker in (
     'shasum -a 256 -c -',
 ):
     assert marker in lua_build_run, marker
+
+
+def runs(step):
+    return str(step.get('run') or '')
+
+
+def job_of(name, step):
+    return next(job_id for job_id, candidate in all_steps[name] if candidate is step)
+
+
+# A step reads only outputs of steps that ran before it in the same job.
+for name, workflow in workflows.items():
+    for job_id, job in workflow['jobs'].items():
+        earlier = set()
+        for step in steps(job):
+            referenced = set(re.findall(r'steps\.([\w-]+)\.outputs\.', json.dumps(step)))
+            assert referenced <= earlier, (name, job_id, step.get('name'), referenced - earlier)
+            if step.get('id'):
+                earlier.add(step['id'])
+
+# Every workflow uses one reviewed commit of each action.
+action_commits = {}
+for name in workflows:
+    for _, step in all_steps[name]:
+        if 'uses' in step:
+            action, commit = step['uses'].split('@')
+            action_commits.setdefault(action, set()).add(commit)
+assert all(len(commits) == 1 for commits in action_commits.values()), action_commits
+
+# macOS jobs run on the runner profile and Xcode that Tools/macos_toolchain_identity.py
+# verifies and that the native fixture watchdog budgets were measured on, and
+# verify that toolchain before building.
+sys.path.insert(0, str(ROOT / 'Tools'))
+from macos_toolchain_identity import SUPPORTED_DEVELOPER_DIR, SUPPORTED_RUNNER_PROFILES  # noqa: E402
+from macos_fixture_policy import HOSTED_PROFILE, PROFILE_VARIABLE  # noqa: E402
+
+macos_jobs = []
+for name, workflow in workflows.items():
+    for job_id, job in workflow['jobs'].items():
+        labels = set(re.findall(r"'(macos[\w.-]*)'", str(job['runs-on'])))
+        if not labels:
+            continue
+        macos_jobs.append((name, job_id))
+        environment = {**(workflow.get('env') or {}), **(job.get('env') or {})}
+        assert labels == {environment.get(PROFILE_VARIABLE)} == {HOSTED_PROFILE}, (name, job_id, labels)
+        assert HOSTED_PROFILE in SUPPORTED_RUNNER_PROFILES, HOSTED_PROFILE
+        assert environment.get('DEVELOPER_DIR') == SUPPORTED_DEVELOPER_DIR, (name, job_id)
+        job_runs = [runs(step) for step in steps(job)]
+        identity = next((index for index, run in enumerate(job_runs) if 'Tools/macos_toolchain_identity.py' in run), None)
+        assert identity is not None, f'{name}: {job_id} never verifies its macOS toolchain'
+        assert all(index > identity for index, run in enumerate(job_runs) if 'build.sh' in run), (name, job_id)
+assert {name for name, _ in macos_jobs} == {'build2-macos.yml', 'module-build-matrix.yml'}, macos_jobs
+
+# A pull request typechecks the unified App unless its diff needs the full
+# linked/signed build, which convergence always runs.
+typecheck_steps = [step for _, step in all_steps['build2-macos.yml'] if runs(step).strip() == './build.sh --typecheck --all']
+assert len(typecheck_steps) == 1, typecheck_steps
+assert {PULL_REQUEST, "needs.scope.outputs.needs_build == 'true'",
+        "needs.scope.outputs.needs_full_build == 'false'"} <= set(conjuncts(typecheck_steps[0].get('if')))
+for step in build2_app_steps:
+    alternatives = {part.strip(' ()') for term in conjuncts(step.get('if')) for part in term.split('||')}
+    assert "needs.scope.outputs.needs_full_build == 'true'" in alternatives, (step.get('name'), step.get('if'))
+
+# Diff-based steps compare a pull request against its own base, with the full
+# history of the exact head checkout.
+for name in TASK_WORKFLOWS:
+    base = workflows[name]['env']['BASE_SHA']
+    assert base.startswith(f'${{{{ {PULL_REQUEST} && github.event.pull_request.base.sha ||'), (name, base)
+for name in workflows:
+    for job_id, job in workflows[name]['jobs'].items():
+        if any('"$BASE_SHA"' in runs(step) for step in steps(job)):
+            checkout = next(step for step in steps(job) if str(step.get('uses', '')).startswith('actions/checkout@'))
+            assert checkout['with']['fetch-depth'] == '0', (name, job_id)
+
+# Steps that act on a built App locate it through the selection-aware verifier,
+# never by listing the output directory.
+app_locators = [(name, located) for name in workflows for _, step in all_steps[name]
+                for located in re.findall(r'\bapp="\$\(([^)]*)\)"', runs(step))]
+assert {name for name, _ in app_locators} == {'build2-macos.yml', 'module-build-matrix.yml'}, app_locators
+for name, located in app_locators:
+    assert 'Tools/verify_module_build.py' in located and '--print-app' in located, (name, located)
+
+
+def option(run, flag):
+    return re.findall(re.escape(flag) + r'\s+"?([^"\s\\]+)', run)
+
+
+# Provenance names the workflow that produced the artifact; each verification
+# expects a producer's own recorded source, and a macOS producer also checks its
+# current toolchain against the recorded one.
+producers = {}
+for name in workflows:
+    for _, step in all_steps[name]:
+        for source in option(runs(step), '--workflow-source'):
+            assert source == f'.github/workflows/{name}', (name, source)
+            producers[source] = name
+assert set(producers.values()) == {'build2-macos.yml', 'module-build-matrix.yml'}, producers
+for name in workflows:
+    for _, step in all_steps[name]:
+        if 'Tools/verify_build_provenance.py' not in runs(step):
+            continue
+        assert [producers.get(source) for source in option(runs(step), '--expected-workflow-source')] == [
+            name if name in producers.values() else 'build2-macos.yml'], (name, step.get('name'))
+        is_macos = (name, job_of(name, step)) in macos_jobs
+        assert ('--match-current-macos-toolchain' in runs(step)) == is_macos, (name, step.get('name'))
+
+# Release coordination stays on Linux and publishes only after the retained
+# artifact's provenance verifies and the monotonic tag is re-derived, at the
+# exact source SHA.
+assert release_job['runs-on'] == 'ubuntu-latest'
+release_runs = [runs(step) for step in release_steps]
+verified = next(index for index, run in enumerate(release_runs) if 'Tools/verify_build_provenance.py' in run)
+retagged = next(index for index, run in enumerate(release_runs)
+                if 'Tools/release_tag.py' in run and 'steps.version.outputs.tag' in run)
+published = next(index for index, run in enumerate(release_runs) if 'gh release create' in run)
+assert verified < retagged < published, (verified, retagged, published)
+assert option(release_runs[published], '--target') == ['$GITHUB_SHA'], release_runs[published]
+
+# Coverage evidence from every macOS check run is retained, even after a failed
+# lane, and never gates it.
+coverage_paths = set()
+for _, step in all_steps['build2-macos.yml']:
+    if 'Tools/run_macos_checks.sh' in runs(step):
+        environment = step.get('env') or {}
+        assert environment.get('MGT_FIXTURE_TIMINGS'), step.get('name')
+        coverage_paths.add(environment.get('MGT_MACOS_COVERAGE_OUTPUT'))
+assert len(coverage_paths) == 1 and None not in coverage_paths, coverage_paths
+retained = [step for _, step in all_steps['build2-macos.yml']
+            if str(step.get('uses', '')).startswith('actions/upload-artifact@')
+            and (step.get('with') or {}).get('path') in coverage_paths]
+assert len(retained) == 1, retained
+assert 'always()' in conjuncts(retained[0].get('if')), retained[0].get('if')
+assert retained[0]['with']['if-no-files-found'] == 'warn', retained[0]['with']
+
+
+# The release identity step runs as the runner's default `bash -e` shell, with
+# a stand-in for macOS-only PlistBuddy, in a throwaway checkout.
+def run_step(name, step_name, checkout, plist):
+    (step,) = [step for _, step in all_steps[name] if step.get('name') == step_name]
+    bindir = checkout.parent / 'bin'
+    bindir.mkdir(exist_ok=True)
+    buddy = bindir / 'PlistBuddy'
+    buddy.write_text(f'#!{sys.executable}\n' + (
+        'import plistlib, sys\n'
+        'command, path = sys.argv[2], sys.argv[3]\n'
+        "print(plistlib.load(open(path, 'rb'))[command.split(':', 1)[1]])\n"))
+    buddy.chmod(0o755)
+    (checkout / 'Info.plist').write_bytes(plistlib.dumps(plist))
+    output = checkout.parent / 'github-output'
+    output.write_text('')
+    script = runs(step).replace('/usr/libexec/PlistBuddy', str(buddy))
+    assert '${{' not in script, script
+    result = subprocess.run(['bash', '-e', '-c', script], cwd=checkout, capture_output=True, text=True,
+                            env={**os.environ, 'GITHUB_OUTPUT': str(output)})
+    return result, dict(line.split('=', 1) for line in output.read_text().splitlines())
+
+
+def git(checkout, *arguments):
+    return subprocess.run(['git', '-c', 'user.name=Contract', '-c', 'user.email=contract@example.invalid',
+                           *arguments], cwd=checkout, check=True, capture_output=True, text=True).stdout.strip()
+
+
+# Both release identities come from Info.plist with distinct meanings (SemVer
+# product version, positive integer bundle build); the build-source identity is
+# the actual checkout, not an event label.
+with tempfile.TemporaryDirectory(prefix='mgt-workflow-step-') as temporary:
+    checkout = Path(temporary) / 'checkout'
+    checkout.mkdir()
+    git(checkout, 'init', '-q')
+    identity = {'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '7'}
+    (checkout / 'Info.plist').write_bytes(plistlib.dumps(identity))
+    git(checkout, 'add', 'Info.plist')
+    git(checkout, 'commit', '-qm', 'identity')
+    head = git(checkout, 'rev-parse', 'HEAD')
+    result, outputs = run_step('build2-macos.yml', 'Read release identity', checkout, identity)
+    assert result.returncode == 0, result.stderr
+    assert outputs == {'version': '1.2.3', 'build': '7', 'source_sha': head,
+                       'source_tree': git(checkout, 'rev-parse', 'HEAD^{tree}'), 'sha_short': head[:8]}, outputs
+    for version, build in (('1.2.3', '0'), ('1.2.3', '7a'), ('1.2', '7')):
+        result, outputs = run_step('build2-macos.yml', 'Read release identity', checkout,
+                                   {'CFBundleShortVersionString': version, 'CFBundleVersion': build})
+        assert result.returncode != 0 and not outputs, (version, build, outputs)
 
 print('ci_workflow_contract_ok')

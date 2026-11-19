@@ -1,5 +1,6 @@
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -87,12 +88,17 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-layout-') as temporary:
 # the FinderInfo/ResourceFork that file-provider checkouts attach, so every
 # signature must follow cleanup of the staged App (scoped to its staging root)
 # with no bundle change in between, and only the signed staged App is published.
+# The bundled Python runs build.sh's inline (stdin) blocks for real, so their
+# effect on the staged App is observable; tool scripts are only recorded.
 RECORDER = f'#!{sys.executable}\n' + r"""
 import json, os, pathlib, sys
 tool, args = pathlib.Path(sys.argv[0]).name, sys.argv[1:]
 with open(os.environ['MGT_TOOL_LOG'], 'a', encoding='utf-8') as log:
     log.write(json.dumps([tool, *args]) + '\n')
-if tool == 'xcrun' and args[:1] == ['--find']:
+if tool == 'python' and args[:1] == ['-']:
+    sys.argv = args
+    exec(compile(sys.stdin.read(), '<build.sh stdin>', 'exec'), {'__name__': '__main__'})
+elif tool == 'xcrun' and args[:1] == ['--find']:
     print(pathlib.Path(sys.argv[0]).parent / args[1])
 elif tool in ('clang', 'lipo'):
     pathlib.Path(args[args.index('-o' if tool == 'clang' else '-output') + 1]).write_bytes(b'fixture')
@@ -104,6 +110,8 @@ elif tool == 'codesign' and '-d' in args:
 CLEAN, PUBLISH, VERIFY = (str(TOOLS / name) for name in (
     'clean_signing_metadata.py', 'publish_module_build.py', 'verify_module_build.py'))
 packaging_tail = build[build.index('\nTIME_WARP_ROOT='):]
+# Kept: the two markers are the seam that executes build.sh's own staging and
+# packaging paragraphs until WP5.4 moves them into an importable Python owner.
 # The executed slices must be the only staging layout and hold every signing
 # command; a codesign moved above the tail would escape the cleanup-order check.
 assert build.count('\nDIST=') == 1 and build.count('\nTIME_WARP_ROOT=') == 1, 'build.sh slice markers must be unique'
@@ -119,6 +127,14 @@ def run_packaging_tail(root, replace_output_with_symlink=None):
         (fakebin / name).chmod(0o755)
     generated = root / 'generated'
     generated.mkdir()
+    (generated / 'module.normalized.json').write_text(json.dumps(
+        {'moduleIDs': ['fixture'], 'buildRequirements': {'entitlements': []}}))
+    # actool's partial Info.plist is the accent owner; a non-default name proves
+    # the packaged declaration is copied from it rather than restated.
+    (generated / 'asset-catalog-info.plist').write_bytes(plistlib.dumps({'NSAccentColorName': 'FixtureAccent'}))
+    staged_info = generated / 'dist' / f'{APP_NAME}.app/Contents/Info.plist'
+    staged_info.parent.mkdir(parents=True)
+    staged_info.write_bytes(plistlib.dumps({'CFBundleExecutable': 'FixtureTrainer'}))
     log = root / 'tools.jsonl'
     env = {
         **os.environ, 'PATH': f"{fakebin}{os.pathsep}{os.environ['PATH']}", 'MGT_TOOL_LOG': str(log),
@@ -166,6 +182,29 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-signing-order-') as temporary
     assert published == [['python', PUBLISH, app, output, APP_NAME]], published
     verified = events.index(['codesign', '--verify', '--deep', '--strict', app])
     assert signatures[-1] < verified < events.index(published[0]), events
+
+    # The Process Time Warp helper is built from its production source and the
+    # bundled fishhook for every Host slice plus x86_64 (target-injected code may
+    # need the Intel slice), with warnings visible but nonfatal, then merged,
+    # ad-hoc signed and shipped with the fishhook licence.
+    native = Path(app) / 'Contents/Resources/Backend/core/native'
+    helper = str(native / 'libMGTTimeWarp.dylib')
+    time_warp = ROOT / 'Native/ProcessTimeWarp'
+    compiles = {event[event.index('-arch') + 1]: event for event in events if event[0] == 'clang'}
+    assert set(compiles) == {'arm64', 'x86_64'}, compiles
+    for arch, compile_args in compiles.items():
+        flags = set(compile_args)
+        assert {'-dynamiclib', '-Wall', '-Wextra'} <= flags and '-Werror' not in flags, compile_args
+        assert compile_args[compile_args.index('-isysroot') + 1] == '/synthetic/sdk', compile_args
+        assert compile_args[compile_args.index('-framework') + 1] == 'QuartzCore', compile_args
+        assert {str(time_warp / 'ProcessTimeWarp.c'), str(time_warp / 'vendor/fishhook/fishhook.c')} <= flags
+    slices = [compile_args[compile_args.index('-o') + 1] for compile_args in compiles.values()]
+    assert ['lipo', '-create', *slices, '-output', helper] in events, events
+    assert ['codesign', '--force', '--sign', '-', '--timestamp=none', helper] in events, events
+    assert (native / 'LICENSE.fishhook').read_bytes() == (time_warp / 'vendor/fishhook/LICENSE').read_bytes()
+    # AppKit native chrome resolves the product accent from the packaged Info.plist.
+    packaged_info = plistlib.loads((Path(app) / 'Contents/Info.plist').read_bytes())
+    assert packaged_info['NSAccentColorName'] == 'FixtureAccent', packaged_info
 
 with tempfile.TemporaryDirectory(prefix='mgt-build-publish-symlink-') as temporary:
     root = Path(temporary)
