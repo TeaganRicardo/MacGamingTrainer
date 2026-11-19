@@ -619,6 +619,11 @@ def _anchor_count(text: str, needle: str) -> int:
     return text.count(needle)
 
 
+def _display(path: Path) -> str:
+    """A target's repository-relative name, or its full path outside the repository."""
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
+
+
 def check_manifest(mutations: list[Mutation]) -> list[str]:
     """Validate every anchor before running anything. Stale anchors are holes.
 
@@ -651,10 +656,10 @@ def check_manifest(mutations: list[Mutation]) -> list[str]:
             continue
         count = _anchor_count(_read(m.path), m.old)
         if count == 0:
-            problems.append(f"{m.ident}: anchor not found in {m.path.relative_to(ROOT)} — manifest is stale")
+            problems.append(f"{m.ident}: anchor not found in {_display(m.path)} — manifest is stale")
         elif count > 1:
             problems.append(
-                f"{m.ident}: anchor appears {count}x in {m.path.relative_to(ROOT)} — must be unique")
+                f"{m.ident}: anchor appears {count}x in {_display(m.path)} — must be unique")
     return problems
 
 

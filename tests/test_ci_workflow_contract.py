@@ -111,7 +111,8 @@ for name in TASK_WORKFLOWS:
     assert workflows[name]['concurrency']['cancel-in-progress'] == "${{ github.event_name == 'pull_request' }}", name
 for name in SCHEDULED:
     workflow = workflows[name]
-    assert [entry.get('cron') for entry in workflow['on']['schedule']], name
+    schedule = workflow['on']['schedule']
+    assert schedule and all(len(str(entry.get('cron', '')).split()) == 5 for entry in schedule), (name, schedule)
     # A running nightly must not queue a release's convergence dispatch on the
     # same ref behind it, so the event separates the concurrency groups.
     assert '${{ github.event_name }}' in workflow['concurrency']['group'], name
@@ -200,6 +201,20 @@ for name, expected in EXPECTED_LANES.items():
                     f"{name}: {step.get('name') or step.get('uses')} ({lane}) must require {event}"
                 )
     assert found == expected, (name, found)
+
+# Convergence also links, signs and verifies the unified app; a Swift-only pull
+# request only typechecks it, so the nightly is where a link failure surfaces.
+def requires_convergence(condition):
+    return any(CONVERGENCE in (part.strip(' ()') for part in term.split('||'))
+               for term in conjuncts(condition))
+
+
+build2_app_steps = [step for _, step in all_steps['build2-macos.yml']
+                    if str(step.get('run') or '').strip() == './build.sh --all'
+                    or 'codesign --verify' in str(step.get('run') or '')]
+assert len(build2_app_steps) == 2, [step.get('name') for step in build2_app_steps]
+for step in build2_app_steps:
+    assert requires_convergence(step.get('if')), (step.get('name'), step.get('if'))
 
 # Evidence belongs to the exact PR head: one workflow-level BASE/HEAD pair feeds
 # both the scope classifier and every executable checkout.

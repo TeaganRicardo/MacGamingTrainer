@@ -9,8 +9,8 @@ suite -- lives in `Tools/mutation_gate.py`, which the Build 2 macOS
 convergence lane runs directly. That run also validates the manifest's anchors
 and owning tests before it mutates anything. Anchors are exact production
 text, so this pull-request lane deliberately does not validate them: it covers
-the gate's own runner and classifier against temporary fixtures, never against
-production files or a clean checkout.
+the gate's own validator, runner and classifier against temporary fixtures,
+never against production anchors, and it does not need a clean checkout.
 """
 
 import subprocess
@@ -58,6 +58,44 @@ def test_success_token_is_discovered_from_the_owning_test():
             assert "multiple" in str(error), error
         else:
             raise AssertionError("two completion markers must not resolve to either one")
+
+
+def test_manifest_validation_reports_each_invalid_entry():
+    """The gate's first stage refuses each kind of stale or invalid entry.
+
+    Production anchors are validated only when the gate runs. The validator
+    itself is checked here on fixtures, so a defect in it fails the pull
+    request rather than the next convergence run.
+    """
+    owning_test = "tests/test_mutation_gate_contract.py"
+    idents = ("fixture-valid",)
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-manifest-") as tmp:
+        target = Path(tmp) / "target.py"
+        target.write_text("VALUE = 1\nREPEATED = 1\nREPEATED = 1\n", encoding="utf-8")
+
+        def entry(ident="fixture-valid", path=target, old="VALUE = 1", test=owning_test):
+            return mutation_gate.Mutation(ident=ident, invariant="fixture", path=path,
+                                          old=old, new="VALUE = 2", test=test)
+
+        for ident in idents:
+            mutation_gate.PROVENANCE[ident] = "contract-test fixture"
+        try:
+            assert mutation_gate.check_manifest([entry()]) == []
+            cases = (
+                ("missing anchor", [entry(old="ABSENT = 1")], "anchor not found"),
+                ("non-unique anchor", [entry(old="REPEATED = 1")], "anchor appears 2x"),
+                ("duplicate ident", [entry(), entry()], "duplicate ident"),
+                ("test outside tests/", [entry(test="Tools/mutation_gate.py")], "must be a tests/ path"),
+                ("missing test", [entry(test="tests/test_does_not_exist.py")], "test does not exist"),
+                ("no provenance", [entry(ident="fixture-unrecorded")], "no provenance recorded"),
+                ("missing production file", [entry(path=Path(tmp) / "absent.py")], "production file missing"),
+            )
+            for label, mutations, expected in cases:
+                problems = mutation_gate.check_manifest(mutations)
+                assert len(problems) == 1 and expected in problems[0], (label, problems)
+        finally:
+            for ident in idents:
+                mutation_gate.PROVENANCE.pop(ident, None)
 
 
 def _run_gate(*args):
@@ -489,6 +527,7 @@ def test_baseline_cache_fails_closed_on_clean_hash_drift():
 
 if __name__ == "__main__":
     test_success_token_is_discovered_from_the_owning_test()
+    test_manifest_validation_reports_each_invalid_entry()
     test_gate_refuses_a_dirty_tree()
     test_gate_prefers_the_tree_check_over_the_toolchain()
     test_git_status_failure_is_not_a_clean_tree()
