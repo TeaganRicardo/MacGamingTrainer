@@ -401,17 +401,18 @@ fixture_vocabulary_leaks = find_hades_vocabulary_leaks({
 })
 assert not fixture_vocabulary_leaks, f"reference fixture leaked Hades vocabulary: {fixture_vocabulary_leaks}"
 
-# Kept (lint): Core presentation sources hard-code no Chinese copy; player text
-# comes from Host.strings or a module resolver. Runtime literals are log and
-# diagnostic sentences, not presentation, and are exempt.
+# Kept (lint): Core presentation sources contain no Chinese text at all (string
+# literals, interpolations and comments alike); player text comes from
+# Host.strings or a module resolver. Runtime sources hold log and diagnostic
+# sentences, not presentation, and are exempt.
 save_model = (ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift").read_text(encoding="utf-8")
-cjk = re.compile(r"[\u4e00-\u9fff]")
+cjk = re.compile(r"[\u4e00-\u9fff]+")
 hard_coded = {
-    str(path.relative_to(ROOT)): [literal for literal in source_string_literals(path) if cjk.search(literal)]
+    str(path.relative_to(ROOT)): sorted(set(cjk.findall(path.read_text(encoding="utf-8"))))
     for path in sorted((ROOT / "Sources/Core").rglob("*.swift"))
     if not path.is_relative_to(ROOT / "Sources/Core/Runtime")
 }
-hard_coded = {path: literals for path, literals in hard_coded.items() if literals}
+hard_coded = {path: text for path, text in hard_coded.items() if text}
 assert not hard_coded, f"Core presentation hard-codes Chinese copy: {hard_coded}"
 for code in (
     "save_busy", "save_not_found", "save_unsupported", "staged_unavailable", "staged_indeterminate",
@@ -490,9 +491,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-error-presentation-") as tempo
                             env=environment, timeout=60)
     replies = [json.loads(line) for line in served.stdout.splitlines() if line.strip()]
     assert len(replies) == len(requests), (served.stdout, served.stderr)
-    failures = [reply["error"] for index, reply in enumerate(replies) if index != 2]
-    assert replies[2].get("ok") is True and all(not reply.get("ok") for reply in failures), replies
-    for error in failures:
+    assert [reply.get("ok") for reply in replies] == [False, False, True, False, False], replies
+    for error in (reply["error"] for reply in replies if reply.get("ok") is False):
         key = error["presentation"]
         assert key.startswith("host.") and key in zh and key in en, error
         assert error.get("diagnostic"), f"Core failure lost its diagnostic: {error}"
