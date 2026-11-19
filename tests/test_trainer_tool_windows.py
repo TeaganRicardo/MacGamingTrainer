@@ -1,11 +1,10 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 """Native tool-window reuse and close ownership with isolated content."""
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -249,11 +248,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-tool-windows-") as directory:
     main = root / "main.swift"
     main.write_text(HARNESS)
     binary = root / "windows"
-    sources = ["Sources/Core/Runtime/TrainerJSON.swift", "Sources/Core/Runtime/BackendProcess.swift", "Sources/Core/Runtime/BackendClient.swift",
-               "Sources/Core/Host/TrainerLocalization.swift", "Sources/Core/UI/TrainerTheme.swift",
-               "Sources/Core/UI/TrainerToolWindows.swift", "tests/fixtures/swift/InMemoryDefaults.swift"]
-    subprocess.run([SWIFT, *SINGLE_MODULE_FLAGS, "-parse-as-library", *[str(ROOT / path) for path in sources],
-                    str(main), "-o", str(binary)], check=True)
+    compile_swift_test(
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main],
+        output=binary,
+        swiftc=SWIFT,
+        cwd=ROOT,
+    )
     env = dict(os.environ, HOME=str(root / "home"))
     (root / "home").mkdir()
     result = launch_fixture([str(binary)], env=env, capture_output=True, text=True, journey='native.trainer_tool_windows', budgets=JOURNEY_BUDGETS)

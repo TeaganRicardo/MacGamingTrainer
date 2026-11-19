@@ -3,29 +3,33 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.multi_game import JOURNEY_BUDGETS
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import SWIFT_CORE_MODULE, compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only shared module context harness")
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "ContractFixtures/reference_module"
-HARNESS = r'''
-import AppKit
+# The synthetic game modules show these views, so TrainerCore compiles them
+# (as `package`) beside the copied Core.
+NAVIGATION_FIXTURE_VIEWS = r'''
 import SwiftUI
 
-struct NavigationFixtureSidebar: View {
+package struct NavigationFixtureSidebar: View {
     @Environment(\.trainerNavigateToSection) private var navigate
     @Environment(\.trainerSelectedSection) private var selection
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let gameID: String
     let name: String
-    var body: some View {
+    package init(gameID: String, name: String) {
+        self.gameID = gameID
+        self.name = name
+    }
+    package var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(name + " sections") {}.accessibilityIdentifier("test.sections." + gameID)
             ForEach(0..<3) { index in
@@ -40,9 +44,10 @@ struct NavigationFixtureSidebar: View {
     }
 }
 
-struct NavigationFixtureSections: View {
+package struct NavigationFixtureSections: View {
     let gameID: String
-    var body: some View {
+    package init(gameID: String) { self.gameID = gameID }
+    package var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(0..<3) { index in
                 Text("Destination \(gameID).\(index)")
@@ -54,6 +59,11 @@ struct NavigationFixtureSections: View {
         }
     }
 }
+'''
+
+HARNESS = r'''
+import AppKit
+import SwiftUI
 
 @MainActor final class NavigationGeometryState: ObservableObject {
     @Published var prefixHeight: CGFloat = 800
@@ -728,9 +738,12 @@ def run_context_journey(*, state_only=False):
         main = project / "Harness.swift"
         main.write_text(HARNESS)
         binary = project / "test"
+        views = project / "NavigationFixtureViews.swift"
+        views.write_text(NAVIGATION_FIXTURE_VIEWS)
         compile_swift_test(
             games=modules,
             checkout=project,
+            instrumentation={SWIFT_CORE_MODULE: [views]},
             harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
                              ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
             output=binary,

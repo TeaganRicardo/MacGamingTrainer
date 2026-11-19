@@ -11,6 +11,7 @@ from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from swift_test_compiler import SwiftModule, compile_swift_test
 
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
 
@@ -79,10 +80,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-exit-swift-') as temporary:
     source = Path(temporary) / 'Exit.swift'
     executable = Path(temporary) / 'exit'
     source.write_text(swift)
-    subprocess.run(['swiftc', str(ROOT/'Sources/Hades2/Hades2Types.swift'),
-                    str(ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
-                    str(ROOT/'Sources/Hades2/Generated/Hades2Command.generated.swift'),
-                    str(source), '-o', str(executable)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files; the harness carries the extracted termination text.
+    compile_swift_test(
+        modules=[SwiftModule('Hades2', [ROOT/'Sources/Hades2/Hades2Types.swift',
+                                        ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift',
+                                        ROOT/'Sources/Hades2/Generated/Hades2Command.generated.swift'])],
+        harness_sources=[source], output=executable, cwd=ROOT,
+    )
     result = subprocess.run([str(executable)], text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr
 

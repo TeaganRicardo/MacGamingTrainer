@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -138,14 +138,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-terminology-manifest-") as temporar
     registry.write_text(json.dumps({"officialTerms": {"probe": {
         "value": "迁移术语", "englishValue": "Relocated term",
     }}}))
+    core_stubs = repository / "TrainerCoreStubs.swift"
+    core_stubs.write_text('''
+package struct TrainerTextToken {
+    package let key: String
+    package let arguments: [String]
+    package init(key: String, arguments: [String] = []) { self.key = key; self.arguments = arguments }
+}
+package enum TrainerPresentationLanguage: String, CaseIterable { case zhCN = "zh-CN", en }
+''')
     main = repository / "main.swift"
     main.write_text('''
-struct TrainerTextToken {
-    let key: String
-    let arguments: [String]
-    init(key: String, arguments: [String] = []) { self.key = key; self.arguments = arguments }
-}
-enum TrainerPresentationLanguage: String, CaseIterable { case zhCN = "zh-CN", en }
 let terms = Hades2TerminologyCatalog()
 precondition(terms.value(forTerm: "officialTerms.probe", language: .en) == "Relocated term",
              "Swift source fallback did not follow the manifest referenceDirectory")
@@ -153,7 +156,13 @@ precondition(terms.value(forTerm: "officialTerms.probe", language: .zhCN) == "�
              "Swift source fallback lost the manifest's bilingual reference")
 ''')
     binary = repository / "terminology-reference"
-    subprocess.run([swiftc, *SINGLE_MODULE_FLAGS, str(source), str(main), "-o", str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files and a stub for the Core text token and language.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [core_stubs]),
+                 SwiftModule("Hades2", [source], (SWIFT_CORE_MODULE,))],
+        harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True)
 
 # Heal Fully was a redundant one-shot beside the durable Infinite Life control.

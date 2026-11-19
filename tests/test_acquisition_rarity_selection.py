@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -57,5 +57,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-706-rarity-") as directory:
     harness = folder / "main.swift"
     output = folder / "smoke"
     harness.write_text(HARNESS, encoding="utf-8")
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", str(SOURCE), str(harness), "-o", str(output)], check=True, cwd=ROOT)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only this
+    # Foundation-level file.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [SOURCE])],
+        harness_sources=[harness], output=output, swiftc=SWIFTC, cwd=ROOT,
+    )
     subprocess.run([str(output)], check=True, cwd=ROOT)

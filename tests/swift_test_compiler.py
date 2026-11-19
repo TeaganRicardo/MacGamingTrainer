@@ -21,8 +21,8 @@ Equivalence and staleness guarantees:
 - Repository files include their exact resolved path in the key so different
   worktrees/checkouts never share compiled ``#filePath`` literals (which
   ``Hades2Presentation`` uses to locate repository assets).
-- Generated bindings are keyed by file name and content digest so equal
-  generated outputs share one cache entry across tests.
+- Generated bindings are keyed by their place in the generated tree and their
+  content digest so equal generated outputs share one cache entry across tests.
 - A module with other temporary source files (a patched or copied tree), and
   every module that imports it, builds privately for one compile and never
   enters the shared cache.
@@ -62,23 +62,19 @@ ROOT = Path(__file__).resolve().parents[1]
 _TOOLS = ROOT / "Tools"
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
-from generate_game_binding import BINDING_FILENAME, CATALOG_FILENAME  # noqa: E402
-from product_support import swift_library_modules  # noqa: E402
 from swift_module_layout import SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
 
 CACHE_FORMAT_VERSION = 3
 # The harness takes the App module's place in the package.
 HARNESS_MODULE_NAME = "TrainerTestHarness"
 PACKAGE_FLAGS = ("-package-name", SWIFT_PACKAGE_NAME)
-SINGLE_MODULE_FLAGS = ("-module-name", SWIFT_CORE_MODULE, *PACKAGE_FLAGS)  # WIP: removed once direct tests migrate
 MAX_CACHE_ENTRIES = 16
 CACHE_ENV_VAR = "MGT_SWIFT_TEST_CACHE"
 CACHE_DIR_ENV_VAR = "MGT_SWIFT_TEST_CACHE_DIR"
-_GENERATED_FILENAMES = frozenset({BINDING_FILENAME, CATALOG_FILENAME})
 _CLT_SDK_PREFIX = "/Library/Developer/CommandLineTools/"
 _IMPORT = re.compile(r"^[ \t]*(?:@\w+[ \t]+)*import[ \t]+(\w+)", re.MULTILINE)
-# A copied checkout's own Tools read its own manifests.
-_CHECKOUT_LAYOUT = """
+# Runs with the checkout's own Tools, which read that checkout's manifests.
+_LAYOUT_PROGRAM = """
 import json, sys
 sys.path.insert(0, sys.argv[1])
 from product_support import swift_library_modules
@@ -108,25 +104,17 @@ class SwiftModule:
 def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = ROOT) -> tuple[SwiftModule, ...]:
     """TrainerCore and each game's frontend module, as the product compiles them.
 
-    The checkout's own Tools derive the layout and write the generated sources
-    under ``directory``. A copied checkout with its own manifests runs its own
-    Tools in a subprocess because Tools read manifests next to themselves.
+    ``Tools/product_support.py`` of ``checkout`` derives the layout from that
+    checkout's manifests and writes the generated sources under ``directory``.
     """
-    directory = Path(directory)
-    if Path(checkout).resolve() == ROOT.resolve():
-        records = [
-            (module["name"], module["dependencies"], sources)
-            for module, sources in swift_library_modules(list(games), directory)
-        ]
-    else:
-        result = subprocess.run(
-            [sys.executable, "-c", _CHECKOUT_LAYOUT, str(Path(checkout) / "Tools"), ",".join(games),
-             str(directory)],
-            capture_output=True, text=True,
-        )
-        if result.returncode:
-            raise SwiftCompilerError(f"{checkout} could not derive its Swift layout:\n{result.stderr}")
-        records = json.loads(result.stdout)
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", _LAYOUT_PROGRAM, str(Path(checkout) / "Tools"), ",".join(games),
+         str(directory)],
+        capture_output=True, text=True,
+    )
+    if result.returncode:
+        raise SwiftCompilerError(f"{checkout} could not derive its Swift layout:\n{result.stderr}")
+    records = json.loads(result.stdout)
     return tuple(
         SwiftModule(name, tuple(Path(path) for path in sources), tuple(dependencies))
         for name, dependencies, sources in records
@@ -261,24 +249,30 @@ def _file_sha256(path: Path) -> str:
 
 def _support_file_records(
     support_sources: Sequence[Path],
+    generated_root: Path | None = None,
 ) -> tuple[list[dict[str, str]], bool]:
-    """Classify one module's files into stable key records and cache eligibility."""
+    """Classify one module's files into stable key records and cache eligibility.
+
+    Files the helper generated under ``generated_root`` are keyed by their
+    place there and their content, so equal bindings share one cache entry.
+    """
     records: list[dict[str, str]] = []
     cacheable = True
+    generated = generated_root.resolve() if generated_root is not None else None
     for raw_path in support_sources:
         path = Path(raw_path)
         if not path.is_file():
             raise FileNotFoundError(f"missing Swift support source: {path}")
         digest = _file_sha256(path)
         resolved = path.resolve()
-        if _is_temp_path(resolved):
-            if path.name in _GENERATED_FILENAMES:
-                records.append({"kind": "generated", "name": path.name, "sha256": digest})
-            else:
-                # Single-use modified/copied trees in temp dirs must not be
-                # served across different temp directories (e.g. #filePath).
-                records.append({"kind": "ephemeral", "path": str(resolved), "sha256": digest})
-                cacheable = False
+        if generated is not None and resolved.is_relative_to(generated):
+            records.append({"kind": "generated", "name": resolved.relative_to(generated).as_posix(),
+                            "sha256": digest})
+        elif _is_temp_path(resolved):
+            # Single-use modified/copied trees in temp dirs must not be
+            # served across different temp directories (e.g. #filePath).
+            records.append({"kind": "ephemeral", "path": str(resolved), "sha256": digest})
+            cacheable = False
         else:
             records.append({"kind": "source", "path": str(resolved), "sha256": digest})
     return records, cacheable
@@ -634,8 +628,9 @@ def compile_swift_test(
 
     with tempfile.TemporaryDirectory(prefix="mgt-swift-test-") as scratch_root, ExitStack() as leases:
         scratch = Path(scratch_root)
+        generated_root = scratch / "generated"
         if modules is None:
-            library = harness_layout(games, scratch / "generated", checkout=checkout)
+            library = harness_layout(games, generated_root, checkout=checkout)
         else:
             if games:
                 raise ValueError("explicit modules replace the product layout; do not also name games")
@@ -650,7 +645,7 @@ def compile_swift_test(
             if missing:
                 raise SwiftCompilerError(f"{module.name} imports modules not built before it: {missing}")
             dependency_dirs = [module_dirs[name] for name in module.dependencies]
-            records, cacheable = _support_file_records(module.sources)
+            records, cacheable = _support_file_records(module.sources, generated_root)
             if cache_enabled and cacheable and all(module_keys[name] for name in module.dependencies):
                 key = compute_support_key(
                     toolchain=toolchain,

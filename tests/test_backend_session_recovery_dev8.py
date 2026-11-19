@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 session_source = (ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift').read_text(encoding='utf-8')
@@ -58,14 +58,24 @@ transition_start = context_source.index('        let pidChanged = previous.proce
 target_transition = context_source[transition_start:context_source.index(
     '        if previous.isRunning && observed.isRunning', transition_start)]
 
+# Stands in for Core's GameModuleDescriptor (Host/TrainerGameModule.swift),
+# which TrainerBackendSession reads; it compiles into TrainerCore.
+descriptor_stub = r'''
+package struct GameModuleDescriptor {
+    package let id: String
+    package let expectedHostProtocolVersion: Int
+    package let expectedModuleProtocolVersion: Int
+
+    package init(id: String, expectedHostProtocolVersion: Int, expectedModuleProtocolVersion: Int) {
+        self.id = id
+        self.expectedHostProtocolVersion = expectedHostProtocolVersion
+        self.expectedModuleProtocolVersion = expectedModuleProtocolVersion
+    }
+}
+'''
+
 harness = r'''
 import Foundation
-
-package struct GameModuleDescriptor {
-    let id: String
-    let expectedHostProtocolVersion: Int
-    let expectedModuleProtocolVersion: Int
-}
 
 struct TargetObservation {
     let isRunning: Bool
@@ -399,23 +409,31 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
     td = Path(td)
     worker_path = td / 'fake_backend.py'
     main_path = td / 'main.swift'
+    stub_path = td / 'GameModuleDescriptorStub.swift'
     binary = td / 'session_test'
     command_log = td / 'commands.log'
     worker_path.write_text(textwrap.dedent(worker), encoding='utf-8')
     main_path.write_text(textwrap.dedent(harness.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)), encoding='utf-8')
-    subprocess.run([
-        SWIFTC,
-        *SINGLE_MODULE_FLAGS,
-        str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'),
-        str(ROOT / 'Sources/Core/Runtime/BackendClient.swift'),
-        str(ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift'),
-        str(ROOT / 'Sources/Hades2/Hades2API.swift'),
-        str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
-        str(ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift'),
-        str(ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
-        str(main_path),
-        '-o', str(binary),
-    ], check=True, cwd=ROOT)
+    stub_path.write_text(descriptor_stub, encoding='utf-8')
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files and a stub for GameModuleDescriptor.
+    compile_swift_test(
+        modules=[
+            SwiftModule(SWIFT_CORE_MODULE, [
+                ROOT / 'Sources/Core/Runtime/TrainerJSON.swift', ROOT / 'Sources/Core/Runtime/BackendProcess.swift',
+                ROOT / 'Sources/Core/Runtime/BackendClient.swift',
+                ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift',
+                stub_path,
+            ]),
+            SwiftModule('Hades2', [
+                ROOT / 'Sources/Hades2/Hades2API.swift',
+                ROOT / 'Sources/Hades2/Hades2Types.swift',
+                ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift',
+                ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift',
+            ], (SWIFT_CORE_MODULE,)),
+        ],
+        harness_sources=[main_path], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     env = os.environ.copy()
     env['MGT_DEV8_WORKER_LOG'] = str(command_log)
     env['MGT_DEV8_PYTHON'] = PYTHON

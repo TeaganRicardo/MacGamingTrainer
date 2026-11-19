@@ -1,6 +1,5 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
-from swift_test_compiler import SINGLE_MODULE_FLAGS
 """The disclosure settle classifier reports three outcomes and fails the third.
 
 Phase C of #670 requires that a deliberately unsatisfied predicate still fails
@@ -69,7 +68,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-disclosure-settle-") as directory:
     source = Path(directory) / "Driver.swift"
     binary = Path(directory) / "classify"
     source.write_text(PROGRAM, encoding="utf-8")
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", str(source), "-o", str(binary)],
+    # Direct swiftc: the program is the disclosure harness's own classifier
+    # (extracted test text, not product code) plus a stub pump; it uses no
+    # product module, so it does not compile the product layout.
+    subprocess.run([SWIFTC, "-parse-as-library", str(source), "-o", str(binary)],
                    check=True, cwd=ROOT)
     result = launch_fixture([str(binary)], capture_output=True, text=True, journey='native.disclosure_settle_classification', budgets=JOURNEY_BUDGETS)
     if result.returncode != 0:

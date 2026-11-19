@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 THEME = ROOT / 'Sources/Core/UI/TrainerTheme.swift'
@@ -47,7 +48,13 @@ for path in [LAYOUT,ROW,HELPER]:
 if shutil.which('swiftc'):
     with tempfile.TemporaryDirectory(prefix='mgt-picker-native-width-') as tmp:
         executable = str(Path(tmp) / 'check')
-        subprocess.run(['swiftc',str(HELPER),str(ROOT / 'tests/fixtures/swift/PickerActionSizingChecks.swift'),'-o',executable],check=True,timeout=40)
+        # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+        # Foundation-level files.
+        compile_swift_test(
+            modules=[SwiftModule(SWIFT_CORE_MODULE, [HELPER])],
+            harness_sources=[ROOT / 'tests/fixtures/swift/PickerActionSizingChecks.swift'],
+            output=Path(executable), cwd=ROOT,
+        )
         subprocess.run([executable],check=True,timeout=10)
         # Exercise the production Layout against a small SwiftUI type shim on
         # Linux: an intrinsic 39pt shortcut must reserve a 52pt visual lane.
@@ -66,6 +73,9 @@ if shutil.which('swiftc'):
             build_shim += ['-Xlinker', '-install_name', '-Xlinker', f'@rpath/{shim_name}']
         subprocess.run(build_shim, check=True, timeout=40)
         layout_executable = str(Path(tmp) / 'layout-check')
+        # Direct swiftc: the SwiftUI type shim stands in for a system module, so
+        # these Core files must compile with the same plain invocation (and SDK)
+        # that built the shim above, not as a cached product module.
         subprocess.run(['swiftc', '-I', tmp, '-L', tmp, '-lSwiftUI',
                         '-Xlinker', '-rpath', '-Xlinker', tmp,
                         str(HELPER), str(LAYOUT),

@@ -1,11 +1,10 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
 import shutil
-import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -696,13 +695,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-log-session-") as td:
     home = td / "home"
     home.mkdir()
     main.write_text(textwrap.dedent(main_source), encoding="utf-8")
-    subprocess.run([
-        SWIFTC,
-        *SINGLE_MODULE_FLAGS,
-        str(ROOT / "Sources/Core/Runtime/TrainerLogSink.swift"),
-        str(main),
-        "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    compile_swift_test(harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT)
     proc = launch_fixture(
         [str(binary), str(home)],
         cwd=ROOT,

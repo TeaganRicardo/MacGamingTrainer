@@ -160,6 +160,7 @@ expected_routes = {
         "test_native_effect_query_macos.py",
     },
     "Tools/generate_game_binding.py": {"test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"},
+    "Tools/product_support.py": {"test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"},
     "docs/reference/hades2/1.143476-25481925/ui_terminology.json": {"test_hades2_model_flow.py"},
 }
 for changed_path, required_tests in expected_routes.items():

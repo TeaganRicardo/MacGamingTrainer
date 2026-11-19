@@ -1,6 +1,7 @@
 """Portable and macOS contract tests for tests/swift_test_compiler.py."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -49,22 +50,24 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
         real_defaults = ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"
         # A temporary checkout is correctly uncached in production. Model a
         # stable source checkout here so this key test is location-independent.
-        def stable_repo_records(paths):
+        def stable_repo_records(paths, generated_root):
             original = stc._is_temp_path
             stable = {real_core.resolve(), real_defaults.resolve()}
             with mock.patch.object(
                 stc, "_is_temp_path",
                 side_effect=lambda p: False if Path(p).resolve() in stable else original(p),
             ):
-                return stc._support_file_records(paths)
+                return stc._support_file_records(paths, generated_root)
 
-        gen_a = Path(gen_dir_a) / "GameBinding.generated.swift"
-        gen_b = Path(gen_dir_b) / "GameBinding.generated.swift"
+        (Path(gen_dir_a) / "Hades2").mkdir()
+        (Path(gen_dir_b) / "Hades2").mkdir()
+        gen_a = Path(gen_dir_a) / "Hades2/GameBinding.generated.swift"
+        gen_b = Path(gen_dir_b) / "Hades2/GameBinding.generated.swift"
         gen_a.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
         gen_b.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
 
-        records_a, cacheable_a = stable_repo_records([real_core, real_defaults, gen_a])
-        records_b, cacheable_b = stable_repo_records([real_core, real_defaults, gen_b])
+        records_a, cacheable_a = stable_repo_records([real_core, real_defaults, gen_a], Path(gen_dir_a))
+        records_b, cacheable_b = stable_repo_records([real_core, real_defaults, gen_b], Path(gen_dir_b))
         assert cacheable_a and cacheable_b, (cacheable_a, cacheable_b)
         assert records_a == records_b, "identical generated binding bytes must share cache across temp dirs"
 
@@ -76,12 +79,12 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
 
         # Generated content change invalidates key.
         gen_b.write_text("// generated\nlet activeGameID = \"hades\"\n", encoding="utf-8")
-        records_b2, _ = stable_repo_records([real_core, real_defaults, gen_b])
+        records_b2, _ = stable_repo_records([real_core, real_defaults, gen_b], Path(gen_dir_b))
         k_gen_changed = stc.compute_support_key(toolchain=tc, support_flags=flags, file_records=records_b2)
         assert k_gen_changed != k_base
 
         # File order change invalidates key.
-        records_reordered, _ = stable_repo_records([real_defaults, real_core, gen_a])
+        records_reordered, _ = stable_repo_records([real_defaults, real_core, gen_a], Path(gen_dir_a))
         assert (
             stc.compute_support_key(toolchain=tc, support_flags=flags, file_records=records_reordered)
             != k_base
@@ -138,11 +141,14 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
         # A caller's module name never leaks into library module flags.
         assert "-module-name" not in stc.normalize_support_flags(["-module-name", "TrainerCore"])
 
-        # Non-generated temp files disable cacheability so patched trees never collide.
+        # Other temp files, even generator-named ones outside the generated
+        # tree, disable cacheability so patched trees never collide.
         ephemeral = Path(gen_dir_a) / "PatchedSource.swift"
         ephemeral.write_text("let patched = true\n", encoding="utf-8")
-        _, cacheable_ephemeral = stable_repo_records([real_core, ephemeral, gen_a])
+        _, cacheable_ephemeral = stable_repo_records([real_core, ephemeral, gen_a], Path(gen_dir_a) / "Hades2")
         assert not cacheable_ephemeral
+        _, cacheable_outside = stable_repo_records([real_core, gen_a], None)
+        assert not cacheable_outside
 
         # Non-temp repo paths with identical bytes in different checkouts produce
         # different keys so embedded #filePath strings cannot bleed across checkouts.
@@ -182,11 +188,20 @@ def _built_modules(commands: list[list[str]]) -> list[str]:
     return [cmd[cmd.index("-module-name") + 1] for cmd in commands if "-emit-module-path" in cmd]
 
 
-def _mocked_toolchain():
-    return (
-        mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"),
-        mock.patch.object(stc, "probe_toolchain", return_value=_make_toolchain()),
-    )
+class _mocked_toolchain:
+    """Mock the compiler identity; fixture sources model a stable checkout,
+    except files named ``Patched.swift``, which model a temporary patch."""
+
+    def __enter__(self):
+        self._stack = contextlib.ExitStack()
+        self._stack.enter_context(mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"))
+        self._stack.enter_context(mock.patch.object(stc, "probe_toolchain", return_value=_make_toolchain()))
+        self._stack.enter_context(mock.patch.object(
+            stc, "_is_temp_path", side_effect=lambda path: Path(path).name == "Patched.swift"))
+        return self
+
+    def __exit__(self, *exc):
+        return self._stack.__exit__(*exc)
 
 
 def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
@@ -215,8 +230,7 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
                 cache_dir=cache_dir, environ={} if environ is None else environ, **kwargs,
             )
 
-        resolve, probe = _mocked_toolchain()
-        with resolve, probe, mock.patch.object(
+        with _mocked_toolchain(), mock.patch.object(
             stc.subprocess, "run", side_effect=_fake_swiftc(commands, linked_sources=linked)
         ):
             # 1. Cold: TrainerCore, then the game against it, then the harness.
@@ -353,16 +367,14 @@ def test_pruning_honors_active_lease_and_recovers_eviction() -> None:
             stc._prune_cache(cache, keep_name="another-key")
             assert entry_dir[0].exists(), "pruner evicted an in-use Swift module"
 
-        resolve, probe = _mocked_toolchain()
-        with resolve, probe, mock.patch.object(stc.subprocess, "run", side_effect=_fake_swiftc(commands)):
+        with _mocked_toolchain(), mock.patch.object(stc.subprocess, "run", side_effect=_fake_swiftc(commands)):
             stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,
                                    cache_dir=cache, environ={})
         entry_dir.extend(p for p in cache.iterdir() if p.is_dir() and not p.name.startswith("."))
         assert len(entry_dir) == 1
 
         commands.clear()
-        resolve, probe = _mocked_toolchain()
-        with resolve, probe, mock.patch.object(
+        with _mocked_toolchain(), mock.patch.object(
             stc.subprocess, "run", side_effect=_fake_swiftc(commands, on_link=prune_during_link)
         ):
             stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,
@@ -388,8 +400,7 @@ def test_pruning_honors_active_lease_and_recovers_eviction() -> None:
                 shutil.rmtree(result)
             return result
 
-        resolve, probe = _mocked_toolchain()
-        with resolve, probe, mock.patch.object(
+        with _mocked_toolchain(), mock.patch.object(
             stc.subprocess, "run", side_effect=_fake_swiftc(commands)
         ), mock.patch.object(stc, "_ensure_module", side_effect=evict_once):
             stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,

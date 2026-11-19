@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -160,10 +161,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-pipe-") as directory:
     binary = directory / "pipe_test"
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
-    subprocess.run([
-        SWIFTC, str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
-        str(main_path), "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT / "Sources/Core/Runtime/TrainerJSON.swift",
+                                                 ROOT / "Sources/Core/Runtime/BackendProcess.swift"])],
+        harness_sources=[main_path], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     try:
         result = subprocess.run(
             [str(binary), PYTHON, str(worker_path)], cwd=ROOT,

@@ -1,6 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 """Exercise real App admission with inert UI/backend and isolated OS processes."""
 import json
 from pathlib import Path
@@ -180,8 +180,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-ownership-") as temporary:
     source = temporary / "main.swift"
     binary = temporary / "host"
     source.write_text(harness)
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", str(ROOT / "Sources/Core/Host/TrainerTargetOwnership.swift"),
-                    str(source), "-o", str(binary)], check=True, cwd=ROOT)
+    # The startup owner and App initializer text compile inside the harness so
+    # their AppKit/Foundation lookups resolve to the fixture types above, which
+    # shadow the system ones; TrainerTargetOwnership comes from TrainerCore.
+    compile_swift_test(harness_sources=[source], output=binary, swiftc=SWIFTC, cwd=ROOT)
     directory = temporary / "ownership"
     directory.mkdir()
     processes = [launch(binary, directory) for _ in range(2)]
@@ -296,19 +298,7 @@ import Foundation
     swift_source = temporary / "monitor.swift"
     swift_binary = temporary / "monitor"
     swift_source.write_text(harness)
-    subprocess.run(
-        [
-            SWIFTC,
-            *SINGLE_MODULE_FLAGS,
-            "-parse-as-library",
-            str(ROOT / "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift"),
-            str(swift_source),
-            "-o",
-            str(swift_binary),
-        ],
-        check=True,
-        cwd=ROOT,
-    )
+    compile_swift_test(harness_sources=[swift_source], output=swift_binary, swiftc=SWIFTC, cwd=ROOT)
 
     for executable, expected in (
         (target_executable, "true"),
