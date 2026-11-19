@@ -123,8 +123,17 @@ func exerciseModuleShortcutSheet<Content: View>(
     show()
     sheetJourneyWait(host, "real module shortcut sheet") { window.attachedSheet != nil && captureButton() != nil }
     exerciseSheetLayout(sheet(), localization: localization)
+    // The capture control keeps one width while idle, capturing and assigned,
+    // so a long prompt or chord never resizes the shortcut column.
+    let idleCaptureWidth = captureButton()!.frame.width
+    func checkCaptureWidth(_ phase: String) {
+        let width = captureButton()!.frame.width
+        managementCheck(abs(width - idleCaptureWidth) <= 1,
+                        "shortcut capture control resized while \(phase): \(idleCaptureWidth) -> \(width)")
+    }
     managementCheck(captureButton()!.press(), "shortcut capture refused native Press")
     sheetJourneyWait(host, "native shortcut monitor installed") { GlobalHotkeys.isShortcutCaptureActive }
+    checkCaptureWidth("capturing")
     key(53, characters: "\u{1b}")
     sheetJourneyWait(host, "Escape cancels active shortcut capture") {
         !GlobalHotkeys.isShortcutCaptureActive
@@ -153,6 +162,7 @@ func exerciseModuleShortcutSheet<Content: View>(
     sheetJourneyWait(host, "module persists one captured native chord") {
         !GlobalHotkeys.isShortcutCaptureActive && chord() != original
     }
+    checkCaptureWidth("showing an assigned chord")
     managementPress(localization.localized("host.done"), in: sheet().contentView!)
     sheetJourneyWait(host, "native shortcut Done closes") { !isPresented() && window.attachedSheet == nil }
     for _ in 0..<3 {

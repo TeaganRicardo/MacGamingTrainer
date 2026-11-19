@@ -99,6 +99,11 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Sources/Core/UI/Components/TrainerMetricGrid.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
     "Sources/Core/UI/Components/TrainerStatControls.swift": (*_CORE_SHARED_UI_TESTS, "test_cross_module_geometry_macos.py"),
     "Sources/Core/UI/Components/TrainerListControls.swift": _CORE_SHARED_UI_TESTS,
+    # Rendered owners of shortcut badges, picker-action rows and shortcut capture.
+    "Sources/Core/UI/Primitives/TrainerBadge.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/TrainerPickerActionLayout.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerDualPickerActionRow.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/Input/TrainerShortcutCapture.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerSheetScaffold.swift": (
         *_CORE_SHARED_UI_TESTS,
         "test_hades_save_editor_frontend.py",

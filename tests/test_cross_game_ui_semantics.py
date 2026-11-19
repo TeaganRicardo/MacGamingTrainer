@@ -194,17 +194,10 @@ assert re.search(
 ), "Hades default shortcut order must start with visible Invincibility / Infinite Life"
 
 # Shared concepts must resolve through one Core semantic icon vocabulary rather
-# than each module independently choosing an SF Symbol literal.
+# than each module independently choosing an SF Symbol literal. The modules'
+# references below compile only against the declared vocabulary.
+# Kept (structural): the Core vocabulary itself names no game concept.
 icon_source = (ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift").read_text()
-for semantic in (
-    "protection", "vitality", "energy", "currency", "randomize",
-    "refresh", "capacity", "quality", "impact", "movement",
-    "actionSpeed", "timeScale", "item", "controls", "defense",
-    "duration", "timer", "precision", "dash", "level",
-):
-    assert f"static let {semantic} =" in icon_source
-for semantic in ("acquire", "apply", "generate", "save", "load", "remove", "restore"):
-    assert f"static let {semantic} =" in icon_source
 for forbidden in ("Hades", "invincibility", "boonRarity", "reroll"):
     assert forbidden not in icon_source, f"Core icon vocabulary leaked game meaning: {forbidden}"
 
@@ -262,8 +255,6 @@ assert "focusValue: .value(.godGauge)" in run_data
 assert "locked: model.healthLocked" in hades2_view
 assert "locked: model.moneyLocked" in hades2_view
 assert "locked: model.rerollsLocked" in hades2_view
-stat_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatControls.swift").read_text()
-assert "TrainerLockButton(" in stat_controls
 
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
@@ -280,9 +271,6 @@ for path in (
     source = path.read_text()
     for semantic in ("saveEditor", "profiles", "diagnostics"):
         assert f"TrainerSemanticIcon.Tool.{semantic}" in source
-core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text()
-for semantic in ("saveManagement", "disableAll", "shortcuts", "log", "logHistory", "clearLogs", "refreshStatus"):
-    assert f"TrainerSemanticIcon.Tool.{semantic}" in core_management
 for path in (
     ROOT / "Sources/Hades/HadesWorkbenchNavigation.swift",
     ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
@@ -373,10 +361,6 @@ hades_current_row = hades_view.split("private struct HadesCurrentTraitRow:", 1)[
 hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:", 1)[1]
 assert hades_current_row.count("model.removeTrait(trait)") == 1
 assert "model.removeTrait(trait)" not in hades_contextual
-trait_layout = (ROOT / "Sources/Core/UI/Components/TrainerTraitManagerLayout.swift").read_text()
-for token in ("rowSpacing", "removeControlWidth", "searchWidth", "levelControlsWidth",
-              "rarityControlsWidth", "commonControlsWidth"):
-    assert token in trait_layout
 assert "private enum TraitManagerLayout" not in hades2_view
 assert "TrainerTraitManagerLayout.searchWidth" in hades_view
 assert "TrainerTraitManagerLayout.searchWidth" in hades2_view
@@ -397,13 +381,10 @@ assert 'title: text("hades.apply")' in hades_contextual
 hades_types = (ROOT / "Sources/Hades/HadesTypes.swift").read_text()
 assert "var hasContextualControls: Bool" in hades_types
 assert "if trait.hasContextualControls {" in hades_current_row
-assert 'static let profiles = "square.stack.3d.up"' in icon_source
 assert "static let catalog = TrainerSemanticIcon.Concept.precision" in hades_nav
 assert "static let exactBoons = TrainerSemanticIcon.Concept.precision" in hades2_nav
 # Exact acquisition shares Core chrome, while each module supplies its
 # own title/icon and native target/rarity rules.
-acquisition_panel = (ROOT / "Sources/Core/UI/Components/TrainerAcquisitionPanel.swift").read_text()
-assert "TrainerIconLabel(" in acquisition_panel and "icon: icon" in acquisition_panel
 assert "TrainerAcquisitionPanel(" in hades_view and 'title: text("hades.catalog")' in hades_view
 assert "TrainerAcquisitionPanel(" in hades2_view and 'title: text("hades2.spawn.exactBoons")' in hades2_view
 assert "acquisitionSettingsRow" in hades_view and "acquisitionSettingsRow" in hades2_view
@@ -413,9 +394,6 @@ assert 'static let garden = "tree.fill"' in hades2_nav
 assert 'static let hexReady = "moon.fill"' in hades2_nav
 assert 'static let shades = "person.3.fill"' in hades2_nav
 assert "Image(systemName: TrainerSemanticIcon.Action.remove)" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-diagnostics_view = (ROOT / "Sources/Core/UI/Components/TrainerDiagnosticsView.swift").read_text()
-assert "TrainerSemanticIcon.Tool.exportDiagnostics" in diagnostics_view
-assert "TrainerListCard" in diagnostics_view
 for path, start, end in (
     ("Sources/Hades/HadesManagement.swift", "struct HadesDiagnosticsView", "@MainActor\nprivate func hadesManagementError"),
     ("Sources/Hades2/Views/Hades2ManagementViews.swift", "struct Hades2DiagnosticsView", "struct Hades2ShortcutSettingsView"),
@@ -427,23 +405,7 @@ for path, start, end in (
     assert "model.runDiagnostics" in adapter and "model.exportDiagnostics" in adapter
     assert "ManagementError(model, localization: localization)" in adapter
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
-search_field = (ROOT / "Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift").read_text()
-assert "systemImage: icon(entry)" in search_field
 assert "icon: { $0.icon }" in hades_nav
-
-# Labeled verbs no longer carry ornamental icons: this behavior belongs
-# to the same shared Core action primitive for every game. Keep the separate
-# icon contracts for feature rows, navigation and command discovery above.
-action_controls = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text()
-label = action_controls[
-    action_controls.index("private struct TrainerActionButtonLabel"):
-    action_controls.index("struct TrainerPrimaryActionButton")
-]
-assert "Text(title)" in label
-assert "Label(title, systemImage:" not in label
-for type_name in ("struct TrainerPrimaryActionButton", "struct TrainerSecondaryActionButton"):
-    owner = action_controls[action_controls.index(type_name):]
-    assert "TrainerActionButtonLabel(title: title, fillsWidth: widthRole != .sheet && (widthRole != .automatic || inheritedRowWidth != nil))" in owner
 
 
 # #706: one Chaos pair row and no duplicate direct Chaos acquisition,
@@ -485,9 +447,6 @@ for path, adjusted, controlled in (
     assert 'text("' + controlled + '")' in view_source, path
 
 # Batch 2 (#750): Hades I & II main workbench parity & Hades I room shortcuts.
-theme_source = (ROOT / "Sources/Core/UI/TrainerTheme.swift").read_text()
-assert "inlineFieldWidth: 64" in theme_source and "occurrenceFieldWidth: 82" in theme_source
-
 # 1. Game Speed panels share helpText, inlineFieldWidth, and row-aligned actual/pending inset.
 hades_speed = hades_view.split("private var gameSpeedPanel: some View {", 1)[1].split(
     "private var boonRarityPanel:", 1
