@@ -375,10 +375,16 @@ assert {name for name, _ in macos_jobs} == {'build2-macos.yml', 'module-build-ma
 for name, job_id in macos_jobs:
     for step in steps(workflows[name]['jobs'][job_id]):
         for line in runs(step).splitlines():
-            for check in (segment.strip() for segment in line.split(';')):
-                if check.startswith(('[[', '((')):
-                    action = check.split('&&', 1)[1].strip() if '&&' in check else ''
-                    assert '||' in check or action not in ('', ':', 'true'), (name, step.get('name'), check)
+            for segment in line.split(';'):
+                check = re.sub(r'^(then|do|else|\{)\s+', '', segment.strip())
+                if not check.startswith(('[[', '((')):
+                    continue
+                # Operators inside the test itself do not handle its failure.
+                rest = re.sub(r'^\[\[.*?\]\]|^\(\(.*?\)\)', '', check).strip()
+                action = rest[2:].strip() if rest.startswith('&&') else ''
+                assert rest.startswith('||') or (
+                    action and action not in (':', 'true') and not action.startswith(('[[', '(('))
+                ), (name, step.get('name'), check)
 
 # A pull request typechecks the unified App unless its diff needs the full
 # linked/signed build, which convergence always runs.
@@ -410,9 +416,11 @@ for name, located in app_locators:
     assert re.fullmatch(r'"?\$\(python3 Tools/verify_module_build\.py [^)]* --print-app\)"?', located), (name, located)
 # No step names the output directory or an App bundle itself, so a stale App in
 # dist can never be signed, verified or packaged in place of the selection.
-for name in workflows:
+for name, workflow in workflows.items():
     for _, step in all_steps[name]:
-        assert not re.search(r'\bdist\b|\.app\b', runs(step)), (name, step.get('name'))
+        assert not re.search(r'\bdist\b|\.app\b', json.dumps(step)), (name, step.get('name'))
+    for scope in (workflow, *workflow['jobs'].values()):
+        assert not re.search(r'\bdist\b', json.dumps(scope.get('env') or {})), name
 
 
 def option(run, flag):
