@@ -12,7 +12,7 @@ The lane prints one block, writes it to the job summary, and uploads
 ```
 macOS coverage lane=pr profile=macos-26 source=b894b3c2292c image=macos26/20261026.0455.2 arch=ARM64
   selected=3 executed=3 passed=3 failed=0 deferred=3 not_selected=30
-  deferred test_hades2_view_state_flow.py reason="..." owner="Build 2 macOS workflow_dispatch on the exact SHA"
+  deferred test_hades2_view_state_flow.py reason="..." owner="Build 2 macOS convergence: workflow_dispatch on the exact SHA, and nightly on main"
   inventory=36 deferred_verified=false
   timings=8 journey/profile samples (observation only, no threshold)
   timing profile=macos-26 journey=hades.disclosure samples=1 min=35.4s median=35.4s max=35.4s budget=60s

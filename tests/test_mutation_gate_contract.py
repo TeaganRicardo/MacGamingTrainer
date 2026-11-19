@@ -5,13 +5,14 @@ buys the confidence it no longer has. These assertions are about the gate's
 own contract, not about the invariants it happens to hold today.
 
 The slow part -- actually mutating production code and running the owning
-suite -- lives in `Tools/mutation_gate.py`, which CI runs directly. This test
-covers the cheap properties that would otherwise only fail during that run.
+suite -- lives in `Tools/mutation_gate.py`, which the Build 2 macOS
+convergence lane runs directly. That run also validates the manifest's anchors
+and owning tests before it mutates anything. Anchors are exact production
+text, so this pull-request lane deliberately does not validate them: it covers
+the gate's own runner and classifier against temporary fixtures, never against
+production files or a clean checkout.
 """
 
-import json
-import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,26 +24,40 @@ sys.path.insert(0, str(ROOT / "Tools"))
 import mutation_gate  # noqa: E402
 
 
-def test_manifest_is_valid():
-    """Every declared invariant must name a real file, a unique anchor, a real test."""
-    problems = mutation_gate.check_manifest(mutation_gate.manifest())
-    assert not problems, problems
+def _probe(tmp, *, checks_target):
+    """A temporary production file and an owning test that may or may not read it."""
+    target = Path(tmp) / "target.py"
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    test = Path(tmp) / "test_probe.py"
+    assertion = (f"assert open({str(target)!r}).read() == 'VALUE = 1\\n', 'VALUE changed'\n"
+                 if checks_target else "")
+    test.write_text(f"{assertion}print('probe_ok')\n", encoding="utf-8")
+    mutation = mutation_gate.Mutation(
+        ident="probe", invariant="VALUE is preserved", path=target,
+        old="VALUE = 1", new="VALUE = 2", test=str(test),
+    )
+    return target, mutation
 
 
-def test_success_tokens_come_from_owning_tests():
-    """The owning behavior test is the source of its completion marker.
+def test_success_token_is_discovered_from_the_owning_test():
+    """The owning test declares one *_ok marker; the harness never mirrors it."""
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-token-") as tmp:
+        single = Path(tmp) / "test_single.py"
+        single.write_text("print('single_ok')\n", encoding="utf-8")
+        assert mutation_gate.success_token_for(str(single)) == "single_ok"
 
-    Keeping a second test->token dictionary in the mutation harness lets the
-    harness drift from the test it claims to execute. Discover the marker from
-    the owning test itself and require one unambiguous *_ok marker.
-    """
-    assert not hasattr(mutation_gate, "_SUCCESS_TOKENS"), (
-        "success-token ownership is still mirrored inside the mutation harness")
-    for mutation in mutation_gate.manifest():
-        token = mutation_gate.success_token_for(mutation.test)
-        assert token.endswith("_ok"), (mutation.ident, token)
-        source = (ROOT / mutation.test).read_text(encoding="utf-8")
-        assert token in source, (mutation.ident, mutation.test, token)
+        embedded = Path(tmp) / "test_embedded.py"
+        embedded.write_text("HARNESS = 'print(\"embedded_ok\")'\n", encoding="utf-8")
+        assert mutation_gate.success_token_for(str(embedded)) == "embedded_ok"
+
+        ambiguous = Path(tmp) / "test_ambiguous.py"
+        ambiguous.write_text("print('one_ok')\nprint('two_ok')\n", encoding="utf-8")
+        try:
+            mutation_gate.success_token_for(str(ambiguous))
+        except ValueError as error:
+            assert "multiple" in str(error), error
+        else:
+            raise AssertionError("two completion markers must not resolve to either one")
 
 
 def _run_gate(*args):
@@ -126,25 +141,15 @@ def test_gate_restores_what_it_mutates():
     """A gate that leaves a mutant behind corrupts the next run.
 
     The reviewer's finding: deleting the restore in `run_mutation` entirely left
-    the contract suite green. Assert the property directly by mutating a tracked
-    file through the real entry point and requiring a clean tree afterwards.
+    the contract suite green. Assert the property directly through the real
+    runner, with a real owning test that catches the mutation.
     """
-    before = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                            capture_output=True, text=True).stdout
-    assert not before.strip(), f"tree must be clean to test this: {before}"
-
-    probe = mutation_gate.Mutation(
-        ident="probe-restore", invariant="probe restore",
-        path=ROOT / "Backend/core/adapter.py",
-        old="        self.arguments = list(arguments)",
-        new="        self.arguments = list(arguments)  # probe",
-        test="tests/test_protocol_fixtures_v0180.py",
-    )
-    result = mutation_gate.run_mutation(probe)
-    after = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                           capture_output=True, text=True).stdout
-    assert not after.strip(), f"run_mutation left the tree dirty:\n{after}"
-    assert result.outcome in {"caught", "error", "equivalent", "survived"}
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-restore-") as tmp:
+        target, probe = _probe(tmp, checks_target=True)
+        before = target.read_bytes()
+        result = mutation_gate.run_mutation(probe)
+        assert target.read_bytes() == before, "run_mutation left the target mutated"
+        assert result.outcome == "caught", result
 
 
 def test_gate_requires_a_green_baseline():
@@ -167,21 +172,22 @@ def test_gate_requires_a_green_baseline():
         return subprocess.CompletedProcess(
             test, 1, stdout="", stderr="AssertionError: the baseline is red")
 
-    # Any invariant will do; the precondition runs before the file is touched.
-    target = mutation_gate.manifest()[0]
-    before = target.path.read_bytes()
-    mutation_gate._run = fake_run
-    try:
-        result = mutation_gate.run_mutation(target)
-    finally:
-        mutation_gate._run = original_run
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-red-") as tmp:
+        _, target = _probe(tmp, checks_target=True)
+        before = target.path.read_bytes()
+        mutation_gate._run = fake_run
+        try:
+            result = mutation_gate.run_mutation(target)
+        finally:
+            mutation_gate._run = original_run
+        after = target.path.read_bytes()
 
     assert calls, "the owning test was never run before the mutation"
     assert result.outcome == "error", (
         f"a red baseline must be an error, not {result.outcome!r}")
     assert "RED" in result.detail, (
         f"the failure must say the baseline was red: {result.detail!r}")
-    assert target.path.read_bytes() == before, "the file must not be touched"
+    assert after == before, "the file must not be touched"
     assert len(calls) == 1, (
         "a red baseline must stop the run before mutating anything")
 
@@ -354,143 +360,23 @@ def test_every_invariant_records_its_incident():
     assert not missing, f"no recorded provenance: {missing}"
 
 
-def test_equivalent_excuses_must_be_backed_by_an_artifact():
-    """A survivor may be excused, but only with a recorded artifact.
-
-    Two weaker rules were each defeated end to end by review. A length check
-    fell to a long paragraph; a keyword check for "python3" and "output" fell to
-    the same paragraph with those two words added, which flipped a real catch
-    to `equivalent` and the gate to `mutation_gate_ok`. Prose cannot be made
-    trustworthy by asking for more prose, so the excuse must cite a file that
-    exists and holds real output.
-    """
-    prose = ("the extra argument looks harmless, it is only a second argument "
-             "and I ran python3 Tools/mutation_gate.py and inspected the output")
-    assert not mutation_gate._is_falsifiable("d01-hero-has-trait-arity", prose), (
-        "a paragraph with the magic words must not count as evidence")
-
-    bare = ("d01-hero-has-trait-arity: see mutation-evidence/d01-hero-has-trait-arity.txt "
-            "for the output of python3 Tools/mutation_gate.py")
-    assert not mutation_gate._is_falsifiable("d01-hero-has-trait-arity", bare), (
-        "citing a file that does not exist must not be accepted")
-
-    mislabelled = "something-else: see mutation-evidence/nope.txt"
-    assert not mutation_gate._is_falsifiable("d01-hero-has-trait-arity", mislabelled), (
-        "the excuse must name its own ident")
-
-    for m in mutation_gate.manifest():
-        if m.equivalent_reason is not None:
-            assert mutation_gate._is_falsifiable(m.ident, m.equivalent_reason), (
-                f"{m.ident}: the excuse is not backed by an artifact: {m.equivalent_reason!r}")
-
-    # The positive direction, asserted against a real artifact. Without this the
-    # whole rule is one-sided: a function that returned False for everything
-    # would pass every negative assertion above, and the loop over the manifest
-    # never runs because the manifest has no excused mutants today. The gate
-    # could then be neutered into "no excuse is ever valid" without anything
-    # noticing -- demonstrated by a review, and re-demonstrated here.
-    evidence_dir = mutation_gate.EVIDENCE_DIR
-    relative = (evidence_dir / "_selftest.txt").relative_to(mutation_gate.ROOT)
-    artifact = evidence_dir / "_selftest.txt"
-    try:
-        evidence_dir.mkdir(parents=True, exist_ok=True)
-        artifact.write_text(
-            "$ python3 Tools/mutation_gate.py --only some-ident\n"
-            "caught 1 | survived 0 | equivalent 0 | skipped 0 | error 0\n"
-            "before: the assertion failed as expected\n"
-            "after: the same assertion failed\n" * 4,
-            encoding="utf-8")
-        reason = f"some-ident: see mutation-evidence/{artifact.name} for the output"
-        assert mutation_gate._is_falsifiable("some-ident", reason), (
-            "a real citation to an existing artifact must be accepted")
-        assert mutation_gate._is_falsifiable(
-            "some-ident", f"some-ident: {reason}"), (
-            "the same citation must be accepted verbatim")
-        # And the same text under the wrong ident must still be refused, so the
-        # positive case is not a blanket pass.
-        assert not mutation_gate._is_falsifiable("another-ident", reason), (
-            "the artifact is only evidence for the ident that cites it")
-    finally:
-        if artifact.exists():
-            artifact.unlink()
-        if evidence_dir.is_dir() and not any(evidence_dir.iterdir()):
-            evidence_dir.rmdir()
-
-
-
-def test_the_artifact_rule_rejects_evidence_outside_the_repository():
-    """Containment has to be enforced by the rule, not asserted about itself.
-
-    The old check here was `assert str(relative) in str(EVIDENCE_DIR)`, where
-    `relative` came from `.relative_to(EVIDENCE_DIR)` -- true by construction, and
-    a review confirmed deleting it left the suite green. The replacement at one
-    point sat INSIDE the test that used the rule, so deleting a line still left
-    the function passing. A self-check has to live in its own test that exercises
-    the rule, which is what this is.
-
-    And the rule had a real hole to exercise: `is_file()` follows symlinks, so a
-    symlink planted inside the evidence directory pointed at a scratch file
-    outside the repository and was accepted. Evidence nobody can review with the
-    commit is not evidence.
-    """
-    evidence_dir = mutation_gate.EVIDENCE_DIR
-    outside = Path(tempfile.mkdtemp(prefix="mgt-outside-evidence-"))
-    evidence_dir.mkdir(parents=True, exist_ok=True)
-    link = evidence_dir / "_escape_selftest.txt"
-    inside = evidence_dir / "_containment_selftest.txt"
-    try:
-        stray = outside / "stray.txt"
-        stray.write_text(
-            "$ python3 Tools/mutation_gate.py --only some-ident\n"
-            "caught 1 | survived 0 | equivalent 0 | skipped 0 | error 0\n" * 4,
-            encoding="utf-8")
-
-        link.symlink_to(stray)
-        assert not mutation_gate._is_falsifiable(
-            "some-ident", f"some-ident: see mutation-evidence/{link.name}"
-            " for the output"), (
-            "a symlink pointing outside the repository must not be accepted")
-
-        # The same bytes as a real file inside the repository are accepted, so
-        # the check above is not simply refusing everything.
-        inside.write_text(stray.read_text(encoding="utf-8"), encoding="utf-8")
-        assert mutation_gate._is_falsifiable(
-            "some-ident", f"some-ident: see mutation-evidence/{inside.name}"
-            " for the output"), (
-            "a real artifact inside the repository must still be accepted")
-    finally:
-        link.unlink(missing_ok=True)
-        inside.unlink(missing_ok=True)
-        if evidence_dir.is_dir() and not any(evidence_dir.iterdir()):
-            evidence_dir.rmdir()
-        subprocess.run(["rm", "-rf", str(outside)], capture_output=True)
-
-
 def test_gate_reports_a_real_surviving_mutant_as_failure():
-    """An uncaught non-equivalent production mutation must fail the gate.
+    """An uncaught production mutation must fail the gate.
 
     This drives the real mutation runner rather than constructing a Result by
-    hand. The selected owning test is intentionally unrelated to AdapterError
-    argument propagation, so breaking that behavior must survive that test; the
-    gate must then turn the survivor into a failing exit status and restore the
-    source file.
+    hand. The owning test never reads the mutated file, so the mutation must
+    survive it; the gate must then turn the survivor into a failing exit status
+    and restore the file. No survivor can be excused.
     """
-    path = ROOT / "Backend/core/adapter.py"
-    before = path.read_text(encoding="utf-8")
-    m = mutation_gate.Mutation(
-        ident="probe-real-survivor",
-        invariant="AdapterError arguments are preserved",
-        path=path,
-        old="        self.arguments = list(arguments)",
-        new="        self.arguments = []",
-        test="tests/test_module_build_output.py",
-    )
-    result = mutation_gate.run_mutation(m)
-    assert result.outcome == "survived", result
-    assert mutation_gate.exit_code_for([result]) != 0, (
-        "a real surviving non-equivalent mutant must fail the gate")
-    assert path.read_text(encoding="utf-8") == before, (
-        "the real survivor probe left production code mutated")
+    with tempfile.TemporaryDirectory(prefix="mgt-mg-survivor-") as tmp:
+        target, m = _probe(tmp, checks_target=False)
+        before = target.read_bytes()
+        result = mutation_gate.run_mutation(m)
+        assert result.outcome == "survived", result
+        assert mutation_gate.exit_code_for([result]) != 0, (
+            "a real surviving mutant must fail the gate")
+        assert target.read_bytes() == before, (
+            "the real survivor probe left the target mutated")
 
 
 def test_list_and_manifest_are_consistent():
@@ -602,8 +488,7 @@ def test_baseline_cache_fails_closed_on_clean_hash_drift():
 
 
 if __name__ == "__main__":
-    test_manifest_is_valid()
-    test_success_tokens_come_from_owning_tests()
+    test_success_token_is_discovered_from_the_owning_test()
     test_gate_refuses_a_dirty_tree()
     test_gate_prefers_the_tree_check_over_the_toolchain()
     test_git_status_failure_is_not_a_clean_tree()
@@ -615,8 +500,6 @@ if __name__ == "__main__":
     test_manifest_covers_final_hardening_seams()
     test_manifest_covers_c05_drift_classes()
     test_every_invariant_records_its_incident()
-    test_equivalent_excuses_must_be_backed_by_an_artifact()
-    test_the_artifact_rule_rejects_evidence_outside_the_repository()
     test_gate_reports_a_real_surviving_mutant_as_failure()
     test_list_and_manifest_are_consistent()
     test_baseline_cache_reuses_green_clean_run_and_isolates_failures()

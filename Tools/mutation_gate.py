@@ -16,9 +16,13 @@ Two rules keep this honest:
 
 1. The manifest is data, not prose. It is reviewable, and the gate is
    self-maintaining: adding an invariant here makes it enforced.
-2. A mutation is only a hole if behaviour actually changed. Mutants that are
-   behaviourally equivalent to the original are recorded as equivalent, with
-   the evidence, instead of failing the gate.
+2. Every survivor fails the gate. A mutant that turns out to be behaviourally
+   equivalent is not excused; replace it with an edit that changes behaviour.
+
+The gate, including its anchor validation, is a convergence audit: it runs in
+the Build 2 macOS convergence lane (explicit dispatch and the nightly schedule
+on main), not on pull requests. An edit that moves an anchored line therefore
+surfaces at the next convergence run, where the manifest is updated.
 
 Usage:
     python3 Tools/mutation_gate.py                  # run every declared mutation
@@ -36,10 +40,9 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,7 +57,7 @@ class Mutation:
     new: str
     test: str
     note: str = ""
-    equivalent_reason: Optional[str] = None
+
     def label(self) -> str:
         return f"{self.path.relative_to(ROOT)}: {self.invariant}"
 
@@ -62,7 +65,7 @@ class Mutation:
 @dataclass
 class Result:
     mutation: Mutation
-    outcome: str  # "caught" | "survived" | "equivalent" | "skipped" | "error"
+    outcome: str  # "caught" | "survived" | "skipped" | "error"
     detail: str = ""
     stderr_tail: list[str] = field(default_factory=list)
 
@@ -109,61 +112,6 @@ PROVENANCE = {
     "core-save-transaction-boundary": "#515: Core Save §5 requires every exit after the first real mutation to attempt rollback; unrecorded rename progress bypasses recovery.",
     "core-save-recovery-evidence-discovery": "#515: Core Save §5 requires preserved .rollback-* evidence to be rediscovered by a later CoreSaveService; otherwise process loss hides the only recovery copy."
 }
-
-
-# Where a recorded equivalent-mutant justification must live. A file that
-# exists and holds the pasted before/after output is checkable; a paragraph in
-# the manifest is not.
-EVIDENCE_DIR = ROOT / "docs/audits/mutation-evidence"
-
-
-def _is_falsifiable(ident: str, reason: str) -> bool:
-    """An excuse must be backed by a recorded artifact, not by prose.
-
-    A surviving mutation is only a hole if behaviour actually changed, so
-    recording one as equivalent is legitimate. Two rounds of review killed both
-    weaker versions of this rule:
-
-    * a length check, defeated by a long paragraph;
-    * a keyword check for "python3" and "output", defeated by adding those two
-      words to the same paragraph -- demonstrated end to end, flipping a real
-      catch to `equivalent` and the gate to `mutation_gate_ok`.
-
-    The only thing that cannot be written convincingly is an artifact somebody
-    else can read. So the excuse must name a file under EVIDENCE_DIR, that file
-    must exist, and it must hold more than a bare claim. The manifest keeps the
-    one-line summary; the directory keeps the proof.
-    """
-    text = reason.strip()
-    if len(text) < 40:
-        return False
-    if not text.startswith(f"{ident}:"):
-        return False
-    # It must point at a real file, named so the mapping is unambiguous.
-    names = re.findall(r"mutation-evidence/([A-Za-z0-9._-]+)", text)
-    if not names:
-        return False
-    for name in names:
-        candidate = EVIDENCE_DIR / name
-        # Containment first. `is_file()` follows symlinks, so a symlink planted
-        # inside EVIDENCE_DIR can point anywhere on disk -- including a scratch
-        # file outside the repository -- and the rule would accept a citation to
-        # evidence nobody can review with the commit. The artifact has to be a
-        # real file that lives under the repository.
-        if not candidate.is_file() or candidate.is_symlink():
-            return False
-        try:
-            resolved = candidate.resolve()
-        except OSError:
-            return False
-        if not resolved.is_relative_to(ROOT):
-            return False
-        # A file that merely restates the claim is not evidence either.
-        if len(candidate.read_text(encoding="utf-8", errors="ignore").strip()) < 200:
-            return False
-    return True
-
-
 
 
 def _hades_lua() -> Path:
@@ -672,7 +620,12 @@ def _anchor_count(text: str, needle: str) -> int:
 
 
 def check_manifest(mutations: list[Mutation]) -> list[str]:
-    """Validate every anchor before running anything. Stale anchors are holes."""
+    """Validate every anchor before running anything. Stale anchors are holes.
+
+    This runs only as the first stage of a gate run, never in a pull-request
+    test lane: anchors are exact production text, so validating them per PR
+    turned every edit near an anchored line into a PR failure.
+    """
     problems = []
     seen_ids = set()
     for m in mutations:
@@ -693,11 +646,6 @@ def check_manifest(mutations: list[Mutation]) -> list[str]:
                 f"{m.ident}: no provenance recorded. Every declared invariant must name "
                 "the shipped defect or the review that demanded it, so it is traceable "
                 "rather than decorative")
-        if m.equivalent_reason is not None and not _is_falsifiable(m.ident, m.equivalent_reason):
-            problems.append(
-                f"{m.ident}: the equivalent-mutant excuse is not backed by a recorded "
-                "artifact. It must read '{ident}: ...' and cite an existing file under "
-                f"{EVIDENCE_DIR.relative_to(ROOT)} holding the before/after output")
         if not m.path.is_file():
             problems.append(f"{m.ident}: production file missing: {m.path}")
             continue
@@ -808,8 +756,6 @@ def run_mutation(
             )
 
     if mutated.returncode == 0:
-        if m.equivalent_reason:
-            return Result(m, "equivalent", m.equivalent_reason)
         return Result(m, "survived", "test stayed green with the invariant broken",
                       _tail(mutated.stdout))
 
@@ -913,7 +859,6 @@ def main() -> int:
     skipped = [r for r in results if r.outcome == "skipped"]
     errored = [r for r in results if r.outcome == "error"]
     caught = [r for r in results if r.outcome == "caught"]
-    equivalent = [r for r in results if r.outcome == "equivalent"]
 
     if args.keep_failing and survivors:
         m = survivors[0].mutation
@@ -925,7 +870,6 @@ def main() -> int:
     payload = {
         "caught": [r.mutation.ident for r in caught],
         "survived": [r.mutation.ident for r in survivors],
-        "equivalent": [r.mutation.ident for r in equivalent],
         "skipped": [r.mutation.ident for r in skipped],
         "error": [r.mutation.ident for r in errored],
     }
@@ -935,14 +879,14 @@ def main() -> int:
     else:
         width = max((len(r.mutation.ident) for r in results), default=0)
         for r in results:
-            mark = {"caught": "caught ", "survived": "SURVIVED", "equivalent": "equivalent",
+            mark = {"caught": "caught ", "survived": "SURVIVED",
                     "skipped": "SKIPPED ", "error": "ERROR   "}[r.outcome]
             print(f"  {mark}  {r.mutation.ident:<{width}}  {r.mutation.test}")
             if r.outcome == "survived" and r.stderr_tail:
                 print(f"           {r.mutation.invariant}")
         print()
         print(f"caught {len(caught)}  |  survived {len(survivors)}  |  "
-              f"equivalent {len(equivalent)}  |  skipped {len(skipped)}  |  error {len(errored)}")
+              f"skipped {len(skipped)}  |  error {len(errored)}")
 
     after = verify_clean_tree()
     if after and not args.keep_failing:
@@ -955,7 +899,7 @@ def main() -> int:
         print(
             f"\n{survivors[0].mutation.ident} stayed green with its invariant broken. "
             "Either the guard is missing or the mutation is behaviourally equivalent — "
-            "prove which, then record an equivalent_reason or fix the guard.",
+            "fix the guard, or replace the mutation with one that changes behaviour.",
             file=sys.stderr)
     if verdict:
         return verdict

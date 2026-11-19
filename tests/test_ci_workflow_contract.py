@@ -2,10 +2,11 @@
 
 The scripts the workflows call own their behavior tests (scope classification,
 PR smoke selection, runners, build). This file keeps only the workflow
-configuration that AGENTS.md states: PR/dispatch triggers, the stable required
-check contexts with their Ubuntu fast path, fail-closed scope decisions, the
-PR/convergence split, exact-SHA checkout, immutable actions and the pinned
-Python runtime. Rules read a parsed step model, never incidental line text.
+configuration that AGENTS.md states: PR/dispatch triggers and the nightly
+Build 2 macOS schedule, the stable required check contexts with their Ubuntu
+fast path, fail-closed scope decisions, the PR/convergence split, exact-SHA
+checkout, immutable actions and the pinned Python runtime. Rules read a parsed
+step model, never incidental line text.
 """
 import json
 import re
@@ -16,6 +17,8 @@ WORKFLOW_DIR = ROOT / '.github/workflows'
 TASK_WORKFLOWS = ('linux-contracts.yml', 'build2-macos.yml', 'module-build-matrix.yml')
 RELEASE_WORKFLOW = 'direct-release.yml'
 PULL_REQUEST = "github.event_name == 'pull_request'"
+# Every event without a PR diff (dispatch and the nightly schedule) converges.
+CONVERGENCE = "github.event_name != 'pull_request'"
 DISPATCH = "github.event_name == 'workflow_dispatch'"
 
 
@@ -96,13 +99,30 @@ all_steps = {
     for name, workflow in workflows.items()
 }
 
-# Merged main does not repeat task verification; only the release workflow has
-# its own trigger, and it never runs for pull requests.
+# Merged main does not repeat PR verification. Build 2 macOS alone adds a
+# nightly convergence schedule for earlier signal; the release workflow has its
+# own trigger and never runs for pull requests.
+SCHEDULED = {'build2-macos.yml'}
 for name in TASK_WORKFLOWS:
-    assert set(workflows[name]['on']) == {'pull_request', 'workflow_dispatch'}, (name, workflows[name]['on'])
+    expected_events = {'pull_request', 'workflow_dispatch'} | ({'schedule'} if name in SCHEDULED else set())
+    assert set(workflows[name]['on']) == expected_events, (name, workflows[name]['on'])
     # Only pull-request runs cancel superseded runs: a repeated dispatch must
     # not cancel the exact-SHA convergence build a release is waiting on.
     assert workflows[name]['concurrency']['cancel-in-progress'] == "${{ github.event_name == 'pull_request' }}", name
+for name in SCHEDULED:
+    workflow = workflows[name]
+    assert [entry.get('cron') for entry in workflow['on']['schedule']], name
+    # A running nightly must not queue a release's convergence dispatch on the
+    # same ref behind it, so the event separates the concurrency groups.
+    assert '${{ github.event_name }}' in workflow['concurrency']['group'], name
+    # A scheduled run has no diff base. The scope classifier must receive none,
+    # which it treats as unknown scope and routes to every lane
+    # (tests/test_ci_docs_only.py owns that behavior).
+    base = workflow['env']['BASE_SHA']
+    assert base.startswith('${{') and base.endswith('}}'), base
+    pr_base, separator, fallback = base[3:-2].rpartition('||')
+    assert separator and fallback.strip() == "''", base
+    assert pr_base.strip() == f'{PULL_REQUEST} && github.event.pull_request.base.sha', base
 assert 'pull_request' not in workflows[RELEASE_WORKFLOW]['on']
 
 # The stable required contexts `backend-contracts`, `build` and
@@ -149,15 +169,17 @@ for name, outputs in DECISIONS.items():
             for _, step in all_steps[name]
         ), f'{name}: unclassified {output} must fail closed'
 
-# Recurring verification is PR-owned and diff-based gates need a PR base; full
-# macOS contracts, mutation audits, packaging/provenance and retained artifacts
-# belong to exact-SHA convergence dispatch.
+# Recurring verification is PR-owned and diff-based gates need a PR base. Full
+# macOS contracts and the mutation audit run on every convergence event
+# (dispatch and the nightly schedule); release-candidate packaging/provenance
+# and retained artifacts belong to explicit exact-SHA dispatch only, because the
+# release coordinator consumes nothing else.
 LANES = (
     ('diff gate', PULL_REQUEST, lambda run, step: 'Tools/check_runtime_revision.py' in run),
     ('macOS PR smoke', PULL_REQUEST,
      lambda run, step: 'Tools/run_macos_checks.sh --pr' in run or 'Tools/select_macos_pr_tests.py' in run),
-    ('full macOS contracts', DISPATCH, lambda run, step: re.search(r'Tools/run_macos_checks\.sh\s*$', run, re.M)),
-    ('mutation audit', DISPATCH, lambda run, step: 'Tools/mutation_gate.py' in run),
+    ('full macOS contracts', CONVERGENCE, lambda run, step: re.search(r'Tools/run_macos_checks\.sh\s*$', run, re.M)),
+    ('mutation audit', CONVERGENCE, lambda run, step: 'Tools/mutation_gate.py' in run),
     ('package/provenance', DISPATCH, lambda run, step: '_build_provenance.py' in run or 'ditto -c' in run),
     ('retained artifact', DISPATCH, lambda run, step: str(step.get('uses', '')).startswith('actions/upload-artifact@')
      and 'artifacts/' in str((step.get('with') or {}).get('path'))),
@@ -219,11 +241,10 @@ for name, workflow in workflows.items():
 
 # A push-triggered release waits for the dispatched convergence lanes on the
 # same SHA. The wait must outlast the slowest producer's dispatch budget plus
-# runner queueing, and the release job must outlast its wait.
+# runner queueing, and the release job must outlast its wait. A conditional
+# budget is bounded by its largest branch.
 def dispatch_minutes(job):
-    value = str(job.get('timeout-minutes'))
-    conditional = re.search(r"workflow_dispatch'\s*&&\s*(\d+)", value)
-    return int(conditional.group(1) if conditional else value)
+    return max(int(minutes) for minutes in re.findall(r'\b\d+\b', str(job['timeout-minutes'])))
 
 
 producer_minutes = max(dispatch_minutes(job) for name in TASK_WORKFLOWS for job in workflows[name]['jobs'].values())

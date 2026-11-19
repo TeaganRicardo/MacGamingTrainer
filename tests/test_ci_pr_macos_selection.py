@@ -198,7 +198,6 @@ _NON_BEHAVIOR_MACOS_EXACT = frozenset({
     "LICENSE",
     "Tools/hades2_profile_workloads.py",
     "Tools/module_inventory.py",
-    "Tools/mutation_gate.py",
     "Tools/product_support.py",
     "Tools/python_runtime.json",
     "Tools/validate_game_module.py",

@@ -209,8 +209,8 @@ PREFIX_TESTS: tuple[tuple[str, tuple[str, ...]], ...] = (
 # A hosted runner cannot guarantee that a background test process becomes the
 # active application, and macOS activation is cooperative: the wait then expires
 # even though the product is correct. They stay in the convergence inventory and
-# run against an exact SHA there; gating every PR on them only produced
-# non-deterministic red results.
+# run against an exact SHA there (explicit dispatch, and nightly on main);
+# gating every PR on them only produced non-deterministic red results.
 @dataclass(frozen=True)
 class Deferral:
     """Why a native journey is absent from the PR lane, and who verifies it."""
@@ -219,18 +219,20 @@ class Deferral:
     verification_owner: str
 
 
+CONVERGENCE_OWNER = "Build 2 macOS convergence: workflow_dispatch on the exact SHA, and nightly on main"
+
 PR_DEFERRED: dict[str, Deferral] = {
     "test_hades2_view_state_flow.py": Deferral(
         reason="asserts native focus, key-window and foreground activation",
-        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+        verification_owner=CONVERGENCE_OWNER,
     ),
     "test_multi_game_contexts.py": Deferral(
         reason="drives two real module adapters through foreground activation",
-        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+        verification_owner=CONVERGENCE_OWNER,
     ),
     "test_runtime_text_edit_completion.py": Deferral(
         reason="requires a focused native field editor in the foreground",
-        verification_owner="Build 2 macOS workflow_dispatch on the exact SHA",
+        verification_owner=CONVERGENCE_OWNER,
     ),
 }
 

@@ -45,7 +45,7 @@ That focused acceptance does not certify earlier feature families or subsequent 
 
 ## Execution authorization
 
-Ordinary PR verification includes foreground-independent Hades II model/API/session behavior and two live-context request/document ownership. Native focus, field-editor, key-window and activation journeys retain exact-SHA convergence ownership. The selector and coverage summary share one relevant/selected/deferred result; an unrelated deferred policy is not counted as this PR's coverage. These fixtures establish only the behavior covered by their assertions.
+Ordinary PR verification includes foreground-independent Hades II model/API/session behavior and two live-context request/document ownership. Native focus, field-editor, key-window and activation journeys retain exact-SHA convergence ownership; a nightly `Build 2 macOS` run on `main` executes them between releases. The selector and coverage summary share one relevant/selected/deferred result; an unrelated deferred policy is not counted as this PR's coverage. These fixtures establish only the behavior covered by their assertions.
 
 The user's 2026-11-07 instruction selects all executable open issues for independent development, review and merge. It supersedes earlier local-testing pauses. Isolated local checks, required PR CI and bounded native verification are authorized. Low-information device work may be deferred while other work continues; skipped checks remain unverified.
 

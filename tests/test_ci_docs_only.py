@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -468,5 +469,20 @@ for darwin_backend in (
     scope = module.classify_scope([darwin_backend])
     assert scope["needs_macos"] is True, (darwin_backend, scope)
 assert module.classify_scope(["Backend/core/protocol.py"])["needs_macos"] is False
+
+# Workflow dispatch and the nightly schedule have no PR diff base, so the
+# workflow passes an empty BASE_SHA. That is unknown scope, which the scope job's
+# own command line must route to every lane rather than to a fast path. A new
+# branch's all-zero base is unknown scope too.
+current_head = head(ROOT)
+for base in ("", "0" * 40):
+    emitted = subprocess.run(
+        [sys.executable, str(SCRIPT), base, current_head],
+        cwd=ROOT, check=True, text=True, capture_output=True,
+    ).stdout.split()
+    assert emitted == [
+        "docs_only=false", "needs_linux=true", "needs_macos=true",
+        "needs_module=true", "needs_build=true", "needs_full_build=true",
+    ], (base, emitted)
 
 print("ci_docs_only_ok")
