@@ -2,6 +2,7 @@ from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_save import JOURNEY_BUDGETS
 import os
 import shutil
+import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
@@ -10,14 +11,16 @@ from swift_test_compiler import compile_swift_test
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
 PYTHON = shutil.which("python3")
-if not SWIFTC or not PYTHON:
-    raise SystemExit("swiftc/python3 required for Save Manager behavior tests")
+CLANG = shutil.which("clang")
+if not SWIFTC or not PYTHON or not CLANG:
+    raise SystemExit("swiftc/python3/clang required for Save Manager behavior tests")
 
 worker = r'''
 import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
 policy={'maxCount':20,'maxBytes':268435456,'policyValid':True,'overBudget':False,'warning':''}
 protected=False
+apply_staged_calls=0
 for raw in sys.stdin:
     req=json.loads(raw)
     command=req.get('command','')
@@ -47,6 +50,34 @@ for raw in sys.stdin:
         snapshot_id=params.get('snapshotId')
         time.sleep(0.45 if snapshot_id == 'b' else 0.05)
         result['operation']={'deleted': True, 'id': snapshot_id}
+    elif command == 'core.save.apply_staged':
+        apply_staged_calls += 1
+        result['operation']={'applied': apply_staged_calls >= 2}
+    elif command == 'core.save.restore':
+        snapshot_id=params.get('snapshotId')
+        if snapshot_id == 'rollback-with-path':
+            print(json.dumps({
+                'type':'result','id':req['id'],'protocolVersion':6,
+                'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
+                'error':{
+                    'code':'rollback_failed',
+                    'presentation':'host.save.error.restoreFailed',
+                    'recoveryPath': str(recovery),
+                },
+            }), flush=True)
+            continue
+        if snapshot_id == 'rollback-blank-path':
+            print(json.dumps({
+                'type':'result','id':req['id'],'protocolVersion':6,
+                'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
+                'error':{
+                    'code':'rollback_failed',
+                    'presentation':'host.save.error.restoreFailed',
+                    'recoveryPath': '   ',
+                },
+            }), flush=True)
+            continue
+        assert snapshot_id == 'auto-fixture' and params.get('preserveCurrent') is True
     elif command == 'core.save.open_folder':
         if params.get('snapshotId') == 'error':
             print(json.dumps({
@@ -64,8 +95,10 @@ for raw in sys.stdin:
 '''
 
 lifecycle_harness = r'''
+import AppKit
 import Foundation
 import Combine
+import SwiftUI
 
 func fail(_ message: String) -> Never {
     fputs(message, stderr)
@@ -82,11 +115,98 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+final class StubHostModel: ObservableObject, TrainerHostModel {
+    @Published var backendAvailable = false
+    let busy = false
+    let connected = false
+    let operation = TrainerTextToken(key: "")
+    let statusTitle = TrainerTextToken(key: "")
+    let connectionDetailText = TrainerTextToken(key: "")
+    let hostActionsEnabled = true
+    func toggleConnectionFromHost() {}
+    func refreshFromHost() {}
+    func restartBackendFromHost() {}
+    func prepareForTermination(completion: @escaping () -> Void) { completion() }
+}
+
+enum SaveContextConfig {
+    nonisolated(unsafe) static var targetSuffix = ""
+}
+
+struct SupportedSaveTargetModule: TrainerGameModule {
+    static var descriptor: GameModuleDescriptor {
+        GameModuleDescriptor(
+            id: "save-target",
+            displayName: "Save Target",
+            targetProcessName: "mgt_save_tgt",
+            targetBundleIdentifier: "",
+            targetExecutablePathSuffix: SaveContextConfig.targetSuffix,
+            expectedHostProtocolVersion: 6,
+            expectedModuleProtocolVersion: 5,
+            supportsSaveManagement: true
+        )
+    }
+    static let presentation = TrainerGamePresentation(headerTitle: "SAVE TARGET")
+    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
+}
+
+struct UnsupportedSaveModule: TrainerGameModule {
+    static let descriptor = GameModuleDescriptor(
+        id: "no-save",
+        displayName: "No Save",
+        targetProcessName: "MGTNoSuchTarget",
+        targetBundleIdentifier: "",
+        expectedHostProtocolVersion: 6,
+        expectedModuleProtocolVersion: 5,
+        supportsSaveManagement: false
+    )
+    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
+    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
+}
+
+struct SupportedNoTargetModule: TrainerGameModule {
+    static let descriptor = GameModuleDescriptor(
+        id: "save-idle",
+        displayName: "Save Idle",
+        targetProcessName: "MGTNoSuchTarget",
+        targetBundleIdentifier: "",
+        expectedHostProtocolVersion: 6,
+        expectedModuleProtocolVersion: 5,
+        supportsSaveManagement: true
+    )
+    static let presentation = TrainerGamePresentation(headerTitle: "SAVE IDLE")
+    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
+}
+
 @main
 struct Runner {
+    @MainActor
     static func main() throws {
+        _ = NSApplication.shared
         let args = CommandLine.arguments
-        if args.count != 4 { fail("expected python + worker + recovery fixture") }
+        if args.count != 6 { fail("expected python + worker + recovery fixture + target binary + target suffix") }
+        SaveContextConfig.targetSuffix = args[5]
         let process = BackendProcess(
             executableURL: URL(fileURLWithPath: args[1]),
             argumentsPrefix: ["-u"],
@@ -98,6 +218,7 @@ struct Runner {
             expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5, supportsSaveManagement: true
         )
         var dispatchedDeletes = 0
+        var dispatchedApplyStaged = 0
         try session.start(
             descriptor: descriptor,
             backendScriptURL: URL(fileURLWithPath: args[2]),
@@ -105,6 +226,7 @@ struct Runner {
             resetGameState: {},
             log: { message in
                 if message.hasPrefix("请求 core.save.delete ·") { dispatchedDeletes += 1 }
+                if message.hasPrefix("请求 core.save.apply_staged ·") { dispatchedApplyStaged += 1 }
             },
             onStatusChange: { _ in }
         )
@@ -165,6 +287,33 @@ struct Runner {
         if old?.origin != "unclassified" || old?.protected != true || old?.storageBytes != nil {
             fail("legacy snapshot decode inferred automatic ownership or zero bytes")
         }
+        let autoSnap = TrainerSaveSnapshot(row: [
+            "id": "auto-1",
+            "name": "自动名称",
+            "nameDetails": ["默认详情"],
+            "automaticName": true,
+            "localizedPresentation": ["en": ["name": "Auto Name", "details": ["English detail"]]],
+            "hot": true,
+            "valid": true,
+        ])!
+        if autoSnap.displayName(for: "en") != "Auto Name" ||
+            autoSnap.displayName(for: "zh-CN") != "自动名称" ||
+            autoSnap.displayDetails(for: "en") != ["English detail"] ||
+            autoSnap.displayDetails(for: "zh-CN") != ["默认详情"] ||
+            !autoSnap.hot || !autoSnap.valid {
+            fail("automatic snapshot localization or hot/valid decoding failed")
+        }
+        let customSnap = TrainerSaveSnapshot(row: [
+            "id": "custom-1",
+            "name": "Custom Name",
+            "automaticName": false,
+            "localizedPresentation": ["en": ["name": "Auto Name", "details": ["English detail"]]],
+        ])!
+        if customSnap.displayName(for: "en") != "Custom Name" ||
+            customSnap.displayDetails(for: "en") != ["English detail"] ||
+            customSnap.hot || customSnap.valid {
+            fail("user-renamed snapshot did not preserve custom name or defaulted hot/valid")
+        }
         var invalidFinished = false
         model.configureRetention(maxCount: 0, maxBytes: 1) { invalidFinished = !$0 }
         if !invalidFinished || model.busy { fail("invalid retention input dispatched backend work") }
@@ -205,6 +354,98 @@ struct Runner {
             fail("unsafe backend folder was not rejected")
         }
 
+        model.applyStagedIfPossible()
+        if !waitUntil(2.0, { !model.busy }) { fail("applyStaged (unapplied) did not finish") }
+        if !model.notice.isEmpty || !model.error.isEmpty {
+            fail("unapplied applyStagedIfPossible emitted notice/error: \(model.notice) / \(model.error)")
+        }
+        model.applyStagedIfPossible()
+        if !waitUntil(2.0, { !model.busy }) { fail("applyStaged (applied) did not finish") }
+        if model.notice != "host.save.notice.pendingApplied" {
+            fail("applied applyStagedIfPossible did not emit notice: \(model.notice)")
+        }
+        model.restore(id: "auto-fixture", preserveCurrent: true)
+        if !waitUntil(2.0, { !model.busy }) || model.notice != "host.save.notice.restoreSubmitted" {
+            fail("restore did not emit submitted notice: \(model.notice)")
+        }
+        model.restore(id: "rollback-with-path", preserveCurrent: true)
+        if !waitUntil(2.0, { !model.busy }) ||
+            model.error != "host.save.error.rollbackFailed" ||
+            model.errorArguments != [recoveryPath] {
+            fail("rollback_failed with recoveryPath did not surface arguments: \(model.error) \(model.errorArguments)")
+        }
+        model.restore(id: "rollback-blank-path", preserveCurrent: true)
+        if !waitUntil(2.0, { !model.busy }) ||
+            model.error != "host.save.error.restoreFailed" ||
+            !model.errorArguments.isEmpty {
+            fail("rollback_failed with blank path did not fall back to restoreFailed: \(model.error) \(model.errorArguments)")
+        }
+
+        // TrainerGameContext owns event-driven staged restore application on
+        // backend availability and target exit only when Save management is enabled.
+        do {
+            let targetProcess = Process()
+            targetProcess.executableURL = URL(fileURLWithPath: args[4])
+            targetProcess.standardInput = FileHandle.nullDevice
+            targetProcess.standardOutput = FileHandle.nullDevice
+            targetProcess.standardError = FileHandle.nullDevice
+            try targetProcess.run()
+            defer {
+                if targetProcess.isRunning {
+                    targetProcess.terminate()
+                    targetProcess.waitUntilExit()
+                }
+            }
+            let modelA = StubHostModel()
+            var contextA: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelA, session: session)
+            if !waitUntil(1.0, { contextA!.targetMonitor.refresh(); return contextA!.targetMonitor.isRunning }) {
+                fail("fixture target process was not observed running")
+            }
+            let beforeA = dispatchedApplyStaged
+            modelA.backendAvailable = true
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            if dispatchedApplyStaged != beforeA {
+                fail("running target allowed staged restore apply on backend availability")
+            }
+            targetProcess.terminate()
+            targetProcess.waitUntilExit()
+            contextA!.targetMonitor.refresh()
+            if !waitUntil(2.0, { dispatchedApplyStaged == beforeA + 1 }) {
+                fail("target exit did not trigger staged restore apply")
+            }
+            if !waitUntil(2.0, { !contextA!.saveManager.busy }) {
+                fail("staged restore apply on target exit did not settle")
+            }
+            contextA = nil
+        }
+
+        do {
+            let beforeB = dispatchedApplyStaged
+            let modelB = StubHostModel()
+            var contextB: TrainerGameContext<UnsupportedSaveModule>? = TrainerGameContext(model: modelB, session: session)
+            modelB.backendAvailable = true
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            if dispatchedApplyStaged != beforeB {
+                fail("supportsSaveManagement=false dispatched staged restore apply")
+            }
+            withExtendedLifetime(contextB) {}
+            contextB = nil
+        }
+
+        do {
+            let beforeC = dispatchedApplyStaged
+            let modelC = StubHostModel()
+            var contextC: TrainerGameContext<SupportedNoTargetModule>? = TrainerGameContext(model: modelC, session: session)
+            modelC.backendAvailable = true
+            if !waitUntil(2.0, { dispatchedApplyStaged == beforeC + 1 }) {
+                fail("backend availability without target did not trigger staged restore apply")
+            }
+            if !waitUntil(2.0, { !contextC!.saveManager.busy }) {
+                fail("staged restore apply on backend availability did not settle")
+            }
+            contextC = nil
+        }
+
         model.backup()
         model.refresh()
         if !model.busy { fail("concurrent Save requests did not start before restart") }
@@ -228,6 +469,7 @@ struct Runner {
 '''
 
 path_harness = r'''
+import Darwin
 import Foundation
 
 func fail(_ message: String) -> Never {
@@ -312,6 +554,16 @@ struct Runner {
             TrainerSavePathValidator.validatedDirectoryURL(for: insideFile.path, under: root) == nil,
             "regular file must not pass directory-only reveal validation"
         )
+        expect(
+            TrainerSavePathValidator.validatedLocalURL(for: "FILE://" + insideDirectory.path, under: root) != nil,
+            "uppercase FILE scheme should be accepted"
+        )
+        let fifoURL = insideDirectory.appendingPathComponent("pipe")
+        expect(mkfifo(fifoURL.path, 0o600) == 0, "fixture could not create FIFO")
+        expect(
+            TrainerSavePathValidator.validatedLocalURL(for: fifoURL.path, under: root) == nil,
+            "non-regular FIFO must be rejected"
+        )
         print("core_save_manager_path_validation_u02_ok")
     }
 }
@@ -322,6 +574,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     worker_path = base / "worker.py"
     main_path = base / "lifecycle.swift"
     binary = base / "lifecycle"
+    target_source = base / "target.c"
+    target_binary = base / "FixtureTarget" / "mgt_save_tgt"
+    target_binary.parent.mkdir(parents=True)
+    target_source.write_text("#include <unistd.h>\nint main(void) { for (int i = 0; i < 30; ++i) sleep(1); return 0; }\n", encoding="utf-8")
+    subprocess.run([CLANG, str(target_source), "-o", str(target_binary)], check=True)
+    target_suffix = f"{base.resolve().name}/FixtureTarget/mgt_save_tgt"
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(lifecycle_harness), encoding="utf-8")
     home = base / "effective-home"
@@ -331,7 +589,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     environment["HOME"] = str(home)
     compile_swift_test(harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT)
     proc = launch_fixture(
-        [str(binary), PYTHON, str(worker_path), str(recovery)],
+        [str(binary), PYTHON, str(worker_path), str(recovery), str(target_binary), target_suffix],
         cwd=ROOT, env=environment, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.1', budgets=JOURNEY_BUDGETS
     )
     if proc.returncode != 0:

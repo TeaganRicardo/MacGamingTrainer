@@ -6,17 +6,6 @@ core = (ROOT / "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift").read
 hades = (ROOT / "Sources/Hades/HadesSaveEditorModel.swift").read_text(encoding="utf-8")
 hades2 = (ROOT / "Sources/Hades2/Hades2SaveEditorModel.swift").read_text(encoding="utf-8")
 
-for method in (
-    "func beginNewDocumentRead() -> Ticket",
-    "func capture(_ lane: Lane? = nil, bindsDocument: Bool = true) -> Ticket",
-    "func accepts(_ ticket: Ticket) -> Bool",
-    "func invalidate(_ lane: Lane)",
-    "func owns(workspaceID: String?, baselineGeneration: String?) -> Bool",
-    "func bind(workspaceID: String, baselineGeneration: String)",
-    "func retire()",
-):
-    assert method in core, method
-
 for name, source in (("Hades I", hades), ("Hades II", hades2)):
     assert "private let requests = TrainerSaveEditorReplyCoordinator()" in source, name
     assert "requests.beginNewDocumentRead()" in source, name
@@ -31,6 +20,7 @@ for name, source in (("Hades I", hades), ("Hades II", hades2)):
 # Both adapters still own game-specific editing/draft presentation.
 assert "activeEdits" in hades and "failedDrafts" in hades
 assert "typedDrafts" in hades2 and "membershipDrafts" in hades2
+# Structural boundary: Core Save reply coordinator names no game.
 assert "Hades" not in core and "Hades2" not in core
 assert "save_editor_close" in hades and ".saveEditorClose" in hades2
 assert "self.release(abandoned)" in hades

@@ -12,25 +12,17 @@ for component in (
     "TrainerSaveEditorWorkbenchBar",
     "TrainerSaveEditorWorkspace",
 ):
-    assert f"struct {component}" in core, component
     assert f"{component}(" in hades, ("Hades I", component)
     assert f"{component}(" in hades2, ("Hades II", component)
 
+# Structural boundary: Core Save Editor shell names no game or save schema vocabulary.
 for token in ("Hades", "Hades2", "CurrentRun", "luabins", "Arcana", "Mirror"):
     assert token not in core, token
 
-# Core owns the shared chrome/geometry; modules only provide labels, options and
-# game-specific result/review content.
+# Kept pending a mid-transition/click-away Save Editor journey: mutations of these
+# three interaction guards survived both Save Editor frontend suites.
 for phrase in (
-    ".frame(width: 980)",
-    ".frame(minHeight: 700, idealHeight: 850, maxHeight: .infinity)",
-    ".trainerSurface(.canvas)",
     ".trainerDismissTextEditingOnClickAway()",
-    "theme.rowHorizontalPadding",
-    "theme.inlineRowVerticalPadding",
-    "TrainerSearchField(",
-    ".trainerPicker(.form",
-    ".animation(TrainerMotion.animation(.disclosure",
     ".allowsHitTesting(hasReview && !busy)",
     ".accessibilityHidden(!hasReview)",
 ):
@@ -52,7 +44,6 @@ assert 'Button(text("hades.saveEditor.read"))' not in hades
 advanced_sheet = (ROOT / "Sources/Hades2/Views/Hades2SaveAdvancedValueView.swift").read_text()
 grouping = (ROOT / "Sources/Hades2/Views/Hades2SaveEditorEntityGrouping.swift").read_text()
 
-assert "struct TrainerSaveEditorPagingBar" in core
 for source in (hades, hades2):
     assert "TrainerSaveEditorPagingBar(" in source
     assert "TrainerLoadingIndicator()" in source
@@ -80,7 +71,6 @@ assert "TrainerSection(title: text(model.domain.titleKey), icon: model.domain.se
 assert ".trainerPicker(.rowValue, state: model.canEdit(row) ? .interactive : .unavailable)" in hades
 assert "cornerRadius: 6" not in hades
 assert "theme.compactCornerRadius" in hades
-assert ".padding(.vertical, 15)" not in core
 
 for modal_name, modal_source in (("HadesSaveTypedEditor", hades), ("Hades2SaveAdvancedValueView", advanced_sheet)):
     assert "TrainerSheetScaffold(" in modal_source, modal_name
