@@ -683,7 +683,6 @@ def run_context_journey(*, state_only=False):
             shutil.copy2(ROOT / "Resources/Localization" / f"{language}.lproj/Host.strings",
                          localized / "Host.strings")
         modules = []
-        frontends = []
         for word, name in (("First", "first_fixture"), ("Second", "second_fixture")):
             destination = project / "Backend/games" / name
             shutil.copytree(FIXTURE / "backend", destination)
@@ -725,22 +724,15 @@ def run_context_journey(*, state_only=False):
                 "        VStack(alignment: .leading, spacing: 12) {",
                 '        VStack(alignment: .leading, spacing: 12) {\n            TextField("Draft", text: $draft)\n'
                 f'            NavigationFixtureSections(gameID: "{name}")'))
-            frontends.append(source)
             modules.append(name)
-        generated = project / "Generated.swift"
-        subprocess.run([sys.executable, str(project / "Tools/generate_game_binding.py"),
-                        ",".join(modules), str(generated)], check=True, cwd=project)
         main = project / "Harness.swift"
         main.write_text(HARNESS)
         binary = project / "test"
         compile_swift_test(
-            support_sources=[
-                *sorted((project / "Sources/Core").rglob("*.swift")),
-                *frontends,
-                ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-                generated,
-            ],
-            harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+            games=modules,
+            checkout=project,
+            harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                             ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
             output=binary,
         )
         env = {**os.environ, "HOME": str(project / "home"), "PYTHONDONTWRITEBYTECODE": "1"}

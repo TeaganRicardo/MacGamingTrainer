@@ -1,44 +1,54 @@
-"""Shared test-mode Swift compilation helper with keyed support-module cache.
+"""Compile Swift test harnesses against the product's Swift module layout.
 
-Many macOS frontend and runtime harnesses recompile the exact same 100+ Swift
-files under ``Sources/Core`` and ``Sources/Hades*`` plus ``InMemoryDefaults``
-and ``ActiveGame.generated.swift``. Compiling that immutable support set once per
-exact toolchain/SDK/flag/source digest into a testable static module
-(``libTrainerCore.a`` + ``TrainerCore.swiftmodule``, see ``MODULE_NAME``) turns ~40s repeat
-compilations into ~1s incremental harness links while keeping clean isolation.
+The product compiles TrainerCore, one module per game frontend and the App as
+separate Swift modules of one package; ``Tools/product_support.py`` owns their
+order, dependencies and source files. A harness compiles the same library
+modules (TrainerCore, then each game it loads against TrainerCore) and then
+itself in the App's place, with a ``@testable import`` of every library
+module. A harness names the games it loads, never product source files, so
+moving a type between files or modules does not change what it compiles.
+``harness_layout`` lists those files.
+
+Each library module is cached as a testable static module
+(``<Module>.swiftmodule`` + ``lib<Module>.a``), so TrainerCore compiles once
+and each game once against it; a harness then compiles and links in seconds.
 
 Equivalence and staleness guarantees:
-- Cache keys hash compiler binary path + ``swiftc --version``, resolved macOS
-  SDK path + version + ``DEVELOPER_DIR``, host architecture, normalized support
-  compile flags, and every support file's identity + exact SHA-256 bytes.
+- A module's key hashes compiler binary path + ``swiftc --version``, resolved
+  macOS SDK path + version + ``DEVELOPER_DIR``, host architecture, normalized
+  compile flags, the module name, the keys of the modules it imports, and
+  every source file's identity + exact SHA-256 bytes.
 - Repository files include their exact resolved path in the key so different
   worktrees/checkouts never share compiled ``#filePath`` literals (which
   ``Hades2Presentation`` uses to locate repository assets).
-- Generated files (``ActiveGame.generated.swift``) are keyed by logical role
-  and content digest so equal generated outputs share one cache across tests.
-- Ephemeral temporary source files other than generated bindings bypass cross-
-  process cache reuse so single-use instrumented trees never collide or linger.
+- Generated bindings are keyed by file name and content digest so equal
+  generated outputs share one cache entry across tests.
+- A module with other temporary source files (a patched or copied tree), and
+  every module that imports it, builds privately for one compile and never
+  enters the shared cache.
 - Writes stage into a PID-scoped temporary directory under an exclusive
   ``fcntl.flock`` lock, verify SHA-256 digests of both ``.swiftmodule`` and
   ``.a`` in ``manifest.json``, and recover automatically by rebuilding if any
-  cached artifact is missing or corrupted.
-- Setting ``MGT_SWIFT_TEST_CACHE=0`` bypasses the cache completely and runs a
-  single direct ``swiftc`` invocation for clean A/B equivalence checks.
+  cached artifact is missing or corrupted. A shared per-module lease, held
+  from first use until the harness has linked, keeps pruning from removing a
+  module that a later step still reads.
+- Setting ``MGT_SWIFT_TEST_CACHE=0`` bypasses the shared cache completely:
+  every module builds privately for that compile, for clean A/B checks.
 
-Module layout: the product compiles Core, each game and the App as separate
-Swift modules of one package (``Tools/swift_module_layout.py``). Until harnesses
-compile that layout themselves, every support set compiles as one module named
-like Core, in the same package. A game file's ``import TrainerCore`` is then a
-self-import the compiler ignores, and ``package`` declarations stay visible.
+The Linux lane has a Swift toolchain but no SwiftUI or AppKit, so the product
+layout cannot compile there. A portable harness passes explicit ``modules``
+built from Foundation-level files and says so where it lists them.
 """
 from __future__ import annotations
 
 import fcntl
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -46,28 +56,81 @@ import tempfile
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Mapping, Sequence
+from typing import Callable, Iterator, Mapping, Sequence
 
-_TOOLS = Path(__file__).resolve().parents[1] / "Tools"
+ROOT = Path(__file__).resolve().parents[1]
+_TOOLS = ROOT / "Tools"
 if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
+from generate_game_binding import BINDING_FILENAME, CATALOG_FILENAME  # noqa: E402
+from product_support import swift_library_modules  # noqa: E402
 from swift_module_layout import SWIFT_CORE_MODULE, SWIFT_PACKAGE_NAME  # noqa: E402
 
-CACHE_FORMAT_VERSION = 2
-MODULE_NAME = SWIFT_CORE_MODULE
+CACHE_FORMAT_VERSION = 3
+# The harness takes the App module's place in the package.
+HARNESS_MODULE_NAME = "TrainerTestHarness"
 PACKAGE_FLAGS = ("-package-name", SWIFT_PACKAGE_NAME)
-# Flags for a direct swiftc call that compiles Core and/or game sources together
-# with its harness as one test module.
-SINGLE_MODULE_FLAGS = ("-module-name", MODULE_NAME, *PACKAGE_FLAGS)
+SINGLE_MODULE_FLAGS = ("-module-name", SWIFT_CORE_MODULE, *PACKAGE_FLAGS)  # WIP: removed once direct tests migrate
 MAX_CACHE_ENTRIES = 16
 CACHE_ENV_VAR = "MGT_SWIFT_TEST_CACHE"
 CACHE_DIR_ENV_VAR = "MGT_SWIFT_TEST_CACHE_DIR"
-_GENERATED_FILENAMES = frozenset({"ActiveGame.generated.swift"})
+_GENERATED_FILENAMES = frozenset({BINDING_FILENAME, CATALOG_FILENAME})
 _CLT_SDK_PREFIX = "/Library/Developer/CommandLineTools/"
+_IMPORT = re.compile(r"^[ \t]*(?:@\w+[ \t]+)*import[ \t]+(\w+)", re.MULTILINE)
+# A copied checkout's own Tools read its own manifests.
+_CHECKOUT_LAYOUT = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from product_support import swift_library_modules
+modules = swift_library_modules([game for game in sys.argv[2].split(',') if game], sys.argv[3])
+print(json.dumps([[module['name'], module['dependencies'], [str(path) for path in sources]]
+                  for module, sources in modules]))
+"""
 
 
 class SwiftCompilerError(RuntimeError):
     """Raised when the Swift toolchain is unavailable or compilation fails."""
+
+
+@dataclass(frozen=True)
+class SwiftModule:
+    """A library module a harness imports: its files and the modules it imports."""
+
+    name: str
+    sources: tuple[Path, ...]
+    dependencies: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "sources", tuple(Path(path) for path in self.sources))
+        object.__setattr__(self, "dependencies", tuple(self.dependencies))
+
+
+def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = ROOT) -> tuple[SwiftModule, ...]:
+    """TrainerCore and each game's frontend module, as the product compiles them.
+
+    The checkout's own Tools derive the layout and write the generated sources
+    under ``directory``. A copied checkout with its own manifests runs its own
+    Tools in a subprocess because Tools read manifests next to themselves.
+    """
+    directory = Path(directory)
+    if Path(checkout).resolve() == ROOT.resolve():
+        records = [
+            (module["name"], module["dependencies"], sources)
+            for module, sources in swift_library_modules(list(games), directory)
+        ]
+    else:
+        result = subprocess.run(
+            [sys.executable, "-c", _CHECKOUT_LAYOUT, str(Path(checkout) / "Tools"), ",".join(games),
+             str(directory)],
+            capture_output=True, text=True,
+        )
+        if result.returncode:
+            raise SwiftCompilerError(f"{checkout} could not derive its Swift layout:\n{result.stderr}")
+        records = json.loads(result.stdout)
+    return tuple(
+        SwiftModule(name, tuple(Path(path) for path in sources), tuple(dependencies))
+        for name, dependencies, sources in records
+    )
 
 
 def default_cache_dir(environ: Mapping[str, str] | None = None) -> Path:
@@ -199,7 +262,7 @@ def _file_sha256(path: Path) -> str:
 def _support_file_records(
     support_sources: Sequence[Path],
 ) -> tuple[list[dict[str, str]], bool]:
-    """Classify support files into stable key records and cache eligibility."""
+    """Classify one module's files into stable key records and cache eligibility."""
     records: list[dict[str, str]] = []
     cacheable = True
     for raw_path in support_sources:
@@ -222,7 +285,7 @@ def _support_file_records(
 
 
 def normalize_support_flags(flags: Sequence[str] = ()) -> tuple[str, ...]:
-    """Normalize support module compilation flags cleanly."""
+    """Normalize library module compilation flags."""
     normalized: list[str] = []
     skip_next = False
     for index, flag in enumerate(flags):
@@ -231,7 +294,7 @@ def normalize_support_flags(flags: Sequence[str] = ()) -> tuple[str, ...]:
             continue
         if flag in {"-parse-as-library", "-whole-module-optimization", "-enable-testing"}:
             continue
-        if flag in {"-num-threads", "-package-name"}:
+        if flag in {"-num-threads", "-package-name", "-module-name"}:
             if index + 1 < len(flags):
                 skip_next = True
             continue
@@ -253,12 +316,14 @@ def compute_support_key(
     toolchain: Mapping[str, str],
     support_flags: Sequence[str],
     file_records: Sequence[Mapping[str, str]],
-    module_name: str = MODULE_NAME,
+    module_name: str = SWIFT_CORE_MODULE,
+    dependencies: Mapping[str, str] | None = None,
 ) -> str:
     """Compute a full cryptographic key covering environment, flags, and inputs."""
     payload = {
         "format": CACHE_FORMAT_VERSION,
         "module_name": module_name,
+        "dependencies": dict(dependencies or {}),
         "toolchain": dict(toolchain),
         "support_flags": list(support_flags),
         "sources": list(file_records),
@@ -267,10 +332,10 @@ def compute_support_key(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _valid_cached_entry(entry_dir: Path, expected_key: str) -> bool:
+def _valid_cached_entry(entry_dir: Path, expected_key: str, module_name: str) -> bool:
     manifest_path = entry_dir / "manifest.json"
-    module_path = entry_dir / f"{MODULE_NAME}.swiftmodule"
-    lib_path = entry_dir / f"lib{MODULE_NAME}.a"
+    module_path = entry_dir / f"{module_name}.swiftmodule"
+    lib_path = entry_dir / f"lib{module_name}.a"
     if not (manifest_path.is_file() and module_path.is_file() and lib_path.is_file()):
         return False
     try:
@@ -279,7 +344,7 @@ def _valid_cached_entry(entry_dir: Path, expected_key: str) -> bool:
         return False
     if manifest.get("version") != CACHE_FORMAT_VERSION:
         return False
-    if manifest.get("key") != expected_key:
+    if manifest.get("key") != expected_key or manifest.get("module") != module_name:
         return False
     return (
         manifest.get("module_sha256") == _file_sha256(module_path)
@@ -305,7 +370,7 @@ def _prune_cache(cache_dir: Path, keep_name: str) -> None:
             continue
     candidates.sort(key=lambda item: item[0], reverse=True)
     for _, stale_dir in candidates[MAX_CACHE_ENTRIES - 1:]:
-        # A separate test process may be linking against this static module.
+        # Another compile step or test process may hold a lease on this module.
         # Pruning must respect the same per-key lock used by active readers.
         lock_path = cache_dir / ".locks" / f"{stale_dir.name}.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,12 +404,54 @@ def _subprocess_env(base_env: Mapping[str, str], toolchain: Mapping[str, str]) -
     return child_env
 
 
-def _ensure_support_module(
+def _force_load(library: Path) -> list[str]:
+    """Link every object of a static module, as the product does, so runtime
+    conformance lookup sees the whole module."""
+    if os.uname().sysname == "Darwin":
+        return ["-Xlinker", "-force_load", "-Xlinker", str(library)]
+    return ["-Xlinker", "--whole-archive", "-Xlinker", str(library), "-Xlinker", "--no-whole-archive"]
+
+
+def _build_module(
     *,
     swiftc: str,
     toolchain: Mapping[str, str],
-    support_sources: Sequence[Path],
+    module: SwiftModule,
     support_flags: Sequence[str],
+    dependency_dirs: Sequence[Path],
+    directory: Path,
+    cwd: Path | None,
+    child_env: Mapping[str, str],
+) -> None:
+    """Compile one library module into ``directory`` against its dependencies only."""
+    directory.mkdir(parents=True, exist_ok=True)
+    search_paths = [argument for path in dependency_dirs for argument in ("-I", str(path))]
+    cmd = [
+        swiftc,
+        *_sdk_args(toolchain, support_flags),
+        *support_flags,
+        *search_paths,
+        "-emit-module",
+        "-emit-module-path",
+        str(directory / f"{module.name}.swiftmodule"),
+        "-emit-library",
+        "-static",
+        "-module-name",
+        module.name,
+        *map(str, module.sources),
+        "-o",
+        str(directory / f"lib{module.name}.a"),
+    ]
+    subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
+
+
+def _ensure_module(
+    *,
+    swiftc: str,
+    toolchain: Mapping[str, str],
+    module: SwiftModule,
+    support_flags: Sequence[str],
+    dependency_dirs: Sequence[Path],
     cache_dir: Path,
     key: str,
     cwd: Path | None,
@@ -359,42 +466,30 @@ def _ensure_support_module(
     with lock_path.open("a+", encoding="utf-8") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
-            if _valid_cached_entry(entry_dir, key):
-                try:
-                    os.utime(entry_dir / "manifest.json", None)
-                except OSError:
-                    pass
+            if _valid_cached_entry(entry_dir, key, module.name):
                 return entry_dir
 
             if entry_dir.exists():
                 shutil.rmtree(entry_dir, ignore_errors=True)
 
             staging_dir = cache_dir / f".staging-{key[:16]}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-            staging_dir.mkdir(parents=True, exist_ok=True)
             try:
-                module_path = staging_dir / f"{MODULE_NAME}.swiftmodule"
-                lib_path = staging_dir / f"lib{MODULE_NAME}.a"
-                cmd = [
-                    swiftc,
-                    *_sdk_args(toolchain, support_flags),
-                    *support_flags,
-                    "-emit-module",
-                    "-emit-module-path",
-                    str(module_path),
-                    "-emit-library",
-                    "-static",
-                    "-module-name",
-                    MODULE_NAME,
-                    *map(str, support_sources),
-                    "-o",
-                    str(lib_path),
-                ]
-                subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
+                _build_module(
+                    swiftc=swiftc,
+                    toolchain=toolchain,
+                    module=module,
+                    support_flags=support_flags,
+                    dependency_dirs=dependency_dirs,
+                    directory=staging_dir,
+                    cwd=cwd,
+                    child_env=child_env,
+                )
                 manifest = {
                     "version": CACHE_FORMAT_VERSION,
                     "key": key,
-                    "module_sha256": _file_sha256(module_path),
-                    "lib_sha256": _file_sha256(lib_path),
+                    "module": module.name,
+                    "module_sha256": _file_sha256(staging_dir / f"{module.name}.swiftmodule"),
+                    "lib_sha256": _file_sha256(staging_dir / f"lib{module.name}.a"),
                 }
                 (staging_dir / "manifest.json").write_text(
                     json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8"
@@ -411,70 +506,104 @@ def _ensure_support_module(
 
 
 @contextmanager
-def _pinned_cached_entry(
+def _leased_entry(
     cache_dir: Path,
     key: str,
+    module_name: str,
     build_entry: Callable[[], Path],
 ) -> Iterator[Path]:
-    """Hold a shared per-key lease through harness linking.
+    """Yield a valid cached module while holding a shared lease on it.
 
-    The builder's exclusive lock ends before linking. If another compiler
-    pruned this key during that gap, rebuild instead of linking a missing
-    module. Pruners skip entries with an active shared lease.
+    A miss builds under the exclusive lock, then re-validates under the lease:
+    if another compile pruned the entry in between, it rebuilds instead of
+    handing a missing module to a later step. Pruners skip leased entries.
     """
+    entry_dir = cache_dir / key[:24]
+    lock_path = cache_dir / ".locks" / f"{key[:24]}.lock"
     for _ in range(3):
-        entry_dir = build_entry()
-        lock_path = cache_dir / ".locks" / f"{key[:24]}.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+") as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
             try:
-                if _valid_cached_entry(entry_dir, key):
+                if _valid_cached_entry(entry_dir, key, module_name):
+                    try:
+                        os.utime(entry_dir / "manifest.json", None)
+                    except OSError:
+                        pass
                     yield entry_dir
                     return
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-    raise SwiftCompilerError("Swift test support cache entry was repeatedly evicted before linking")
+        entry_dir = build_entry()
+    raise SwiftCompilerError(f"Swift test cache entry for {module_name} was repeatedly evicted before use")
 
 
 def _write_harness_shims(
     harness_sources: Sequence[Path],
     shim_dir: Path,
+    modules: Sequence[str],
 ) -> list[Path]:
-    """Create temporary harness shims that @testable-import the support module."""
+    """Copy harness files that do not import every library module, adding a
+    ``@testable import`` for each module they do not import."""
     shim_dir.mkdir(parents=True, exist_ok=True)
     shimmed: list[Path] = []
     seen_names: dict[str, int] = {}
-    import_line = f"@testable import {MODULE_NAME}"
     for raw_path in harness_sources:
         path = Path(raw_path)
         text = path.read_text(encoding="utf-8")
-        if import_line in text or f"import {MODULE_NAME}" in text:
+        imported = set(_IMPORT.findall(text))
+        missing = [module for module in modules if module not in imported]
+        if not missing:
             shimmed.append(path)
             continue
         count = seen_names.get(path.name, 0)
         seen_names[path.name] = count + 1
         target_name = path.name if count == 0 else f"{count}_{path.name}"
         target = shim_dir / target_name
-        target.write_text(f"{import_line}\n{text}", encoding="utf-8")
+        target.write_text("".join(f"@testable import {module}\n" for module in missing) + text, encoding="utf-8")
         shimmed.append(target)
     return shimmed
 
 
-def _filter_direct_flags(flags: Sequence[str]) -> list[str]:
-    """Compile a direct (uncached) build as the single test module."""
-    direct = list(flags)
-    if "-package-name" not in direct:
-        direct += PACKAGE_FLAGS
-    if "-module-name" not in direct:
-        direct += ["-module-name", MODULE_NAME]
-    return direct
+def _patch_modules(
+    library: Sequence[SwiftModule],
+    patched: Mapping[Path, Path],
+    instrumentation: Mapping[str, Sequence[Path]],
+) -> tuple[SwiftModule, ...]:
+    """Replace product files with patched copies and add instrumentation files.
+
+    Every patched file and instrumented module must be part of the harness, so
+    a moved file fails loudly instead of silently compiling the original.
+    """
+    replacements = {Path(original).resolve(): Path(copy) for original, copy in patched.items()}
+    unused = set(replacements)
+    result = []
+    for module in library:
+        sources = []
+        for path in module.sources:
+            replacement = replacements.get(path.resolve())
+            if replacement is not None:
+                unused.discard(path.resolve())
+            sources.append(replacement or path)
+        sources += [Path(path) for path in instrumentation.get(module.name, ())]
+        result.append(SwiftModule(module.name, tuple(sources), module.dependencies))
+    if unused:
+        raise SwiftCompilerError(f"patched files are not compiled by this harness: {sorted(map(str, unused))}")
+    unknown = set(instrumentation) - {module.name for module in library}
+    if unknown:
+        raise SwiftCompilerError(f"instrumented modules are not compiled by this harness: {sorted(unknown)}")
+    return tuple(result)
 
 
 def compile_swift_test(
     *,
     harness_sources: Sequence[Path],
     output: Path,
-    support_sources: Sequence[Path] = (),
+    games: Sequence[str] = (),
+    checkout: Path = ROOT,
+    modules: Sequence[SwiftModule] | None = None,
+    patched: Mapping[Path, Path] | None = None,
+    instrumentation: Mapping[str, Sequence[Path]] | None = None,
     flags: Sequence[str] = ("-parse-as-library",),
     support_flags: Sequence[str] | None = None,
     swiftc: str | None = None,
@@ -482,92 +611,103 @@ def compile_swift_test(
     cache_dir: Path | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> Path:
-    """Compile one Swift test executable, reusing a keyed support-module cache."""
+    """Compile one Swift test executable against the product's module layout.
+
+    By default the harness imports TrainerCore and the frontend module of each
+    of ``games`` from ``checkout``. ``modules`` replaces the layout
+    with explicit library modules in build order (portable harnesses only).
+    ``patched`` maps product files to patched copies that replace them in
+    their module, and ``instrumentation`` adds files (for example a trace type
+    that patched code calls) to named modules. ``flags`` apply to the harness;
+    ``support_flags`` (default: ``flags``) to the library modules.
+    """
     compiler = resolve_swiftc(swiftc)
     env = os.environ if environ is None else environ
-    harness_list = [Path(p) for p in harness_sources]
-    support_list = [Path(p) for p in support_sources]
     output_path = Path(output)
-    sdk_env = env.get("SDKROOT", "").strip()
-    dev_env = env.get("DEVELOPER_DIR", "").strip()
-    toolchain = probe_toolchain(compiler, sdk_env, dev_env, environ=env)
+    toolchain = probe_toolchain(
+        compiler, env.get("SDKROOT", "").strip(), env.get("DEVELOPER_DIR", "").strip(), environ=env
+    )
     child_env = _subprocess_env(env, toolchain)
-
     cache_enabled = env.get(CACHE_ENV_VAR, "1").strip().lower() not in {"0", "false", "no", "off"}
-    if not support_list or not cache_enabled:
+    resolved_cache_dir = cache_dir if cache_dir is not None else default_cache_dir(env)
+    normalized_support_flags = normalize_support_flags(flags if support_flags is None else support_flags)
+
+    with tempfile.TemporaryDirectory(prefix="mgt-swift-test-") as scratch_root, ExitStack() as leases:
+        scratch = Path(scratch_root)
+        if modules is None:
+            library = harness_layout(games, scratch / "generated", checkout=checkout)
+        else:
+            if games:
+                raise ValueError("explicit modules replace the product layout; do not also name games")
+            library = tuple(modules)
+        if patched or instrumentation:
+            library = _patch_modules(library, patched or {}, instrumentation or {})
+
+        module_dirs: dict[str, Path] = {}
+        module_keys: dict[str, str | None] = {}
+        for module in library:
+            missing = [name for name in module.dependencies if name not in module_dirs]
+            if missing:
+                raise SwiftCompilerError(f"{module.name} imports modules not built before it: {missing}")
+            dependency_dirs = [module_dirs[name] for name in module.dependencies]
+            records, cacheable = _support_file_records(module.sources)
+            if cache_enabled and cacheable and all(module_keys[name] for name in module.dependencies):
+                key = compute_support_key(
+                    toolchain=toolchain,
+                    support_flags=normalized_support_flags,
+                    file_records=records,
+                    module_name=module.name,
+                    dependencies={name: module_keys[name] for name in module.dependencies},
+                )
+
+                def build_entry(module=module, key=key, dependency_dirs=dependency_dirs) -> Path:
+                    return _ensure_module(
+                        swiftc=compiler,
+                        toolchain=toolchain,
+                        module=module,
+                        support_flags=normalized_support_flags,
+                        dependency_dirs=dependency_dirs,
+                        cache_dir=resolved_cache_dir,
+                        key=key,
+                        cwd=cwd,
+                        child_env=child_env,
+                    )
+
+                module_dirs[module.name] = leases.enter_context(
+                    _leased_entry(resolved_cache_dir, key, module.name, build_entry)
+                )
+                module_keys[module.name] = key
+            else:
+                directory = scratch / "modules" / module.name
+                _build_module(
+                    swiftc=compiler,
+                    toolchain=toolchain,
+                    module=module,
+                    support_flags=normalized_support_flags,
+                    dependency_dirs=dependency_dirs,
+                    directory=directory,
+                    cwd=cwd,
+                    child_env=child_env,
+                )
+                module_dirs[module.name] = directory
+                module_keys[module.name] = None
+
+        shimmed = _write_harness_shims(harness_sources, scratch / "harness", [module.name for module in library])
+        link_flags = [flag for flag in flags if flag != "-whole-module-optimization"]
+        if "-package-name" not in link_flags:
+            link_flags += PACKAGE_FLAGS
+        if "-module-name" not in link_flags:
+            link_flags += ["-module-name", HARNESS_MODULE_NAME]
         cmd = [
             compiler,
-            *_sdk_args(toolchain, flags),
-            *_filter_direct_flags(flags),
-            *map(str, [*support_list, *harness_list]),
+            *_sdk_args(toolchain, link_flags),
+            *link_flags,
+            *(argument for directory in module_dirs.values() for argument in ("-I", str(directory))),
+            *(argument for module in library
+              for argument in _force_load(module_dirs[module.name] / f"lib{module.name}.a")),
+            *map(str, shimmed),
             "-o",
             str(output_path),
         ]
         subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
-        return output_path
-
-    file_records, cacheable = _support_file_records(support_list)
-    normalized_support_flags = normalize_support_flags(
-        flags if support_flags is None else support_flags
-    )
-
-    if not cacheable:
-        # Single-use temporary source tree (patched/copied sources): still
-        # compile faster with WMO + threads, without writing shared cache entries
-        # and while honoring caller library-vs-script parsing mode for harness files.
-        direct_flags = _filter_direct_flags([
-            f
-            for f in normalize_support_flags(flags)
-            if f != "-enable-testing"
-            and (f != "-parse-as-library" or "-parse-as-library" in flags)
-        ])
-        single_cmd = [
-            compiler,
-            *_sdk_args(toolchain, direct_flags),
-            *direct_flags,
-            *map(str, [*support_list, *harness_list]),
-            "-o",
-            str(output_path),
-        ]
-        subprocess.run(single_cmd, check=True, cwd=cwd, env=child_env)
-        return output_path
-
-    key = compute_support_key(
-        toolchain=toolchain,
-        support_flags=normalized_support_flags,
-        file_records=file_records,
-    )
-    resolved_cache_dir = cache_dir if cache_dir is not None else default_cache_dir(env)
-    def build_entry() -> Path:
-        return _ensure_support_module(
-            swiftc=compiler,
-            toolchain=toolchain,
-            support_sources=support_list,
-            support_flags=normalized_support_flags,
-            cache_dir=resolved_cache_dir,
-            key=key,
-            cwd=cwd,
-            child_env=child_env,
-        )
-
-    with _pinned_cached_entry(resolved_cache_dir, key, build_entry) as module_dir:
-        with tempfile.TemporaryDirectory(prefix="mgt-swift-shim-") as shim_root:
-            shimmed = _write_harness_shims(harness_list, Path(shim_root))
-            link_flags = [f for f in flags if f != "-whole-module-optimization"]
-            if "-package-name" not in link_flags:
-                link_flags += PACKAGE_FLAGS
-            cmd = [
-                compiler,
-                *_sdk_args(toolchain, link_flags),
-                *link_flags,
-                "-I",
-                str(module_dir),
-                "-L",
-                str(module_dir),
-                f"-l{MODULE_NAME}",
-                *map(str, shimmed),
-                "-o",
-                str(output_path),
-            ]
-            subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
     return output_path

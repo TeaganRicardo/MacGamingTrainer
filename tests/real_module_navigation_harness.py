@@ -609,8 +609,6 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
     """Compile once; each journey's outer watchdog is owned by macos_fixture_policy."""
     with tempfile.TemporaryDirectory(prefix="mgt-real-module-navigation-") as directory:
         project = Path(directory)
-        for name in ("Core", "Hades", "Hades2"):
-            shutil.copytree(root / "Sources" / name, project / "Sources" / name)
         for language in ("en", "zh-CN"):
             localized = project / f"{language}.lproj"
             localized.mkdir()
@@ -628,19 +626,14 @@ def run_real_module_navigation(root: Path, *, startup_only: bool = False) -> Non
                 "game": "startup_fixture" if is_startup_fixture else game, "hostProtocolVersion": HOST_PROTOCOL_VERSION,
                 "moduleProtocolVersion": manifest["protocolVersion"],
             }))
-        generated = project / "ActiveGames.generated.swift"
-        subprocess.run([sys.executable, str(root / "Tools/generate_game_binding.py"), "hades,hades2", str(generated)],
-                       check=True, cwd=root)
         main = project / "main.swift"
         main.write_text(HARNESS)
         binary = project / "real-navigation"
         compile_swift_test(
-            support_sources=[
-                *sorted((project / "Sources").rglob("*.swift")),
-                root / "tests/fixtures/swift/InMemoryDefaults.swift",
-                generated,
-            ],
-            harness_sources=[root / "tests/fixtures/swift/NativeAccessibility.swift", main],
+            games=("hades", "hades2"),
+            checkout=root,
+            harness_sources=[root / "tests/fixtures/swift/InMemoryDefaults.swift",
+                             root / "tests/fixtures/swift/NativeAccessibility.swift", main],
             output=binary,
             cwd=project,
         )

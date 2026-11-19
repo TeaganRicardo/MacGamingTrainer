@@ -429,23 +429,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-cross-geometry-") as directory:
         )
     worker = folder / "stub_worker.py"
     worker.write_text(STUB_WORKER, encoding="utf-8")
-    generated = folder / "Generated.swift"
-    subprocess.run(
-        [sys.executable, str(ROOT / "Tools/generate_game_binding.py"), "hades,hades2", str(generated)],
-        check=True,
-        cwd=ROOT,
-    )
     main = folder / "main.swift"
     main.write_text(HARNESS, encoding="utf-8")
     binary = folder / "cross_module_geometry"
     compile_swift_test(
-        support_sources=(
-            sorted((ROOT / "Sources/Core").rglob("*.swift"))
-            + sorted((ROOT / "Sources/Hades").rglob("*.swift"))
-            + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-            + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
-        ),
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        games=("hades", "hades2"),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
         output=binary,
         cwd=ROOT,
     )

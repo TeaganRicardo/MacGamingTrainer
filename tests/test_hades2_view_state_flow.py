@@ -845,20 +845,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness) + PROFILE_JOURNEY + DIAGNOSTICS_JOURNEY + MANAGEMENT_JOURNEY + SLIDER_JOURNEY + VISUAL_HIERARCHY_JOURNEY + ROOM_PICKER_ALIGNMENT_JOURNEY + DISCLOSURE_JOURNEY + SEARCH_JOURNEY + WORLD_EXIT_JOURNEY + NATIVE_PICKER, encoding="utf-8")
 
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run(
-        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
-        check=True,
-        cwd=ROOT,
-    )
-    support_sources = (
-        sorted((ROOT / "Sources/Core").rglob("*.swift"))
-        + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
-    )
     compile_swift_test(
-        support_sources=support_sources,
+        games=("hades2",),
         harness_sources=[
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
             ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
             main_path,
         ],

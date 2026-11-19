@@ -583,21 +583,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-ui-") as temporary:
     (base / ".fixture-owned").touch()
     home = base / "home"
     home.mkdir()
-    generated = base / "ActiveGame.generated.swift"
-    subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades", str(generated)],
-                   check=True, cwd=ROOT)
     module_version = json.loads((ROOT / "Backend/games/hades/module.json").read_text())["protocolVersion"]
     worker_path = base / "worker.py"
     worker_path.write_text(f"MODULE_VERSION = {module_version}\n" + WORKER, encoding="utf-8")
     harness_path = base / "main.swift"
     harness_path.write_text(HARNESS, encoding="utf-8")
-    support_sources = (sorted((ROOT / "Sources/Core").rglob("*.swift"))
-                       + sorted((ROOT / "Sources/Hades").rglob("*.swift"))
-                       + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated])
     binary = base / "hades-save-editor-frontend"
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", harness_path],
+        games=("hades",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", harness_path],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

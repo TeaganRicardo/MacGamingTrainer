@@ -2238,17 +2238,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
         'traitNames': data['traitNames'], 'worldRewards': list(json.loads(
             (ROOT / 'Backend/games/hades/world_catalog.json').read_text())['rewards'].values()),
         'worldTerms': json.loads((ROOT / 'Backend/games/hades/world_catalog.json').read_text())['terms']}
-    generated = folder / 'ActiveGame.generated.swift'
-    subprocess.run([sys.executable, str(ROOT / 'Tools/generate_game_binding.py'), 'hades', str(generated)], check=True, cwd=ROOT)
-    support_sources = (
-        sorted((ROOT / 'Sources/Core').rglob('*.swift'))
-        + sorted((ROOT / 'Sources/Hades').rglob('*.swift'))
-        + [ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', generated]
-    )
     binary = folder / 'frontend'
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[ROOT / 'tests/fixtures/swift/NativeAccessibility.swift', folder / 'main.swift'],
+        games=('hades',),
+        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+                         ROOT / 'tests/fixtures/swift/NativeAccessibility.swift', folder / 'main.swift'],
         output=binary,
         cwd=ROOT,
     )

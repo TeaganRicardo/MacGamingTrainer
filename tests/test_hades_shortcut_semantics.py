@@ -279,18 +279,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-shortcuts-") as td:
 
     main_path = folder / "main.swift"
     main_path.write_text(HARNESS, encoding="utf-8")
-    generated = folder / "ActiveGame.generated.swift"
-    subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades", str(generated)],
-                   check=True, cwd=ROOT)
-    support_sources = (
-        sorted((ROOT / "Sources/Core").rglob("*.swift"))
-        + sorted((ROOT / "Sources/Hades").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
-    )
     binary = folder / "hades-shortcuts"
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[main_path],
+        games=("hades",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_path],
         output=binary,
         cwd=ROOT,
     )

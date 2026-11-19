@@ -278,11 +278,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-retention-controls-") as temporary:
         localized.mkdir()
         shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     compile_swift_test(
-        support_sources=[
-            *sorted((ROOT / "Sources/Core").rglob("*.swift")),
-            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-        ],
         harness_sources=[
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
             ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
             harness,
         ],

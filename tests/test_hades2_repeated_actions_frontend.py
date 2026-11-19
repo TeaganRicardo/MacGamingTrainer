@@ -501,25 +501,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-repeat-actions-") as td:
     root = Path(td)
     worker_path = root / "fake_worker.py"
     swift_path = root / "main.swift"
-    binding_path = root / "ActiveGame.generated.swift"
     binary_path = root / "repeat_action_harness"
     home_path = root / "home"
     home_path.mkdir()
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     swift_path.write_text(textwrap.dedent(harness), encoding="utf-8")
-    subprocess.run(
-        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(binding_path)],
-        check=True, cwd=ROOT,
-    )
-    support_sources = [
-        *sorted((ROOT / "Sources/Core").rglob("*.swift")),
-        *sorted((ROOT / "Sources/Hades2").rglob("*.swift")),
-        ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-        binding_path,
-    ]
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[swift_path],
+        games=("hades2",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", swift_path],
         output=binary_path,
         swiftc=SWIFTC,
         cwd=ROOT,

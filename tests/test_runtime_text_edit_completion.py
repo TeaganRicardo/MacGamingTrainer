@@ -10,7 +10,7 @@ from pathlib import Path
 from native_picker_harness import NATIVE_PICKER
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import SWIFT_CORE_MODULE, compile_swift_test
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only runtime text-edit behavior")
@@ -72,26 +72,6 @@ import AppKit
 import SwiftUI
 import Foundation
 import Darwin
-enum RuntimeTextTrace {
- static var updateDepth=0
- static var currentPhase=""
- static var active: Bool { currentPhase == "editing:money:quick-blur" }
- static func write(_ message: String) {
-  guard active else { return }
-  FileHandle.standardError.write(Data("text_edit_trace:\(ProcessInfo.processInfo.systemUptime):\(currentPhase):\(message)\n".utf8))
- }
- static func native(_ event: String) {
-  guard active else { return }
-  write("\(event) updateDepth=\(updateDepth)")
-  write(Thread.callStackSymbols.prefix(24).joined(separator:"\n"))
- }
- static func window(_ event: String, field: NSView) {
-  guard active else { return }
-  let window = field.window
-  let identity = window.map { String(describing: ObjectIdentifier($0)) } ?? "nil"
-  write("\(event) field=\(ObjectIdentifier(field)) window=\(identity) visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false)")
- }
-}
 func phase(_ name: String) {
  RuntimeTextTrace.currentPhase=name
  FileHandle.standardError.write(Data("runtime_text_edit_completion:\(name)\n".utf8))
@@ -883,12 +863,39 @@ struct HeaderFixture: View {
  }
 }
 """
+# TrainerCore compiles this trace beside the traced copies below; `package`
+# access lets the traced Hades2 view call it as well.
+RUNTIME_TEXT_TRACE = r"""
+import AppKit
+import Foundation
+
+package enum RuntimeTextTrace {
+ package static var updateDepth=0
+ package static var currentPhase=""
+ package static var active: Bool { currentPhase == "editing:money:quick-blur" }
+ package static func write(_ message: String) {
+  guard active else { return }
+  FileHandle.standardError.write(Data("text_edit_trace:\(ProcessInfo.processInfo.systemUptime):\(currentPhase):\(message)\n".utf8))
+ }
+ package static func native(_ event: String) {
+  guard active else { return }
+  write("\(event) updateDepth=\(updateDepth)")
+  write(Thread.callStackSymbols.prefix(24).joined(separator:"\n"))
+ }
+ package static func window(_ event: String, field: NSView) {
+  guard active else { return }
+  let window = field.window
+  let identity = window.map { String(describing: ObjectIdentifier($0)) } ?? "nil"
+  write("\(event) field=\(ObjectIdentifier(field)) window=\(identity) visible=\(window?.isVisible ?? false) key=\(window?.isKeyWindow ?? false)")
+ }
+}
+"""
 with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
     td = Path(temporary)
     main = td / "main.swift"; main.write_text(HARNESS + NATIVE_PICKER)
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
-    sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
+    trace = td / "RuntimeTextTrace.swift"
+    trace.write_text(RUNTIME_TEXT_TRACE)
+    traced_sources = {}
     # The first hosted cycle follows quick blur and precedes native automatic
     # focus inside a SwiftUI update. Trace only that bounded phase in fixture
     # copies, including idle fields and every native configuration assignment.
@@ -1002,11 +1009,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-text-edit-") as temporary:
             text = text.replace(anchor, replacement)
         traced = td / source.name
         traced.write_text(text)
-        sources[sources.index(source)] = traced
+        traced_sources[source] = traced
     binary = td / "text_edit"
     compile_swift_test(
-        support_sources=[*sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated],
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        games=("hades2",),
+        patched=traced_sources,
+        instrumentation={SWIFT_CORE_MODULE: [trace]},
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
         output=binary,
         swiftc=SWIFTC,
     )

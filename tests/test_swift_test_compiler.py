@@ -58,15 +58,15 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
             ):
                 return stc._support_file_records(paths)
 
-        gen_a = Path(gen_dir_a) / "ActiveGame.generated.swift"
-        gen_b = Path(gen_dir_b) / "ActiveGame.generated.swift"
+        gen_a = Path(gen_dir_a) / "GameBinding.generated.swift"
+        gen_b = Path(gen_dir_b) / "GameBinding.generated.swift"
         gen_a.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
         gen_b.write_text("// generated\nlet activeGameID = \"hades2\"\n", encoding="utf-8")
 
         records_a, cacheable_a = stable_repo_records([real_core, real_defaults, gen_a])
         records_b, cacheable_b = stable_repo_records([real_core, real_defaults, gen_b])
         assert cacheable_a and cacheable_b, (cacheable_a, cacheable_b)
-        assert records_a == records_b, "identical ActiveGame.generated.swift bytes must share cache across temp dirs"
+        assert records_a == records_b, "identical generated binding bytes must share cache across temp dirs"
 
         tc = _make_toolchain()
         flags = stc.normalize_support_flags(["-parse-as-library"])
@@ -121,6 +121,23 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
             != k_base
         )
 
+        # Module identity and the keys of imported modules are part of the key,
+        # so a game rebuilds whenever the TrainerCore it imports changes.
+        assert stc.compute_support_key(
+            toolchain=tc, support_flags=flags, file_records=records_a, module_name="Hades2",
+        ) != k_base
+        with_core = stc.compute_support_key(
+            toolchain=tc, support_flags=flags, file_records=records_a, module_name="Hades2",
+            dependencies={"TrainerCore": "a" * 64},
+        )
+        assert with_core != stc.compute_support_key(
+            toolchain=tc, support_flags=flags, file_records=records_a, module_name="Hades2",
+            dependencies={"TrainerCore": "b" * 64},
+        )
+
+        # A caller's module name never leaks into library module flags.
+        assert "-module-name" not in stc.normalize_support_flags(["-module-name", "TrainerCore"])
+
         # Non-generated temp files disable cacheability so patched trees never collide.
         ephemeral = Path(gen_dir_a) / "PatchedSource.swift"
         ephemeral.write_text("let patched = true\n", encoding="utf-8")
@@ -144,121 +161,139 @@ def test_support_key_sensitivity_and_filepath_safety() -> None:
         )
 
 
+def _fake_swiftc(commands: list[list[str]], on_link=None, linked_sources=None):
+    """Record swiftc invocations and write placeholder outputs."""
+    def fake_run(cmd: list[str], **kwargs):
+        commands.append(list(cmd))
+        if linked_sources is not None and "-emit-module-path" not in cmd:
+            linked_sources[:] = [Path(arg).read_text(encoding="utf-8") for arg in cmd if arg.endswith(".swift")]
+        if "-emit-module-path" in cmd:
+            Path(cmd[cmd.index("-emit-module-path") + 1]).write_bytes(b"swiftmodule-v1")
+            Path(cmd[cmd.index("-o") + 1]).write_bytes(b"staticlib-v1")
+        else:
+            if on_link is not None:
+                on_link()
+            Path(cmd[cmd.index("-o") + 1]).write_bytes(b"binary-v1")
+        return subprocess.CompletedProcess(cmd, 0)
+    return fake_run
+
+
+def _built_modules(commands: list[list[str]]) -> list[str]:
+    return [cmd[cmd.index("-module-name") + 1] for cmd in commands if "-emit-module-path" in cmd]
+
+
+def _mocked_toolchain():
+    return (
+        mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"),
+        mock.patch.object(stc, "probe_toolchain", return_value=_make_toolchain()),
+    )
+
+
 def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
-    """Mocked compiler verifies hit reuse, corrupt artifact rebuilds, LRU prune, and bypass."""
+    """Each library module caches separately; a game builds against its cached TrainerCore."""
     with tempfile.TemporaryDirectory(prefix="mgt-stc-cache-") as tmp:
         root = Path(tmp)
-        support_dir = root / "gen"
-        support_dir.mkdir()
-        generated = support_dir / "ActiveGame.generated.swift"
-        generated.write_text("internal let greeting = \"ok\"\n", encoding="utf-8")
+        generated = root / "core" / "GameBinding.generated.swift"
+        generated.parent.mkdir()
+        generated.write_text("package let greeting = \"ok\"\n", encoding="utf-8")
+        game_generated = root / "game" / "GameBinding.generated.swift"
+        game_generated.parent.mkdir()
+        game_generated.write_text("import TrainerCore\nlet reply = greeting\n", encoding="utf-8")
         harness = root / "Harness.swift"
-        harness.write_text("@main struct Main { static func main() { print(greeting) } }\n", encoding="utf-8")
+        harness.write_text("@main struct Main { static func main() { print(reply) } }\n", encoding="utf-8")
+        core = stc.SwiftModule(stc.SWIFT_CORE_MODULE, [generated])
+        game = stc.SwiftModule("Game", [game_generated], [stc.SWIFT_CORE_MODULE])
         cache_dir = root / "cache"
         out_bin = root / "bin"
-
         commands: list[list[str]] = []
+        linked: list[str] = []
 
-        def fake_run(cmd: list[str], **kwargs):
-            commands.append(list(cmd))
-            if "-emit-module-path" in cmd:
-                mod_path = Path(cmd[cmd.index("-emit-module-path") + 1])
-                lib_path = Path(cmd[cmd.index("-o") + 1])
-                mod_path.write_bytes(b"swiftmodule-v1")
-                lib_path.write_bytes(b"staticlib-v1")
+        def compile_harness(modules=(core, game), environ=None, **kwargs):
+            commands.clear()
+            stc.compile_swift_test(
+                modules=list(modules), harness_sources=[harness], output=out_bin,
+                cache_dir=cache_dir, environ={} if environ is None else environ, **kwargs,
+            )
+
+        resolve, probe = _mocked_toolchain()
+        with resolve, probe, mock.patch.object(
+            stc.subprocess, "run", side_effect=_fake_swiftc(commands, linked_sources=linked)
+        ):
+            # 1. Cold: TrainerCore, then the game against it, then the harness.
+            compile_harness()
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE, "Game"], commands
+            core_build, game_build, link = commands
+            assert "-I" not in core_build, "TrainerCore must not see any other module"
+            core_entry = Path(game_build[game_build.index("-I") + 1])
+            assert (core_entry / f"{stc.SWIFT_CORE_MODULE}.swiftmodule").is_file()
+            assert link[link.index("-module-name") + 1] == stc.HARNESS_MODULE_NAME
+            assert sum(1 for arg in link if arg == "-I") == 2
+            assert any(arg.endswith(f"lib{stc.SWIFT_CORE_MODULE}.a") for arg in link)
+            assert any(arg.endswith("libGame.a") for arg in link)
+            assert linked == [
+                f"@testable import {stc.SWIFT_CORE_MODULE}\n@testable import Game\n" + harness.read_text(encoding="utf-8")
+            ], linked
+            entries = {p.name for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")}
+            assert len(entries) == 2, entries
+
+            # 2. Warm: only the harness compiles.
+            compile_harness()
+            assert _built_modules(commands) == [] and len(commands) == 1, commands
+
+            # 3. A Core-only harness reuses the same cached TrainerCore.
+            compile_harness(modules=(core,))
+            assert _built_modules(commands) == [], commands
+
+            # 4. A corrupt cached library rebuilds only that module.
+            (core_entry / f"lib{stc.SWIFT_CORE_MODULE}.a").write_bytes(b"corrupted!")
+            compile_harness()
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE], commands
+            assert (core_entry / f"lib{stc.SWIFT_CORE_MODULE}.a").read_bytes() == b"staticlib-v1"
+
+            # 5. A corrupt manifest rebuilds as well.
+            (core_entry / "manifest.json").write_text("{bad json", encoding="utf-8")
+            compile_harness()
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE], commands
+
+            # 6. Changing TrainerCore changes the game's key: both rebuild.
+            generated.write_text("package let greeting = \"changed\"\n", encoding="utf-8")
+            compile_harness()
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE, "Game"], commands
+            generated.write_text("package let greeting = \"ok\"\n", encoding="utf-8")
+
+            # 7. MGT_SWIFT_TEST_CACHE=0 builds every module privately and never
+            # touches the shared cache.
+            before = sorted(p.name for p in cache_dir.iterdir())
+            compile_harness(environ={stc.CACHE_ENV_VAR: "0"})
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE, "Game"], commands
+            assert all(not arg.startswith(str(cache_dir)) for cmd in commands for arg in cmd)
+            assert sorted(p.name for p in cache_dir.iterdir()) == before
+
+            # 8. A patched temporary source builds its module, and every module
+            # importing it, privately; cached TrainerCore is still reused.
+            patched = root / "game" / "Patched.swift"
+            patched.write_text("import TrainerCore\nlet reply = 1\n", encoding="utf-8")
+            compile_harness(modules=(core, stc.SwiftModule("Game", [patched], [stc.SWIFT_CORE_MODULE])))
+            assert _built_modules(commands) == ["Game"], commands
+            assert not commands[0][commands[0].index("-emit-module-path") + 1].startswith(str(cache_dir))
+            assert sorted(p.name for p in cache_dir.iterdir()) == before
+
+            # 9. Explicit modules replace the layout; naming games too is an error.
+            try:
+                compile_harness(games=("hades2",))
+            except ValueError:
+                pass
             else:
-                out = Path(cmd[cmd.index("-o") + 1])
-                out.write_bytes(b"binary-v1")
-            return subprocess.CompletedProcess(cmd, 0)
+                raise AssertionError("explicit modules plus games must be rejected")
+            # A module importing one that is not built before it is rejected.
+            try:
+                compile_harness(modules=(game,))
+            except stc.SwiftCompilerError:
+                pass
+            else:
+                raise AssertionError("an unbuilt dependency must be rejected")
 
-        tc = _make_toolchain()
-        with mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"), mock.patch.object(
-            stc, "probe_toolchain", return_value=tc
-        ), mock.patch.object(stc.subprocess, "run", side_effect=fake_run):
-            # 1. Cold build: compiles support module + links harness (2 swiftc invocations).
-            stc.compile_swift_test(
-                support_sources=[generated],
-                harness_sources=[harness],
-                output=out_bin,
-                cache_dir=cache_dir,
-                environ={},
-            )
-            assert len(commands) == 2, commands
-            assert "-emit-module" in commands[0]
-            assert f"-l{stc.MODULE_NAME}" in commands[1]
-
-            # Locate created cache entry.
-            entries = [p for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
-            assert len(entries) == 1, entries
-            entry = entries[0]
-
-            # 2. Warm hit: only links harness (1 swiftc invocation).
-            commands.clear()
-            stc.compile_swift_test(
-                support_sources=[generated],
-                harness_sources=[harness],
-                output=out_bin,
-                cache_dir=cache_dir,
-                environ={},
-            )
-            assert len(commands) == 1, commands
-            assert "-emit-module" not in commands[0]
-
-            # 3. Corrupt the cached support library -> automatic rebuild without failing or reusing corrupt bits.
-            (entry / f"lib{stc.MODULE_NAME}.a").write_bytes(b"corrupted!")
-            commands.clear()
-            stc.compile_swift_test(
-                support_sources=[generated],
-                harness_sources=[harness],
-                output=out_bin,
-                cache_dir=cache_dir,
-                environ={},
-            )
-            assert len(commands) == 2, ("corrupt lib should trigger rebuild", commands)
-            assert (entry / f"lib{stc.MODULE_NAME}.a").read_bytes() == b"staticlib-v1"
-
-            # 4. Corrupt manifest JSON -> automatic rebuild.
-            (entry / "manifest.json").write_text("{bad json", encoding="utf-8")
-            commands.clear()
-            stc.compile_swift_test(
-                support_sources=[generated],
-                harness_sources=[harness],
-                output=out_bin,
-                cache_dir=cache_dir,
-                environ={},
-            )
-            assert len(commands) == 2, ("corrupt manifest should trigger rebuild", commands)
-
-            # 5. MGT_SWIFT_TEST_CACHE=0 -> direct single build bypassing cache.
-            commands.clear()
-            stc.compile_swift_test(
-                support_sources=[generated],
-                harness_sources=[harness],
-                output=out_bin,
-                cache_dir=cache_dir,
-                environ={stc.CACHE_ENV_VAR: "0"},
-            )
-            assert len(commands) == 1, commands
-            assert f"-l{stc.MODULE_NAME}" not in commands[0]
-
-            # 6. Ephemeral non-generated support file -> direct WMO build honoring script flags.
-            ephemeral = support_dir / "Patched.swift"
-            ephemeral.write_text("let patched = 1\n", encoding="utf-8")
-            commands.clear()
-            stc.compile_swift_test(
-                support_sources=[ephemeral],
-                harness_sources=[harness],
-                output=out_bin,
-                flags=(),
-                cache_dir=cache_dir,
-                environ={},
-            )
-            assert len(commands) == 1, commands
-            assert "-whole-module-optimization" in commands[0]
-            assert "-parse-as-library" not in commands[0]
-            assert "-enable-testing" not in commands[0]
-
-        # 7. LRU pruning bounds directory count at MAX_CACHE_ENTRIES.
+        # 10. LRU pruning bounds directory count at MAX_CACHE_ENTRIES.
         prune_dir = root / "prune"
         prune_dir.mkdir()
         for idx in range(stc.MAX_CACHE_ENTRIES + 4):
@@ -272,7 +307,7 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
         assert "entry-00" in remaining
         assert len(remaining) <= stc.MAX_CACHE_ENTRIES, (len(remaining), remaining)
 
-        # 8. Harness shimming does not duplicate imports and disambiguates duplicate names.
+        # 11. Shims add only missing imports and disambiguate duplicate names.
         h1_dir = root / "d1"
         h2_dir = root / "d2"
         shim_dir = root / "shims"
@@ -280,75 +315,70 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
         h2_dir.mkdir()
         f1 = h1_dir / "Same.swift"
         f2 = h2_dir / "Same.swift"
+        f3 = h2_dir / "Partial.swift"
         f1.write_text("let a = 1\n", encoding="utf-8")
-        f2.write_text(f"@testable import {stc.MODULE_NAME}\nlet b = 2\n", encoding="utf-8")
-        shimmed = stc._write_harness_shims([f1, f2, f1], shim_dir)
+        f2.write_text("import SwiftUI\nimport TrainerCore\n@testable import Game\nlet b = 2\n", encoding="utf-8")
+        f3.write_text("@preconcurrency import TrainerCore\nlet c = 3\n", encoding="utf-8")
+        shimmed = stc._write_harness_shims([f1, f2, f1, f3], shim_dir, [stc.SWIFT_CORE_MODULE, "Game"])
         assert shimmed[0] != shimmed[2], "duplicate basenames should get unique shim paths"
-        assert shimmed[1] == f2, "existing import should keep original path"
-        assert shimmed[0].read_text(encoding="utf-8").startswith(f"@testable import {stc.MODULE_NAME}\n")
+        assert shimmed[1] == f2, "a file importing every module keeps its original path"
+        assert shimmed[0].read_text(encoding="utf-8").startswith(
+            f"@testable import {stc.SWIFT_CORE_MODULE}\n@testable import Game\nlet a"
+        )
+        assert shimmed[3].read_text(encoding="utf-8").startswith("@testable import Game\n@preconcurrency")
 
 
-def test_pruning_honors_active_link_lease_and_recovers_eviction() -> None:
-    """Parallel cache builds cannot unlink a module used by an active linker."""
+def test_pruning_honors_active_lease_and_recovers_eviction() -> None:
+    """Pruning cannot unlink a module that a later build step or the linker still reads."""
     with tempfile.TemporaryDirectory(prefix="mgt-stc-lease-") as tmp:
         root = Path(tmp)
-        generated = root / "ActiveGame.generated.swift"
-        generated.write_text("internal let answer = 42\n", encoding="utf-8")
+        generated = root / "GameBinding.generated.swift"
+        generated.write_text("package let answer = 42\n", encoding="utf-8")
         harness = root / "Harness.swift"
         harness.write_text("@main struct Main { static func main() { print(answer) } }\n", encoding="utf-8")
+        core = stc.SwiftModule(stc.SWIFT_CORE_MODULE, [generated])
         cache = root / "cache"
         output = root / "binary"
-        builds = []
-        trigger_prune = False
-        entry_dir = None
+        commands: list[list[str]] = []
+        entry_dir: list[Path] = []
 
-        def fake_run(cmd: list[str], **kwargs):
-            if "-emit-module-path" in cmd:
-                builds.append("support")
-                Path(cmd[cmd.index("-emit-module-path") + 1]).write_bytes(b"swiftmodule")
-                Path(cmd[cmd.index("-o") + 1]).write_bytes(b"static library")
-            else:
-                if trigger_prune:
-                    # The current manifest is the oldest candidate. Only a
-                    # held link lease should prevent pruning its directory.
-                    for index in range(stc.MAX_CACHE_ENTRIES + 3):
-                        extra = cache / f"extra-{index:02d}"
-                        extra.mkdir(exist_ok=True)
-                        (extra / "manifest.json").write_text("{}", encoding="utf-8")
-                    assert entry_dir is not None
-                    os.utime(entry_dir / "manifest.json", (1, 1))
-                    stc._prune_cache(cache, keep_name="another-key")
-                    assert entry_dir.exists(), "pruner evicted an in-use Swift module"
-                Path(cmd[cmd.index("-o") + 1]).write_bytes(b"linked binary")
-            return subprocess.CompletedProcess(cmd, 0)
+        def prune_during_link():
+            # The leased entry is the oldest candidate. Only its lease
+            # should prevent pruning its directory.
+            for index in range(stc.MAX_CACHE_ENTRIES + 3):
+                extra = cache / f"extra-{index:02d}"
+                extra.mkdir(exist_ok=True)
+                (extra / "manifest.json").write_text("{}", encoding="utf-8")
+            os.utime(entry_dir[0] / "manifest.json", (1, 1))
+            stc._prune_cache(cache, keep_name="another-key")
+            assert entry_dir[0].exists(), "pruner evicted an in-use Swift module"
 
-        with mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"), mock.patch.object(
-            stc, "probe_toolchain", return_value=_make_toolchain()
-        ), mock.patch.object(stc.subprocess, "run", side_effect=fake_run):
-            stc.compile_swift_test(
-                support_sources=[generated], harness_sources=[harness],
-                output=output, cache_dir=cache, environ={},
-            )
-            entries = [p for p in cache.iterdir() if p.is_dir() and not p.name.startswith(".")]
-            assert len(entries) == 1
-            entry_dir = entries[0]
-            trigger_prune = True
-            stc.compile_swift_test(
-                support_sources=[generated], harness_sources=[harness],
-                output=output, cache_dir=cache, environ={},
-            )
-            assert builds == ["support"], builds
-            assert output.read_bytes() == b"linked binary"
+        resolve, probe = _mocked_toolchain()
+        with resolve, probe, mock.patch.object(stc.subprocess, "run", side_effect=_fake_swiftc(commands)):
+            stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,
+                                   cache_dir=cache, environ={})
+        entry_dir.extend(p for p in cache.iterdir() if p.is_dir() and not p.name.startswith("."))
+        assert len(entry_dir) == 1
 
-        # With no live linker lease, the previously old entry can be evicted.
+        commands.clear()
+        resolve, probe = _mocked_toolchain()
+        with resolve, probe, mock.patch.object(
+            stc.subprocess, "run", side_effect=_fake_swiftc(commands, on_link=prune_during_link)
+        ):
+            stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,
+                                   cache_dir=cache, environ={})
+        assert _built_modules(commands) == [], commands
+        assert output.read_bytes() == b"binary-v1"
+
+        # With no live lease, the previously old entry can be evicted.
         stc._prune_cache(cache, keep_name="another-key")
-        assert entry_dir is not None and not entry_dir.exists()
+        assert not entry_dir[0].exists()
 
-        # An eviction between build completion and acquiring a link lease is
-        # detected and rebuilt, never passed through to the linker.
+        # An eviction between a build and its lease is detected and rebuilt,
+        # never handed to a later step.
         eviction_cache = root / "eviction"
-        builds.clear()
-        original_ensure = stc._ensure_support_module
+        commands.clear()
+        original_ensure = stc._ensure_module
         first = [True]
 
         def evict_once(**kwargs):
@@ -358,18 +388,39 @@ def test_pruning_honors_active_link_lease_and_recovers_eviction() -> None:
                 shutil.rmtree(result)
             return result
 
-        with mock.patch.object(stc, "resolve_swiftc", return_value="/usr/bin/swiftc"), mock.patch.object(
-            stc, "probe_toolchain", return_value=_make_toolchain()
-        ), mock.patch.object(stc.subprocess, "run", side_effect=fake_run), mock.patch.object(
-            stc, "_ensure_support_module", side_effect=evict_once
-        ):
-            trigger_prune = False
-            stc.compile_swift_test(
-                support_sources=[generated], harness_sources=[harness],
-                output=output, cache_dir=eviction_cache, environ={},
-            )
-            assert builds == ["support", "support"], builds
-            assert output.read_bytes() == b"linked binary"
+        resolve, probe = _mocked_toolchain()
+        with resolve, probe, mock.patch.object(
+            stc.subprocess, "run", side_effect=_fake_swiftc(commands)
+        ), mock.patch.object(stc, "_ensure_module", side_effect=evict_once):
+            stc.compile_swift_test(modules=[core], harness_sources=[harness], output=output,
+                                   cache_dir=eviction_cache, environ={})
+        assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE, stc.SWIFT_CORE_MODULE], commands
+        assert output.read_bytes() == b"binary-v1"
+
+
+def test_harness_layout_is_the_product_layout() -> None:
+    """A harness compiles exactly the files the product compiles into each library module."""
+    sys.path.insert(0, str(ROOT / "Tools"))
+    from product_support import swift_layout, swift_module_sources
+    from module_support import load_manifest
+
+    with tempfile.TemporaryDirectory(prefix="mgt-stc-layout-") as tmp:
+        generated = Path(tmp) / "harness"
+        layout = stc.harness_layout(["hades", "hades2"], generated)
+        product = swift_module_sources(
+            swift_layout([load_manifest("hades"), load_manifest("hades2")])["modules"], ROOT, generated
+        )
+        expected = [(module["name"], tuple(sources), tuple(module["dependencies"]))
+                    for module, sources in product if module["role"] != "app"]
+        assert len(expected) == len(product) - 1, "the harness takes the App module's place"
+        assert [(m.name, m.sources, m.dependencies) for m in layout] == expected
+        assert [m.name for m in layout] == [stc.SWIFT_CORE_MODULE, "Hades", "Hades2"]
+        assert all(path.is_relative_to(ROOT / "Sources/Core") for path in layout[0].sources)
+        assert [path.name for path in layout[1].sources if not path.is_relative_to(ROOT)] == [
+            "GameBinding.generated.swift"
+        ]
+        core_only = stc.harness_layout([], Path(tmp) / "core")
+        assert [m.name for m in core_only] == [stc.SWIFT_CORE_MODULE]
 
 
 def test_clt_sdk_shim_ignored_for_xcode_discovery() -> None:
@@ -451,18 +502,6 @@ def test_real_darwin_equivalence_and_cache_hit() -> None:
     with tempfile.TemporaryDirectory(prefix="mgt-stc-darwin-") as tmp:
         work = Path(tmp)
         cache_dir = work / "cache"
-        generated = work / "ActiveGame.generated.swift"
-        subprocess.run(
-            [sys.executable, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
-            cwd=ROOT,
-            check=True,
-        )
-        support = [
-            *sorted((ROOT / "Sources/Core").rglob("*.swift")),
-            *sorted((ROOT / "Sources/Hades2").rglob("*.swift")),
-            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-            generated,
-        ]
         harness = work / "EquivalenceHarness.swift"
         harness.write_text(
             """
@@ -478,7 +517,7 @@ struct EquivalenceHarness {
         localization.language = .en
         let enTitle = localization.string("hades2.chaosGate.title")
         let patch = Hades2StatePatch(["chaosGateProbability": 25.5])
-        print("eq_ok|\\(Hades2GameModule.presentation.headerTitle)|\\(enTitle)|\\(patch.chaosGateProbability.value ?? -1)")
+        print("eq_ok|\\(Hades2GameModule.presentation.headerTitle)|\\(enTitle)|\\(patch.chaosGateProbability.value ?? -1)|\\(Hades2GameModuleBinding.descriptor.id)")
     }
 }
 """,
@@ -489,7 +528,7 @@ struct EquivalenceHarness {
         warm_bin = work / "warm"
 
         # Keep this equivalence check valid if the repository itself was
-        # checked out below /tmp; only the generated binding is ephemeral.
+        # checked out below /tmp; only the generated bindings are temporary.
         def compile_from_checkout(**kwargs):
             original = stc._is_temp_path
             with mock.patch.object(
@@ -499,8 +538,8 @@ struct EquivalenceHarness {
                 return stc.compile_swift_test(**kwargs)
 
         compile_from_checkout(
-            support_sources=support,
-            harness_sources=[harness],
+            games=("hades2",),
+            harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", harness],
             output=direct_bin,
             swiftc=swiftc,
             cwd=ROOT,
@@ -510,8 +549,8 @@ struct EquivalenceHarness {
         assert not cache_dir.exists()
 
         compile_from_checkout(
-            support_sources=support,
-            harness_sources=[harness],
+            games=("hades2",),
+            harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", harness],
             output=cold_bin,
             swiftc=swiftc,
             cwd=ROOT,
@@ -519,11 +558,11 @@ struct EquivalenceHarness {
             environ={},
         )
         entries = [p for p in cache_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
-        assert len(entries) == 1
+        assert len(entries) == 2, "TrainerCore and Hades2 cache separately"
 
         compile_from_checkout(
-            support_sources=support,
-            harness_sources=[harness],
+            games=("hades2",),
+            harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", harness],
             output=warm_bin,
             swiftc=swiftc,
             cwd=ROOT,
@@ -540,13 +579,14 @@ struct EquivalenceHarness {
             for binary in (direct_bin, cold_bin, warm_bin)
         ]
         assert outputs[0] == outputs[1] == outputs[2], outputs
-        assert outputs[0].startswith("eq_ok|HADES II|Chaos Gate|"), outputs[0]
+        assert outputs[0].startswith("eq_ok|HADES II|Chaos Gate|25.5|hades2"), outputs[0]
 
 
 if __name__ == "__main__":
     test_support_key_sensitivity_and_filepath_safety()
     test_cache_hit_miss_corruption_recovery_and_opt_out()
-    test_pruning_honors_active_link_lease_and_recovers_eviction()
+    test_pruning_honors_active_lease_and_recovers_eviction()
+    test_harness_layout_is_the_product_layout()
     test_clt_sdk_shim_ignored_for_xcode_discovery()
     test_real_darwin_equivalence_and_cache_hit()
     print("swift_test_compiler_ok")
