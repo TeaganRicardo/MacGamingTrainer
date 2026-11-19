@@ -400,26 +400,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     shutil.copytree(ROOT / "Tools", project / "Tools")
     shutil.copy2(ROOT / "Info.plist", project / "Info.plist")
 
-    generated = project / "Generated/GameBinding.swift"
-    subprocess.run(
-        [PYTHON, str(project / "Tools/generate_game_binding.py"), "reference_fixture", str(generated)],
-        cwd=project,
-        check=True,
-    )
-
     main_swift = project / "main.swift"
     main_swift.write_text(textwrap.dedent(harness), encoding="utf-8")
     binary = project / "reference_fixture_session_test"
 
-    core_sources = sorted((project / "Sources/Core").rglob("*.swift"))
     compile_swift_test(
-        support_sources=[
-            *core_sources,
-            project / "Sources/ReferenceFixture/ReferenceFixtureModule.swift",
-            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-            generated,
-        ],
-        harness_sources=[main_swift],
+        games=("reference_fixture",),
+        checkout=project,
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_swift],
         output=binary,
         flags=(),
         swiftc=SWIFTC,

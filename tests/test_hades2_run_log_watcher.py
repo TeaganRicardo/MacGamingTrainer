@@ -1,11 +1,10 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.hades2_panels import JOURNEY_BUDGETS
 import shutil
-import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -279,15 +278,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
     main = td / "main.swift"
     binary = td / "watcher_test"
     main.write_text(textwrap.dedent(main_source), encoding="utf-8")
-    subprocess.run([
-        SWIFTC,
-        *SINGLE_MODULE_FLAGS,
-        str(ROOT / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"),
-        str(ROOT / "Sources/Hades2/Services/Hades2RunLogWatcher.swift"),
-        str(ROOT / "Sources/Core/Host/TrainerConnectionPolicy.swift"),
-        str(main),
-        "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    compile_swift_test(games=("hades2",), harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT)
     support = td / "fake-hades-support"
     proc = launch_fixture([str(binary), str(support)], cwd=ROOT, text=True, capture_output=True, journey='native.hades2_run_log_watcher', budgets=JOURNEY_BUDGETS)
     if proc.returncode != 0:

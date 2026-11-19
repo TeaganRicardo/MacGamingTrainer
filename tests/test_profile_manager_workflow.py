@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Sources/Core/UI/Components/TrainerProfileSelection.swift"
@@ -85,8 +85,12 @@ precondition(TrainerProfileEntry(name: "Restored", updatedAt: "Today").title == 
 print("profile_selection_workflow_ok")
 ''', encoding="utf-8")
     binary = folder / "selection"
-    subprocess.run([swiftc, *SINGLE_MODULE_FLAGS, str(SOURCE), str(ROOT / "Sources/Core/UI/Components/TrainerSheetLifetime.swift"),
-                    str(main), "-o", str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [SOURCE, ROOT / "Sources/Core/UI/Components/TrainerSheetLifetime.swift"])],
+        harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True)
 
 # Both modules bind the same workflow. Contents, transport and shortcut

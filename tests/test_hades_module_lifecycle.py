@@ -378,6 +378,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-lifecycle-') as directory:
     source = Path(directory) / 'Exit.swift'
     executable_path = Path(directory) / 'exit'
     source.write_text(swift)
+    # Direct swiftc: compiles only the termination text extracted from
+    # HadesModule.swift (a SwiftUI file) and no product file.
     subprocess.run(['swiftc', '-parse-as-library', str(source), '-o', str(executable_path)], check=True)
     subprocess.run([str(executable_path)], check=True)
 print('hades_termination_best_effort_ok')

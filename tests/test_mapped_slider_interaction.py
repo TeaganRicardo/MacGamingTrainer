@@ -1,11 +1,10 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 """Exercise actual mouse, keyboard and accessibility input on the shared slider."""
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 
@@ -255,13 +254,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-slider-interaction-") as temporary:
     harness = directory / "main.swift"
     harness.write_text(HARNESS)
     binary = directory / "slider"
-    sources = [
-        ROOT / "Sources/Core/UI/TrainerTheme.swift",
-        ROOT / "Sources/Core/UI/Primitives/TrainerSliderMapping.swift",
-        ROOT / "Sources/Core/UI/Primitives/TrainerMappedSlider.swift",
-        ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
-    ]
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library", *map(str, sources), str(harness), "-o", str(binary)],
-                   cwd=ROOT, check=True)
+    compile_swift_test(
+        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", harness],
+        output=binary,
+        swiftc=SWIFTC,
+        cwd=ROOT,
+    )
     launch_fixture([str(binary)], cwd=ROOT, env=dict(os.environ, HOME=str(directory)),
                    check=True, journey='native.mapped_slider_interaction', budgets=JOURNEY_BUDGETS)

@@ -1,6 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import SWIFT_CORE_MODULE, compile_swift_test
 """Exercise the real shared SwiftUI/AppKit text control on macOS."""
 import shutil
 import subprocess
@@ -48,14 +48,6 @@ final class InputModel: ObservableObject {
 struct InputOption: Identifiable {
     let id: String
     let title: String
-}
-
-// Read the actual production role's allocation independently of AppKit's
-// native bezel. A localized popup can be narrower inside that allocation.
-struct PickerAllocationProbe: NSViewRepresentable {
-    final class Frame: NSView {}
-    func makeNSView(context: Context) -> Frame { Frame() }
-    func updateNSView(_ view: Frame, context: Context) {}
 }
 
 private func pickerAllocation(_ view: NSView) -> NSView? {
@@ -365,6 +357,20 @@ struct Main {
 }
 '''
 
+# TrainerCore compiles this beside the observed resource picker, which uses it:
+# it reads the actual production role's allocation independently of AppKit's
+# native bezel. A localized popup can be narrower inside that allocation.
+ALLOCATION_PROBE = """
+import AppKit
+import SwiftUI
+
+struct PickerAllocationProbe: NSViewRepresentable {
+    final class Frame: NSView {}
+    func makeNSView(context: Context) -> Frame { Frame() }
+    func updateNSView(_ view: Frame, context: Context) {}
+}
+"""
+
 with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
     directory = Path(temporary)
     swift = directory / "main.swift"
@@ -384,11 +390,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
     observed_resource = directory / "TrainerResourceControls.swift"
     observed_resource.write_text(resource_text.replace(allocation_anchor, """                .trainerPicker(.expanding, state: enabled && !sections.allSatisfy({ $0.items.isEmpty }) ? .interactive : .unavailable)
                 .background(PickerAllocationProbe().allowsHitTesting(false).accessibilityHidden(true))"""))
-    core_sources = [observed_resource if source == resource_source else source
-                    for source in sorted((ROOT / "Sources/Core").rglob("*.swift"))]
+    probe = directory / "PickerAllocationProbe.swift"
+    probe.write_text(ALLOCATION_PROBE)
     compile_swift_test(
-        support_sources=[*core_sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"],
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", swift],
+        patched={resource_source: observed_resource},
+        instrumentation={SWIFT_CORE_MODULE: [probe]},
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", swift],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

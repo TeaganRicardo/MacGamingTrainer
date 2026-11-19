@@ -3,7 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -36,14 +36,24 @@ for raw in sys.stdin:
     }), flush=True)
 '''
 
+# Stands in for Core's GameModuleDescriptor (Host/TrainerGameModule.swift),
+# which TrainerBackendSession reads; it compiles into TrainerCore.
+descriptor_stub = r'''
+package struct GameModuleDescriptor {
+    package let id: String
+    package let expectedHostProtocolVersion: Int
+    package let expectedModuleProtocolVersion: Int
+
+    package init(id: String, expectedHostProtocolVersion: Int, expectedModuleProtocolVersion: Int) {
+        self.id = id
+        self.expectedHostProtocolVersion = expectedHostProtocolVersion
+        self.expectedModuleProtocolVersion = expectedModuleProtocolVersion
+    }
+}
+'''
+
 harness = r'''
 import Foundation
-
-package struct GameModuleDescriptor {
-    let id: String
-    let expectedHostProtocolVersion: Int
-    let expectedModuleProtocolVersion: Int
-}
 
 func fail(_ message: String) -> Never {
     fputs("FAIL: \(message)\n", stderr)
@@ -142,19 +152,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-reply-round20-") as td:
     td = Path(td)
     worker_path = td / "worker.py"
     main_path = td / "main.swift"
+    stub_path = td / "GameModuleDescriptorStub.swift"
     binary = td / "reply_test"
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
-    subprocess.run([
-        SWIFTC,
-        *SINGLE_MODULE_FLAGS,
-        "-parse-as-library",
-        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
-        str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
-        str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
-        str(main_path),
-        "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    stub_path.write_text(descriptor_stub, encoding="utf-8")
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files and a stub for GameModuleDescriptor.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [
+            ROOT / "Sources/Core/Runtime/TrainerJSON.swift", ROOT / "Sources/Core/Runtime/BackendProcess.swift",
+            ROOT / "Sources/Core/Runtime/BackendClient.swift",
+            ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift",
+            stub_path,
+        ])],
+        harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT,
+    )
     proc = subprocess.run([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, timeout=10)
     if proc.returncode != 0:
         print(proc.stdout)

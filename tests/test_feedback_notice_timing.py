@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -96,9 +97,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-feedback-timing-") as td:
     main = td / "main.swift"
     binary = td / "feedback_timing"
     main.write_text(textwrap.dedent(harness))
-    subprocess.run([
-        SWIFTC,
-        str(ROOT / "Sources/Core/UI/TrainerFeedbackTiming.swift"),
-        str(main), "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only this
+    # Foundation-level file.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT / "Sources/Core/UI/TrainerFeedbackTiming.swift"])],
+        harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True, cwd=ROOT, timeout=10)

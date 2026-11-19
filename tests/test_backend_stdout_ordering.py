@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKER = r'''
@@ -49,6 +50,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-stdout-ordering-') as directory:
     binary = directory / 'ordering'
     worker.write_text(WORKER)
     main.write_text(HARNESS)
-    subprocess.run([shutil.which('swiftc'), str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'),
-        str(ROOT / 'Sources/Core/Runtime/BackendProcess.swift'), str(main), '-o', str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT / 'Sources/Core/Runtime/TrainerJSON.swift',
+                                                 ROOT / 'Sources/Core/Runtime/BackendProcess.swift'])],
+        harness_sources=[main], output=binary, flags=(), swiftc=shutil.which('swiftc'), cwd=ROOT,
+    )
     subprocess.run([str(binary), shutil.which('python3'), str(worker)], check=True, timeout=25)

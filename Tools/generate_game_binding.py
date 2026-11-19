@@ -133,39 +133,15 @@ def generate_module_sources(manifests, directory: Path):
     return written
 
 
-def generate(manifest, output: Path, *, catalog=False):
-    """Write one file for a harness that compiles Core and games as one module.
-
-    Only Swift test harnesses still compile that single-module shape; the
-    product compiles the per-module sources of ``generate_module_sources``.
-    """
-    manifests = list(manifest) if isinstance(manifest, (list, tuple)) else [manifest]
-    output.parent.mkdir(parents=True, exist_ok=True)
-    text = HEADER + _imports('SwiftUI') + ''.join(binding_declaration(item) for item in manifests)
-    if catalog or len(manifests) > 1:
-        text += catalog_declaration(manifests)
-    output.write_text(text, encoding='utf-8')
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('game_ids', help='Comma-separated game module IDs.')
-    target = parser.add_mutually_exclusive_group(required=True)
-    target.add_argument('--module-sources', metavar='DIRECTORY',
-                        help='Write per-Swift-module generated sources for the product build.')
-    target.add_argument('output', nargs='?',
-                        help='Write one single-module file for a Swift test harness.')
-    parser.add_argument('--catalog', action='store_true',
-                        help='Include the App catalog in single-module output.')
+    parser.add_argument('--module-sources', metavar='DIRECTORY', required=True,
+                        help='Write each Swift module\'s generated sources under DIRECTORY/<module>.')
     args = parser.parse_args(argv)
-    if args.module_sources and args.catalog:
-        parser.error('--catalog applies only to single-module output; --module-sources always writes the catalog.')
     try:
         manifests = [load_manifest(game_id) for game_id in args.game_ids.split(',')]
-        if args.module_sources:
-            generate_module_sources(manifests, Path(args.module_sources))
-        else:
-            generate(manifests, Path(args.output), catalog=args.catalog)
+        generate_module_sources(manifests, Path(args.module_sources))
     except (ManifestError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 2

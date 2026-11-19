@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from games.hades.save_document import encode_lua
 from games.hades.save_values import from_typed
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 SWIFTC = shutil.which('swiftc')
 if not SWIFTC:
@@ -105,8 +105,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-save-value-wire-') as tempora
     values_file, main, binary = base / 'HadesSaveValue.swift', base / 'main.swift', base / 'wire'
     values_file.write_text(value_source)
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(ROOT / 'Sources/Core/Runtime/TrainerJSON.swift'), str(ROOT / 'Sources/Core/Input/TrainerJSONNumericInput.swift'),
-                    str(values_file), str(main), '-o', str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files; the extracted Hades section keeps its own module.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT / 'Sources/Core/Runtime/TrainerJSON.swift',
+                                                 ROOT / 'Sources/Core/Input/TrainerJSONNumericInput.swift']),
+                 SwiftModule('Hades', [values_file], (SWIFT_CORE_MODULE,))],
+        harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     wire = subprocess.check_output([str(binary)], text=True)
 
 samples = {item['name']: item['value'] for item in json.loads(wire)}

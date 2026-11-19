@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
 from hades2_resident_session_fakes import FakeResidentSession
+from swift_test_compiler import SwiftModule, compile_swift_test
 
 GENERATOR_PATH = ROOT / "Tools/generate_hades2_feature_bindings.py"
 GENERATED_SWIFT = ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift"
@@ -113,9 +114,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-feature-binding-") as temporary:
     main = Path(temporary) / "main.swift"
     binary = Path(temporary) / "feature-binding-test"
     main.write_text(harness, encoding="utf-8")
-    subprocess.run(
-        [swiftc, str(GENERATED_SWIFT), str(main), "-o", str(binary)],
-        check=True,
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule("Hades2", [GENERATED_SWIFT])],
+        harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
     )
     subprocess.run([str(binary)], check=True)
 

@@ -222,31 +222,23 @@ import sys
 from pathlib import Path
 
 manifest, root, generated, lists = map(Path, sys.argv[1:])
+sys.path.insert(0, str(root / 'Tools'))
+from module_support import ManifestError
+from product_support import swift_module_sources
+
 lists.mkdir(parents=True, exist_ok=True)
-modules = json.loads(manifest.read_text(encoding='utf-8'))['frontend']['swift']['modules']
-roles = [module['role'] for module in modules]
+layout = json.loads(manifest.read_text(encoding='utf-8'))['frontend']['swift']['modules']
+roles = [module['role'] for module in layout]
 if roles[-1:] != ['app'] or roles.count('app') != 1:
     raise SystemExit('The Swift layout must end with exactly one App module.')
-built = set()
-for module in modules:
+try:
+    modules = swift_module_sources(layout, root, generated)
+except ManifestError as error:
+    raise SystemExit(str(error))
+for module, sources in modules:
     name = module['name']
-    if any(dependency not in built for dependency in module['dependencies']):
-        raise SystemExit(f'Swift module {name} depends on a module not built before it.')
-    sources = []
-    for relative in module['sources']:
-        path = root / relative
-        if path.is_dir():
-            sources += sorted(path.rglob('*.swift'))
-        elif path.is_file() and path.suffix == '.swift':
-            sources.append(path)
-        else:
-            raise SystemExit(f'Missing Swift source for {name}: {relative}')
-    sources += sorted((generated / name).glob('*.swift'))
-    if not sources:
-        raise SystemExit(f'No Swift sources for module {name}.')
     (lists / f'{name}.txt').write_text(''.join(f'{source}\n' for source in sources), encoding='utf-8')
     print('\t'.join((name, module['role'], ','.join(module['dependencies']))))
-    built.add(name)
 PY
 grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT_DIR"/*/TrainerGameCatalog.generated.swift || {
     echo "Generated game catalog is invalid." >&2; exit 1;

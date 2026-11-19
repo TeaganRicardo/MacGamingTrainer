@@ -154,12 +154,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-frontend-') as td:
     main, binary, worker = td / 'main.swift', td / 'reroll', td / 'worker.py'
     main.write_text(HARNESS); worker.write_text(WORKER.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"])))
     home = td / 'home'; home.mkdir()
-    generated = td / 'ActiveGame.generated.swift'
-    subprocess.run([PYTHON, str(ROOT / 'Tools/generate_game_binding.py'), 'hades2', str(generated)], check=True)
-    sources = sorted((ROOT / 'Sources/Core').rglob('*.swift')) + sorted((ROOT / 'Sources/Hades2').rglob('*.swift'))
     compile_swift_test(
-        support_sources=[*sources, ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', generated],
-        harness_sources=[main],
+        games=('hades2',),
+        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', main],
         output=binary,
         swiftc=SWIFTC,
     )

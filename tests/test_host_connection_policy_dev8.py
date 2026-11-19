@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which('swiftc')
@@ -347,12 +348,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-host-policy-') as td:
     main = td / 'main.swift'
     binary = td / 'policy_test'
     main.write_text(textwrap.dedent(harness), encoding='utf-8')
-    subprocess.run([
-        SWIFTC,
-        str(ROOT / 'Sources/Core/Host/TrainerConnectionPolicy.swift'),
-        str(main),
-        '-o', str(binary),
-    ], check=True, cwd=ROOT)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only this
+    # Foundation-level file.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT / 'Sources/Core/Host/TrainerConnectionPolicy.swift'])],
+        harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     proc = subprocess.run([str(binary)], cwd=ROOT, text=True, capture_output=True, timeout=10)
     if proc.returncode != 0:
         print(proc.stdout)

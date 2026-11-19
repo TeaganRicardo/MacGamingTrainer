@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / 'Tools'))
 import module_support
 import product_support
 import verify_module_build
-from generate_game_binding import generate, generate_module_sources
+from generate_game_binding import generate_module_sources
 from swift_module_layout import SWIFT_APP_MODULE
 from module_support import ManifestError
 from build_module_native import build_libraries
@@ -103,14 +103,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     assert 'typealias ActiveGameModule' not in ''.join(bindings.values()) + catalog
     assert 'backendGameID' not in ''.join(bindings.values())
     assert 'targetExecutablePathSuffix: "one/Game.macOS"' in bindings['One']
-
-    # Harnesses that still compile Core and games as one module use one file
-    # with the same declarations and no module imports.
-    output = project / 'Generated.swift'
-    generate(selection.modules, output, catalog=True)
-    single = output.read_text()
-    assert 'import TrainerCore' not in single and 'import one' not in single
-    assert 'package enum OneModuleBinding' in single and 'enum TrainerGameCatalog' in single
 
     dist = project / 'dist'
     app = dist / 'Unified Trainer.app'

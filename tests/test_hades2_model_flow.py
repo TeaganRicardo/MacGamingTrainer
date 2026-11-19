@@ -459,22 +459,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run(
-        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
-        check=True,
-        cwd=ROOT,
-    )
-    # Include InMemoryDefaults.swift so this harness shares the cached
-    # Core+Hades2 support module cleanly with sibling frontend harnesses.
-    support_sources = (
-        sorted((ROOT / "Sources/Core").rglob("*.swift"))
-        + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
-    )
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[main_path],
+        games=("hades2",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_path],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

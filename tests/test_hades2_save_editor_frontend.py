@@ -2179,20 +2179,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-save-editor-frontend-") as td
     worker_path.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run(
-        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
-        check=True,
-        cwd=ROOT,
-    )
-    support_sources = (
-        sorted((ROOT / "Sources/Core").rglob("*.swift"))
-        + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated]
-    )
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main_path],
+        games=("hades2",),
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            main_path,
+        ],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

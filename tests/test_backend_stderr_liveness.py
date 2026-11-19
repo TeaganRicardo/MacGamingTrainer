@@ -1,6 +1,6 @@
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 """Backend stderr read/flush must remain live with an open, quiet worker."""
 import os
 import shutil
@@ -161,7 +161,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-stderr-liveness-") as path:
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     backpressure_path.write_text(textwrap.dedent(backpressure_worker), encoding="utf-8")
     # Instrument only the compiled fixture copy, preserving the production API.
-    production = (ROOT / "Sources/Core/Runtime/BackendProcess.swift").read_text()
+    production_path = ROOT / "Sources/Core/Runtime/BackendProcess.swift"
+    production = production_path.read_text()
     counter_anchor = "    private var buffer = Data()"
     read_anchor = "    private func readPipeIfReadableLocked(_ handle: FileHandle) -> Data? {"
     assert production.count(counter_anchor) == production.count(read_anchor) == 1
@@ -179,14 +180,18 @@ extension BackendProcess {
     func readAttemptsForTest() -> Int { readQueue.sync { testReadAttempts } }
 }
 """
-    harness_path.write_text(production + probe_extension + textwrap.dedent(harness), encoding="utf-8")
-    subprocess.run([
-        SWIFTC,
-        *SINGLE_MODULE_FLAGS,
-        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"),
-        str(harness_path),
-        "-o", str(binary),
-    ], cwd=ROOT, check=True)
+    # The probe extension reads private state, so it lives in the patched file.
+    instrumented = temp / "BackendProcess.swift"
+    instrumented.write_text(production + probe_extension, encoding="utf-8")
+    harness_path.write_text(textwrap.dedent(harness), encoding="utf-8")
+    compile_swift_test(
+        patched={production_path: instrumented},
+        harness_sources=[harness_path],
+        output=binary,
+        flags=(),
+        swiftc=SWIFTC,
+        cwd=ROOT,
+    )
     try:
         result = launch_fixture(
             [str(binary), PYTHON, str(worker_path), str(backpressure_path)],

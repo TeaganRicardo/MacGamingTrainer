@@ -47,6 +47,8 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-swift-') as temp:
     binary = root / 'test'
     swift.write_text(harness)
     data.write_text(json.dumps(payload))
+    # Direct swiftc: compiles only the enum extracted from HadesTypes.swift, whose
+    # whole file needs the SwiftUI HadesWorkbenchCatalog.
     result = subprocess.run(['swiftc', str(swift), '-o', str(binary)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     result = subprocess.run([str(binary), str(data)], capture_output=True, text=True)

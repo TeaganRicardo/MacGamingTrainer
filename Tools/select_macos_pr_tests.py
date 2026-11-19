@@ -185,6 +185,8 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     "Backend/games/hades2/trainer-entitlements.plist": (BUILD_SMOKE,),
     "docs/reference/hades2/1.143476-25481925/ui_terminology.json": ("test_hades2_model_flow.py",),
     "Tools/generate_game_binding.py": ("test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"),
+    # Swift test harnesses compile the module layout this owns.
+    "Tools/product_support.py": ("test_hades2_model_flow.py", "test_reference_fixture_session_integration.py"),
     "Tools/module_support.py": ("test_multi_game_context_state.py", "test_reference_fixture_session_integration.py"),
     "Tools/resident_runtime.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),
     "Tools/supported_build.py": ("test_multi_game_context_state.py", "test_hades2_model_flow.py"),

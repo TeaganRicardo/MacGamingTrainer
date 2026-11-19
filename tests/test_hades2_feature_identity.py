@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which("swiftc")
@@ -64,12 +65,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-feature-identity-") as td:
     main = Path(td) / "main.swift"
     main.write_text(harness, encoding="utf-8")
     binary = Path(td) / "feature-identity-test"
-    subprocess.run([
-        swiftc,
-        str(ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift"),
-        str(ROOT / "Sources/Hades2/Hades2Types.swift"),
-        str(ROOT / "Sources/Hades2/Hades2BackendState.swift"),
-        str(main),
-        "-o", str(binary),
-    ], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule("Hades2", [
+            ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift",
+            ROOT / "Sources/Hades2/Hades2Types.swift",
+            ROOT / "Sources/Hades2/Hades2BackendState.swift",
+        ])],
+        harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True)

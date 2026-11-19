@@ -406,19 +406,9 @@ extension Hades2TrainerModel {
     testable_model = td / "Hades2Model.swift"
     testable_model.write_text(model_source, encoding="utf-8")
 
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run(
-        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
-        check=True,
-        cwd=ROOT,
-    )
-    support_sources = (
-        sorted((ROOT / "Sources/Core").rglob("*.swift"))
-        + [path for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")) if path.name != "Hades2Model.swift"]
-        + [testable_model, generated]
-    )
     compile_swift_test(
-        support_sources=support_sources,
+        games=("hades2",),
+        patched={ROOT / "Sources/Hades2/Hades2Model.swift": testable_model},
         harness_sources=[main_path],
         output=binary,
         swiftc=SWIFTC,

@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
 from supported_build import supported_reference_directory
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 for path in ('Sources/Hades/HadesWorkbenchNavigation.swift',
              'Sources/Hades2/Views/Hades2HostActions.swift'):
     header_actions = (ROOT/path).read_text()
@@ -159,12 +159,17 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
     main = Path(temporary)/'main.swift'
     binary = Path(temporary)/'search'
     main.write_text(HARNESS)
-    subprocess.run([SWIFTC, *SINGLE_MODULE_FLAGS, str(ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift'),
-                    str(ROOT/'Sources/Core/UI/TrainerWorkbenchSearch.swift'),
-                    str(ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
-                    str(ROOT/'Sources/Hades2/Hades2Types.swift'),
-                    str(ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
-                    str(main), '-o', str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift',
+                                                 ROOT/'Sources/Core/UI/TrainerWorkbenchSearch.swift']),
+                 SwiftModule('Hades2', [ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift',
+                                        ROOT/'Sources/Hades2/Hades2Types.swift',
+                                        ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'],
+                             (SWIFT_CORE_MODULE,))],
+        harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True)
 
 workbench_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()

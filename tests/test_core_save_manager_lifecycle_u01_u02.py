@@ -2,11 +2,10 @@ from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_save import JOURNEY_BUDGETS
 import os
 import shutil
-import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -68,12 +67,6 @@ lifecycle_harness = r'''
 import Foundation
 import Combine
 
-package struct GameModuleDescriptor {
-    let id: String
-    let expectedHostProtocolVersion: Int
-    let expectedModuleProtocolVersion: Int
-}
-
 func fail(_ message: String) -> Never {
     fputs(message, stderr)
     fputc(10, stderr)
@@ -101,9 +94,8 @@ struct Runner {
         )
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
-            id: "test",
-            expectedHostProtocolVersion: 6,
-            expectedModuleProtocolVersion: 5
+            id: "test", displayName: "Test", targetProcessName: "", targetBundleIdentifier: "",
+            expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5, supportsSaveManagement: true
         )
         var dispatchedDeletes = 0
         try session.start(
@@ -337,17 +329,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     recovery.mkdir(parents=True)
     environment = os.environ.copy()
     environment["HOME"] = str(home)
-    subprocess.run([
-        SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library",
-        str(ROOT / "Sources/Core/Runtime/TrainerJSON.swift"), str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
-        str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
-        str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
-        str(ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"),
-        str(ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"),
-        str(ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"),
-        str(ROOT / "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift"),
-        str(main_path), "-framework", "AppKit", "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    compile_swift_test(harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT)
     proc = launch_fixture(
         [str(binary), PYTHON, str(worker_path), str(recovery)],
         cwd=ROOT, env=environment, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.1', budgets=JOURNEY_BUDGETS
@@ -367,11 +349,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-path-validation-") as td:
     main_path = base / "path_validation.swift"
     binary = base / "path_validation"
     main_path.write_text(textwrap.dedent(path_harness), encoding="utf-8")
-    subprocess.run([
-        SWIFTC, *SINGLE_MODULE_FLAGS, "-parse-as-library",
-        str(ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"),
-        str(main_path), "-o", str(binary),
-    ], check=True, cwd=ROOT)
+    compile_swift_test(harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT)
     proc = launch_fixture(
         [str(binary), str(root), str(outside)],
         cwd=ROOT, text=True, capture_output=True, journey='native.core_save_manager_lifecycle_u01_u02.2', budgets=JOURNEY_BUDGETS

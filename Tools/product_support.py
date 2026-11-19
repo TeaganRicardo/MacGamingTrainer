@@ -6,6 +6,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from generate_game_binding import generate_module_sources
 from module_support import (
     ROOT, AppBuildSpec, ManifestError, load_manifest, load_product_declaration,
     normalized_manifest, product_app_spec,
@@ -92,6 +93,49 @@ def swift_layout(modules):
              'dependencies': [SWIFT_CORE_MODULE, *games]},
         ],
     }
+
+
+def swift_module_sources(modules, root, generated):
+    """Each of ``modules`` (``swift_layout`` order) with the Swift files it compiles.
+
+    A module compiles its declared sources under ``root`` (a directory
+    contributes every ``*.swift`` file below it) plus the binding generator's
+    files for it under ``generated/<module>``. The product build and the Swift
+    test harnesses both take their source lists from here.
+    """
+    built = set()
+    result = []
+    for module in modules:
+        name = module['name']
+        if any(dependency not in built for dependency in module['dependencies']):
+            raise ManifestError(f'Swift module {name} depends on a module not built before it.')
+        sources = []
+        for relative in module['sources']:
+            path = Path(root) / relative
+            if path.is_dir():
+                sources += sorted(path.rglob('*.swift'))
+            elif path.is_file() and path.suffix == '.swift':
+                sources.append(path)
+            else:
+                raise ManifestError(f'Missing Swift source for {name}: {relative}')
+        sources += sorted((Path(generated) / name).glob('*.swift'))
+        if not sources:
+            raise ManifestError(f'No Swift sources for module {name}.')
+        result.append((module, sources))
+        built.add(name)
+    return result
+
+
+def swift_library_modules(game_ids, generated):
+    """TrainerCore and each game's Swift module for ``game_ids``, with their files.
+
+    Writes each module's generated sources under ``generated`` first. A Swift
+    test harness compiles these modules and takes the App module's place.
+    """
+    manifests = [load_manifest(game_id) for game_id in game_ids]
+    generate_module_sources(manifests, Path(generated))
+    modules = [module for module in swift_layout(manifests)['modules'] if module['role'] != 'app']
+    return swift_module_sources(modules, ROOT, generated)
 
 
 def load_selection(selection='all'):

@@ -2,7 +2,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from swift_test_compiler import SINGLE_MODULE_FLAGS
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which('swiftc')
@@ -287,17 +287,23 @@ with tempfile.TemporaryDirectory() as td:
     main = Path(td) / 'main.swift'
     main.write_text(harness)
     binary = Path(td) / 'shortcut-test'
-    subprocess.run([
-        swiftc,
-        *SINGLE_MODULE_FLAGS,
-        str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
-        str(ROOT / 'Sources/Core/UI/TrainerSemanticIcon.swift'),
-        str(ROOT / 'Sources/Core/UI/TrainerWorkbenchSearch.swift'),
-        str(ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift'),
-        str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
-        str(ROOT / 'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
-        str(ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift'),
-        str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'),
-        str(main), '-o', str(binary),
-    ], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[
+            SwiftModule(SWIFT_CORE_MODULE, [
+                ROOT / 'Sources/Core/Input/HotkeyChord.swift',
+                ROOT / 'Sources/Core/UI/TrainerSemanticIcon.swift',
+                ROOT / 'Sources/Core/UI/TrainerWorkbenchSearch.swift',
+            ]),
+            SwiftModule('Hades2', [
+                ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift',
+                ROOT / 'Sources/Hades2/Hades2Types.swift',
+                ROOT / 'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift',
+                ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift',
+            ], (SWIFT_CORE_MODULE,)),
+        ],
+        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', main],
+        output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
+    )
     subprocess.run([str(binary)], check=True)

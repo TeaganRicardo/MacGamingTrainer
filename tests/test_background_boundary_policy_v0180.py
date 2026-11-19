@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from swift_test_compiler import SwiftModule, compile_swift_test
 
 root = Path(__file__).resolve().parents[1]
 hades_sources = list((root/'Sources/Hades2').rglob('*.swift'))
@@ -64,8 +65,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-background-boundary-") as temporary
     main = Path(temporary) / "main.swift"
     binary = Path(temporary) / "refresh-gate"
     main.write_text(main_source)
-    subprocess.run([swiftc, str(root / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"),
-                    str(main), "-o", str(binary)], check=True)
+    # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
+    # Foundation-level files.
+    compile_swift_test(
+        modules=[SwiftModule("Hades2", [root / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"])],
+        harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=root,
+    )
     subprocess.run([str(binary)], check=True)
 
 print('background_boundary_policy_v0180_ok')

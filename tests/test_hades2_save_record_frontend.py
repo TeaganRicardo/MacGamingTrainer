@@ -25,18 +25,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-record-save-journey-") as temporary
     (base / ".fixture-owned").touch()
     home = base / "home"
     home.mkdir()
-    generated = base / "ActiveGame.generated.swift"
-    subprocess.run([sys.executable, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True, cwd=ROOT)
-    support_sources = (sorted((ROOT / "Sources/Core").rglob("*.swift"))
-                       + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-                       + [ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated])
     swiftc = shutil.which("swiftc")
     if not swiftc:
         raise SystemExit("swiftc required")
     binary = base / "record-save-journey"
     compile_swift_test(
-        support_sources=support_sources,
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+        games=("hades2",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
                          ROOT / "tests/fixtures/swift/SaveRecordPlayerJourney.swift"],
         output=binary,
         swiftc=swiftc,

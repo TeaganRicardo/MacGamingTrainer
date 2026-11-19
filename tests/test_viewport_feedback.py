@@ -855,12 +855,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
                      destination / "Host.strings")
     main.write_text(textwrap.dedent(harness))
     stub.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))))
-    generated = td / "ActiveGame.generated.swift"
-    subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
-    sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
     compile_swift_test(
-        support_sources=[*sources, ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", generated],
-        harness_sources=[ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        games=("hades2",),
+        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,
