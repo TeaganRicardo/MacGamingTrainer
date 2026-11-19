@@ -7,6 +7,7 @@ MANAGEMENT_JOURNEY = r'''
 @MainActor
 func exerciseManagementRouting(localization: TrainerLocalizationStore) {
     exerciseSharedControlMotion(localization: localization)
+    exerciseSharedActionGeometry()
     exerciseFeedbackPresentation(localization: localization)
     var available = ["first": true, "second": true]
     var events: [String] = []
@@ -334,6 +335,102 @@ func exerciseDiagnosticStatuses(localization: TrainerLocalizationStore) {
 '''
 
 MANAGEMENT_JOURNEY += FEEDBACK_JOURNEY + SHEET_JOURNEY + r'''
+// Core owns action width roles and shortcut badge geometry for every module:
+// a row's automatic action takes the compact action column, explicit roles take
+// their theme lane, sheet and standalone actions keep their text-only width, and
+// a shortcut badge has one minimum whether shown directly or through a slot.
+private struct ActionGeometryFixture: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TrainerRow {
+                HStack {
+                    Text("Row")
+                    Spacer()
+                    TrainerSecondaryActionButton(title: "Go") {}.accessibilityIdentifier("geometry.row")
+                }
+            }
+            HStack(spacing: 0) {
+                Text("⟨")
+                TrainerSecondaryActionButton(title: "Go") {}.accessibilityIdentifier("geometry.automatic")
+                Text("⟩")
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                TrainerPrimaryActionButton(title: "Go", widthRole: .sheet) {}.accessibilityIdentifier("geometry.sheet")
+                TrainerPrimaryActionButton(title: "Go", widthRole: .compactRow) {}.accessibilityIdentifier("geometry.compactRow")
+                TrainerSecondaryActionButton(title: "Go", widthRole: .connection) {}.accessibilityIdentifier("geometry.connection")
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                TrainerSecondaryActionButton(title: "Go", latched: true, helpText: "Latched help",
+                                             accessibilityLabel: "Latched action") {}
+                    .accessibilityIdentifier("geometry.latched")
+                TrainerSecondaryActionButton(title: "Go") {}.accessibilityIdentifier("geometry.unlatched")
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 0) {
+                TrainerShortcutBadge(text: "⌃1")
+                TrainerShortcutBadgeSlot(text: "⌃1")
+                TrainerShortcutBadgeSlot(text: nil)
+                TrainerShortcutBadgeSlot(text: "⌃⌥⇧⌘ F12 + Space")
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(12)
+        .trainerTheme(.standard)
+    }
+}
+
+@MainActor
+func exerciseSharedActionGeometry() {
+    let theme = TrainerTheme.standard
+    let host = NSHostingView(rootView: ActionGeometryFixture())
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 260),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    window.makeKeyAndOrderFront(nil)
+    func button(_ id: String) -> NativeAccessibilityControl? {
+        nativeAccessibilityControls(host).first { $0.identifier == "geometry." + id && $0.role == "AXButton" }
+    }
+    func texts(_ text: String) -> [NSRect] {
+        nativeAccessibilityControls(host).filter { $0.role == "AXStaticText" && $0.text == text }.map(\.frame)
+            .sorted { $0.minX < $1.minX }
+    }
+    let ids = ["row", "automatic", "sheet", "compactRow", "connection", "latched", "unlatched"]
+    managementWait(host, "shared action geometry") {
+        ids.allSatisfy { button($0) != nil } && texts("⌃1").count == 2
+    }
+    let width = { (id: String) in button(id)!.frame.width }
+    print("native_action_geometry " + ids.map { "\($0)=\(width($0))" }.joined(separator: " ")); fflush(stdout)
+    managementCheck(abs(width("row") - theme.compactActionWidth) <= 1, "row action left the compact action column")
+    managementCheck(abs(width("compactRow") - theme.compactActionWidth) <= 1, "compact-row role lost its lane")
+    managementCheck(abs(width("connection") - theme.connectionActionWidth) <= 1, "connection role lost its lane")
+    let automatic = button("automatic")!.frame
+    let open = texts("⟨"), close = texts("⟩")
+    managementCheck(width("automatic") < theme.compactActionWidth - 8 && open.count == 1 && close.count == 1
+                    && abs(automatic.minX - open[0].maxX) <= 1 && abs(close[0].minX - automatic.maxX) <= 1,
+                    "standalone automatic action took a lane it was not given")
+    managementCheck(abs(width("sheet") - width("automatic")) <= 1, "sheet action stretched its text-only label")
+    let latched = button("latched")!, unlatched = button("unlatched")!
+    managementCheck(latched.label == "Latched action" && latched.help == "Latched help",
+                    "secondary action lost its accessibility label or help")
+    managementCheck(latched.selected && !unlatched.selected, "latched state is not exposed as selected")
+    managementCheck(unlatched.label == "Go", "secondary action label does not default to its title")
+    let short = texts("⌃1"), long = texts("⌃⌥⇧⌘ F12 + Space")
+    print("native_badge_geometry short=\(short) long=\(long)"); fflush(stdout)
+    // Badges are centred in their lane and the row has no spacing, so adjacent
+    // short badges sit exactly one shared minimum lane apart.
+    let lane = theme.shortcutBadgeMinimumWidth
+    managementCheck(abs(short[1].midX - short[0].midX - lane) <= 1,
+                    "direct and slotted shortcut badges disagree on the shared minimum lane")
+    managementCheck(long.count == 1 && long[0].width > lane, "a long shortcut was truncated to the minimum lane")
+    let afterSlot = long[0].minX - (short[1].midX + lane / 2)
+    managementCheck(afterSlot >= 0 && afterSlot < lane / 2, "an empty shortcut slot left a phantom gap")
+    window.contentView = nil
+    window.close()
+}
+
 @MainActor private final class ControlMotionState: ObservableObject {
     @Published var enabled = true
     @Published var isOn = false
