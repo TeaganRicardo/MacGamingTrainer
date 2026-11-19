@@ -514,7 +514,7 @@ def _leased_entry(
     """
     entry_dir = cache_dir / key[:24]
     lock_path = cache_dir / ".locks" / f"{key[:24]}.lock"
-    for _ in range(3):
+    for attempt in range(3):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+") as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
@@ -528,7 +528,8 @@ def _leased_entry(
                     return
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        entry_dir = build_entry()
+        if attempt < 2:
+            entry_dir = build_entry()
     raise SwiftCompilerError(f"Swift test cache entry for {module_name} was repeatedly evicted before use")
 
 

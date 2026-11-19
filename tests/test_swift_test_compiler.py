@@ -292,6 +292,16 @@ def test_cache_hit_miss_corruption_recovery_and_opt_out() -> None:
             assert not commands[0][commands[0].index("-emit-module-path") + 1].startswith(str(cache_dir))
             assert sorted(p.name for p in cache_dir.iterdir()) == before
 
+            # A patched TrainerCore makes its unchanged importer private too: a
+            # game built against instrumented Core must never be cached.
+            patched_core = root / "core" / "Patched.swift"
+            patched_core.write_text("package let greeting = \"instrumented\"\n", encoding="utf-8")
+            compile_harness(patched={generated: patched_core})
+            assert _built_modules(commands) == [stc.SWIFT_CORE_MODULE, "Game"], commands
+            assert all(not cmd[cmd.index("-emit-module-path") + 1].startswith(str(cache_dir))
+                       for cmd in commands if "-emit-module-path" in cmd)
+            assert sorted(p.name for p in cache_dir.iterdir()) == before
+
             # 9. Explicit modules replace the layout; naming games too is an error.
             try:
                 compile_harness(games=("hades2",))
