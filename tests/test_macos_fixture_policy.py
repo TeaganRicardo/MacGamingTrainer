@@ -315,18 +315,7 @@ assert selected_tests(["tests/fixture_budgets/hades.py"], INVENTORY, SOURCES) ==
     "test_hades_save_editor_frontend.py",
 ]
 
-for path in sorted((ROOT / "Tools").rglob("*")) + sorted((ROOT / ".github").rglob("*.yml")):
-    if not path.is_file() or path.suffix not in {".py", ".sh", ".yml", ".json", ".txt"}:
-        continue
-    text = path.read_text(encoding="utf-8", errors="replace")
-    assert "MGT_MACOS_OUTER_TIMEOUT_SCALE" not in text, (
-        f"{path.relative_to(ROOT)}: no workflow or tool may scale a hard watchdog"
-    )
-
-for name in ("build2-macos.yml", "module-build-matrix.yml"):
-    workflow = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
-    assert f"{PROFILE_VARIABLE}: {HOSTED_PROFILE}" in workflow, (
-        f"{name}: hosted jobs must declare the verified profile the policy expects"
-    )
+# Hosted macOS jobs declaring this verified profile is a parsed-model rule in
+# test_ci_workflow_contract.py.
 
 print("macos_fixture_policy_ok")

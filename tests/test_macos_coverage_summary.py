@@ -228,13 +228,7 @@ assert "summarize_macos_coverage.py" in runner
 assert 'LANE="pr"' in runner and 'LANE="convergence"' in runner
 assert "MGT_FIXTURE_TIMINGS" in runner
 assert "macOS coverage summary (exit" in runner, "a coverage violation must fail the lane"
-
-workflow = (ROOT / ".github/workflows/build2-macos.yml").read_text(encoding="utf-8")
-assert "MGT_FIXTURE_TIMINGS:" in workflow
-assert "MGT_MACOS_COVERAGE_OUTPUT:" in workflow
-assert "macos-coverage.jsonl" in workflow
-coverage_step = workflow.split("Retain macOS coverage and journey timing evidence", 1)[1]
-assert "always()" in coverage_step.split("with:", 1)[0]
-assert "if-no-files-found: warn" in coverage_step, "missing evidence must not fail the lane"
+# The workflow's coverage export and always-retained, non-gating upload are a
+# parsed-model rule in test_ci_workflow_contract.py.
 
 print("macos_coverage_summary_ok")

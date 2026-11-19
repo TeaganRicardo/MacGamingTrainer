@@ -44,59 +44,7 @@ for name in SWIFT_TESTS:
         "Foundation-only behavior belongs to the portable Swift lane", name)
 
 
-# Standing workflow dependencies are supply-chain inputs. Keep the exact commit
-# immutable; the trailing comment preserves the reviewed upstream release tag.
-pins = {
-    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262 # v4.4.0",
-    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0",
-    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2",
-}
-workflow_root = ROOT / ".github" / "workflows"
-pinned_workflows = (
-    "linux-contracts.yml",
-    "build2-macos.yml",
-    "module-build-matrix.yml",
-    "direct-release.yml",
-)
-for name in pinned_workflows:
-    source = (workflow_root / name).read_text()
-    for action, pin in pins.items():
-        for line in source.splitlines():
-            stripped = line.strip()
-            if stripped.startswith(f"- uses: {action}@"):
-                use = stripped.removeprefix("- uses: ")
-                assert use == f"{action}@{pin}", (name, use)
-
-for name in ("build2-macos.yml", "module-build-matrix.yml"):
-    source = (workflow_root / name).read_text()
-    # PR smoke and explicit convergence share the ARM64 profile in both
-    # macOS-owned workflows; the product declares only the arm64 architecture.
-    assert 'MGT_MACOS_RUNNER_LABEL: macos-26' in source, name
-    assert 'macos-26-intel' not in source, name
-    assert "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer" in source, name
-    assert "python3 Tools/macos_toolchain_identity.py" in source, name
-    assert "Tools/verify_build_provenance.py" in source, name
-    assert "--match-current-macos-toolchain" in source, name
-    assert "--expected-workflow-source .github/workflows/" in source, name
-    assert "macos-latest" not in source, name
-
-build2 = (workflow_root / "build2-macos.yml").read_text()
-# Workflow-only changes stay orchestration-only in scope routing. Linux
-# contracts therefore pin the product-build invocations that must remain in
-# the changed workflow even when that PR does not build the app package.
-assert "run: ./build.sh --typecheck --all" in build2
-assert "run: ./build.sh --all" in build2
-assert "needs.scope.outputs.needs_build == 'true'" in build2
-assert "needs.scope.outputs.needs_full_build == 'true'" in build2
-
-release = (workflow_root / "direct-release.yml").read_text()
-# The release job now coordinates Linux-side dispatch and verifies the retained
-# artifact's recorded macOS toolchain; compilation/signing remain macOS-owned.
-assert "runs-on: ubuntu-latest" in release
-assert "sha256sum -c" in release
-assert "/usr/libexec/PlistBuddy" not in release
-assert "macos-latest" not in release
-assert "Tools/verify_build_provenance.py" in release
-assert "--expected-workflow-source .github/workflows/build2-macos.yml" in release
+# Workflow action pins, the macOS runner/Xcode profile, product-build lanes and
+# provenance wiring are parsed-model rules in test_ci_workflow_contract.py.
 
 print("swift_toolchain_ci_contract_ok")

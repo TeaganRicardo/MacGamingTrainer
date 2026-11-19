@@ -7,7 +7,6 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 MANIFEST_PATH = ROOT / 'Backend/games/hades2/module.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text())
 APP = json.loads(subprocess.check_output([sys.executable, str(ROOT / 'Tools/validate_game_module.py'), 'hades2', '--json'], text=True))['app']
@@ -42,14 +41,8 @@ def install_runtime_fixture(resources, architectures=('arm64',)):
         unversioned.symlink_to(versioned.name)
 
 
-# A stale app alphabetically before the selected target must not win discovery.
-assert 'Tools/verify_module_build.py' in WORKFLOW
-assert 'find dist' not in WORKFLOW
-BUILD2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
-assert 'dist/Mac Gaming Trainer.app' not in BUILD2
-assert 'Tools/verify_module_build.py all --print-app' in BUILD2
-assert 'Tools/write_build_provenance.py' in WORKFLOW
-assert 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2' in WORKFLOW
+# A stale app alphabetically before the selected target must not win discovery
+# (workflows locate the App only through this verifier: test_ci_workflow_contract.py).
 
 with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     dist = Path(temporary)

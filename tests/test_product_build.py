@@ -9,12 +9,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Build selection is explicit and independent of the backend worker environment.
-BUILD_SCRIPT = (ROOT / 'build.sh').read_text()
-assert 'BUILD_SELECTION="${1:-all}"' in BUILD_SCRIPT
-assert 'MGT_GAME_ID:-all' not in BUILD_SCRIPT
-assert 'SELECTION_ID="$(manifest_field id)"' in BUILD_SCRIPT
-assert 'ACTIVE_GAME_ID="$SELECTION_ID"' in BUILD_SCRIPT
 sys.path.insert(0, str(ROOT / 'Tools'))
 import module_support
 import product_support

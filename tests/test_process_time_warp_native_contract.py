@@ -5,7 +5,6 @@ HELPER = ROOT / 'Native/ProcessTimeWarp/ProcessTimeWarp.c'
 FISHHOOK = ROOT / 'Native/ProcessTimeWarp/vendor/fishhook/fishhook.c'
 FISHHOOK_H = ROOT / 'Native/ProcessTimeWarp/vendor/fishhook/fishhook.h'
 UPSTREAM = ROOT / 'Native/ProcessTimeWarp/vendor/fishhook/UPSTREAM'
-BUILD = (ROOT / 'build.sh').read_text()
 
 assert HELPER.is_file(), 'native Time Warp helper is missing'
 assert FISHHOOK.is_file() and FISHHOOK_H.is_file(), 'fishhook vendor source is missing'
@@ -30,21 +29,7 @@ assert 'anchor_real_ticks' in source and 'anchor_offset_ticks' in source
 assert 'speed - 1.0' in source
 assert 'basename' in source or 'image_basename' in source
 
-for token in (
-    'TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"',
-    'TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"',
-    'TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"',
-    '-dynamiclib',
-    '-isysroot "$SDK"',
-    '-framework QuartzCore',
-    'libMGTTimeWarp.dylib',
-    'codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"',
-    'LICENSE.fishhook',
-    'TIME_WARP_ARCHITECTURES=("${ARCHITECTURES[@]}")',
-    "TIME_WARP_ARCHITECTURES+=(x86_64)",
-    'for arch in "${TIME_WARP_ARCHITECTURES[@]}"; do',
-):
-
-    assert token in BUILD, token
+# build.sh's compile, merge, signing and licence packaging of this helper is
+# asserted on the executed packaging stage in test_build_signing_scope.py.
 
 print('process_time_warp_native_contract_ok')

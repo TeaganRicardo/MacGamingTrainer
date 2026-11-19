@@ -125,10 +125,11 @@ jobs:
           source_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
           source_sha="$(git rev-parse HEAD)"
           source_tree="$(git rev-parse 'HEAD^{tree}')"
-          [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ "$source_build" =~ ^[1-9][0-9]*$ ]]
-          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]]
+          # bash 3.2's errexit ignores a failing [[ ]], so each check exits explicitly.
+          [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid product version: $source_version" >&2; exit 1; }
+          [[ "$source_build" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid bundle build: $source_build" >&2; exit 1; }
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source commit: $source_sha" >&2; exit 1; }
+          [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source tree: $source_tree" >&2; exit 1; }
           echo "version=$source_version" >> "$GITHUB_OUTPUT"
           echo "build=$source_build" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"

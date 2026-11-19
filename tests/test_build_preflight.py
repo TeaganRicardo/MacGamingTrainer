@@ -119,6 +119,23 @@ exit 93
     )
     assert invalid.returncode == 2, invalid.stdout + "\n" + invalid.stderr
 
+    # A bare build is the product. MGT_GAME_ID is the backend worker's runtime
+    # value and must not select what is built.
+    log.write_text("", encoding="utf-8")
+    bare = subprocess.run(
+        ["bash", str(ROOT / "build.sh"), "--typecheck"],
+        cwd=ROOT, env={**env, "MGT_GAME_ID": "hades"}, text=True, capture_output=True, check=False,
+    )
+    assert bare.returncode == 0, bare.stdout + "\n" + bare.stderr
+    assert "MGT_BUILD_TIMING mode=typecheck selection=all phase=swift-typecheck" in bare.stdout, bare.stdout
+    bare_modules = [
+        arguments[arguments.index("-module-name") + 1]
+        for arguments in (block.strip("\n").splitlines()
+                          for block in log.read_text(encoding="utf-8").split("--- end of invocation ---\n")
+                          if block.strip())
+    ]
+    assert bare_modules == list(modules), bare_modules
+
 with tempfile.TemporaryDirectory(prefix="mgt-runtime-cache-") as temporary:
     root = Path(temporary)
     fakebin = root / "bin"
