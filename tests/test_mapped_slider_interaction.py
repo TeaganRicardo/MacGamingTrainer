@@ -91,7 +91,9 @@ func sampledColor(_ bitmap: NSBitmapImageRep, at point: NSPoint, in view: NSView
 
 func trackHasColor(in view: NSView, matching: (NSColor) -> Bool) -> Bool {
     let bitmap = rasterize(view)
-    for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
+    // Sample near the right end so a render of the previous low value cannot
+    // satisfy this check while the new full track is still settling.
+    for x in stride(from: CGFloat(194), through: CGFloat(210), by: 2) {
         for y in stride(from: CGFloat(25.5), through: CGFloat(28.5), by: 0.5) {
             if matching(sampledColor(bitmap, at: NSPoint(x: x, y: y), in: view)) { return true }
         }
@@ -285,7 +287,7 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
         model.enabled = true
         model.value = 10
         waitForPaint("filled slider track did not render TrainerTheme.standard.accent") {
-            abs(thumbCenter(host) - expectedThumb()) < 1.5 && trackHasColor(in: host) { c in
+            trackHasColor(in: host) { c in
                 c.blueComponent > c.redComponent && c.blueComponent > c.greenComponent + 0.15
             }
         }

@@ -1163,7 +1163,7 @@ private struct StubPageModuleB: TrainerGameModule {
         }
         .padding(20)
         .frame(width: 400, height: 320, alignment: .topLeading)
-        .background(Color.green)
+        .background(Color.cyan)
     }
     static func makeSidebarActions(model: StubPageModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StubPageModel) -> EmptyView { EmptyView() }
@@ -1369,10 +1369,10 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
         in: pHost, window: pWin
     )
     let pageProbe = NSPoint(x: pageBBtnRect.minX + 5, y: pageBBtnRect.maxY + 20)
-    func pageLuminance() -> CGFloat {
-        luminance(rasterize(pHost), ptX: pageProbe.x, ptY: pageProbe.y, host: pHost)
+    func pagePaint() -> NSColor {
+        rgba(rasterize(pHost), ptX: pageProbe.x, ptY: pageProbe.y, host: pHost)
     }
-    waitWindow(pHost, "selected Page B paints its green surface") { pageLuminance() > 0.4 }
+    waitWindow(pHost, "selected Page B paints its cyan surface") { isCyan(pagePaint()) }
     clickLocal(NSPoint(x: pageABtnRect.midX, y: pageABtnRect.midY), in: pWin, host: pHost)
     pump(0.05)
     check(StubPageModuleA.pageATaps == 1, "inactive Page A button remained clickable after switching to B")
@@ -1380,7 +1380,10 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
     waitWindow(pHost, "TrainerGamePages hides unselected pages") {
         !nativeAccessibilityControls(pHost).contains { $0.identifier == "page.a.btn" || $0.identifier == "page.b.btn" }
     }
-    waitWindow(pHost, "unselected pages stop painting their content") { pageLuminance() < 0.2 }
+    waitWindow(pHost, "unselected pages stop painting their content") {
+        let color = pagePaint()
+        return (color.redComponent + color.greenComponent + color.blueComponent) / 3 < 0.2
+    }
     pWin.contentView = nil
     pWin.close()
     print("scenario7_sidebar_pages_ok")
