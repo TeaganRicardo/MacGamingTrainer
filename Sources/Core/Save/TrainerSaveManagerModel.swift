@@ -238,33 +238,8 @@ final class TrainerSaveManagerModel: ObservableObject {
                 setError("host.save.error.failed")
                 return
             }
-            switch failure.code {
-            case "save_busy":
-                setError("host.save.error.busy")
-            case "save_not_found":
-                setError("host.save.error.notFound")
-            case "save_unsupported":
-                setError("host.save.error.unsupported")
-            case "staged_unavailable":
-                setError("host.save.error.stagedUnavailable")
-            case "staged_indeterminate":
-                setError("host.save.error.stagedIndeterminate")
-            case "save_unsafe":
-                setError("host.save.error.unsafe")
-            case "snapshot_invalid":
-                setError("host.save.error.invalidSnapshot")
-            case "restore_failed":
-                setError("host.save.error.restoreFailed")
-            case "rollback_failed":
-                let recoveryPath = failure.recoveryPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if recoveryPath.isEmpty {
-                    setError("host.save.error.restoreFailed")
-                } else {
-                    setError("host.save.error.rollbackFailed", arguments: [recoveryPath])
-                }
-            default:
-                setError("host.save.error.failed")
-            }
+            let key = failure.presentation.trimmingCharacters(in: .whitespacesAndNewlines)
+            setError(key.isEmpty ? "host.save.error.failed" : key, arguments: failure.presentationArguments)
             return
         }
         guard let result = reply.result else { return }

@@ -28,10 +28,17 @@ class CoreSaveError(PresentableError, RuntimeError):
     code: str
     presentation_key: str
 
-    def __init__(self, message: str, *, arguments: Sequence[str] = (), recovery_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        arguments: Sequence[str] = (),
+        recovery_path: Optional[str] = None,
+        presentation_key: Optional[str] = None,
+    ) -> None:
         super().__init__(
             self.code,
-            self.presentation_key,
+            self.presentation_key if presentation_key is None else presentation_key,
             diagnostic=message,
             arguments=arguments,
             recovery_path=recovery_path,

@@ -9,6 +9,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
+sys.path.insert(0, str(ROOT / 'Backend'))
+import core.protocol  # noqa: F401 - loads all CoreSaveError subclasses
+from core.errors import CoreSaveError
 from supported_build import supported_reference_directory
 
 ZH = ROOT / "Resources/Localization/zh-CN.lproj/Host.strings"
@@ -405,7 +408,6 @@ assert not fixture_vocabulary_leaks, f"reference fixture leaked Hades vocabulary
 # literals, interpolations and comments alike); player text comes from
 # Host.strings or a module resolver. Runtime sources hold log and diagnostic
 # sentences, not presentation, and are exempt.
-save_model = (ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift").read_text(encoding="utf-8")
 cjk = re.compile(r"[\u4e00-\u9fff]+")
 hard_coded = {
     str(path.relative_to(ROOT)): sorted(set(cjk.findall(path.read_text(encoding="utf-8"))))
@@ -414,11 +416,25 @@ hard_coded = {
 }
 hard_coded = {path: text for path, text in hard_coded.items() if text}
 assert not hard_coded, f"Core presentation hard-codes Chinese copy: {hard_coded}"
-for code in (
-    "save_busy", "save_not_found", "save_unsupported", "staged_unavailable", "staged_indeterminate",
-    "save_unsafe", "snapshot_invalid", "restore_failed", "rollback_failed",
-):
-    assert code in save_model, f"Save presentation must map stable error code {code}"
+
+def _core_save_error_subclasses(base):
+    seen = []
+    for subclass in base.__subclasses__():
+        seen.append(subclass)
+        seen.extend(_core_save_error_subclasses(subclass))
+    return seen
+
+
+core_save_subclasses = [
+    cls for cls in _core_save_error_subclasses(CoreSaveError) if not cls.__name__.startswith("_")
+]
+assert core_save_subclasses, "No public CoreSaveError subclasses found"
+for cls in core_save_subclasses:
+    key = getattr(cls, "presentation_key", "")
+    assert key.startswith("host.save.error."), f"{cls.__name__} missing host.save.error.* key: {key!r}"
+    assert key in zh and key in en and zh[key].strip() and en[key].strip(), (
+        f"{cls.__name__} presentation key {key!r} is not bilingual in Host.strings"
+    )
 
 session = (ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift").read_text(encoding="utf-8")
 for key in (

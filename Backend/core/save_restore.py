@@ -30,8 +30,11 @@ class SaveRollbackError(SaveRestoreError):
     presentation_key = 'host.save.error.rollbackFailed'
 
     def __init__(self, message, recovery_path):
-        path = str(recovery_path)
-        super().__init__(message, arguments=(path,), recovery_path=path)
+        raw = '' if recovery_path is None else str(recovery_path)
+        if not raw.strip():
+            super().__init__(message, presentation_key='host.save.error.restoreFailed')
+            return
+        super().__init__(message, arguments=(raw,), recovery_path=raw)
 
 
 class SaveRestorePreparationInterrupted(KeyboardInterrupt):
