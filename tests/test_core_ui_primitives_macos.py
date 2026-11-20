@@ -857,9 +857,9 @@ private struct ResourceFixtureView: View {
                 itemLabel: { $0.title }, onAction: { _ in state.actionCalls += 1 }
             )
             TrainerGroupedOptionPicker(
-                title: "InlineDisabled", icon: "moon.fill", pickerLabel: "DisabledPicker",
+                title: "InlineBlocked", icon: "moon.fill", pickerLabel: "BlockedActionPicker",
                 selection: $state.selection, sections: options,
-                enabled: false, inline: true, emptyLabel: "Empty", actionTitle: "Blocked", shortcutText: nil,
+                enabled: true, actionEnabled: false, inline: true, emptyLabel: "Empty", actionTitle: "Blocked", shortcutText: nil,
                 itemLabel: { $0.title }, onAction: { _ in }
             )
             TrainerGroupedOptionPicker(
@@ -894,6 +894,7 @@ private func exerciseResourceControls(localization: TrainerLocalizationStore) {
         nativeAccessibilityControls(host).contains { $0.identifier == "trainer.search.clear" }
             && nativeAccessibilityControls(host).filter { $0.role == "AXPopUpButton" }.count == 5
             && namedNativeControl(host, role: "AXButton", name: "Spawn")?.enabled == true
+            && namedNativeControl(host, role: "AXPopUpButton", name: "BlockedActionPicker")?.enabled == true
             && namedNativeControl(host, role: "AXButton", name: "Blocked")?.enabled == false
             && namedNativeControl(host, role: "AXButton", name: lockLabel) != nil
     }
@@ -919,27 +920,33 @@ private func exerciseResourceControls(localization: TrainerLocalizationStore) {
     check(stackPicker.minY > stackTitle.maxY + 2,
           "non-inline TrainerGroupedOptionPicker did not stack picker below title")
 
-    // Icon badge tint: purple when actionAvailable == true, neutral gray when false.
+    // The badge reflects the selected action's availability even while the picker stays enabled.
     let bitmap = rasterize(host)
     let activeBadgeRect = NSRect(x: inlineTitle.minX, y: inlineTitle.midY - 20, width: 42, height: 40)
-    let disabledTitle = localRect(namedNativeControl(host, role: "AXStaticText", name: "InlineDisabled")!.frame, in: host, window: win)
-    let disabledBadgeRect = NSRect(x: disabledTitle.minX, y: disabledTitle.midY - 20, width: 42, height: 40)
+    let blockedTitle = localRect(namedNativeControl(host, role: "AXStaticText", name: "InlineBlocked")!.frame, in: host, window: win)
+    let blockedBadgeRect = NSRect(x: blockedTitle.minX, y: blockedTitle.midY - 20, width: 42, height: 40)
     check(hasMatchingPixel(bitmap, in: activeBadgeRect, host: host, step: 0.5, matching: isPurple),
           "active TrainerGroupedOptionPicker icon badge did not use theme.accent")
-    check(!hasMatchingPixel(bitmap, in: disabledBadgeRect, host: host, step: 0.5, matching: isPurple),
-          "disabled TrainerGroupedOptionPicker icon badge kept purple tint instead of theme.inactive")
+    check(!hasMatchingPixel(bitmap, in: blockedBadgeRect, host: host, step: 0.5, matching: isPurple),
+          "blocked TrainerGroupedOptionPicker action kept a purple icon badge")
+    check(hasMatchingPixel(bitmap, in: blockedBadgeRect.insetBy(dx: 10, dy: 8), host: host, step: 0.5) { color in
+        let maximum = max(color.redComponent, color.greenComponent, color.blueComponent)
+        let minimum = min(color.redComponent, color.greenComponent, color.blueComponent)
+        return minimum > 0.3 && maximum - minimum < 0.08
+    }, "blocked TrainerGroupedOptionPicker action lost its neutral icon glyph")
 
     // Clicking Spawn invokes onAction; clear button clears ResourceEditor search.
     check(namedNativeControl(host, role: "AXButton", name: "Spawn")!.press(), "Spawn refused press")
     check(nativeAccessibilityControls(host).first { $0.identifier == "trainer.search.clear" }!.press(), "Resource clear refused press")
     waitUntil("spawn and resource clear applied") { state.actionCalls == 1 && state.search.isEmpty }
 
-    // Disabling ResourceEditor disables its picker and amount field.
     state.enabled = false
-    waitWindow(host, "disabled ResourceEditor disables picker and amount") {
+    waitWindow(host, "disabled resource controls disable their pickers, amount, and action") {
         let lockedPicker = namedNativeControl(host, role: "AXPopUpButton", name: "LockedRes")
         let amtFields = textFields(in: host).filter { $0.stringValue == "50" }
         return lockedPicker?.enabled == false && !amtFields.isEmpty && amtFields.allSatisfy { !$0.isEnabled }
+            && namedNativeControl(host, role: "AXPopUpButton", name: "InlinePicker")?.enabled == false
+            && namedNativeControl(host, role: "AXButton", name: "Spawn")?.enabled == false
     }
 
     win.contentView = nil
