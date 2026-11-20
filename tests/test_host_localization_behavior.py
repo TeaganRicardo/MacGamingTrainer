@@ -1,5 +1,8 @@
 """Compile and exercise Host localization on macOS with real Bundle tables."""
 
+MGT_PLATFORM = "macos"
+MGT_INPUTS = ("Resources/Localization/", ".github/workflows/build2-macos.yml")
+
 from pathlib import Path
 import shutil
 import subprocess

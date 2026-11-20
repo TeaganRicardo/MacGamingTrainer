@@ -1,4 +1,7 @@
 """Exercise Core Host context lifecycle, target monitor, management groups, and shortcut settings on macOS."""
+
+MGT_PLATFORM = "macos"
+
 from fixture_budgets.core_runtime import JOURNEY_BUDGETS
 from macos_fixture_policy import launch_fixture
 from swift_test_compiler import compile_swift_test

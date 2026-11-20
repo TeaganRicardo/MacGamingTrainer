@@ -1,3 +1,5 @@
+MGT_PLATFORM = "macos"
+
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
 from swift_test_compiler import SWIFT_CORE_MODULE, compile_swift_test

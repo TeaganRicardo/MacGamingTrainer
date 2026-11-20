@@ -25,7 +25,7 @@ from macos_fixture_policy import (
     FixtureBudget, FixturePolicyError, FixtureWatchdogExpired,
     resolve_budget, resolve_profile, run_watchdog, validate_journey_budgets,
 )
-from select_macos_pr_tests import PR_DEFERRED, load_macos_only_tests, selected_tests, source_directories
+from select_macos_pr_tests import PR_DEFERRED, load_routing
 
 HOSTED = {"GITHUB_ACTIONS": "true", PROFILE_VARIABLE: HOSTED_PROFILE, "RUNNER_ARCH": "ARM64"}
 
@@ -305,14 +305,13 @@ assert declared == set(JOURNEY_BUDGETS), (
 
 # Fan-out isolation proof: calibrating one domain budget selects only its
 # owning tests, never the full 28+ PR native fixture suite.
-INVENTORY = load_macos_only_tests()
-SOURCES = source_directories()
+ROUTING = load_routing()
 for domain_name, owners in consumer_domains.items():
-    selected = set(selected_tests([f"tests/fixture_budgets/{domain_name}.py"], INVENTORY, SOURCES))
+    selected = set(ROUTING.relevant_tests([f"tests/fixture_budgets/{domain_name}.py"]))
     assert selected == owners, (domain_name, selected, owners)
     pr_selected = selected - PR_DEFERRED.keys()
     assert len(pr_selected) <= 6, f"domain budget {domain_name} fanned out too broadly: {pr_selected}"
-assert selected_tests(["tests/fixture_budgets/hades.py"], INVENTORY, SOURCES) == [
+assert ROUTING.relevant_tests(["tests/fixture_budgets/hades.py"]) == [
     "test_hades_frontend.py",
     "test_hades_save_editor_frontend.py",
 ]

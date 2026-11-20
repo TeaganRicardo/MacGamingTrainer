@@ -1,4 +1,7 @@
 """Render both real game modules via AppKit and enforce visual geometry parity."""
+
+MGT_PLATFORM = "macos"
+
 import json
 import os
 from pathlib import Path

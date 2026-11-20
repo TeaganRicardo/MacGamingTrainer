@@ -1,3 +1,16 @@
+MGT_PLATFORM = "macos"
+# Exercise the signing contract when native inputs or its build recipe change.
+MGT_INPUTS = (
+    "build.sh",
+    "Native/",
+    "Tools/build_module_native.py",
+    "Tools/macos_toolchain_identity.py",
+    "Tools/verify_module_build.py",
+    "Tools/write_build_provenance.py",
+    "Tools/verify_build_provenance.py",
+    ".github/workflows/build2-macos.yml",
+)
+
 import plistlib
 import subprocess
 import sys

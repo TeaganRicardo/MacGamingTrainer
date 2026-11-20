@@ -29,15 +29,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-no-swift-") as empty_path:
 # Native warning policy: clang emits diagnostics for maintainers, while the
 # unfiltered production-plus-vendor build stays nonfatal until baselined.
 macos_runner = (ROOT / "Tools/run_macos_checks.sh").read_text()
-assert "macos_only_tests.txt" in macos_runner
+assert "python3 Tools/test_inventory.py" in macos_runner
 assert 'python3 "$test_file"' in macos_runner
 assert "while IFS= read -r name" in macos_runner
 
 linux_runner = (ROOT / "Tools/run_linux_checks.sh").read_text()
 assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"' in linux_runner
-macos_list = (ROOT / "Tools/macos_only_tests.txt").read_text().splitlines()
 sys.path.insert(0, str(ROOT / "Tools"))
 from discover_linux_tests import discover_tests
+from test_inventory import load_macos_only_tests
+
+macos_list = load_macos_only_tests(ROOT)
 portable_tests = discover_tests(ROOT)
 for name in SWIFT_TESTS:
     assert name not in macos_list and "tests/" + name in portable_tests, (

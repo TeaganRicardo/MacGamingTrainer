@@ -1,4 +1,9 @@
 """Real fishhook slot writes distinguish successful binding from protection failure."""
+
+MGT_PLATFORM = "macos"
+# The C harness pulls its sources in through preprocessor includes.
+MGT_INPUTS = ("Native/ProcessTimeWarp/vendor/fishhook/",)
+
 from pathlib import Path
 import subprocess
 import tempfile

@@ -1,4 +1,7 @@
 """Hades I 21-shortcut catalog, conflict/reflow rules, bilingual labels, and room-shortcut dispatch."""
+
+MGT_PLATFORM = "macos"
+
 import json
 import shutil
 import subprocess

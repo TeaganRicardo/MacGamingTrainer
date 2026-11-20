@@ -45,36 +45,19 @@ if ! mkdir -p "$HOME"; then
   record_failure "create isolated HOME"
 fi
 
-MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
-if [[ -f "$MACOS_ONLY_LIST" ]]; then
-  while IFS= read -r name || [[ -n "$name" ]]; do
-    [[ -n "$name" ]] || continue
-    if [[ ! -f "$ROOT/tests/$name" ]]; then
-      record_failure "missing macOS-only test: $name"
-    fi
-  done < "$MACOS_ONLY_LIST"
-else
-  record_failure "missing macOS-only test list: $MACOS_ONLY_LIST"
-fi
-
 run_check "Compile backend" python3 -m compileall -q Backend
 run_check "Validate game modules" python3 Tools/validate_game_module.py --all
 
-# Linux collects paths recursively; the shared macOS-only list is the sole
-# exclusion source, so new portable tests cannot miss the gate. A failing
-# test is recorded and does not prevent later tests from running.
-if [[ -f "$MACOS_ONLY_LIST" ]]; then
-  if discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"; then
-    while IFS= read -r test_file; do
-      [[ -n "$test_file" ]] || continue
-      run_check "$test_file" python3 "$test_file"
-    done <<< "$discovered_tests"
-  else
-    status=$?
-    record_failure "discover Linux tests (exit $status)"
-  fi
+# Linux collects portable entrypoints recursively. Record discovery and
+# individual test failures without skipping the remaining checks.
+if discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"; then
+  while IFS= read -r test_file; do
+    [[ -n "$test_file" ]] || continue
+    run_check "$test_file" python3 "$test_file"
+  done <<< "$discovered_tests"
 else
-  record_failure "discover Linux tests (missing macOS-only list)"
+  status=$?
+  record_failure "discover Linux tests (exit $status)"
 fi
 
 if [[ ${#failures[@]} -gt 0 ]]; then

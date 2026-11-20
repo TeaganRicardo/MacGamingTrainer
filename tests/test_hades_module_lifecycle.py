@@ -322,7 +322,7 @@ else:
 print('hades_transport_focus_ownership_ok')
 
 # The termination harness imports only Foundation, so it runs in the portable
-# lane; the macOS lanes execute only Tools/macos_only_tests.txt.
+# lane; the macOS lanes execute tests marked MGT_PLATFORM = "macos".
 model = (ROOT / 'Sources/Hades/HadesModule.swift').read_text()
 start = model.index('    func prepareForTermination(')
 termination = model[start:model.index('\n    private func send(', start)]

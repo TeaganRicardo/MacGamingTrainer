@@ -1,0 +1,249 @@
+"""Derive macOS test consumers from their Python imports and file inputs."""
+from __future__ import annotations
+
+import ast
+import re
+from functools import lru_cache
+from pathlib import Path, PurePosixPath
+from typing import Iterable
+
+from module_inventory import MODULES_RELATIVE
+from product_support import CORE_SWIFT_SOURCES
+from test_inventory import ROOT, declarations, load_macos_only_tests
+
+PATH_LITERAL = re.compile(r"[\w.-]+(?:/[\w.-]+)*")
+SUPPORT_ROOTS = ("tests", "Tools")
+FILE_ROOTS = (*SUPPORT_ROOTS, "Backend", "Sources", "Resources", "Native", "ContractFixtures", "docs", ".github")
+# Exercise both a native build fixture and a Host journey when their runner changes.
+MACOS_RUNNER_PATHS = frozenset({
+    "Tools/run_macos_checks.sh",
+    "Tools/select_macos_pr_tests.py",
+    "Tools/test_inputs.py",
+    "Tools/test_inventory.py",
+})
+MACOS_RUNNER_SMOKE = frozenset({"test_build_signing_metadata_macos.py", "test_multi_game_context_state.py"})
+
+
+def path_tail(node: ast.AST) -> list[str]:
+    """Literal portion of a Path / 'directory' / 'file' expression."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        tail = path_tail(node.right)
+        return path_tail(node.left) + tail if tail else []
+    return []
+
+
+def declared_inputs(tree: ast.Module, source: str) -> tuple[str, ...]:
+    values = declarations(tree, "MGT_INPUTS")
+    if not values:
+        return ()
+    message = f"{source}: MGT_INPUTS must be a literal list of repository-relative paths"
+    if len(values) != 1 or not isinstance(values[0], (ast.List, ast.Tuple)):
+        raise ValueError(message)
+    paths = []
+    for element in values[0].elts:
+        if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+            raise ValueError(message)
+        value = element.value
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts or path == PurePosixPath("."):
+            raise ValueError(message)
+        if value not in (path.as_posix(), path.as_posix() + "/"):
+            raise ValueError(message)
+        paths.append(value)
+    return tuple(paths)
+
+
+def compiled_layout_inputs(tree: ast.Module, source_dirs: dict[str, str]) -> set[str]:
+    """Find source directories and generated-binding inputs of Swift compiler calls."""
+    compiler_names = set()
+    compiler_modules = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in {"swift_test_compiler", "tests.swift_test_compiler"}:
+            compiler_names.update(alias.asname or alias.name for alias in node.names
+                                  if alias.name == "compile_swift_test")
+        elif isinstance(node, ast.Import):
+            compiler_modules.update(alias.asname or alias.name for alias in node.names
+                                    if alias.name in {"swift_test_compiler", "tests.swift_test_compiler"})
+    used = set()
+    used_games = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        named_call = isinstance(callee, ast.Name) and callee.id in compiler_names
+        module_call = (
+            isinstance(callee, ast.Attribute) and callee.attr == "compile_swift_test"
+            and isinstance(callee.value, ast.Name) and callee.value.id in compiler_modules
+        )
+        if not (named_call or module_call):
+            continue
+        args = {keyword.arg: keyword.value for keyword in node.keywords}
+        if "modules" in args and not (
+            isinstance(args["modules"], ast.Constant) and args["modules"].value is None
+        ):
+            # Explicit modules list their source files at the call site.
+            continue
+        checkout = args.get("checkout")
+        if checkout is not None and not (isinstance(checkout, ast.Name) and checkout.id in {"ROOT", "root"}):
+            # A scratch checkout must declare inputs copied from the real tree.
+            continue
+        used.add(f"{CORE_SWIFT_SOURCES}/")
+        if None in args:
+            used_games.update(source_dirs)
+        if "games" in args:
+            try:
+                games = ast.literal_eval(args["games"])
+            except (ValueError, SyntaxError):
+                used_games.update(source_dirs)
+                continue
+            if isinstance(games, (list, tuple)) and all(
+                isinstance(game, str) and game in source_dirs for game in games
+            ):
+                used_games.update(games)
+            else:
+                used_games.update(source_dirs)
+    for game in used_games:
+        used.update((source_dirs[game], (MODULES_RELATIVE / game / "module.json").as_posix()))
+    return used
+
+
+def affected_tests(paths: Iterable[str], dependencies: dict[str, frozenset[str]]) -> set[str]:
+    changed = set(paths)
+    return {
+        name for name, inputs in dependencies.items()
+        if changed.intersection(inputs) or any(
+            path.startswith(prefix) for prefix in inputs if prefix.endswith("/") for path in changed
+        )
+    }
+
+
+def is_native_fixture(path: str) -> bool:
+    # Shared native fixture sources can be pulled in indirectly by the harness.
+    return path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib"))
+
+
+def load_macos_test_dependencies(
+    root: Path = ROOT, *, changed_paths: Iterable[str] = (),
+    source_dirs: dict[str, str] | None = None,
+) -> dict[str, frozenset[str]]:
+    """Return the input paths of each native entrypoint, including indirect helpers.
+
+    Portable Backend implementation remains Linux-owned. A macOS fixture
+    declares the Backend files it actually executes in MGT_INPUTS, where
+    indirect runtime/data inputs are also declared. A trailing slash denotes
+    a directory input. When the product's source directories are supplied,
+    include the sources compiled by Swift harnesses.
+    """
+    changed = set(changed_paths)
+
+    @lru_cache(maxsize=None)
+    def exists(path: str) -> bool:
+        return path in changed or (root / path).is_file()
+
+    def imported_files(tree: ast.Module, source: PurePosixPath) -> set[str]:
+        found = set()
+        search_path = (source.parent, *map(PurePosixPath, SUPPORT_ROOTS), PurePosixPath("."))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+                bases = search_path
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                names = [module] if module else []
+                names += [".".join(filter(None, (module, alias.name)))
+                          for alias in node.names if alias.name != "*"]
+                if node.level:
+                    bases = (source.parents[node.level - 1],) if node.level <= len(source.parents) else ()
+                else:
+                    bases = search_path
+            else:
+                continue
+            for name in names:
+                for base in bases:
+                    stem = (base / name.replace(".", "/")).as_posix()
+                    candidates = (f"{stem}.py", f"{stem}/__init__.py")
+                    match = next((path for path in candidates if exists(path)), None)
+                    if match:
+                        found.add(match)
+                        for parent in PurePosixPath(stem).parents:
+                            initializer = (parent / "__init__.py").as_posix()
+                            if parent == base:
+                                break
+                            if exists(initializer):
+                                found.add(initializer)
+                        break
+        return found
+
+    def named_files(tree: ast.Module, source: PurePosixPath) -> set[str]:
+        found = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Constant, ast.BinOp)):
+                continue
+            relative = "/".join(path_tail(node))
+            if not PATH_LITERAL.fullmatch(relative):
+                continue
+            path = PurePosixPath(relative)
+            if not path.parts or ".." in path.parts:
+                continue
+            candidates = [source.parent / path, PurePosixPath("tests") / path]
+            if path.parts[0] == "Backend" and path.suffix == ".py":
+                continue  # Ordinary Backend Python is covered by portable contracts.
+            if path.parts[0] in FILE_ROOTS or relative in {"build.sh", "Info.plist"}:
+                candidates.append(path)
+            found.update(candidate.as_posix() for candidate in candidates if exists(candidate.as_posix()))
+        return found
+
+    @lru_cache(maxsize=None)
+    def swift_sources(directory: str) -> frozenset[str]:
+        prefix = directory.rstrip("/") + "/"
+        return frozenset(
+            path.relative_to(root).as_posix()
+            for path in (root / directory).rglob("*.swift") if path.is_file()
+        ) | frozenset(path for path in changed if path.startswith(prefix) and path.endswith(".swift"))
+
+    @lru_cache(maxsize=None)
+    def direct_inputs(path: str) -> tuple[set[str], set[str]]:
+        if not (root / path).is_file():
+            return set(), set()
+        tree = ast.parse((root / path).read_text(encoding="utf-8"), filename=path)
+        declared = declared_inputs(tree, path)
+        for input_path in declared:
+            if input_path.endswith("/"):
+                present = (root / input_path).is_dir()
+            else:
+                present = (root / input_path).is_file()
+            if not present:
+                raise ValueError(f"{path}: missing declared macOS test input {input_path}")
+        source = PurePosixPath(path)
+        imports = imported_files(tree, source)
+        named = named_files(tree, source)
+        inputs = imports | named | set(declared)
+        if source_dirs is not None:
+            for compiled in compiled_layout_inputs(tree, source_dirs):
+                if compiled.endswith("/"):
+                    inputs.update(swift_sources(compiled))
+                else:
+                    inputs.add(compiled)
+        helpers = {
+            helper for helper in (named - set(declared)) | imports
+            if helper.endswith(".py") and helper.startswith(("tests/", "Tools/"))
+        }
+        return inputs, helpers
+
+    result = {}
+    for name in sorted(load_macos_only_tests(root)):
+        entry = f"tests/{name}"
+        inputs: set[str] = set()
+        work = [entry]
+        seen = {entry}
+        while work:
+            found, helpers = direct_inputs(work.pop())
+            inputs.update(found)
+            work.extend(helpers - seen)
+            seen.update(helpers)
+        if name in MACOS_RUNNER_SMOKE:
+            inputs.update(MACOS_RUNNER_PATHS)
+        result[name] = frozenset(inputs - {entry})
+    return result

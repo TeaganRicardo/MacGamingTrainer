@@ -1,4 +1,12 @@
 """Trainer-owned copies never inherit source locking flags; targets keep them."""
+
+MGT_PLATFORM = "macos"
+MGT_INPUTS = (
+    "Backend/core/save_metadata.py",
+    "Backend/core/save_restore.py",
+    "Backend/core/save_snapshots.py",
+)
+
 import os
 from pathlib import Path
 import stat

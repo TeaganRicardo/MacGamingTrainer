@@ -1,3 +1,5 @@
+MGT_PLATFORM = "macos"
+
 import json
 """Real Hades SwiftUI text editing uses a temporary backend, never the game/save tree."""
 import os

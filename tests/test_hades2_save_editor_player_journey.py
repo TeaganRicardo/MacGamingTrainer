@@ -1,3 +1,10 @@
+MGT_PLATFORM = "macos"
+MGT_INPUTS = (
+    "Backend/core/save_metadata.py",
+    "Backend/core/save_restore.py",
+    "Backend/core/save_snapshots.py",
+)
+
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.hades2_save import JOURNEY_BUDGETS
 from swift_test_compiler import compile_swift_test

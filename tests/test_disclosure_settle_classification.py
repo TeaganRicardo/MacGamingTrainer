@@ -1,3 +1,5 @@
+MGT_PLATFORM = "macos"
+
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.core_ui import JOURNEY_BUDGETS
 """The disclosure settle classifier reports three outcomes and fails the third.

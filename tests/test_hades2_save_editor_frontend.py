@@ -1,3 +1,5 @@
+MGT_PLATFORM = "macos"
+
 import json
 import os
 import shutil
