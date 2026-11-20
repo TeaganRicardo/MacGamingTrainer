@@ -23,8 +23,13 @@ final class Session {
     var stopped = false
     func stop(suppressTerminationError: Bool) { stopped = true }
 }
+struct Services {
+    var targetObservation = 1
+}
 final class ExitHarness {
     var connected = true, exiting = false
+    var services = Services()
+    var terminationTargetObservation: Int?
     var backendSession = Session()
     var commands: [Hades2Command] = []
     var activeFeatures: [String: Bool] = [:], dormantFeatures: [String: Bool] = [:]
@@ -69,6 +74,10 @@ final class ExitHarness {
         disconnected.connected = false
         disconnected.prepareForTermination { }
         precondition(disconnected.commands == [.resetDesired])
+        let replaced = ExitHarness()
+        replaced.terminationTargetObservation = 0
+        replaced.prepareForTermination { }
+        precondition(replaced.commands == [.resetDesired, .disconnect])
         let stopped = ExitHarness()
         stopped.backendSession.isRunning = false
         var stoppedFinished = false

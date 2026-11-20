@@ -92,6 +92,15 @@ enum HadesFeatureValue: Decodable, Equatable {
         return nil
     }
 
+    func gameSpeedIntent(preservingRuntimeFrom current: Self? = nil) -> Self? {
+        guard case let .gameSpeed(desired, _, _, _, _) = self else { return nil }
+        if case let .gameSpeed(_, actual, active, error, arguments) = current {
+            return .gameSpeed(desired: desired, actual: actual, active: active,
+                              errorPresentation: error, errorArguments: arguments)
+        }
+        return .gameSpeed(desired: desired, actual: nil, active: nil, errorPresentation: nil, errorArguments: [])
+    }
+
     var errorPresentation: String? {
         if case let .gameSpeed(_, _, _, error, _) = self { return error }
         return nil

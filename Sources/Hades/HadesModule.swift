@@ -808,20 +808,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func applyStaleBackendPayload(_ payload: [String: Any]) {
-        var metadata = payload
-        metadata.removeValue(forKey: "connected")
-        applyBackendPayload(metadata)
-        resetObservation()
+        applyBackendPayload(payload, acceptsTargetObservation: false)
     }
 
     func applyBackendPayload(_ payload: [String: Any]) {
+        applyBackendPayload(payload, acceptsTargetObservation: true)
+    }
+
+    private func applyBackendPayload(_ payload: [String: Any], acceptsTargetObservation: Bool) {
         let catalogPayload = payload["catalog"] != nil
         do {
-            try decode(payload)
+            try decode(payload, acceptsTargetObservation: acceptsTargetObservation)
             // Only the same kind of payload proves its failure resolved.
             if catalogPayload { catalogIssue = nil }
-            else if payload["connected"] != nil { observationIssue = nil }
+            else if acceptsTargetObservation && payload["connected"] != nil { observationIssue = nil }
         } catch {
+            guard acceptsTargetObservation else { return }
             let issue = TrainerTextToken(key: catalogPayload ? "hades.error.catalog" : "hades.error.protocol")
             let previous = catalogPayload ? catalogIssue : observationIssue
             if catalogPayload { catalogIssue = issue } else {
@@ -832,7 +834,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func decode(_ payload: [String: Any]) throws {
+    private func decode(_ payload: [String: Any], acceptsTargetObservation: Bool) throws {
         let data = try JSONSerialization.data(withJSONObject: payload)
         if let rows = payload["profiles"] {
             profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
@@ -867,6 +869,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         guard payload["connected"] != nil else { return }
         let state = try JSONDecoder().decode(HadesObservation.self, from: data)
+        guard acceptsTargetObservation else {
+            applyDurableIntent(state)
+            return
+        }
         connected = state.connected
         heroReady = state.heroReady
         invincible = state.invincible ?? false
@@ -893,6 +899,24 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         repairWorldActionSelection()
     }
 
+    private func applyDurableIntent(_ state: HadesObservation) {
+        let speedKey = HadesFeature.gameSpeed.rawValue
+        // The adapter always reports desired speed from preferences, even in a live snapshot.
+        let speed = state.features?[speedKey]?.gameSpeedIntent(preservingRuntimeFrom: features[speedKey])
+        if !connected && !state.connected {
+            // A detached reply can omit preferences. Retain existing values for those fields.
+            var desired = state.features ?? [:]
+            desired[speedKey] = speed
+            features.merge(desired) { _, value in value }
+            healthLocked = state.healthLocked ?? healthLocked
+            moneyLocked = state.moneyLocked ?? moneyLocked
+            rerollsLocked = state.rerollsLocked ?? rerollsLocked
+            boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
+        } else if let speed {
+            features[speedKey] = speed
+        }
+    }
+
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = nil; maxHealth = nil; money = nil; rerolls = nil
@@ -901,12 +925,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         // the backend reprojects the preference document.
         godGauge = nil; maxGodGauge = nil
         target = nil
-        if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
-            features[HadesFeature.gameSpeed.rawValue] = .gameSpeed(
-                desired: desired, actual: nil, active: nil,
-                errorPresentation: nil, errorArguments: []
-            )
-        }
+        let speedKey = HadesFeature.gameSpeed.rawValue
+        if let speed = features[speedKey]?.gameSpeedIntent() { features[speedKey] = speed }
         activeFeatures = [:]; dormantFeatures = [:]; resources = [:]; traits = []; world = nil
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""

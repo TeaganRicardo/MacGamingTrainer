@@ -47,6 +47,9 @@ for raw in sys.stdin:
         result = {'connected': True, 'pid': 4141, 'health': 999}
     if req['command'] == 'queued-observation':
         result = {'health': 999}
+    if req['command'] == 'reset_desired':
+        # The backend's transport-free reset retains the retired attachment PID.
+        result = {'connected': False, 'pid': 5151}
     if req['command'] == 'set_desired':
         feature = req['params']['feature']; value = req['params']['value']
         if feature == 'gameSpeed': result['gameSpeed'] = value
@@ -505,7 +508,7 @@ struct Main {
               "late reply adopted the previous target PID after rapid replacement")
 
         // Quit freezes automatic work while the already-admitted request
-        // settles. The process can exit during that drain.
+        // settles. The process can exit and be replaced during that drain.
         try FileManager.default.removeItem(at: release)
         var quitReply: Bool?
         observedSession.send("late-observation", operation: "quit-drain", announceSuccess: false,
@@ -514,11 +517,19 @@ struct Main {
         context.beginTermination()
         target = .init(isRunning: false, launchGeneration: 1)
         monitor.refresh()
+        target = .init(isRunning: true, launchGeneration: 2, processIdentifier: 6161)
+        monitor.refresh()
         try Data().write(to: release)
         waitFor("quit did not drain the pending reply") { quitReply != nil && !observedModel.busy }
         check(quitReply == true && observedModel.health != 999,
               "quit admitted the previous target's runtime observation after exit")
-        observedSession.stop()
+        let beforeShutdown = commands(at: commandLog).count
+        var shutdownFinished = false
+        context.prepareForTermination { shutdownFinished = true }
+        waitFor("quit did not finish module cleanup and stop its worker") { shutdownFinished && !observedSession.isStarted }
+        let shutdownCommands = commands(at: commandLog).dropFirst(beforeShutdown).compactMap { $0["command"] as? String }
+        check(shutdownCommands == ["reset_desired", "disconnect"],
+              "quit issued runtime cleanup that could attach the replacement target: \(shutdownCommands)")
         print("hades2_live_trait_model_flow_ok")
     }
 }

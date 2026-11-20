@@ -524,9 +524,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private var terminationRequestedFromHost = false
+    private var terminationTargetObservation: TrainerTargetObservation?
 
     func beginTerminationFromHost() {
+        guard !terminationRequestedFromHost else { return }
         terminationRequestedFromHost = true
+        terminationTargetObservation = services.targetObservation
         launchAttachGate.cancel()
     }
 
@@ -732,8 +735,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let identifier = payload["pid"] as? Int {
             return .process(identifier: identifier)
         }
-        if (payload["connected"] as? Bool) ?? connected {
-            // A sparse reply can omit its PID while retaining its connection.
+        let reportsConnected = payload["connected"] as? Bool
+        if reportsConnected == false { return .lifetime }
+        if reportsConnected == true || connected || services.targetObservation.processIdentifier != nil {
+            // A sparse reply can inherit a verified PID. A newly admitted
+            // request alone gives no such evidence while the worker is still
+            // projecting changes against its previous target.
             return .process(identifier: payload.keys.contains("pid") ? nil : pid)
         }
         return .lifetime
@@ -742,9 +749,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func applyStaleBackendPayload(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
         applyDesiredPatch(patch)
+        applyLockProjection(patch, includesRuntime: false)
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
-        if let profiles = patch.profiles { self.profiles = profiles }
-        if let shortcuts = patch.shortcuts { applyProfileShortcuts(shortcuts) }
+        applyManagementPatch(patch)
     }
 
     func applyBackendPayload(_ payload: [String: Any]) {
@@ -820,11 +827,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             repairOccurrenceSelection()
         }
         if patch.biomeTime.isPresent { biomeTime = patch.biomeTime.value }
-        if let value = patch.biomeTimeLocked { biomeTimeLocked = value }
-        if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
-        if let value = patch.rerollsLocked { rerollsLocked = value }
-        if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
-        if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
         if patch.chaosGateTarget.isPresent { chaosGateTarget = patch.chaosGateTarget.value }
         if patch.facilityOptions.isPresent {
@@ -855,25 +857,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.statSupport { statSupport = value }
         if let value = patch.statAvailable { statAvailable = value }
 
-        if let stats = patch.stats {
-            applyStat(stats["grasp"], value: &graspValue, locked: &graspLocked)
-            applyStat(stats["dodge"], value: &dodgeValue, locked: &dodgeLocked)
-            applyStat(stats["crit"], value: &critValue, locked: &critLocked)
-            applyStat(stats["chargeSpeed"], value: &chargeSpeedValue, locked: &chargeSpeedLocked)
-            applyStat(stats["moveSpeed"], value: &moveSpeedValue, locked: &moveSpeedLocked)
-            applyStat(stats["sprintSpeed"], value: &sprintSpeedValue, locked: &sprintSpeedLocked)
-            applyStat(stats["dashSpeed"], value: &dashSpeedValue, locked: &dashSpeedLocked)
-            applyStat(stats["attackSpeed"], value: &attackSpeedValue, locked: &attackSpeedLocked)
-            applyStat(stats["manaRegen"], value: &manaRegenValue, locked: &manaRegenLocked)
-            applyStat(stats["enemyDamage"], value: &enemyDamageValue, locked: &enemyDamageLocked)
-            applyStat(stats["enemyHealth"], value: &enemyHealthValue, locked: &enemyHealthLocked)
-        }
-        if let value = patch.profiles { profiles = value }
-        if let value = patch.diagnostics {
-            diagnostics = value
-            diagnosticsPassed = patch.diagnosticsPassed ?? value.filter(\.ok).count
-            diagnosticsTotal = patch.diagnosticsTotal ?? value.count
-        }
+        applyManagementPatch(patch)
 
         for (rawKey, active) in activeFeatures where active {
             if let key = Hades2FeatureKey(rawValue: rawKey) { clearFeatureActivationGrace(key) }
@@ -892,23 +876,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             }
         }
 
-        if let shortcuts = patch.shortcuts { applyProfileShortcuts(shortcuts) }
-        if patch.health.isPresent { health = patch.health.value }
-        if patch.maxHealth.isPresent { maxHealth = patch.maxHealth.value }
-        if let value = patch.healthLocked { healthLocked = value }
-        if patch.mana.isPresent { mana = patch.mana.value }
-        if patch.maxMana.isPresent { maxMana = patch.maxMana.value }
-        if let value = patch.manaLocked { manaLocked = value }
-        if patch.armor.isPresent { armor = patch.armor.value }
-        if let value = patch.armorLocked { armorLocked = value }
+        applyLockProjection(patch, includesRuntime: true)
         if patch.spellCharge.isPresent { spellCharge = patch.spellCharge.value }
         if patch.spellChargeCost.isPresent { spellChargeCost = patch.spellChargeCost.value }
-        if patch.money.isPresent { money = patch.money.value }
         if patch.runCount.isPresent { runCount = patch.runCount.value }
-        if let value = patch.elements { elements = value }
-        if let value = patch.resources { resources = value }
+    }
 
-
+    private func applyManagementPatch(_ patch: Hades2StatePatch) {
+        if let value = patch.profiles { profiles = value }
+        if let value = patch.diagnostics {
+            diagnostics = value
+            diagnosticsPassed = patch.diagnosticsPassed ?? value.filter(\.ok).count
+            diagnosticsTotal = patch.diagnosticsTotal ?? value.count
+        }
+        if let shortcuts = patch.shortcuts { applyProfileShortcuts(shortcuts) }
     }
 
     private func applyDesiredPatch(_ patch: Hades2StatePatch) {
@@ -921,10 +902,86 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
         if let value = patch.gameSpeed, pendingGameSpeedRequestID == nil { gameSpeed = value }
         if let value = patch.damageMultiplier { damageMultiplier = value }
-        if let value = patch.moneyLocked { moneyLocked = value }
         if let value = patch.moneyMultiplier { moneyMultiplier = value }
         if let value = patch.resourceMultiplier { resourceMultiplier = value }
         if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil { applyBoonRarity(rarity) }
+        if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
+        if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
+    }
+
+    private func applyLockProjection(_ patch: Hades2StatePatch, includesRuntime: Bool) {
+        if includesRuntime {
+            if patch.health.isPresent { health = patch.health.value }
+            if patch.maxHealth.isPresent { maxHealth = patch.maxHealth.value }
+            if patch.mana.isPresent { mana = patch.mana.value }
+            if patch.maxMana.isPresent { maxMana = patch.maxMana.value }
+            if patch.armor.isPresent { armor = patch.armor.value }
+        } else if !connected {
+            // Offline acknowledgments carry desired vital lock flags. Their
+            // numeric values can still describe the preceding live run.
+            if healthLocked && patch.healthLocked == false { health = nil; maxHealth = nil }
+            if manaLocked && patch.manaLocked == false { mana = nil; maxMana = nil }
+            if armorLocked && patch.armorLocked == false { armor = nil }
+            if moneyLocked && patch.moneyLocked == false { money = nil }
+            if rerollsLocked && patch.rerollsLocked == false { rerolls = nil }
+        }
+        // The backend overlays the persisted target on locked Money and
+        // reroll values. A sparse patch can retain the previous lock flag.
+        if patch.money.isPresent && (includesRuntime || (patch.moneyLocked ?? moneyLocked)) {
+            money = patch.money.value
+        }
+        if patch.rerolls.isPresent && (includesRuntime || (patch.rerollsLocked ?? rerollsLocked)) {
+            rerolls = patch.rerolls.value
+        }
+        if let value = patch.healthLocked { healthLocked = value }
+        if let value = patch.manaLocked { manaLocked = value }
+        if let value = patch.armorLocked { armorLocked = value }
+        if let value = patch.moneyLocked { moneyLocked = value }
+        if let value = patch.rerollsLocked { rerollsLocked = value }
+        if let value = patch.biomeTimeLocked { biomeTimeLocked = value }
+
+        if let stats = patch.stats {
+            applyStat(stats["grasp"], value: &graspValue, locked: &graspLocked, includesRuntime: includesRuntime)
+            applyStat(stats["dodge"], value: &dodgeValue, locked: &dodgeLocked, includesRuntime: includesRuntime)
+            applyStat(stats["crit"], value: &critValue, locked: &critLocked, includesRuntime: includesRuntime)
+            applyStat(stats["chargeSpeed"], value: &chargeSpeedValue, locked: &chargeSpeedLocked, includesRuntime: includesRuntime)
+            applyStat(stats["moveSpeed"], value: &moveSpeedValue, locked: &moveSpeedLocked, includesRuntime: includesRuntime)
+            applyStat(stats["sprintSpeed"], value: &sprintSpeedValue, locked: &sprintSpeedLocked, includesRuntime: includesRuntime)
+            applyStat(stats["dashSpeed"], value: &dashSpeedValue, locked: &dashSpeedLocked, includesRuntime: includesRuntime)
+            applyStat(stats["attackSpeed"], value: &attackSpeedValue, locked: &attackSpeedLocked, includesRuntime: includesRuntime)
+            applyStat(stats["manaRegen"], value: &manaRegenValue, locked: &manaRegenLocked, includesRuntime: includesRuntime)
+            applyStat(stats["enemyDamage"], value: &enemyDamageValue, locked: &enemyDamageLocked, includesRuntime: includesRuntime)
+            applyStat(stats["enemyHealth"], value: &enemyHealthValue, locked: &enemyHealthLocked, includesRuntime: includesRuntime)
+        }
+        if let observed = patch.elements {
+            elements = includesRuntime ? observed : mergeLockedRows(observed, into: elements, locked: \.locked)
+        }
+        if let observed = patch.resources {
+            resources = includesRuntime ? observed : mergeLockedRows(observed, into: resources, locked: \.locked)
+        }
+    }
+
+    /// Locked counts are preference targets. Counts from unlocked rows belong
+    /// to the observation. Keep any already-present row when the payload is
+    /// sparse and supplies no new lock information for that ID.
+    private func mergeLockedRows<Row: Identifiable>(
+        _ observed: [Row], into current: [Row], locked: WritableKeyPath<Row, Bool>
+    ) -> [Row] {
+        var incoming = Dictionary(observed.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        var merged: [Row] = current.compactMap { row in
+            guard let confirmed = incoming.removeValue(forKey: row.id) else { return row }
+            if confirmed[keyPath: locked] { return confirmed }
+            guard row[keyPath: locked] else { return row }
+            guard connected else { return nil }
+            var updated = row
+            updated[keyPath: locked] = false
+            return updated
+        }
+        merged += observed.compactMap { row in
+            guard let confirmed = incoming.removeValue(forKey: row.id), confirmed[keyPath: locked] else { return nil }
+            return confirmed
+        }
+        return merged
     }
 
     private func rebuildRuntimeIssuePresentations() {
@@ -1059,9 +1116,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = rarity.forceDuo { boonForceDuo = value }
     }
 
-    private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
+    private func applyStat(
+        _ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool, includesRuntime: Bool
+    ) {
         guard let snapshot else { return }
-        value = snapshot.value
+        if includesRuntime {
+            value = snapshot.value
+        } else if snapshot.locked {
+            if let target = snapshot.target { value = target }
+        } else if !connected && locked {
+            value = nil
+        }
         locked = snapshot.locked
     }
 
@@ -2273,12 +2338,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return
         }
 
-        // Every verified connection receives best-effort resident teardown.
-        // The resident owns its hooks; a Host feature mirror cannot determine
-        // whether cleanup is needed. Durable reset remains persistence-only.
+        // Durable reset is transport-free. Resident teardown can reattach, so
+        // it belongs only to the verified target that still owns this quit.
+        let targetAtQuit = terminationTargetObservation ?? services.targetObservation
         sendBarrier(.resetDesired, title: "hades2.op.exitReset", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(); return }
-            guard self.connected else {
+            guard self.connected, self.services.targetObservation == targetAtQuit else {
                 self.detachForTermination(completion: completion)
                 return
             }

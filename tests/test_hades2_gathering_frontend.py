@@ -19,13 +19,15 @@ SWIFTC = shutil.which('swiftc')
 PYTHON = shutil.which('python3')
 
 WORKER = r'''
-import argparse, json, pathlib, sys
+import argparse, json, pathlib, sys, time
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True)
 args, _ = p.parse_known_args()
 probabilities = {}
 generated = None
 garden_matured = False
 trace = pathlib.Path(__file__).with_suffix('.trace')
+offline = pathlib.Path(__file__).stem == "offline-preferences"
+offline_scans = 0
 for raw in sys.stdin:
  req = json.loads(raw)
  with trace.open('a') as out: out.write(json.dumps(req) + '\n')
@@ -52,6 +54,34 @@ for raw in sys.stdin:
   state['status'] = 'restart_required'
   state['gatheringTargets'] = {}
   state['lastAction'] = {'requestId': generated, 'command': 'generate_gathering', 'outcome': 'outcome_unknown'}
+ if offline:
+  if req['command'] == 'scan':
+   offline_scans += 1
+   state = {'connected': False, 'status': 'disconnected'}
+   if offline_scans == 1: state['chaosGateProbability'] = 35
+   else: state['warning'] = 'verified detached snapshot'
+  elif req['command'] == 'core.save.apply_staged':
+   state = {'operation': {'applied': False}}
+  else:
+   release = pathlib.Path(__file__).with_suffix('.release')
+   deadline = time.monotonic() + 5
+   while not release.exists() and time.monotonic() < deadline:
+    time.sleep(0.005)
+   state = {'status': 'not_running', 'health': 999, 'gardenScopeToken': 'expired-garden'}
+   if req['command'] == 'set_gathering_desired':
+    state['gatheringProbabilities'] = probabilities
+   elif req['command'] == 'set_chaos_gate_desired':
+    state['chaosGateProbability'] = req['params']['probability']
+   elif req['command'] == 'load_profile':
+    state.update(healthLocked=True, moneyLocked=True, money=41, rerollsLocked=True, rerolls=3,
+                 biomeTimeLocked=True, biomeTime=700, stats={'grasp': {'locked': True, 'target': 30, 'value': 999},
+                                                          'dodge': {'locked': False, 'value': 999}},
+                 resources=[{'id': 'MetaCurrency', 'name': 'Ashes', 'locked': True, 'count': 52},
+                            {'id': 'Ore', 'name': 'Ore', 'locked': False, 'count': 999}],
+                 elements=[{'id': 'Fire', 'name': 'Fire', 'locked': True, 'count': 10},
+                           {'id': 'Water', 'name': 'Water', 'locked': False, 'count': 999}])
+   elif req['command'] == 'diagnostics':
+    state = {'checks': [{'name': 'Worker verified', 'ok': True, 'detail': 'fixture'}], 'passed': 1, 'total': 1}
  reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': __MGT_MODULE_PROTOCOL__, 'gameID': args.game, 'ok': True, 'result': state}
  print(json.dumps(reply), flush=True)
 '''
@@ -61,10 +91,10 @@ import Foundation
 import SwiftUI
 func check(_ value: @autoclosure () -> Bool, _ message: String) { if !value() { fatalError(message) } }
 func pump(_ time: TimeInterval) { RunLoop.current.run(until: Date().addingTimeInterval(time)) }
-func wait(_ predicate: () -> Bool) {
+func wait(_ message: String = "worker/model did not reach expected state", _ predicate: () -> Bool) {
     let deadline = Date().addingTimeInterval(4)
     while !predicate(), Date() < deadline { pump(0.02) }
-    check(predicate(), "worker/model did not reach expected state")
+    check(predicate(), message)
 }
 @main struct Main {
     @MainActor static func main() throws {
@@ -150,6 +180,62 @@ func wait(_ predicate: () -> Bool) {
         model.setGatheringProbability(.mining, probability: 70)
         wait { !model.busy && model.gatheringProbabilities[.mining] == 70 }
         session.stop(suppressTerminationError: true)
+
+        // Start a real Context with an offline model. The worker holds the
+        // durable edit replies while the monitor discovers a target without
+        // a launch grant. Desired acknowledgments must survive that boundary.
+        let preferenceWorker = temporary.appendingPathComponent("offline-preferences.py")
+        try FileManager.default.copyItem(at: worker, to: preferenceWorker)
+        let preferenceSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+            executableURL: python, argumentsPrefix: ["-u"])))
+        var target = TrainerTargetObservation(isRunning: false, launchGeneration: 0)
+        let monitor = TrainerTargetProcessMonitor(snapshot: { target })
+        let context = TrainerGameContext<Hades2GameModule>(session: preferenceSession,
+            backendScriptURL: preferenceWorker, logSink: TrainerLogSink(url: temporary.appendingPathComponent("offline.log")),
+            targetMonitor: monitor) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("offline-run-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+        defer { preferenceSession.stop() }
+        let offlineModel = context.model
+        wait("offline preferences did not load") {
+            !offlineModel.connected && !offlineModel.busy && offlineModel.chaosGateProbability == 35
+        }
+        let preferenceTrace = preferenceWorker.deletingPathExtension().appendingPathExtension("trace")
+        let preferenceRelease = preferenceWorker.deletingPathExtension().appendingPathExtension("release")
+        offlineModel.setGatheringProbability(.mining, probability: 55)
+        wait("offline probability request did not start") {
+            (try? String(contentsOf: preferenceTrace, encoding: .utf8))?.contains("set_gathering_desired") == true
+        }
+        offlineModel.setChaosGateProbability(nil)
+        offlineModel.loadProfile("Fixture locks")
+        target = .init(isRunning: true, launchGeneration: 0, processIdentifier: 6161)
+        monitor.refresh()
+        // This request is admitted against current presence, but dispatches
+        // before a verified PID projection. Its sparse reply still carries
+        // state from the worker's previous projection.
+        offlineModel.setGatheringProbability(.fishing, probability: 70)
+        offlineModel.runDiagnostics()
+        try Data().write(to: preferenceRelease)
+        wait("offline acknowledgments did not complete") { !offlineModel.busy }
+        check(offlineModel.gatheringProbabilities == [.mining: 55, .fishing: 70] && offlineModel.chaosGateProbability == nil,
+              "target discovery discarded an acknowledged offline desired probability")
+        check(offlineModel.healthLocked && offlineModel.rerollsLocked && offlineModel.rerolls == 3
+                && offlineModel.moneyLocked && offlineModel.money == 41 && offlineModel.biomeTimeLocked
+                && offlineModel.graspLocked && offlineModel.graspValue == 30,
+              "target discovery discarded a durable profile lock")
+        check(offlineModel.resources.map(\.id) == ["MetaCurrency"] && offlineModel.elements.map(\.id) == ["Fire"]
+                && offlineModel.resources.first?.count == 52 && offlineModel.elements.first?.count == 10,
+              "resource or element lock projection lost its target or adopted stale unlocked rows")
+        check(offlineModel.status == "disconnected" && offlineModel.health == nil && offlineModel.biomeTime == nil
+                && offlineModel.dodgeValue == nil && offlineModel.gardenScopeToken == nil,
+              "a durable acknowledgment restored runtime data from the prior observation")
+        check(offlineModel.diagnosticsPassed == 1 && offlineModel.diagnostics.first?.name == "Worker verified",
+              "a diagnostics reply was discarded while its worker had no verified target baseline")
+        offlineModel.refreshFromHost()
+        wait("a current full detached snapshot was rejected") {
+            !offlineModel.busy && offlineModel.warning == "verified detached snapshot"
+        }
         print("hades2_gathering_frontend_ok")
     }
 }
