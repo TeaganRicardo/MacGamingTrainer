@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +13,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
 from core.module_manifest import GameModuleManifest
-from games.hades import adapter as hades_adapter
+from core.target_probe import AmbiguousTargetError, locate_target
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.recovery import HadesRecoveryJournal
@@ -167,45 +168,56 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-target-metadata-") as tempora
     changed = HadesAdapter(changed_context, runtime=changed_runtime,
         preferences=HadesPreferenceStore(module_dir / "preferences.json"))
     executable = str(Path("/tmp/Fixture/ChangedTarget").resolve())
-    with patch("games.hades.adapter.subprocess.check_output", return_value="42 ChangedTarget\n"), patch(
-        "games.hades.adapter.process_executable_path", return_value=executable
-    ):
+    with patch(
+        "core.target_probe.subprocess.run",
+        return_value=SimpleNamespace(returncode=0, stdout="42 ChangedTarget\n", stderr=""),
+    ) as ps_run, patch("core.target_probe.process_executable_path", return_value=executable):
         assert changed.dispatch("connect", {}, "changed-target")["connected"]
+        assert ps_run.call_args.kwargs["timeout"] > 0
     assert changed_runtime.calls[0] == ("connect", 42, executable)
-    with patch("games.hades.adapter.subprocess.run") as opened:
+    with patch("core.target_probe.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="", stderr="")) as opened:
         changed.dispatch("launch", {}, "changed-launch")
         assert opened.call_args.args[0] == ["/usr/bin/open", "steam://run/2300"]
+        assert opened.call_args.kwargs["timeout"] > 0
     changed.close()
 
 # Process-list command names are candidate hints only; the kernel path owns identity.
-declared_suffix = json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['targetApplication']['executablePathSuffix']
+hades_manifest = GameModuleManifest.load(ROOT / 'Backend/games/hades/module.json')
 expected_executable = str(Path(
     '/Users/test/Library/Application Support/Steam/steamapps/common/Hades/'
     'Game.macOS.app/Contents/MacOS/Game.macOS'
 ).resolve())
 unrelated_executable = str(Path('/tmp/Other/Game.macOS').resolve())
-with patch('games.hades.adapter.subprocess.check_output',
-           return_value='42 Game.macOS\n43 Game.macOS\n'):
-    with patch('games.hades.adapter.process_executable_path',
+with patch(
+    'core.target_probe.subprocess.run',
+    return_value=SimpleNamespace(returncode=0, stdout='42 Game.macOS\n43 Game.macOS\n', stderr=''),
+):
+    with patch('core.target_probe.process_executable_path',
                side_effect=lambda pid: expected_executable if pid == 42 else unrelated_executable):
-        assert hades_adapter._locate_process(declared_suffix) == (42, expected_executable), (
+        located = locate_target(hades_manifest)
+        assert located is not None and (located.pid, str(located.executable_path)) == (42, expected_executable), (
             'basename-only comm must resolve through the actual executable path'
         )
 
-with patch('games.hades.adapter.subprocess.check_output',
-           return_value=f'42 {expected_executable}\n'):
-    with patch('games.hades.adapter.process_executable_path', return_value=None):
-        assert hades_adapter._locate_process(declared_suffix) == (42, expected_executable), (
+with patch(
+    'core.target_probe.subprocess.run',
+    return_value=SimpleNamespace(returncode=0, stdout=f'42 {expected_executable}\n', stderr=''),
+):
+    with patch('core.target_probe.process_executable_path', return_value=None):
+        located = locate_target(hades_manifest)
+        assert located is not None and (located.pid, str(located.executable_path)) == (42, expected_executable), (
             'a full matching ps path remains a valid fallback if proc_pidpath is unavailable'
         )
 
-with patch('games.hades.adapter.subprocess.check_output',
-           return_value='42 Game.macOS\n43 Game.macOS\n'):
-    with patch('games.hades.adapter.process_executable_path', return_value=expected_executable):
+with patch(
+    'core.target_probe.subprocess.run',
+    return_value=SimpleNamespace(returncode=0, stdout='42 Game.macOS\n43 Game.macOS\n', stderr=''),
+):
+    with patch('core.target_probe.process_executable_path', return_value=expected_executable):
         try:
-            hades_adapter._locate_process(declared_suffix)
-        except AdapterError as error:
-            assert error.code == 'ambiguous_target'
+            locate_target(hades_manifest)
+        except AmbiguousTargetError:
+            pass
         else:
             raise AssertionError('multiple matching Hades processes must fail closed')
 

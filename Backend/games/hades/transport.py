@@ -9,7 +9,7 @@ from core.adapter import AdapterError
 
 LUA_SOURCE_LIMIT_BYTES = 128 * 1024
 
-sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False).strip())
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False, timeout=10).strip())
 import lldb
 
 

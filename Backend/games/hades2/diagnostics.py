@@ -1,12 +1,12 @@
 import json
 import platform
-import subprocess
 import sys
 import time
 import zipfile
 from pathlib import Path
 
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION
+from core.target_probe import bounded_run
 
 from . import localization, preparation, schema
 from .config import DISPLAY_NAME
@@ -35,26 +35,35 @@ def build_diagnostics(adapter):
     add('协议版本',True,f'host {HOST_PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
     add('后端进程',True,sys.executable)
     add('Python',True,sys.version.split()[0]+' · '+platform.platform())
-    add(DISPLAY_NAME+' 安装',preparation.GAME.exists(),preparation.GAME)
+    game_dir = adapter.install_path() if callable(getattr(adapter, 'install_path', None)) else preparation.resolve_paths()[0]
+    identity = None
+    identity_error = None
+    try:
+        identity = preparation.compatibility(strict=False)
+        if isinstance(identity.get('game'), str) and identity['game']:
+            game_dir = Path(identity['game'])
+    except Exception as error:
+        identity_error = error
+    add(DISPLAY_NAME+' 安装',game_dir.exists(),game_dir)
     symbols=Path(__file__).with_name('symbols.json')
     add('symbols.json',symbols.is_file(),symbols)
     add('存档目录',preparation.SAVES.exists(),preparation.SAVES)
-    try:
-        identity=preparation.compatibility(strict=False)
+    if identity is not None:
         warnings=identity.get('warnings') if isinstance(identity.get('warnings'),list) else []
         detail=f"{identity.get('version')} · Steam {identity.get('steam_build')}"
         if warnings:detail+=' · '+'; '.join(map(str,warnings))
         add('游戏版本 / Build',identity.get('compatible') is True,detail)
-    except Exception as error:add('游戏版本 / Build',False,error)
+    else:
+        add('游戏版本 / Build',False,identity_error)
     try:
-        names=localization.official_display_names({'WeaponUpgrade'},'zh-CN');add('官方中文文本',bool(names.get('WeaponUpgrade')),names.get('WeaponUpgrade','未解析到 WeaponUpgrade'))
+        names=localization.official_display_names({'WeaponUpgrade'},'zh-CN',game_path=game_dir);add('官方中文文本',bool(names.get('WeaponUpgrade')),names.get('WeaponUpgrade','未解析到 WeaponUpgrade'))
     except Exception as error:add('官方中文文本',False,error)
     try:
-        result=subprocess.run(['/usr/bin/xcrun','--find','lldb'],capture_output=True,text=True,timeout=LLDB_DISCOVERY_TIMEOUT_SECONDS);add('LLDB',result.returncode==0,result.stdout.strip() or result.stderr.strip())
+        result=bounded_run(['/usr/bin/xcrun','--find','lldb'],LLDB_DISCOVERY_TIMEOUT_SECONDS,text=True);add('LLDB',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB',False,error)
     try:
         probe='import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
-        result=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=LLDB_PYTHON_TIMEOUT_SECONDS);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
+        result=bounded_run(['/usr/bin/xcrun','python3','-c',probe],LLDB_PYTHON_TIMEOUT_SECONDS,text=True);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB Python',False,error)
 
     if runtime_observation_available:

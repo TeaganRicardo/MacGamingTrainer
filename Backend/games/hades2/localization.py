@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import GAME_APP
 
+_DEFAULT_GAME_APP = GAME_APP
 _OFFICIAL_TEXT_CACHE = {}
 
 
@@ -40,7 +41,13 @@ def _clean_display_name(value):
 
 def _load_official_display_names(language, game_path=None):
     language = str(language)
-    game = Path(game_path) if game_path is not None else GAME_APP
+    if game_path is not None:
+        game = Path(game_path)
+    elif GAME_APP != _DEFAULT_GAME_APP:
+        game = Path(GAME_APP)
+    else:
+        from .preparation import resolve_paths
+        game = resolve_paths()[0]
     cache_key = (str(game), language)
     cached = _OFFICIAL_TEXT_CACHE.get(cache_key)
     if cached is not None:

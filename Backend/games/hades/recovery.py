@@ -1,15 +1,21 @@
 import json
 import os
 from pathlib import Path
-import subprocess
 import tempfile
 
 from core.adapter import AdapterError
+from core.target_probe import bounded_run
+
+PROCESS_IDENTITY_TIMEOUT_SECONDS = 2.0
 
 
 def process_identity(pid):
-    result = subprocess.run(['/bin/ps', '-p', str(pid), '-o', 'lstart='],
-                            capture_output=True, text=True, check=False)
+    result = bounded_run(
+        ['/bin/ps', '-p', str(pid), '-o', 'lstart='],
+        PROCESS_IDENTITY_TIMEOUT_SECONDS,
+        text=True,
+        check=False,
+    )
     return result.stdout.strip()
 
 

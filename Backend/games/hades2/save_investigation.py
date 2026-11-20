@@ -280,8 +280,8 @@ def _requirement_nodes(node, root):
 
 def _original_roots(game_path):
     if game_path is None:
-        from .config import GAME_APP
-        game_path = GAME_APP
+        from .preparation import resolve_paths
+        game_path = resolve_paths()[0]
     base = Path(game_path)
     candidates = (
         (base / 'Contents/Resources/Content/Scripts', base / 'Contents/Resources/Content/Game/Text'),

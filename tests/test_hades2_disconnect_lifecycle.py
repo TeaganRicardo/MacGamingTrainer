@@ -5,16 +5,15 @@ import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
+from core.target_probe import LocatedTarget
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from games.hades2.config import PROCESS_NAME
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
@@ -108,9 +107,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                 _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
             ), patch.object(preparation, "compatibility", return_value={
                 "version": "1.143476", "steam_build": "fixture", "warnings": [],
-            }), patch("games.hades2.adapter.subprocess.run", return_value=SimpleNamespace(
-                returncode=0, stdout="4343\n" if operation == "scan_replacement" else "4242\n", stderr="",
-            )):
+            }), patch(
+                "games.hades2.adapter.locate_target",
+                return_value=LocatedTarget(
+                    4343 if operation == "scan_replacement" else 4242,
+                    Path("/tmp/Hades II.app/Contents/MacOS/Hades II"),
+                    None,
+                ),
+            ):
                 transport = Hades2LuaTransport()
                 adapter = Hades2Adapter(context=hades2_adapter_context(Path(temporary) / operation / outcome), transport=transport)
                 if operation != "attach_failure":transport.attach(4242)
@@ -174,10 +178,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
     for transition in ("attached_replacement", "detached_replacement", "exit_then_replacement"):
         visible_pid = 4141
 
-        def query_target(command, **kwargs):
-            assert command == ["/usr/bin/pgrep", "-x", PROCESS_NAME]
-            return SimpleNamespace(returncode=int(visible_pid is None),
-                                   stdout=f"{visible_pid}\n" if visible_pid else "", stderr="")
+        def query_target(_manifest, **_kwargs):
+            if visible_pid is None:
+                return None
+            return LocatedTarget(visible_pid, Path("/tmp/Hades II.app/Contents/MacOS/Hades II"), None)
 
         def initial_probe(session, request):
             if session.pid == 5151:
@@ -209,7 +213,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
             preparation, "compatibility", return_value={
                 "version": "1.143476", "steam_build": "fixture", "warnings": [],
             },
-        ), patch("games.hades2.adapter.subprocess.run", side_effect=query_target):
+        ), patch("games.hades2.adapter.locate_target", side_effect=query_target):
             adapter = Hades2Adapter(
                 context=hades2_adapter_context(Path(temporary) / transition),
                 resident_session=resident,
@@ -311,9 +315,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary
             _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
         ), patch.object(preparation, "compatibility", return_value={
             "version": "1.143476", "steam_build": "fixture", "warnings": [],
-        }), patch("games.hades2.adapter.subprocess.run", return_value=SimpleNamespace(
-            returncode=0, stdout="4242\n", stderr="",
-        )):
+        }), patch(
+            "games.hades2.adapter.locate_target",
+            return_value=LocatedTarget(4242, Path("/tmp/Hades II.app/Contents/MacOS/Hades II"), None),
+        ):
             transport = Hades2LuaTransport()
             adapter = Hades2Adapter(context=hades2_adapter_context(Path(temporary) / scenario), transport=transport)
             try:

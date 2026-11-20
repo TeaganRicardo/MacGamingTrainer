@@ -10,12 +10,14 @@ from typing import Any
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import ProcessTimeWarpError
 from core.save_resolution import SaveProviderContext
+from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, locate_target
 
 from . import preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
+from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
-from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST, PROCESS_NAME
+from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST
 from .persistence import PersistenceError
 from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
@@ -138,6 +140,7 @@ class Hades2Adapter(GameAdapter):
             )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
+        self._game_path = None
         self._time_warp_speed=None;self._time_warp_pid=None;self._time_warp_error=None
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
@@ -752,21 +755,48 @@ class Hades2Adapter(GameAdapter):
 
     def scan(self):
         try:
-            identity=preparation.compatibility(strict=False)
-            version=str(identity['version'])
-            self.state.update(version=version if version.startswith('1.') else '1.'+version,
-                              warnings=identity.get('warnings',[]),steamBuild=identity['steam_build'])
+            located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
+        except AmbiguousTargetError as error:
+            raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。') from error
+        except (OSError, subprocess.CalledProcessError, BoundedCommandTimeoutError) as error:
+            if isinstance(error, subprocess.CalledProcessError):
+                code = str(error.returncode)
+                raw = error.stderr if error.stderr is not None else error.stdout
+                detail = (
+                    raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
+                ).strip() or '未知错误'
+            elif isinstance(error, BoundedCommandTimeoutError):
+                code = 'timeout'
+                detail = str(error)
+            else:
+                code = str(getattr(error, 'errno', None) or 'error')
+                detail = str(error) or '未知错误'
+            raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{code}）：{detail}') from error
+
+        pid = located.pid if located is not None else None
+        running_bundle = located.bundle_path if located is not None else None
+        try:
+            identity = (
+                preparation.compatibility(strict=False, game_path=running_bundle)
+                if running_bundle is not None
+                else preparation.compatibility(strict=False)
+            )
+            game_dir = identity.get('game')
+            if isinstance(game_dir, str) and game_dir:
+                self._game_path = Path(game_dir)
+            elif running_bundle is not None:
+                self._game_path = running_bundle
+            version = str(identity['version'])
+            self.state.update(
+                version=version if version.startswith('1.') else '1.' + version,
+                warnings=identity.get('warnings', []),
+                steamBuild=identity['steam_build'],
+            )
         except Exception:
-            self.state['status']='incompatible'
+            self.state['status'] = 'incompatible'
             raise
-        result=subprocess.run(['/usr/bin/pgrep','-x',PROCESS_NAME],capture_output=True,text=True,timeout=5)
-        if result.returncode not in (0,1):
-            detail=(result.stderr or result.stdout).strip() or '未知错误'
-            raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{result.returncode}）：{detail}')
-        pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
-        if len(pids)>1:raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。')
-        pid=pids[0] if pids else None
-        previous_pid=self.state.get('pid')
+
+        previous_pid = self.state.get('pid')
         attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
         if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
             same_process=pid is not None and attached_pid is not None and pid==attached_pid
@@ -1119,8 +1149,16 @@ class Hades2Adapter(GameAdapter):
     def state_for_error(self) -> dict[str, Any]:
         return self.state
 
+    def install_path(self) -> Path:
+        resolved = getattr(self, '_game_path', None)
+        if isinstance(resolved, Path) and resolved.exists():
+            return resolved
+        game, _exe, _steam = preparation.resolve_paths()
+        self._game_path = game
+        return game
+
     def save_provider_context(self) -> SaveProviderContext:
-        return SaveProviderContext(self.context.module_dir, game_path=preparation.GAME)
+        return SaveProviderContext(self.context.module_dir, game_path=self.install_path())
 
     def reply_replayed(self):
         self.reply_projection.invalidate()
