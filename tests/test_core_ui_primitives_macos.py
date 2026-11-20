@@ -1070,9 +1070,18 @@ private func exerciseDisclosureProfilePickerPopover(localization: TrainerLocaliz
           && abs(standardAlloc.width - theme.pickerStandardWidth) <= 1.5,
           "Picker role width allocation mismatch: compact=\(compactAlloc.width) standard=\(standardAlloc.width)")
 
-    // WorkbenchSearchField popover below field (.popover arrowEdge: .bottom).
+    // Center the anchor on roomy displays. On shorter displays, reserve
+    // room below for the 312-point result viewport and its native chrome.
     let wbField = textFields(in: host).first { $0.placeholderString == "SearchWorkbench" }!
-    let inputScreen = win.convertToScreen(wbField.convert(wbField.bounds, to: nil))
+    guard let display = win.screen ?? NSScreen.main else {
+        fatalError("workbench search fixture needs a display")
+    }
+    let inputInWindow = wbField.convert(wbField.bounds, to: nil)
+    let inputBeforeMove = win.convertToScreen(inputInWindow)
+    let windowOrigin = win.frame.origin
+    let anchorY = max(display.visibleFrame.midY, display.visibleFrame.minY + 380)
+    win.setFrameOrigin(NSPoint(x: windowOrigin.x, y: windowOrigin.y + anchorY - inputBeforeMove.midY))
+    let inputScreen = win.convertToScreen(inputInWindow)
     check(win.makeFirstResponder(wbField), "workbench field refused firstResponder")
     if let tv = wbField.currentEditor() as? NSTextView {
         tv.insertText("Health", replacementRange: tv.selectedRange())
@@ -1089,7 +1098,7 @@ private func exerciseDisclosureProfilePickerPopover(localization: TrainerLocaliz
     }
     let popoverWin = findPopoverWindow()!
     check(popoverWin.frame.maxY <= inputScreen.minY + 18,
-          "workbench popover did not present below input (arrowEdge: .bottom): popover=\(popoverWin.frame) input=\(inputScreen)")
+          "workbench popover did not present below input: popover=\(popoverWin.frame) input=\(inputScreen) display=\(display.visibleFrame)")
 
     popoverWin.close()
     win.contentView = nil

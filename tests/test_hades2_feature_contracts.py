@@ -258,6 +258,10 @@ assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_p
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
 assert "specialSearch" not in view
 assert "TrainerWorkbenchSearchField(" in host_actions
+# AppKit can flip either requested edge when space is limited. Keep the
+# preferred edge guarded on displays that cannot show both placements.
+search_field = read('Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift')
+assert ".popover(isPresented: $presentation.resultsPresented, arrowEdge: .bottom)" in search_field
 
 
 gathering_action_key = "hades2.gathering.generate"
