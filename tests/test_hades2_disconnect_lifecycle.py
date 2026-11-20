@@ -3,6 +3,7 @@ import io
 import json
 import sys
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -13,9 +14,10 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.adapter import AdapterError
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import hades2_adapter_context
+from games.hades2.config import PROCESS_NAME
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 class NativeTransport:
@@ -154,6 +156,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                     elif outcome == "restore_failed":
                         assert native.pid == transport.pid == 4242
                         assert adapter.state["connected"] is True, "failed pre-detach recovery lost its attachment"
+                        assert adapter.state["pid"] == 4242, "failed cleanup relabeled the old attachment"
                     else:
                         assert native.pid is None and transport.pid is None, "released worker state was lost"
                         assert adapter.state["connected"] is False, "released debugger still projected connected"
@@ -166,6 +169,113 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                     native.outcome = "success"
                     transport.close()
                     native.close()
+
+with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as temporary:
+    for transition in ("attached_replacement", "detached_replacement", "exit_then_replacement"):
+        visible_pid = 4141
+
+        def query_target(command, **kwargs):
+            assert command == ["/usr/bin/pgrep", "-x", PROCESS_NAME]
+            return SimpleNamespace(returncode=int(visible_pid is None),
+                                   stdout=f"{visible_pid}\n" if visible_pid else "", stderr="")
+
+        def initial_probe(session, request):
+            if session.pid == 5151:
+                assert request["command"] == "status"
+                return AdapterError("waiting", "synthetic replacement is still loading")
+
+        resident = FakeResidentSession({
+            "status": "ready", "scene": "run", "health": 812, "maxHealth": 900,
+            "money": 75, "rerolls": 6, "biomeTime": 23, "runCount": 17,
+            "currentRunTraits": [{"instanceId": "previous-trait"}],
+            "gardenScopeToken": "previous-garden",
+            "chaosGateTarget": {"scopeToken": "previous-chaos"},
+            "facilityOptions": [{"id": "previous-facility"}],
+            "statAvailable": {"dodge": True},
+            "stats": {"dodge": {"value": 80, "locked": False}},
+            "resources": [
+                {"id": "Ore", "name": "Ore", "count": 91, "locked": False},
+                {"id": "Ash", "name": "Ash", "count": 90, "locked": True},
+            ],
+            "elements": [{"id": "Fire", "name": "Fire", "count": 7, "locked": False}],
+            "rewards": [{"id": "StaticReward"}],
+            "boons": [{"id": "StaticBoon"}],
+            "nativeRarityOrder": ["Common", "Rare"],
+            "occurrenceTargets": [{"id": "StaticOccurrence"}],
+            "lastAction": {"requestId": "previous-action", "outcome": "completed"},
+            "runtimeDiagnostics": {"revision": 7, "heroObjectId": 812},
+        }, handler=initial_probe, pid=4141)
+        with patch.object(
+            preparation, "compatibility", return_value={
+                "version": "1.143476", "steam_build": "fixture", "warnings": [],
+            },
+        ), patch("games.hades2.adapter.subprocess.run", side_effect=query_target):
+            adapter = Hades2Adapter(
+                context=hades2_adapter_context(Path(temporary) / transition),
+                resident_session=resident,
+                time_warp_controller=FakeTimeWarpController(),
+            )
+            adapter.preferences.update(
+                gameSpeed=1.5, vitalLocks={"health": {"current": 60, "max": 100}},
+                rerollsLock=9, resourceLocks={"Ash": 24}, statLocks={"grasp": 30},
+            )
+            desired = deepcopy(adapter.preferences)
+            old = adapter.observe_runtime()
+            assert old["pid"] == 4141 and old["health"] == 812
+            if transition == "detached_replacement":
+                assert adapter.disconnect()["connected"] is False
+                same_target = adapter.dispatch("scan", {}, "same-target")
+                assert same_target["pid"] == 4141 and same_target["health"] == 812
+                assert same_target["currentRunTraits"] == [{"instanceId": "previous-trait"}]
+                assert same_target["resources"][0]["count"] == 91
+
+            def assert_observations_retired(state):
+                assert state["health"] is None and state["maxHealth"] is None, (
+                    transition, state["pid"], state["health"], state["maxHealth"],
+                )
+                assert state["money"] is None and state["biomeTime"] is None and state["runCount"] is None
+                assert state["currentRunTraits"] == [] and state["gardenScopeToken"] is None
+                assert state["chaosGateTarget"] is None and state["facilityOptions"] == []
+                assert state["lastAction"] is None and state["runtimeDiagnostics"] is None
+                assert state["statAvailable"] == {} and "dodge" not in state["stats"]
+                assert state["resources"] == [
+                    {"id": "Ore", "name": "Ore", "count": None, "locked": False},
+                    {"id": "Ash", "name": "Ash", "count": 24, "locked": True},
+                ]
+                assert state["elements"] == [{"id": "Fire", "name": "Fire", "count": None, "locked": False}]
+                assert state["healthLocked"] and state["rerollsLocked"] and state["rerolls"] == 9
+                assert state["stats"]["grasp"] == {"locked": True, "target": 30, "value": 30}
+                assert state["rewards"] == [{"id": "StaticReward"}] and state["boons"] == [{"id": "StaticBoon"}]
+                assert state["nativeRarityOrder"] == ["Common", "Rare"]
+                assert state["occurrenceTargets"] == [{"id": "StaticOccurrence"}]
+                assert state["gameSpeed"] == 1.5 and adapter.preferences == desired
+
+            if transition == "exit_then_replacement":
+                visible_pid = None
+                exited = adapter.dispatch("scan", {}, "target-exited")
+                assert exited["pid"] is None and exited["status"] == "not_running"
+                assert_observations_retired(exited)
+
+            visible_pid = 5151
+            found = adapter.dispatch("scan", {}, "find-replacement")
+            assert found["pid"] == 5151 and found["connected"] is False
+            assert_observations_retired(found)
+            waiting = adapter.dispatch("connect", {"probeRuntime": True}, "connect-replacement")
+            assert waiting["pid"] == 5151 and waiting["connected"] is True and waiting["status"] == "waiting"
+            assert_observations_retired(waiting)
+
+            resident.handler = None
+            resident.payload = {
+                "status": "ready", "scene": "run", "health": 63, "maxHealth": 120,
+                "currentRunTraits": [{"instanceId": "replacement-trait"}],
+                "resources": [{"id": "Ore", "name": "Ore", "count": 3, "locked": False}],
+            }
+            fresh = adapter.observe_runtime()
+            assert fresh["pid"] == 5151 and fresh["status"] == "ready" and fresh["health"] == 63
+            assert fresh["currentRunTraits"] == [{"instanceId": "replacement-trait"}]
+            assert fresh["resources"][0]["count"] == 3 and adapter.preferences == desired
+            assert [call["kind"] for call in resident.calls] == ["observe", "status", "observe"]
+            adapter.close()
 
 with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary:
     for scenario in ("lldb_still_attached", "os_resume_pending"):

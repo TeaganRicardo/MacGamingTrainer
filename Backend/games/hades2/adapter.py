@@ -720,6 +720,27 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         return dict(self.state)
 
+    def _retire_target_observations(self):
+        # A waiting connection can publish this cache before the new resident
+        # has supplied any observations. Clear the old process's values
+        # explicitly so both full snapshots and sparse replies retire them.
+        self.state.update(dict.fromkeys((
+            "health", "maxHealth", "mana", "maxMana", "availableMana", "totalMaxMana",
+            "armor", "spellCharge", "spellChargeCost", "biomeTime", "money", "rerolls",
+            "runCount", "currentRunTraitsReason", "chaosGateTarget", "lastAction", "runtimeDiagnostics",
+        )))
+        self.state.update(
+            currentRunTraits=[], facilityOptions=[], stats={}, statSupport={}, statAvailable={},
+            featureSupport={}, featureErrors={}, featureErrorPresentations={},
+        )
+        for key in (*ACTION_RESULT_FIELDS, "residentDesiredLocks", "runtimeOutcomeUnknown", "error"):
+            self.state.pop(key, None)
+        # Row identity and names are catalog data. A count is absent until the
+        # new process reports it or this worker reprojects a durable lock.
+        for key in ("resources", "elements"):
+            self.state[key] = [dict(row, count=None) for row in self.state[key]]
+        self._overlay_preferences()
+
     def scan(self):
         try:
             identity=preparation.compatibility(strict=False)
@@ -736,15 +757,19 @@ class Hades2Adapter(GameAdapter):
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。')
         pid=pids[0] if pids else None
+        previous_pid=self.state.get('pid')
+        attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
         if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
-            attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
             same_process=pid is not None and attached_pid is not None and pid==attached_pid
             if not same_process:clear_active(self.state,preserve_desired=True)
             self._detach_runtime()
-        elif self.state.get('pid') is not None and pid!=self.state.get('pid'):
-            # A different game process cannot contain the prior session-local Lua module.
-            clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
-        previous_pid=self.state.get('pid')
+        elif previous_pid is not None and pid!=previous_pid:
+            clear_active(self.state,preserve_desired=True)
+            self.state['connected']=False
+        observed_pid=previous_pid or attached_pid
+        if observed_pid is not None and pid!=observed_pid:
+            # A failed detach still owns the old PID and never reaches here.
+            self._retire_target_observations()
         self.state['pid']=pid
         if pid!=previous_pid:
             self.runtime.invalidate_generation()
