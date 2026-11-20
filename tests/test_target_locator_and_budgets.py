@@ -22,10 +22,10 @@ from core.target_probe import (
 )
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
-from games.hades.recovery import process_identity
-from games.hades2 import diagnostics, localization, preparation, save_investigation
+from games.hades2 import diagnostics, error_presentation, localization, preparation, save_investigation
 from games.hades2.adapter import Hades2Adapter
-from games.hades2.config import SUPPORTED_BUILD
+from games.hades2.config import SUPPORTED_BUILD, resolve_game_install
+from games.hades.recovery import process_identity
 
 HADES2_MANIFEST = GameModuleManifest.load(ROOT / "Backend/games/hades2/module.json")
 HADES_MANIFEST = GameModuleManifest.load(ROOT / "Backend/games/hades/module.json")
@@ -71,7 +71,7 @@ def _write_hades2_install(
 
 
 # 1. bounded_run enforces positive budget and maps TimeoutExpired to BoundedCommandTimeoutError.
-for bad_budget in (0, -1, False, True):
+for bad_budget in (0, -1, False, True, float("nan"), float("inf"), float("-inf")):
     try:
         bounded_run([sys.executable, "-c", "pass"], bad_budget)
     except ValueError:
@@ -141,6 +141,40 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-locate-") as tmp:
     ):
         long_found = locate_target(long_manifest, executable_probe=lambda pid: str(long_exe) if pid == 201 else None)
     assert long_found == LocatedTarget(201, long_exe.resolve(), None), long_found
+
+    # Imposter CFBundleIdentifier must be rejected even when both bundle_identifier and executable_path_suffix are declared.
+    both_manifest = SimpleNamespace(
+        process_name="Hades II",
+        bundle_identifier="com.supergiantgames.macos.hades2",
+        executable_path_suffix="Imposter/Hades II.app/Contents/MacOS/Hades II",
+    )
+    with patch(
+        "core.target_probe.subprocess.run",
+        return_value=SimpleNamespace(returncode=0, stdout="102 Hades II\n", stderr=""),
+    ):
+        imposter_match = locate_target(both_manifest, executable_probe=lambda pid: str(bad_exe) if pid == 102 else None)
+    assert imposter_match is None, f"imposter bundle bypassed bundle_identifier check: {imposter_match}"
+
+    # Malformed Info.plist XML or invalid plist types never crash locate_target.
+    malformed_bundle = root / "Malformed/Hades II.app"
+    malformed_exe = malformed_bundle / "Contents/MacOS/Hades II"
+    malformed_exe.parent.mkdir(parents=True)
+    malformed_exe.write_bytes(b"malformed")
+    (malformed_bundle / "Contents/Info.plist").write_text("<plist><dict>", encoding="utf-8")
+    with patch(
+        "core.target_probe.subprocess.run",
+        return_value=SimpleNamespace(returncode=0, stdout="105 Hades II\n", stderr=""),
+    ):
+        assert locate_target(HADES2_MANIFEST, executable_probe=lambda _pid: str(malformed_exe)) is None
+    (malformed_bundle / "Contents/Info.plist").write_text(
+        "<plist><dict><key>CFBundleIdentifier</key><date>bad</date></dict></plist>",
+        encoding="utf-8",
+    )
+    with patch(
+        "core.target_probe.subprocess.run",
+        return_value=SimpleNamespace(returncode=0, stdout="105 Hades II\n", stderr=""),
+    ):
+        assert locate_target(HADES2_MANIFEST, executable_probe=lambda _pid: str(malformed_exe)) is None
 
     # Ambiguous matches fail closed.
     with patch(
@@ -254,6 +288,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
         install_check = next(row for row in diag["checks"] if row["name"] == "Hades II 安装")
         assert install_check["ok"] is True and Path(install_check["detail"]).resolve() == ext_app.resolve()
 
+    # Steam metadata strings in steamapps/libraryfolders.vdf do not short-circuit config/libraryfolders.vdf.
+    meta_home = base / "meta_home"
+    (meta_home / "Library/Application Support/Steam/steamapps").mkdir(parents=True)
+    (meta_home / "Library/Application Support/Steam/config").mkdir(parents=True)
+    meta_ext_lib = base / "ConfigLibrary"
+    meta_ext_app, _, _ = _write_hades2_install(meta_ext_lib / "steamapps")
+    (meta_home / "Library/Application Support/Steam/steamapps/libraryfolders.vdf").write_text(
+        '"libraryfolders"\n{\n\t"TimeNextStatsReport"\t\t"1700000000"\n\t"ContentStatsID"\t\t"-1"\n}\n',
+        encoding="utf-8",
+    )
+    (meta_home / "Library/Application Support/Steam/config/libraryfolders.vdf").write_text(
+        f'"libraryfolders"\n{{\n\t"1"\n\t{{\n\t\t"path"\t\t"{meta_ext_lib}"\n\t\t"apps"\n\t\t{{\n\t\t\t"1145350"\t\t"1"\n\t\t}}\n\t}}\n}}\n',
+        encoding="utf-8",
+    )
+    resolved_meta_app, _, _ = resolve_game_install(home=meta_home)
+    assert resolved_meta_app.resolve() == meta_ext_app.resolve(), resolved_meta_app
+
     # Running process overrides libraryfolders.vdf.
     localization.invalidate_display_names()
     preparation.invalidate_compatibility_cache()
@@ -281,6 +332,41 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
         assert adapter.install_path().resolve() == run_app.resolve()
         assert adapter.save_provider_context().game_path.resolve() == run_app.resolve()
         assert localization.official_display_names({"WeaponUpgrade"}, "zh-CN") == {"WeaponUpgrade": "运行中目录赐福"}
+        assert preparation.official_display_names({"WeaponUpgrade"}, "zh-CN", ext_app) == {
+            "WeaponUpgrade": "外置赐福"
+        }
+
+        # Scan timeout & empty-stderr process errors preserve structured presentation keys without Chinese leakage.
+        with patch("games.hades2.adapter.locate_target", side_effect=BoundedCommandTimeoutError(["/bin/ps"], 2.0)):
+            try:
+                adapter.scan()
+            except RuntimeError as error:
+                pres = error_presentation.presentation_for(str(error))
+                assert pres == ("hades2.error.timeout", ["/bin/ps", "2"]), pres
+            else:
+                raise AssertionError("Hades2Adapter.scan() did not raise on timeout")
+
+        with patch(
+            "games.hades2.adapter.locate_target",
+            side_effect=subprocess.CalledProcessError(2, ["/bin/ps"], output=b"", stderr=b""),
+        ):
+            try:
+                adapter.scan()
+            except RuntimeError as error:
+                pres = error_presentation.presentation_for(str(error))
+                assert pres[0] == "hades2.error.processQueryFailed" and len(pres[1]) == 3 and pres[1][2] == "exit 2", pres
+            else:
+                raise AssertionError("Hades2Adapter.scan() did not raise on CalledProcessError")
+
+        empty_fail = subprocess.CalledProcessError(2, ["/bin/ps"], output=b"", stderr=b"")
+        with patch("games.hades2.preparation.bounded_run", side_effect=empty_fail):
+            try:
+                preparation._command("/bin/ps")
+            except RuntimeError as error:
+                pres = error_presentation.presentation_for(str(error))
+                assert pres == ("hades2.error.commandFailed", ["/bin/ps", "2", "exit 2"]), pres
+            else:
+                raise AssertionError("preparation._command did not raise on CalledProcessError")
 
 
 # 4. Hades I subprocess calls carry finite timeouts and surface timeouts cleanly.

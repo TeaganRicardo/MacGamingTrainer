@@ -74,8 +74,9 @@ assert adapter.dispatch('status', {}, 's0')['connected'] is False
 assert runtime.calls == [], 'offline status must not launch a debugger'
 assert adapter.dispatch('connect', {}, 'c1')['connected'] is True
 assert runtime.calls[0] == ('connect', 42, '/tmp/Hades/Game.macOS')
-with patch('games.hades.adapter.subprocess.run'):
+with patch('games.hades.adapter.bounded_run') as mock_launch:
     assert adapter.dispatch('launch', {}, 'launch')['connected'] is True
+    assert mock_launch.call_args.args[:2] == (['/usr/bin/open', context.steam_launch_url], 10.0)
 invincible = {'feature': 'invincibility', 'value': True}
 assert adapter.dispatch('set_feature', invincible, 'm1')['invincible'] is True
 assert runtime.calls[-1] == ('set_feature', invincible)
@@ -220,6 +221,16 @@ with patch(
             pass
         else:
             raise AssertionError('multiple matching Hades processes must fail closed')
+        default_context = GameAdapterContext.from_manifest(hades_manifest, home=Path(test_data.name))
+        default_adapter = HadesAdapter(default_context, preferences=preferences)
+        try:
+            default_adapter.locate_process()
+        except AdapterError as error:
+            assert error.code == 'ambiguous_target' and error.presentation == 'hades.error.ambiguousTarget', error
+        else:
+            raise AssertionError('HadesAdapter.locate_process must map AmbiguousTargetError to AdapterError')
+        finally:
+            default_adapter.close()
 
 
 source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()

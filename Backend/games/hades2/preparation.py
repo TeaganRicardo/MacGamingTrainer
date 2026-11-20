@@ -95,7 +95,7 @@ def _command(*args, allowed=(0,)):
         raise RuntimeError(f'无法运行 {args[0]}：{error}') from error
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or error.stdout or b'').decode('utf-8', errors='replace')[-3000:].strip()
-        raise RuntimeError(f'{args[0]} 失败（{error.returncode}）：{detail}') from error
+        raise RuntimeError(f'{args[0]} 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
 
 
 def run(*args):
@@ -113,8 +113,8 @@ def _require_stopped():
         raise RuntimeError(f'无法运行 /bin/ps：{error}') from error
     except subprocess.CalledProcessError as error:
         raw = error.stderr or error.stdout or ''
-        detail = raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else raw
-        raise RuntimeError(f'/bin/ps 失败（{error.returncode}）：{detail.strip()}') from error
+        detail = (raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else raw).strip()
+        raise RuntimeError(f'/bin/ps 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
     if located is not None:
         raise RuntimeError(f'请先退出 {DISPLAY_NAME}；运行中不能修改签名或恢复存档。')
 
@@ -309,7 +309,7 @@ def prepare(data_dir=None):
     backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
     game, exe, _steam = resolve_paths(query_running=False)
-    identity = compatibility(game_path=game, query_running=False)
+    identity = compatibility(query_running=False)
     current = sha(exe)
 
     for root, record in _records(backup_parent, game):
@@ -365,7 +365,7 @@ def restore(data_dir=None):
     backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
     game, exe, _steam = resolve_paths(query_running=False)
-    compatibility(game_path=game, query_running=False)
+    compatibility(query_running=False)
     current = sha(exe)
     for root, record in _records(backup_parent, game):
         if current == record.get('original_sha256'):
@@ -383,7 +383,8 @@ def restore(data_dir=None):
 
 def official_display_names(*args, **kwargs):
     from .localization import official_display_names as implementation
-    kwargs.setdefault('game_path', resolve_paths()[0])
+    if len(args) < 3:
+        kwargs.setdefault('game_path', resolve_paths()[0])
     return implementation(*args, **kwargs)
 
 if __name__ == '__main__':

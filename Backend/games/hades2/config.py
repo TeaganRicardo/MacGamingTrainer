@@ -132,8 +132,8 @@ def _steam_library_entries(home: Path) -> list[tuple[Path, set[str]]]:
         section = parsed.get('libraryfolders') if isinstance(parsed.get('libraryfolders'), dict) else parsed
         if not isinstance(section, dict):
             continue
-        for value in section.values():
-            if isinstance(value, str) and value.strip():
+        for key, value in section.items():
+            if isinstance(value, str) and value.strip() and key.isdigit():
                 candidates.append((Path(value.strip()), set()))
             elif isinstance(value, dict):
                 raw_path = value.get('path')

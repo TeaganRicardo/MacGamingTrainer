@@ -758,19 +758,17 @@ class Hades2Adapter(GameAdapter):
             located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
         except AmbiguousTargetError as error:
             raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。') from error
-        except (OSError, subprocess.CalledProcessError, BoundedCommandTimeoutError) as error:
+        except BoundedCommandTimeoutError as error:
+            raise RuntimeError(str(error)) from error
+        except (OSError, subprocess.CalledProcessError) as error:
             if isinstance(error, subprocess.CalledProcessError):
                 code = str(error.returncode)
                 raw = error.stderr if error.stderr is not None else error.stdout
-                detail = (
-                    raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
-                ).strip() or '未知错误'
-            elif isinstance(error, BoundedCommandTimeoutError):
-                code = 'timeout'
-                detail = str(error)
+                text = raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
+                detail = text.strip() or f'exit {error.returncode}'
             else:
                 code = str(getattr(error, 'errno', None) or 'error')
-                detail = str(error) or '未知错误'
+                detail = str(error).strip() or type(error).__name__
             raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{code}）：{detail}') from error
 
         pid = located.pid if located is not None else None

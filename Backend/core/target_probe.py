@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import os
 import plistlib
 import subprocess
 import sys
+import xml.parsers.expat
 from pathlib import Path
 from typing import Any, Callable, Collection, Mapping, NamedTuple, Optional, Sequence
 
@@ -48,26 +50,35 @@ def bounded_run(
     env: Optional[Mapping[str, str]] = None,
 ) -> subprocess.CompletedProcess[Any]:
     """Run `argv` without shell expansion under a hard timeout budget."""
-    if isinstance(budget, bool) or not isinstance(budget, (int, float)) or budget <= 0:
-        raise ValueError('bounded_run requires a positive numeric budget.')
+    if isinstance(budget, bool) or not isinstance(budget, (int, float)) or not math.isfinite(budget) or budget <= 0:
+        raise ValueError('bounded_run requires a positive finite numeric budget.')
     command = [str(part) for part in argv]
-    run_kwargs: dict[str, Any] = {
-        'timeout': float(budget),
-        'shell': False,
-        'text': text,
-        'check': False,
-    }
-    if env is not None:
-        run_kwargs['env'] = dict(env)
-    if stdout is not None or stderr is not None:
-        run_kwargs['stdout'] = stdout
-        run_kwargs['stderr'] = stderr
-    else:
-        run_kwargs['capture_output'] = capture_output
+    run_env = None if env is None else dict(env)
+    timeout = float(budget)
     try:
-        result = subprocess.run(command, **run_kwargs)
+        if stdout is not None or stderr is not None:
+            result: subprocess.CompletedProcess[Any] = subprocess.run(
+                command,
+                timeout=timeout,
+                shell=False,
+                text=text,
+                check=False,
+                stdout=stdout,
+                stderr=stderr,
+                env=run_env,
+            )
+        else:
+            result = subprocess.run(
+                command,
+                timeout=timeout,
+                shell=False,
+                text=text,
+                check=False,
+                capture_output=capture_output,
+                env=run_env,
+            )
     except subprocess.TimeoutExpired as error:
-        raise BoundedCommandTimeoutError(command, float(budget)) from error
+        raise BoundedCommandTimeoutError(command, timeout) from error
     if allowed is not None:
         if result.returncode not in allowed:
             raise subprocess.CalledProcessError(
@@ -116,28 +127,31 @@ def enclosing_app_bundle(executable_path: Path) -> Optional[Path]:
     return None
 
 
-def _bundle_identifier(bundle_path: Optional[Path]) -> Optional[str]:
+def _bundle_info_string(bundle_path: Optional[Path], field: str) -> Optional[str]:
     if bundle_path is None:
         return None
     info_path = bundle_path / 'Contents' / 'Info.plist'
     try:
         info = plistlib.loads(info_path.read_bytes())
-    except (OSError, ValueError, plistlib.InvalidFileException):
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        AttributeError,
+        plistlib.InvalidFileException,
+        xml.parsers.expat.ExpatError,
+    ):
         return None
-    value = info.get('CFBundleIdentifier') if isinstance(info, dict) else None
+    value = info.get(field) if isinstance(info, dict) else None
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _bundle_identifier(bundle_path: Optional[Path]) -> Optional[str]:
+    return _bundle_info_string(bundle_path, 'CFBundleIdentifier')
 
 
 def _bundle_executable_name(bundle_path: Optional[Path]) -> Optional[str]:
-    if bundle_path is None:
-        return None
-    info_path = bundle_path / 'Contents' / 'Info.plist'
-    try:
-        info = plistlib.loads(info_path.read_bytes())
-    except (OSError, ValueError, plistlib.InvalidFileException):
-        return None
-    value = info.get('CFBundleExecutable') if isinstance(info, dict) else None
-    return value.strip() if isinstance(value, str) and value.strip() else None
+    return _bundle_info_string(bundle_path, 'CFBundleExecutable')
 
 
 def locate_target(
@@ -193,15 +207,15 @@ def locate_target(
 
         bundle_path = enclosing_app_bundle(executable_path)
         actual_bundle_id = _bundle_identifier(bundle_path)
-        if bundle_identifier and not executable_path_suffix:
-            if actual_bundle_id != bundle_identifier:
+        if bundle_identifier:
+            if actual_bundle_id is not None and actual_bundle_id != bundle_identifier:
                 continue
-            if process_name and executable_path.name != process_name:
-                if _bundle_executable_name(bundle_path) != process_name:
+            if not executable_path_suffix:
+                if actual_bundle_id != bundle_identifier:
                     continue
-        elif bundle_identifier and actual_bundle_id is not None and actual_bundle_id != bundle_identifier:
-            if process_name and executable_path.name != process_name:
-                continue
+                if process_name and executable_path.name != process_name:
+                    if _bundle_executable_name(bundle_path) != process_name:
+                        continue
 
         matches.append(LocatedTarget(pid=pid, executable_path=executable_path, bundle_path=bundle_path))
 
