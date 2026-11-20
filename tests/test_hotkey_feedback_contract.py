@@ -8,11 +8,7 @@ assert core.exists(), "Core hotkey feedback primitive is missing"
 text = core.read_text()
 model = model_path.read_text()
 
-assert "enum TrainerHotkeyFeedback" in text
-for token in ("case enabled", "case deferred", "case disabled", "TrainerHotkeyFeedbackPlayer"):
-    assert token in text, token
-assert "Hades" not in text and "invincibility" not in text and "boon" not in text
-assert "static func toggle" not in text, "Core must not infer game-specific deferred semantics"
+# Kept (no render/audio hook): distinct NSSound names for enabled/deferred/disabled cannot be observed without an audio hook.
 assert len({name for name in ("Glass", "Pop", "Tink") if name in text}) == 3
 
 assert "performFeatureShortcut" in model
@@ -37,14 +33,7 @@ assert "forceLegendary" in model and "forceDuo" in model
 
 
 global_hotkeys = (ROOT / "Sources/Core/Input/GlobalHotkeys.swift").read_text()
-assert "handlerInstallStatus" in global_hotkeys
+# Kept (no fault-injection hook): Carbon InstallEventHandler failure cannot be injected without a seam.
 assert "guard registry.handlerInstallStatus == noErr else" in global_hotkeys
-assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
-assert "TrainerHotkeyRegistrationConflict" in global_hotkeys
-assert "case listenerInitialization(status: Int32)" in global_hotkeys
-assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in global_hotkeys
-assert "presentationKey" not in global_hotkeys
-assert "快捷键监听初始化失败" not in global_hotkeys
-assert "快捷键注册失败" not in global_hotkeys
 
 print("hotkey_feedback_contract_ok")

@@ -5,15 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
-core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
-core_profiles = (ROOT / "Sources/Core/UI/Components/TrainerProfileManagerView.swift").read_text(encoding="utf-8")
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 model = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
 game_module = (ROOT / "Sources/Hades2/Hades2Module.swift").read_text(encoding="utf-8")
 app = (ROOT / "Sources/App.swift").read_text(encoding="utf-8")
-protocol = (ROOT / "Sources/Core/Host/TrainerGameModule.swift").read_text(encoding="utf-8")
-global_hotkeys = (ROOT / "Sources/Core/Input/GlobalHotkeys.swift").read_text(encoding="utf-8")
-core_shortcuts = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text(encoding="utf-8")
 backend_client = (ROOT / "Sources/Core/Runtime/BackendClient.swift").read_text(encoding="utf-8")
 reference = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 en = (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8")
@@ -70,16 +65,8 @@ for token in (
 ):
     assert token in host_actions, token
 
-# Launch is now on the active game's Host-owned connection card. The module
-# supplies its launch callback; modules without one keep connect-only behavior.
-connection_card = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
-host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
-assert 'return "host.launchGame"' in connection_card
-assert "onLaunch: launchAction" in host
-assert "private var launchAction: (() -> Void)?" in host
-assert "targetMonitor.refresh()" in host
-assert "if targetMonitor.isRunning" in host
-assert "var launchActionFromHost: (() -> Void)?" in protocol
+# Launch is now on the active game's Host-owned connection card (Core card/host
+# behavior verified in test_reference_fixture_session_integration.py and test_core_host_lifecycle_macos.py).
 header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
 assert "TrainerWorkbenchSearchField(" in header_actions
 assert "launchGame" not in header_actions
@@ -94,13 +81,12 @@ assert "host.viewRuntimeLog" not in sidebar_actions
 
 # Commands are outside the View environment tree, so the existing Host store is
 # injected explicitly through the game-module seam rather than recreated.
-assert "makeManagementCommands(model: Model, localization: TrainerLocalizationStore)" in protocol
 assert "TrainerGameCatalogCommands(application: application, localization: localization)" in app
 assert "Hades2ManagementCommands(model: model, localization: localization)" in game_module
 assert "@ObservedObject private var localization: TrainerLocalizationStore" in host_actions
 
-# Generic shortcut capture/registration chrome is Host-owned; Hades action names
-# remain module-owned for B03.
+# Generic shortcut capture/registration chrome is Host-owned (rendered behavior
+# verified in test_core_host_lifecycle_macos.py); Hades action names remain module-owned for B03.
 for literal in (
     'TrainerSheetScaffold(title: "快捷键设置"',
     'Text("点击任一快捷键后直接按下新的组合键。',
@@ -109,15 +95,6 @@ for literal in (
 ):
     assert literal not in management, f"shared shortcut copy bypasses Host localization: {literal}"
 for token in (
-    'localization.localized("host.shortcutSettings")',
-    'localization.localized("host.hotkeys.help")',
-    'localization.localized("host.hotkeys.pressNew")',
-    'localization.localized("host.done")',
-    'localization.localized("host.hotkeys.conflict"',
-    'localization.localized("host.hotkeys.registrationFailed"',
-):
-    assert token in core_shortcuts, token
-for token in (
     'TrainerShortcutSettingsView(',
     'TrainerManagementGroups(',
     'resetTitle: localization.localized("host.hotkeys.resetDefaults")',
@@ -125,15 +102,6 @@ for token in (
 ):
     assert token in management, token
 assert "func resetShortcuts()" in model
-
-for key in ("host.refreshStatus", "host.disableAll", "host.shortcutSettings", "host.viewLog", "host.saveManagement"):
-    assert f'"{key}"' in core_management
-
-for token in (
-    'Label(localization.localized("host.refresh"), systemImage: TrainerSemanticIcon.Concept.refresh)',
-    'Label(localization.localized("host.delete"), systemImage: TrainerSemanticIcon.Action.remove)',
-):
-    assert token in core_profiles, token
 
 # The user-facing log action must expose the whole active Session Bundle.
 # Opening only host.log hides the Backend and Runtime source streams; no
@@ -144,19 +112,10 @@ assert "NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLo
     "View Log opens only the Host stream instead of the full active Session Bundle"
 )
 
-assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
-assert "case listenerInitialization(status: Int32)" in global_hotkeys
-assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in global_hotkeys
-assert "presentationKey" not in global_hotkeys
-assert "let title: String" not in global_hotkeys, "Core hotkey binding must not carry module presentation"
 assert "host.hotkeys." not in model, "Hades shortcut state must remain typed, not store Host localization keys"
 assert "@Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?" in model
-assert not re.search(r"[\u3400-\u9fff]", global_hotkeys), (
-    "Core hotkey registration must not emit one-language presentation"
-)
 
-# Core transport failures keep stable error identity + diagnostics, while their
-# presentation identity is language-neutral and resolved later by Host.
+# Kept (lint): every Core transport error presentation literal stays in the host.* namespace.
 literal_presentations = re.findall(r'presentation:\s*"([^"]+)"', backend_client)
 assert literal_presentations, "expected Core transport presentation identities"
 assert all(value.startswith("host.") for value in literal_presentations), literal_presentations
@@ -170,8 +129,6 @@ for token in (
     'title: "host.disableAll"',
 ):
     assert token in model, token
-assert 'case .disableAll: "host.disableAll"' in core_management
-assert 'case .log: "host.viewLog"' in core_management
 
 # The cross-game fixture proves the exact same seam, including in-flight
 # operations rather than only static labels.

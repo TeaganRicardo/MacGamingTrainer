@@ -66,6 +66,7 @@ CONSUMERS = {
     'test_trainer_tool_windows.py': ('native.trainer_tool_windows',),
     'test_hades2_repeated_actions_frontend.py': ('native.hades2_repeated_actions_frontend',),
     'test_host_target_ownership.py': ('native.host_target_ownership',),
+    'test_core_host_lifecycle_macos.py': ('native.core_host_lifecycle',),
     'test_core_save_retention_controls.py': ('native.core_save_retention_controls',),
     'test_mapped_slider_interaction.py': ('native.mapped_slider_interaction',),
     'test_hades2_save_container_frontend.py': ('native.hades2_save_container_frontend',),

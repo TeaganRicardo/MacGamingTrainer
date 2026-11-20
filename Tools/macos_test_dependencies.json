@@ -232,6 +232,14 @@
     "tests/swift_test_compiler.py",
     "Tools/swift_module_layout.py"
   ],
+  "test_core_host_lifecycle_macos.py": [
+    "tests/macos_fixture_policy.py",
+    "tests/fixture_budgets/core_runtime.py",
+    "tests/swift_test_compiler.py",
+    "tests/fixtures/swift/InMemoryDefaults.swift",
+    "tests/fixtures/swift/NativeAccessibility.swift",
+    "Tools/swift_module_layout.py"
+  ],
   "test_core_save_retention_controls.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_save.py",

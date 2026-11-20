@@ -214,4 +214,64 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-publish-symlink-') as tempora
     assert not [event for event in events if PUBLISH in event], events
     assert sentinel.read_text() == 'preserved'
 
+# Execute build.sh's own Host localization packaging & byte-verification paragraph.
+loc_start = '\nfor language in en zh-CN; do\n'
+loc_end = '\n# The product purple'
+# Kept (build slice): these markers select build.sh's localization paragraph until WP5.4 moves packaging into Python.
+assert build.count(loc_start) == 1 and build.count(loc_end) == 1, 'build.sh localization slice markers must be unique'
+loc_packaging = build[build.index(loc_start) + 1:build.index(loc_end)]
+
+
+def run_localization_packaging(root, corrupt_cp=False):
+    fakebin = root / 'bin'
+    fakebin.mkdir()
+    if corrupt_cp:
+        cp_bin = fakebin / 'cp'
+        cp_bin.write_text('#!/bin/sh\necho corrupted > "$2"\n', encoding='utf-8')
+        cp_bin.chmod(0o755)
+    loc_root = root / 'Localization'
+    for lang in ('en', 'zh-CN'):
+        d = loc_root / f'{lang}.lproj'
+        d.mkdir(parents=True)
+        (d / 'Host.strings').write_text(f'"host.ok" = "{lang}";\n', encoding='utf-8')
+    contents = root / 'Contents'
+    (contents / 'Resources').mkdir(parents=True)
+    env = {
+        **os.environ,
+        'PATH': f'{fakebin}{os.pathsep}{os.environ["PATH"]}',
+        'LOCALIZATION_ROOT': str(loc_root),
+        'CONTENTS': str(contents),
+        'PYTHON': sys.executable,
+    }
+    return subprocess.run(['bash', '-c', 'set -euo pipefail\n' + loc_packaging],
+                          env=env, capture_output=True, text=True), loc_root, contents
+
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-loc-ok-') as temporary:
+    root = Path(temporary)
+    res, loc_root, contents = run_localization_packaging(root)
+    assert res.returncode == 0, res.stdout + '\n' + res.stderr
+    for lang in ('en', 'zh-CN'):
+        src = loc_root / f'{lang}.lproj/Host.strings'
+        dst = contents / 'Resources' / f'{lang}.lproj/Host.strings'
+        assert dst.is_file() and dst.read_bytes() == src.read_bytes(), dst
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-loc-missing-') as temporary:
+    root = Path(temporary)
+    loc_root = root / 'Localization'
+    (loc_root / 'en.lproj').mkdir(parents=True)
+    (loc_root / 'en.lproj/Host.strings').write_text('"host.ok" = "en";\n', encoding='utf-8')
+    contents = root / 'Contents'
+    (contents / 'Resources').mkdir(parents=True)
+    res = subprocess.run(
+        ['bash', '-c', 'set -euo pipefail\n' + loc_packaging],
+        env={**os.environ, 'LOCALIZATION_ROOT': str(loc_root), 'CONTENTS': str(contents), 'PYTHON': sys.executable},
+        capture_output=True, text=True,
+    )
+    assert res.returncode != 0 and 'Missing Host localization table' in res.stderr, res.stderr
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-loc-drift-') as temporary:
+    res, *_ = run_localization_packaging(Path(temporary), corrupt_cp=True)
+    assert res.returncode != 0 and 'Host localization package mismatch' in res.stderr, res.stderr
+
 print('build_signing_scope_ok')

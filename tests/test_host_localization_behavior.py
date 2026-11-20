@@ -132,6 +132,9 @@ struct LocalizationBehaviorTest {
         )
         precondition(emitted == [.zhCN, .en], "published language must update live observers")
         precondition(TrainerLocalizationStore(defaults: defaults).language == .en, "saved selection must load on next launch")
+        missingValue.language = .zhCN
+        precondition(defaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "zh-CN", "zh-CN selection must persist")
+        precondition(TrainerLocalizationStore(defaults: defaults).language == .zhCN, "saved zh-CN selection must load on next launch")
         withExtendedLifetime(subscription) { }
         print("host_localization_behavior_ok")
     }
