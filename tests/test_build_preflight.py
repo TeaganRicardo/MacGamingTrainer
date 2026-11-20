@@ -102,6 +102,8 @@ exit 93
     ]
     for name, arguments in modules.items():
         assert "-parse-as-library" in arguments, (name, arguments)
+        assert "-strict-concurrency=targeted" in arguments, (name, arguments)
+        assert "-warnings-as-errors" in arguments, (name, arguments)
         assert arguments[arguments.index("-package-name") + 1] == SWIFT_PACKAGE_NAME, (name, arguments)
         assert "-O" not in arguments and "-emit-library" not in arguments, (name, arguments)
         expected_mode = "-typecheck" if name == SWIFT_APP_MODULE else "-emit-module"

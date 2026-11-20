@@ -265,7 +265,7 @@ compile_swift_modules() {
             -package-name "$SWIFT_PACKAGE_NAME"
         )
         if [[ "$mode" == "typecheck" ]]; then
-            arguments+=(-strict-concurrency=targeted)
+            arguments+=(-strict-concurrency=targeted -warnings-as-errors)
         fi
         local search_paths=()
         IFS=',' read -r -a search_paths <<< "$dependencies"
