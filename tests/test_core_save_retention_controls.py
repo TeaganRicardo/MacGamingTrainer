@@ -493,8 +493,10 @@ struct Main {
         window.close()
 
         // TrainerHostView + TrainerHostSidebarCard Save Management wiring.
+        let fixtureHome = log.deletingLastPathComponent()
         HostSaveProbeBridge.captured = nil
-        let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(session: session)
+        let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(session: session,
+            logSink: TrainerLogSink(gameID: HostUnsupportedSaveModule.descriptor.id, homeDirectory: fixtureHome))
         let unsupportedWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -515,7 +517,8 @@ struct Main {
         unsupportedWindow.close()
 
         HostSaveProbeBridge.captured = nil
-        let supportedContext = TrainerGameContext<HostSupportedSaveModule>(session: session)
+        let supportedContext = TrainerGameContext<HostSupportedSaveModule>(session: session,
+            logSink: TrainerLogSink(gameID: HostSupportedSaveModule.descriptor.id, homeDirectory: fixtureHome))
         let hostWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false

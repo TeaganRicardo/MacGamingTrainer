@@ -128,6 +128,7 @@ final class LifecycleStubModel: TrainerHostModel {
     var didBecomeActiveCount = 0
     var targetLifetimeObservations: [TrainerTargetObservation] = []
     var restartBackendCount = 0
+    var staleReplyCount = 0
 
     func notifyChanged() {
         objectWillChange.send()
@@ -145,6 +146,8 @@ final class LifecycleStubModel: TrainerHostModel {
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
         targetLifetimeObservations.append(observation)
     }
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .lifetime }
+    func applyStaleBackendPayload(_ payload: [String: Any]) { staleReplyCount += 1 }
     func backendWillRestart() { restartBackendCount += 1 }
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
@@ -449,12 +452,10 @@ struct Runner {
             }
         }
 
-        // 4. Session-owned busy state delays exit and replacement refresh.
+        // 4. Discovery invalidates in-flight state. Session-owned busy then
+        // delays exit and replacement refresh.
         do {
-            let pExit = try spawnTargetProcess(at: targetURL)
-            defer { terminateTarget(pExit) }
             let model = LifecycleStubModel()
-            model.connected = true
             let context = makeContext(LifecycleStubModule.self, model: model)
             defer { context.session.stop() }
             func holdRequest() -> URL {
@@ -463,6 +464,18 @@ struct Runner {
                 check(context.backendStatus.busy && !context.canTerminate, "shared request did not block quit")
                 return release
             }
+            let discoveryRequest = holdRequest()
+            let pExit = try spawnTargetProcess(at: targetURL)
+            defer { terminateTarget(pExit) }
+            context.targetMonitor.refresh()
+            check(context.targetMonitor.isRunning && context.targetMonitor.launchGeneration == 0,
+                  "fixture did not discover its target without a launch notification")
+            try Data().write(to: discoveryRequest)
+            waitUntil(message: "pre-discovery request settles") { !context.backendStatus.busy }
+            check(model.staleReplyCount == 1 && model.connectAutomaticallyCalls.isEmpty,
+                  "target discovery adopted the previous absence or started an automatic connection")
+
+            model.connected = true
             let firstRequest = holdRequest()
             terminateTarget(pExit)
             context.targetMonitor.refresh()

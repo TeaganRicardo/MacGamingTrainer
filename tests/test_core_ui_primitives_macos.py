@@ -1350,8 +1350,11 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
 
     // TrainerGamePages: active clicks, opacity hiding, inactive click/AX isolation, firstResponder resignation on switch.
     StubPageModuleA.pageATaps = 0
-    let ctxA = TrainerGameContext<StubPageModuleA>(session: TrainerBackendSession())
-    let ctxB = TrainerGameContext<StubPageModuleB>(session: TrainerBackendSession())
+    let fixtureHome = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+    let ctxA = TrainerGameContext<StubPageModuleA>(session: TrainerBackendSession(),
+        logSink: TrainerLogSink(gameID: StubPageModuleA.descriptor.id, homeDirectory: fixtureHome))
+    let ctxB = TrainerGameContext<StubPageModuleB>(session: TrainerBackendSession(),
+        logSink: TrainerLogSink(gameID: StubPageModuleB.descriptor.id, homeDirectory: fixtureHome))
     let coordinator = TrainerApplicationCoordinator(contexts: [AnyTrainerGameContext(ctxA), AnyTrainerGameContext(ctxB)])
     let pagesView = TrainerGamePages(application: coordinator)
         .trainerTheme(theme)

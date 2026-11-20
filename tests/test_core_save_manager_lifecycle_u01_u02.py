@@ -243,6 +243,10 @@ struct Runner {
         let args = CommandLine.arguments
         if args.count != 6 { fail("expected python + worker + recovery fixture + target binary + target suffix") }
         SaveContextConfig.targetSuffix = args[5]
+        let fixtureHome = URL(fileURLWithPath: args[2]).deletingLastPathComponent()
+        func fixtureLog(for descriptor: GameModuleDescriptor) -> TrainerLogSink {
+            TrainerLogSink(gameID: descriptor.id, homeDirectory: fixtureHome)
+        }
         let process = BackendProcess(
             executableURL: URL(fileURLWithPath: args[1]),
             argumentsPrefix: ["-u"],
@@ -451,7 +455,7 @@ struct Runner {
             let monitor = runningTargetMonitor(for: SupportedSaveTargetModule.descriptor)
             let beforeA = dispatchedApplyStaged
             var contextA: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
-                session: session, targetMonitor: monitor
+                session: session, logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor), targetMonitor: monitor
             )
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             if dispatchedApplyStaged != beforeA {
@@ -471,7 +475,9 @@ struct Runner {
 
         do {
             let beforeB = dispatchedApplyStaged
-            var contextB: TrainerGameContext<UnsupportedSaveModule>? = TrainerGameContext(session: session)
+            var contextB: TrainerGameContext<UnsupportedSaveModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: UnsupportedSaveModule.descriptor)
+            )
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             if dispatchedApplyStaged != beforeB {
                 fail("supportsSaveManagement=false dispatched staged restore apply")
@@ -487,7 +493,8 @@ struct Runner {
             let freshSession = TrainerBackendSession(client: BackendClient(process: process))
             defer { freshSession.stop() }
             let contextC = TrainerGameContext<SupportedNoTargetModule>(
-                session: freshSession, backendScriptURL: URL(fileURLWithPath: args[2])
+                session: freshSession, backendScriptURL: URL(fileURLWithPath: args[2]),
+                logSink: fixtureLog(for: SupportedNoTargetModule.descriptor)
             )
             if !waitUntil(2.0, { contextC.saveManager.pendingRestore?.indeterminate == true }) {
                 fail("backend availability without target did not trigger staged restore apply")
@@ -501,7 +508,9 @@ struct Runner {
         // target exit with supportsSaveManagement=false or backendAvailable=false must not apply.
         do {
             let initBefore = dispatchedApplyStaged
-            var contextD: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(session: session)
+            var contextD: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor)
+            )
             if !waitUntil(2.0, { dispatchedApplyStaged == initBefore + 1 && !contextD!.saveManager.busy }) {
                 fail("contextD initial backend availability apply did not settle")
             }
@@ -545,7 +554,7 @@ struct Runner {
             }
             let monitor = runningTargetMonitor(for: UnsupportedSaveTargetModule.descriptor)
             var contextE: TrainerGameContext<UnsupportedSaveTargetModule>? = TrainerGameContext(
-                session: session, targetMonitor: monitor
+                session: session, logSink: fixtureLog(for: UnsupportedSaveTargetModule.descriptor), targetMonitor: monitor
             )
             RunLoop.current.run(until: Date().addingTimeInterval(0.20))
             let beforeExitE = dispatchedApplyStaged
@@ -578,7 +587,8 @@ struct Runner {
                 client: BackendClient(process: BackendProcess(executableURL: missingExecutable, argumentsPrefix: []))
             )
             var contextF: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
-                session: unavailableSession, backendScriptURL: URL(fileURLWithPath: args[2]), targetMonitor: monitor
+                session: unavailableSession, backendScriptURL: URL(fileURLWithPath: args[2]),
+                logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor), targetMonitor: monitor
             )
             if unavailableSession.currentStatus.backendAvailable { fail("missing executable started a worker") }
             targetProcess.terminate()

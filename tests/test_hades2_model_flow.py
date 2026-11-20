@@ -503,6 +503,21 @@ struct Main {
         waitFor("stale PID reply did not settle") { mismatchedDone != nil && !observedModel.busy }
         check(mismatchedDone == true && observedModel.connected && observedModel.pid == 5151 && observedModel.health != 999,
               "late reply adopted the previous target PID after rapid replacement")
+
+        // Quit freezes automatic work while the already-admitted request
+        // settles. The process can exit during that drain.
+        try FileManager.default.removeItem(at: release)
+        var quitReply: Bool?
+        observedSession.send("late-observation", operation: "quit-drain", announceSuccess: false,
+            completion: { quitReply = $0 })
+        waitFor("quit-drain request did not start") { commands(at: commandLog).last?["command"] as? String == "late-observation" }
+        context.beginTermination()
+        target = .init(isRunning: false, launchGeneration: 1)
+        monitor.refresh()
+        try Data().write(to: release)
+        waitFor("quit did not drain the pending reply") { quitReply != nil && !observedModel.busy }
+        check(quitReply == true && observedModel.health != 999,
+              "quit admitted the previous target's runtime observation after exit")
         observedSession.stop()
         print("hades2_live_trait_model_flow_ok")
     }

@@ -274,9 +274,15 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     private func targetChanged(_ observed: TrainerTargetObservation) {
-        guard !terminationRequested else { return }
         let previous = services.targetObservation
+        guard previous != observed else { return }
         services.targetObservation = observed
+        // Already-admitted replies still settle during quit. Keep validating
+        // their observations without scheduling any new lifecycle work.
+        guard !terminationRequested else {
+            session.invalidateTargetObservation()
+            return
+        }
         let launched = observed.launchGeneration != previous.launchGeneration
         let pidChanged = previous.processIdentifier != observed.processIdentifier
         let replacement = lastKnownTargetProcessIdentifier != nil && observed.processIdentifier != nil &&
@@ -289,14 +295,12 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
             running: observed.isRunning, launchGeneration: observed.launchGeneration,
             allowDiscoveryConnect: false
         )
-        if launched || pidChanged || previous.isRunning != observed.isRunning {
-            if model.connected { connectionPolicy.retainTargetExitRefresh() }
-            notifyTargetLifetime(observed)
-            if launched || replacement {
-                session.targetLifetimeChanged()
-            } else if !observed.isRunning {
-                session.invalidateTargetObservation()
-            }
+        if model.connected { connectionPolicy.retainTargetExitRefresh() }
+        notifyTargetLifetime(observed)
+        if launched || replacement {
+            session.targetLifetimeChanged()
+        } else {
+            session.invalidateTargetObservation()
         }
         if !observed.isRunning, services.descriptor.supportsSaveManagement, backendStatus.backendAvailable {
             saveManager.applyStagedIfPossible()
