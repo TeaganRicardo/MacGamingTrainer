@@ -1,13 +1,15 @@
 """Hades command semantics; debugger lifetime is isolated in its own sidecar."""
-import ctypes
 from functools import partial
-import os
-from pathlib import Path
-import subprocess
-import sys
 
 from core.adapter import AdapterError, GameAdapter
 from core.errors import PresentableError
+from core.target_probe import (
+    AmbiguousTargetError,
+    BoundedCommandTimeoutError,
+    bounded_run,
+    locate_target,
+    process_executable_path as process_executable_path,
+)
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
 from .recovery import HadesRecoveryJournal
@@ -17,53 +19,20 @@ from .diagnostics import build_diagnostics
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
 
+PROCESS_QUERY_TIMEOUT_SECONDS = 2.0
+LAUNCH_TIMEOUT_SECONDS = 10.0
 
-def process_executable_path(pid):
-    """Return the kernel-reported executable path for a PID on macOS."""
-    if sys.platform != 'darwin':
-        return None
+
+def _locate_hades_target(context):
     try:
-        libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
-        proc_pidpath = libproc.proc_pidpath
-        proc_pidpath.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]
-        proc_pidpath.restype = ctypes.c_int
-        buffer = ctypes.create_string_buffer(4096)
-        length = proc_pidpath(pid, buffer, len(buffer))
-    except (OSError, AttributeError):
+        located = locate_target(context, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
+    except AmbiguousTargetError as error:
+        raise AdapterError('ambiguous_target', 'hades.error.ambiguousTarget') from error
+    except BoundedCommandTimeoutError:
+        raise
+    if located is None:
         return None
-    if length <= 0:
-        return None
-    return str(Path(os.fsdecode(buffer.value)).resolve())
-
-
-def _locate_process(executable_suffix):
-    rows = subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True)
-    expected_name = Path(executable_suffix).name
-    matches = []
-    for row in rows.splitlines():
-        parts = row.strip().split(None, 1)
-        if len(parts) != 2:
-            continue
-        try:
-            pid = int(parts[0])
-        except ValueError:
-            continue
-        command = parts[1]
-        # BSD ps may expose a process command name rather than its executable
-        # path. Use it only to narrow candidates; proc_pidpath verifies identity.
-        if Path(command).name != expected_name and not command.endswith('/' + executable_suffix):
-            continue
-        executable = process_executable_path(pid)
-        if executable is None and command.endswith('/' + executable_suffix):
-            executable = str(Path(command).resolve())
-        if executable is None:
-            continue
-        executable = str(Path(executable).resolve())
-        if executable.endswith('/' + executable_suffix):
-            matches.append((pid, executable))
-    if len(matches) > 1:
-        raise AdapterError('ambiguous_target', 'hades.error.ambiguousTarget')
-    return matches[0] if matches else None
+    return (located.pid, str(located.executable_path))
 
 
 class HadesAdapter(GameAdapter):
@@ -74,7 +43,7 @@ class HadesAdapter(GameAdapter):
             recovery = HadesRecoveryJournal(context.data_dir / 'runtime-request.json')
             runtime = HadesRuntimeClient(recovery=recovery)
         self.runtime = runtime
-        self.locate_process = locate_process or partial(_locate_process, context.executable_path_suffix)
+        self.locate_process = locate_process or partial(_locate_hades_target, context)
         self.connected = False
         self.preferences = preferences or HadesPreferenceStore(context.data_dir / 'preferences.json')
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
@@ -141,7 +110,7 @@ class HadesAdapter(GameAdapter):
             url = self.context.steam_launch_url
             if url is None:
                 raise RuntimeError('Hades module manifest is missing a valid steamAppId.')
-            subprocess.run(['/usr/bin/open', url], check=True)
+            bounded_run(['/usr/bin/open', url], LAUNCH_TIMEOUT_SECONDS, check=True)
             return self.dispatch('status', {}, request_id)
         if command == 'connect':
             target = self.locate_process()

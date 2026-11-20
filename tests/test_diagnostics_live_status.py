@@ -48,7 +48,7 @@ def build(adapter, identity, command="diagnostics"):
             patch.object(diagnostics.preparation, "SAVES", saves),
             patch.object(diagnostics.preparation, "compatibility", return_value=identity),
             patch.object(diagnostics.localization, "official_display_names", return_value={"WeaponUpgrade": "测试"}),
-            patch.object(diagnostics.subprocess, "run", return_value=completed),
+            patch("core.target_probe.subprocess.run", return_value=completed),
         ):
             return adapter.dispatch(command, {}, "diagnostics-test")
 

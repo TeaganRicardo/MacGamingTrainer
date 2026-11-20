@@ -9,6 +9,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 sys.path.insert(0, str(root/'tests'))
 
+import core.target_probe as target_probe_module
 import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
 from core.protocol import JsonlRequestRouter
@@ -226,28 +227,28 @@ scan_transport.live = True
 scan_adapter = Hades2Adapter(context=context, transport=scan_transport)
 scan_adapter.state.update(pid=4242, connected=True, status='ready', scene='run')
 old_compatibility = adapter_module.preparation.compatibility
-old_run = adapter_module.subprocess.run
+old_run = target_probe_module.subprocess.run
 class FailedProcessQuery:
     returncode = 2
     stdout = ''
-    stderr = 'pgrep permission denied'
+    stderr = 'ps permission denied'
 try:
     adapter_module.preparation.compatibility = lambda strict=False: {
         'version':'139672', 'steam_build':'24556151', 'warnings':[],
     }
-    adapter_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
+    target_probe_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
     try:
         scan_adapter.scan()
     except RuntimeError as error:
         assert '查询 Hades II 进程失败' in str(error)
     else:
-        raise AssertionError('pgrep failure was misreported as game-not-running')
+        raise AssertionError('target process query failure was misreported as game-not-running')
     assert scan_transport.pid == 4242 and scan_transport.live is True
     assert scan_adapter.state['pid'] == 4242
     assert scan_adapter.state['connected'] is True
 finally:
     adapter_module.preparation.compatibility = old_compatibility
-    adapter_module.subprocess.run = old_run
+    target_probe_module.subprocess.run = old_run
 
 
 # Offline desired profile semantics survived the module move.

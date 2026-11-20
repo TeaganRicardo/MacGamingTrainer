@@ -3,7 +3,6 @@ import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +10,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.process_time_warp import ProcessTimeWarpController
 from core.adapter import AdapterError
+from core.target_probe import LocatedTarget
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
@@ -160,8 +160,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
             disconnected_session.live = False
             with patch.object(preparation, 'compatibility', return_value={
                     'version': '1.143476', 'warnings': [], 'steam_build': '25481925'}), \
-                    patch('games.hades2.adapter.subprocess.run', return_value=SimpleNamespace(
-                        returncode=0, stdout='4242\n', stderr='')):
+                    patch('games.hades2.adapter.locate_target', return_value=LocatedTarget(
+                        4242, Path('/tmp/Hades II.app/Contents/MacOS/Hades II'), None)):
                 disconnected.scan()
         else:
             if loss == 'preflight':

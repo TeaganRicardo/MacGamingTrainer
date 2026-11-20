@@ -1,4 +1,5 @@
 """Hades II executable/save preparation. Build-agnostic and recoverable."""
+from collections import OrderedDict
 import datetime
 import hashlib
 import json
@@ -11,20 +12,70 @@ import tempfile
 from pathlib import Path
 
 from core.log_paths import trainer_data_root
+from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, bounded_run, locate_target
 
 from .config import (
     BUNDLE_IDENTIFIER, DISPLAY_NAME, GAME_APP, GAME_ARCHITECTURE, GAME_EXECUTABLE,
-    GAME_EXECUTABLE_NAME, GAME_SAVES, PROCESS_NAME, STEAM_MANIFEST, SUPPORTED_BUILD,
+    GAME_EXECUTABLE_NAME, GAME_SAVES, MODULE_MANIFEST, STEAM_MANIFEST,
+    SUPPORTED_BUILD, resolve_game_install, steam_manifest_for_bundle,
 )
-from .operation_budgets import SUBPROCESS_TIMEOUT_SECONDS
+from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS, SUBPROCESS_TIMEOUT_SECONDS
 
 GAME = GAME_APP
 SAVES = GAME_SAVES
+_DEFAULT_GAME = GAME_APP
+_DEFAULT_EXECUTABLE = GAME_EXECUTABLE
+_DEFAULT_STEAM_MANIFEST = STEAM_MANIFEST
+_COMPATIBILITY_CACHE_MAX_ENTRIES = 8
+_COMPATIBILITY_CACHE: OrderedDict = OrderedDict()
 VERSION = SUPPORTED_BUILD['bundleVersion']
 STEAM_BUILD = SUPPORTED_BUILD['steamBuildID']
 UUID = SUPPORTED_BUILD['uuid']
 ORIGINAL_SHA256 = SUPPORTED_BUILD['originalExecutableSHA256']
 TIMEOUT = SUBPROCESS_TIMEOUT_SECONDS
+
+
+def invalidate_compatibility_cache():
+    """Discard cached bundle compatibility observations."""
+    _COMPATIBILITY_CACHE.clear()
+
+
+def resolve_paths(game_path=None, *, query_running=True):
+    """Return active `(game_app, executable, steam_manifest)` paths."""
+    if game_path is not None:
+        game = Path(game_path)
+        return (
+            game,
+            game / 'Contents' / 'MacOS' / GAME_EXECUTABLE_NAME,
+            steam_manifest_for_bundle(game),
+        )
+    if (
+        GAME != _DEFAULT_GAME
+        or GAME_EXECUTABLE != _DEFAULT_EXECUTABLE
+        or STEAM_MANIFEST != _DEFAULT_STEAM_MANIFEST
+    ):
+        game = Path(GAME)
+        exe = (
+            Path(GAME_EXECUTABLE)
+            if GAME_EXECUTABLE != _DEFAULT_EXECUTABLE
+            else game / 'Contents' / 'MacOS' / GAME_EXECUTABLE_NAME
+        )
+        manifest = (
+            Path(STEAM_MANIFEST)
+            if STEAM_MANIFEST != _DEFAULT_STEAM_MANIFEST
+            else steam_manifest_for_bundle(game)
+        )
+        return game, exe, manifest
+
+    located_bundle = None
+    if query_running:
+        try:
+            located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
+            if located is not None:
+                located_bundle = located.bundle_path
+        except (OSError, subprocess.CalledProcessError, BoundedCommandTimeoutError, AmbiguousTargetError):
+            located_bundle = None
+    return resolve_game_install(located_bundle=located_bundle)
 
 
 def sha(path):
@@ -37,15 +88,14 @@ def sha(path):
 
 def _command(*args, allowed=(0,)):
     try:
-        result = subprocess.run(args, capture_output=True, timeout=TIMEOUT)
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError(f'{args[0]} 超时（{TIMEOUT} 秒）；操作结果需重新检查。') from error
+        return bounded_run(args, TIMEOUT, capture_output=True, allowed=allowed)
+    except BoundedCommandTimeoutError as error:
+        raise RuntimeError(str(error)) from error
     except OSError as error:
         raise RuntimeError(f'无法运行 {args[0]}：{error}') from error
-    if result.returncode not in allowed:
-        detail = (result.stderr or result.stdout).decode('utf-8', errors='replace')[-3000:].strip()
-        raise RuntimeError(f'{args[0]} 失败（{result.returncode}）：{detail}')
-    return result
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or b'').decode('utf-8', errors='replace')[-3000:].strip()
+        raise RuntimeError(f'{args[0]} 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
 
 
 def run(*args):
@@ -53,7 +103,19 @@ def run(*args):
 
 
 def _require_stopped():
-    if _command('/usr/bin/pgrep', '-x', PROCESS_NAME, allowed=(0, 1)).returncode == 0:
+    try:
+        located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
+    except AmbiguousTargetError as error:
+        raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。') from error
+    except BoundedCommandTimeoutError as error:
+        raise RuntimeError(str(error)) from error
+    except OSError as error:
+        raise RuntimeError(f'无法运行 /bin/ps：{error}') from error
+    except subprocess.CalledProcessError as error:
+        raw = error.stderr or error.stdout or ''
+        detail = (raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else raw).strip()
+        raise RuntimeError(f'/bin/ps 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
+    if located is not None:
         raise RuntimeError(f'请先退出 {DISPLAY_NAME}；运行中不能修改签名或恢复存档。')
 
 
@@ -68,20 +130,56 @@ def _uuid(exe):
     return match.group(1).upper()
 
 
-def compatibility(strict=False):
+def _file_signature(path: Path):
+    stat = path.stat()
+    return str(path.resolve()), stat.st_mtime_ns, stat.st_size
+
+
+def compatibility(strict=False, game_path=None, *, query_running=True):
     """Report version drift without blocking supported operations by default."""
-    info = plistlib.loads((GAME / 'Contents/Info.plist').read_bytes())
+    game, exe, steam = resolve_paths(game_path=game_path, query_running=query_running)
+    info_path = game / 'Contents/Info.plist'
+    cache_key = None
+    try:
+        cache_key = (
+            *_file_signature(info_path),
+            *_file_signature(exe),
+            *_file_signature(steam),
+            _uuid,
+        )
+    except OSError:
+        cache_key = None
+
+    if cache_key is not None and cache_key in _COMPATIBILITY_CACHE:
+        _COMPATIBILITY_CACHE.move_to_end(cache_key)
+        cached = _COMPATIBILITY_CACHE[cache_key]
+        if strict and not cached['compatible']:
+            raise RuntimeError(cached['warnings'][0])
+        return dict(cached, warnings=list(cached['warnings']))
+
+    info = plistlib.loads(info_path.read_bytes())
     version = info.get('CFBundleVersion')
-    steam = STEAM_MANIFEST
     match = re.search(r'"buildid"\s+"([0-9]+)"', steam.read_text())
     build = match.group(1) if match else None
-    uuid = _uuid(GAME_EXECUTABLE)
+    uuid = _uuid(exe)
     compatible = version == VERSION and build == STEAM_BUILD and uuid == UUID
     warning = f'未经验证的游戏版本：version={version}, build={build}, UUID={uuid}。'
+    result = {
+        'version': version,
+        'steam_build': build,
+        'uuid': uuid,
+        'game': str(game),
+        'compatible': compatible,
+        'warnings': [] if compatible else [warning],
+    }
+    if cache_key is not None:
+        _COMPATIBILITY_CACHE[cache_key] = dict(result, warnings=list(result['warnings']))
+        _COMPATIBILITY_CACHE.move_to_end(cache_key)
+        while len(_COMPATIBILITY_CACHE) > _COMPATIBILITY_CACHE_MAX_ENTRIES:
+            _COMPATIBILITY_CACHE.popitem(last=False)
     if strict and not compatible:
         raise RuntimeError(warning)
-    return {'version': version, 'steam_build': build, 'uuid': uuid, 'game': str(GAME),
-            'compatible': compatible, 'warnings': [] if compatible else [warning]}
+    return result
 
 
 def _write_json(path, value):
@@ -103,13 +201,13 @@ def _backup_dir(parent, prefix):
     return Path(tempfile.mkdtemp(prefix=prefix + '-' + stamp, dir=parent))
 
 
-def _records(backup_parent):
+def _records(backup_parent, game):
     for root in sorted(backup_parent.glob('signature-*'), reverse=True):
         try:
             record = json.loads((root / 'manifest.json').read_text())
         except (OSError, ValueError):
             continue
-        if record.get('game') == str(GAME):
+        if record.get('game') == str(game):
             yield root, record
 
 
@@ -173,6 +271,7 @@ def _atomic_install(source, destination, expected_current, original_sha256=None,
             if sha(destination) != expected_current:
                 raise RuntimeError('游戏文件在操作期间改变；拒绝覆盖。')
             os.replace(staged, destination)
+            invalidate_compatibility_cache()
         finally:
             staged.unlink(missing_ok=True)
 
@@ -209,11 +308,11 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
 def prepare(data_dir=None):
     backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
-    identity = compatibility()
-    exe = GAME_EXECUTABLE
+    game, exe, _steam = resolve_paths(query_running=False)
+    identity = compatibility(query_running=False)
     current = sha(exe)
 
-    for root, record in _records(backup_parent):
+    for root, record in _records(backup_parent, game):
         if current not in _prepared_hashes(record):
             continue
         original = _verify_backup(root, record)
@@ -235,7 +334,7 @@ def prepare(data_dir=None):
 
     if _entitlements(exe).get('com.apple.security.get-task-allow'):
         raise RuntimeError('当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
-    bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME), allowed=(0, 1))
+    bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(game), allowed=(0, 1))
 
     root = _backup_dir(backup_parent, 'signature')
     original = root / GAME_EXECUTABLE_NAME
@@ -261,13 +360,14 @@ def prepare(data_dir=None):
     _write_json(root / 'manifest.json', record)
     return {'prepared': True, 'already_prepared': False, 'backup': str(root), 'manifest': record}
 
+
 def restore(data_dir=None):
     backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
-    compatibility()
-    exe = GAME_EXECUTABLE
+    game, exe, _steam = resolve_paths(query_running=False)
+    compatibility(query_running=False)
     current = sha(exe)
-    for root, record in _records(backup_parent):
+    for root, record in _records(backup_parent, game):
         if current == record.get('original_sha256'):
             return {'restored': True, 'already_restored': True}
         if current not in _prepared_hashes(record):
@@ -281,10 +381,10 @@ def restore(data_dir=None):
     raise RuntimeError('没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。')
 
 
-
 def official_display_names(*args, **kwargs):
     from .localization import official_display_names as implementation
-    kwargs.setdefault('game_path', GAME)
+    if len(args) < 3:
+        kwargs.setdefault('game_path', resolve_paths()[0])
     return implementation(*args, **kwargs)
 
 if __name__ == '__main__':
