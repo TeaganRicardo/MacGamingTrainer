@@ -70,7 +70,7 @@ Shared semantics are contract assertions, not a quota of test files. Preserve ga
 | Shortcut capture (#613) | `test_shortcut_chord_semantics.py`, `test_global_hotkey_routing.py`, native module capture journeys | One shared chord/capture contract; native event routing and spoken feedback need their actual execution paths |
 | Disconnect/reconnect and unknown results | Backend session recovery tests, sidecar protocol and per-game recovery journal tests | A new worker is not a new target lifetime; unknown one-shot outcomes are never replayed |
 
-When a gap in this table is a product defect, fix its production owner and nearest behavior test. Keep actual rendered App behavior, game actions, save loading, later game-authored persistence, accessibility speech and perceived performance with #429. A fixture or compiler pass cannot fill those acceptance cells.
+When a gap in this table is a product defect, fix its production owner and nearest behavior test. Keep actual rendered App behavior, game actions, save loading, later game-authored persistence, accessibility speech and perceived performance with #794. A fixture or compiler pass cannot fill those acceptance cells.
 
 ## Shared files a module still touches
 
