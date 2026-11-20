@@ -46,6 +46,11 @@ for raw in sys.stdin:
         deadline = time.monotonic() + 5
         while not release.exists() and time.monotonic() < deadline:
             time.sleep(0.005)
+    if request["command"] == "unknown-reply":
+        print(json.dumps({"type": "result", "id": request["id"], "ok": False,
+            "protocolVersion": 6, "moduleProtocolVersion": 1, "gameID": args.game,
+            "error": {"code": "outcome_unknown", "presentation": "host.backend.error.outcomeUnknown"}}), flush=True)
+        continue
     print(json.dumps({"type": "result", "id": request["id"], "ok": True,
         "protocolVersion": 6, "moduleProtocolVersion": 1, "gameID": args.game,
         "result": {}}), flush=True)
@@ -264,6 +269,11 @@ func postWorkspace(_ name: Notification.Name, pid: pid_t) {
     pump(0.05)
 }
 
+final class TestHostApplication: NSApplication {
+    var fakeActive = false
+    override var isActive: Bool { fakeActive }
+}
+
 @main
 struct Runner {
     @MainActor
@@ -272,7 +282,7 @@ struct Runner {
         let pythonURL = URL(fileURLWithPath: CommandLine.arguments[2])
         let workerURL = URL(fileURLWithPath: CommandLine.arguments[3])
 
-        let app = NSApplication.shared
+        let app = TestHostApplication.shared as! TestHostApplication
         app.setActivationPolicy(.accessory)
         enableNativeAccessibility()
         check(!NSApp.isActive, "Headless lifecycle fixture must start with NSApp.isActive == false")
@@ -377,17 +387,28 @@ struct Runner {
             check(model.restartBackendCount == 0, "activation before launch triggered backend restart")
 
             // Launch consumes backend restart while preserving backgroundConnectionAllowed.
-            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41002)
+            let activeTarget = try spawnTargetProcess(at: targetURL)
+            defer { terminateTarget(activeTarget) }
+            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: activeTarget.processIdentifier)
             check(model.restartBackendCount == 1, "launch did not consume backend restart")
             waitUntil(message: "backend availability after launch permits a single connection") {
                 model.connectAutomaticallyCalls == [true]
             }
 
+            // Activation sets targetActivated() without calling reconcileAutomaticConnection().
             let activationsBefore = context.targetMonitor.activationGeneration
-            postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: 41002)
+            app.fakeActive = true
+            defer { app.fakeActive = false }
+            postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: activeTarget.processIdentifier)
             check(context.targetMonitor.activationGeneration == activationsBefore &+ 1,
                   "didActivate did not increment activationGeneration")
-            check(model.restartBackendCount == 1, "launch restarted the backend more than once")
+            check(model.restartBackendCount == 1 && model.connectAutomaticallyCalls == [true],
+                  "activationGeneration sink called reconcileAutomaticConnection() directly: \(model.connectAutomaticallyCalls)")
+            NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+            pump(0.05)
+            check(model.connectAutomaticallyCalls == [true, false],
+                  "activationGeneration sink did not call connectionPolicy.targetActivated(): \(model.connectAutomaticallyCalls)")
+            app.fakeActive = false
 
             model.connected = true
             model.notifyChanged()
@@ -395,10 +416,10 @@ struct Runner {
             model.connected = false
             model.notifyChanged()
             pump(0.05)
-            postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: 41002)
+            postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: activeTarget.processIdentifier)
             model.notifyChanged()
             pump(0.05)
-            check(model.connectAutomaticallyCalls == [true],
+            check(model.connectAutomaticallyCalls == [true, false],
                   "background reconnect ran without NSApp.isActive or launch permission: \(model.connectAutomaticallyCalls)")
         }
 
@@ -953,6 +974,78 @@ struct Runner {
                     pump(0.05)
                 }
             }
+        }
+
+        // 9. Context trust-gate wiring: discovery and exit invalidate observation
+        // without releasing an unknown outcome; only definitive launch or
+        // replacement PID releases the trust gate.
+        do {
+            let model = LifecycleStubModel()
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            check(!context.targetMonitor.isRunning, "trust-gate check requires absent target initially")
+
+            func sendOutcomeUnknown() {
+                var done: Bool?
+                context.session.send("unknown-reply", operation: "unknown", announceSuccess: false, completion: { done = $0 })
+                waitUntil(message: "unknown-reply settles") { done != nil }
+                check(done == false && context.backendStatus.requiresTargetRestart && context.backendStatus.errorCode == "outcome_unknown",
+                      "unknown-reply did not lock Context trust gate: \(context.backendStatus)")
+            }
+
+            func sendRuntimeRequest(_ command: String) -> (completed: Bool, failure: BackendFailure?) {
+                var done: Bool?
+                var capturedFailure: BackendFailure?
+                context.session.send(command, operation: command, announceSuccess: false,
+                                     failed: { capturedFailure = $0 }, completion: { done = $0 })
+                waitUntil(message: "\(command) request settles") { done != nil }
+                return (done!, capturedFailure)
+            }
+
+            sendOutcomeUnknown()
+            let beforeDiscovery = sendRuntimeRequest("blocked-before-discovery")
+            check(!beforeDiscovery.completed && beforeDiscovery.failure?.presentation == "host.backend.error.targetRestartRequired",
+                  "runtime request was not blocked before discovery")
+
+            // Mere discovery (running=false -> true, launchGeneration=0, no prior PID) must not release the gate.
+            let discovered = try spawnTargetProcess(at: targetURL)
+            defer { terminateTarget(discovered) }
+            context.targetMonitor.refresh()
+            pump(0.05)
+            check(context.targetMonitor.isRunning && context.targetMonitor.launchGeneration == 0,
+                  "fixture did not discover target without launch")
+            check(context.backendStatus.requiresTargetRestart && context.backendStatus.errorCode == "outcome_unknown",
+                  "target discovery through Context released unknown-outcome trust gate: \(context.backendStatus)")
+            let afterDiscovery = sendRuntimeRequest("blocked-after-discovery")
+            check(!afterDiscovery.completed && afterDiscovery.failure?.presentation == "host.backend.error.targetRestartRequired",
+                  "runtime request bypassed trust gate after target discovery")
+
+            // Target exit (running=true -> false, processIdentifier=nil) must not release the gate.
+            terminateTarget(discovered)
+            context.targetMonitor.refresh()
+            pump(0.05)
+            check(!context.targetMonitor.isRunning && context.backendStatus.requiresTargetRestart,
+                  "target exit through Context released unknown-outcome trust gate")
+
+            // Replacement PID discovered (lastKnownTargetProcessIdentifier != newPID) releases the gate.
+            let replacement = try spawnTargetProcess(at: targetURL)
+            defer { terminateTarget(replacement) }
+            context.targetMonitor.refresh()
+            pump(0.05)
+            check(!context.backendStatus.requiresTargetRestart && context.backendStatus.errorCode == nil,
+                  "replacement PID through Context did not release trust gate: \(context.backendStatus)")
+            let afterReplacement = sendRuntimeRequest("allowed-after-replacement")
+            check(afterReplacement.completed && afterReplacement.failure == nil,
+                  "runtime request failed after replacement PID released trust gate")
+
+            // Definitive launch notification also releases the gate.
+            sendOutcomeUnknown()
+            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41004)
+            check(!context.backendStatus.requiresTargetRestart && context.backendStatus.errorCode == nil,
+                  "definitive launch through Context did not release trust gate: \(context.backendStatus)")
+            let afterLaunch = sendRuntimeRequest("allowed-after-launch")
+            check(afterLaunch.completed && afterLaunch.failure == nil,
+                  "runtime request failed after definitive launch released trust gate")
         }
 
         print("core_host_lifecycle_macos_ok")
