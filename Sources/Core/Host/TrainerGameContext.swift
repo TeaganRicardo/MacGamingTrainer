@@ -80,7 +80,6 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     private var ownership: TrainerTargetOwnership?
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
-    private var statusObserver: UUID?
     private var lastKnownTargetProcessIdentifier: pid_t?
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
@@ -127,11 +126,14 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         model.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.modelChanged()
         }.store(in: &subscriptions)
-        statusObserver = session.observeStatus { [weak self] _, _ in
+        let statusObserver = session.observeStatus { [weak self] _, _ in
             // Session status can become idle mid-reply. Reconcile only after
             // the payload and receipt have reached their owners.
             DispatchQueue.main.async { [weak self] in self?.modelChanged() }
         }
+        AnyCancellable { [weak session] in
+            Task { @MainActor in session?.removeStatusObserver(statusObserver) }
+        }.store(in: &subscriptions)
         monitor.$targetObservation.dropFirst().sink { [weak self] observed in
             self?.targetChanged(observed)
         }.store(in: &subscriptions)
@@ -150,10 +152,6 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         } else {
             startBackend(scriptURL: backendScriptURL)
         }
-    }
-
-    isolated deinit {
-        if let statusObserver { session.removeStatusObserver(statusObserver) }
     }
 
     var backendStatus: TrainerBackendStatus { services.backendStatus }
