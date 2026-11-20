@@ -1,6 +1,8 @@
 """Hades II adapter for Core's generic structured save-edit lifecycle."""
 
-from core.structured_save_edit import StructuredSaveEditSession
+from pathlib import Path
+
+from core.structured_save_edit import StructuredSaveCodec, StructuredSaveEditSession
 from .save_document import Hades2SaveDocument
 from .save_provider import editor_files, profile_file_identity
 
@@ -8,19 +10,19 @@ from .save_provider import editor_files, profile_file_identity
 class _Hades2SaveCodec:
     """Keep Hades II's version-17/18 container and luabins rules game-owned."""
 
-    def encode(self, document):
+    def encode(self, document: Hades2SaveDocument) -> bytes:
         if not isinstance(document, Hades2SaveDocument):
             raise TypeError("Save Editor applies only structured Hades II save documents.")
         return document.to_bytes()
 
-    def decode(self, payload):
+    def decode(self, payload: bytes) -> Hades2SaveDocument:
         return Hades2SaveDocument.from_bytes(payload)
 
-    def load(self, path):
+    def load(self, path: Path) -> Hades2SaveDocument:
         return Hades2SaveDocument.load(path)
 
 
-_CODEC = _Hades2SaveCodec()
+_CODEC: StructuredSaveCodec[Hades2SaveDocument] = _Hades2SaveCodec()
 
 
 class Hades2SaveEditSession:

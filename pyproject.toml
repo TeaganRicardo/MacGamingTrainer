@@ -10,9 +10,17 @@ select = ["E4", "E7", "E9", "F"]
 quote-style = "preserve"
 
 [tool.mypy]
-files = ["Backend/core/structured_save_edit.py"]
+files = [
+    "Backend/core/structured_save_edit.py",
+    "Backend/games/hades/save_edit.py",
+    "Backend/games/hades2/save_edit.py",
+]
 follow_imports = "silent"
 python_version = "3.10"
-disallow_untyped_defs = true
 disallow_any_generics = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = "core.structured_save_edit"
+disallow_untyped_defs = true
 warn_return_any = true
