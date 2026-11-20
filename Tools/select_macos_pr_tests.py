@@ -58,7 +58,8 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     # Shared Core Host/Runtime behavior owners
     "Sources/Core/Host/TrainerLocalization.swift": ("test_host_localization_behavior.py",),
     "Sources/Core/Host/TrainerApplicationStartup.swift": ("test_host_target_ownership.py",),
-    "Sources/Core/Host/TrainerGameContext.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Host/TrainerGameContext.swift": ("test_host_target_ownership.py", "test_core_save_manager_lifecycle_u01_u02.py"),
+    "Sources/Core/Host/TrainerHost.swift": ("test_core_save_retention_controls.py",),
     "Sources/Core/Host/TrainerTargetOwnership.swift": ("test_host_target_ownership.py",),
     "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift": ("test_host_target_ownership.py",),
     "Sources/Core/Runtime/TrainerLogSink.swift": ("test_trainer_log_session_lifecycle.py",),
@@ -70,7 +71,10 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     # Shared Core Save management owners
     "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift": _CORE_SAVE_MANAGER_TESTS,
     "Sources/Core/Save/TrainerSavePathValidator.swift": _CORE_SAVE_MANAGER_TESTS,
-    "Sources/Core/Save/TrainerSaveTypes.swift": _CORE_SAVE_MANAGER_TESTS,
+    "Sources/Core/Save/TrainerSaveTypes.swift": (
+        *_CORE_SAVE_MANAGER_TESTS,
+        "test_core_save_retention_controls.py",
+    ),
     "Sources/Core/Save/TrainerSaveManagerModel.swift": (
         *_CORE_SAVE_MANAGER_TESTS,
         "test_core_save_retention_controls.py",

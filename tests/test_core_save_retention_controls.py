@@ -36,11 +36,31 @@ saves = folder / 'saves'; saves.mkdir()
 (saves / 'Profile1.sav').write_bytes(b'original temporary fixture')
 replacement = folder / 'replacement.sav'; replacement.write_bytes(b'edited temporary fixture')
 
+running = [False]
+
+
+class Provider:
+    def describe_snapshot(self, files, created_at):
+        return {
+            'defaultName': '自动快照',
+            'nameDetails': ['默认详情'],
+            'localizedPresentation': {
+                'en': {'name': 'Auto Snapshot', 'details': ['Localized detail']},
+            },
+        }
+
+
 class FixtureAdapter(GameAdapter):
     def dispatch(self, command, params, request_id):
         if command == 'fixture.interrupted_restore':
             claim = self.save_service.store.ensure_storage_root() / '.staged-restore-applying-invalid.json'
             claim.write_text('{interrupted', encoding='utf-8')
+        elif command == 'fixture.set_running':
+            running[0] = bool(params.get('running', False))
+        elif command == 'fixture.seed_recovery':
+            recovery_dir = self.save_service.store.ensure_storage_root() / 'transactions' / '.rollback-fixture'
+            recovery_dir.mkdir(parents=True, exist_ok=True)
+            (recovery_dir / 'save.bak').write_bytes(b'recovery')
         else:
             assert command == 'fixture.observe_policy'
             self.save_service.configure_retention(9, 8 * 1024 * 1024)
@@ -51,15 +71,17 @@ class FixtureAdapter(GameAdapter):
 spec = SaveManagementSpec((SaveRootSpec('main', str(saves), ('*.sav',)),), None,
                           True, 'stoppedOnly', True)
 adapter = FixtureAdapter(GameAdapterContext(args.game, 'Fixture', 1, folder, {}, save_management=spec))
-router = JsonlRequestRouter(adapter, save_data_root=folder / 'data', target_running_probe=lambda: False)
+data_root = pathlib.Path.home() / 'Library/Application Support/MacGamingTrainer'
+router = JsonlRequestRouter(adapter, save_data_root=data_root, target_running_probe=lambda: running[0])
+router.save_service.provider = Provider()
 router.save_service.replace_files((ResolvedSaveFile('main', 'Profile1.sav', replacement),))
 for raw in sys.stdin:
     request = json.loads(raw)
     with (folder / 'commands.jsonl').open('a') as log:
         log.write(json.dumps(request) + '\n')
     reply = router.handle_encoded(request)
-    if request['command'] in ('core.save.set_retention', 'core.save.protect'):
-        time.sleep(0.25)  # Prove the sheet waits for the actual acknowledgement.
+    if request['command'] in ('core.save.set_retention', 'core.save.protect', 'core.save.rename'):
+        time.sleep(0.35 if request['command'] == 'core.save.rename' else 0.25)  # Prove UI waits / renders optimistic rename before reply.
     print(reply, flush=True)
 '''
 
@@ -106,6 +128,80 @@ func press(_ root: Any, title: String) {
 }
 func hasText(_ root: Any, _ text: String) -> Bool {
     nativeAccessibilityControls(root).contains { $0.role == "AXStaticText" && $0.text == text }
+}
+func hostRect(_ control: NativeAccessibilityControl, in host: NSView, window: NSWindow) -> NSRect {
+    host.convert(window.convertFromScreen(control.frame), from: nil)
+}
+
+final class HostSaveStubModel: ObservableObject, TrainerHostModel {
+    let backendAvailable = false
+    let busy = false
+    let connected = false
+    let operation = TrainerTextToken(key: "")
+    let statusTitle = TrainerTextToken(key: "host.disconnected")
+    let connectionDetailText = TrainerTextToken(key: "host.gameLibrary")
+    let hostActionsEnabled = false
+    func toggleConnectionFromHost() {}
+    func refreshFromHost() {}
+    func restartBackendFromHost() {}
+    func prepareForTermination(completion: @escaping () -> Void) { completion() }
+}
+
+private struct ManagementProbeView: View {
+    @Environment(\.trainerManagementActions) private var managementActions
+    let onCapture: (TrainerManagementActions) -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .onAppear { onCapture(managementActions) }
+    }
+}
+
+enum HostSaveProbeBridge {
+    nonisolated(unsafe) static var captured: TrainerManagementActions?
+}
+
+struct HostUnsupportedSaveModule: TrainerGameModule {
+    static let descriptor = GameModuleDescriptor(
+        id: "host-no-save", displayName: "Host No Save",
+        targetProcessName: "MGTNoSuchTarget", targetBundleIdentifier: "",
+        expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1,
+        supportsSaveManagement: false
+    )
+    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
+    static func makeModel(session: TrainerBackendSession) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeContent(model: HostSaveStubModel) -> some View {
+        ManagementProbeView { HostSaveProbeBridge.captured = $0 }
+    }
+    static func makeSidebarActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static let presentationKeyPrefix = "fixture."
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
+}
+
+struct HostSupportedSaveModule: TrainerGameModule {
+    static let descriptor = GameModuleDescriptor(
+        id: "host-save", displayName: "Host Save",
+        targetProcessName: "MGTNoSuchTarget", targetBundleIdentifier: "",
+        expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1,
+        supportsSaveManagement: true
+    )
+    static let presentation = TrainerGamePresentation(headerTitle: "SAVE")
+    static func makeModel(session: TrainerBackendSession) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeContent(model: HostSaveStubModel) -> some View {
+        ManagementProbeView { HostSaveProbeBridge.captured = $0 }
+    }
+    static func makeSidebarActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
+    static func makeHeaderActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
+    static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
+    }
+    static let presentationKeyPrefix = "fixture."
+    static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
 @main
@@ -254,13 +350,226 @@ struct Main {
         }
         check(model.pendingRestore?.snapshotID == nil && model.error.isEmpty,
               "unavailable restore intent was required to display recovery state")
+        check(hasText(host, localization.localized("host.save.pendingIndeterminate")),
+              "indeterminate pending restore text missing")
         press(host, title: localization.localized("host.clearStatus"))
         wait("actual Clear status did not clear the unresolved claim") {
             !model.busy && model.pendingRestore == nil
         }
         check(requests("core.save.cancel_staged", log: log).count == 1,
               "recovery button did not send the explicit cancellation once")
+
+        // History section, localized snapshot presentation, and header/footer button order.
+        check(hasText(host, localization.localized("host.save.history")), "Backup History section title missing")
+        check(hasText(host, "Auto Snapshot"), "English localized automatic snapshot name missing")
+        check(hasText(host, "Localized detail"), "English localized snapshot detail missing")
+        check(hasText(host, localization.localized("host.save.fileCount", arguments: ["1"])),
+              "snapshot file count missing")
+
+        let refreshBtn = namedNativeControl(host, role: "AXButton", name: localization.localized("host.refresh"))
+        let createBackupBtn = namedNativeControl(host, role: "AXButton", name: localization.localized("host.save.createBackup"))
+        let openFolderBtn = namedNativeControl(host, role: "AXButton", name: localization.localized("host.save.openFolder"))
+        let doneBtn = namedNativeControl(host, role: "AXButton", name: localization.localized("host.done"))
+        check(refreshBtn?.enabled == true && createBackupBtn?.enabled == true &&
+              openFolderBtn?.enabled == true && doneBtn?.enabled == true,
+              "Save Manager header/footer buttons missing or disabled")
+        let refreshRect = hostRect(refreshBtn!, in: host, window: window)
+        let createBackupRect = hostRect(createBackupBtn!, in: host, window: window)
+        let doneRect = hostRect(doneBtn!, in: host, window: window)
+        check(refreshRect.maxX <= createBackupRect.minX,
+              "Refresh button was not ordered before Create Backup in header")
+        check(doneRect.minY > createBackupRect.maxY,
+              "Done button was not positioned in footer below header")
+
+        // Overflow menu items + inline rename with optimistic pendingRenameNames.
+        do {
+            guard let popup = popups(host).first, let menu = popup.menu else {
+                check(false, "missing backup overflow menu"); return
+            }
+            for itemTitle in [
+                localization.localized("host.rename"),
+                localization.localized("host.showInFinder"),
+                localization.localized("host.delete"),
+            ] {
+                guard let item = menu.items.first(where: { $0.title == itemTitle }), item.isEnabled else {
+                    check(false, "overflow menu missing enabled item: \(itemTitle)"); return
+                }
+            }
+        }
+        selectBackupAction(localization.localized("host.rename"))
+        wait("inline rename editor did not mount") { fields(in: host).contains { $0.isEditable } }
+        let renameField = fields(in: host).first { $0.isEditable }!
+        edit(renameField, in: window, text: "Renamed Backup", submit: true)
+        check(model.busy, "rename completed before optimistic display check")
+        check(hasText(host, "Renamed Backup"),
+              "optimistic rename name did not render while rename request was in flight")
+        wait("rename did not finish") { !model.busy }
+        let renameRequests = requests("core.save.rename", log: log)
+        check(renameRequests.count == 1 && (renameRequests.last?["params"] as? [String: Any])?["name"] as? String == "Renamed Backup",
+              "inline rename did not dispatch expected name")
+        check(hasText(host, "Renamed Backup"), "renamed snapshot name missing after reply")
+        check(hasText(host, localization.localized("host.save.notice.renamed")),
+              "rename confirmation notice missing")
+
+        // Bulk selection control and Delete Selected bar.
+        press(host, title: localization.localized("host.selection.select"))
+        wait("bulk selection bar did not render") {
+            hasText(host, localization.localized("host.selectedCount", arguments: ["1"]))
+        }
+        check(namedNativeControl(host, role: "AXButton", name: localization.localized("host.deleteSelected"))?.enabled == true,
+              "Delete Selected action missing or disabled")
+        press(host, title: localization.localized("host.selection.deselect"))
+        wait("bulk selection bar did not dismiss") {
+            namedNativeControl(host, role: "AXButton", name: localization.localized("host.deleteSelected")) == nil
+        }
+
+        // Hot backup badge, Restore confirmation sheet, and non-indeterminate staged pending banner.
+        var setRunningDone = false
+        session.send("fixture.set_running", params: ["running": true], operation: "set running", announceSuccess: false,
+                     completion: { setRunningDone = $0 })
+        wait("fixture.set_running(true) did not complete") { setRunningDone }
+        let backupBefore = requests("core.save.backup", log: log).count
+        press(host, title: localization.localized("host.save.createBackup"))
+        wait("Create Backup did not add hot snapshot") { !model.busy && model.snapshots.count == 2 }
+        check(requests("core.save.backup", log: log).count == backupBefore + 1,
+              "Create Backup button did not dispatch backup command")
+        check(hasText(host, localization.localized("host.save.hotBackup")),
+              "Live Backup pill badge missing on hot snapshot")
+
+        press(host, title: localization.localized("host.restore"))
+        wait("Restore confirmation sheet did not open") { window.attachedSheet != nil }
+        let restoreSheet = window.attachedSheet!
+        let restoreSheetContent = restoreSheet.contentView!
+        wait("Preserve Current checkbox did not mount in restore confirmation sheet") {
+            namedNativeControl(restoreSheetContent, role: "AXCheckBox",
+                             name: localization.localized("host.save.preserveCurrent")) != nil
+        }
+        press(restoreSheetContent, title: localization.localized("host.restore"))
+        wait("Restore confirmation did not stage restore") {
+            window.attachedSheet == nil && !model.busy &&
+                model.pendingRestore != nil && model.pendingRestore?.indeterminate == false
+        }
+        let restoreRequests = requests("core.save.restore", log: log)
+        check(restoreRequests.count == 1 && (restoreRequests.last?["params"] as? [String: Any])?["preserveCurrent"] as? Bool == true,
+              "Restore confirmation did not dispatch preserveCurrent=true")
+        check(namedNativeControl(host, role: "AXButton", name: localization.localized("host.cancel"))?.enabled == true,
+              "Cancel button missing on non-indeterminate staged restore")
+        check(hasText(host, localization.localized("host.save.pendingWaiting", arguments: ["Auto Snapshot"])),
+              "staged pending waiting notice with snapshot name missing")
+        press(host, title: localization.localized("host.cancel"))
+        wait("Cancel did not clear staged restore") { !model.busy && model.pendingRestore == nil }
+        var clearRunningDone = false
+        session.send("fixture.set_running", params: ["running": false], operation: "clear running", announceSuccess: false,
+                     completion: { clearRunningDone = $0 })
+        wait("fixture.set_running(false) did not complete") { clearRunningDone }
+
+        // Recovery paths warning banner + Save error banner.
+        var seedRecoveryDone = false
+        session.send("fixture.seed_recovery", operation: "seed recovery", announceSuccess: false,
+                     completion: { seedRecoveryDone = $0 })
+        wait("fixture.seed_recovery did not complete") { seedRecoveryDone }
+        model.refresh()
+        wait("recovery paths did not populate on refresh") { !model.busy && !model.recoveryPaths.isEmpty }
+        check(hasText(host, localization.localized("host.save.recoveryCopiesWarning")),
+              "recovery copies warning missing")
+        check(hasText(host, model.recoveryPaths.joined(separator: "\n")),
+              "recovery paths list missing")
+        check(namedNativeControl(host, role: "AXButton", name: localization.localized("host.show"))?.enabled == true,
+              "Show button missing or disabled for recovery copies")
+
+        model.restore(id: "snap-20261107-000000-00000000", preserveCurrent: true)
+        wait("missing snapshot restore did not surface error") {
+            !model.busy && model.error == "host.save.error.notFound"
+        }
+        check(hasText(host, localization.presentation("host.save.error.notFound")),
+              "error banner did not render localized Save error")
+
+        model.delete(ids: Set(model.snapshots.map(\.id)))
+        wait("batch delete notice did not render") {
+            !model.busy && model.notice == "host.save.notice.deletedMany"
+        }
+        check(hasText(host, localization.presentation("host.save.notice.deletedMany", arguments: ["2"])),
+              "notice banner did not render formatted noticeArguments")
+
         window.close()
+
+        // TrainerHostView + TrainerHostSidebarCard Save Management wiring.
+        HostSaveProbeBridge.captured = nil
+        let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(
+            model: HostUnsupportedSaveModule.makeModel(session: session), session: session
+        )
+        let unsupportedWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        unsupportedWindow.isReleasedWhenClosed = false
+        let unsupportedHost = NSHostingView(
+            rootView: TrainerHostView(context: unsupportedContext)
+                .environmentObject(localization)
+                .trainerTheme(.standard)
+        )
+        unsupportedWindow.contentView = unsupportedHost
+        unsupportedWindow.orderFront(nil)
+        wait("unsupported TrainerHostView did not mount management environment") {
+            HostSaveProbeBridge.captured != nil
+        }
+        check(HostSaveProbeBridge.captured?.openSaveManagement == nil,
+              "supportsSaveManagement=false exposed openSaveManagement")
+        unsupportedWindow.close()
+
+        HostSaveProbeBridge.captured = nil
+        let supportedContext = TrainerGameContext<HostSupportedSaveModule>(
+            model: HostSupportedSaveModule.makeModel(session: session), session: session
+        )
+        let hostWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        hostWindow.isReleasedWhenClosed = false
+        let supportedHost = NSHostingView(
+            rootView: TrainerHostView(context: supportedContext)
+                .environmentObject(localization)
+                .trainerTheme(.standard)
+        )
+        hostWindow.contentView = supportedHost
+        hostWindow.orderFront(nil)
+
+        let sidebarWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false
+        )
+        sidebarWindow.isReleasedWhenClosed = false
+        let sidebarHost = NSHostingView(
+            rootView: TrainerHostSidebarCard(context: supportedContext, selected: true, onSelect: {})
+                .environmentObject(localization)
+                .trainerTheme(.standard)
+        )
+        sidebarWindow.contentView = sidebarHost
+        sidebarWindow.orderFront(nil)
+        pump()
+        sidebarHost.layoutSubtreeIfNeeded()
+        let saveMgmtTitle = localization.localized("host.saveManagement")
+        check(!hasText(sidebarHost, saveMgmtTitle) &&
+              namedNativeControl(sidebarHost, role: "AXButton", name: saveMgmtTitle) == nil,
+              "Host sidebar unexpectedly presented Save Management")
+
+        wait("supported TrainerHostView did not mount management environment") {
+            HostSaveProbeBridge.captured?.openSaveManagement != nil
+        }
+        let listsBeforeOpen = requests("core.save.list", log: log).count
+        HostSaveProbeBridge.captured?.openSaveManagement?()
+        wait("Save Management tool window did not open and refresh") {
+            requests("core.save.list", log: log).count == listsBeforeOpen + 1 &&
+                !supportedContext.saveManager.busy &&
+                NSApp.windows.contains(where: {
+                    $0.title == saveMgmtTitle &&
+                        $0.contentView.map { hasText($0, localization.localized("host.save.history")) } == true
+                })
+        }
+        supportedContext.toolWindows.closeAll()
+        pump()
+        sidebarWindow.close()
+        hostWindow.close()
         print("core_save_retention_controls_ok")
     }
 }

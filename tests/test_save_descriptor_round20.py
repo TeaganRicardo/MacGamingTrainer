@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -11,7 +12,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-descriptor-") as td:
     assert "supportsSaveManagement: true" in generated
 
 descriptor = (ROOT / "Sources/Core/Host/TrainerGameModule.swift").read_text(encoding="utf-8")
-assert "let supportsSaveManagement: Bool\n" in descriptor
-assert "supportsSaveManagement: Bool = false" not in descriptor
+# Kept (lint): GameModuleDescriptor requires an explicit supportsSaveManagement argument;
+# adding a default compiles with existing callers.
+assert not re.search(r"supportsSaveManagement:\s*Bool\s*=", descriptor)
 
 print("save_descriptor_round20_ok")

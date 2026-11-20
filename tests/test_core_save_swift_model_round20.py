@@ -1,95 +1,16 @@
+"""Core Save structural boundaries and Finder-reveal keep; behavior runs on macOS."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-types = ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"
-model = ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"
-client = ROOT / "Sources/Core/Runtime/BackendClient.swift"
-validator = ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"
+save_dir = ROOT / "Sources/Core/Save"
+save_sources = "\n".join(p.read_text(encoding="utf-8") for p in sorted(save_dir.glob("*.swift")))
+model_text = (save_dir / "TrainerSaveManagerModel.swift").read_text(encoding="utf-8")
 
-assert types.is_file(), "generic save types missing"
-assert model.is_file(), "generic save manager model missing"
-assert client.is_file(), "generic backend client missing"
-assert validator.is_file(), "Save path validator missing"
-
-types_text = types.read_text(encoding="utf-8")
-model_text = model.read_text(encoding="utf-8")
-client_text = client.read_text(encoding="utf-8")
-combined = types_text + "\n" + model_text + "\n" + validator.read_text(encoding="utf-8")
-
-for token in (
-    "struct TrainerSaveSnapshot",
-    "struct TrainerPendingRestore",
-    "@Published private(set) var snapshots",
-    "final class TrainerSaveManagerModel",
-    "activeRequestTokens: Set<UUID>",
-    "self.busy = !self.activeRequestTokens.isEmpty",
-    "enum TrainerSavePathValidator",
-    "resolvingSymlinksInPath()",
-    'scheme.caseInsensitiveCompare("file")',
-    "candidateValues.isRegularFile == true",
-    "@Published private(set) var pendingRestore",
-    "@Published private(set) var recoveryPaths",
-    "func refresh()",
-    "func backup(",
-    "func rename(",
-    "func delete(ids:",
-    "func reveal(",
-    "func revealRecoveryCopies()",
-    "func restore(",
-    "func cancelStaged()",
-    "func applyStagedIfPossible()",
-    '"core.save.list"',
-    '"core.save.backup"',
-    '"core.save.rename"',
-    '"core.save.delete"',
-    '"core.save.open_folder"',
-    '"core.save.restore"',
-    '"core.save.cancel_staged"',
-    '"core.save.apply_staged"',
-):
-    assert token in combined, token
-
-assert "Hades" not in combined
-assert "Timer.scheduledTimer" not in combined
-assert "SaveBackup" not in combined
-assert 'nameDetails' in types_text
-assert 'let automaticName: Bool' in types_text
-assert 'let localizedPresentation: [String: TrainerSaveSnapshotPresentation]' in types_text
-assert 'self.automaticName = row["automaticName"] as? Bool ?? false' in types_text
-assert 'row["localizedPresentation"] as? [String: Any] ?? [:]' in types_text
-assert 'func displayName(for languageCode: String)' in types_text
-assert 'func displayDetails(for languageCode: String)' in types_text
-assert 'guard automaticName' in types_text
-assert 'TrainerPresentationLanguage' not in types_text
-assert 'hot' in types_text
-assert 'valid' in types_text
-assert 'let indeterminate: Bool' in types_text
-assert 'self.indeterminate = row["indeterminate"] as? Bool ?? false' in types_text
-assert 'func applyStagedIfPossible()' in model_text
-apply_block = model_text[model_text.index('    func applyStagedIfPossible()'):model_text.index('    private func deleteNext', model_text.index('    func applyStagedIfPossible()'))]
-assert 'successNotice: nil' in apply_block
-assert 'reply:' in model_text, "Core payload must use request-specific reply callback"
-
-# Recovery copies that outlive a killed rollback must be observable after the
-# backend restarts, not only through the in-flight rollback_failed envelope.
-assert 'result["recoveryPaths"] as? [String]' in model_text
-assert 'NSWorkspace.shared.activateFileViewerSelecting' in model_text
-
-# rollback_failed is the one Core error that carries a user-actionable path.
-assert "let recoveryPath: String?" in client_text
-assert 'recoveryPath: detail?["recoveryPath"] as? String' in client_text
-assert 'case "rollback_failed":' in model_text
-assert "failure.recoveryPath" in model_text
-assert '"rollback_failed"' in model_text
-assert '"host.save.error.rollbackFailed"' in model_text
-assert "errorArguments" in model_text and "noticeArguments" in model_text
-
-# Completion is a total contract: Save Manager callers use it to clear
-# optimistic rename state and to terminate sequential batch deletes. A backend
-# that is already unavailable must still complete the request with failure.
-request_block = model_text[model_text.index("    private func request("):model_text.index("    private func consume(")]
-guard_block = request_block[request_block.index("guard session.isRunning else"):request_block.index("        let token")]
-assert "onComplete?(false)" in guard_block
-assert "activeRequestTokens.remove(token)" in request_block
+# Structural boundary: Core Save sources name no game.
+assert "Hades" not in save_sources
+# Lint (event-driven): Core Save uses no polling timers.
+assert "Timer.scheduledTimer" not in save_sources
+# Kept pending Finder-reveal mock: model.reveal/revealRecoveryCopies call Finder directly.
+assert "NSWorkspace.shared.activateFileViewerSelecting" in model_text
 
 print("core_save_swift_model_round20_ok")

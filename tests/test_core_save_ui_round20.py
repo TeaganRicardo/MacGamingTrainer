@@ -1,78 +1,18 @@
+"""Core Save Manager UI pins kept pending pointer, alert, Finder-reveal and error-arg journeys."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-view_path = ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift"
-host_path = ROOT / "Sources/Core/Host/TrainerHost.swift"
-app_path = ROOT / "Sources/App.swift"
+view = (ROOT / "Sources/Core/Save/TrainerSaveManagerView.swift").read_text(encoding="utf-8")
 
-assert view_path.is_file(), "generic save manager view missing"
-view = view_path.read_text(encoding="utf-8")
-host = host_path.read_text(encoding="utf-8")
-app = app_path.read_text(encoding="utf-8")
-
-for token in (
-    "struct TrainerSaveManagerView",
-    "@EnvironmentObject private var localization: TrainerLocalizationStore",
-    "@State private var selectedIDs: Set<String>",
-    "@State private var editingID:",
-    "TrainerInlineNameEditor",
-    ".onTapGesture(count: 2)",
-    'TrainerPillBadge(text: localization.localized("host.save.hotBackup")',
-    "TrainerOverflowMenu",
-    'Label(localization.localized("host.showInFinder")',
-    'Label(localization.localized("host.delete")',
-    'Button(localization.localized("host.restore"))',
-    "TrainerCheckboxControl(",
-    'title: localization.localized("host.save.preserveCurrent")',
-    "deleteIDs = selectedIDs",
-    "model.delete(ids: ids)",
-    "model.reveal(id: snapshot.id)",
-    "model.restore(id:",
-    "LazyVStack",
-    'localization.localized("host.save.fileCount", arguments:',
-    'localization.presentation(model.error, arguments: model.errorArguments)',
-    'localization.presentation(model.notice, arguments: model.noticeArguments)',
-    'snapshot.displayName(for: localization.language.rawValue)',
-    'snapshot.displayDetails(for: localization.language.rawValue)',
-):
-    assert token in view, token
-
-assert "NavigationSplitView" not in view
-assert "Inspector" not in view
-assert "Hades" not in view
-assert "Timer.scheduledTimer" not in view
-assert "@FocusState" not in view
-assert "pending.indeterminate" in view
-assert 'localization.localized("host.save.pendingIndeterminate")' in view
-assert '"host.clearStatus" : "host.cancel"' in view
-assert "if !model.recoveryPaths.isEmpty" in view
-assert 'localization.localized("host.save.recoveryCopiesWarning")' in view
+# Kept pending a pointer double-click rename journey.
+assert ".onTapGesture(count: 2)" in view
+# Kept pending a modal .alert confirmation journey; bulk selection is exercised natively.
+assert "deleteIDs = selectedIDs" in view
+assert "model.delete(ids: ids)" in view
+# Kept pending a Finder-reveal mock; buttons and menu items are asserted enabled natively.
+assert "model.reveal(id: snapshot.id)" in view
 assert "model.revealRecoveryCopies()" in view
-assert 'model.recoveryPaths.joined(separator: "\\n")' in view
-
-for token in (
-    "@ObservedObject private var saveManager: TrainerSaveManagerModel",
-    "Module.descriptor.supportsSaveManagement",
-    "TrainerSaveManagerView(model: saveManager",
-    "init(context: TrainerGameContext<Module>)",
-):
-    assert token in host, token
-
-assert "TrainerGamePages(application: application)" in app
-for token in (
-    "private var managementActions: TrainerManagementActions",
-    "TrainerManagementActions(openSaveManagement:",
-    'toolWindows.open(id: "host-save-management"',
-    "saveManager.refresh()",
-    ".environment(\\.trainerManagementActions, managementActions)",
-):
-    assert token in host, token
-
-sidebar_start = host.index("struct TrainerHostSidebarCard<")
-sidebar = host[sidebar_start:host.index("\n}", sidebar_start) + 2]
-assert "TrainerSidebarCard(" in sidebar
-assert "Module.makeSidebarActions(model: model)" in sidebar
-assert 'host.saveManagement' not in sidebar
-assert "saveManagerPresented = true" not in sidebar
+# Kept pending a rendered rollback-failed journey passing errorArguments to the view.
+assert "localization.presentation(model.error, arguments: model.errorArguments)" in view
 
 print("core_save_ui_round20_ok")

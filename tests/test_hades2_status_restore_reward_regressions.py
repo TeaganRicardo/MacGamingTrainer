@@ -2,8 +2,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
-host = (ROOT/'Sources/Core/Host/TrainerGameContext.swift').read_text()
-save_model = (ROOT/'Sources/Core/Save/TrainerSaveManagerModel.swift').read_text()
 lua = (ROOT/'Backend/games/hades2/runtime/hades.lua').read_text()
 
 # The v0.17.9 4-second live status timer caused debugger boundary stops in play.
@@ -15,8 +13,6 @@ assert '同步功能状态' not in model
 # passive scan timer or special busy projection.
 assert 'saveManagerBusy' not in model
 assert 'pendingRestoreTimer' not in model
-assert 'saveManager.applyStagedIfPossible()' in host
-assert 'Timer.scheduledTimer' not in save_model
 
 # #704 retires the global all-exits next-room owner. Row 1 is exact-door
 # resident state, route Apply is a reservation, and LeaveRoom is the only
