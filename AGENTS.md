@@ -6,7 +6,7 @@
 2. State the user outcome and the accepted product contract. Current user instructions govern the task. Current selected work, direct dependencies and explicit live deferrals are indexed in [planning issue #124](https://github.com/TeaganRicardo/MacGamingTrainer/issues/124). Product decisions belong to their owning task issues or stable repository contracts. Code and executable tests establish current behavior, which may contain defects; they do not override an accepted requirement.
 3. Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for compatibility, operational limitations and manual-acceptance state. Read the relevant sections of [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md), then the owning production files and nearest behavior tests.
 
-For Core/game/build changes, also read [GAME_MODULES.md](GAME_MODULES.md); for release metadata, read [VERSIONING.md](VERSIONING.md). Historical audits, closed PRs and Git history are evidence to consult when explaining a current defect or invariant, not a default task queue. When documents conflict, resolve against the accepted contract and current evidence, and correct the stale instruction in the owning change.
+For Core/game/build changes, also read [GAME_MODULES.md](GAME_MODULES.md) and [the CI and provenance guide](docs/development/ci.md); for release metadata, read [VERSIONING.md](VERSIONING.md). Historical audits, closed PRs and Git history are evidence to consult when explaining a current defect or invariant, not a default task queue. When documents conflict, resolve against the accepted contract and current evidence, and correct the stale instruction in the owning change.
 
 ## Choose the owner
 

@@ -89,6 +89,6 @@ Run `python3 Tools/validate_game_module.py --all`, `python3 Tools/supported_buil
 
 For shared Python changes, create a virtual environment with the Python version used by Linux contracts and install the pinned tools with `python3 -m pip install -r Tools/python_static_requirements.txt`. From the repository root, run `python3 -m ruff check`, `python3 -m ruff format --check` and `python3 -m mypy`. `pyproject.toml` defines the shared packages Ruff checks and the protocol seams mypy checks.
 
-A module-matrix workflow-only change exercises its own reference lane and Linux contracts; it does not force the unrelated unified product build. Mixed changes choose all applicable responsibilities, while an unknown diff fails closed. The three required check contexts stay present. Full inventory, isolated module packaging and retained artifact provenance belong to exact-SHA convergence.
+A module-matrix workflow-only change exercises its own reference lane and Linux contracts; it does not force the unrelated unified product build. Mixed changes choose all applicable responsibilities, while an unknown diff fails closed. See [CI and build provenance](ci.md) for the three required check contexts, convergence dispatch, Action pinning and provenance verification.
 
 Resolve the current main and open overlapping PRs before starting. Develop, independently review and merge the final tested head separately. Record the exact source and the scope each check proves. Product versions and releases are prepared in separate intentional work.
