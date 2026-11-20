@@ -44,8 +44,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-derived-routing-") as directory:
         write(f'tests/journeys/test_{game}_frontend.py', 'MGT_PLATFORM = "macos"\n')
 
     write("tests/helpers/native.py",
-          'from swift_test_compiler import compile_swift_test as build\nbuild(games=("beta",))\n')
-    write("tests/test_consumer.py", 'MGT_PLATFORM = "macos"\nfrom helpers import native\n')
+          'from swift_test_compiler import compile_swift_test as build\n'
+          'from games.beta import runtime_probe\n'
+          'build(games=("beta",))\n')
+    write("Backend/games/beta/runtime_probe.py", "def probe(): return True\n")
+    write("Backend/core/server.py", "# portable server\n")
+    write("tests/helpers/server_harness.py", 'SERVER = "Backend/core/server.py"\n')
+    write("tests/test_consumer.py",
+          'MGT_PLATFORM = "macos"\nfrom helpers import native, server_harness\n')
     reclassified = write("tests/other/test_alpha_frontend.py", 'raise AssertionError("no test imports")\n')
     write("Sources/Explicit.swift")
     write("tests/test_explicit_sources.py",
@@ -66,6 +72,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-derived-routing-") as directory:
     assert fixture.relevant_tests(["Sources/parked/Module.swift"]) == ["journeys/test_parked_frontend.py"]
     assert fixture.relevant_tests(["Sources/Explicit.swift"]) == ["test_explicit_sources.py"]
     assert fixture.relevant_tests(["tests/helpers/native.py"]) == ["test_consumer.py"]
+    assert fixture.relevant_tests(["Backend/games/beta/runtime_probe.py"]) == ["test_consumer.py"]
+    assert fixture.relevant_tests(["Backend/core/server.py"]) == []
     assert fixture.relevant_tests(["tests/other/test_alpha_frontend.py"]) == []
     reclassified.write_text('MGT_PLATFORM = "macos"\n', encoding="utf-8")
     assert load_routing(project).relevant_tests(["tests/other/test_alpha_frontend.py"]) == [
@@ -88,10 +96,14 @@ for routing, paths, game in (
     else:
         raise AssertionError(f"missing or fully deferred {game} behavior passed")
 
-# These shared helpers previously missed real native consumers.
+# These shared helpers and platform-coupled Backend imports previously missed real native consumers.
 for helper, consumers in (
     ("tests/room_picker_alignment_harness.py", {"test_hades_frontend.py", "test_hades2_view_state_flow.py"}),
     ("tests/fixtures/hades2/save_editor_player_journey.py", {
+        "test_hades2_save_editor_player_journey.py", "test_hades2_advanced_save_frontend.py",
+        "test_hades2_save_record_frontend.py", "test_hades2_save_container_frontend.py",
+    }),
+    ("Backend/core/save_resolution.py", {
         "test_hades2_save_editor_player_journey.py", "test_hades2_advanced_save_frontend.py",
         "test_hades2_save_record_frontend.py", "test_hades2_save_container_frontend.py",
     }),

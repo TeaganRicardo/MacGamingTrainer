@@ -464,6 +464,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # Darwin target probe and LLDB/transport Backend modules run macOS checks, while
 # the pure-Python wire protocol stays on Linux fast path.
 for darwin_backend in (
+    "Backend/core/save_resolution.py",
     "Backend/core/target_probe.py",
     "Backend/core/process_time_warp.py",
     "Backend/debugger/lldb_time_warp.py",

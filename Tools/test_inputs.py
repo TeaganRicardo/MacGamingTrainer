@@ -14,6 +14,30 @@ from test_inventory import ROOT, declarations, load_macos_only_tests
 PATH_LITERAL = re.compile(r"[\w.-]+(?:/[\w.-]+)*")
 SUPPORT_ROOTS = ("tests", "Tools")
 FILE_ROOTS = (*SUPPORT_ROOTS, "Backend", "Sources", "Resources", "Native", "ContractFixtures", "docs", ".github")
+# Pure-Python Backend modules covered by Linux contracts even when imported or
+# invoked by a macOS harness or helper, keeping pure-Python protocol, server,
+# save-codec, and game-adapter changes on the Linux fast path (see
+# tests/test_ci_docs_only.py).
+PORTABLE_BACKEND_IMPORTS = frozenset({
+    "Backend/core/__init__.py",
+    "Backend/core/adapter.py",
+    "Backend/core/errors.py",
+    "Backend/core/lz4_block.py",
+    "Backend/core/module_manifest.py",
+    "Backend/core/operation_profile.py",
+    "Backend/core/protocol.py",
+    "Backend/core/registry.py",
+    "Backend/core/save_service.py",
+    "Backend/core/server.py",
+    "Backend/core/structured_save_edit.py",
+    "Backend/games/__init__.py",
+    "Backend/games/hades2/__init__.py",
+    "Backend/games/hades2/adapter.py",
+    "Backend/games/hades2/command_contract.py",
+    "Backend/games/hades2/save_document.py",
+    "Backend/games/hades2/save_provider.py",
+    "Backend/games/hades2/save_workspace.py",
+})
 # Exercise both a native build fixture and a Host journey when their runner changes.
 MACOS_RUNNER_PATHS = frozenset({
     "Tools/run_macos_checks.sh",
@@ -130,11 +154,13 @@ def load_macos_test_dependencies(
 ) -> dict[str, frozenset[str]]:
     """Return the input paths of each native entrypoint, including indirect helpers.
 
-    Portable Backend implementation remains Linux-owned. A macOS fixture
-    declares the Backend files it actually executes in MGT_INPUTS, where
-    indirect runtime/data inputs are also declared. A trailing slash denotes
-    a directory input. When the product's source directories are supplied,
-    include the sources compiled by Swift harnesses.
+    Pure-Python Backend modules listed in PORTABLE_BACKEND_IMPORTS remain
+    Linux-owned unless explicitly declared in MGT_INPUTS. Any other Backend
+    module imported or referenced by a test or its tests/ helpers is derived
+    automatically, alongside indirect runtime/data inputs declared in
+    MGT_INPUTS (where a trailing slash denotes a directory input). When the
+    product's source directories are supplied, include the sources compiled by
+    Swift harnesses.
     """
     changed = set(changed_paths)
 
@@ -144,7 +170,8 @@ def load_macos_test_dependencies(
 
     def imported_files(tree: ast.Module, source: PurePosixPath) -> set[str]:
         found = set()
-        search_path = (source.parent, *map(PurePosixPath, SUPPORT_ROOTS), PurePosixPath("."))
+        roots = (*SUPPORT_ROOTS, "Backend") if source.parts and source.parts[0] == "tests" else SUPPORT_ROOTS
+        search_path = (source.parent, *map(PurePosixPath, roots), PurePosixPath("."))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = [alias.name for alias in node.names]
@@ -174,7 +201,7 @@ def load_macos_test_dependencies(
                             if exists(initializer):
                                 found.add(initializer)
                         break
-        return found
+        return {path for path in found if path not in PORTABLE_BACKEND_IMPORTS}
 
     def named_files(tree: ast.Module, source: PurePosixPath) -> set[str]:
         found = set()
@@ -188,8 +215,8 @@ def load_macos_test_dependencies(
             if not path.parts or ".." in path.parts:
                 continue
             candidates = [source.parent / path, PurePosixPath("tests") / path]
-            if path.parts[0] == "Backend" and path.suffix == ".py":
-                continue  # Ordinary Backend Python is covered by portable contracts.
+            if path.parts[0] == "Backend" and path.suffix == ".py" and relative in PORTABLE_BACKEND_IMPORTS:
+                continue  # Pure-Python portable modules are covered by Linux contracts.
             if path.parts[0] in FILE_ROOTS or relative in {"build.sh", "Info.plist"}:
                 candidates.append(path)
             found.update(candidate.as_posix() for candidate in candidates if exists(candidate.as_posix()))
