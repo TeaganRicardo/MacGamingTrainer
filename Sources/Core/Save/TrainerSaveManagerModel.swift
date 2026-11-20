@@ -239,7 +239,10 @@ final class TrainerSaveManagerModel: ObservableObject {
                 return
             }
             let key = failure.presentation.trimmingCharacters(in: .whitespacesAndNewlines)
-            setError(key.isEmpty ? "host.save.error.failed" : key, arguments: failure.presentationArguments)
+            setError(
+                key.isEmpty ? "host.save.error.failed" : key,
+                arguments: key.isEmpty ? [] : failure.presentationArguments
+            )
             return
         }
         guard let result = reply.result else { return }

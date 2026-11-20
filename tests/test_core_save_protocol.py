@@ -186,25 +186,26 @@ assert rollback_failed['error'] == {
 }
 assert adapter.calls == []
 
-def fail_with_blank_rollback(snapshot_id, preserve_current=True):
-    raise SaveRollbackError('restore and rollback failed without path', '   ')
-router.save_service.restore = fail_with_blank_rollback
-logging.disable(logging.CRITICAL)
-try:
-    blank_rollback = router.handle({
-        'id':'rr2',
-        'command':'core.save.restore',
-        'params':{'snapshotId':snapshot_id,'preserveCurrent':True},
-    })
-finally:
-    logging.disable(logging.NOTSET)
-    router.save_service.restore = real_restore
-assert blank_rollback['ok'] is False
-assert blank_rollback['error'] == {
-    'code':'rollback_failed',
-    'presentation':'host.save.error.restoreFailed',
-    'diagnostic':'restore and rollback failed without path',
-}
+for missing_path in ('   ', None):
+    def fail_with_blank_rollback(snapshot_id, preserve_current=True):
+        raise SaveRollbackError('restore and rollback failed without path', missing_path)
+    router.save_service.restore = fail_with_blank_rollback
+    logging.disable(logging.CRITICAL)
+    try:
+        blank_rollback = router.handle({
+            'id':'rr2' if missing_path == '   ' else 'rr3',
+            'command':'core.save.restore',
+            'params':{'snapshotId':snapshot_id,'preserveCurrent':True},
+        })
+    finally:
+        logging.disable(logging.NOTSET)
+        router.save_service.restore = real_restore
+    assert blank_rollback['ok'] is False
+    assert blank_rollback['error'] == {
+        'code':'rollback_failed',
+        'presentation':'host.save.error.restoreFailed',
+        'diagnostic':'restore and rollback failed without path',
+    }
 
 # Ordinary game command routing is unchanged.
 game = router.handle({'id':'g1','command':'poke','params':{'x':1}})

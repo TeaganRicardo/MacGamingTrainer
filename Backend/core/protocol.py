@@ -299,9 +299,7 @@ class JsonlRequestRouter:
             else:
                 code = 'invalid_request' if isinstance(error, ValueError) else 'operation_failed'
                 if isinstance(command, str) and command.startswith(_CORE_SAVE_PREFIX):
-                    reply = self.error_reply(
-                        request_id, code, 'host.save.error.failed', state, diagnostic=str(error)
-                    )
+                    reply = self.error_reply(request_id, code, 'host.save.error.failed', state, diagnostic=str(error))
                 else:
                     reply = self.core_error_reply(request_id, code, str(error), state)
             reply_json = self.encode_reply(reply)
