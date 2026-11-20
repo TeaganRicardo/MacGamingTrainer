@@ -63,7 +63,8 @@ for raw in sys.stdin:
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
                 'error':{
                     'code':'rollback_failed',
-                    'presentation':'host.save.error.restoreFailed',
+                    'presentation':'host.save.error.rollbackFailed',
+                    'arguments':[str(recovery)],
                     'recoveryPath': str(recovery),
                 },
             }), flush=True)
@@ -75,7 +76,6 @@ for raw in sys.stdin:
                 'error':{
                     'code':'rollback_failed',
                     'presentation':'host.save.error.restoreFailed',
-                    'recoveryPath': '   ',
                 },
             }), flush=True)
             continue
@@ -85,8 +85,19 @@ for raw in sys.stdin:
             print(json.dumps({
                 'type':'result','id':req['id'],'protocolVersion':6,
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
-                'error':{'code':'save_unsafe','presentation':'后端拒绝显示存档'},
+                'error':{'code':'save_unsafe','presentation':'host.save.error.unsafe'},
                 'result':{'folder':str(pathlib.Path(__file__).parent)},
+            }), flush=True)
+            continue
+        if params.get('snapshotId') == 'presentation-pass-through':
+            print(json.dumps({
+                'type':'result','id':req['id'],'protocolVersion':6,
+                'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
+                'error':{
+                    'code':'save_busy',
+                    'presentation':'host.save.error.fromPython',
+                    'arguments':['arg-from-python'],
+                },
             }), flush=True)
             continue
         result['folder']=str(pathlib.Path(__file__).parent)
@@ -434,6 +445,12 @@ struct Runner {
             model.error != "host.save.error.restoreFailed" ||
             !model.errorArguments.isEmpty {
             fail("rollback_failed with blank path did not fall back to restoreFailed: \(model.error) \(model.errorArguments)")
+        }
+        model.reveal(id: "presentation-pass-through")
+        if !waitUntil(2.0, { !model.busy }) ||
+            model.error != "host.save.error.fromPython" ||
+            model.errorArguments != ["arg-from-python"] {
+            fail("SaveManager remapped failure.code instead of forwarding Python presentation: \(model.error) \(model.errorArguments)")
         }
 
         // TrainerGameContext owns event-driven staged restore application on

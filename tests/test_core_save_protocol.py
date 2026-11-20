@@ -186,18 +186,55 @@ assert rollback_failed['error'] == {
 }
 assert adapter.calls == []
 
+for missing_path in ('   ', None):
+    def fail_with_blank_rollback(snapshot_id, preserve_current=True):
+        raise SaveRollbackError('restore and rollback failed without path', missing_path)
+    router.save_service.restore = fail_with_blank_rollback
+    logging.disable(logging.CRITICAL)
+    try:
+        blank_rollback = router.handle({
+            'id':'rr2' if missing_path == '   ' else 'rr3',
+            'command':'core.save.restore',
+            'params':{'snapshotId':snapshot_id,'preserveCurrent':True},
+        })
+    finally:
+        logging.disable(logging.NOTSET)
+        router.save_service.restore = real_restore
+    assert blank_rollback['ok'] is False
+    assert blank_rollback['error'] == {
+        'code':'rollback_failed',
+        'presentation':'host.save.error.restoreFailed',
+        'diagnostic':'restore and rollback failed without path',
+    }
+
 # Ordinary game command routing is unchanged.
 game = router.handle({'id':'g1','command':'poke','params':{'x':1}})
 assert game['ok'] is True and game['result']['gameCommand'] == 'poke'
 assert [call[0] for call in adapter.calls] == ['poke']
 
-# Reserved unknown/invalid Core save requests never fall through to the game adapter.
+# Reserved unknown/invalid Core save requests never fall through to the game adapter
+# and carry the Core Save fallback presentation key directly from Python.
 logging.disable(logging.CRITICAL)
 try:
     unknown = router.handle({'id':'u1','command':'core.save.unknown','params':{}})
     assert unknown['ok'] is False
+    assert unknown['error']['presentation'] == 'host.save.error.failed'
     invalid = router.handle({'id':'i1','command':'core.save.restore','params':{'snapshotId':snapshot_id,'preserveCurrent':'yes'}})
     assert invalid['ok'] is False and invalid['error']['code'] == 'invalid_request'
+    assert invalid['error']['presentation'] == 'host.save.error.failed'
+    invalid_rename = router.handle({'id':'i2','command':'core.save.rename','params':{'snapshotId':snapshot_id,'name':'bad/name'}})
+    assert invalid_rename['ok'] is False and invalid_rename['error']['code'] == 'invalid_request'
+    assert invalid_rename['error']['presentation'] == 'host.save.error.failed'
+    def fail_backup(**_kw):
+        raise OSError('disk full')
+    real_backup = router.save_service.backup
+    router.save_service.backup = fail_backup
+    try:
+        failed_backup = router.handle({'id':'backup-oserror','command':'core.save.backup','params':{}})
+    finally:
+        router.save_service.backup = real_backup
+    assert failed_backup['ok'] is False and failed_backup['error']['code'] == 'operation_failed'
+    assert failed_backup['error']['presentation'] == 'host.save.error.failed'
 
     # Unsupported module produces the generic Core capability error, not a game dispatch.
     plain_context = GameAdapterContext(
