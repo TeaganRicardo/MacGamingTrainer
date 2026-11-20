@@ -243,7 +243,17 @@ class SaveSnapshotStore:
             raise SaveNotFoundError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
-    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None, describe=None, *, origin="manual"):
+    def create_snapshot(
+        self,
+        resolver,
+        hot=False,
+        display_name=None,
+        name_details=None,
+        created_at=None,
+        describe=None,
+        *,
+        origin="manual",
+    ):
         if not callable(resolver):
             raise ValueError('Snapshot creation requires a resolver callback.')
         if type(hot) is not bool:
@@ -269,19 +279,27 @@ class SaveSnapshotStore:
                 try:
                     description = describe(tuple(current), created_at)
                     if not isinstance(description, (tuple, list)) or len(description) not in (2, 3):
-                        raise ValueError('Snapshot describe callback must return (name, details[, localizedPresentation]).')
+                        raise ValueError(
+                            'Snapshot describe callback must return (name, details[, localizedPresentation]).'
+                        )
                     described_name, described_details = description[:2]
                     if described_name is not None:
                         described_name = _validate_display_name(described_name)
                     described_details = _validate_name_details(described_details)
-                    described_localized = _validate_localized_presentation(description[2] if len(description) == 3 else {})
+                    described_localized = _validate_localized_presentation(
+                        description[2] if len(description) == 3 else {}
+                    )
                 except Exception:
                     logging.exception('Snapshot provider presentation is invalid; using a timestamp name')
                     described_name, described_details, described_localized = (None, [], {})
                     naming_warning = 'provider_invalid'
             name = explicit_name
             if name is None:
-                name = _validate_display_name(described_name) if described_name is not None else created_at.replace('T', ' ').replace(':', '-')
+                name = (
+                    _validate_display_name(described_name)
+                    if described_name is not None
+                    else created_at.replace('T', ' ').replace(':', '-')
+                )
             details = explicit_details if explicit_details is not None else _validate_name_details(described_details)
             localized_presentation = _validate_localized_presentation(described_localized)
             automatic_name = explicit_name is None and bool(localized_presentation)
@@ -301,12 +319,14 @@ class SaveSnapshotStore:
                     if _sha256(destination) != before or _sha256(row.source_path) != before:
                         raise _SaveSnapshotRace('Save changed while copying.')
                     copied_hashes[key] = before
-                    manifest_files.append({
-                        'rootId': row.root_id,
-                        'relativePath': row.relative_path,
-                        'sha256': before,
-                        'size': destination.stat().st_size,
-                    })
+                    manifest_files.append(
+                        {
+                            'rootId': row.root_id,
+                            'relativePath': row.relative_path,
+                            'sha256': before,
+                            'size': destination.stat().st_size,
+                        }
+                    )
 
                 after = self._normalize_sources(resolver())
                 if [(row.root_id, row.relative_path) for row in after] != [
@@ -347,7 +367,11 @@ class SaveSnapshotStore:
                 return self._row(final, manifest, valid=True)
             except _SaveSnapshotRace as error:
                 if not hot or attempt + 1 >= attempts:
-                    message = 'Save changed during snapshot creation.' if not hot else 'Save did not become stable during hot backup.'
+                    message = (
+                        'Save changed during snapshot creation.'
+                        if not hot
+                        else 'Save did not become stable during hot backup.'
+                    )
                     raise SaveSnapshotBusyError(message) from error
                 time.sleep(0.08 * (attempt + 1))
             finally:
@@ -377,9 +401,7 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('Snapshot createdAt is invalid.')
         _validate_display_name(manifest.get('displayName'))
         manifest['nameDetails'] = _validate_name_details(manifest.get('nameDetails', []))
-        manifest['localizedPresentation'] = _validate_localized_presentation(
-            manifest.get('localizedPresentation', {})
-        )
+        manifest['localizedPresentation'] = _validate_localized_presentation(manifest.get('localizedPresentation', {}))
         manifest['automaticName'] = manifest.get('automaticName', False)
         if manifest.get('namingWarning', '') not in ('', 'provider_invalid'):
             raise SaveSnapshotError('Snapshot naming warning is invalid.')
@@ -392,7 +414,11 @@ class SaveSnapshotStore:
         manifest['origin'] = manifest.get('origin', 'unclassified')
         manifest['protected'] = manifest.get('protected', True)
         manifest['retentionEligible'] = manifest.get('retentionEligible', False)
-        if not isinstance(manifest['origin'], str) or manifest['origin'] not in _SNAPSHOT_ORIGINS or type(manifest['protected']) is not bool:
+        if (
+            not isinstance(manifest['origin'], str)
+            or manifest['origin'] not in _SNAPSHOT_ORIGINS
+            or type(manifest['protected']) is not bool
+        ):
             raise SaveSnapshotError('Snapshot origin/protection metadata is invalid.')
         if type(manifest['retentionEligible']) is not bool or (
             manifest['retentionEligible'] and manifest['origin'] != 'automaticPreEdit'
@@ -457,8 +483,11 @@ class SaveSnapshotStore:
 
     def read_source_file(self, snapshot_id, root_id, relative_path):
         verified = self.load_verified_snapshot(snapshot_id)
-        matches = [item for item in verified['manifest']['files']
-            if (item['rootId'], item['relativePath']) == (root_id, relative_path)]
+        matches = [
+            item
+            for item in verified['manifest']['files']
+            if (item['rootId'], item['relativePath']) == (root_id, relative_path)
+        ]
         if len(matches) != 1:
             raise SaveSnapshotError('Snapshot source is missing or ambiguous.')
         item = matches[0]
@@ -508,9 +537,7 @@ class SaveSnapshotStore:
 
             if valid:
                 name_details = _validate_name_details(manifest.get('nameDetails', []))
-                localized_presentation = _validate_localized_presentation(
-                    manifest.get('localizedPresentation', {})
-                )
+                localized_presentation = _validate_localized_presentation(manifest.get('localizedPresentation', {}))
                 automatic_name = manifest.get('automaticName', False) is True
 
         return {
@@ -561,8 +588,10 @@ class SaveSnapshotStore:
         Include the manifest and invalid/unlisted files, not a manifest's claimed
         sizes. A permission/read failure is unknown size, never reported as zero.
         """
+
         def unreadable(error):
             raise error
+
         try:
             if Path(root).is_symlink() or not Path(root).is_dir():
                 return None
@@ -601,19 +630,23 @@ class SaveSnapshotStore:
 
     def rename_snapshot(self, snapshot_id, display_name):
         name = _validate_display_name(display_name)
+
         def rename(manifest):
             manifest['displayName'] = name
             manifest['automaticName'] = False
             manifest['protected'] = True
+
         return self._update_metadata(snapshot_id, rename)
 
     def protect_snapshot(self, snapshot_id, protected):
         if type(protected) is not bool:
             raise ValueError('Snapshot protection must be boolean.')
+
         def protect(manifest):
             if manifest['origin'] != 'automaticPreEdit':
                 raise ValueError('Only automatic pre-edit backups participate in retention.')
             manifest['protected'] = protected
+
         return self._update_metadata(snapshot_id, protect)
 
     def confirm_pre_edit(self, snapshot_id):
@@ -623,6 +656,7 @@ class SaveSnapshotStore:
             if manifest['origin'] != 'automaticPreEdit':
                 raise SaveSnapshotError('Successful edit backup has an unexpected origin.')
             manifest['retentionEligible'] = True
+
         return self._update_metadata(snapshot_id, confirm)
 
     def delete_snapshot(self, snapshot_id):

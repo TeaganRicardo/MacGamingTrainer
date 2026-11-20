@@ -162,7 +162,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
 
     /// The sidebar connection card's single production composition. The module
     /// request gate governs connect/launch/refresh; restart uses Host eligibility.
-    func connectionStatusCard(onLaunch: (() -> Void)?) -> TrainerConnectionStatusCard {
+    func connectionStatusCard(onLaunch: (@MainActor () -> Void)?) -> TrainerConnectionStatusCard {
         TrainerConnectionStatusCard(
             connected: model.connected,
             backendAvailable: model.backendAvailable,

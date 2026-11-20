@@ -27,6 +27,7 @@ package struct TrainerBackendStatus: Equatable {
 /// unexpected worker exit gets a bounded restart attempt; once the worker is
 /// back, the host-level target-process coordinator decides whether to reconnect
 /// the active game. No window activation and no process polling are involved.
+@MainActor
 package final class TrainerBackendSession {
     private struct Configuration {
         let descriptor: GameModuleDescriptor

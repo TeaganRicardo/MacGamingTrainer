@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Game-agnostic JSONL host. Game behavior lives under Backend/games/<game_id>."""
+
 import argparse
 import logging
 import os
@@ -12,10 +13,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from core.operation_profile import correlation, operation, record
-from core.framing import JsonLineFileSession, decode_json
-from core.protocol import JsonlRequestRouter
-from core.registry import available_games, create_adapter
+# Direct script execution needs the Backend path before importing core.
+from core.operation_profile import correlation, operation, record  # noqa: E402
+from core.framing import JsonLineFileSession, decode_json  # noqa: E402
+from core.protocol import JsonlRequestRouter  # noqa: E402
+from core.registry import available_games, create_adapter  # noqa: E402
 
 _LOG_FORMAT = '%(levelname)s %(message)s'
 
@@ -65,8 +67,7 @@ def process_line(router, line):
     started = time.perf_counter()
     request = decode_json(line)
     decode = time.perf_counter() - started
-    return _process_request(router, request, decode,
-                            len(line.encode('utf-8')) if isinstance(line, str) else len(line))
+    return _process_request(router, request, decode, len(line.encode('utf-8')) if isinstance(line, str) else len(line))
 
 
 def _process_request(router, request, decode_seconds, request_bytes):
@@ -77,8 +78,7 @@ def _process_request(router, request, decode_seconds, request_bytes):
             record('backend.request_decode', decode_seconds, request_bytes=request_bytes)
         encoded = router.handle_encoded(request)
         if correlation() is not None:
-            record('backend.reply_ready', 0.0,
-                   reply_bytes=len(encoded.encode('utf-8')) + 1)
+            record('backend.reply_ready', 0.0, reply_bytes=len(encoded.encode('utf-8')) + 1)
         return encoded
 
 

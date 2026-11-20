@@ -4,7 +4,7 @@ MGT_INPUTS = ("Sources/App.swift",)
 import subprocess
 import tempfile
 from pathlib import Path
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import compile_swift_test, main_actor_entrypoint
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = r'''
@@ -12,7 +12,10 @@ import AppKit
 import Carbon
 import Foundation
 
-let app = NSApplication.shared
+'''
+
+journey = r'''
+_ = NSApplication.shared
 var received: [String] = []
 GlobalHotkeys.selectGame("first")
 let first = GlobalHotkeys(gameID: "first") { received.append("first:" + $0) }
@@ -181,6 +184,6 @@ print("global_hotkey_routing_ok")
 with tempfile.TemporaryDirectory(prefix="mgt-hotkey-routing-") as directory:
     main = Path(directory) / "main.swift"
     binary = Path(directory) / "test"
-    main.write_text(SOURCE)
-    compile_swift_test(harness_sources=[main], output=binary, flags=(), cwd=ROOT)
+    main.write_text(SOURCE + main_actor_entrypoint(journey))
+    compile_swift_test(harness_sources=[main], output=binary, cwd=ROOT)
     subprocess.run([str(binary)], check=True)

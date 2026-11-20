@@ -16,6 +16,7 @@ enum TrainerShortcutCaptureIssue: Equatable {
 
 /// One key monitor per open capture. Injection keeps native key/monitor behavior
 /// testable without installing a global event tap or changing user preferences.
+@MainActor
 final class TrainerShortcutCaptureController: ObservableObject {
     typealias MonitorInstaller = (@escaping (NSEvent) -> NSEvent?) -> Any?
 
@@ -123,7 +124,7 @@ final class TrainerShortcutCaptureController: ObservableObject {
         }
     }
 
-    deinit {
+    isolated deinit {
         if let monitor { removeMonitor(monitor) }
         if let registrationToken { GlobalHotkeys.endShortcutCapture(registrationToken) }
     }

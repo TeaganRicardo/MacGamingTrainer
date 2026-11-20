@@ -12,8 +12,9 @@ class AdapterError(RuntimeError):
     `diagnostic` is technical detail that never reaches the player.
     """
 
-    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None,
-                 arguments: Sequence[Any] = ()):
+    def __init__(
+        self, code: str, presentation: str, *, diagnostic: Optional[str] = None, arguments: Sequence[Any] = ()
+    ):
         super().__init__(presentation)
         self.code = code
         self.presentation = presentation
@@ -26,8 +27,9 @@ class HostPresentationError(AdapterError):
 
     PRESENTATION_PREFIX = "host."
 
-    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None,
-                 arguments: Sequence[Any] = ()):
+    def __init__(
+        self, code: str, presentation: str, *, diagnostic: Optional[str] = None, arguments: Sequence[Any] = ()
+    ):
         if not isinstance(presentation, str) or not presentation.startswith(self.PRESENTATION_PREFIX):
             raise ValueError("Core presentation errors must use a host.* key.")
         super().__init__(
@@ -97,9 +99,11 @@ class GameAdapter(ABC):
 
     def metadata(self):
         metadata = dict(self.context.public_metadata)
-        metadata.update({
-            'id': self.game_id,
-            'displayName': self.display_name,
-            'protocolVersion': self.module_protocol_version,
-        })
+        metadata.update(
+            {
+                'id': self.game_id,
+                'displayName': self.display_name,
+                'protocolVersion': self.module_protocol_version,
+            }
+        )
         return metadata

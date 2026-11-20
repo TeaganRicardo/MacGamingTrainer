@@ -71,7 +71,7 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
         self.onSelect = onSelect
     }
 
-    private var launchAction: (() -> Void)? {
+    private var launchAction: (@MainActor () -> Void)? {
         guard let launch = model.launchActionFromHost else { return nil }
         return {
             // Retain the existing owner and refresh before choosing launch or

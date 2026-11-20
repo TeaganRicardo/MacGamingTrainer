@@ -26,6 +26,7 @@ NON_PRODUCT_TOOL_PATHS = {
     "Tools/discover_linux_tests.py",
     "Tools/release_tag.py",
     "Tools/module_inventory.py",
+    "Tools/python_static_requirements.txt",
     # The mutation audit runs only in Build 2 macOS convergence; a PR that edits
     # it has no macOS work to verify (tests/test_mutation_gate_contract.py is
     # portable).
@@ -33,6 +34,7 @@ NON_PRODUCT_TOOL_PATHS = {
     "Tools/run_linux_checks.sh",
     "Tools/ci_docs_only.py",
     "Tools/summarize_macos_coverage.py",
+    "pyproject.toml",
     *MACOS_RUNNER_PATHS,
 }
 # Only native/module composition boundaries need the reference-fixture compiler lane.

@@ -148,7 +148,7 @@ final class GenerateAction: NSObject {
  let model: Hades2TrainerModel
  var presses=0
  init(_ model: Hades2TrainerModel) { self.model=model }
- @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
+ @MainActor @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
 }
 @MainActor final class PageVisibility {
  let pageVisibility = TrainerGamePageVisibility()

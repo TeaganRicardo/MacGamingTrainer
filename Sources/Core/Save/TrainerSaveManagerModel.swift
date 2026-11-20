@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 
+@MainActor
 final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var snapshots: [TrainerSaveSnapshot] = []
     @Published private(set) var pendingRestore: TrainerPendingRestore?
@@ -29,7 +30,7 @@ final class TrainerSaveManagerModel: ObservableObject {
             self.observationWarning = "host.save.warning.workerChanged"
         }
     }
-    deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
+    isolated deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
 
     func refresh() {
         request("core.save.list", operation: "host.save.operation.refresh", successNotice: nil)

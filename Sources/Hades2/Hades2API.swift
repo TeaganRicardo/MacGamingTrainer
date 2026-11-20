@@ -280,6 +280,7 @@ final class Hades2API {
         self.session = session
     }
 
+    @MainActor
     func request(
         _ request: Hades2Request,
         runtimeConnected: Bool = true,

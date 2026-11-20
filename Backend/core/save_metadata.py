@@ -1,4 +1,5 @@
 """Metadata policy for Trainer-owned save copies."""
+
 import errno
 import ctypes
 import os
@@ -6,9 +7,17 @@ from pathlib import Path
 import shutil
 import stat
 
-_LOCKING_FLAGS = sum(getattr(stat, name, 0) for name in (
-    'UF_IMMUTABLE', 'SF_IMMUTABLE', 'UF_APPEND', 'SF_APPEND', 'UF_NOUNLINK', 'SF_NOUNLINK',
-))
+_LOCKING_FLAGS = sum(
+    getattr(stat, name, 0)
+    for name in (
+        'UF_IMMUTABLE',
+        'SF_IMMUTABLE',
+        'UF_APPEND',
+        'SF_APPEND',
+        'UF_NOUNLINK',
+        'SF_NOUNLINK',
+    )
+)
 if hasattr(os, 'chflags'):
     _fchflags = ctypes.CDLL(None, use_errno=True).fchflags
     _fchflags.argtypes = (ctypes.c_int, ctypes.c_uint)

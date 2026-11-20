@@ -5,28 +5,37 @@ verified replacement, baseline advancement and terminal recovery evidence.
 Game adapters supply a structured codec and retain save eligibility and meaning.
 There is deliberately no apply-bytes entrypoint.
 """
-from hashlib import sha256
+
+from __future__ import annotations
+
 import logging
 import os
-from pathlib import Path
 import tempfile
-from typing import Protocol
+from collections.abc import Iterable
+from hashlib import sha256
+from pathlib import Path
+from typing import TYPE_CHECKING, Generic, Optional, Protocol, TypeVar
 
 from .save_resolution import ResolvedSaveFile
 
+if TYPE_CHECKING:
+    from .save_service import CoreSaveService
 
-class StructuredSaveCodec(Protocol):
+_Document = TypeVar("_Document")
+
+
+class StructuredSaveCodec(Protocol[_Document]):
     """Game-owned adapter for one structured save document format."""
 
-    def decode(self, payload: bytes):
+    def decode(self, payload: bytes) -> _Document:
         """Decode bytes into the game's structured document type."""
         ...
 
-    def encode(self, document) -> bytes:
+    def encode(self, document: _Document) -> bytes:
         """Encode only the game's structured document type."""
         ...
 
-    def load(self, path: Path):
+    def load(self, path: Path) -> _Document:
         """Reload the installed physical document through the game codec."""
         ...
 
@@ -40,8 +49,9 @@ class StructuredSaveEditRecoveryError(ValueError):
 
     code = "rollback_failed"
 
-    def __init__(self, recovery_paths):
+    def __init__(self, recovery_paths: Iterable[str]) -> None:
         self.recovery_paths = tuple(recovery_paths)
+        self.arguments: tuple[str, ...]
         if self.recovery_paths:
             display = "\n".join(self.recovery_paths)
             super().__init__(
@@ -60,7 +70,7 @@ class StructuredSaveEditRecoveryError(ValueError):
             self.arguments = ()
 
 
-class StructuredSaveEditSession:
+class StructuredSaveEditSession(Generic[_Document]):
     """One pinned structured source and explicit physical replacement target."""
 
     __slots__ = (
@@ -79,16 +89,16 @@ class StructuredSaveEditSession:
 
     def __init__(
         self,
-        save_service,
-        codec,
-        source_file,
-        source_identity,
-        target,
-        original_sha256,
-        document,
+        save_service: CoreSaveService,
+        codec: StructuredSaveCodec[_Document],
+        source_file: ResolvedSaveFile,
+        source_identity: dict[str, str],
+        target: Optional[ResolvedSaveFile],
+        original_sha256: str,
+        document: _Document,
         *,
-        version_pinned=False,
-    ):
+        version_pinned: bool = False,
+    ) -> None:
         self._save_service = save_service
         self._codec = codec
         self._source_file = source_file
@@ -98,24 +108,24 @@ class StructuredSaveEditSession:
         self._source_sha256 = original_sha256
         self._original_sha256 = original_sha256
         self._document = document
-        self._recovery_paths = ()
+        self._recovery_paths: tuple[str, ...] = ()
         self._recovery_unresolved = False
 
     @classmethod
     def open(
         cls,
-        save_service,
-        source_identity,
-        codec,
+        save_service: CoreSaveService,
+        source_identity: object,
+        codec: StructuredSaveCodec[_Document],
         *,
-        snapshot_id=None,
-        target=None,
-        version_pinned=False,
-    ):
-        source_identity = cls._identity(source_identity, "source")
+        snapshot_id: Optional[str] = None,
+        target: object = None,
+        version_pinned: bool = False,
+    ) -> StructuredSaveEditSession[_Document]:
+        identity = cls._identity(source_identity, "source")
         selected, raw = save_service.read_source_file(
-            source_identity["rootId"],
-            source_identity["relativePath"],
+            identity["rootId"],
+            identity["relativePath"],
             snapshot_id,
         )
         document = codec.decode(raw)
@@ -123,7 +133,7 @@ class StructuredSaveEditSession:
             save_service,
             codec,
             selected,
-            source_identity,
+            identity,
             None,
             sha256(raw).hexdigest(),
             document,
@@ -134,7 +144,7 @@ class StructuredSaveEditSession:
         return session
 
     @staticmethod
-    def _identity(identity, role):
+    def _identity(identity: object, role: str) -> dict[str, str]:
         if (
             not isinstance(identity, dict)
             or set(identity) != {"rootId", "relativePath"}
@@ -143,17 +153,15 @@ class StructuredSaveEditSession:
             or not isinstance(identity["relativePath"], str)
             or not identity["relativePath"]
         ):
-            raise ValueError(
-                "Structured Save Editor {} must identify one physical save file.".format(role)
-            )
+            raise ValueError("Structured Save Editor {} must identify one physical save file.".format(role))
         return {"rootId": identity["rootId"], "relativePath": identity["relativePath"]}
 
-    def _resolve_target(self, identity):
-        identity = self._identity(identity, "target")
+    def _resolve_target(self, identity: object) -> ResolvedSaveFile:
+        selected = self._identity(identity, "target")
         matches = [
-            row for row in self._save_service.resolved_files()
-            if (row.root_id, row.relative_path)
-            == (identity["rootId"], identity["relativePath"])
+            row
+            for row in self._save_service.resolved_files()
+            if (row.root_id, row.relative_path) == (selected["rootId"], selected["relativePath"])
         ]
         if len(matches) != 1:
             raise ValueError("Structured Save Editor target is missing or ambiguous.")
@@ -165,27 +173,27 @@ class StructuredSaveEditSession:
         return ResolvedSaveFile(row.root_id, row.relative_path, physical_path)
 
     @property
-    def document(self):
+    def document(self) -> _Document:
         return self._document
 
     @document.setter
-    def document(self, value):
+    def document(self, value: _Document) -> None:
         self._document = value
 
     @property
-    def source_identity(self):
+    def source_identity(self) -> dict[str, str]:
         return dict(self._source_identity)
 
     @property
-    def source_sha256(self):
+    def source_sha256(self) -> str:
         return self._source_sha256
 
     @property
-    def original_sha256(self):
+    def original_sha256(self) -> str:
         return self._original_sha256
 
     @property
-    def target(self):
+    def target(self) -> Optional[dict[str, str]]:
         if self._target is None:
             return None
         return {
@@ -194,46 +202,42 @@ class StructuredSaveEditSession:
         }
 
     @property
-    def relative_path(self):
-        return (
-            self._target.relative_path
-            if self._target is not None
-            else self._source_file.relative_path
-        )
+    def relative_path(self) -> str:
+        return self._target.relative_path if self._target is not None else self._source_file.relative_path
 
     @property
-    def recovery_path(self):
+    def recovery_path(self) -> Optional[str]:
         return self._recovery_paths[0] if len(self._recovery_paths) == 1 else None
 
     @property
-    def recovery_paths(self):
+    def recovery_paths(self) -> tuple[str, ...]:
         return self._recovery_paths
 
     @property
-    def recovery_unresolved(self):
+    def recovery_unresolved(self) -> bool:
         return self._recovery_unresolved
 
-    def set_target(self, identity):
+    def set_target(self, identity: object) -> Optional[dict[str, str]]:
         self._target = self._resolve_target(identity)
         return self.target
 
-    def _encode(self, document):
+    def _encode(self, document: _Document) -> bytes:
         payload = self._codec.encode(document)
         if type(payload) is not bytes:
             raise TypeError("Structured save codec must return bytes.")
         return payload
 
-    def _recovery_snapshot(self):
+    def _recovery_snapshot(self) -> frozenset[str]:
         paths = self._save_service.recovery_paths()
         if not isinstance(paths, (list, tuple)) or any(not isinstance(path, str) for path in paths):
             raise RuntimeError("Core Save returned invalid recovery evidence.")
         return frozenset(paths)
 
-    def _record_recovery(self, paths):
+    def _record_recovery(self, paths: Iterable[str]) -> None:
         self._recovery_paths = tuple(sorted(set(paths)))
         self._recovery_unresolved = True
 
-    def _capture_recovery_after_failure(self, error, before):
+    def _capture_recovery_after_failure(self, error: BaseException, before: frozenset[str]) -> None:
         direct = getattr(error, "recovery_path", None)
         if direct is not None:
             self._record_recovery((str(direct),))
@@ -249,11 +253,11 @@ class StructuredSaveEditSession:
         if added:
             self._record_recovery(added)
 
-    def _require_resolved(self):
+    def _require_resolved(self) -> None:
         if self._recovery_unresolved:
             raise StructuredSaveEditRecoveryError(self._recovery_paths)
 
-    def apply(self):
+    def apply(self) -> dict[str, object]:
         self._require_resolved()
         if self._target is None:
             raise ValueError("Save Editor requires an explicitly selected physical write target.")
@@ -284,16 +288,14 @@ class StructuredSaveEditSession:
                 staged,
             )
 
-            def verify_installed():
+            def verify_installed() -> None:
                 installed = self._codec.load(target_path)
                 if self._encode(installed) != encoded:
                     raise StructuredSaveEditValidationError(
                         "Installed structured save did not round-trip to the edited document."
                     )
 
-            expected_hashes = (
-                None if self._version_pinned else {key: self._original_sha256}
-            )
+            expected_hashes = None if self._version_pinned else {key: self._original_sha256}
             try:
                 result = self._save_service.replace_files(
                     (replacement,),

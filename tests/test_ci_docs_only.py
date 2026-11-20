@@ -50,6 +50,8 @@ assert_scope(
     macos=False,
     module_build=False,
 )
+for tool_input in ("pyproject.toml", "Tools/python_static_requirements.txt"):
+    assert_scope([tool_input], docs_only=False, linux=True, macos=False, module_build=False)
 # Portable tests read documentation (VERSIONING.md, GAME_MODULES.md and the
 # reference snapshots), so every documentation-only diff keeps the Linux lane.
 tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, text=True, capture_output=True).stdout.split()

@@ -23,7 +23,9 @@ class ProcessTimeWarpController:
     def __init__(self, driver, helper_path, image_names):
         self.driver = driver
         self.helper_path = Path(helper_path)
-        if not image_names or any(not isinstance(name, str) or not name or "\n" in name or "\0" in name for name in image_names):
+        if not image_names or any(
+            not isinstance(name, str) or not name or "\n" in name or "\0" in name for name in image_names
+        ):
             raise ValueError("Time Warp image allowlist is invalid.")
         self.image_payload = "\n".join(image_names).encode("utf-8")
         if len(self.image_payload) >= 1024:
@@ -50,7 +52,8 @@ class ProcessTimeWarpController:
     def _install_error(code):
         if code == -7:
             return ProcessTimeWarpError(
-                "restart_required", "host.timeWarp.error.partialInstall",
+                "restart_required",
+                "host.timeWarp.error.partialInstall",
                 diagnostic="Some Time Warp clock slots could not be rebound; the helper was reset to 1x.",
             )
         if code == -3:
@@ -70,7 +73,8 @@ class ProcessTimeWarpController:
         abi = self.driver.abi()
         if abi != self.ABI_VERSION:
             raise ProcessTimeWarpError(
-                "time_warp_abi_mismatch", "host.timeWarp.error.abiMismatchVersion",
+                "time_warp_abi_mismatch",
+                "host.timeWarp.error.abiMismatchVersion",
                 arguments=(self.ABI_VERSION, abi),
                 diagnostic=f"Time Warp helper ABI 不兼容（需要 {self.ABI_VERSION}，当前 {abi}）。",
             )
@@ -81,7 +85,8 @@ class ProcessTimeWarpController:
             raise self._install_error(-7)
         if state not in (0, 1):
             raise ProcessTimeWarpError(
-                "restart_required", "host.timeWarp.error.installStateUnknown",
+                "restart_required",
+                "host.timeWarp.error.installStateUnknown",
                 diagnostic=f"Time Warp helper installation state is not usable ({state}).",
             )
         return state
@@ -90,7 +95,8 @@ class ProcessTimeWarpController:
         actual = self.driver.get_speed()
         if not math.isfinite(actual) or abs(actual - speed) > 0.000001:
             raise ProcessTimeWarpError(
-                "time_warp_verify_failed", "host.timeWarp.error.verifyFailed",
+                "time_warp_verify_failed",
+                "host.timeWarp.error.verifyFailed",
                 arguments=(f"{speed:g}", f"{actual:g}"),
                 diagnostic=f"Time Warp 设置校验失败（目标 {speed:g}，实际 {actual:g}）。",
             )
@@ -102,8 +108,10 @@ class ProcessTimeWarpController:
             raise self._install_error(code)
         if code != 0:
             raise ProcessTimeWarpError(
-                "time_warp_set_failed", "host.timeWarp.error.setFailed",
-                arguments=(code,), diagnostic=f"Time Warp 设置失败（{code}）。",
+                "time_warp_set_failed",
+                "host.timeWarp.error.setFailed",
+                arguments=(code,),
+                diagnostic=f"Time Warp 设置失败（{code}）。",
             )
         return self._verify_speed(speed)
 

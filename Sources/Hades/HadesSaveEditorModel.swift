@@ -199,6 +199,7 @@ struct HadesSaveFileIdentity: Decodable {
     var id: String { rootId + "/" + relativePath }
 }
 
+@MainActor
 final class HadesSaveEditorModel: ObservableObject {
     private struct Inventory: Decodable {
         let sources: [HadesSaveFile]; let targets: [HadesSaveFile]; let defaultSource: HadesSaveFileIdentity?
@@ -279,7 +280,7 @@ final class HadesSaveEditorModel: ObservableObject {
             self.failures["workspace"] = TrainerTextToken(key: "host.save.error.workspaceExpired")
         }
     }
-    deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
+    isolated deinit { if let lifecycleObserver { session.removeLifecycleObserver(lifecycleObserver) } }
     var canEditRows: Bool {
         requests.owns(workspaceID: workspaceID, baselineGeneration: baselineGeneration) &&
             readyGeneration == baselineGeneration && !applying && recoveryPath == nil

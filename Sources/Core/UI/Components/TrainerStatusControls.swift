@@ -13,7 +13,7 @@ struct TrainerConnectionStatusCard: View {
     let onPrimary: () -> Void
     let onRestart: () -> Void
     let targetRunning: Bool
-    let onLaunch: (() -> Void)?
+    let onLaunch: (@MainActor () -> Void)?
 
     init(
         connected: Bool,

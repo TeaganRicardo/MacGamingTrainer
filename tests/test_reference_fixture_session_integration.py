@@ -9,14 +9,13 @@ MGT_INPUTS = (
 
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.multi_game import JOURNEY_BUDGETS
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import compile_swift_test, main_actor_entrypoint
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +62,9 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+"""
+
+journey = r"""
 let args = CommandLine.arguments
 if args.count != 5 { fail("expected backend, Python, target PID and journey mode") }
 let descriptor = ReferenceFixtureGameModule.descriptor
@@ -410,7 +412,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     shutil.copy2(ROOT / "Info.plist", project / "Info.plist")
 
     main_swift = project / "main.swift"
-    main_swift.write_text(textwrap.dedent(harness), encoding="utf-8")
+    main_swift.write_text(harness + main_actor_entrypoint(journey), encoding="utf-8")
     binary = project / "reference_fixture_session_test"
 
     compile_swift_test(
@@ -418,7 +420,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
         checkout=project,
         harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_swift],
         output=binary,
-        flags=(),
         swiftc=SWIFTC,
         cwd=project,
     )

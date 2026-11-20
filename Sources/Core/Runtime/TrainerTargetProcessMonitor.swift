@@ -26,6 +26,7 @@ package struct TrainerTargetObservation: Equatable {
 /// useful second attach opportunity after launch because the target game is already
 /// foreground and cannot be paused merely to focus the trainer. The initial snapshot
 /// covers the case where the target game was already running before the trainer launched.
+@MainActor
 final class TrainerTargetProcessMonitor: ObservableObject {
     @Published private(set) var targetObservation = TrainerTargetObservation(
         isRunning: false,
@@ -60,41 +61,48 @@ final class TrainerTargetProcessMonitor: ObservableObject {
             object: workspace,
             queue: .main
         ) { [weak self] note in
-            guard let self,
-                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  self.matches(app) else { return }
-            self.targetObservation = TrainerTargetObservation(
-                isRunning: true,
-                launchGeneration: self.launchGeneration &+ 1,
-                processIdentifier: app.processIdentifier
-            )
+            // NotificationCenter delivers this observer on the requested main queue.
+            MainActor.assumeIsolated {
+                guard let self,
+                      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      self.matches(app) else { return }
+                self.targetObservation = TrainerTargetObservation(
+                    isRunning: true,
+                    launchGeneration: self.launchGeneration &+ 1,
+                    processIdentifier: app.processIdentifier
+                )
+            }
         })
         observers.append(center.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: workspace,
             queue: .main
         ) { [weak self] note in
-            guard let self,
-                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  self.matches(app) else { return }
-            // Activation proves the game is running for Save safety, but it
-            // does not grant a launch-time automatic debugger attachment.
-            self.publishPresence(app)
-            self.activationGeneration &+= 1
+            MainActor.assumeIsolated {
+                guard let self,
+                      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      self.matches(app) else { return }
+                // Activation proves the game is running for Save safety, but it
+                // does not grant a launch-time automatic debugger attachment.
+                self.publishPresence(app)
+                self.activationGeneration &+= 1
+            }
         })
         observers.append(center.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
             object: workspace,
             queue: .main
         ) { [weak self] note in
-            guard let self,
-                  let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  self.matches(app) else { return }
-            self.publishCurrentPresence()
+            MainActor.assumeIsolated {
+                guard let self,
+                      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      self.matches(app) else { return }
+                self.publishCurrentPresence()
+            }
         })
     }
 
-    deinit {
+    isolated deinit {
         let center = workspace.notificationCenter
         observers.forEach(center.removeObserver)
     }
