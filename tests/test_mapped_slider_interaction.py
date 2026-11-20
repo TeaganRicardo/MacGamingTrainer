@@ -242,6 +242,159 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
         mouse(.leftMouseUp, x: upperEndpoint, in: window)
         check(model.value == 0.1 && model.commits == 6 && model.preview == nil,
               "disabled pointer or AX input changed the value")
+        check(slider().help == "Adjust speed",
+              "mapped slider did not expose accessibilityHint as AXHelp: \(String(describing: slider().help))")
+
+        // Verify accent-filled track, tick marks, and @Environment(\.trainerTheme) rendering.
+        model.width = 240
+        window.setContentSize(NSSize(width: 264, height: 54))
+        model.enabled = true
+        model.value = 10
+        pump(0.2)
+        host.layoutSubtreeIfNeeded()
+        do {
+            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let scaleX = CGFloat(bitmap.pixelsWide) / host.bounds.width
+            let scaleY = CGFloat(bitmap.pixelsHigh) / host.bounds.height
+            func sampleColor(ptX: CGFloat, ptY: CGFloat) -> NSColor {
+                let px = max(0, min(bitmap.pixelsWide - 1, Int((ptX * scaleX).rounded())))
+                let rawY = host.isFlipped ? ptY : (host.bounds.height - ptY)
+                let py = max(0, min(bitmap.pixelsHigh - 1, Int((rawY * scaleY).rounded())))
+                return bitmap.colorAt(x: px, y: py)?.usingColorSpace(.deviceRGB) ?? .black
+            }
+            var foundPurpleTrack = false
+            for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
+                for dy in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
+                    let c = sampleColor(ptX: x, ptY: 27 + dy)
+                    if c.blueComponent > c.redComponent && c.blueComponent > c.greenComponent + 0.15 {
+                        foundPurpleTrack = true
+                    }
+                }
+            }
+            check(foundPurpleTrack, "filled slider track did not render TrainerTheme.standard.accent")
+
+            func maxBandLuma(centerX: CGFloat) -> CGFloat {
+                var best: CGFloat = 0
+                for dx in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
+                    for dy in [CGFloat(-3.2), CGFloat(-2.5), CGFloat(2.5), CGFloat(3.2)] {
+                        let c = sampleColor(ptX: centerX + dx, ptY: 27 + dy)
+                        let luma = (c.redComponent + c.greenComponent + c.blueComponent) / 3.0
+                        best = max(best, luma)
+                    }
+                }
+                return best
+            }
+            let markLuma = maxBandLuma(centerX: 132)
+            let offMarkLuma = maxBandLuma(centerX: 108)
+            check(markLuma > offMarkLuma + 0.05,
+                  "anchor tick mark did not render outside track: mark=\(markLuma) offMark=\(offMarkLuma)")
+        }
+
+        do {
+            let greenTheme = TrainerTheme(
+                background: TrainerTheme.standard.background,
+                accent: Color(red: 0.1, green: 0.9, blue: 0.2),
+                panel: TrainerTheme.standard.panel,
+                panelRaised: TrainerTheme.standard.panelRaised,
+                sidebarBackground: TrainerTheme.standard.sidebarBackground,
+                selectedFill: TrainerTheme.standard.selectedFill,
+                deferred: TrainerTheme.standard.deferred,
+                warning: TrainerTheme.standard.warning,
+                success: TrainerTheme.standard.success,
+                mutedFill: TrainerTheme.standard.mutedFill,
+                subtleFill: TrainerTheme.standard.subtleFill,
+                separator: TrainerTheme.standard.separator,
+                info: TrainerTheme.standard.info,
+                inactive: TrainerTheme.standard.inactive,
+                panelCornerRadius: TrainerTheme.standard.panelCornerRadius,
+                cardCornerRadius: TrainerTheme.standard.cardCornerRadius,
+                controlCornerRadius: TrainerTheme.standard.controlCornerRadius,
+                controlPadding: TrainerTheme.standard.controlPadding,
+                compactControlSpacing: TrainerTheme.standard.compactControlSpacing,
+                compactCornerRadius: TrainerTheme.standard.compactCornerRadius,
+                contentMinWidth: TrainerTheme.standard.contentMinWidth,
+                contentMinHeight: TrainerTheme.standard.contentMinHeight,
+                pagePadding: TrainerTheme.standard.pagePadding,
+                pageSpacing: TrainerTheme.standard.pageSpacing,
+                sectionSpacing: TrainerTheme.standard.sectionSpacing,
+                panelPadding: TrainerTheme.standard.panelPadding,
+                rowHorizontalPadding: TrainerTheme.standard.rowHorizontalPadding,
+                rowMinimumHeight: TrainerTheme.standard.rowMinimumHeight,
+                inlineRowVerticalPadding: TrainerTheme.standard.inlineRowVerticalPadding,
+                shortcutCaptureWidth: TrainerTheme.standard.shortcutCaptureWidth,
+                connectionActionWidth: TrainerTheme.standard.connectionActionWidth,
+                compactActionWidth: TrainerTheme.standard.compactActionWidth,
+                shortcutBadgeMinimumWidth: TrainerTheme.standard.shortcutBadgeMinimumWidth,
+                pickerCompactWidth: TrainerTheme.standard.pickerCompactWidth,
+                pickerStandardWidth: TrainerTheme.standard.pickerStandardWidth,
+                pickerWideWidth: TrainerTheme.standard.pickerWideWidth,
+                pickerActionMaxWidth: TrainerTheme.standard.pickerActionMaxWidth,
+                pickerActionLabelWidth: TrainerTheme.standard.pickerActionLabelWidth,
+                sheetPadding: TrainerTheme.standard.sheetPadding,
+                sheetSpacing: TrainerTheme.standard.sheetSpacing,
+                emptyStatePadding: TrainerTheme.standard.emptyStatePadding,
+                sidebarWidth: TrainerTheme.standard.sidebarWidth,
+                sidebarPadding: TrainerTheme.standard.sidebarPadding,
+                sidebarCardPadding: TrainerTheme.standard.sidebarCardPadding,
+                rowContentSpacing: TrainerTheme.standard.rowContentSpacing,
+                rowIconSpacing: TrainerTheme.standard.rowIconSpacing,
+                rowIconSize: TrainerTheme.standard.rowIconSize,
+                rowGlyphSize: TrainerTheme.standard.rowGlyphSize,
+                rowGlyphActiveOpacity: TrainerTheme.standard.rowGlyphActiveOpacity,
+                rowGlyphIdleOpacity: TrainerTheme.standard.rowGlyphIdleOpacity,
+                listCardPadding: TrainerTheme.standard.listCardPadding,
+                noticePadding: TrainerTheme.standard.noticePadding,
+                noticeFillOpacity: TrainerTheme.standard.noticeFillOpacity,
+                compactFieldWidth: TrainerTheme.standard.compactFieldWidth,
+                inlineFieldWidth: TrainerTheme.standard.inlineFieldWidth,
+                occurrenceFieldWidth: TrainerTheme.standard.occurrenceFieldWidth,
+                disabledOpacity: TrainerTheme.standard.disabledOpacity,
+                unavailableOpacity: TrainerTheme.standard.unavailableOpacity,
+                selectionHighlightOpacity: TrainerTheme.standard.selectionHighlightOpacity,
+                popoverDetailsWidth: TrainerTheme.standard.popoverDetailsWidth,
+                toastMaxWidth: TrainerTheme.standard.toastMaxWidth
+            )
+            let greenHost = NSHostingView(
+                rootView: TrainerMappedSlider(
+                    value: .constant(10),
+                    mapping: .anchoredLogarithmic(values: [0.1, 1, 10], step: 0.1),
+                    accessibilityLabel: "Green",
+                    accessibilityHint: "Green hint"
+                )
+                .frame(width: 240, height: 30)
+                .padding(12)
+                .background(Color.black)
+                .trainerTheme(greenTheme)
+            )
+            let greenWin = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 264, height: 54),
+                                    styleMask: [.titled], backing: .buffered, defer: false)
+            greenWin.isReleasedWhenClosed = false
+            greenWin.contentView = greenHost
+            greenWin.orderBack(nil)
+            pump(0.1)
+            greenHost.layoutSubtreeIfNeeded()
+            let bitmap = greenHost.bitmapImageRepForCachingDisplay(in: greenHost.bounds)!
+            greenHost.cacheDisplay(in: greenHost.bounds, to: bitmap)
+            let scaleX = CGFloat(bitmap.pixelsWide) / greenHost.bounds.width
+            let scaleY = CGFloat(bitmap.pixelsHigh) / greenHost.bounds.height
+            var foundGreen = false
+            for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
+                for dy in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
+                    let px = max(0, min(bitmap.pixelsWide - 1, Int((x * scaleX).rounded())))
+                    let rawY = greenHost.isFlipped ? (27 + dy) : (greenHost.bounds.height - (27 + dy))
+                    let py = max(0, min(bitmap.pixelsHigh - 1, Int((rawY * scaleY).rounded())))
+                    if let c = bitmap.colorAt(x: px, y: py)?.usingColorSpace(.deviceRGB),
+                       c.greenComponent > c.redComponent + 0.3 && c.greenComponent > c.blueComponent + 0.3 {
+                        foundGreen = true
+                    }
+                }
+            }
+            check(foundGreen, "slider did not follow @Environment(\\.trainerTheme) accent color")
+            greenWin.contentView = nil
+            greenWin.close()
+        }
+
         window.close()
         print("mapped_slider_system_reduce_motion=\(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)")
         print("mapped_slider_interaction_ok")

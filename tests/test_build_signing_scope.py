@@ -274,4 +274,101 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-loc-drift-') as temporary:
     res, *_ = run_localization_packaging(Path(temporary), corrupt_cp=True)
     assert res.returncode != 0 and 'Host localization package mismatch' in res.stderr, res.stderr
 
+# Execute build.sh's own asset-catalog compilation & NSAccentColorName check paragraph.
+asset_start = '\nASSET_CATALOG='
+asset_end = '\nrecord_build_timing "package-runtime"'
+# Kept (build slice): these markers select build.sh's asset-catalog paragraph until WP5.4 moves packaging into Python.
+assert build.count(asset_start) == 1 and build.count(asset_end) == 1, 'build.sh asset-catalog slice markers must be unique'
+asset_packaging = build[build.index(asset_start) + 1:build.index(asset_end)]
+
+ACTOOL_FAKE = f'#!{sys.executable}\n' + r"""
+import json, os, plistlib, sys
+from pathlib import Path
+args = sys.argv[1:]
+with open(os.environ['MGT_ACTOOL_LOG'], 'a', encoding='utf-8') as log:
+    log.write(json.dumps(args) + '\n')
+compile_dir = Path(args[args.index('--compile') + 1])
+plist_path = Path(args[args.index('--output-partial-info-plist') + 1])
+if not os.environ.get('MGT_OMIT_CAR'):
+    (compile_dir / 'Assets.car').write_bytes(b'fixture-car')
+accent = args[args.index('--accent-color') + 1] if '--accent-color' in args else None
+payload = {} if os.environ.get('MGT_OMIT_ACCENT') else ({'NSAccentColorName': accent} if accent else {})
+plist_path.write_bytes(plistlib.dumps(payload))
+"""
+
+PLUTIL_FAKE = f'#!{sys.executable}\n' + r"""
+import plistlib, sys
+assert sys.argv[1] == '-extract' and sys.argv[3] == 'raw' and sys.argv[4] == '-o' and sys.argv[5] == '-', sys.argv
+key, path = sys.argv[2], sys.argv[6]
+data = plistlib.loads(open(path, 'rb').read())
+if key not in data:
+    raise SystemExit(1)
+print(data[key])
+"""
+
+XCRUN_ASSET_FAKE = f'#!{sys.executable}\n' + r"""
+import pathlib, sys
+assert sys.argv[1:3] == ['--find', 'actool'], sys.argv
+print(pathlib.Path(sys.argv[0]).parent / 'actool')
+"""
+
+
+def run_asset_catalog_packaging(root, create_colorset=True, extra_env=None):
+    fakebin = root / 'bin'
+    fakebin.mkdir()
+    for name, body in (('xcrun', XCRUN_ASSET_FAKE), ('actool', ACTOOL_FAKE), ('plutil', PLUTIL_FAKE)):
+        p = fakebin / name
+        p.write_text(body, encoding='utf-8')
+        p.chmod(0o755)
+    project_root = root / 'project'
+    if create_colorset:
+        colorset = project_root / 'Resources/Assets.xcassets/AccentColor.colorset'
+        colorset.mkdir(parents=True)
+        (colorset / 'Contents.json').write_text('{"colors":[]}\n', encoding='utf-8')
+    generated = root / 'generated'
+    generated.mkdir()
+    contents = root / 'Contents'
+    (contents / 'Resources').mkdir(parents=True)
+    log = root / 'actool.jsonl'
+    env = {
+        **os.environ,
+        'PATH': f'{fakebin}{os.pathsep}{os.environ["PATH"]}',
+        'MGT_ACTOOL_LOG': str(log),
+        'ROOT': str(project_root),
+        'GENERATED_DIR': str(generated),
+        'CONTENTS': str(contents),
+        'MIN_MACOS': '14.0',
+    }
+    if extra_env:
+        env.update(extra_env)
+    res = subprocess.run(['bash', '-c', 'set -euo pipefail\n' + asset_packaging],
+                         env=env, capture_output=True, text=True)
+    calls = [json.loads(line) for line in log.read_text(encoding='utf-8').splitlines()] if log.exists() else []
+    return res, calls, generated, contents
+
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-asset-ok-') as temporary:
+    res, calls, generated, contents = run_asset_catalog_packaging(Path(temporary))
+    assert res.returncode == 0, res.stdout + '\n' + res.stderr
+    assert len(calls) == 1, calls
+    argv = calls[0]
+    assert argv[argv.index('--accent-color') + 1] == 'AccentColor', argv
+    assert argv[argv.index('--platform') + 1] == 'macosx', argv
+    assert argv[argv.index('--minimum-deployment-target') + 1] == '14.0', argv
+    assert argv[argv.index('--compile') + 1] == str(contents / 'Resources'), argv
+    assert argv[argv.index('--output-partial-info-plist') + 1] == str(generated / 'asset-catalog-info.plist'), argv
+    assert (contents / 'Resources/Assets.car').is_file()
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-asset-missing-colorset-') as temporary:
+    res, calls, *_ = run_asset_catalog_packaging(Path(temporary), create_colorset=False)
+    assert res.returncode != 0 and 'Missing application accent color' in res.stderr and not calls, res.stderr
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-asset-missing-car-') as temporary:
+    res, *_ = run_asset_catalog_packaging(Path(temporary), extra_env={'MGT_OMIT_CAR': '1'})
+    assert res.returncode != 0 and 'produced no Assets.car' in res.stderr, res.stderr
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-asset-missing-accent-') as temporary:
+    res, *_ = run_asset_catalog_packaging(Path(temporary), extra_env={'MGT_OMIT_ACCENT': '1'})
+    assert res.returncode != 0 and 'did not declare the application accent color' in res.stderr, res.stderr
+
 print('build_signing_scope_ok')

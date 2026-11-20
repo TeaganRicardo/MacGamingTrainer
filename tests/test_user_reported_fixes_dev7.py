@@ -90,15 +90,6 @@ def main():
     # Source belongs in grouping metadata, not prefixed into the official item name.
     assert "source_name} ·" not in catalog
 
-    # Feature icon and switch use the same phase/state tint; metric card is optically centered.
-    toggle = read('Sources/Core/UI/Primitives/TrainerToggleControl.swift')
-    feature_controls = read('Sources/Core/UI/Components/TrainerFeatureControls.swift')
-    card = read('Sources/Core/UI/Primitives/TrainerCard.swift')
-    assert '.tint(tint ?? theme.accent)' in toggle
-    assert feature_controls.count('tint: state.indicatorColor') >= 2
-    assert '.padding(.top, 6)' in card
-    assert '.padding(.bottom, 8)' in card
-
     print('user_reported_fixes_dev7_ok')
 
 

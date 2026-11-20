@@ -42,3 +42,4 @@ test_native_effect_query_macos.py
 test_core_save_metadata_darwin.py
 test_core_save_target_probe_macos.py
 test_core_host_lifecycle_macos.py
+test_core_ui_primitives_macos.py

@@ -144,6 +144,7 @@
   "test_trainer_search_field_appearance.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_ui.py",
+    "tests/fixtures/swift/NativeAccessibility.swift",
     "tests/swift_test_compiler.py",
     "Tools/swift_module_layout.py"
   ],
@@ -235,6 +236,14 @@
   "test_core_host_lifecycle_macos.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_runtime.py",
+    "tests/swift_test_compiler.py",
+    "tests/fixtures/swift/InMemoryDefaults.swift",
+    "tests/fixtures/swift/NativeAccessibility.swift",
+    "Tools/swift_module_layout.py"
+  ],
+  "test_core_ui_primitives_macos.py": [
+    "tests/macos_fixture_policy.py",
+    "tests/fixture_budgets/core_ui_primitives.py",
     "tests/swift_test_compiler.py",
     "tests/fixtures/swift/InMemoryDefaults.swift",
     "tests/fixtures/swift/NativeAccessibility.swift",

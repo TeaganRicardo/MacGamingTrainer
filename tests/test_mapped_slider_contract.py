@@ -18,16 +18,6 @@ snapshots = (ROOT / "Sources/Hades2/Views/Hades2ViewSnapshots.swift").read_text(
 
 assert mapping.is_file()
 assert component.is_file()
-component_text = component.read_text()
-assert "struct TrainerMappedSlider: View" in component_text
-assert "mapping.marks" in component_text
-assert ".accessibilityRepresentation" in component_text
-assert "@Environment(\\.trainerTheme)" in component_text
-assert ".fill(theme.accent)" in component_text
-assert "Circle()\n                    .fill(Color.white)" in component_text
-assert "onPreviewValue: ((Double?) -> Void)?" in component_text
-assert ".accessibilityLabel(Text(accessibilityLabel))" in component_text
-assert ".accessibilityHint(Text(accessibilityHint))" in component_text
 assert "accessibilityLabel:" in view
 assert "accessibilityHint:" in view
 # Pointer lifecycle and commit counts are exercised below and by the native

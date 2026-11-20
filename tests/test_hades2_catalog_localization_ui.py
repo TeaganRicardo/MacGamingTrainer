@@ -12,7 +12,6 @@ from supported_build import supported_reference_directory
 from games.hades2 import catalog, localization
 
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
-card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 zh_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json').read_text()
@@ -698,22 +697,8 @@ common_controls = trait_manager[
 # The named Apply/Expire/Advance controls now use Core's compact
 # text-only button: label containment is owned by the shared primitive.
 assert contextual_controls.count('TrainerSecondaryActionButton(') >= 3
-shared_actions = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text()
-action_label = shared_actions[
-    shared_actions.index('private struct TrainerActionButtonLabel'):
-    shared_actions.index('struct TrainerPrimaryActionButton')
-]
-assert '.lineLimit(1)' in action_label
-assert '.minimumScaleFactor(0.78)' in action_label
 assert common_controls.count('.lineLimit(1)') >= 4
 assert '"hades2.traits.targetRarity": "稀有度"' in zh_presentation
 assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation
-
-# Metric cards are content-sized; no hidden min-height is allowed to re-create
-# the empty strip above title/lock controls.
-metric = card[card.index('struct TrainerMetricCard'):]
-assert 'minHeight: 82' not in metric
-assert '.padding(.top, 6)' in metric and '.padding(.bottom, 8)' in metric
-assert '.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)' in metric
 
 print('hades2_catalog_localization_ui_ok')

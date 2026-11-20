@@ -169,6 +169,13 @@ let unavailable = TrainerShortcutCaptureController(
 unavailable.begin(actionID: "unavailable", onAssign: accept)
 precondition(unavailable.issue == .rejected(messageKey: "host.hotkeys.captureUnavailable"))
 precondition(unavailable.capturingActionID == nil && !GlobalHotkeys.isShortcutCaptureActive)
+
+let defaultCapture = TrainerShortcutCaptureController()
+defaultCapture.begin(actionID: "default") { _, _ in .applied }
+precondition(defaultCapture.capturingActionID == "default" && GlobalHotkeys.isShortcutCaptureActive)
+defaultCapture.cancel()
+precondition(defaultCapture.capturingActionID == nil && !GlobalHotkeys.isShortcutCaptureActive)
+
 GlobalHotkeys.selectGame(nil)
 
 print("global_hotkey_routing_ok")
