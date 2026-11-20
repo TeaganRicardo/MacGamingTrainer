@@ -395,10 +395,16 @@ struct Runner {
                 model.connectAutomaticallyCalls == [true]
             }
 
-            // Activation sets targetActivated() without calling reconcileAutomaticConnection().
-            let activationsBefore = context.targetMonitor.activationGeneration
+            // Becoming active before target activation must not invent targetActivated().
             app.fakeActive = true
             defer { app.fakeActive = false }
+            NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+            pump(0.05)
+            check(model.connectAutomaticallyCalls == [true],
+                  "applicationBecameActive connected before didActivateApplicationNotification: \(model.connectAutomaticallyCalls)")
+
+            // Activation sets targetActivated() without calling reconcileAutomaticConnection().
+            let activationsBefore = context.targetMonitor.activationGeneration
             postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: activeTarget.processIdentifier)
             check(context.targetMonitor.activationGeneration == activationsBefore &+ 1,
                   "didActivate did not increment activationGeneration")
@@ -1038,9 +1044,9 @@ struct Runner {
             check(afterReplacement.completed && afterReplacement.failure == nil,
                   "runtime request failed after replacement PID released trust gate")
 
-            // Definitive launch notification also releases the gate.
+            // Definitive launch notification with an unchanged PID (launched=true, replacement=false) also releases the gate.
             sendOutcomeUnknown()
-            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41004)
+            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: replacement.processIdentifier)
             check(!context.backendStatus.requiresTargetRestart && context.backendStatus.errorCode == nil,
                   "definitive launch through Context did not release trust gate: \(context.backendStatus)")
             let afterLaunch = sendRuntimeRequest("allowed-after-launch")
