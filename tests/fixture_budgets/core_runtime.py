@@ -4,4 +4,5 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "native.trainer_log_session_lifecycle": 30.0,
     "native.backend_stderr_liveness": 20.0,
     "native.host_target_ownership": 20.0,
+    "native.core_host_lifecycle": 30.0,
 }

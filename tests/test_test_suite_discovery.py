@@ -21,9 +21,6 @@ macos_only = [
 ]
 assert macos_only, 'macOS-only test list must not be empty'
 assert len(macos_only) == len(set(macos_only)), 'macOS-only test list contains duplicates'
-assert 'test_host_localization_runtime.py' not in macos_only, (
-    'source-only host localization contract must run on portable Linux'
-)
 for name in macos_only:
     assert (ROOT / 'tests' / name).is_file(), name
 
@@ -54,7 +51,6 @@ assert 'macos_only_tests.txt' in linux_text
 assert 'set -euo pipefail' not in linux_text
 assert 'python3 "$test_file"' in linux_text
 assert 'tests/test_*.py' not in linux_text
-assert 'test_host_localization_runtime.py' not in linux_text
 assert 'tests=(' not in linux_text, 'Linux runner must not maintain a curated positive test list'
 for name in macos_only:
     assert name not in linux_text, name

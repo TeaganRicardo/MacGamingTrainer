@@ -2,47 +2,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-module_contract = (ROOT / "Sources/Core/Host/TrainerGameModule.swift").read_text(encoding="utf-8")
-host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
-pages = (ROOT / "Sources/Core/Host/TrainerGamePages.swift").read_text(encoding="utf-8")
-context = (ROOT / "Sources/Core/Host/TrainerGameContext.swift").read_text(encoding="utf-8")
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
-core_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
 action_adapter = (ROOT / "Sources/Hades2/Services/Hades2ManagementActions.swift").read_text(encoding="utf-8")
 hades = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "Sources/Hades2").rglob("*.swift"))
 fixture = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 
 # Core owns the only Save manager and exposes one neutral optional presentation
-# capability to selected module content. No Save service/model crosses into Hades.
-assert "struct TrainerManagementActions" in module_contract
-assert "let openSaveManagement: (() -> Void)?" in module_contract
-assert "trainerManagementActions" in module_contract
-assert "@ObservedObject private var saveManager: TrainerSaveManagerModel" in host
-# Constructor argument layout is not ownership evidence; native module/session
-# fixtures and the module build matrix exercise the optional editor hook.
-assert "Module.descriptor.supportsSaveManagement" in host
-assert ".environment(\\.trainerManagementActions, managementActions)" in host
-
+# capability to selected module content (tested in test_core_save_retention_controls.py
+# and test_core_host_lifecycle_macos.py). No Save service/model crosses into Hades or the fixture.
 for forbidden in ("TrainerSaveManagerModel(", "TrainerSaveManagerView("):
     assert forbidden not in hades
     assert forbidden not in fixture
 
-# The Host sidebar no longer injects Save Management. Hades also contributes no
-# shortcut/log copies there, so every moved utility has exactly one game-area entry.
-sidebar_start = host.index("struct TrainerHostSidebarCard<")
-host_sidebar = host[sidebar_start:host.index("\n}", sidebar_start) + 2]
-shell_start = pages.index("            TrainerSidebar {")
-sidebar_shell = pages[shell_start:pages.index("\n            }", shell_start) + len("\n            }")]
-assert "context.makeSidebarCard(selected:" in sidebar_shell
-assert "TrainerHostSidebarCard(context: context, selected: selected, onSelect: onSelect)" in context
-assert "TrainerSidebarCard(" in host_sidebar
-assert "Module.makeSidebarActions(model: model)" in host_sidebar
-for sidebar in (sidebar_shell, host_sidebar):
-    assert "host.saveManagement" not in sidebar
-    assert "saveManagerPresented = true" not in sidebar
-
+# Hades contributes no shortcut/log copies to the sidebar, so every moved utility
+# has one game-area entry.
 hades_sidebar = host_actions[
     host_actions.index("struct Hades2SidebarActions"):
     host_actions.index("struct Hades2HeaderActions")
@@ -67,11 +42,6 @@ for token in (
 ):
     assert token in management, token
 
-for key in ("host.refreshStatus", "host.disableAll", "host.shortcutSettings", "host.viewLog",
-            "host.viewLogHistory", "host.clearCompletedLogs", "host.saveManagement"):
-    assert f'"{key}"' in core_management
-assert "CommandMenu(title)" in core_management
-assert "guard isEnabled else { return }" in core_management
 assert "TrainerManagementCommandMenu(" in host_actions
 assert "openSaveManagement.map" in action_adapter
 assert "canStartBackendAction() && !model.connected && model.pid == nil" in action_adapter

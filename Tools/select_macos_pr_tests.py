@@ -58,15 +58,29 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     # Shared Core Host/Runtime behavior owners
     "Sources/Core/Host/TrainerLocalization.swift": ("test_host_localization_behavior.py",),
     "Sources/Core/Host/TrainerApplicationStartup.swift": ("test_host_target_ownership.py",),
-    "Sources/Core/Host/TrainerGameContext.swift": ("test_host_target_ownership.py", "test_core_save_manager_lifecycle_u01_u02.py"),
-    "Sources/Core/Host/TrainerHost.swift": ("test_core_save_retention_controls.py",),
+    "Sources/Core/Host/TrainerGameModule.swift": ("test_core_host_lifecycle_macos.py",),
+    "Sources/Core/Host/TrainerGameContext.swift": (
+        "test_host_target_ownership.py",
+        "test_core_save_manager_lifecycle_u01_u02.py",
+        "test_core_host_lifecycle_macos.py",
+    ),
+    "Sources/Core/Host/TrainerHost.swift": (
+        "test_core_save_retention_controls.py",
+        "test_core_host_lifecycle_macos.py",
+    ),
     "Sources/Core/Host/TrainerTargetOwnership.swift": ("test_host_target_ownership.py",),
-    "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift": ("test_host_target_ownership.py",),
+    "Sources/Core/Runtime/TrainerTargetProcessMonitor.swift": (
+        "test_host_target_ownership.py",
+        "test_core_host_lifecycle_macos.py",
+    ),
     "Sources/Core/Runtime/TrainerLogSink.swift": ("test_trainer_log_session_lifecycle.py",),
     "Sources/Core/Runtime/BackendProcess.swift": ("test_backend_stderr_liveness.py",),
     "Sources/Core/Runtime/BackendClient.swift": ("test_core_save_manager_lifecycle_u01_u02.py",),
     "Sources/Core/Runtime/TrainerBackendSession.swift": ("test_core_save_manager_lifecycle_u01_u02.py",),
-    "Sources/Core/Host/TrainerConnectionPolicy.swift": ("test_hades2_run_log_watcher.py",),
+    "Sources/Core/Host/TrainerConnectionPolicy.swift": (
+        "test_hades2_run_log_watcher.py",
+        "test_core_host_lifecycle_macos.py",
+    ),
 
     # Shared Core Save management owners
     "Sources/Core/Save/TrainerSaveEditorReplyCoordinator.swift": _CORE_SAVE_MANAGER_TESTS,
@@ -120,11 +134,22 @@ EXACT_PATH_TESTS: dict[str, tuple[str, ...]] = {
     ),
     "Sources/Core/UI/Components/TrainerProfileManagerView.swift": _CORE_SHARED_UI_TESTS,
     "Sources/Core/UI/Components/TrainerDiagnosticsView.swift": _CORE_SHARED_UI_TESTS,
-    "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift": _CORE_SHARED_UI_TESTS,
+    "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift": (
+        *_CORE_SHARED_UI_TESTS,
+        "test_core_host_lifecycle_macos.py",
+    ),
+    "Sources/Core/UI/Components/TrainerManagementGroups.swift": (
+        *_CORE_SHARED_UI_TESTS,
+        "test_core_host_lifecycle_macos.py",
+    ),
     "Sources/Core/UI/TrainerFeedbackOverlay.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
     "Sources/Core/UI/TrainerFeedbackTiming.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
     "Sources/Core/UI/TrainerSidebar.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
-    "Sources/Core/UI/Components/TrainerStatusControls.swift": ("test_viewport_feedback.py", *_CORE_SHARED_UI_TESTS),
+    "Sources/Core/UI/Components/TrainerStatusControls.swift": (
+        "test_viewport_feedback.py",
+        *_CORE_SHARED_UI_TESTS,
+        "test_core_host_lifecycle_macos.py",
+    ),
     "Sources/Core/UI/TrainerToolWindows.swift": ("test_trainer_tool_windows.py",),
 
     # Two-module Host & reveal owners

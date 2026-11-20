@@ -3,7 +3,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 host = (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
-contract = (ROOT / 'Sources/Core/Host/TrainerGameModule.swift').read_text()
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 command_binding = (ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift').read_text()
 watcher_path = ROOT / 'Sources/Hades2/Services/Hades2RunLogWatcher.swift'
@@ -22,77 +21,8 @@ for retired in (
 ):
     assert retired not in model, retired
 
-# Initial process discovery and a real NSWorkspace launch are distinct events.
-# Only didLaunch may grant permission to attach while Trainer is backgrounded.
-monitor = (ROOT / 'Sources/Core/Runtime/TrainerTargetProcessMonitor.swift').read_text()
-# A single published observation prevents an isRunning callback consuming
-# launch intent before the corresponding NSWorkspace generation is published.
-assert '@Published private(set) var targetObservation' in monitor
-assert '@Published private(set) var isRunning' not in monitor
-assert '@Published private(set) var launchGeneration' not in monitor
-launch_note = monitor[monitor.index('NSWorkspace.didLaunchApplicationNotification'):monitor.index('NSWorkspace.didActivateApplicationNotification')]
-assert 'targetObservation = TrainerTargetObservation(' in launch_note
-assert 'targetMonitor.$targetObservation.dropFirst().sink' in host
-assert '.onChange(of: targetMonitor.isRunning)' not in host
-assert '.onChange(of: targetMonitor.launchGeneration)' not in host
-launch_start = host.index('    private func targetChanged(')
-launch_end = host.index('    private func applicationBecameActive()', launch_start)
-launch_block = host[launch_start:launch_end]
-assert 'previous.processIdentifier != observed.processIdentifier' in launch_block, (
-    'PID-only target replacement must refresh the module lifecycle'
-)
-assert 'connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)' in launch_block, (
-    'missed launch must invalidate the old connection without granting background attach'
-)
-assert launch_block.index('connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)') < launch_block.index('connectionPolicy.observeTarget(')
-for token in (
-    'connectionPolicy.observeTarget(',
-    'model.hostTargetLifetimeChanged(',
-    'reconcileAutomaticConnection()',
-):
-    assert token in launch_block, token
-
-# A true target-process launch grants a one-shot background connection
-# permission in the pure connection policy. The permission survives temporary
-# busy/backend recovery states until connect is consumed; ordinary activation
-# never grants it.
-assert 'connectionPolicy.backgroundConnectionAllowed || NSApp.isActive' in host
-assert 'reconcileAutomaticConnection(allowBackground:' not in host
-assert 'NSApplication.didBecomeActiveNotification' in host
-assert 'targetMonitor.refresh()' in host
-assert 'reconcileAutomaticConnection()' in host
-assert 'model.hostDidBecomeActive()' in host
-assert 'connectionPolicy.targetActivated()' in host
-
-# Target activation only records an opportunity. It must not consume that
-# opportunity immediately because NSWorkspace target-activation can race the
-# trainer's own didResignActive transition.
-activation_start = host.index('targetMonitor.$activationGeneration.dropFirst().sink')
-activation_end = host.index('saveManager.objectWillChange', activation_start)
-activation_block = host[activation_start:activation_end]
-assert 'connectionPolicy.targetActivated()' in activation_block
-assert 'reconcileAutomaticConnection()' not in activation_block
-
-# Trainer activation is the only place that repairs a potentially missed target
-# snapshot before consuming pending debugger work.
-foreground_start = host.index('    private func applicationBecameActive()')
-foreground_end = host.index('    private func reconcileAutomaticConnection()', foreground_start)
-host_foreground = host[foreground_start:foreground_end]
-for token in (
-    'targetMonitor.refresh()',
-    'connectionPolicy.observeTarget(',
-    'allowDiscoveryConnect: false',
-    'reconcileAutomaticConnection()',
-    'model.hostDidBecomeActive()',
-):
-    assert token in host_foreground, token
-assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.observeTarget')
-assert host_foreground.index('connectionPolicy.observeTarget') < host_foreground.index('reconcileAutomaticConnection()')
-
 # App activation is a generic optional lifecycle hook. Hades uses it only for a
 # single foreground refresh when an existing connection is still waiting.
-assert 'func hostDidBecomeActive()' in contract
-assert 'extension TrainerHostModel' in contract
 start = model.index('    func hostDidBecomeActive()')
 end = model.index('\n    private func handleRunLogEvent', start)
 foreground = model[start:end]
@@ -108,16 +38,7 @@ for token in (
     assert token in foreground, token
 
 # Automatic connection carries the true-launch reason through the generic Host
-# contract. Game modules that do not care keep the default toggle behavior;
-# Hades defers the actual debugger attach until a native runtime-ready event.
-assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in contract
-assert 'connectAutomaticallyFromHost(targetJustLaunched:' in host
-automatic_start = host.index('    private func reconcileAutomaticConnection()')
-automatic_block = host[automatic_start:]
-assert 'let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed' in automatic_block
-assert automatic_block.index('let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed') < automatic_block.index('consumeAutomaticConnectIfEligible')
-assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)' in automatic_block
-
+# contract (verified behaviorally in test_core_host_lifecycle_macos.py).
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
 assert 'launchAttachGate.deferUntilReady(' in model
 assert 'consumeDeferredLaunchAttachIfPossible()' in model
@@ -134,7 +55,7 @@ assert 'toggleConnection(probeRuntime: true)' in model
 assert 'case connect(probeRuntime: Bool, recoverLostAttach: Bool)' in api
 assert '["probeRuntime": probeRuntime, "recoverLostAttach": recoverLostAttach]' in api
 
-# No generic process/Lua polling loop is introduced by the foreground design.
+# Kept (lint): no compile or render hook rules out background timer polling in the Host context.
 assert 'Timer.' not in host and 'scheduledTimer' not in host
 assert 'asyncAfter' not in foreground
 

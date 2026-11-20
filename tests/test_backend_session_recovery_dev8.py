@@ -7,9 +7,6 @@ from pathlib import Path
 from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
 
 ROOT = Path(__file__).resolve().parents[1]
-session_source = (ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift').read_text(encoding='utf-8')
-assert '后端已退出（状态 \\(exitStatus)）' not in session_source
-assert '后端退出 status=\\(exitStatus)' in session_source
 SWIFTC = shutil.which('swiftc')
 PYTHON = shutil.which('python3')
 if not SWIFTC or not PYTHON:
@@ -218,7 +215,7 @@ do {
     if hostLogs.contains(where: { $0.contains("后端退出 status=") }) {
         fail("backend termination evidence leaked into the Host stream")
     }
-    if !backendLogs.contains(where: { $0.contains("后端退出 status=") }) {
+    if !backendLogs.contains(where: { $0.contains("后端退出 status=7") }) {
         fail("backend termination evidence did not reach the Backend stream")
     }
     var ping: Bool? = nil
