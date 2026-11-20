@@ -11,13 +11,12 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from core.adapter import AdapterError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, clear_active, mark_disconnected
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
 assert DESIRED_STATE_SCHEMA_VERSION == 12
@@ -43,9 +42,9 @@ class OfflineSession(FakeResidentSession):
 
 with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as temporary:
     base = Path(temporary)
-    preparation.DATA = base
+    context = hades2_adapter_context(base)
     transport = OfflineSession()
-    adapter = Hades2Adapter(resident_session=transport, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(context=context, resident_session=transport, time_warp_controller=FakeTimeWarpController())
     # Host request validation is owned by the command-contract dispatch seam.
     for command, params in (
         ('set_gathering_desired', {'family': 'other', 'probability': 10}),
@@ -69,10 +68,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     for family, percentage in valid.items():
         result = adapter.dispatch('set_gathering_desired', {'family': family, 'probability': percentage}, 'desired-'+family)
         assert result['gatheringProbabilities'][family] == percentage
-    persisted = json.loads((base/'desired-state.json').read_text())
+    persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
     assert persisted['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION and persisted['gatheringProbabilities'] == valid
     assert not {'gatheringTargets', 'scopeToken', 'generate_gathering'} & set(persisted)
-    restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
+    restarted = Hades2Adapter(context=context, resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['gatheringProbabilities'] == valid and restarted.preference_dirty
     adapter.dispatch('set_gathering_desired', {'family': 'flora', 'probability': None}, 'native')
     wanted = dict(valid); wanted.pop('flora')
@@ -102,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_gathering_probabilities':
-            assert json.loads((base/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
+            assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
             adapter.state['gatheringProbabilities'] = dict(params['probabilities'])
         return dict(adapter.state)
     adapter.execute = execute

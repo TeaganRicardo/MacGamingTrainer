@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 import tempfile
 import zipfile
@@ -7,6 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
+
+from games.hades2 import diagnostics
+from hades2_resident_session_fakes import hades2_adapter_context
 
 
 class DeadTransport:
@@ -20,23 +22,18 @@ class FakeAdapter:
     transport = DeadTransport()
     state = {}
 
+    def __init__(self, context):
+        self.context = context
+        self.legacy_data_dir = context.data_dir.parent
+
     def list_profiles(self):
         return []
 
 
-original_home = os.environ.get("HOME")
 with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
-    root = Path(td)
-    home = root / "home"
-    home.mkdir()
-    os.environ["HOME"] = str(home)
-
-    from games.hades2 import diagnostics, preparation
-
-    legacy_data = root / "legacy-hades-data"
-    legacy_data.mkdir()
-    preparation.DATA = legacy_data
-
+    home = Path(td) / "home"
+    adapter = FakeAdapter(hades2_adapter_context(home))
+    legacy_data = home / "Library/Application Support/MacGamingTrainer"
     log_directory = (
         home
         / "Library/Application Support/MacGamingTrainer"
@@ -119,9 +116,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         encoding="utf-8",
     )
 
-    result = diagnostics.export_diagnostics(FakeAdapter())
+    result = diagnostics.export_diagnostics(adapter)
     archive_path = Path(result["diagnosticBundle"])
     assert archive_path.is_file()
+    assert archive_path.parent == legacy_data / "diagnostics"
 
     with zipfile.ZipFile(archive_path) as archive:
         names = set(archive.namelist())
@@ -170,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
     legacy_flat = log_directory / "trainer.log"
     legacy_flat.unlink()
     legacy_flat.symlink_to(legacy_data / "trainer.log")
-    symlinked_result = diagnostics.export_diagnostics(FakeAdapter())
+    symlinked_result = diagnostics.export_diagnostics(adapter)
     with zipfile.ZipFile(symlinked_result["diagnosticBundle"]) as archive:
         assert "trainer-session/backend.log" in archive.namelist()
         assert "BACKEND SESSION BACKEND STREAM" in archive.read(
@@ -184,7 +182,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
     # With no target session pointer, export the Host context explicitly rather
     # than selecting completed history or the legacy trainer.log path.
     (log_directory / "current-session.json").unlink()
-    host_result = diagnostics.export_diagnostics(FakeAdapter())
+    host_result = diagnostics.export_diagnostics(adapter)
     host_archive_path = Path(host_result["diagnosticBundle"])
     with zipfile.ZipFile(host_archive_path) as archive:
         names = set(archive.namelist())
@@ -197,10 +195,5 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         assert host_report["trainerLogScope"] == "host_context"
         assert host_report["trainerSession"] is None
         assert host_report["trainerLogStreams"] == []
-
-if original_home is None:
-    os.environ.pop("HOME", None)
-else:
-    os.environ["HOME"] = original_home
 
 print("hades2_diagnostics_log_scope_ok")

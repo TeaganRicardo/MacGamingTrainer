@@ -372,7 +372,7 @@ def manifest() -> list[Mutation]:
         Mutation(
             ident="protocol-error-arguments",
             invariant="error arguments travel the wire and reach the Host",
-            path=ROOT / "Backend/core/adapter.py",
+            path=ROOT / "Backend/core/errors.py",
             old="        self.arguments = list(arguments)",
             new="        self.arguments = []",
             test="tests/test_protocol_fixtures_v0180.py",
@@ -381,8 +381,8 @@ def manifest() -> list[Mutation]:
             ident="protocol-read-arguments",
             invariant="the protocol funnel forwards the module's arguments",
             path=ROOT / "Backend/core/protocol.py",
-            old="                arguments = error.arguments",
-            new="                arguments = None",
+            old="                        arguments=error.arguments,",
+            new="                        arguments=None,",
             test="tests/test_protocol_fixtures_v0180.py",
         ),
         Mutation(

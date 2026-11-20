@@ -6,11 +6,10 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.diagnostics import build_diagnostics
 from games.hades2.preferences import Hades2PreferenceStore
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 
 # Source-boundary evidence for the real resident contract: status enters the
@@ -46,9 +45,9 @@ class FakeTransport:
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-diagnostics-readonly-v0190-'))
-preparation.DATA = base/'initialized'
-preparation.DATA.mkdir(parents=True)
-pref_path = preparation.DATA/'desired-state.json'
+context = hades2_adapter_context(base/'initialized')
+context.data_dir.parent.mkdir(parents=True)
+pref_path = context.data_dir.parent/'desired-state.json'
 store = Hades2PreferenceStore(pref_path)
 prefs = store.defaults()
 prefs['invincibility'] = True
@@ -56,7 +55,7 @@ store.save(prefs)
 file_before = pref_path.read_bytes()
 
 transport = FakeTransport()
-adapter = Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
+adapter = Hades2Adapter(context=context, transport=transport, time_warp_controller=FakeTimeWarpController())
 assert adapter.preference_dirty is True
 preferences_before = json.loads(json.dumps(adapter.preferences))
 
@@ -81,14 +80,14 @@ assert pref_path.read_bytes() == file_before
 
 # With no durable desired-state at all, a diagnostics/status read must not adopt
 # the live Lua configuration and create a new desired-state file.
-preparation.DATA = base/'uninitialized'
-preparation.DATA.mkdir(parents=True)
+context = hades2_adapter_context(base/'uninitialized')
+context.data_dir.parent.mkdir(parents=True)
 transport2 = FakeTransport()
-adapter2 = Hades2Adapter(transport=transport2, time_warp_controller=FakeTimeWarpController())
+adapter2 = Hades2Adapter(context=context, transport=transport2, time_warp_controller=FakeTimeWarpController())
 assert adapter2.preference_initialized is False
 adapter2.observe_runtime()
 assert adapter2.preference_initialized is False
-assert not (preparation.DATA/'desired-state.json').exists()
+assert not (context.data_dir.parent/'desired-state.json').exists()
 
 # Runtime observation is a dedicated status-only API rather than a flag that
 # mutation callers can opt into.

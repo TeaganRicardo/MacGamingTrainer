@@ -120,14 +120,13 @@ try:
     # Adapter integration: a write-protected existing desired-state is distinct
     # from true first-run state. Even a successful live status must not adopt
     # Lua desired values and then attempt to overwrite the preserved file.
-    from games.hades2 import preparation as prep
     from games.hades2.adapter import Hades2Adapter
-    from hades2_resident_session_fakes import FakeTimeWarpController
+    from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
     adapter_base = base/'blocked-adapter'
-    adapter_base.mkdir()
-    prep.DATA = adapter_base
-    blocked_path = adapter_base/'desired-state.json'
+    context = hades2_adapter_context(adapter_base)
+    context.data_dir.parent.mkdir(parents=True)
+    blocked_path = context.data_dir.parent/'desired-state.json'
     blocked_path.write_text('{broken', encoding='utf-8')
     blocked_bytes = blocked_path.read_bytes()
 
@@ -147,7 +146,7 @@ try:
     original_replace = persistence.os.replace
     persistence.os.replace = lambda source, destination: (_ for _ in ()).throw(OSError('rename denied'))
     try:
-        blocked_adapter = Hades2Adapter(transport=LiveTransport())
+        blocked_adapter = Hades2Adapter(context=context, transport=LiveTransport())
     finally:
         persistence.os.replace = original_replace
     assert blocked_adapter.preference_write_blocked is True

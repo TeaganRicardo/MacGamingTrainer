@@ -4,24 +4,21 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests")]
 
 from core.adapter import AdapterError
 from core.protocol import JsonlRequestRouter
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.schema import MULTIPLIERS, TOGGLES
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
-with tempfile.TemporaryDirectory(prefix="mgt-public-mutations-") as temporary, patch.object(
-    preparation, "DATA", Path(temporary) / "preferences",
-):
+with tempfile.TemporaryDirectory(prefix="mgt-public-mutations-") as temporary:
+    context = hades2_adapter_context(temporary)
     resident = FakeResidentSession()
-    adapter = Hades2Adapter(resident_session=resident, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(context=context, resident_session=resident, time_warp_controller=FakeTimeWarpController())
     resident.payload.update(
         capabilities={"setFeature": True},
         desiredFeatures={key: False for key in TOGGLES},

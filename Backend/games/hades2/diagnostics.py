@@ -6,7 +6,6 @@ import time
 import zipfile
 from pathlib import Path
 
-from core.log_paths import trainer_log_directory
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION
 
 from . import localization, preparation, schema
@@ -96,7 +95,7 @@ def build_diagnostics(adapter):
 
 def export_diagnostics(adapter):
     result=build_diagnostics(adapter)
-    export_root=preparation.DATA/'diagnostics';export_root.mkdir(parents=True,exist_ok=True)
+    export_root=adapter.legacy_data_dir/'diagnostics';export_root.mkdir(parents=True,exist_ok=True)
     stamp=time.strftime('%Y%m%d-%H%M%S')+f'-{time.time_ns()%1000000:06d}'
     zip_path=export_root/f'MacGamingTrainer-Diagnostics-{stamp}.zip'
     report={
@@ -105,7 +104,7 @@ def export_diagnostics(adapter):
         'python':sys.version,'platform':platform.platform(),'passed':result['passed'],'total':result['total'],
         'checks':result['checks'],'state':result['state'],
     }
-    log_directory=trainer_log_directory(adapter.game_id)
+    log_directory=adapter.context.log_dir
     session_pointer_path=log_directory/'current-session.json'
     host_log_path=log_directory/'trainer-host.log'
     session_metadata=None

@@ -108,14 +108,14 @@ print('preferences_schema_v0180_ok')
 
 # Integration guard: a malformed legacy desired-state file must never make the
 # adapter's reconnect replay fail before it reaches the transport boundary.
-from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 adapter_base = Path(tempfile.mkdtemp(prefix='mgt-preference-adapter-'))
-prep.DATA = adapter_base
-(adapter_base/'desired-state.json').write_text(json.dumps({
+context = hades2_adapter_context(adapter_base)
+context.data_dir.parent.mkdir(parents=True)
+(context.data_dir.parent/'desired-state.json').write_text(json.dumps({
     'gardenQoL': True,
     'resourceLocks': {'Money': 'oops'},
     'elementLocks': {'Fire': 'oops'},
@@ -132,7 +132,7 @@ class FakeTransport:
     def close(self): pass
     def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
-adapter = Hades2Adapter(transport=FakeTransport())
+adapter = Hades2Adapter(context=context, transport=FakeTransport())
 adapter.state.update({
     'connected': True,
     'status': 'ready',
@@ -181,7 +181,7 @@ print('preferences_schema_adapter_reconciliation_ok')
 # validation remains single-sourced in Hades2PreferenceStore via Adapter.load_profile;
 # do not duplicate a second nested desired schema in profile_service.py.
 profile_base = Path(tempfile.mkdtemp(prefix='mgt-profile-desired-boundary-'))
-prep.DATA = profile_base
+context = hades2_adapter_context(profile_base)
 
 class OfflineTransport:
     pid = None
@@ -191,7 +191,7 @@ class OfflineTransport:
     def close(self): pass
     def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
-profile_adapter = Hades2Adapter(transport=OfflineTransport())
+profile_adapter = Hades2Adapter(context=context, transport=OfflineTransport())
 profile_path = profile_adapter.profile_service.path('bad-desired')
 profile_path.write_text(json.dumps({
     'schemaVersion': PROFILE_SCHEMA_VERSION,
@@ -211,7 +211,7 @@ assert 'gardenQoL' not in profile_adapter.preferences
 assert profile_adapter.preferences['resourceLocks'] == {'MetaCurrency':12}
 assert profile_adapter.preferences['elementLocks'] == {'Water':4}
 assert profile_adapter.preferences['statLocks'] == {'grasp':30}
-persisted = json.loads((profile_base/'desired-state.json').read_text(encoding='utf-8'))
+persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text(encoding='utf-8'))
 assert persisted['resourceLocks'] == {'MetaCurrency':12}
 assert persisted['elementLocks'] == {'Water':4}
 assert persisted['statLocks'] == {'grasp':30}

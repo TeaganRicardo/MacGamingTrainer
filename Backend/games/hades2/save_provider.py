@@ -2,6 +2,8 @@ import struct
 import re
 from pathlib import Path
 
+from core.save_resolution import LocalizedSnapshotDescription, ResolvedSaveFile, DefaultSaveProvider, SnapshotDescription
+
 from .localization import official_display_names
 from .save_document import Hades2SaveDocument, HadesSaveError, read_hades2_save_header
 
@@ -90,15 +92,8 @@ def resolve_active_profile_save(files):
     return profile, persistent
 
 
-class Hades2SaveProvider:
-    def __init__(self, game_path=None):
-        self.game_path = Path(game_path) if game_path is not None else None
-
-    def resolve(self, roots, declared):
-        del roots
-        return [(row.root_id, row.relative_path) for row in declared]
-
-    def describe_snapshot(self, files, created_at):
+class Hades2SaveProvider(DefaultSaveProvider):
+    def describe_snapshot(self, files: tuple[ResolvedSaveFile, ...], created_at: str) -> SnapshotDescription:
         by_path = {row.relative_path: row.source_path for row in files}
         try:
             _profile, relative = resolve_active_profile_save(files)
@@ -107,11 +102,11 @@ class Hades2SaveProvider:
             return {'defaultName': None, 'nameDetails': []}
         time_label = created_at.replace('T', ' ')[:16]
 
-        def presentation(language):
+        def presentation(language: str) -> LocalizedSnapshotDescription:
             names = official_display_names(
                 {header.location},
                 language,
-                game_path=self.game_path,
+                game_path=self.context.game_path,
             )
             location = names.get(header.location) or header.map_name or header.location
             if language == 'en':

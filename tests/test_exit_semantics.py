@@ -7,10 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 from swift_test_compiler import SwiftModule, compile_swift_test
 
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
@@ -97,9 +96,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-exit-swift-') as temporary:
 
 def make_adapter(prefix, session=None):
     base = Path(tempfile.mkdtemp(prefix=prefix))
-    preparation.DATA = base
+    context = hades2_adapter_context(base)
     session = session or FakeResidentSession()
     adapter = Hades2Adapter(
+        context=context,
         resident_session=session,
         time_warp_controller=FakeTimeWarpController(),
     )

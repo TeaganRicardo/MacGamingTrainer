@@ -9,12 +9,11 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from core.adapter import AdapterError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from games.hades2.schema import TOGGLES, default_boon_rarity
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 class PendingResidentSession(FakeResidentSession):
@@ -159,9 +158,10 @@ class PendingResidentSession(FakeResidentSession):
 
 def make_pending_adapter(prefix):
     base = Path(tempfile.mkdtemp(prefix=prefix))
-    preparation.DATA = base
+    context = hades2_adapter_context(base)
     session = PendingResidentSession()
     adapter = Hades2Adapter(
+        context=context,
         resident_session=session,
         time_warp_controller=FakeTimeWarpController(),
     )
@@ -169,7 +169,7 @@ def make_pending_adapter(prefix):
     adapter.state.update(copy.deepcopy(session.state), connected=True, pid=session.pid)
     adapter.preference_initialized = True
     adapter.preference_dirty = False
-    return base, session, adapter
+    return context.data_dir.parent, session, adapter
 
 
 base, transport, adapter = make_pending_adapter('mgt-pending-confirmation-')

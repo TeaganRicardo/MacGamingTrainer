@@ -7,7 +7,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2 import preparation
 from games.hades2.command_contract import command_metadata
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
@@ -48,21 +47,20 @@ assert "set_next_room_reward_desired" not in commands
 assert "set_next_room_reward_once" not in commands
 assert {"apply_world_exit", "cancel_world_exit"} <= commands
 
-old_data = preparation.DATA
-try:
-    preparation.DATA = Path(tempfile.mkdtemp(prefix="mgt-retired-next-room-"))
-    store = Hades2PreferenceStore(preparation.DATA / "desired-state.json")
+with tempfile.TemporaryDirectory(prefix="mgt-retired-next-room-") as temporary:
+    data_dir = Path(temporary)
+    store = Hades2PreferenceStore(data_dir / "desired-state.json")
     store.save(dict(
         Hades2PreferenceStore.defaults(),
         nextRoomReward="WeaponUpgrade",
         nextRoomRewardToken="must-drop",
     ))
-    persisted = json.loads((preparation.DATA / "desired-state.json").read_text(encoding="utf-8"))
+    persisted = json.loads((data_dir / "desired-state.json").read_text(encoding="utf-8"))
     assert persisted["schemaVersion"] == 12
     assert "nextRoomReward" not in persisted
     assert "nextRoomRewardToken" not in persisted
 
-    profiles = Hades2ProfileService(preparation.DATA / "profiles")
+    profiles = Hades2ProfileService(data_dir / "profiles")
     profiles.save(
         "current",
         dict(
@@ -90,7 +88,5 @@ try:
     legacy = profiles.load("legacy")["desired"]
     assert "nextRoomReward" not in legacy
     assert "nextRoomRewardToken" not in legacy
-finally:
-    preparation.DATA = old_data
 
 print("next_room_reward_retired_semantics_ok")

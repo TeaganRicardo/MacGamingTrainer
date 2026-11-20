@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.module_manifest import GameModuleManifest
-from core.save_resolution import ResolvedSaveFile
+from core.save_resolution import ResolvedSaveFile, SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades.save_provider import HadesSaveProvider
 
@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-save-') as directory:
     recovery = [row for row in reloaded.list_state()['snapshots'] if row['id'] not in (target['id'], live['id'])]
     assert recovery, 'restore must preserve a recoverable copy of the prior live files'
 
-    provider = HadesSaveProvider()
+    provider = HadesSaveProvider(SaveProviderContext(manifest.source_path.parent))
     rows = (ResolvedSaveFile('main', 'activeProfile', saves / 'activeProfile'),)
     description = provider.describe_snapshot(rows, '2026-10-25T15:42:00')
     assert description['defaultName'] == '2026-10-25 15:42 · 存档 1'

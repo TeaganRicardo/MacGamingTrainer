@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 import core.save_restore as save_restore_module
 import core.save_service as save_service_module
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import DefaultSaveProvider, SaveProviderContext
 from core.save_restore import SaveBusyError, SaveRollbackError
 from core.save_service import (
     CoreSaveService,
@@ -346,11 +347,9 @@ assert not list(cleanup_dir.glob('.staged-restore-applying-*.json'))
 assert len(list(cleanup_dir.glob('.staged-restore-applied-*.json'))) == 1
 
 # hotPreferred busy provider falls back to staged restore without mutation.
-class Provider:
+class Provider(DefaultSaveProvider):
     busy = False
     describe_calls = 0
-    def resolve(self, roots, declared):
-        return [(row.root_id, row.relative_path) for row in declared]
     def restore_busy(self, files):
         return self.busy
     def describe_snapshot(self, files, created_at):
@@ -365,7 +364,7 @@ class Provider:
                 'en': {'name': 'Night 42 · Crossroads', 'details': ['Night 42', 'Crossroads']},
             },
         }
-provider = Provider()
+provider = Provider(SaveProviderContext(base))
 provider_spec = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('*.sav',)),),
     provider='games.example.save_provider:Provider', hot_backup=True,
@@ -411,20 +410,21 @@ assert len(provider_service.list_state()['snapshots']) == 3
 # Provider naming is evaluated inside the successful hot-snapshot attempt.
 # If the save changes after the first description, the retry must describe the
 # bytes that are actually committed rather than keeping stale naming metadata.
-class NamingRaceProvider:
-    def __init__(self):
+class NamingRaceProvider(DefaultSaveProvider):
+    def __init__(self, context):
+        super().__init__(context)
         self.resolve_calls = 0
     def resolve(self, roots, declared):
         self.resolve_calls += 1
         if self.resolve_calls == 2:
             (saves / 'Profile1.sav').write_bytes(b'name-v2')
-        return [(row.root_id, row.relative_path) for row in declared]
+        return super().resolve(roots, declared)
     def describe_snapshot(self, files, created_at):
         row = next(row for row in files if row.relative_path == 'Profile1.sav')
         value = row.source_path.read_bytes().decode('utf-8')
         return {'defaultName': value, 'nameDetails': [value]}
 
-naming_provider = NamingRaceProvider()
+naming_provider = NamingRaceProvider(SaveProviderContext(base))
 naming_spec = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('*.sav',)),),
     provider='games.example.naming_provider:Provider', hot_backup=True,

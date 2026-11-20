@@ -7,12 +7,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import UnsupportedSchemaVersionError
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-schema-version-v0180-'))
 logging.disable(logging.CRITICAL)
@@ -90,9 +89,9 @@ try:
     # cross the live boundary, but it must not adopt/replay/save defaults and
     # therefore must not fail merely because the durable file is newer.
     adapter_base = base/'future-adapter'
-    adapter_base.mkdir()
-    preparation.DATA = adapter_base
-    adapter_desired = adapter_base/'desired-state.json'
+    context = hades2_adapter_context(adapter_base)
+    context.data_dir.parent.mkdir(parents=True)
+    adapter_desired = context.data_dir.parent/'desired-state.json'
     adapter_desired.write_text(json.dumps(future_doc, sort_keys=True), encoding='utf-8')
     adapter_desired_bytes = adapter_desired.read_bytes()
 
@@ -114,7 +113,7 @@ try:
         def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
     future_transport = FutureSchemaTransport()
-    adapter = Hades2Adapter(transport=future_transport)
+    adapter = Hades2Adapter(context=context, transport=future_transport)
     assert adapter.preference_write_blocked is True
     assert adapter.preference_dirty is False
     state = adapter.execute('status', {})

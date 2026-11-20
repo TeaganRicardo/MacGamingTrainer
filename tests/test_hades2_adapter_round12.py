@@ -11,16 +11,17 @@ sys.path.insert(0, str(root/'tests'))
 
 import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
+from core.protocol import JsonlRequestRouter
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.schema import STAT_RULES, TOGGLES, default_boon_rarity
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
-prep.DATA = base
+context = hades2_adapter_context(base)
 prep.GAME = base/'Hades II.app'
 prep.SAVES = base/'Saves'
 prep.official_display_names = lambda ids, language='zh-CN': {}
@@ -37,7 +38,7 @@ class FakeTransport:
     def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
 transport = FakeTransport()
-a = Hades2Adapter(transport=transport)
+a = Hades2Adapter(context=context, transport=transport)
 
 class LoggingTransport(FakeTransport):
     def __init__(self):
@@ -63,7 +64,7 @@ old_level = root_logger.level
 root_logger.addHandler(log_handler)
 root_logger.setLevel(logging.INFO)
 try:
-    logging_adapter = Hades2Adapter(transport=LoggingTransport())
+    logging_adapter = Hades2Adapter(context=context, transport=LoggingTransport())
     logging_adapter.preference_initialized = True
     logging_adapter.execute('spawn_reward', {
         'reward': 'EmptyMaxHealthDrop',
@@ -131,6 +132,7 @@ class ResetSession(FakeResidentSession):
 # generation-reset evidence and replays the durable desired profile once.
 reset_session=ResetSession(generation_reset=True)
 reset_adapter=Hades2Adapter(
+    context=context,
     resident_session=reset_session,
     time_warp_controller=FakeTimeWarpController(),
 )
@@ -153,6 +155,7 @@ assert reset_adapter.preference_dirty is False
 # generation and projects waiting state without crossing a resident boundary.
 proactive_session=ResetSession()
 proactive_adapter=Hades2Adapter(
+    context=context,
     resident_session=proactive_session,
     time_warp_controller=FakeTimeWarpController(),
 )
@@ -187,6 +190,7 @@ def mutation_reset_handler(session, record):
 
 mutation_session=FakeResidentSession(reset_payload(False), handler=mutation_reset_handler)
 mutation_adapter=Hades2Adapter(
+    context=context,
     resident_session=mutation_session,
     time_warp_controller=FakeTimeWarpController(),
 )
@@ -203,7 +207,15 @@ module_protocol = json.loads((root/'Backend/games/hades2/module.json').read_text
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == module_protocol
 assert a.state['version'] == '1.143476'
 assert 'infiniteMoney' in TOGGLES and 'gardenQoL' not in TOGGLES and 'enemyHealth' in STAT_RULES
-assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == module_protocol
+router = JsonlRequestRouter(a, target_running_probe=lambda: False)
+hello = router.handle({'id': 'hello', 'command': 'hello'})
+assert hello['result']['game']['protocolVersion'] == module_protocol
+assert set(hello['result']['game']) == {'id', 'displayName', 'protocolVersion', 'targetApplication', 'saveManagement'}
+assert router.save_service.provider.context.game_path == prep.GAME
+assert router.save_service.provider.context.module_dir == a.context.module_dir
+legacy_data = base / 'Library/Application Support/MacGamingTrainer'
+assert a.preference_store.path == legacy_data / 'desired-state.json'
+assert a.profile_service.root == legacy_data / 'profiles'
 
 # A process-query failure is not evidence that Hades stopped. Preserve the
 # existing debugger/session state and surface the query error instead of
@@ -211,7 +223,7 @@ assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['prot
 scan_transport = FakeTransport()
 scan_transport.pid = 4242
 scan_transport.live = True
-scan_adapter = Hades2Adapter(transport=scan_transport)
+scan_adapter = Hades2Adapter(context=context, transport=scan_transport)
 scan_adapter.state.update(pid=4242, connected=True, status='ready', scene='run')
 old_compatibility = adapter_module.preparation.compatibility
 old_run = adapter_module.subprocess.run

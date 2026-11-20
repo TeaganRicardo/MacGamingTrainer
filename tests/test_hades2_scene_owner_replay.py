@@ -6,9 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 # Regression: the resident is attached and compatible in Hero-less Crossroads,
@@ -16,7 +15,7 @@ from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpContr
 # must replay without trying to write the missing Hero's stats/vitals or a
 # future-room one-shot in that scene.
 with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
-    preparation.DATA = Path(temporary)
+    context = hades2_adapter_context(Path(temporary))
     waiting = {
         "status": "waiting",
         "scene": "crossroads",
@@ -42,6 +41,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     }
     resident = FakeResidentSession(payload=waiting)
     adapter = Hades2Adapter(
+        context=context,
         resident_session=resident,
         time_warp_controller=FakeTimeWarpController(),
     )

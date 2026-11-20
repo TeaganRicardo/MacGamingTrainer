@@ -1,25 +1,21 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from core.errors import PresentableError
+from core.log_paths import trainer_data_root, trainer_log_directory
+from core.module_manifest import GameModuleManifest, SaveManagementSpec
+from core.save_resolution import SaveProviderContext
 
-class AdapterError(RuntimeError):
+
+class AdapterError(PresentableError, RuntimeError):
     """Module-raised failure with a stable presentation identity.
 
     `presentation` is a stable key or a message the Host resolves; `arguments`
     are the values for its placeholders. The host envelope carries both, and
     `diagnostic` is technical detail that never reaches the player.
     """
-
-    def __init__(
-        self, code: str, presentation: str, *, diagnostic: Optional[str] = None, arguments: Sequence[Any] = ()
-    ):
-        super().__init__(presentation)
-        self.code = code
-        self.presentation = presentation
-        self.diagnostic = diagnostic
-        self.arguments = list(arguments)
 
 
 class HostPresentationError(AdapterError):
@@ -48,8 +44,35 @@ class GameAdapterContext:
     module_dir: Path
     public_metadata: Mapping[str, Any]
     process_name: str = ''
-    save_management: Any = None
+    save_management: Optional[SaveManagementSpec] = None
     executable_path_suffix: str = ''
+    steam_launch_url: Optional[str] = None
+    home: Path = field(default_factory=Path.home)
+
+    @classmethod
+    def from_manifest(cls, manifest: GameModuleManifest, *, home: Optional[Path] = None) -> 'GameAdapterContext':
+        return cls(
+            game_id=manifest.id,
+            display_name=manifest.display_name,
+            module_protocol_version=manifest.module_protocol_version,
+            module_dir=manifest.source_path.parent,
+            public_metadata=manifest.public_metadata(),
+            process_name=manifest.process_name,
+            save_management=manifest.save_management,
+            executable_path_suffix=manifest.executable_path_suffix,
+            steam_launch_url=manifest.steam_launch_url,
+            home=Path.home() if home is None else home,
+        )
+
+    @property
+    def data_dir(self) -> Path:
+        """Directory for this game's Trainer-owned data."""
+        return trainer_data_root(self.home) / self.game_id
+
+    @property
+    def log_dir(self) -> Path:
+        """Resolve the Host's contained session log directory at time of use."""
+        return trainer_log_directory(self.game_id, home=self.home)
 
 
 class GameAdapter(ABC):
@@ -67,6 +90,14 @@ class GameAdapter(ABC):
     def bind_save_service(self, save_service):
         """Bind the Host-owned generic Save service for optional game semantics."""
         self.save_service = save_service
+
+    def save_provider_context(self) -> SaveProviderContext:
+        """Supply the declared module directory and any module-owned install path."""
+        return SaveProviderContext(self.context.module_dir)
+
+    def state_for_error(self) -> Optional[dict[str, Any]]:
+        """Return an already-observed public state for error replies, if available."""
+        return None
 
     def reply_replayed(self):
         """Observe delivery of a historical cached reply without re-execution.

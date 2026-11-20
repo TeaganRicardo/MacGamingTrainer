@@ -16,6 +16,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Optional, Protocol, TypeVar
 
+from .errors import PresentableError
 from .save_resolution import ResolvedSaveFile
 
 if TYPE_CHECKING:
@@ -40,34 +41,40 @@ class StructuredSaveCodec(Protocol[_Document]):
         ...
 
 
-class StructuredSaveEditValidationError(ValueError):
+class StructuredSaveEditValidationError(PresentableError, ValueError):
     """A structured candidate did not survive the game's codec validation."""
 
+    def __init__(self, message: str) -> None:
+        super().__init__("invalid_request", "host.save.error.failed", diagnostic=message, message=message)
 
-class StructuredSaveEditRecoveryError(ValueError):
+
+class StructuredSaveEditRecoveryError(PresentableError, ValueError):
     """A prior uncertain Apply locks this session until recovery is inspected."""
 
     code = "rollback_failed"
 
     def __init__(self, recovery_paths: Iterable[str]) -> None:
         self.recovery_paths = tuple(recovery_paths)
-        self.arguments: tuple[str, ...]
         if self.recovery_paths:
             display = "\n".join(self.recovery_paths)
-            super().__init__(
+            diagnostic = (
                 "A previous structured Save Editor Apply could not be rolled back. "
                 "Recovery evidence was preserved at: " + display
             )
-            self.presentation = "host.save.error.rollbackFailed"
-            self.arguments = (display,)
-            self.recovery_path = display
-        else:
             super().__init__(
+                self.code,
+                "host.save.error.rollbackFailed",
+                diagnostic=diagnostic,
+                arguments=(display,),
+                recovery_path=display,
+                message=diagnostic,
+            )
+        else:
+            diagnostic = (
                 "A previous structured Save Editor Apply has unresolved recovery evidence; "
                 "the recovery location could not be inspected."
             )
-            self.presentation = "host.save.error.recoveryUnresolved"
-            self.arguments = ()
+            super().__init__(self.code, "host.save.error.recoveryUnresolved", diagnostic=diagnostic, message=diagnostic)
 
 
 class StructuredSaveEditSession(Generic[_Document]):
@@ -238,9 +245,8 @@ class StructuredSaveEditSession(Generic[_Document]):
         self._recovery_unresolved = True
 
     def _capture_recovery_after_failure(self, error: BaseException, before: frozenset[str]) -> None:
-        direct = getattr(error, "recovery_path", None)
-        if direct is not None:
-            self._record_recovery((str(direct),))
+        if isinstance(error, PresentableError) and error.recovery_path is not None:
+            self._record_recovery((error.recovery_path,))
             return
         try:
             after = self._recovery_snapshot()

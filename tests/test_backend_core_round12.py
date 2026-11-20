@@ -28,6 +28,9 @@ class FakeAdapter(GameAdapter):
         self.calls = []
         self.closed = False
 
+    def state_for_error(self):
+        return self.state
+
     def dispatch(self, command, params, request_id):
         self.calls.append((command, dict(params), request_id))
         if command == 'fail':
@@ -75,6 +78,7 @@ try:
     assert failed['error']['code'] == 'invalid_request'
     assert failed['error']['presentation'] == 'host.backend.error.invalidRequest'
     assert failed['error']['diagnostic'] == 'bad fake request'
+    assert failed['state'] == {'connected': False}
     scalar = router.handle({'id':'c','command':'scalar','params':{}})
     assert scalar['error']['code'] == 'outcome_unknown'
     assert scalar['error']['outcomeUnknown'] and scalar['error']['terminal']
@@ -114,7 +118,21 @@ backend = project/'Backend'; games = backend/'games'; module_dir = games/'other'
 module_dir.mkdir(parents=True)
 (games/'__init__.py').write_text('')
 (module_dir/'__init__.py').write_text('')
-(module_dir/'adapter.py').write_text('''\nfrom core.adapter import GameAdapter\nclass OtherAdapter(GameAdapter):\n    def dispatch(self, command, params, request_id): return {"command": command}\n    def close(self): pass\n''')
+(module_dir / 'adapter.py').write_text('''
+from core.adapter import GameAdapter
+from core.save_resolution import DefaultSaveProvider
+
+class OtherAdapter(GameAdapter):
+    state = {"internal": True}
+    def dispatch(self, command, params, request_id):
+        return {"command": command}
+    def close(self):
+        pass
+
+class NameFromModuleDirectory(DefaultSaveProvider):
+    def describe_snapshot(self, files, created_at):
+        return {"defaultName": (self.context.module_dir / "backup-name.txt").read_text()}
+''')
 (module_dir/'module.json').write_text(json.dumps({
     'id':'other','displayName':'Other Game','protocolVersion':11,
     'backend':{'adapter':'games.other.adapter:OtherAdapter'},
@@ -143,6 +161,8 @@ try:
     }]
     other = create_adapter('other', games)
     assert other.dispatch('ping', {}, 'x') == {'command':'ping'}
+    malformed = JsonlRequestRouter(other).handle({'id': 'bad-command', 'command': None})
+    assert 'state' not in malformed
     other.close()
 
     # One unreadable sibling must not prevent the explicitly selected healthy
@@ -186,6 +206,45 @@ try:
         raise AssertionError("duplicate module identity was accepted")
     (duplicate / "module.json").unlink()
     duplicate.rmdir()
+
+    original = json.loads((module_dir / "module.json").read_text())
+    for invalid in (None, 0, True, "", "0", "１２", "1/2", "12\n"):
+        (module_dir / "module.json").write_text(json.dumps({**original, "steamAppId": invalid}))
+        try:
+            create_adapter("other", games)
+        except ManifestError as error:
+            assert "steamAppId" in str(error), error
+        else:
+            raise AssertionError(f"invalid Steam app ID was accepted: {invalid!r}")
+    (module_dir / "module.json").write_text(json.dumps({**original, "steamAppId": "2300"}))
+    launched = create_adapter("other", games)
+    assert launched.context.steam_launch_url == "steam://run/2300"
+    assert "steamAppId" not in JsonlRequestRouter(launched).handle({
+        "id": "other-hello", "command": "hello",
+    })["result"]["game"]
+    launched.close()
+
+    saves = project / "other-saves"
+    saves.mkdir()
+    (saves / "slot.sav").write_bytes(b"synthetic save")
+    (module_dir / "backup-name.txt").write_text("From the fixture module")
+    original["saveManagement"] = {
+        "roots": [{"id": "main", "path": str(saves), "include": ["*.sav"]}],
+        "provider": "games.other.adapter:NameFromModuleDirectory",
+    }
+    (module_dir / "module.json").write_text(json.dumps(original))
+    with_saves = JsonlRequestRouter(
+        create_adapter("other", games, home=project / "home"), target_running_probe=lambda: False
+    )
+    created = with_saves.handle({"id": "other-backup", "command": "core.save.backup"})
+    assert created["ok"] is True, created
+    snapshot = created["result"]["operation"]
+    snapshot_dir = Path(snapshot["path"])
+    assert snapshot["name"] == "From the fixture module"
+    expected = project / "home/Library/Application Support/MacGamingTrainer/other/saves/snapshots"
+    assert snapshot_dir.parent == expected.resolve()
+    assert (snapshot_dir / "files/main/slot.sav").read_bytes() == b"synthetic save"
+    with_saves.close()
 finally:
     framework_games.__path__[:] = old_path
     sys.path.remove(str(backend))
@@ -214,6 +273,6 @@ for token in ('Hades II','WeaponCast','CurrentRun','TraitData','1145350','import
 from dataclasses import fields
 assert {field.name for field in fields(GameModuleManifest)} == {
     'id', 'display_name', 'module_protocol_version', 'adapter', 'process_name',
-    'bundle_identifier', 'source_path', 'save_management', 'executable_path_suffix',
+    'bundle_identifier', 'source_path', 'save_management', 'executable_path_suffix', 'steam_app_id',
 }
 print('backend_core_round12_ok')

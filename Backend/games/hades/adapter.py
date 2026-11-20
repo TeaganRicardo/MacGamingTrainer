@@ -7,9 +7,10 @@ import subprocess
 import sys
 
 from core.adapter import AdapterError, GameAdapter
+from core.errors import PresentableError
 from .catalog import catalog, get_entry, resource_catalog, trait_names
-from .config import steam_launch_url
 from .preferences import HadesPreferenceStore
+from .recovery import HadesRecoveryJournal
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
@@ -70,11 +71,12 @@ class HadesAdapter(GameAdapter):
         super().__init__(context)
         if runtime is None:
             from .client import HadesRuntimeClient
-            runtime = HadesRuntimeClient()
+            recovery = HadesRecoveryJournal(context.data_dir / 'runtime-request.json')
+            runtime = HadesRuntimeClient(recovery=recovery)
         self.runtime = runtime
         self.locate_process = locate_process or partial(_locate_process, context.executable_path_suffix)
         self.connected = False
-        self.preferences = preferences or HadesPreferenceStore()
+        self.preferences = preferences or HadesPreferenceStore(context.data_dir / 'preferences.json')
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
         self.features = dict(DEFAULT_PREFERENCES)
         self._preferences_error = None
@@ -136,7 +138,10 @@ class HadesAdapter(GameAdapter):
             except ValueError as error:
                 raise invalid_value() from error
         if command == 'launch':
-            subprocess.run(['/usr/bin/open', steam_launch_url(self.context.module_dir)], check=True)
+            url = self.context.steam_launch_url
+            if url is None:
+                raise RuntimeError('Hades module manifest is missing a valid steamAppId.')
+            subprocess.run(['/usr/bin/open', url], check=True)
             return self.dispatch('status', {}, request_id)
         if command == 'connect':
             target = self.locate_process()
@@ -387,12 +392,11 @@ class HadesAdapter(GameAdapter):
             if command == 'cancel': return workspace.cancel(language, baseline_generation=params.get('baselineGeneration'))
             if command == 'apply': return workspace.apply(baseline_generation=params.get('baselineGeneration'))
             raise ValueError('Unknown Save Editor operation.')
+        except PresentableError:
+            raise
         except (ValueError, KeyError, TypeError, OSError) as error:
-            recovery = getattr(error, 'recovery_path', None)
-            wrapped = AdapterError('rollback_failed' if recovery is not None else 'save_editor_invalid', 'hades.saveEditor.error',
-                                   diagnostic=str(error), arguments=[str(error)])
-            if recovery is not None: wrapped.recovery_path = str(recovery)
-            raise wrapped from error
+            raise AdapterError('save_editor_invalid', 'hades.saveEditor.error',
+                               diagnostic=str(error), arguments=[str(error)]) from error
 
     @staticmethod
     def _mutation_params(command, params):

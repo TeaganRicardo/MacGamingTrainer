@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -87,7 +88,7 @@ def _environment(name, *, include_temp=False, validation_age=None, running=False
         spec,
         base / "data",
         lambda: running,
-        provider_loader=lambda _target: Hades2SaveProvider(),
+        provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2")),
     )
     return base, saves, service
 

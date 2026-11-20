@@ -6,9 +6,13 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from typing import Callable, Optional, Union
 
+from .errors import CoreSaveError
+from .module_manifest import SaveManagementSpec
 from .save_resolution import (
     ResolvedSaveFile,
+    SaveProvider,
     SaveResolutionError,
     load_save_provider,
     read_resolved_save_file,
@@ -24,26 +28,36 @@ from .save_snapshots import SaveSnapshotError, SaveSnapshotStore
 from .save_retention import SaveBackupRetention
 
 
-class SaveManagementUnsupportedError(RuntimeError):
+class SaveManagementUnsupportedError(CoreSaveError):
     code = 'save_unsupported'
+    presentation_key = 'host.save.error.unsupported'
 
 
-class SaveStagedUnavailableError(RuntimeError):
+class SaveStagedUnavailableError(CoreSaveError):
     code = 'staged_unavailable'
+    presentation_key = 'host.save.error.stagedUnavailable'
 
 
-class SaveStagedIndeterminateError(RuntimeError):
+class SaveStagedIndeterminateError(CoreSaveError):
     code = 'staged_indeterminate'
+    presentation_key = 'host.save.error.stagedIndeterminate'
 
 
 class CoreSaveService:
-    def __init__(self, game_id, spec, data_root, target_running_probe, provider_loader=None):
+    def __init__(
+        self,
+        game_id: str,
+        spec: Optional[SaveManagementSpec],
+        data_root: Union[str, Path],
+        target_running_probe: Callable[[], bool],
+        provider_loader: Optional[Callable[[str], SaveProvider]] = None,
+    ) -> None:
         self.game_id = game_id
         self.spec = spec
         self.target_running_probe = target_running_probe
         self.store = SaveSnapshotStore(game_id, Path(data_root))
         self.retention = SaveBackupRetention(self.store)
-        self.provider = None
+        self.provider: Optional[SaveProvider] = None
         if spec is not None and spec.provider is not None:
             loader = provider_loader or load_save_provider
             self.provider = loader(spec.provider)
@@ -61,12 +75,7 @@ class CoreSaveService:
     def _provider_busy(self, files):
         if self.provider is None:
             return False
-        probe = getattr(self.provider, 'restore_busy', None)
-        if probe is None:
-            return False
-        if not callable(probe):
-            raise RuntimeError('Save Provider restore_busy must be callable.')
-        value = probe(files)
+        value = self.provider.restore_busy(files)
         if type(value) is not bool:
             raise RuntimeError('Save Provider restore_busy must return bool.')
         return value
@@ -74,12 +83,7 @@ class CoreSaveService:
     def _snapshot_naming(self, files, created_at):
         if self.provider is None:
             return None, [], {}
-        describe = getattr(self.provider, 'describe_snapshot', None)
-        if describe is None:
-            return None, [], {}
-        if not callable(describe):
-            raise RuntimeError('Save Provider describe_snapshot must be callable.')
-        value = describe(tuple(files), created_at)
+        value = self.provider.describe_snapshot(tuple(files), created_at)
         if value is None:
             return None, [], {}
         if not isinstance(value, dict):

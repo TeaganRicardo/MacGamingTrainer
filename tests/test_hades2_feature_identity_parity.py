@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
-from hades2_resident_session_fakes import FakeResidentSession
+from hades2_resident_session_fakes import FakeResidentSession, hades2_adapter_context
 from swift_test_compiler import SwiftModule, compile_swift_test
 
 GENERATOR_PATH = ROOT / "Tools/generate_hades2_feature_bindings.py"
@@ -174,86 +174,83 @@ class TimeWarp:
         return 1.0
 
 
-previous_data = preparation.DATA
-try:
-    with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary:
-        preparation.DATA = Path(temporary)
-        adapter_type = importlib.import_module("games.hades2.adapter").Hades2Adapter
-        session = FakeResidentSession({
-            "status": "ready",
-            "scene": "run",
-            "capabilities": {"setFeature": True},
-            "featureSupport": {},
-            "desiredFeatures": {},
-            "activeFeatures": {},
-            "dormantFeatures": {},
-            "featureErrors": {},
-            "stats": {},
-            "resources": [],
-            "elements": [],
-            "boons": [],
-            "rewards": [],
-            "nextRoomReward": None,
-            "boonRarity": {},
-            "gatheringProbabilities": {},
-            "chaosGateProbability": None,
-        }, pid=4242)
-        time_warp = TimeWarp()
-        adapter = adapter_type(
-            resident_session=session,
-            time_warp_controller=time_warp,
-        )
-        adapter.preference_initialized = True
-        adapter.state.update(
-            connected=True,
-            status="waiting",
-            capabilities={"setFeature": True},
-        )
+with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary:
+    context = hades2_adapter_context(temporary)
+    adapter_type = importlib.import_module("games.hades2.adapter").Hades2Adapter
+    session = FakeResidentSession({
+        "status": "ready",
+        "scene": "run",
+        "capabilities": {"setFeature": True},
+        "featureSupport": {},
+        "desiredFeatures": {},
+        "activeFeatures": {},
+        "dormantFeatures": {},
+        "featureErrors": {},
+        "stats": {},
+        "resources": [],
+        "elements": [],
+        "boons": [],
+        "rewards": [],
+        "nextRoomReward": None,
+        "boonRarity": {},
+        "gatheringProbabilities": {},
+        "chaosGateProbability": None,
+    }, pid=4242)
+    time_warp = TimeWarp()
+    adapter = adapter_type(
+        context=context,
+        resident_session=session,
+        time_warp_controller=time_warp,
+    )
+    adapter.preference_initialized = True
+    adapter.state.update(
+        connected=True,
+        status="waiting",
+        capabilities={"setFeature": True},
+    )
 
-        # `damageEnabled` is a derived projection of `damageMultiplier`, so the
-        # adapter translates a write to it instead of forwarding the retired
-        # name; the translation is asserted on its own below.
-        derived_toggles = {"damageEnabled"}
-        resident_cases = [(key, True) for key in TOGGLES if key not in derived_toggles]
-        resident_cases.extend(
-            (key, MULTIPLIER_RULES[key]["default"])
-            for key in MULTIPLIER_RULES
-            if key in resident_multipliers
-        )
-        for index, (key, value) in enumerate(resident_cases):
-            before = len(session.calls)
-            adapter.dispatch(
-                "set_desired",
-                {"feature": key, "value": value},
-                f"resident-{index}",
-            )
-            assert len(session.calls) == before + 1
-            call = session.calls[-1]
-            assert call["kind"] == "mutate"
-            assert call["command"] == "set_feature"
-            assert call["params"] == {"feature": key, "value": value}
-            assert not time_warp.calls
-
+    # `damageEnabled` is a derived projection of `damageMultiplier`, so the
+    # adapter translates a write to it instead of forwarding the retired
+    # name; the translation is asserted on its own below.
+    derived_toggles = {"damageEnabled"}
+    resident_cases = [(key, True) for key in TOGGLES if key not in derived_toggles]
+    resident_cases.extend(
+        (key, MULTIPLIER_RULES[key]["default"])
+        for key in MULTIPLIER_RULES
+        if key in resident_multipliers
+    )
+    for index, (key, value) in enumerate(resident_cases):
         before = len(session.calls)
         adapter.dispatch(
             "set_desired",
-            {"feature": "damageEnabled", "value": True},
-            "resident-damage-toggle",
+            {"feature": key, "value": value},
+            f"resident-{index}",
         )
         assert len(session.calls) == before + 1
-        assert session.calls[-1]["params"] == {"feature": "damageMultiplier", "value": 2.0}
+        call = session.calls[-1]
+        assert call["kind"] == "mutate"
+        assert call["command"] == "set_feature"
+        assert call["params"] == {"feature": key, "value": value}
+        assert not time_warp.calls
 
-        before = len(session.calls)
-        speed = MULTIPLIER_RULES["gameSpeed"]["default"] + 1.0
-        result = adapter.dispatch(
-            "set_desired",
-            {"feature": "gameSpeed", "value": speed},
-            "core-speed",
-        )
-        assert len(session.calls) == before
-        assert time_warp.calls == [("set_speed", speed)]
-        assert result["gameSpeed"] == speed
-finally:
-    preparation.DATA = previous_data
+    before = len(session.calls)
+    adapter.dispatch(
+        "set_desired",
+        {"feature": "damageEnabled", "value": True},
+        "resident-damage-toggle",
+    )
+    assert len(session.calls) == before + 1
+    assert session.calls[-1]["params"] == {"feature": "damageMultiplier", "value": 2.0}
+
+    before = len(session.calls)
+    speed = MULTIPLIER_RULES["gameSpeed"]["default"] + 1.0
+    result = adapter.dispatch(
+        "set_desired",
+        {"feature": "gameSpeed", "value": speed},
+        "core-speed",
+    )
+    assert len(session.calls) == before
+    assert time_warp.calls == [("set_speed", speed)]
+    assert result["gameSpeed"] == speed
 
 print("hades2_feature_identity_contract_ok")

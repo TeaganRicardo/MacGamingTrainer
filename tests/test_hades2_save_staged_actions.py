@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -59,7 +60,7 @@ def environment(name, state):
     )
     service = CoreSaveService(
         "hades2", spec, base / "data", lambda: False,
-        provider_loader=lambda _target: Hades2SaveProvider(),
+        provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2")),
     )
     return saves, Hades2SaveWorkspace.open(service)
 

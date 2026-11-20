@@ -6,19 +6,19 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
-from games.hades2 import preparation, resident_session
+from games.hades2 import resident_session
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import Hades2ResidentSession
 from hades2_lua_observation_fixture import LuaObservationTransport
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 with tempfile.TemporaryDirectory(prefix='mgt-vital-lock-observation-') as temporary, \
      patch.object(resident_session, 'localize_catalog', side_effect=lambda payload: payload):
-    preparation.DATA = Path(temporary)
+    context = hades2_adapter_context(Path(temporary))
     transport = LuaObservationTransport()
     try:
-        adapter = Hades2Adapter(resident_session=Hades2ResidentSession(transport, bootstrap=''),
+        adapter = Hades2Adapter(context=context, resident_session=Hades2ResidentSession(transport, bootstrap=''),
                                 time_warp_controller=FakeTimeWarpController())
         adapter.execute('status', {})
         adapter.execute('lock_vital', {'vital': 'health', 'locked': True})

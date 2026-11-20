@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -86,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
         restore_policy="hotPreferred", staged_restore=True,
     )
     service = CoreSaveService("hades2", spec, base / "data", lambda: False,
-                              provider_loader=lambda _target: Hades2SaveProvider(game_path=game))
+                              provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=game)))
     workspace = Hades2SaveWorkspace.open(service)
     original = path.read_bytes()
     frog = entity(workspace, "familiar:FrogFamiliar", "Frinos")

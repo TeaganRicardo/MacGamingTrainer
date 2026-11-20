@@ -7,12 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-dev8-pref-commit-'))
-preparation.DATA = base
+context = hades2_adapter_context(base)
 session = FakeResidentSession({
     'status':'ready', 'scene':'run',
     'capabilities':{'setFeature':True},
@@ -21,6 +20,7 @@ session = FakeResidentSession({
     'boonRarity':{}, 'gatheringProbabilities':{}, 'chaosGateProbability':None,
 }, pid=123)
 adapter = Hades2Adapter(
+    context=context,
     resident_session=session,
     time_warp_controller=FakeTimeWarpController(),
 )
@@ -39,12 +39,12 @@ adapter.preference_store.save = counted_save
 save_count = 0
 adapter.set_desired('invincibility', True)
 assert save_count == 1, save_count
-assert json.loads((base/'desired-state.json').read_text())['invincibility'] is True
+assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['invincibility'] is True
 
 save_count = 0
 adapter.set_boon_rarity_desired({'target':'Epic','multiplier':100,'forceLegendary':True,'forceDuo':False})
 assert save_count == 1, save_count
-assert json.loads((base/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
+assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
 
 save_count = 0
 adapter.dispatch(
@@ -53,7 +53,7 @@ adapter.dispatch(
     'world-exit-once',
 )
 assert save_count == 0, save_count
-persisted = json.loads((base/'desired-state.json').read_text())
+persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
 assert 'nextRoomReward' not in persisted and 'nextRoomRewardToken' not in persisted
 
 # Programming/schema failures after the durable commit are surfaced instead of

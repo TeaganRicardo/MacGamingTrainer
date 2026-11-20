@@ -15,9 +15,8 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 logging.disable(logging.WARNING)
 
-from games.hades2 import preparation  # noqa: E402
 from games.hades2.adapter import Hades2Adapter  # noqa: E402
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController  # noqa: E402
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context  # noqa: E402
 
 MISSING_NATIVE = '[string "MGTHades2Runtime"]:812: Unsupported infinite ammo: missing SetAmmo'
 UNKNOWN_FAILURE = '[string "MGTHades2Runtime"]:901: attempt to index a nil value'
@@ -29,8 +28,8 @@ PAYLOAD = {
 }
 
 with tempfile.TemporaryDirectory(prefix='hades2-feature-errors-') as directory:
-    preparation.DATA = Path(directory)
-    adapter = Hades2Adapter(resident_session=FakeResidentSession(payload=PAYLOAD),
+    context = hades2_adapter_context(Path(directory))
+    adapter = Hades2Adapter(context=context, resident_session=FakeResidentSession(payload=PAYLOAD),
                             time_warp_controller=FakeTimeWarpController())
     adapter.preference_initialized = True
     state = adapter.execute('status', {})

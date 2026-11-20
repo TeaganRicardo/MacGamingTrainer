@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
-from core.save_resolution import SaveResolutionError, resolve_save_files
+from core.save_resolution import DefaultSaveProvider, SaveProviderContext, SaveResolutionError, resolve_save_files
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-resolution-'))
 saves = base / 'saves'
@@ -68,7 +68,9 @@ else:
     raise AssertionError('symlink save file was accepted')
 
 (saves / 'dynamic.bin').write_bytes(b'dynamic')
-class Provider:
+context = SaveProviderContext(base)
+
+class Provider(DefaultSaveProvider):
     def resolve(self, roots, declared):
         assert set(roots) == {'main'}
         assert any(row.relative_path == 'Profile1.sav' for row in declared)
@@ -79,18 +81,19 @@ provider_spec = SaveManagementSpec(
     provider='games.example.save_provider:Provider', hot_backup=True,
     restore_policy='hotPreferred', staged_restore=True,
 )
-provider_rows = resolve_save_files(provider_spec, provider_loader=lambda target: Provider())
+
+provider_rows = resolve_save_files(provider_spec, provider_loader=lambda target: Provider(context))
 assert [(row.root_id, row.relative_path) for row in provider_rows] == [
     ('main', 'Profile1.sav'), ('main', 'dynamic.bin')
 ]
 
-class EscapeProvider:
+class EscapeProvider(DefaultSaveProvider):
     def resolve(self, roots, declared):
         return [('main', '../outside.sav')]
 
 (base / 'outside.sav').write_bytes(b'outside')
 try:
-    resolve_save_files(provider_spec, provider_loader=lambda target: EscapeProvider())
+    resolve_save_files(provider_spec, provider_loader=lambda target: EscapeProvider(context))
 except SaveResolutionError:
     pass
 else:

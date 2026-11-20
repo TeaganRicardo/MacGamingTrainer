@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.adapter import AdapterError
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from hades2_resident_session_fakes import hades2_adapter_context
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
 
@@ -101,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
         for outcome in outcomes:
             native = NativeTransport(outcome)
             sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
-            with patch.object(preparation, "DATA", Path(temporary) / operation / outcome), patch.object(
+            with patch.object(
                 _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
             ), patch.object(preparation, "compatibility", return_value={
                 "version": "1.143476", "steam_build": "fixture", "warnings": [],
@@ -109,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                 returncode=0, stdout="4343\n" if operation == "scan_replacement" else "4242\n", stderr="",
             )):
                 transport = Hades2LuaTransport()
-                adapter = Hades2Adapter(transport=transport)
+                adapter = Hades2Adapter(context=hades2_adapter_context(Path(temporary) / operation / outcome), transport=transport)
                 if operation != "attach_failure":transport.attach(4242)
                 adapter.state.update(connected=True, pid=4242, status="ready", scene="run")
                 desired = dict(adapter.preferences)
@@ -172,7 +173,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary
             "attach_rollback_lldb_failed" if scenario == "lldb_still_attached" else "attach_release_failed",
         )
         sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
-        with patch.object(preparation, "DATA", Path(temporary) / scenario), patch.object(
+        with patch.object(
             _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
         ), patch.object(preparation, "compatibility", return_value={
             "version": "1.143476", "steam_build": "fixture", "warnings": [],
@@ -180,7 +181,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-quarantine-recovery-") as temporary
             returncode=0, stdout="4242\n", stderr="",
         )):
             transport = Hades2LuaTransport()
-            adapter = Hades2Adapter(transport=transport)
+            adapter = Hades2Adapter(context=hades2_adapter_context(Path(temporary) / scenario), transport=transport)
             try:
                 adapter.connect()
             except AdapterError as error:
@@ -248,11 +249,11 @@ for outcome, expected_code in (
 with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-disconnect-") as temporary:
     native = NativeTransport("success")
     sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
-    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+    with patch.object(
         _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
     ):
         transport = Hades2LuaTransport()
-        adapter = Hades2Adapter(transport=transport)
+        adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport)
         transport.attach(4242)
         adapter.state.update(connected=True, pid=4242, status="ready", scene="run")
         try:
@@ -274,7 +275,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-close-") as tempo
     native = NativeTransport("success")
     native.detach_failures = 1
     sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
-    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+    with patch.object(
         _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
     ):
         transport = Hades2LuaTransport()
@@ -305,7 +306,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-semantic-terminal-close-") as tempo
 with tempfile.TemporaryDirectory(prefix="mgt-lost-terminal-sidecar-") as temporary:
     native = NativeTransport("success")
     sidecar = LoopbackSidecar(Hades2LLDBWorker(transport=native))
-    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+    with patch.object(
         _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
     ):
         transport = Hades2LuaTransport()

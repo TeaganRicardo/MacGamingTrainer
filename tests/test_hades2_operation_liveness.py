@@ -12,12 +12,11 @@ sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests")]
 from core.adapter import AdapterError
 from core.protocol import JsonlRequestRouter
 from core.sidecar import SidecarTerminalError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.persistence import PersistenceError
 from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 
 class NativeTransport:
@@ -95,12 +94,12 @@ class LoopbackSidecar:
 with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
     native = NativeTransport()
     sidecar = LoopbackSidecar(native)
-    with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+    with patch.object(
         _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
     ):
         transport = Hades2LuaTransport()
         transport.attach(4242)
-        adapter = Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
+        adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport, time_warp_controller=FakeTimeWarpController())
         adapter.preference_initialized = True
         adapter.preference_dirty = False
         adapter.state.update(connected=True, pid=4242, capabilities={"setFeature": True})
@@ -190,12 +189,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
                          "desiredFeatures": {}, "activeFeatures": {}, "resources": [],
                          "requestId": request_id, "applied": outcome == "completed",
                          "actionOutcome": outcome, "lastAction": receipt, "money": 321}
-        with patch.object(preparation, "DATA", Path(temporary)), patch.object(
+        with patch.object(
             _LLDBWorkerClient, "_make_sidecar", return_value=sidecar,
         ):
             transport = Hades2LuaTransport()
             transport.attach(4242)
-            adapter = Hades2Adapter(transport=transport, time_warp_controller=speed)
+            adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport, time_warp_controller=speed)
             adapter.preference_initialized = True
             adapter.preference_dirty = True
             adapter.preferences["invincibility"] = True

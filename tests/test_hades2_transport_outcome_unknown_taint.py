@@ -310,7 +310,7 @@ import tempfile
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 
 class AsyncUnknownTransport:
@@ -340,13 +340,13 @@ class AsyncUnknownTransport:
 
 
 with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
-    prior_data, prior_game, prior_saves = preparation.DATA, preparation.GAME, preparation.SAVES
+    prior_game, prior_saves = preparation.GAME, preparation.SAVES
     try:
-        preparation.DATA = Path(temporary) / 'data'
+        context = hades2_adapter_context(temporary)
         preparation.GAME = Path(temporary) / 'Hades II.app'
         preparation.SAVES = Path(temporary) / 'Saves'
         async_transport = AsyncUnknownTransport()
-        adapter = Hades2Adapter(transport=async_transport)
+        adapter = Hades2Adapter(context=context, transport=async_transport)
         try:
             adapter.execute('status', {})
         except AdapterError as error:
@@ -355,7 +355,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
             raise AssertionError('decoded asynchronous unknown action did not stop transport trust')
         assert async_transport.tainted
         assert len(async_transport.calls) == 1, 'unknown status automatically crossed another Lua boundary'
-        assert not (preparation.DATA / 'desired-state.json').exists(), 'unknown status adopted preferences'
+        assert not (context.data_dir.parent / 'desired-state.json').exists(), 'unknown status adopted preferences'
         assert adapter.state['status'] == 'restart_required'
         assert adapter.state['rerolls'] == 4
         assert adapter.state['lastAction']['requestId'] == 'async-special-choice'
@@ -371,11 +371,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         # receipts are observation only and must never be promoted to persistence.
         desired = Hades2PreferenceStore.defaults()
         desired.update(invincibility=True)
-        store = Hades2PreferenceStore(preparation.DATA / 'desired-state.json')
+        store = Hades2PreferenceStore(context.data_dir.parent / 'desired-state.json')
         store.save(desired)
         dirty_transport = AsyncUnknownTransport()
         dirty_transport.payload.update(nextRoomReward=None, runtimeDiagnostics={'lastConsumedNextRoomRewardToken': 'consumed-room'})
-        dirty_adapter = Hades2Adapter(transport=dirty_transport)
+        dirty_adapter = Hades2Adapter(context=context, transport=dirty_transport)
         try:
             dirty_adapter.execute('status', {})
         except AdapterError as error:
@@ -393,7 +393,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         # Observation-only status has the same trust rule without adopting the
         # runtime's desired state, and known failures do not taint the session.
         observation_transport = AsyncUnknownTransport()
-        observation_adapter = Hades2Adapter(transport=observation_transport)
+        observation_adapter = Hades2Adapter(context=context, transport=observation_transport)
         try:
             observation_adapter.observe_runtime()
         except AdapterError as error:
@@ -404,11 +404,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         for outcome in ('accepted', 'completed', 'failed'):
             known_transport = AsyncUnknownTransport()
             known_transport.payload['lastAction']['outcome'] = outcome
-            known_adapter = Hades2Adapter(transport=known_transport)
+            known_adapter = Hades2Adapter(context=context, transport=known_transport)
             result = known_adapter.observe_runtime()
             assert not known_transport.tainted and len(known_transport.calls) == 1
             assert result['lastAction']['outcome'] == outcome
     finally:
-        preparation.DATA, preparation.GAME, preparation.SAVES = prior_data, prior_game, prior_saves
+        preparation.GAME, preparation.SAVES = prior_game, prior_saves
 
 print('hades2_async_action_unknown_taint_ok')

@@ -88,6 +88,12 @@ router.close()
     # declarations in this isolated module; Core/reference need no Hades code.
     manifest = backend_module / 'module.json'
     original_manifest = manifest.read_text()
+    manifest.write_text(json.dumps({**json.loads(original_manifest), 'steamAppId': '42/invalid'}))
+    refused = subprocess.run([
+        'python3', str(tools / 'validate_game_module.py'), game_id
+    ], text=True, capture_output=True, cwd=project, env=env)
+    assert refused.returncode == 2 and 'steamAppId' in refused.stderr, refused
+
     native_source = backend_module / 'native/Query.c'
     native_source.parent.mkdir()
     native_source.write_text('int fixture_query(void) { return 1; }\n')

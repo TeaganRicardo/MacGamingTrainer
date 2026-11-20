@@ -3,6 +3,8 @@ import re
 import struct
 from pathlib import Path
 
+from core.save_resolution import LocalizedSnapshotDescription, ResolvedSaveFile, DefaultSaveProvider, SnapshotDescription
+
 
 _PROFILE_FILE = re.compile(r'^(Profile[0-9]+)((?:_[A-Za-z0-9_-]+|[.][A-Za-z0-9_-]+)?)\.sav$')
 
@@ -33,11 +35,8 @@ def active_profile_bytes(raw):
     return match[0].decode('ascii') if match is not None else None
 
 
-class HadesSaveProvider:
-    def resolve(self, roots, declared):
-        return [(row.root_id, row.relative_path) for row in declared]
-
-    def describe_snapshot(self, files, created_at):
+class HadesSaveProvider(DefaultSaveProvider):
+    def describe_snapshot(self, files: tuple[ResolvedSaveFile, ...], created_at: str) -> SnapshotDescription:
         active = next((row.source_path for row in files if row.relative_path == 'activeProfile'), None)
         if active is None:
             return {'defaultName': None, 'nameDetails': []}
@@ -52,8 +51,10 @@ class HadesSaveProvider:
         number = profile[len('Profile'):]
         timestamp = created_at.replace('T', ' ')[:16]
         labels = {'zh-CN': f'存档 {number}', 'en': f'Save Slot {number}'}
-        localized = {language: {'name': f'{timestamp} · {label}', 'details': [label]}
-                     for language, label in labels.items()}
+        localized: dict[str, LocalizedSnapshotDescription] = {
+            language: {'name': f'{timestamp} · {label}', 'details': [label]}
+            for language, label in labels.items()
+        }
         return {'defaultName': localized['zh-CN']['name'],
                 'nameDetails': localized['zh-CN']['details'],
                 'localizedPresentation': localized}

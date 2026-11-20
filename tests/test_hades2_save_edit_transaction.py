@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 import core.save_restore as save_restore_module
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import DefaultSaveProvider, SaveProviderContext
 from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, HadesSaveFormatError
@@ -215,17 +216,13 @@ running_previous = service.store.load_verified_snapshot(running_result["previous
 assert (running_previous["root"] / "files/main/Profile1.sav").read_bytes() == original
 
 # Provider-declared save busy must still veto the explicit running editor path.
-class BusyProvider:
-    def resolve(self, roots, declared):
-        del roots
-        return [(row.root_id, row.relative_path) for row in declared]
-
+class BusyProvider(DefaultSaveProvider):
     def restore_busy(self, files):
         assert any(row.relative_path == "Profile1.sav" for row in files)
         return True
 
 
-busy_provider = BusyProvider()
+busy_provider = BusyProvider(SaveProviderContext(ROOT / "Backend/games/hades2"))
 service, save_path, original, _state, _spec, _data_root = make_environment(
     "provider-busy",
     running=True,

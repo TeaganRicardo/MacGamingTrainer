@@ -5,15 +5,17 @@ import math
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import ProcessTimeWarpError
+from core.save_resolution import SaveProviderContext
 
 from . import preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
-from .config import DATA, DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST, PROCESS_NAME, STEAM_APP_ID
+from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST, PROCESS_NAME
 from .persistence import PersistenceError
 from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
@@ -114,18 +116,9 @@ _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
 class Hades2Adapter(GameAdapter):
-    data_dir = DATA
     def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None):
         if context is None:
-            context = GameAdapterContext(
-                game_id=MODULE_MANIFEST.id,
-                display_name=MODULE_MANIFEST.display_name,
-                module_protocol_version=MODULE_MANIFEST.module_protocol_version,
-                module_dir=Path(__file__).resolve().parent,
-                public_metadata=MODULE_MANIFEST.public_metadata(),
-                process_name=MODULE_MANIFEST.process_name,
-                save_management=MODULE_MANIFEST.save_management,
-            )
+            context = GameAdapterContext.from_manifest(MODULE_MANIFEST)
         super().__init__(context)
         if resident_session is None:
             if transport is None:
@@ -156,10 +149,10 @@ class Hades2Adapter(GameAdapter):
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
-        self.preference_store=Hades2PreferenceStore(preparation.DATA/'desired-state.json')
+        self.preference_store=Hades2PreferenceStore(self.legacy_data_dir/'desired-state.json')
         self.preferences,self.preference_initialized=self.preference_store.load()
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
-        self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
+        self.profile_service=Hades2ProfileService(self.legacy_data_dir/'profiles')
         self.command_contract=Hades2CommandContract(self)
         self.reply_projection=Hades2ReplyProjection()
         self.save_workspaces={}
@@ -1081,13 +1074,16 @@ class Hades2Adapter(GameAdapter):
     def apply_save_editor(self, params):
         return self._require_save_workspace(params["workspaceId"]).apply(params["draftEntryIds"])
 
-    def metadata(self):
-        metadata = super().metadata()
-        metadata.update({
-            'steamAppId': STEAM_APP_ID,
-            'transport': 'supergiant-lldb-lua',
-        })
-        return metadata
+    @property
+    def legacy_data_dir(self) -> Path:
+        """Retain the flat storage used before the Host added game directories."""
+        return self.context.data_dir.parent
+
+    def state_for_error(self) -> dict[str, Any]:
+        return self.state
+
+    def save_provider_context(self) -> SaveProviderContext:
+        return SaveProviderContext(self.context.module_dir, game_path=preparation.GAME)
 
     def reply_replayed(self):
         self.reply_projection.invalidate()

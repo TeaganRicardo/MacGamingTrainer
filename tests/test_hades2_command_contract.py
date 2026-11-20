@@ -1,6 +1,7 @@
 import copy
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -22,6 +23,8 @@ class ProbeAdapter:
     def __init__(self):
         self.calls = []
         self.runtime = TransportProbe()
+        self.context = SimpleNamespace(steam_launch_url="steam://run/2300")
+        self.legacy_data_dir = Path("/tmp/synthetic-trainer-data")
 
     def _record(self, name, *args):
         self.calls.append((name, *copy.deepcopy(args)))
@@ -565,8 +568,8 @@ try:
     command_contract_module.subprocess.run = (
         lambda argv, **kwargs: system_events.append((list(argv), dict(kwargs)))
     )
-    command_contract_module.preparation.prepare = lambda: {"prepared": True}
-    command_contract_module.preparation.restore = lambda: {"restored": True}
+    command_contract_module.preparation.prepare = lambda data_dir: {"prepared": True, "dataDir": data_dir}
+    command_contract_module.preparation.restore = lambda data_dir: {"restored": True, "dataDir": data_dir}
 
     assert contract.dispatch("diagnostics", {}, "diag") == {"diagnostics": True}
     assert contract.dispatch("export_diagnostics", {}, "export") == {
@@ -580,16 +583,16 @@ try:
 
     probe.calls.clear()
     contract.dispatch("launch", {}, "launch")
-    assert system_events[-1][0] == ["/usr/bin/open", command_contract_module.STEAM_LAUNCH_URL]
+    assert system_events[-1][0] == ["/usr/bin/open", "steam://run/2300"]
     assert probe.calls == [("scan",)]
 
     probe.runtime.live = False
     probe.calls.clear()
     prepared = contract.dispatch("prepare", {}, "prepare")
-    assert prepared == {"route": "scan", "args": (), "operation": {"prepared": True}}
+    assert prepared == {"route": "scan", "args": (), "operation": {"prepared": True, "dataDir": probe.legacy_data_dir}}
     probe.calls.clear()
     restored = contract.dispatch("restore", {}, "restore")
-    assert restored == {"route": "scan", "args": (), "operation": {"restored": True}}
+    assert restored == {"route": "scan", "args": (), "operation": {"restored": True, "dataDir": probe.legacy_data_dir}}
     probe.runtime.live = True
     expect_error("prepare", {}, "请断开连接并退出游戏后操作。")
 finally:

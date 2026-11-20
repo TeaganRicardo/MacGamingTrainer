@@ -12,8 +12,9 @@ import copy
 import math
 import subprocess
 
+from core.errors import PresentableError
+
 from . import preparation, save_advanced, save_container
-from .config import STEAM_LAUNCH_URL
 from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
@@ -607,8 +608,11 @@ def _export_diagnostics(adapter, params):
 
 
 def _launch(adapter, params):
+    url = adapter.context.steam_launch_url
+    if url is None:
+        raise RuntimeError("Hades II module manifest is missing a valid steamAppId.")
     subprocess.run(
-        ["/usr/bin/open", STEAM_LAUNCH_URL],
+        ["/usr/bin/open", url],
         check=True,
         timeout=10,
         shell=False,
@@ -620,7 +624,7 @@ def _stopped_operation(name):
     def invoke(adapter, params):
         if adapter.runtime.alive():
             raise ValueError("请断开连接并退出游戏后操作。")
-        info = {"prepare": preparation.prepare, "restore": preparation.restore}[name]()
+        info = {"prepare": preparation.prepare, "restore": preparation.restore}[name](adapter.legacy_data_dir)
         return dict(adapter.scan(), operation=info)
 
     return invoke
@@ -829,10 +833,8 @@ class Hades2CommandContract:
 
     @staticmethod
     def _as_presentation_key(error):
-        # Workspace batch-validation errors are ValueError-compatible so
-        # direct semantic callers retain the established exception contract.
-        # Preserve their already-resolved Hades key/arguments at the JSONL seam.
-        if getattr(error, "_hades2_presentation_ready", False):
+        # Preserve resolved presentation and recovery data across the legacy text mapper.
+        if isinstance(error, PresentableError) and error.presentation and error.presentation.startswith(("host.", "hades2.")):
             return error
         key, arguments = presentation_for(str(error))
         if key is None:

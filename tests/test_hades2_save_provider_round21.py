@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.save_resolution import ResolvedSaveFile
+from core.save_resolution import ResolvedSaveFile, SaveProviderContext
 
 
 def write_active_profile(path, name):
@@ -99,7 +99,7 @@ write_save(
 
 from games.hades2.save_provider import Hades2SaveProvider
 
-provider = Hades2SaveProvider(game_path=game)
+provider = Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=game))
 rows = [
     ResolvedSaveFile("main", "activeProfile", saves / "activeProfile"),
     ResolvedSaveFile("main", "Profile1.sav", saves / "Profile1.sav"),

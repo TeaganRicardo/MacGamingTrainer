@@ -9,9 +9,8 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from core.adapter import AdapterError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 
 class FakeTransport:
@@ -52,9 +51,9 @@ class FakeTransport:
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-boundary-ledger-v0180-'))
-preparation.DATA = base
+context = hades2_adapter_context(base)
 transport = FakeTransport()
-adapter = Hades2Adapter(transport=transport)
+adapter = Hades2Adapter(context=context, transport=transport)
 adapter.preference_initialized = True
 adapter.preference_dirty = False
 
