@@ -17,15 +17,12 @@ backend_state = read('Sources/Hades2/Hades2BackendState.swift')
 store = read('Sources/Hades2/Services/Hades2ShortcutStore.swift')
 navigation = read('Sources/Hades2/Services/Hades2WorkbenchNavigation.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
-core_management = read('Sources/Core/UI/Components/TrainerManagementGroups.swift')
-core_profiles = read('Sources/Core/UI/Components/TrainerProfileManagerView.swift')
 schema = read('Backend/games/hades2/schema.py')
 feature_generator = read('Tools/generate_hades2_feature_bindings.py')
 feature_bindings = read('Sources/Hades2/Generated/Hades2Feature.generated.swift')
 gathering = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
 occurrence = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
 rarity = read('Sources/Hades2/Views/Hades2BoonRarityPanel.swift')
-badge = read('Sources/Core/UI/Primitives/TrainerBadge.swift')
 lua = read('Backend/games/hades2/runtime/hades.lua')
 
 # Dynamic spawn lists remain bilingual. Resource rows put the active Host
@@ -133,15 +130,8 @@ profile_manager = source_section(management, "struct Hades2ProfileManagerView: V
 assert "TrainerProfileManagerView(" in profile_manager
 assert 'warning: model.profileShortcutWarning.map { localization.string($0) } ?? ""' in profile_manager
 assert '.onDisappear { model.clearProfileShortcutWarning() }' in profile_manager
-profile_warning = source_section(core_profiles, "if !warning.isEmpty {", "            HStack(spacing: 10)")
-assert "Text(warning)" in profile_warning
-assert ".foregroundStyle(theme.warning)" in profile_warning
-assert ".fixedSize(horizontal: false, vertical: true)" in profile_warning
 shortcut_settings = management[management.index("struct Hades2ShortcutSettingsView"):management.index("struct Hades2ManagementUtilities")]
-shared_settings = (ROOT / "Sources/Core/UI/Components/TrainerShortcutSettingsView.swift").read_text()
 assert "TrainerShortcutSettingsView(" in shortcut_settings
-assert "ScrollView {" in shared_settings
-assert ".frame(maxHeight: 560)" in shared_settings
 assert "ShortcutAction.allCases" in model
 assert "Hades2WorkbenchCatalog.orderedShortcutActions" in management
 assert 'title: "hades2.op.acquireSelectedReward"' in model
@@ -191,8 +181,6 @@ if "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common:
 visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
 # Disable All remains a visible action, but its fixed global shortcut is not
 # rendered as a badge beside the button.
-assert 'case .disableAll: "host.disableAll"' in core_management
-assert "case .disableAll: TrainerSemanticIcon.Tool.disableAll" in core_management
 assert "TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))" not in management
 visible_actions.append("disableAll")
 assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
@@ -215,12 +203,6 @@ assert "value = value ~= 1" in feature_generator
 assert 'if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end' in lua
 assert "M.damageMultiplier = 1" in lua[lua.index("local function disable()"):lua.index("local function anyDesired()")]
 assert len(set(action_order)) == len(action_order)
-assert "Color.clear" not in badge
-assert "if let text, !text.isEmpty" in badge
-capture = (ROOT / "Sources/Core/Input/TrainerShortcutCapture.swift").read_text()
-assert "GlobalHotkeys.beginShortcutCapture()" in capture
-assert "HotkeyChord.capture(event)" in capture
-assert "NSEvent.addLocalMonitorForEvents(matching: .keyDown" in capture
 assert "NSEvent.addLocalMonitorForEvents" not in management
 
 required_shortcut_labels = {
@@ -265,20 +247,19 @@ for line in (
 print('hades2_feature_contracts_ok')
 
 
-resource_controls = read('Sources/Core/UI/Components/TrainerResourceControls.swift')
 occurrence_setting = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
 gathering_panel = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
 chaos_gate_panel = read('Sources/Hades2/Views/Hades2ChaosGatePanel.swift')
 host_actions = read('Sources/Hades2/Views/Hades2HostActions.swift')
 assert "inline: true" in view
-assert "if inline" in resource_controls
-assert "actionAvailable ? theme.accent : theme.inactive" in resource_controls
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert 'TrainerSection(title: text("hades2.section.elements")' not in view
 assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
 assert "specialSearch" not in view
 assert "TrainerWorkbenchSearchField(" in host_actions
+# AppKit can flip either requested edge when space is limited. Keep the
+# preferred edge guarded on displays that cannot show both placements.
 search_field = read('Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift')
 assert ".popover(isPresented: $presentation.resultsPresented, arrowEdge: .bottom)" in search_field
 

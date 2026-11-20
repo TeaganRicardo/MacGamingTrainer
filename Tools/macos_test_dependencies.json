@@ -144,6 +144,7 @@
   "test_trainer_search_field_appearance.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_ui.py",
+    "tests/fixtures/swift/NativeAccessibility.swift",
     "tests/swift_test_compiler.py",
     "Tools/swift_module_layout.py"
   ],
@@ -240,6 +241,17 @@
     "tests/fixtures/swift/NativeAccessibility.swift",
     "Tools/swift_module_layout.py"
   ],
+  "test_core_ui_primitives_macos.py": [
+    "Resources/Assets.xcassets/AccentColor.colorset/Contents.json",
+    "Resources/Localization/en.lproj/Host.strings",
+    "Resources/Localization/zh-CN.lproj/Host.strings",
+    "tests/macos_fixture_policy.py",
+    "tests/fixture_budgets/core_ui_primitives.py",
+    "tests/swift_test_compiler.py",
+    "tests/fixtures/swift/InMemoryDefaults.swift",
+    "tests/fixtures/swift/NativeAccessibility.swift",
+    "Tools/swift_module_layout.py"
+  ],
   "test_core_save_retention_controls.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_save.py",
@@ -253,6 +265,7 @@
   "test_mapped_slider_interaction.py": [
     "tests/macos_fixture_policy.py",
     "tests/fixture_budgets/core_ui.py",
+    "tests/fixtures/swift/NativeAccessibility.swift",
     "tests/swift_test_compiler.py",
     "Tools/swift_module_layout.py"
   ],

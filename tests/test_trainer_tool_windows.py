@@ -161,6 +161,7 @@ struct Main {
                 DraftView(draft: draft)
             }
         }
+        precondition(first.appearance?.name == .darkAqua, "tool window did not own darkAqua appearance")
         pump(0.2)
         wait("initial tool did not become the active key window") {
             NSApp.isActive && first.isVisible && first.isKeyWindow
@@ -210,6 +211,7 @@ struct Main {
                 Text("second draft").frame(width: 400, height: 250)
             }
         }
+        precondition(second.appearance?.name == .darkAqua, "second tool window did not own darkAqua appearance")
         precondition(first !== second && factories == 2)
         precondition(first.sheetParent == nil && second.sheetParent == nil)
         precondition(first.isVisible && second.isVisible)

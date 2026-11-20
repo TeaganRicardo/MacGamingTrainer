@@ -1,23 +1,13 @@
 """Root regression for issue #653: workbench Pickers have one Core presentation owner."""
 
-import json
 from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
 picker = (ROOT / "Sources/Core/UI/Primitives/TrainerPicker.swift").read_text()
-assert "enum TrainerPickerPresentationState" in picker
-assert "case interactive" in picker and "case unavailable" in picker
-assert "func trainerPicker(" in picker
-assert ".trainerPickerWidth(role)" in picker
-assert ".disabled(!state.allowsInteraction)" in picker
 
-# The accepted baseline (v0.5.1) is the native popup: AppKit draws the bezel,
-# title, indicator and disabled state. #654/#675 repainted it with SwiftUI
-# fills, borders, a masking indicator and an AppKit view-tree bridge; the native
-# body still showed through, so the surface never filled the control. The owner
-# may select geometry, availability and accent only.
+# Kept (lint): structural guard preventing native popup repainting regressions (#654/#675).
 picker_code = "\n".join(line.split("//", 1)[0] for line in picker.splitlines())
 for repaint in (
     "NSViewRepresentable", "NSPopUpButton", "isBordered", "bezelColor",
@@ -26,37 +16,9 @@ for repaint in (
 ):
     assert repaint not in picker_code, f"shared Picker owner repaints native chrome: {repaint}"
 
-# The product purple reaches the native indicator through SwiftUI tint and,
-# for chrome AppKit redraws by itself, through the application accent color.
+# Kept (no headless render hook): macOS renders native popup accent neutral gray in inactive headless windows, so Picker .tint(theme.accent) has no PR-safe render hook.
 assert ".tint(theme.accent)" in picker
 
-
-def srgb_triplet(text: str) -> tuple[float, float, float]:
-    match = re.search(
-        r"accent: Color\(red: ([\d.]+), green: ([\d.]+), blue: ([\d.]+)\)", text
-    )
-    assert match, "TrainerTheme accent declaration is missing"
-    return tuple(float(value) for value in match.groups())
-
-
-theme_accent = srgb_triplet((ROOT / "Sources/Core/UI/TrainerTheme.swift").read_text())
-colorset = json.loads(
-    (ROOT / "Resources/Assets.xcassets/AccentColor.colorset/Contents.json").read_text()
-)
-(entry,) = colorset["colors"]
-assert entry["idiom"] == "universal"
-assert "appearances" not in entry, "the dark-only product declares one accent"
-assert entry["color"]["color-space"] == "srgb"
-components = entry["color"]["components"]
-asset_accent = tuple(float(components[name]) for name in ("red", "green", "blue"))
-assert float(components["alpha"]) == 1.0
-assert all(abs(a - b) < 0.0005 for a, b in zip(asset_accent, theme_accent)), (
-    f"application accent {asset_accent} diverged from TrainerTheme accent {theme_accent}"
-)
-
-build_script = (ROOT / "build.sh").read_text()
-assert '--accent-color "$ACCENT_COLOR_NAME"' in build_script
-assert "data['NSAccentColorName'] = asset_info['NSAccentColorName']" in build_script
 
 # Appearance is owned once at the AppKit application boundary, so windows,
 # sheets, panels, menus and reconstructed popups never resolve the light bezel.
@@ -154,9 +116,8 @@ assert _fixture_multiline_owner
 assert picker_trailing_segment(_fixture_multiline_bad, _fixture_multiline_owner).startswith(".disabled(")
 
 assert ".preferredColorScheme(" not in app_source
-tool_windows_source = (ROOT / "Sources/Core/UI/TrainerToolWindows.swift").read_text()
-assert "window.appearance = NSAppearance(named: .darkAqua)" in tool_windows_source
 
+# Kept (lint): cross-codebase scanner enforcing every Picker uses .trainerPicker(...) without .pickerStyle/.preferredColorScheme/.disabled bypasses.
 for source_root in (ROOT / "Sources/Core", ROOT / "Sources/Hades", ROOT / "Sources/Hades2"):
     for swift_path in source_root.rglob("*.swift"):
         relative = swift_path.relative_to(ROOT)

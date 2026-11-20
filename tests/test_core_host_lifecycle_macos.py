@@ -703,9 +703,14 @@ struct Runner {
                 }
                 for (kind, key) in expectedKeys {
                     let action = makeCommon(kind)
-                    check(action.title == localization.localized(key),
+                    check(kind.titleKey == key && action.title == localization.localized(key),
                           "Common action \(kind) title mismatch in \(language): \(action.title) != \(localization.localized(key))")
+                    check(action.icon == kind.icon,
+                          "Common action \(kind) icon mismatch: \(action.icon) != \(kind.icon)")
                 }
+                check(TrainerManagementAction.Common.disableAll.titleKey == "host.disableAll"
+                      && TrainerManagementAction.Common.disableAll.icon == TrainerSemanticIcon.Tool.disableAll,
+                      "Common.disableAll lost shared host key or icon")
 
                 let withoutOptionals = TrainerManagementCatalog(
                     titles: .init(daily: "Daily", settings: "Settings", maintenance: "Maintenance"),
@@ -920,6 +925,46 @@ struct Runner {
                 listenerWindow.contentView = nil
                 listenerWindow.close()
                 pump(0.05)
+
+                // Verify ScrollView + maxHeight: 560 caps tall entry lists.
+                if language == .en {
+                    func findScrollViews(in view: NSView) -> [NSScrollView] {
+                        (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(findScrollViews)
+                    }
+                    let manyEntries = (0..<30).map { index in
+                        TrainerShortcutSettingsEntry(
+                            id: "entry.\(index)", title: "Action \(index)", icon: "star",
+                            chordText: "⌃⌥\(index)", isEditable: true
+                        )
+                    }
+                    let tallWindow = NSWindow(
+                        contentRect: NSRect(x: 0, y: 0, width: 620, height: 800),
+                        styleMask: [.titled], backing: .buffered, defer: false
+                    )
+                    tallWindow.isReleasedWhenClosed = false
+                    let tallHost = NSHostingView(
+                        rootView: TrainerShortcutSettingsView(
+                            isPresented: .constant(true),
+                            entries: manyEntries,
+                            onAssign: { _, _ in .applied }
+                        )
+                        .environmentObject(localization)
+                        .trainerTheme(.standard)
+                    )
+                    tallWindow.contentView = tallHost
+                    tallWindow.orderBack(nil)
+                    waitWindow(tallHost, message: "shortcut settings ScrollView caps tall list") {
+                        guard let scroll = findScrollViews(in: tallHost).first else { return false }
+                        let docHeight = scroll.documentView?.frame.height ?? 0
+                        return scroll.frame.height > 100 && docHeight > scroll.frame.height
+                    }
+                    let scroll = findScrollViews(in: tallHost).first!
+                    check(scroll.frame.height <= 562,
+                          "shortcut settings ScrollView exceeded maxHeight 560: \(scroll.frame.height)")
+                    tallWindow.contentView = nil
+                    tallWindow.close()
+                    pump(0.05)
+                }
             }
         }
 

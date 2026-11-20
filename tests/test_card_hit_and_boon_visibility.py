@@ -1,24 +1,9 @@
-"""Regression: entire inactive module card is a hit target and Hades II Boon Management stays discoverable."""
+"""Regression: Hades II Boon Management stays discoverable."""
 from pathlib import Path
 import json
 
 ROOT = Path(__file__).resolve().parents[1]
-sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text()
 hades = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-native = (ROOT / "tests/visual_hierarchy_harness.py").read_text()
-
-card = sidebar.split("struct TrainerSidebarCard<", 1)[1].split("struct TrainerSidebar<", 1)[0]
-assert ".frame(maxWidth: .infinity, alignment: .leading)" in card
-assert ".focusEffectDisabled()" in card
-assert ".allowsHitTesting(selected)" in card
-assert ".trainerSurface(selected ? .raised : .panel" in card
-surface = card.split(".trainerSurface(selected ? .raised : .panel", 1)[1]
-assert ".overlay {" in surface
-assert "if !selected {" in surface
-assert ".contentShape(Rectangle())" in surface
-assert ".onTapGesture(perform: onSelect)" in surface
-assert ".accessibilityHidden(true)" in surface
-assert "collapsed module-card background rejected pointer selection" in native
 
 effects = hades.split("private var currentRunEffectsPanel: some View {", 1)[1].split("private func exactItemLabel", 1)[0]
 assert "currentRunTraitsPanel" in effects
