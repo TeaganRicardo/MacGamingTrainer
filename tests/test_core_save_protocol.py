@@ -50,6 +50,16 @@ adapter = FakeAdapter(context)
 router = JsonlRequestRouter(adapter, save_data_root=base/'data', target_running_probe=lambda: False)
 assert adapter.save_service is router.save_service
 
+unscoped = base / 'outside-configured-home'
+unsafe_context = replace(context, game_id=str(unscoped), home=base / 'home')
+try:
+    JsonlRequestRouter(FakeAdapter(unsafe_context), target_running_probe=lambda: False)
+except ValueError as error:
+    assert 'safe path component' in str(error)
+else:
+    raise AssertionError('router accepted an absolute game ID as its default storage location')
+assert not unscoped.exists()
+
 backup = router.handle({'id':'b1','command':'core.save.backup','params':{'name':'First'}})
 assert backup['ok'] is True
 assert backup['result']['operation']['name'] == 'First'

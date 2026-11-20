@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 from core.errors import PresentableError
-from core.log_paths import trainer_data_root, trainer_log_directory
+from core.log_paths import trainer_data_directory, trainer_log_directory
 from core.module_manifest import GameModuleManifest, SaveManagementSpec
 from core.save_resolution import SaveProviderContext
 
@@ -67,7 +67,7 @@ class GameAdapterContext:
     @property
     def data_dir(self) -> Path:
         """Directory for this game's Trainer-owned data."""
-        return trainer_data_root(self.home) / self.game_id
+        return trainer_data_directory(self.game_id, self.home)
 
     @property
     def log_dir(self) -> Path:
