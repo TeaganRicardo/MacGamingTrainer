@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from games.hades2 import diagnostics, schema
 from games.hades2.config import DISPLAY_NAME
 from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 STALE_STATE = {
@@ -28,9 +28,9 @@ STALE_STATE = {
 
 
 def make_adapter(refresh_result=None, refresh_error=None):
-    diagnostics.preparation.DATA = Path(tempfile.mkdtemp(prefix="mgt-diagnostic-adapter-"))
+    context = hades2_adapter_context(Path(tempfile.mkdtemp(prefix="mgt-diagnostic-adapter-")))
     session = FakeResidentSession(refresh_result, handler=lambda *args: refresh_error)
-    adapter = Hades2Adapter(resident_session=session, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(context=context, resident_session=session, time_warp_controller=FakeTimeWarpController())
     adapter.state.update(STALE_STATE)
     return adapter
 
@@ -49,7 +49,6 @@ def build(adapter, identity, command="diagnostics"):
             patch.object(diagnostics.preparation, "compatibility", return_value=identity),
             patch.object(diagnostics.localization, "official_display_names", return_value={"WeaponUpgrade": "测试"}),
             patch.object(diagnostics.subprocess, "run", return_value=completed),
-            patch.object(diagnostics, "trainer_log_directory", return_value=root),
         ):
             return adapter.dispatch(command, {}, "diagnostics-test")
 

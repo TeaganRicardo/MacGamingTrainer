@@ -1,6 +1,7 @@
 from importlib import import_module
 import logging
 from pathlib import Path
+from typing import Optional
 
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import GameModuleManifest, ManifestError
@@ -38,7 +39,7 @@ def available_games(root: Path = _ROOT):
     return [manifest.public_metadata() for _, manifest in sorted(discover_manifests(root).items())]
 
 
-def create_adapter(game_id: str, root: Path = _ROOT):
+def create_adapter(game_id: str, root: Path = _ROOT, *, home: Optional[Path] = None) -> GameAdapter:
     try:
         manifest = discover_manifests(root, selected_game_id=game_id)[game_id]
     except KeyError as error:
@@ -48,16 +49,7 @@ def create_adapter(game_id: str, root: Path = _ROOT):
     adapter_type = getattr(module, class_name, None)
     if not isinstance(adapter_type, type) or not issubclass(adapter_type, GameAdapter):
         raise TypeError(f'Adapter {manifest.adapter} must inherit GameAdapter.')
-    context = GameAdapterContext(
-        game_id=manifest.id,
-        display_name=manifest.display_name,
-        module_protocol_version=manifest.module_protocol_version,
-        module_dir=manifest.source_path.parent,
-        public_metadata=manifest.public_metadata(),
-        process_name=manifest.process_name,
-        save_management=manifest.save_management,
-        executable_path_suffix=manifest.executable_path_suffix,
-    )
+    context = GameAdapterContext.from_manifest(manifest, home=home)
     # Do not catch TypeError here: a TypeError raised *inside* a valid adapter
     # constructor is a real module bug and must not be misreported as a bad
     # constructor signature.

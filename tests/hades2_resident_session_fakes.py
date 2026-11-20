@@ -1,7 +1,15 @@
 import copy
+from pathlib import Path
+from typing import Union
 
-from core.adapter import AdapterError
+from core.adapter import AdapterError, GameAdapterContext
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
+
+
+def hades2_adapter_context(home: Union[str, Path]) -> GameAdapterContext:
+    from games.hades2.config import MODULE_MANIFEST
+
+    return GameAdapterContext.from_manifest(MODULE_MANIFEST, home=Path(home))
 
 
 class FakeResidentSession:

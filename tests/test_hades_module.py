@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
+from core.module_manifest import GameModuleManifest
 from games.hades import adapter as hades_adapter
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
@@ -62,8 +63,9 @@ class Runtime:
         self.connected = False
 
 
-context = GameAdapterContext('hades', 'Hades', 1, ROOT / 'Backend/games/hades', {})
 test_data = tempfile.TemporaryDirectory(prefix='hades-module-')
+manifest = GameModuleManifest.load(ROOT / 'Backend/games/hades/module.json')
+context = GameAdapterContext.from_manifest(manifest, home=Path(test_data.name))
 preferences = HadesPreferenceStore(Path(test_data.name) / 'preferences.json')
 runtime = Runtime()
 adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=preferences)
@@ -160,8 +162,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-target-metadata-") as tempora
     declared["targetApplication"]["executablePathSuffix"] = "Fixture/ChangedTarget"
     declared["steamAppId"] = "2300"
     (module_dir / "module.json").write_text(json.dumps(declared))
-    changed_context = GameAdapterContext("hades", "Hades", 2, module_dir, {},
-        process_name="ChangedTarget", executable_path_suffix="Fixture/ChangedTarget")
+    changed_context = GameAdapterContext.from_manifest(GameModuleManifest.load(module_dir / "module.json"), home=module_dir)
     changed_runtime = Runtime()
     changed = HadesAdapter(changed_context, runtime=changed_runtime,
         preferences=HadesPreferenceStore(module_dir / "preferences.json"))

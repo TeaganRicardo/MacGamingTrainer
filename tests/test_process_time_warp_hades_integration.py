@@ -13,10 +13,10 @@ from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.schema import TOGGLES, default_boon_rarity
 from core.process_time_warp import ProcessTimeWarpError
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
-prep.DATA = base
+context = hades2_adapter_context(base)
 prep.GAME = base / "Hades II.app"
 prep.SAVES = base / "Saves"
 prep.official_display_names = lambda ids, language="zh-CN": {}
@@ -81,7 +81,7 @@ class FakeTimeWarp:
 
 
 transport = FakeTransport()
-adapter = Hades2Adapter(transport=transport)
+adapter = Hades2Adapter(context=context, transport=transport)
 adapter.time_warp = FakeTimeWarp()
 adapter.preference_initialized = True
 adapter.preference_dirty = False
@@ -179,7 +179,7 @@ class FailingTimeWarp:
 # Drive the real Hades desired-state path. The adapter deliberately keeps the
 # failed desired value pending, but the observable failure is now a structured
 # Host presentation token rather than raw localized copy in featureErrors.
-failing = Hades2Adapter(transport=FakeTransport())
+failing = Hades2Adapter(context=context, transport=FakeTransport())
 failing.time_warp = FailingTimeWarp()
 failing.preference_initialized = True
 failing.preference_dirty = False

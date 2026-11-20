@@ -4,7 +4,7 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
-from .recovery import HadesRecoveryJournal, process_identity
+from .recovery import process_identity
 from .schema import DEFERRED_TRAIT_COMMANDS, MUTATING_COMMANDS
 
 
@@ -16,12 +16,12 @@ class HadesRuntimeClient:
         if method in DEFERRED_TRAIT_COMMANDS:
             return 50
         return 22
-    def __init__(self, sidecar=None, *, recovery=None, identity=process_identity):
+    def __init__(self, sidecar=None, *, recovery, identity=process_identity):
         self.sidecar = sidecar or self._new_sidecar()
         self.connected = False
         self.pid = None
         self.uncertain_pid = None
-        self.recovery = recovery or HadesRecoveryJournal()
+        self.recovery = recovery
         self.identity = identity
         self.process_identity = None
         self.game_speed_actual = None

@@ -30,7 +30,7 @@ sys.path.insert(0, BACKEND_PATH)
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
-from core.save_resolution import ResolvedSaveFile
+from core.save_resolution import ResolvedSaveFile, DefaultSaveProvider, SaveProviderContext
 
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
 folder = pathlib.Path(__file__).parent.resolve()
@@ -41,7 +41,7 @@ replacement = folder / 'replacement.sav'; replacement.write_bytes(b'edited tempo
 running = [False]
 
 
-class Provider:
+class Provider(DefaultSaveProvider):
     def describe_snapshot(self, files, created_at):
         return {
             'defaultName': '自动快照',
@@ -75,7 +75,7 @@ spec = SaveManagementSpec((SaveRootSpec('main', str(saves), ('*.sav',)),), None,
 adapter = FixtureAdapter(GameAdapterContext(args.game, 'Fixture', 1, folder, {}, save_management=spec))
 data_root = pathlib.Path.home() / 'Library/Application Support/MacGamingTrainer'
 router = JsonlRequestRouter(adapter, save_data_root=data_root, target_running_probe=lambda: running[0])
-router.save_service.provider = Provider()
+router.save_service.provider = Provider(SaveProviderContext(folder))
 router.save_service.replace_files((ResolvedSaveFile('main', 'Profile1.sav', replacement),))
 for raw in sys.stdin:
     request = json.loads(raw)

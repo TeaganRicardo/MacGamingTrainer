@@ -117,6 +117,7 @@ class GameModuleManifest:
     source_path: Path
     save_management: Optional[SaveManagementSpec] = None
     executable_path_suffix: str = ''
+    steam_app_id: Optional[str] = None
 
     @classmethod
     def load(cls, path: Union[str, Path]) -> 'GameModuleManifest':
@@ -162,6 +163,12 @@ class GameModuleManifest:
         if not bundle_identifier.strip() and not executable_suffix.strip():
             raise ManifestError('targetApplication requires bundleIdentifier or executablePathSuffix.')
 
+        steam_app_id = data.get('steamAppId')
+        if 'steamAppId' in data and (
+            not isinstance(steam_app_id, str) or not re.fullmatch(r'[1-9][0-9]*', steam_app_id)
+        ):
+            raise ManifestError('steamAppId must be a string containing a positive decimal Steam app ID.')
+
         return cls(
             id=game_id,
             display_name=display_name.strip(),
@@ -172,7 +179,14 @@ class GameModuleManifest:
             source_path=source,
             save_management=_parse_save_management(data, game_id),
             executable_path_suffix=executable_suffix.strip(),
+            steam_app_id=steam_app_id,
         )
+
+    @property
+    def steam_launch_url(self) -> Optional[str]:
+        if self.steam_app_id is None:
+            return None
+        return f'steam://run/{self.steam_app_id}'
 
     def public_metadata(self) -> dict:
         metadata = {

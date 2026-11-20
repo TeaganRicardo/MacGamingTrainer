@@ -123,12 +123,13 @@ def worker():
 
 
 def backend():
+    from core.adapter import GameAdapterContext
     from games.hades2 import preparation
     from games.hades2.adapter import Hades2Adapter
     from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
     from core.protocol import JsonlRequestRouter
     from core import server
-    from hades2_resident_session_fakes import FakeTimeWarpController
+    from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
     temporary = Path(os.environ['MGT_PROFILE_TEMP'])
     # The production localization owner also reads installed content by
     # default. Pin its input to a finite synthetic bilingual source tree.
@@ -144,14 +145,19 @@ def backend():
             '{ Id = %s DisplayName = %s }' % (json.dumps(key), json.dumps('Synthetic ' + key))
             for key in sorted(identifiers)) + '\n] }\n', encoding='utf-8')
     localization.GAME_APP = game
-    preparation.DATA = temporary / 'preferences'
-    preparation.DATA.mkdir()
+    if hasattr(GameAdapterContext, 'from_manifest'):
+        adapter_options = {'context': hades2_adapter_context(temporary / 'preferences')}
+    else:
+        # Historical source checkouts use a mutable preparation path.
+        preparation.DATA = temporary / 'preferences'
+        preparation.DATA.mkdir()
+        adapter_options = {}
     transport = Hades2LuaTransport()
     sidecar = ProfileSidecar([sys.executable, '-u', str(Path(__file__).resolve()), '--sidecar'],
                             reply_timeout_seconds=15, env=dict(os.environ))
     transport._worker = _LLDBWorkerClient(sidecar=sidecar, on_state=transport._adopt_state)
     transport.attach(4242)
-    adapter = Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController(), **adapter_options)
     adapter.state.update(pid=4242, connected=True)
     adapter.preference_initialized = True
     adapter.preference_dirty = False

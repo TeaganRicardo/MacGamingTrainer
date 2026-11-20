@@ -9,14 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 from games.hades2.resident_session import Hades2ResidentSession
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-runtime-boundary-dev8-'))
-preparation.DATA = base
+context = hades2_adapter_context(base)
 runtime_source = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
 
@@ -112,6 +111,7 @@ def status_handler(fake, record):
 
 adapter_session = FakeResidentSession(handler=status_handler, pid=4242)
 adapter = Hades2Adapter(
+    context=context,
     resident_session=adapter_session,
     time_warp_controller=FakeTimeWarpController(),
 )

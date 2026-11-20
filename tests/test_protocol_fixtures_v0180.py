@@ -28,6 +28,9 @@ class FixtureAdapter(GameAdapter):
         self.state = {'connected': False, 'scene': 'fixture'}
         self.dispatch_count = 0
 
+    def state_for_error(self):
+        return self.state
+
     def dispatch(self, command, params, request_id):
         self.dispatch_count += 1
         if command == 'echo':
@@ -101,6 +104,9 @@ class SnapshotAdapter(GameAdapter):
         self.state = {'nested': {'locked': False}}
         self.shared_result = {'nested': {'locked': False}}
         self.dispatch_count = 0
+
+    def state_for_error(self):
+        return self.state
 
     def dispatch(self, command, params, request_id):
         self.dispatch_count += 1

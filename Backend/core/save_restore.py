@@ -9,25 +9,29 @@ import uuid
 from contextlib import ExitStack
 from pathlib import Path
 
+from .errors import CoreSaveError
 from .save_resolution import ResolvedSaveFile
 from .save_metadata import copy_owned_save_file, copy_save_metadata, remove_owned_save_tree
 from .save_snapshots import SaveSnapshotError, _safe_relative, _sha256
 
 
-class SaveBusyError(RuntimeError):
+class SaveBusyError(CoreSaveError):
     code = 'save_busy'
+    presentation_key = 'host.save.error.busy'
 
 
-class SaveRestoreError(RuntimeError):
+class SaveRestoreError(CoreSaveError):
     code = 'restore_failed'
+    presentation_key = 'host.save.error.restoreFailed'
 
 
 class SaveRollbackError(SaveRestoreError):
     code = 'rollback_failed'
+    presentation_key = 'host.save.error.rollbackFailed'
 
     def __init__(self, message, recovery_path):
-        super().__init__(message)
-        self.recovery_path = str(recovery_path)
+        path = str(recovery_path)
+        super().__init__(message, arguments=(path,), recovery_path=path)
 
 
 class SaveRestorePreparationInterrupted(KeyboardInterrupt):

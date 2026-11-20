@@ -11,9 +11,12 @@ quote-style = "preserve"
 
 [tool.mypy]
 files = [
+    "Backend/core/save_resolution.py",
     "Backend/core/structured_save_edit.py",
     "Backend/games/hades/save_edit.py",
+    "Backend/games/hades/save_provider.py",
     "Backend/games/hades2/save_edit.py",
+    "Backend/games/hades2/save_provider.py",
 ]
 follow_imports = "silent"
 python_version = "3.10"

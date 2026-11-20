@@ -4,13 +4,15 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Protocol, Tuple, TypedDict, runtime_checkable
 
+from .errors import CoreSaveError
 from .module_manifest import SaveManagementSpec
 
 
-class SaveResolutionError(RuntimeError):
+class SaveResolutionError(CoreSaveError):
     code = 'save_unsafe'
+    presentation_key = 'host.save.error.unsafe'
 
 
 @dataclass(frozen=True)
@@ -18,6 +20,47 @@ class ResolvedSaveFile:
     root_id: str
     relative_path: str
     source_path: Path
+
+
+@dataclass(frozen=True)
+class SaveProviderContext:
+    module_dir: Path
+    game_path: Optional[Path] = None
+
+
+class LocalizedSnapshotDescription(TypedDict):
+    name: str
+    details: List[str]
+
+
+class SnapshotDescription(TypedDict, total=False):
+    defaultName: Optional[str]
+    nameDetails: List[str]
+    localizedPresentation: Dict[str, LocalizedSnapshotDescription]
+
+
+@runtime_checkable
+class SaveProvider(Protocol):
+    """Optional game policy for Core Save transactions."""
+
+    context: SaveProviderContext
+
+    def resolve(self, roots: Mapping[str, Path], declared: Tuple[ResolvedSaveFile, ...]) -> Iterable[Tuple[str, str]]:
+        """Choose members by declared root ID and relative path."""
+        return [(row.root_id, row.relative_path) for row in declared]
+
+    def restore_busy(self, files: Tuple[ResolvedSaveFile, ...]) -> bool:
+        return False
+
+    def describe_snapshot(self, files: Tuple[ResolvedSaveFile, ...], created_at: str) -> Optional[SnapshotDescription]:
+        return None
+
+
+class DefaultSaveProvider(SaveProvider):
+    """Initialize the context for providers that inherit the default hooks."""
+
+    def __init__(self, context: SaveProviderContext) -> None:
+        self.context = context
 
 
 def read_resolved_save_file(root, row):
@@ -65,13 +108,22 @@ def read_resolved_save_file(root, row):
         raise SaveResolutionError('Save source is missing or outside its declared directory.') from error
 
 
-def load_save_provider(target):
+def load_save_provider(target: str, *, context: Optional[SaveProviderContext] = None) -> SaveProvider:
     module_name, class_name = target.split(':', 1)
     module = import_module(module_name)
     provider_type = getattr(module, class_name, None)
     if not isinstance(provider_type, type):
         raise SaveResolutionError('存档 Provider 类型无效。')
-    return provider_type()
+    if context is None:
+        # Standalone service callers have a provider declaration but no adapter context.
+        package = import_module('.'.join(module_name.split('.')[:2]))
+        if package.__file__ is None:
+            raise SaveResolutionError('Save Provider module directory is unavailable.')
+        context = SaveProviderContext(Path(package.__file__).resolve().parent)
+    provider = provider_type(context)
+    if not isinstance(provider, SaveProvider):
+        raise SaveResolutionError('Save Provider must implement the SaveProvider contract.')
+    return provider
 
 
 def _validate_relative(value):
@@ -100,7 +152,7 @@ def _validate_file(root_id, root, relative):
 
 def resolve_save_files(
     spec: SaveManagementSpec,
-    provider_loader: Optional[Callable[[str], object]] = None,
+    provider_loader: Optional[Callable[[str], SaveProvider]] = None,
 ) -> List[ResolvedSaveFile]:
     roots: Dict[str, Path] = {}
     declared: List[ResolvedSaveFile] = []
@@ -127,10 +179,7 @@ def resolve_save_files(
     else:
         loader = provider_loader or load_save_provider
         provider = loader(spec.provider)
-        resolve = getattr(provider, 'resolve', None)
-        if not callable(resolve):
-            raise SaveResolutionError('存档 Provider 缺少 resolve()。')
-        rows = resolve(dict(roots), tuple(declared))
+        rows = provider.resolve(dict(roots), tuple(declared))
 
     unique = {}
     try:

@@ -21,9 +21,9 @@ LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS = 30.0
 HOME = Path.home()
 STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
 _RAW_MODULE = json.loads((MODULE_DIR / 'module.json').read_text(encoding='utf-8'))
-STEAM_APP_ID = _RAW_MODULE.get('steamAppId')
+STEAM_APP_ID = MODULE_MANIFEST.steam_app_id
 SUPPORTED_BUILD = _RAW_MODULE['supportedBuild']
-if not isinstance(STEAM_APP_ID, str) or not STEAM_APP_ID.isdigit():
+if STEAM_APP_ID is None:
     raise RuntimeError('Hades II module manifest is missing a valid steamAppId.')
 # Target identity is owned by module.json; the install, save and Steam
 # locations below are this module's macOS projection of it.
@@ -36,11 +36,6 @@ GAME_EXECUTABLE = GAME_APP / 'Contents' / 'MacOS' / GAME_EXECUTABLE_NAME
 GAME_SAVES = HOME / 'Library/Application Support/Supergiant Games/Hades II'
 GAME_ARCHITECTURE = 'arm64'
 STEAM_MANIFEST = STEAMAPPS / f'appmanifest_{STEAM_APP_ID}.acf'
-STEAM_LAUNCH_URL = f'steam://rungameid/{STEAM_APP_ID}'
-
-# Preserve the existing Hades II data location. New game modules should use a
-# namespaced directory under MacGamingTrainer/<game-id> unless migration requires otherwise.
-DATA = HOME / 'Library/Application Support/MacGamingTrainer'
 
 
 def supported_reference_path(name: str, module_file: Path = Path(__file__)) -> Path:

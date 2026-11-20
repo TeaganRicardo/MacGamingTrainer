@@ -8,12 +8,11 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from core.adapter import AdapterError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 def default_runtime_state():
@@ -248,8 +247,9 @@ class ProfileSession(FakeResidentSession):
 
 def make_adapter(prefix, session):
     base = Path(tempfile.mkdtemp(prefix=prefix))
-    preparation.DATA = base
+    context = hades2_adapter_context(base)
     adapter = Hades2Adapter(
+        context=context,
         resident_session=session,
         time_warp_controller=FakeTimeWarpController(),
     )

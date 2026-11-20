@@ -15,7 +15,7 @@ from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.schema import MULTIPLIERS, TOGGLES
-from hades2_resident_session_fakes import FakeResidentSession
+from hades2_resident_session_fakes import FakeResidentSession, hades2_adapter_context
 
 
 class ResidentHelperDriver:
@@ -62,8 +62,8 @@ class ResidentHelperDriver:
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
-    preparation.DATA = Path(temporary)
-    store = Hades2PreferenceStore(preparation.DATA / "desired-state.json")
+    context = hades2_adapter_context(Path(temporary))
+    store = Hades2PreferenceStore(context.data_dir.parent / "desired-state.json")
     store.save(store.defaults())
     driver = ResidentHelperDriver()
     controller = ProcessTimeWarpController(driver, Path(temporary) / "helper", ["Hades II"])
@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
         boonRarity=store.defaults()['boonRarity'],
         **{key: store.defaults()[key] for key in MULTIPLIERS if key != 'gameSpeed'},
     )
-    adapter = Hades2Adapter(resident_session=session, time_warp_controller=controller)
+    adapter = Hades2Adapter(context=context, resident_session=session, time_warp_controller=controller)
     adapter.state.update(connected=True, pid=4242)
 
     # Observe first without changing durable intent or the live helper.
@@ -114,7 +114,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
 
     # Backend restart against the same live process repeats the actual query.
     driver.speed = 2.0
-    restarted = Hades2Adapter(resident_session=FakeResidentSession(session.payload, pid=5000),
+    restarted = Hades2Adapter(context=context, resident_session=FakeResidentSession(session.payload, pid=5000),
                              time_warp_controller=controller)
     restarted.state.update(connected=True, pid=5000)
     restarted.dispatch("status", {}, "backend-restart")
@@ -127,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
             session.pid = None
             session.live = False
             return 1.0
-    lost = Hades2Adapter(resident_session=session, time_warp_controller=LostController())
+    lost = Hades2Adapter(context=context, resident_session=session, time_warp_controller=LostController())
     lost.state.update(connected=True, pid=5000)
     try:
         lost.observe_runtime()
@@ -145,7 +145,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
             disconnected_driver, Path(temporary) / 'helper', ['Hades II'])
         disconnected_session = FakeResidentSession(session.payload)
         disconnected_session.payload['runtimeDiagnostics'] = {}
-        disconnected = Hades2Adapter(resident_session=disconnected_session,
+        disconnected = Hades2Adapter(context=context, resident_session=disconnected_session,
                                      time_warp_controller=disconnected_controller)
         disconnected.state.update(connected=True, pid=4242)
         assert disconnected.observe_runtime()['activeFeatures']['gameSpeed']

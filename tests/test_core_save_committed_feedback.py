@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from core.save_snapshots import SaveNotFoundError, SaveSnapshotError
+from core.save_resolution import DefaultSaveProvider, SaveProviderContext
 from core.save_restore import SaveRestoreError
 from test_core_structured_save_edit import CODEC, environment, open_session
 
@@ -38,13 +39,13 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
             self.assertEqual((saves / "Profile1.sav").read_bytes(), original)
 
     def test_invalid_provider_description_still_allows_automatic_preedit_copy(self):
-        class Provider:
+        class Provider(DefaultSaveProvider):
             def describe_snapshot(self, *_):
                 return {"defaultName": "bad/name", "localizedPresentation": {"en": {"name": None}}}
 
         with tempfile.TemporaryDirectory() as temporary:
             saves, service, _ = environment(Path(temporary))
-            service.provider = Provider()
+            service.provider = Provider(SaveProviderContext(Path(temporary)))
             session = open_session(service)
             session.document.value = 77
             with self.assertLogs(level="WARNING"):

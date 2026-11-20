@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -71,7 +72,7 @@ service = CoreSaveService(
     spec,
     base / "data",
     lambda: False,
-    provider_loader=lambda _target: Hades2SaveProvider(),
+    provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2")),
 )
 
 backup = service.backup()
@@ -130,8 +131,8 @@ import os
 import core.save_restore as restore_module
 from core.save_restore import SaveRestoreError, SaveRollbackError
 from core.save_snapshots import SaveSnapshotError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from hades2_resident_session_fakes import hades2_adapter_context
 from games.hades2.command_contract import Hades2CommandContract
 
 
@@ -156,13 +157,9 @@ def environment(folder):
         restore_policy="hotPreferred", staged_restore=True,
     )
     service = CoreSaveService("hades2", spec, folder / "data", lambda: state["running"],
-        provider_loader=lambda _: Hades2SaveProvider(game_path=folder / "AbsentGame.app"))
-    prior_data = preparation.DATA
-    preparation.DATA = folder / "preferences"
-    try:
-        adapter = Hades2Adapter(transport=object(), time_warp_controller=object())
-    finally:
-        preparation.DATA = prior_data
+        provider_loader=lambda _: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=folder / "AbsentGame.app")))
+    context = hades2_adapter_context(folder / "preferences")
+    adapter = Hades2Adapter(context=context, transport=object(), time_warp_controller=object())
     adapter.bind_save_service(service)
     return root, service, state, adapter
 
@@ -396,7 +393,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-multiple-roots-") as tempora
         restore_policy="stoppedOnly", staged_restore=False,
     )
     service = CoreSaveService("hades2", spec, folder / "data", lambda: False,
-        provider_loader=lambda _: Hades2SaveProvider(game_path=folder / "AbsentGame.app"))
+        provider_loader=lambda _: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=folder / "AbsentGame.app")))
     snapshot = service.backup()["id"]
     preserved = contents(Path(service.folder(snapshot)))
     assert Hades2SaveWorkspace.inventory(service, snapshot)["defaultSource"] is None

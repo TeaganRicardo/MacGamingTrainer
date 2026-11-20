@@ -9,6 +9,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
         restore_policy="hotPreferred", staged_restore=True,
     )
     service = CoreSaveService("hades2", spec, base / "data", lambda: False,
-        provider_loader=lambda _target: Hades2SaveProvider(game_path=base / "no-game"))
+        provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=base / "no-game")))
     editor = Hades2SaveWorkspace.open(service)
     rows = {row["id"]: row for row in editor.query(domain="progression", language="en", limit=200)["items"]}
     assert rows["card:ChanneledCast:Equipped"]["editable"], "reliable native equipment Boolean is read-only"

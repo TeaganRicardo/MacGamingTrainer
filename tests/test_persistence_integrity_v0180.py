@@ -9,12 +9,12 @@ sys.path.insert(0, str(root/'Backend'))
 
 from core.adapter import GameAdapter, GameAdapterContext
 from core.protocol import JsonlRequestRouter
-from games.hades2 import persistence, preparation
+from games.hades2 import persistence
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.profile_service import Hades2ProfileService
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-persistence-v0180-'))
 
@@ -70,7 +70,7 @@ assert list((base/'profiles').glob('.*.tmp')) == []
 # Desired-only mutations persist before becoming the in-memory owner.  If disk
 # persistence fails, no transport mutation may be attempted and the old desired
 # state remains authoritative in memory.
-preparation.DATA = base/'adapter-data'
+context = hades2_adapter_context(base/'adapter-data')
 
 class FakeTransport:
     def __init__(self):
@@ -81,7 +81,7 @@ class FakeTransport:
     def close(self): pass
     def create_time_warp_controller(self, helper_path, image_names): return FakeTimeWarpController()
 
-adapter = Hades2Adapter(transport=FakeTransport())
+adapter = Hades2Adapter(context=context, transport=FakeTransport())
 adapter.state['capabilities'] = dict(adapter.state.get('capabilities', {}), setFeature=True)
 transport_calls = []
 adapter.execute = lambda *args, **kwargs: transport_calls.append((args, kwargs)) or dict(adapter.state)

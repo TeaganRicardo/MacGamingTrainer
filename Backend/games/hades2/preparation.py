@@ -10,8 +10,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from core.log_paths import trainer_data_root
+
 from .config import (
-    BUNDLE_IDENTIFIER, DATA, DISPLAY_NAME, GAME_APP, GAME_ARCHITECTURE, GAME_EXECUTABLE,
+    BUNDLE_IDENTIFIER, DISPLAY_NAME, GAME_APP, GAME_ARCHITECTURE, GAME_EXECUTABLE,
     GAME_EXECUTABLE_NAME, GAME_SAVES, PROCESS_NAME, STEAM_MANIFEST, SUPPORTED_BUILD,
 )
 from .operation_budgets import SUBPROCESS_TIMEOUT_SECONDS
@@ -95,15 +97,14 @@ def _write_json(path, value):
         Path(temporary).unlink(missing_ok=True)
 
 
-def _backup_dir(prefix):
-    parent = DATA / 'backups'
+def _backup_dir(parent, prefix):
     parent.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-')
     return Path(tempfile.mkdtemp(prefix=prefix + '-' + stamp, dir=parent))
 
 
-def _records():
-    for root in sorted((DATA / 'backups').glob('signature-*'), reverse=True):
+def _records(backup_parent):
+    for root in sorted(backup_parent.glob('signature-*'), reverse=True):
         try:
             record = json.loads((root / 'manifest.json').read_text())
         except (OSError, ValueError):
@@ -133,10 +134,9 @@ def _entitlements(exe):
     return plistlib.loads(combined[start:end + len(b'</plist>')])
 
 
-def _atomic_install(source, destination, expected_current, original_sha256=None, original_uuid=None):
+def _atomic_install(source, destination, expected_current, original_sha256=None, original_uuid=None, *, backup_parent):
     """Verify outside the app, then copy those bytes for same-volume replacement."""
     destination = Path(destination)
-    backup_parent = DATA / 'backups'
     backup_parent.mkdir(parents=True, exist_ok=True)
     expected_source = sha(source)
     # Even a renamed executable under .app/Contents/MacOS is interpreted by
@@ -206,13 +206,14 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
     return staged
 
 
-def prepare():
+def prepare(data_dir=None):
+    backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
     identity = compatibility()
     exe = GAME_EXECUTABLE
     current = sha(exe)
 
-    for root, record in _records():
+    for root, record in _records(backup_parent):
         if current not in _prepared_hashes(record):
             continue
         original = _verify_backup(root, record)
@@ -226,7 +227,7 @@ def prepare():
             return {'prepared': True, 'already_prepared': True, 'backup': str(root), 'manifest': record}
 
         staged = _stage_prepared(root, record, original, previous_prepared_sha256=current)
-        _atomic_install(staged, exe, current)
+        _atomic_install(staged, exe, current, backup_parent=backup_parent)
         record.pop('previous_prepared_sha256', None)
         record['status'] = 'prepared'
         _write_json(root / 'manifest.json', record)
@@ -236,7 +237,7 @@ def prepare():
         raise RuntimeError('当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
     bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME), allowed=(0, 1))
 
-    root = _backup_dir('signature')
+    root = _backup_dir(backup_parent, 'signature')
     original = root / GAME_EXECUTABLE_NAME
     shutil.copy2(exe, original)
     record = dict(identity, original_sha256=current, status='backed_up')
@@ -255,23 +256,24 @@ def prepare():
     _write_json(root / 'manifest.json', record)
 
     staged = _stage_prepared(root, record, original)
-    _atomic_install(staged, exe, current)
+    _atomic_install(staged, exe, current, backup_parent=backup_parent)
     record['status'] = 'prepared'
     _write_json(root / 'manifest.json', record)
     return {'prepared': True, 'already_prepared': False, 'backup': str(root), 'manifest': record}
 
-def restore():
+def restore(data_dir=None):
+    backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
     _require_stopped()
     compatibility()
     exe = GAME_EXECUTABLE
     current = sha(exe)
-    for root, record in _records():
+    for root, record in _records(backup_parent):
         if current == record.get('original_sha256'):
             return {'restored': True, 'already_restored': True}
         if current not in _prepared_hashes(record):
             continue
         original = _verify_backup(root, record)
-        _atomic_install(original, exe, current, record['original_sha256'], record['uuid'])
+        _atomic_install(original, exe, current, record['original_sha256'], record['uuid'], backup_parent=backup_parent)
         record.pop('previous_prepared_sha256', None)
         record['status'] = 'restored'
         _write_json(root / 'manifest.json', record)

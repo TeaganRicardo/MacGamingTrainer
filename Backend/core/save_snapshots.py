@@ -10,6 +10,7 @@ import time
 import uuid
 from pathlib import Path
 
+from .errors import CoreSaveError
 from .save_resolution import ResolvedSaveFile, SaveResolutionError, read_resolved_save_file
 from .save_metadata import copy_owned_save_file, remove_owned_save_tree
 
@@ -22,16 +23,19 @@ _SNAPSHOT_ID_RE = re.compile(r'^snap-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$')
 _SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
 
 
-class SaveSnapshotError(RuntimeError):
+class SaveSnapshotError(CoreSaveError):
     code = 'snapshot_invalid'
+    presentation_key = 'host.save.error.invalidSnapshot'
 
 
 class SaveSnapshotBusyError(SaveSnapshotError):
     code = 'save_busy'
+    presentation_key = 'host.save.error.busy'
 
 
 class SaveNotFoundError(SaveSnapshotError):
     code = 'save_not_found'
+    presentation_key = 'host.save.error.notFound'
 
 
 class _SaveSnapshotRace(SaveSnapshotError):

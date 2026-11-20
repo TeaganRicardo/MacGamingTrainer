@@ -10,13 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 from core.adapter import AdapterError
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, clear_active, mark_disconnected
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 assert Hades2PreferenceStore.defaults()['chaosGateProbability'] is None
 assert DESIRED_STATE_SCHEMA_VERSION == 12 and PROFILE_SCHEMA_VERSION == 6
@@ -37,9 +36,9 @@ class OfflineSession(FakeResidentSession):
 
 with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as temporary:
     base = Path(temporary)
-    preparation.DATA = base
+    context = hades2_adapter_context(base)
     transport = OfflineSession()
-    adapter = Hades2Adapter(resident_session=transport, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(context=context, resident_session=transport, time_warp_controller=FakeTimeWarpController())
     # Host input validation is observed only through the public command seam.
     for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
         try:
@@ -61,11 +60,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     for value in (0, 100, 32.5, None, 80):
         result = adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'desired')
         assert result['chaosGateProbability'] == value
-    persisted = json.loads((base/'desired-state.json').read_text())
+    persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
     assert persisted['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION and persisted['chaosGateProbability'] == 80
     assert persisted['gatheringProbabilities'] == {'flora': 25}
     assert not {'ForceSecretDoor', 'ForceNextRoom', 'door', 'scopeToken'} & set(persisted)
-    restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
+    restarted = Hades2Adapter(context=context, resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['chaosGateProbability'] == 80 and restarted.preference_dirty
     adapter.save_profile('Chaos Gate')
     envelope = json.loads(adapter.profile_service.path('Chaos Gate').read_text())
@@ -86,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_chaos_gate_probability':
-            assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
+            assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
             adapter.state['chaosGateProbability'] = params['probability']
         return dict(adapter.state)
     adapter.execute = execute
@@ -172,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         assert record['kind'] == 'mutate'
         assert record['command'] == 'set_chaos_gate_probability'
         assert record['params'] == {'probability': 0}
-        assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == 0
+        assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['chaosGateProbability'] == 0
         return {'status': 'ready', 'scene': 'run', 'chaosGateProbability': 0}
 
     reply_session = FakeResidentSession(
@@ -181,6 +180,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         pid=123,
     )
     real = Hades2Adapter(
+        context=context,
         resident_session=reply_session,
         time_warp_controller=FakeTimeWarpController(),
     )

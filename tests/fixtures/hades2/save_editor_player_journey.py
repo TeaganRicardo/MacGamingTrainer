@@ -14,6 +14,7 @@ from pathlib import Path
 
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.protocol import JsonlRequestRouter
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.command_contract import Hades2CommandContract
@@ -106,6 +107,10 @@ class SaveOnlyAdapter(Hades2Adapter):
 
     def metadata(self):
         return GameAdapter.metadata(self)
+
+    def state_for_error(self):
+        # This fixture has no target runtime state to project on a Save error.
+        return None
 
     def reply_replayed(self):
         pass
@@ -217,7 +222,7 @@ def main():
                                 target_running_probe=lambda: False)
     # Source lookups remain contained in this temporary game tree. An authored
     # corpus may explain context; it cannot inspect an installed game tree.
-    router.save_service.provider = Hades2SaveProvider(game_path=base / "native-game")
+    router.save_service.provider = Hades2SaveProvider(SaveProviderContext(adapter.context.module_dir, game_path=base / "native-game"))
     for raw in sys.stdin:
         request = json.loads(raw)
         with (base / "commands.jsonl").open("a") as log:

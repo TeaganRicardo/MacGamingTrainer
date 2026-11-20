@@ -9,13 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.command_contract import command_metadata
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.profile_service import Hades2ProfileService
 from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 
 def status_payload(occurrence=None):
@@ -64,10 +63,11 @@ def handle_occurrence(resident, record):
     return copy.deepcopy(resident.payload)
 
 
-old_data = preparation.DATA
-try:
-    preparation.DATA = Path(tempfile.mkdtemp(prefix="mgt-occurrence-world-action-"))
-    desired_path = preparation.DATA / "desired-state.json"
+with tempfile.TemporaryDirectory(prefix="mgt-occurrence-world-action-") as temporary:
+    context = hades2_adapter_context(temporary)
+    data_dir = context.data_dir.parent
+    data_dir.mkdir(parents=True)
+    desired_path = data_dir / "desired-state.json"
     desired_path.write_text(json.dumps({
         "schemaVersion": 11,
         "nextOccurrenceTarget": "npc:Nemesis",
@@ -76,6 +76,7 @@ try:
 
     resident = FakeResidentSession(status_payload(), handler=handle_occurrence, pid=4242)
     adapter = Hades2Adapter(
+        context=context,
         resident_session=resident, time_warp_controller=FakeTimeWarpController()
     )
     assert adapter.preference_initialized
@@ -107,6 +108,7 @@ try:
     # A reconstructed Host observes the resident lease; it does not recreate it
     # from Preferences or Profile data.
     restarted = Hades2Adapter(
+        context=context,
         resident_session=resident, time_warp_controller=FakeTimeWarpController()
     )
     restarted.state.update(
@@ -134,7 +136,7 @@ try:
     assert "nextOccurrenceTarget" not in persisted
     assert "nextOccurrenceToken" not in persisted
 
-    profiles = Hades2ProfileService(preparation.DATA / "profiles")
+    profiles = Hades2ProfileService(data_dir / "profiles")
     profiles.save("current", dict(
         restarted.preferences,
         nextOccurrenceTarget="npc:Nemesis",
@@ -161,8 +163,6 @@ try:
     )
     assert "occurrence" not in resident.payload["worldActions"]
     assert "nextOccurrenceTarget" not in restarted.preferences
-finally:
-    preparation.DATA = old_data
 
 commands = {row["name"] for row in command_metadata()}
 assert {"apply_world_occurrence", "cancel_world_occurrence"} <= commands

@@ -50,6 +50,16 @@ adapter = FakeAdapter(context)
 router = JsonlRequestRouter(adapter, save_data_root=base/'data', target_running_probe=lambda: False)
 assert adapter.save_service is router.save_service
 
+unscoped = base / 'outside-configured-home'
+unsafe_context = replace(context, game_id=str(unscoped), home=base / 'home')
+try:
+    JsonlRequestRouter(FakeAdapter(unsafe_context), target_running_probe=lambda: False)
+except ValueError as error:
+    assert 'safe path component' in str(error)
+else:
+    raise AssertionError('router accepted an absolute game ID as its default storage location')
+assert not unscoped.exists()
+
 backup = router.handle({'id':'b1','command':'core.save.backup','params':{'name':'First'}})
 assert backup['ok'] is True
 assert backup['result']['operation']['name'] == 'First'
@@ -169,7 +179,8 @@ finally:
 assert rollback_failed['ok'] is False
 assert rollback_failed['error'] == {
     'code':'rollback_failed',
-    'presentation':'host.backend.error.operationFailed',
+    'presentation':'host.save.error.rollbackFailed',
+    'arguments':[str(recovery_path)],
     'diagnostic':'restore and rollback failed',
     'recoveryPath':str(recovery_path),
 }
@@ -197,6 +208,7 @@ try:
     plain_router = JsonlRequestRouter(plain_adapter, save_data_root=base/'plain-data', target_running_probe=lambda: False)
     unsupported = plain_router.handle({'id':'x1','command':'core.save.list','params':{}})
     assert unsupported['ok'] is False and unsupported['error']['code'] == 'save_unsupported'
+    assert unsupported['error']['presentation'] == 'host.save.error.unsupported'
     assert plain_adapter.calls == []
 finally:
     logging.disable(logging.NOTSET)
@@ -217,7 +229,7 @@ finally:
     logging.disable(logging.NOTSET)
 assert empty_backup['ok'] is False
 assert empty_backup['error']['code'] == 'save_not_found'
-assert empty_backup['error']['presentation'] == 'host.backend.error.operationFailed'
+assert empty_backup['error']['presentation'] == 'host.save.error.notFound'
 assert 'save' in empty_backup['error']['diagnostic'].lower()
 
 # Process-query failure is not evidence that the game stopped. Core Save must
@@ -245,10 +257,14 @@ finally:
     target_probe_module.subprocess.run = real_run
 assert probe_restore['ok'] is False
 assert probe_restore['error']['code'] == 'save_busy'
+assert probe_restore['error']['presentation'] == 'host.save.error.busy'
 assert protocol_module._target_process_running is target_probe_module.target_process_running
 assert (saves / 'Profile1.sav').read_bytes() == b'probe-current'
 
-identity_adapter = create_adapter('hades')
+identity_adapter = create_adapter('hades', home=base / 'host-home')
+identity_data = base / 'host-home/Library/Application Support/MacGamingTrainer/hades'
+assert identity_adapter.preferences.path == identity_data / 'preferences.json'
+assert identity_adapter.runtime.recovery.path == identity_data / 'runtime-request.json'
 identity_saves = base / 'identity-saves'; identity_saves.mkdir()
 identity_file = identity_saves / 'Profile1.sav'
 identity_file.write_bytes(b'identity-original')

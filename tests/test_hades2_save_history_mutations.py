@@ -7,6 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_workspace import Hades2SaveWorkspace
@@ -48,7 +49,7 @@ class HistoryMutationTests(unittest.TestCase):
         spec = SaveManagementSpec((SaveRootSpec('main', str(self.saves), ('Profile*.sav',)),), None,
                                   True, 'stoppedOnly', True)
         self.service = CoreSaveService('hades2', spec, self.folder / 'data', lambda: False)
-        self.service.provider = Hades2SaveProvider(game_path=self.game)
+        self.service.provider = Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=self.game))
         self.editor = self.open()
 
     def write(self):

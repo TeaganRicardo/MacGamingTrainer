@@ -14,9 +14,8 @@ def process_identity(pid):
 
 
 class HadesRecoveryJournal:
-    def __init__(self, path=None):
-        self.path = Path(path) if path is not None else (
-            Path.home() / 'Library/Application Support/MacGamingTrainer/hades/runtime-request.json')
+    def __init__(self, path):
+        self.path = Path(path)
 
     def guard(self, pid, identity):
         try:

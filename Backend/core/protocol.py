@@ -6,6 +6,8 @@ from pathlib import Path
 
 from core.operation_profile import operation, phase
 from core.adapter import GameAdapter
+from core.errors import PresentableError
+from core.save_resolution import load_save_provider
 from core.save_restore import SaveBusyError as SaveBusyError
 from core.save_service import CoreSaveService
 from core.target_probe import target_process_running as _target_process_running
@@ -52,16 +54,11 @@ class JsonlRequestRouter:
         context = adapter.context
         self.save_service = CoreSaveService(
             adapter.game_id,
-            getattr(context, 'save_management', None),
-            Path(save_data_root)
-            if save_data_root is not None
-            else Path.home() / 'Library/Application Support/MacGamingTrainer',
+            context.save_management,
+            Path(save_data_root) if save_data_root is not None else context.data_dir.parent,
             target_running_probe
-            or (
-                lambda: _target_process_running(
-                    getattr(context, 'process_name', ''), getattr(context, 'executable_path_suffix', '')
-                )
-            ),
+            or (lambda: _target_process_running(context.process_name, context.executable_path_suffix)),
+            provider_loader=lambda target: load_save_provider(target, context=adapter.save_provider_context()),
         )
 
         adapter.bind_save_service(self.save_service)
@@ -245,7 +242,7 @@ class JsonlRequestRouter:
                         request_id,
                         'invalid_request',
                         'command must be a non-empty string of at most 128 characters',
-                        getattr(self.adapter, 'state', None),
+                        self.adapter.state_for_error(),
                     )
                 )
             if not isinstance(params, dict):
@@ -254,7 +251,7 @@ class JsonlRequestRouter:
                         request_id,
                         'invalid_request',
                         'params must be a JSON object',
-                        getattr(self.adapter, 'state', None),
+                        self.adapter.state_for_error(),
                     )
                 )
             if command == 'hello':
@@ -281,38 +278,27 @@ class JsonlRequestRouter:
             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
         except Exception as error:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
-            state = getattr(self.adapter, 'state', None)
-            code = (
-                'outcome_unknown'
-                if dispatch_returned
-                else getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
-            )
-            arguments = None
-            if hasattr(error, 'presentation'):
-                presentation = error.presentation
-                diagnostic = getattr(error, 'diagnostic', None)
-                arguments = error.arguments
-                reply = self.error_reply(
-                    request_id,
-                    code,
-                    presentation,
-                    state,
-                    diagnostic=diagnostic,
-                    arguments=arguments,
-                )
-            else:
-                diagnostic = getattr(error, 'diagnostic', None) or str(error)
-                reply = self.core_error_reply(
-                    request_id,
-                    code,
-                    diagnostic,
-                    state,
-                )
+            state = self.adapter.state_for_error()
             if dispatch_returned:
+                reply = self.core_error_reply(request_id, 'outcome_unknown', str(error), state)
                 reply['error'].update(outcomeUnknown=True, terminal=True)
-            recovery_path = getattr(error, 'recovery_path', None)
-            if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
-                reply['error']['recoveryPath'] = recovery_path
+            elif isinstance(error, PresentableError):
+                if error.presentation is None:
+                    reply = self.core_error_reply(request_id, error.code, error.diagnostic or str(error), state)
+                else:
+                    reply = self.error_reply(
+                        request_id,
+                        error.code,
+                        error.presentation,
+                        state,
+                        diagnostic=error.diagnostic,
+                        arguments=error.arguments,
+                    )
+                if error.code == 'rollback_failed' and isinstance(error.recovery_path, str) and error.recovery_path:
+                    reply['error']['recoveryPath'] = error.recovery_path
+            else:
+                code = 'invalid_request' if isinstance(error, ValueError) else 'operation_failed'
+                reply = self.core_error_reply(request_id, code, str(error), state)
             reply_json = self.encode_reply(reply)
         self.cache[request_id] = (fingerprint, reply_json)
         while len(self.cache) > 256:

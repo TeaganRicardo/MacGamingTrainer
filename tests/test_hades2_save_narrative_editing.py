@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -52,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-narrative-editing-') as temporary:
         provider='games.hades2.save_provider:Hades2SaveProvider', hot_backup=True,
         restore_policy='hotPreferred', staged_restore=True)
     service = CoreSaveService('hades2', spec, base / 'data', lambda: False,
-        provider_loader=lambda _: Hades2SaveProvider())
+        provider_loader=lambda _: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2")))
     work = Hades2SaveWorkspace.open(service)
     work.stage('quest:QuestCatchFish', 'setEnum', 'Unrecorded')
     assert work.review()['actionCount'] == 0, 'absent→unrecorded created a no-op basket that Apply cannot write'

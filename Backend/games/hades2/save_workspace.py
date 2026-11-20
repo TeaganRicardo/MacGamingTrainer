@@ -10,6 +10,8 @@ import math
 import uuid
 from types import SimpleNamespace
 
+from core.errors import PresentableError
+
 from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
@@ -108,16 +110,11 @@ _ACTIONABLE_BATCH_VALIDATION_MESSAGES = {
     "Save Editor linked changes conflict.": "all",
 }
 
-class _SaveEditorActionValidationError(ValueError):
+class _SaveEditorActionValidationError(PresentableError, ValueError):
     """ValueError-compatible batch rejection with a Hades-owned presentation."""
 
     def __init__(self, diagnostic, presentation, arguments):
-        super().__init__(diagnostic)
-        self.code = "invalid_request"
-        self.presentation = presentation
-        self.arguments = list(arguments)
-        self.diagnostic = diagnostic
-        self._hades2_presentation_ready = True
+        super().__init__("invalid_request", presentation, arguments=arguments, diagnostic=diagnostic, message=diagnostic)
 
 
 
@@ -209,8 +206,8 @@ class Hades2SaveWorkspace:
         identity = profile_file_identity(source["relativePath"])
         if identity is None:
             raise ValueError("Save Editor source is not a supported profile document.")
-        provider = getattr(save_service, "provider", None)
-        game_path = getattr(provider, "game_path", None)
+        provider = save_service.provider
+        game_path = provider.context.game_path if provider is not None else None
         return cls(
             Hades2SaveEditSession.open(
                 save_service,

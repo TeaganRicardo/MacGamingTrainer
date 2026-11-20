@@ -16,9 +16,8 @@ sys.path.insert(0, str(ROOT / 'tests'))
 logging.disable(logging.CRITICAL)
 
 from core.adapter import AdapterError  # noqa: E402
-from games.hades2 import preparation  # noqa: E402
 from games.hades2.adapter import Hades2Adapter  # noqa: E402
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController  # noqa: E402
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context  # noqa: E402
 
 CAPABILITIES = {name: True for name in (
     'setFeature', 'setHealth', 'setMana', 'setArmor', 'setResource', 'setRerolls',
@@ -43,9 +42,9 @@ def teardown_waits(session, record):
 
 
 with tempfile.TemporaryDirectory(prefix='hades2-teardown-') as directory:
-    preparation.DATA = Path(directory)
+    context = hades2_adapter_context(Path(directory))
     resident = FakeResidentSession(payload=STILL_ENABLED, handler=teardown_waits)
-    adapter = Hades2Adapter(resident_session=resident, time_warp_controller=FakeTimeWarpController())
+    adapter = Hades2Adapter(context=context, resident_session=resident, time_warp_controller=FakeTimeWarpController())
     adapter.preferences = adapter._default_preferences()
     adapter.preferences.update(
         infiniteAmmo=True, vitalLocks={'health': {'current': 40, 'max': 100}}, resourceLocks={'Money': 500},
@@ -59,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='hades2-teardown-') as directory:
         assert error.code == 'waiting', error.code
     else:
         raise AssertionError('the fixture teardown was expected to wait')
-    assert (Path(directory) / 'desired-state.json').exists(), 'durable reset was not persisted first'
+    assert (context.data_dir.parent / 'desired-state.json').exists(), 'durable reset was not persisted first'
     assert adapter.preference_dirty, 'an unobserved teardown was recorded as reconciled'
 
     before = len(resident.calls)

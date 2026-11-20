@@ -18,10 +18,10 @@ sys.path.insert(0, str(root / 'tests'))
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-damage-intent-'))
-prep.DATA = base
+context = hades2_adapter_context(base)
 prep.GAME = base / 'Hades II.app'
 prep.SAVES = base / 'Saves'
 prep.official_display_names = lambda ids, language='zh-CN': {}
@@ -51,7 +51,7 @@ class FakeTransport:
         return FakeTimeWarpController()
 
 
-adapter = Hades2Adapter(transport=FakeTransport())
+adapter = Hades2Adapter(context=context, transport=FakeTransport())
 adapter.runtime.attach(4242)
 adapter.state['capabilities'] = {'setFeature': True}
 

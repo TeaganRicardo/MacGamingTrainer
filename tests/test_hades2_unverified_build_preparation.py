@@ -68,7 +68,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
 
     old_values = {
         "GAME": preparation.GAME,
-        "DATA": preparation.DATA,
         "GAME_EXECUTABLE": preparation.GAME_EXECUTABLE,
         "STEAM_MANIFEST": preparation.STEAM_MANIFEST,
         "_require_stopped": preparation._require_stopped,
@@ -82,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         "com.apple.security.cs.disable-library-validation": True,
     }
     preparation.GAME = game
-    preparation.DATA = root / "trainer-data"
+    data_dir = root / "trainer-data"
     preparation.GAME_EXECUTABLE = executable
     preparation.STEAM_MANIFEST = manifest
     preparation._require_stopped = lambda: None
@@ -120,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         assert identity["compatible"] is False
         assert identity["warnings"]
 
-        result = preparation.prepare()
+        result = preparation.prepare(data_dir)
         assert result["prepared"] is True
         assert result["manifest"]["compatible"] is False
         assert result["manifest"]["uuid"] == unknown_uuid
@@ -128,7 +127,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         prepared_bytes = executable.read_bytes()
         assert prepared_bytes != original_bytes
 
-        restored = preparation.restore()
+        restored = preparation.restore(data_dir)
         assert restored["restored"] is True
         assert executable.read_bytes() == original_bytes
         assert ("/usr/bin/codesign", "--verify", "--strict", str(game)) in commands

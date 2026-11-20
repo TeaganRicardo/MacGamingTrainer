@@ -11,12 +11,11 @@ sys.path.insert(0, str(ROOT / 'tests'))
 
 from core.adapter import AdapterError
 from games.hades2 import adapter as adapter_module
-from games.hades2 import preparation
 from games.hades2.schema import TOGGLES
-from hades2_resident_session_fakes import FakeTimeWarpController
+from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
 
 base = Path(tempfile.mkdtemp(prefix='mgt-connect-profile-'))
-preparation.DATA = base
+context = hades2_adapter_context(base)
 
 
 class FakeTransport:
@@ -67,7 +66,7 @@ class FakeTransport:
 
 
 transport = FakeTransport()
-adapter = adapter_module.Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
+adapter = adapter_module.Hades2Adapter(context=context, transport=transport, time_warp_controller=FakeTimeWarpController())
 adapter.preference_initialized = True
 adapter.preference_dirty = False
 
@@ -165,7 +164,7 @@ class WaitingTransport(FakeTransport):
 
 
 waiting_transport = WaitingTransport()
-waiting_adapter = adapter_module.Hades2Adapter(transport=waiting_transport)
+waiting_adapter = adapter_module.Hades2Adapter(context=context, transport=waiting_transport)
 waiting_adapter.preference_initialized = True
 waiting_adapter.preference_dirty = False
 
@@ -209,7 +208,7 @@ class EarlyRuntimeTransport(FakeTransport):
 
 
 early_transport = EarlyRuntimeTransport()
-early_adapter = adapter_module.Hades2Adapter(transport=early_transport)
+early_adapter = adapter_module.Hades2Adapter(context=context, transport=early_transport)
 early_adapter.preference_initialized = True
 early_adapter.preference_dirty = False
 
@@ -245,7 +244,7 @@ class DeferredProbeTransport(FakeTransport):
 
 
 deferred_transport = DeferredProbeTransport()
-deferred_adapter = adapter_module.Hades2Adapter(transport=deferred_transport)
+deferred_adapter = adapter_module.Hades2Adapter(context=context, transport=deferred_transport)
 deferred_adapter.preference_initialized = True
 deferred_adapter.preference_dirty = True
 

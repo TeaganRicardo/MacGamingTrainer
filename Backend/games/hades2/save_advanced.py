@@ -9,23 +9,18 @@ import json
 import math
 import struct
 
+from core.errors import PresentableError
+
 from .save_document import (
     AmbiguousLuaKeyError, LuaTable,
     _MAX_LUABINS_DEPTH, _encode_luabins, _same_lua_key,
 )
 
 
-class AdvancedMutationError(ValueError):
-    code = "invalid_request"
-    presentation = "hades2.saveEditor.error.typedLuaMutation"
-    arguments = ()
-    _hades2_presentation_ready = True
-
+class AdvancedMutationError(PresentableError, ValueError):
     def __init__(self, message, *, conflict=False):
-        super().__init__(message)
-        self.diagnostic = message
-        if conflict:
-            self.presentation = "hades2.saveEditor.error.typedLuaConflict"
+        key = "hades2.saveEditor.error.typedLuaConflict" if conflict else "hades2.saveEditor.error.typedLuaMutation"
+        super().__init__("invalid_request", key, diagnostic=message, message=message)
 
 
 def validate_scalar(value, value_type):

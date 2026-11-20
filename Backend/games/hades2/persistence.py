@@ -4,11 +4,15 @@ import time
 import uuid
 from pathlib import Path
 
+from core.errors import PresentableError
 from core.persistence import atomic_write_text as _atomic_write_text, fsync_directory
 
 
-class PersistenceError(RuntimeError):
+class PersistenceError(PresentableError, RuntimeError):
     code = 'persistence_failed'
+
+    def __init__(self, message: str):
+        super().__init__(self.code, None, diagnostic=message, message=message)
 
 
 class UnsupportedSchemaVersionError(PersistenceError):
