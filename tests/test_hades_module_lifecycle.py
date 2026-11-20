@@ -358,19 +358,20 @@ final class ExitHarness {
             model.failures = failures
             var completions = 0
             model.prepareForTermination { completions += 1; model.session.events.append("complete") }
-            precondition(model.session.events == ["disable_all", "disconnect", "flush", "stop", "complete"])
+            precondition(model.session.events == ["disable_all", "disconnect", "complete"],
+                "the module must finish best-effort cleanup before the Context stops the worker")
             precondition(Set(model.session.diagnostics) == Set(failures.map { "recovery: " + $0 }))
             precondition(completions == 1)
         }
         let offline = ExitHarness()
         offline.connected = false
         offline.prepareForTermination { offline.session.events.append("complete") }
-        precondition(offline.session.events == ["disable_all", "disconnect", "flush", "stop", "complete"])
+        precondition(offline.session.events == ["disable_all", "disconnect", "complete"])
         let unavailable = ExitHarness()
         unavailable.connected = false
         unavailable.backendAvailable = false
         unavailable.prepareForTermination { unavailable.session.events.append("complete") }
-        precondition(unavailable.session.events == ["flush", "stop", "complete"])
+        precondition(unavailable.session.events == ["complete"])
     }
 }
 '''

@@ -24,7 +24,7 @@ final class Session {
     func stop(suppressTerminationError: Bool) { stopped = true }
 }
 final class ExitHarness {
-    var connected = true, exiting = false, shuttingDown = false
+    var connected = true, exiting = false
     var backendSession = Session()
     var commands: [Hades2Command] = []
     var activeFeatures: [String: Bool] = [:], dormantFeatures: [String: Bool] = [:]
@@ -61,7 +61,8 @@ final class ExitHarness {
                 model.prepareForTermination { finished = true }
                 precondition(model.commands == [.resetDesired, .disableAll, .disconnect],
                     "\(family)/\(failure): verified connection skipped resident teardown: \(model.commands)")
-                precondition(finished && model.backendSession.stopped)
+                precondition(finished && !model.backendSession.stopped,
+                    "module cleanup must return session ownership to the Context")
             }
         }
         let disconnected = ExitHarness()
@@ -70,8 +71,9 @@ final class ExitHarness {
         precondition(disconnected.commands == [.resetDesired])
         let stopped = ExitHarness()
         stopped.backendSession.isRunning = false
-        stopped.prepareForTermination { }
-        precondition(stopped.commands.isEmpty && stopped.backendSession.stopped)
+        var stoppedFinished = false
+        stopped.prepareForTermination { stoppedFinished = true }
+        precondition(stoppedFinished && stopped.commands.isEmpty && !stopped.backendSession.stopped)
     }
 }
 '''
