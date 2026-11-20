@@ -215,9 +215,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
                 resident_session=resident,
                 time_warp_controller=FakeTimeWarpController(),
             )
+            adapter.preferences["gameSpeed"] = 1.5
+            adapter.save_profile("Unlocked")
+            unlocked_desired = deepcopy(adapter.preferences)
             adapter.preferences.update(
-                gameSpeed=1.5, vitalLocks={"health": {"current": 60, "max": 100}},
-                rerollsLock=9, resourceLocks={"Ash": 24}, statLocks={"grasp": 30},
+                vitalLocks={"health": {"current": 60, "max": 100}}, rerollsLock=9,
+                resourceLocks={"Money": 33, "Ash": 24}, elementLocks={"Fire": 55}, statLocks={"grasp": 30},
             )
             desired = deepcopy(adapter.preferences)
             old = adapter.observe_runtime()
@@ -229,26 +232,32 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
                 assert same_target["currentRunTraits"] == [{"instanceId": "previous-trait"}]
                 assert same_target["resources"][0]["count"] == 91
 
-            def assert_observations_retired(state):
+            def assert_observations_retired(state, locked=True):
                 assert state["health"] is None and state["maxHealth"] is None, (
                     transition, state["pid"], state["health"], state["maxHealth"],
                 )
-                assert state["money"] is None and state["biomeTime"] is None and state["runCount"] is None
+                assert state["money"] == (33 if locked else None), (transition, locked, state["money"])
+                assert state["biomeTime"] is None and state["runCount"] is None
                 assert state["currentRunTraits"] == [] and state["gardenScopeToken"] is None
                 assert state["chaosGateTarget"] is None and state["facilityOptions"] == []
                 assert state["lastAction"] is None and state["runtimeDiagnostics"] is None
                 assert state["statAvailable"] == {} and "dodge" not in state["stats"]
                 assert state["resources"] == [
                     {"id": "Ore", "name": "Ore", "count": None, "locked": False},
-                    {"id": "Ash", "name": "Ash", "count": 24, "locked": True},
+                    {"id": "Ash", "name": "Ash", "count": 24 if locked else None, "locked": locked},
                 ]
-                assert state["elements"] == [{"id": "Fire", "name": "Fire", "count": None, "locked": False}]
-                assert state["healthLocked"] and state["rerollsLocked"] and state["rerolls"] == 9
-                assert state["stats"]["grasp"] == {"locked": True, "target": 30, "value": 30}
+                assert state["elements"] == [
+                    {"id": "Fire", "name": "Fire", "count": 55 if locked else None, "locked": locked},
+                ]
+                assert all(state[key] is locked for key in ("healthLocked", "moneyLocked", "rerollsLocked"))
+                assert state["rerolls"] == (9 if locked else None)
+                stat_value = 30 if locked else None
+                assert state["stats"]["grasp"] == {"locked": locked, "target": stat_value, "value": stat_value}
                 assert state["rewards"] == [{"id": "StaticReward"}] and state["boons"] == [{"id": "StaticBoon"}]
                 assert state["nativeRarityOrder"] == ["Common", "Rare"]
                 assert state["occurrenceTargets"] == [{"id": "StaticOccurrence"}]
-                assert state["gameSpeed"] == 1.5 and adapter.preferences == desired
+                assert state["gameSpeed"] == 1.5
+                assert adapter.preferences == (desired if locked else unlocked_desired)
 
             if transition == "exit_then_replacement":
                 visible_pid = None
@@ -260,20 +269,35 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
             found = adapter.dispatch("scan", {}, "find-replacement")
             assert found["pid"] == 5151 and found["connected"] is False
             assert_observations_retired(found)
+
+            unlocked = adapter.dispatch("load_profile", {"name": "Unlocked"}, "load-profile")
+            assert unlocked["pid"] == 5151 and unlocked["connected"] is False
+            assert unlocked["loadedProfile"] == "Unlocked"
+            assert_observations_retired(unlocked, locked=False)
+
             waiting = adapter.dispatch("connect", {"probeRuntime": True}, "connect-replacement")
             assert waiting["pid"] == 5151 and waiting["connected"] is True and waiting["status"] == "waiting"
-            assert_observations_retired(waiting)
+            assert_observations_retired(waiting, locked=False)
 
             resident.handler = None
             resident.payload = {
                 "status": "ready", "scene": "run", "health": 63, "maxHealth": 120,
+                "money": 12, "rerolls": 2,
                 "currentRunTraits": [{"instanceId": "replacement-trait"}],
                 "resources": [{"id": "Ore", "name": "Ore", "count": 3, "locked": False}],
+                "elements": [{"id": "Fire", "name": "Fire", "count": 8, "locked": False}],
+                "stats": {"grasp": {"value": 13, "target": None, "locked": False}},
             }
             fresh = adapter.observe_runtime()
             assert fresh["pid"] == 5151 and fresh["status"] == "ready" and fresh["health"] == 63
             assert fresh["currentRunTraits"] == [{"instanceId": "replacement-trait"}]
-            assert fresh["resources"][0]["count"] == 3 and adapter.preferences == desired
+            assert fresh["resources"][0]["count"] == 3 and adapter.preferences == unlocked_desired
+            adapter.disconnect()
+            detached = adapter.dispatch("load_profile", {"name": "Unlocked"}, "load-after-observation")
+            assert detached["pid"] == 5151 and detached["connected"] is False
+            assert detached["money"] == 12 and detached["rerolls"] == 2
+            assert detached["resources"][0]["count"] == 3 and detached["elements"][0]["count"] == 8
+            assert detached["stats"]["grasp"]["value"] == 13
             assert [call["kind"] for call in resident.calls] == ["observe", "status", "observe"]
             adapter.close()
 
