@@ -517,12 +517,14 @@ struct Hades2StatePatch {
     }
 
     private static func decodeElement(_ row: [String: Any]) -> ElementCount? {
-        guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+        guard !(row["count"] is NSNull),
+              let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return ElementCount(id: id, name: name, count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false)
     }
 
     private static func decodeResource(_ row: [String: Any]) -> MaterialResource? {
-        guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+        guard !(row["count"] is NSNull),
+              let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return MaterialResource(
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
             count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false,

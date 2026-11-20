@@ -59,7 +59,12 @@ for raw in sys.stdin:
    offline_scans += 1
    state = {'connected': False, 'status': 'disconnected'}
    if offline_scans == 1: state['chaosGateProbability'] = 35
-   else: state['warning'] = 'verified detached snapshot'
+   else:
+    state.update(pid=6161, warning='verified detached snapshot',
+                 resources=[{'id': 'MetaCurrency', 'name': 'Ashes', 'locked': True, 'count': 52},
+                            {'id': 'Ore', 'name': 'Ore', 'locked': False, 'count': None}],
+                 elements=[{'id': 'Fire', 'name': 'Fire', 'locked': True, 'count': 10},
+                           {'id': 'Water', 'name': 'Water', 'locked': False, 'count': None}])
   elif req['command'] == 'core.save.apply_staged':
    state = {'operation': {'applied': False}}
   else:
@@ -236,6 +241,8 @@ func wait(_ message: String = "worker/model did not reach expected state", _ pre
         wait("a current full detached snapshot was rejected") {
             !offlineModel.busy && offlineModel.warning == "verified detached snapshot"
         }
+        check(offlineModel.resources.map(\.id) == ["MetaCurrency"] && offlineModel.elements.map(\.id) == ["Fire"],
+              "unobserved resource or element appeared as zero in the detached snapshot")
         print("hades2_gathering_frontend_ok")
     }
 }
