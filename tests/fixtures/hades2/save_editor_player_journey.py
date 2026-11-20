@@ -108,6 +108,10 @@ class SaveOnlyAdapter(Hades2Adapter):
     def metadata(self):
         return GameAdapter.metadata(self)
 
+    def state_for_error(self):
+        # This fixture has no target runtime state to project on a Save error.
+        return None
+
     def reply_replayed(self):
         pass
 
