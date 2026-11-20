@@ -137,6 +137,8 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
     @MainActor static func main() {
         let application = NSApplication.shared
         application.setActivationPolicy(.regular)
+        // Resolve the track's secondary tick color in the product's appearance.
+        application.appearance = NSAppearance(named: .darkAqua)
         application.finishLaunching()
         application.activate(ignoringOtherApps: true)
         enableNativeAccessibility()

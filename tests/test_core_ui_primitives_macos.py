@@ -967,6 +967,15 @@ private struct DisclosureSearchFixture: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Leave room below the search anchor for the native popover.
+            TrainerWorkbenchSearchField(
+                text: $state.query,
+                placeholder: "SearchWorkbench", clearLabel: "ClearWB", emptyLabel: "NoResults",
+                search: { q in q.isEmpty ? [] : [SearchEntry(id: "e1", title: "Health", detail: "Vital", icon: "heart")] },
+                title: { $0.title }, detail: { $0.detail }, icon: { $0.icon }, onNavigate: { _ in }
+            )
+            .frame(width: 320)
+
             HStack {
                 TrainerDisclosureButton(
                     isExpanded: $state.expanded,
@@ -1001,14 +1010,6 @@ private struct DisclosureSearchFixture: View {
                     .background(FrameProbe("picker.standard.alloc").allowsHitTesting(false).accessibilityHidden(true))
                     .accessibilityIdentifier("picker.standardDisabled")
             }
-
-            TrainerWorkbenchSearchField(
-                text: $state.query,
-                placeholder: "SearchWorkbench", clearLabel: "ClearWB", emptyLabel: "NoResults",
-                search: { q in q.isEmpty ? [] : [SearchEntry(id: "e1", title: "Health", detail: "Vital", icon: "heart")] },
-                title: { $0.title }, detail: { $0.detail }, icon: { $0.icon }, onNavigate: { _ in }
-            )
-            .frame(width: 320)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
