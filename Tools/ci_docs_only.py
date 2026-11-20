@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +18,10 @@ from module_inventory import (
     executable_reference_prefixes,
     module_ids_for_diff,
 )
-PORTABLE_TOOL_PATHS = {
+from test_inputs import MACOS_RUNNER_PATHS, affected_tests, is_native_fixture, load_macos_test_dependencies
+from test_inventory import load_macos_only_tests
+
+NON_PRODUCT_TOOL_PATHS = {
     "Tools/check_runtime_revision.py",
     "Tools/discover_linux_tests.py",
     "Tools/release_tag.py",
@@ -31,8 +33,8 @@ PORTABLE_TOOL_PATHS = {
     "Tools/run_linux_checks.sh",
     "Tools/ci_docs_only.py",
     "Tools/summarize_macos_coverage.py",
+    *MACOS_RUNNER_PATHS,
 }
-MACOS_TEST_DEPENDENCIES_PATH = "Tools/macos_test_dependencies.json"
 # Only native/module composition boundaries need the reference-fixture compiler lane.
 # Pure Backend implementation and game-owned Swift changes are verified by their
 # owning lanes; invoking a second macOS app build adds no isolation evidence.
@@ -86,58 +88,11 @@ def is_docs_only(
     )
 
 
-def load_macos_only_tests(root: Path = ROOT) -> set[str]:
-    source = root / "Tools/macos_only_tests.txt"
-    inventory = {
-        line.strip()
-        for line in source.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    }
-    return inventory
-
-
-def load_macos_test_dependencies(root: Path = ROOT) -> dict[str, frozenset[str]]:
-    # Dependency edges belong beside the test inventory; shared scope routing
-    # only interprets the generic relationship between support paths and tests.
-    dependencies = json.loads((root / MACOS_TEST_DEPENDENCIES_PATH).read_text(encoding="utf-8"))
-    inventory = load_macos_only_tests(root)
-    if not isinstance(dependencies, dict):
-        raise ValueError("macOS test dependencies must be an object")
-    for consumer, paths in dependencies.items():
-        if consumer not in inventory:
-            raise ValueError(f"macOS dependency consumer missing from inventory: {consumer}")
-        if not isinstance(paths, list) or not paths or any(
-            not isinstance(path, str) or not path or path == "." or Path(path).is_absolute()
-            or ".." in Path(path).parts or Path(path).as_posix() != path
-            for path in paths
-        ):
-            raise ValueError(f"invalid macOS test dependency paths for {consumer}")
-    return {consumer: frozenset(paths) for consumer, paths in dependencies.items()}
-
-
-# Missing or malformed ownership metadata must fail routing, never become an
-# empty map that silently skips a native consumer.
-MACOS_TEST_DEPENDENCIES = load_macos_test_dependencies()
-MACOS_TEST_SUPPORT_PATHS = frozenset({MACOS_TEST_DEPENDENCIES_PATH}).union(*MACOS_TEST_DEPENDENCIES.values())
-
-
 def needs_module_build_for_path(path: str) -> bool:
     return (
         path in MODULE_EXACT_PATHS
         or path == "Sources/App.swift"
         or path.startswith(MODULE_PREFIXES)
-    )
-
-
-def is_linux_portable_only(
-    path: str,
-    macos_only_tests: set[str],
-    reference_prefixes: tuple[str, ...] | None = None,
-    app_resource_sources: tuple[str, ...] = (),
-) -> bool:
-    # A declared native-test dependency must run its macOS consumers.
-    return path not in MACOS_TEST_SUPPORT_PATHS and _is_portable_input(
-        path, macos_only_tests, reference_prefixes, app_resource_sources
     )
 
 
@@ -161,19 +116,15 @@ def _is_portable_input(
         return path.endswith((".py", ".lua", ".json", ".csv", ".txt", ".md"))
     if path.startswith("tests/"):
         # Shared Swift/native fixtures are inputs to macOS behavioral harnesses.
-        if path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib")):
-            return False
-        return Path(path).name not in macos_only_tests
+        return not is_native_fixture(path) and path.removeprefix("tests/") not in macos_only_tests
     if path.startswith(".github/workflows/"):
         # A change to Build 2's own execution recipe must exercise the real
         # macOS product; the separate module-matrix workflow owns its lane.
         return path != ".github/workflows/build2-macos.yml"
-    if path == "Tools/select_macos_pr_tests.py":
-        return False
     if path.startswith("Tools/profile_") and path.endswith(".py"):
         # Instrumentation tools consume test helpers; they are not product inputs.
         return True
-    if path in PORTABLE_TOOL_PATHS:
+    if path in NON_PRODUCT_TOOL_PATHS:
         return True
     if is_executable_reference_data(path, reference_prefixes):
         return path not in app_resource_sources
@@ -189,12 +140,7 @@ def needs_build_for_path(
     # Workflow files describe CI orchestration. Their own changed job graph is
     # exercised by the PR workflow, while Linux contracts pin the product-build
     # invocations. Product recipe inputs remain owned by build/tool paths below.
-    if path.startswith(("tests/", ".github/workflows/")) or path in {
-        MACOS_TEST_DEPENDENCIES_PATH,
-        "Tools/macos_only_tests.txt",
-        "Tools/run_macos_checks.sh",
-        "Tools/select_macos_pr_tests.py",
-    }:
+    if path.startswith(("tests/", ".github/workflows/")):
         return False
     # Declaring a file as a native-test dependency selects that test; the file
     # remains whatever product input it is.
@@ -222,7 +168,9 @@ def needs_full_build_for_path(
 def classify_scope(
     paths: list[str],
     *,
+    root: Path = ROOT,
     macos_only_tests: set[str] | None = None,
+    test_dependencies: dict[str, frozenset[str]] | None = None,
     reference_prefixes: tuple[str, ...] | None = None,
     app_resource_sources: tuple[str, ...] | None = None,
 ) -> dict[str, bool]:
@@ -238,31 +186,19 @@ def classify_scope(
             "needs_full_build": True,
         }
 
-    docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
-    if docs_only:
-        # Documentation never builds the product, but portable contract tests
-        # read policy and reference documents. Skipping the Linux lane would
-        # let a docs-only change pass every required check while breaking the
-        # suite for the next, unrelated pull request.
-        return {
-            "docs_only": True,
-            "needs_linux": True,
-            "needs_macos": False,
-            "needs_module": False,
-            "needs_build": False,
-            "needs_full_build": False,
-        }
-
-    macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
+    if reference_prefixes is None:
+        reference_prefixes = current_reference_prefixes(root)
+    documentation = is_docs_only(normalized, reference_prefixes=reference_prefixes)
+    macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests(root)
     packaged_resources = (
         app_resource_sources
         if app_resource_sources is not None
-        else current_app_resource_sources()
+        else current_app_resource_sources(root)
     )
-    needs_module = any(needs_module_build_for_path(path) for path in normalized)
-    needs_macos = any(
+    needs_module = not documentation and any(needs_module_build_for_path(path) for path in normalized)
+    needs_macos = not documentation and any(
         (needs_module_build_for_path(path) and not path.startswith(".github/workflows/"))
-        or not is_linux_portable_only(
+        or not _is_portable_input(
             path,
             macos_only,
             reference_prefixes,
@@ -270,16 +206,22 @@ def classify_scope(
         )
         for path in normalized
     )
+    if not needs_macos:
+        dependencies = test_dependencies
+        if dependencies is None:
+            dependencies = load_macos_test_dependencies(root, changed_paths=normalized)
+        needs_macos = bool(affected_tests(normalized, dependencies))
+
     return {
-        "docs_only": False,
+        "docs_only": documentation and not needs_macos,
         "needs_linux": True,
         "needs_macos": needs_macos,
         "needs_module": needs_module,
-        "needs_build": any(
+        "needs_build": not documentation and any(
             needs_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
             for path in normalized
         ),
-        "needs_full_build": any(
+        "needs_full_build": not documentation and any(
             needs_full_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
             for path in normalized
         ),
@@ -328,7 +270,7 @@ def main(argv: list[str]) -> int:
             reference_prefixes=prefixes,
             app_resource_sources=packaged_resources,
         )
-    except (ModuleInventoryError, OSError, subprocess.SubprocessError) as error:
+    except (ModuleInventoryError, OSError, SyntaxError, ValueError, subprocess.SubprocessError) as error:
         print(f"ci scope: {error}", file=sys.stderr)
         return 2
     for key in ("docs_only", "needs_linux", "needs_macos", "needs_module", "needs_build", "needs_full_build"):

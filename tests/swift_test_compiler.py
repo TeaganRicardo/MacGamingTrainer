@@ -76,8 +76,12 @@ _IMPORT = re.compile(r"^[ \t]*(?:@\w+[ \t]+)*import[ \t]+(\w+)", re.MULTILINE)
 # Runs with the checkout's own Tools, which read that checkout's manifests.
 _LAYOUT_PROGRAM = """
 import json, sys
-sys.path.insert(0, sys.argv[1])
-from product_support import swift_library_modules
+from importlib import import_module
+from pathlib import Path
+
+layout_tool = Path(sys.argv[1])
+sys.path.insert(0, str(layout_tool.parent))
+swift_library_modules = import_module(layout_tool.stem).swift_library_modules
 modules = swift_library_modules([game for game in sys.argv[2].split(',') if game], sys.argv[3])
 print(json.dumps([[module['name'], module['dependencies'], [str(path) for path in sources]]
                   for module, sources in modules]))
@@ -107,9 +111,9 @@ def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = RO
     ``Tools/product_support.py`` of ``checkout`` derives the layout from that
     checkout's manifests and writes the generated sources under ``directory``.
     """
+    layout_tool = Path(checkout) / "Tools/product_support.py"
     result = subprocess.run(
-        [sys.executable, "-I", "-c", _LAYOUT_PROGRAM, str(Path(checkout) / "Tools"), ",".join(games),
-         str(directory)],
+        [sys.executable, "-I", "-c", _LAYOUT_PROGRAM, str(layout_tool), ",".join(games), str(directory)],
         capture_output=True, text=True,
     )
     if result.returncode:

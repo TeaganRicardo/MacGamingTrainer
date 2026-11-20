@@ -1,4 +1,8 @@
 """The Darwin kernel path probe resolves the running native process."""
+
+MGT_PLATFORM = "macos"
+MGT_INPUTS = ("Backend/games/hades/adapter.py",)
+
 import os
 import sys
 from pathlib import Path

@@ -61,14 +61,13 @@ fi
 export MGT_FIXTURE_TIMINGS
 COVERAGE_OUTPUT="${MGT_MACOS_COVERAGE_OUTPUT:-}"
 
-MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
 LANE="convergence"
 selected=""
-if [[ ! -f "$MACOS_ONLY_LIST" ]]; then
-  record_failure "missing macOS-only test list: $MACOS_ONLY_LIST"
-elif [[ $# -eq 0 ]]; then
+if [[ $# -eq 0 ]]; then
   # Full inventory is reserved for exact-SHA release convergence.
-  selected="$(cat "$MACOS_ONLY_LIST")"
+  if ! selected="$(python3 Tools/test_inventory.py)"; then
+    record_failure "discover macOS tests"
+  fi
 elif [[ $# -eq 3 && "$1" == "--pr" ]]; then
   LANE="pr"
   if [[ -n "${MGT_MACOS_SELECTION:-}" ]]; then

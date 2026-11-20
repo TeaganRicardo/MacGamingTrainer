@@ -1,3 +1,12 @@
+MGT_PLATFORM = "macos"
+# The harness builds a separate checkout from these inputs.
+MGT_INPUTS = (
+    "Sources/App.swift",
+    "Sources/Core/",
+    "ContractFixtures/reference_module/",
+    "Resources/Localization/",
+)
+
 from macos_fixture_policy import launch_fixture
 from fixture_budgets.multi_game import JOURNEY_BUDGETS
 from swift_test_compiler import compile_swift_test

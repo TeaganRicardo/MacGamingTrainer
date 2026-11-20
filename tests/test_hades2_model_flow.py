@@ -1,4 +1,7 @@
 """Hades II model/typed API/real Host-session behavior without foreground activation."""
+
+MGT_PLATFORM = "macos"
+
 import json
 import os
 import shutil

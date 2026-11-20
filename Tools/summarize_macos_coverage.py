@@ -23,7 +23,7 @@ TOOLS = ROOT / "Tools"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
-from ci_docs_only import load_macos_only_tests
+from test_inventory import load_macos_only_tests
 from select_macos_pr_tests import PR_DEFERRED
 
 MAXIMUM_TIMING_LINES = 40

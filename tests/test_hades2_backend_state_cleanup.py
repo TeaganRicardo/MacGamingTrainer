@@ -1,3 +1,5 @@
+MGT_PLATFORM = "macos"
+
 import os
 import shutil
 import subprocess

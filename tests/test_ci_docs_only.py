@@ -28,11 +28,12 @@ assert not module.is_docs_only([f"{REFERENCE_ROOT}/manifest.json"])
 assert not module.is_docs_only(["docs/a.md", REFERENCE_DATA])
 
 MACOS_ONLY = {"test_hades2_run_log_watcher.py"}
+DEPENDENCIES = module.load_macos_test_dependencies()
 
 
 def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None, full_build=None):
     expected_build = macos if build is None else build
-    assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY) == {
+    assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY, test_dependencies=DEPENDENCIES) == {
         "docs_only": docs_only,
         "needs_linux": linux,
         "needs_macos": macos,
@@ -53,7 +54,8 @@ assert_scope(
 # reference snapshots), so every documentation-only diff keeps the Linux lane.
 tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, text=True, capture_output=True).stdout.split()
 for document in [path for path in tracked if path.endswith(".md") or path.startswith("docs/")]:
-    assert module.classify_scope([document], macos_only_tests=MACOS_ONLY)["needs_linux"], document
+    scope = module.classify_scope([document], macos_only_tests=MACOS_ONLY, test_dependencies=DEPENDENCIES)
+    assert scope["needs_linux"], document
 # Documentation is not a product build input, at any depth and in a mixed diff:
 # a docs file next to code must not escalate the lane to the unified build.
 for documentation in (
@@ -83,6 +85,14 @@ assert_scope(
     linux=True,
     macos=False,
     module_build=False,
+)
+assert_scope(
+    ["Backend/games/hades/catalog.json"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+    build=False,
 )
 
 for shared_backend_seam in (
@@ -179,7 +189,7 @@ assert_scope(
 for path in (
     "tests/hades2_lldb_worker_support.py", "tests/hades2_lldb_fixture.py",
     "tests/hades2_debugserver_owner.py",
-    "Tools/macos_test_dependencies.json",
+    "Tools/test_inputs.py", "Tools/test_inventory.py",
 ):
     assert_scope([path], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope(["tests/test_debugserver_ownership.py"],
@@ -207,45 +217,37 @@ for source in (
 assert_scope(["tests/visual_hierarchy_harness.py"],
              docs_only=False, linux=True, macos=True, module_build=False, build=False)
 
-# Native support ownership is data from the test inventory, independent of
-# module identities. Invalid consumers/paths cannot silently skip native checks.
+# Native support ownership follows imports without loading any Python entrypoint.
 with tempfile.TemporaryDirectory() as temporary:
     root = Path(temporary)
-    (root / "Tools").mkdir()
-    (root / "Tools/macos_only_tests.txt").write_text("test_native_fixture.py\n")
-    metadata = root / "Tools/macos_test_dependencies.json"
-    metadata.write_text(json.dumps({"test_native_fixture.py": ["tests/fixture.py"]}))
+    tests_root = root / "tests"
+    tests_root.mkdir()
+    native = tests_root / "test_native_fixture.py"
+    native.write_text('MGT_PLATFORM = "macos"\nfrom fixture import sample\n')
+    (tests_root / "fixture.py").write_text('from support import sample\n')
+    (tests_root / "support.py").write_text('raise AssertionError("discovery must not run imports")\n')
+    (tests_root / "test_portable.py").write_text("import fixture\n")
     assert module.load_macos_test_dependencies(root) == {
-        "test_native_fixture.py": frozenset({"tests/fixture.py"}),
+        "test_native_fixture.py": frozenset({"tests/fixture.py", "tests/support.py"}),
     }
+    # The CLI classifier consumes the same graph, including deleted imports
+    # that are still named by their native consumers at the head of the PR.
+    (tests_root / "support.py").unlink()
+    scope = module.classify_scope(
+        ["tests/support.py"], root=root, reference_prefixes=(), app_resource_sources=(),
+    )
+    assert scope["needs_macos"] and not scope["needs_build"], scope
     for invalid in (
-        [], {"test_unknown.py": ["tests/fixture.py"]},
-        {"test_native_fixture.py": "tests/fixture.py"},
-        {"test_native_fixture.py": ["../fixture.py"]},
-        {"test_native_fixture.py": ["/fixture.py"]},
-        {"test_native_fixture.py": ["./tests/fixture.py"]},
+        '"tests/fixture.py"', '("../fixture.py",)', '("/fixture.py",)',
+        '("./tests/fixture.py",)', '("tests/support.py",)',
     ):
-        metadata.write_text(json.dumps(invalid))
+        native.write_text(f'MGT_PLATFORM = "macos"\nMGT_INPUTS = {invalid}\n')
         try:
-            module.load_macos_test_dependencies(root)
+            module.load_macos_test_dependencies(root, changed_paths=["tests/support.py"])
         except ValueError:
             pass
         else:
-            raise AssertionError(f"invalid native dependency metadata accepted: {invalid!r}")
-    metadata.write_text("{")
-    try:
-        module.load_macos_test_dependencies(root)
-    except json.JSONDecodeError:
-        pass
-    else:
-        raise AssertionError("malformed native dependency metadata was ignored")
-    metadata.unlink()
-    try:
-        module.load_macos_test_dependencies(root)
-    except FileNotFoundError:
-        pass
-    else:
-        raise AssertionError("missing native dependency metadata was ignored")
+            raise AssertionError(f"invalid native input declaration accepted: {invalid}")
 assert_scope(
     ["Tools/supported_build.py"],
     docs_only=False,
@@ -268,12 +270,11 @@ assert_scope(["Backend/games/hades/runtime/hades.lua"], docs_only=False, linux=T
 assert_scope(["Backend/games/hades2/native/CommandMailbox.c"], docs_only=False, linux=True, macos=True, module_build=False)
 # Declaring a product input as a native-test dependency routes that test; it
 # must not turn the input into fixture support that skips the product build.
-assert "Backend/games/hades2/native/EffectBlockQuery.c" in module.MACOS_TEST_SUPPORT_PATHS
 assert_scope(["Backend/games/hades2/native/EffectBlockQuery.c"], docs_only=False, linux=True, macos=True, module_build=False)
-assert "Tools/clean_signing_metadata.py" in module.MACOS_TEST_SUPPORT_PATHS
+assert_scope(["Tools/clean_signing_metadata.py"], docs_only=False, linux=True, macos=True, module_build=True)
 assert_scope(["Tools/resident_runtime.py"], docs_only=False, linux=True, macos=True, module_build=False)
 assert_scope(["Sources/Hades/HadesModule.swift"], docs_only=False, linux=True, macos=True, module_build=False, full_build=False)
-assert_scope(["Tools/macos_only_tests.txt"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
+assert_scope(["Tools/run_macos_checks.sh"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/direct-release.yml"], docs_only=False, linux=True, macos=False, module_build=False)
 assert_scope(["Tools/select_macos_pr_tests.py"], docs_only=False, linux=True, macos=True, module_build=False, build=False)
 assert_scope([".github/workflows/module-build-matrix.yml"], docs_only=False, linux=True, macos=False, module_build=True, build=False)

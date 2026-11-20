@@ -1,3 +1,15 @@
+MGT_PLATFORM = "macos"
+# The worker swaps these runtime components into isolated LLDB fixtures.
+MGT_INPUTS = (
+    "Backend/core/process_time_warp.py",
+    "Backend/debugger/lldb_time_warp.py",
+    "Backend/games/hades2/mailbox.py",
+    "Backend/games/hades2/native_effect_query.py",
+    "Backend/games/hades2/native_library.py",
+    "Backend/games/hades2/native_mailbox.py",
+    "Backend/games/hades2/transport.py",
+)
+
 import os
 import mmap
 import json

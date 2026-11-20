@@ -33,17 +33,17 @@ Put a responsibility in Core when actual behavior demonstrates a game-agnostic c
 
 ## Register behavior coverage
 
-Provide a stable macOS behavior entry using `test_<id>_model_flow.py`, `test_<id>_frontend.py` or `test_<id>_view_state_flow.py`, and add the native entry to `Tools/macos_only_tests.txt`. The selector requires a module-owned entry for changed module Swift sources. Missing entries and an entry set entirely deferred to convergence fail with an explicit module diagnostic.
+Provide a stable behavior entry using `test_<id>_model_flow.py`, `test_<id>_frontend.py` or `test_<id>_view_state_flow.py`. Put `MGT_PLATFORM = "macos"` at the test file's top level. The selector requires a stable PR entry for changed module Swift sources and for each module in `app.json` on shared Core changes.
 
 Use a foreground-independent model/API/session journey for ordinary PR smoke. The Hades II model entry exercises typed commands, explicit commit, authoritative observation refresh, guarded actions and feedback. Native focus, field-editor, key-window, activation and rendered journeys remain in their own convergence entries. A model call does not prove physical keyboard/focus behavior.
 
-Portable `test_*.py` files remain automatically discovered without an additional source-scanning gate. Register Darwin-only behavior explicitly in the macOS inventory; the process-path and native image-query entries demonstrate the formerly omitted platform branches. Tests which compile only Foundation logic belong in the portable lane when that lane can execute them.
+Test discovery reads platform declarations without executing the files. Unmarked `test_*.py` entries run in the portable lane, including Foundation-only Swift behavior that also runs on Linux.
 
-Declare every imported or executed Python/data helper in `Tools/macos_test_dependencies.json`, including indirect helpers. The selector owner has named regressions for the shared room-picker and Save Editor helpers whose consumers were previously omitted. Dependencies point from a consumer to its inputs; a profiling tool importing a test helper is not an input to that helper's unrelated test. Native fixture sources under `tests/` conservatively select the complete native inventory.
+The selector follows Python imports and literal file paths through test helpers. It derives Swift sources and the manifests used to generate bindings from the product layout used by `compile_swift_test`. Declare opaque inputs in a top-level `MGT_INPUTS` tuple, such as interpolated resource paths, files copied into a scratch checkout, and Backend Python files that exercise platform-specific behavior. Use repository-relative paths and a trailing slash for a directory. Native fixture sources under `tests/` select the full native inventory.
 
 Use `tests/macos_fixture_policy.py` for an actual native journey's outer watchdog. Give the journey one budget and one launch. Preserve named semantic predicates and their own failures inside the harness; compilation timeouts and an LLDB coordinator with its own worker cleanup are different contracts. Never multiply budgets or wrap an existing coordinator with a second watchdog. Unknown hosted profiles fail closed. Runtime timing is observation, never a speed threshold.
 
-`Tools/select_macos_pr_tests.py` uses the actual merge-base inventory/dependency delta for registration changes, while changed sources and helpers retain their consumers. It writes one structured relevant/selected/deferred result. The runner executes its selected list and passes that same result to the coverage summary. A deferred record includes its reason and exact-SHA verification owner; unrelated global deferral policy is not counted as this PR's deferred coverage.
+`Tools/select_macos_pr_tests.py` reads changed paths from the merge base and writes one structured relevant/selected/deferred result. Adding a native entry or editing its declared inputs changes the test file itself, which selects that entry. The runner executes the selected list and uses that same result to report any deferred tests, their reasons and the exact-SHA verification owner.
 
 ## Keep architecture identities separate
 
@@ -74,9 +74,7 @@ The contract above is the goal; these shared files still need edits or attention
 
 | Shared file | When | Removal owner |
 | --- | --- | --- |
-| `Tools/macos_only_tests.txt`, `Tools/macos_test_dependencies.json` | Always: the module smoke entry and every helper it imports | #768 (derived inventory and dependencies) |
 | An entry in `tests/fixture_budgets/` (for example `hades2_flow.py`, `multi_game.py`) | Each native journey; an unknown journey fails closed | #772 (provisional budgets) |
-| `Tools/select_macos_pr_tests.py` tuples | Only if the module's journeys should run on Core changes | #768 (derived selector) |
 | `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
 | `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
 | Lua 5.2 prerequisite steps in `linux-contracts.yml` and `build2-macos.yml` | The module's tests need a different runtime | #772 (generic prerequisites) |

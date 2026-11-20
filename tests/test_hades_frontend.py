@@ -1,4 +1,8 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
+
+MGT_PLATFORM = "macos"
+MGT_INPUTS = ("Backend/core/save_restore.py", "Resources/Localization/")
+
 import json
 import os
 from pathlib import Path

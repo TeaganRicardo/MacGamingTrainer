@@ -1,4 +1,7 @@
 """Native AppKit UI checks for Hades I Save Editor and typed modal sheet parity (#751)."""
+
+MGT_PLATFORM = "macos"
+
 import json
 import os
 import shutil

@@ -1,3 +1,6 @@
+MGT_PLATFORM = "macos"
+MGT_INPUTS = ("Sources/App.swift",)
+
 import subprocess
 import tempfile
 from pathlib import Path
