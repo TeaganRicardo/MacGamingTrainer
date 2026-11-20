@@ -1,4 +1,5 @@
 """Bound only confirmed automatic pre-edit copies; preserve explicit recovery."""
+
 import json
 import logging
 import os
@@ -66,16 +67,20 @@ class SaveBackupRetention:
 
     @staticmethod
     def eligible(row):
-        return (row['valid'] and row['origin'] == 'automaticPreEdit'
-                and row['retentionEligible'] and not row['protected'])
+        return (
+            row['valid'] and row['origin'] == 'automaticPreEdit' and row['retentionEligible'] and not row['protected']
+        )
 
     def state(self, rows, recovery_paths):
         policy, valid = self.policy()
         eligible = [row for row in rows if self.eligible(row)]
         sizes_known = all(row['storageBytes'] is not None for row in eligible)
         eligible_bytes = sum(row['storageBytes'] or 0 for row in eligible)
-        usage = {'snapshotCount': len(rows), 'snapshotBytes': sum(row['storageBytes'] or 0 for row in rows),
-                 'unknownSnapshotSizes': sum(row['storageBytes'] is None for row in rows)}
+        usage = {
+            'snapshotCount': len(rows),
+            'snapshotBytes': sum(row['storageBytes'] or 0 for row in rows),
+            'unknownSnapshotSizes': sum(row['storageBytes'] is None for row in rows),
+        }
         for key, selected in (
             ('automatic', [row for row in rows if self.eligible(row)]),
             ('protected', [row for row in rows if row['origin'] == 'automaticPreEdit' and not self.eligible(row)]),
@@ -85,13 +90,20 @@ class SaveBackupRetention:
             usage[key + 'Count'] = len(selected)
             usage[key + 'Bytes'] = sum(row['storageBytes'] or 0 for row in selected)
         recovery_sizes = [self.store.storage_bytes(path) for path in recovery_paths]
-        usage.update(recoveryCount=len(recovery_paths), recoveryBytes=sum(size or 0 for size in recovery_sizes),
-                     unknownRecoverySizes=sum(size is None for size in recovery_sizes))
+        usage.update(
+            recoveryCount=len(recovery_paths),
+            recoveryBytes=sum(size or 0 for size in recovery_sizes),
+            unknownRecoverySizes=sum(size is None for size in recovery_sizes),
+        )
         return {
-            'retention': {**policy, 'minimumCount': 1, 'policyValid': valid,
-                          'overBudget': len(eligible) > policy['maxCount'] or eligible_bytes > policy['maxBytes'],
-                          'usageComplete': sizes_known,
-                          'warning': 'policy_invalid' if not valid else self.warning},
+            'retention': {
+                **policy,
+                'minimumCount': 1,
+                'policyValid': valid,
+                'overBudget': len(eligible) > policy['maxCount'] or eligible_bytes > policy['maxBytes'],
+                'usageComplete': sizes_known,
+                'warning': 'policy_invalid' if not valid else self.warning,
+            },
             'storageUsage': usage,
         }
 

@@ -7,7 +7,13 @@ import time
 import uuid
 from pathlib import Path
 
-from .save_resolution import ResolvedSaveFile, SaveResolutionError, load_save_provider, read_resolved_save_file, resolve_save_files
+from .save_resolution import (
+    ResolvedSaveFile,
+    SaveResolutionError,
+    load_save_provider,
+    read_resolved_save_file,
+    resolve_save_files,
+)
 from .save_restore import (
     SaveBusyError,
     SaveRestorePreparationInterrupted,
@@ -110,8 +116,9 @@ class CoreSaveService:
             return self.resolved_files()
         verified = self.store.load_verified_snapshot(snapshot_id)
         return tuple(
-            ResolvedSaveFile(item['rootId'], item['relativePath'],
-                verified['root'] / 'files' / item['rootId'] / item['relativePath'])
+            ResolvedSaveFile(
+                item['rootId'], item['relativePath'], verified['root'] / 'files' / item['rootId'] / item['relativePath']
+            )
             for item in verified['manifest']['files']
         )
 
@@ -120,8 +127,7 @@ class CoreSaveService:
         self._require_supported()
         if snapshot_id is not None:
             return self.store.read_source_file(snapshot_id, root_id, relative_path)
-        matches = [row for row in self.resolved_files()
-            if (row.root_id, row.relative_path) == (root_id, relative_path)]
+        matches = [row for row in self.resolved_files() if (row.root_id, row.relative_path) == (root_id, relative_path)]
         if len(matches) != 1:
             raise SaveResolutionError('Save source is missing or ambiguous.')
         root = next(root for root in self.spec.roots if root.id == root_id)
@@ -155,7 +161,8 @@ class CoreSaveService:
             pending = self.pending_restore()
             pinned = (pending['snapshotId'],) if pending and pending.get('snapshotId') else ()
             result['retention'] = self.retention.after_successful_edit(
-                result['previousSnapshotId'], pinned,
+                result['previousSnapshotId'],
+                pinned,
                 recovery_pending=bool(self._recovery_paths()) or bool(pending and pending.get('indeterminate')),
             )
         except Exception:

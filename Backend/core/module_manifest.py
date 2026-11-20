@@ -152,8 +152,12 @@ class GameModuleManifest:
         if not isinstance(bundle_identifier, str) or len(bundle_identifier) > 255:
             raise ManifestError('targetApplication.bundleIdentifier must be a string of at most 255 characters.')
         executable_suffix = target_application.get('executablePathSuffix', '')
-        if (not isinstance(executable_suffix, str) or '\\' in executable_suffix
-                or executable_suffix.startswith('/') or '..' in Path(executable_suffix).parts):
+        if (
+            not isinstance(executable_suffix, str)
+            or '\\' in executable_suffix
+            or executable_suffix.startswith('/')
+            or '..' in Path(executable_suffix).parts
+        ):
             raise ManifestError('targetApplication.executablePathSuffix must be a contained relative path.')
         if not bundle_identifier.strip() and not executable_suffix.strip():
             raise ManifestError('targetApplication requires bundleIdentifier or executablePathSuffix.')
@@ -195,11 +199,7 @@ class GameModuleManifest:
         backend_root = Path(backend_root).resolve()
         expected_module_dir = (backend_root / 'games' / self.id).resolve()
         if self.source_path.parent.resolve() != expected_module_dir:
-            raise ManifestError(
-                f'Game module {self.id!r} must live at Backend/games/{self.id}/module.json.'
-            )
+            raise ManifestError(f'Game module {self.id!r} must live at Backend/games/{self.id}/module.json.')
         required_adapter_prefix = f'games.{self.id}.'
         if not self.adapter.startswith(required_adapter_prefix):
-            raise ManifestError(
-                f'backend.adapter must stay inside the game package ({required_adapter_prefix}...).'
-            )
+            raise ManifestError(f'backend.adapter must stay inside the game package ({required_adapter_prefix}...).')

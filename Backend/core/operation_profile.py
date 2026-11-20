@@ -3,6 +3,7 @@
 No files, retention, sessions or export policy are owned here. Durations are
 local monotonic intervals; nested intervals must not be added together.
 """
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
@@ -26,8 +27,13 @@ def correlation():
 @contextmanager
 def operation(request_id, command):
     # Correlation is transport metadata, never params/state/error text.
-    if (not enabled() or not isinstance(request_id, str) or not 0 < len(request_id) <= 128
-            or not isinstance(command, str) or len(command) > 128):
+    if (
+        not enabled()
+        or not isinstance(request_id, str)
+        or not 0 < len(request_id) <= 128
+        or not isinstance(command, str)
+        or len(command) > 128
+    ):
         yield
         return
     token = _current.set({"request_id": request_id, "command": command})
@@ -41,8 +47,7 @@ def record(phase, seconds, **fields):
     identity = _current.get()
     if identity is None:
         return
-    value = {"schema": 1, "component": "backend", **identity,
-             "phase": phase, "seconds": seconds}
+    value = {"schema": 1, "component": "backend", **identity, "phase": phase, "seconds": seconds}
     value.update({key: value for key, value in fields.items() if key in _FIELDS})
     logging.info("OperationProfile %s", json.dumps(value, ensure_ascii=True, allow_nan=False))
 
@@ -65,5 +70,7 @@ def profiled(name):
         def measured(*args, **kwargs):
             with phase(name):
                 return method(*args, **kwargs)
+
         return measured
+
     return decorate

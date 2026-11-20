@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import compile_swift_test
+from swift_test_compiler import compile_swift_test, main_actor_entrypoint
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which("swiftc")
@@ -50,6 +50,9 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+'''
+
+journey = r'''
 let args = CommandLine.arguments
 if args.count != 3 { fail("expected python + worker") }
 let process = BackendProcess(
@@ -92,8 +95,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-batch-delete-") as td:
     main_path=td/"main.swift"
     binary=td/"batch_delete"
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
-    main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
-    compile_swift_test(harness_sources=[main_path], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT)
+    main_path.write_text(harness + main_actor_entrypoint(journey), encoding="utf-8")
+    compile_swift_test(harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT)
     proc=launch_fixture([str(binary), PYTHON, str(worker_path)], cwd=ROOT, text=True, capture_output=True, journey='native.core_save_batch_delete_round20', budgets=JOURNEY_BUDGETS)
     if proc.returncode != 0:
         print(proc.stdout)

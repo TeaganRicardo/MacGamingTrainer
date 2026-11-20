@@ -53,6 +53,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -592,6 +593,16 @@ def _patch_modules(
     if unknown:
         raise SwiftCompilerError(f"instrumented modules are not compiled by this harness: {sorted(unknown)}")
     return tuple(result)
+
+
+def main_actor_entrypoint(body: str) -> str:
+    """Run synchronous Swift fixture statements from an explicit MainActor entry point."""
+    return (
+        "\n@main struct Main {\n"
+        "    @MainActor static func main() throws {\n"
+        + textwrap.indent(body.strip("\n"), "        ")
+        + "\n    }\n}\n"
+    )
 
 
 def compile_swift_test(

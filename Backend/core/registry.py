@@ -20,8 +20,11 @@ def discover_manifests(root: Path = _ROOT, *, selected_game_id=None):
             # the frontend/build sources omitted from the App bundle.
             manifest.validate_backend_layout(backend_root)
         except ManifestError:
-            if (selected_game_id is None or path.parent.name == selected_game_id
-                    or (manifest is not None and manifest.id == selected_game_id)):
+            if (
+                selected_game_id is None
+                or path.parent.name == selected_game_id
+                or (manifest is not None and manifest.id == selected_game_id)
+            ):
                 raise
             logging.warning('Unselected game module is invalid: %s', path, exc_info=True)
             continue

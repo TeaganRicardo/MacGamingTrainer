@@ -78,7 +78,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return Hades2Presentation.token("hades2.status.detailWithPID", arguments: [version, String(pid)])
     }
     var hostActionsEnabled: Bool { canAcceptRuntimeAction && !exiting && protocolCompatible }
-    var launchActionFromHost: (() -> Void)? { { [weak self] in self?.launchGame() } }
+    var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.launchGame() } }
     @Published var workbenchSearch = ""
     @Published var numericControlsExpanded = false
 
@@ -2294,6 +2294,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 }
 
 private extension Hades2FeatureKey {
+    @MainActor
     var modelKeyPath: ReferenceWritableKeyPath<Hades2TrainerModel, Bool> {
         switch self {
         case .invincibility: return \.invincibility

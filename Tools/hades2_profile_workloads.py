@@ -55,7 +55,7 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
         # Older --baseline-ref archives predate the shared JSON decoder.
         if (source / 'Sources/Core/Runtime/TrainerJSON.swift').exists():
             runtime_sources.append('TrainerJSON')
-        subprocess.run([compiler, '-O', '-package-name', SWIFT_PACKAGE_NAME,
+        subprocess.run([compiler, '-parse-as-library', '-O', '-package-name', SWIFT_PACKAGE_NAME,
             *(str(source / ('Sources/Core/Runtime/' + name + '.swift'))
             for name in runtime_sources),
             str(main), '-o', str(binary)], check=True, capture_output=True, text=True, timeout=60)

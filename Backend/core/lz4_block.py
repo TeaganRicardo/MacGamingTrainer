@@ -2,6 +2,7 @@
 
 Container owners supply their native byte bounds.
 """
+
 import struct
 
 
@@ -43,7 +44,7 @@ def decompress(data, max_output_bytes):
         if literal_length > len(source) - pos:
             raise LZ4BlockError("truncated LZ4 literal run")
         ensure_output(literal_length)
-        output += source[pos:pos + literal_length]
+        output += source[pos : pos + literal_length]
         pos += literal_length
 
         if pos == len(source):
@@ -114,7 +115,7 @@ def compress(payload, max_input_bytes):
     last = [-1] * 65536
 
     def hash_at(position):
-        value = int.from_bytes(payload[position:position + 4], "little")
+        value = int.from_bytes(payload[position : position + 4], "little")
         return ((value * 2654435761) & 0xFFFFFFFF) >> 16
 
     anchor = 0
@@ -126,20 +127,13 @@ def compress(payload, max_input_bytes):
         slot = hash_at(pos)
         candidate = last[slot]
         last[slot] = pos
-        if (
-            candidate < 0
-            or pos - candidate > 0xFFFF
-            or payload[candidate:candidate + 4] != payload[pos:pos + 4]
-        ):
+        if candidate < 0 or pos - candidate > 0xFFFF or payload[candidate : candidate + 4] != payload[pos : pos + 4]:
             pos += 1
             continue
 
         match_length = 4
         max_match = match_limit - pos
-        while (
-            match_length < max_match
-            and payload[candidate + match_length] == payload[pos + match_length]
-        ):
+        while match_length < max_match and payload[candidate + match_length] == payload[pos + match_length]:
             match_length += 1
 
         emit(anchor, pos, match_length, pos - candidate)

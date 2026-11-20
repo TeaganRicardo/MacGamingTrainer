@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
-from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
+from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test, main_actor_entrypoint
 
 ROOT = Path(__file__).resolve().parents[1]
 SWIFTC = shutil.which('swiftc')
@@ -82,11 +82,6 @@ struct TargetObservation {
 struct TargetModelProbe {
     func hostTargetLifetimeChanged(observation: TargetObservation) {}
 }
-var lastKnownTargetProcessIdentifier: Int32?
-func observeTarget(previous: TargetObservation, observed: TargetObservation) {
-    let model = TargetModelProbe()
-__MGT_TARGET_LIFETIME_TRANSITION__
-}
 
 func fail(_ message: String) -> Never {
     fputs("FAIL: \(message)\n", stderr)
@@ -107,6 +102,9 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 let requestTimeout: TimeInterval = 6.0
 let waitBudget: TimeInterval = 4.0
 
+'''
+
+journey = r'''
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected worker path") }
 let worker = args[1]
@@ -118,6 +116,11 @@ let backendProcess = BackendProcess(
     forceKillDelay: 0.10
 )
 let session = TrainerBackendSession(client: BackendClient(process: backendProcess, maxQueueDepth: 1))
+var lastKnownTargetProcessIdentifier: Int32?
+func observeTarget(previous: TargetObservation, observed: TargetObservation) {
+    let model = TargetModelProbe()
+__MGT_TARGET_LIFETIME_TRANSITION__
+}
 var states: [TrainerBackendStatus] = []
 var payloadCommands: [String] = []
 var hostLogs: [String] = []
@@ -410,7 +413,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
     binary = td / 'session_test'
     command_log = td / 'commands.log'
     worker_path.write_text(textwrap.dedent(worker), encoding='utf-8')
-    main_path.write_text(textwrap.dedent(harness.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)), encoding='utf-8')
+    journey_source = journey.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)
+    main_path.write_text(harness + main_actor_entrypoint(journey_source), encoding='utf-8')
     stub_path.write_text(descriptor_stub, encoding='utf-8')
     # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
     # Foundation-level files and a stub for GameModuleDescriptor.
@@ -429,7 +433,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
                 ROOT / 'Sources/Hades2/Generated/Hades2Feature.generated.swift',
             ], (SWIFT_CORE_MODULE,)),
         ],
-        harness_sources=[main_path], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,
+        harness_sources=[main_path], output=binary, swiftc=SWIFTC, cwd=ROOT,
     )
     env = os.environ.copy()
     env['MGT_DEV8_WORKER_LOG'] = str(command_log)

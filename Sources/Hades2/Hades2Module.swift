@@ -56,12 +56,13 @@ struct Hades2GameModule: TrainerGameModule {
     static func makeFeedback(model: Hades2TrainerModel) -> Hades2OperationFeedback {
         Hades2OperationFeedback(model: model)
     }
-    static var managedBackupEditor: ((Hades2TrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
+    static var managedBackupEditor: (@MainActor (Hades2TrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
         { model, snapshot in
             makeSaveEditorWindow(model: model, snapshotID: snapshot.id)
         }
     }
 
+    @MainActor
     static func makeSaveEditorWindow(model: Hades2TrainerModel, snapshotID: String? = nil) -> TrainerToolWindowContent {
         let editor = model.makeSaveEditorModel(snapshotID: snapshotID)
         return TrainerToolWindowContent(canClose: { !editor.busy }, onClose: editor.close) {

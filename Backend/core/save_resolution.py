@@ -49,7 +49,12 @@ def read_resolved_save_file(root, row):
             if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                 raise SaveResolutionError('Save source is not a regular file.')
             raw = source.read()
-            if root.is_symlink() or root.resolve() != canonical_root or row.source_path.is_symlink() or row.source_path.resolve() != canonical_file:
+            if (
+                root.is_symlink()
+                or root.resolve() != canonical_root
+                or row.source_path.is_symlink()
+                or row.source_path.resolve() != canonical_file
+            ):
                 raise SaveResolutionError('Save source path changed while reading.')
             for path, directory in directories:
                 captured, current = os.fstat(directory), path.stat()

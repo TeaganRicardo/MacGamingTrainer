@@ -4,6 +4,12 @@ import plistlib
 from collections import OrderedDict
 from pathlib import Path
 
+from core.operation_profile import operation, phase
+from core.adapter import GameAdapter
+from core.save_restore import SaveBusyError as SaveBusyError
+from core.save_service import CoreSaveService
+from core.target_probe import target_process_running as _target_process_running
+
 # Host protocol covers only the JSONL envelope and request semantics. Each game
 # module has its own independent protocol/schema version exposed alongside it.
 HOST_PROTOCOL_VERSION = 6
@@ -36,12 +42,6 @@ def _product_version():
 APP_BACKEND_VERSION = _product_version()
 
 
-from core.operation_profile import operation, phase
-from core.adapter import GameAdapter
-from core.save_restore import SaveBusyError
-from core.save_service import CoreSaveService
-from core.target_probe import target_process_running as _target_process_running
-
 _CORE_SAVE_PREFIX = 'core.save.'
 
 
@@ -53,9 +53,15 @@ class JsonlRequestRouter:
         self.save_service = CoreSaveService(
             adapter.game_id,
             getattr(context, 'save_management', None),
-            Path(save_data_root) if save_data_root is not None else Path.home() / 'Library/Application Support/MacGamingTrainer',
-            target_running_probe or (lambda: _target_process_running(
-                getattr(context, 'process_name', ''), getattr(context, 'executable_path_suffix', ''))),
+            Path(save_data_root)
+            if save_data_root is not None
+            else Path.home() / 'Library/Application Support/MacGamingTrainer',
+            target_running_probe
+            or (
+                lambda: _target_process_running(
+                    getattr(context, 'process_name', ''), getattr(context, 'executable_path_suffix', '')
+                )
+            ),
         )
 
         adapter.bind_save_service(self.save_service)
@@ -70,8 +76,7 @@ class JsonlRequestRouter:
             'moduleProtocolVersion': self.adapter.module_protocol_version,
         }
 
-    def error_reply(self, request_id, code, presentation, state=None, diagnostic=None,
-                    arguments=None):
+    def error_reply(self, request_id, code, presentation, state=None, diagnostic=None, arguments=None):
         reply = self._envelope(request_id, False)
         error = {'code': code, 'presentation': presentation}
         if isinstance(diagnostic, str) and diagnostic:
@@ -151,11 +156,13 @@ class JsonlRequestRouter:
                 raise ValueError('name 无效。')
             return self._with_state({'operation': self.save_service.rename(snapshot_id, name)})
         if command == 'core.save.set_retention':
-            return self._with_state({'operation': self.save_service.configure_retention(
-                params.get('maxCount'), params.get('maxBytes'))})
+            return self._with_state(
+                {'operation': self.save_service.configure_retention(params.get('maxCount'), params.get('maxBytes'))}
+            )
         if command == 'core.save.protect':
-            return self._with_state({'operation': self.save_service.protect(
-                self._snapshot_id(params), params.get('protected'))})
+            return self._with_state(
+                {'operation': self.save_service.protect(self._snapshot_id(params), params.get('protected'))}
+            )
         if command == 'core.save.delete':
             return self._with_state({'operation': self.save_service.delete(self._snapshot_id(params))})
         if command == 'core.save.open_folder':
@@ -168,7 +175,9 @@ class JsonlRequestRouter:
             preserve_current = params.get('preserveCurrent', True)
             if type(preserve_current) is not bool:
                 raise ValueError('preserveCurrent 必须为布尔值。')
-            return self._with_state({'operation': self.save_service.restore(snapshot_id, preserve_current=preserve_current)})
+            return self._with_state(
+                {'operation': self.save_service.restore(snapshot_id, preserve_current=preserve_current)}
+            )
         if command == 'core.save.cancel_staged':
             self._require_empty(params)
             return self._with_state({'operation': self.save_service.cancel_staged()})
@@ -196,43 +205,58 @@ class JsonlRequestRouter:
     def _handle_encoded(self, request):
         request_id = request.get('id') if isinstance(request, dict) else None
         if not isinstance(request_id, str) or not request_id or len(request_id) > 128:
-            return self.encode_reply(self.core_error_reply(
-                None, 'invalid_request',
-                'request id must be a non-empty string of at most 128 characters',
-            ))
+            return self.encode_reply(
+                self.core_error_reply(
+                    None,
+                    'invalid_request',
+                    'request id must be a non-empty string of at most 128 characters',
+                )
+            )
         try:
             with phase("backend.request_fingerprint"):
                 fingerprint = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError):
-            return self.encode_reply(self.core_error_reply(
-                request_id, 'invalid_request',
-                'request contains a value that cannot be serialized as strict JSON',
-            ))
+            return self.encode_reply(
+                self.core_error_reply(
+                    request_id,
+                    'invalid_request',
+                    'request contains a value that cannot be serialized as strict JSON',
+                )
+            )
         if request_id in self.cache:
             old, reply_json = self.cache[request_id]
             if old == fingerprint:
                 self.adapter.reply_replayed()
                 return reply_json
-            return self.encode_reply(self.core_error_reply(
-                request_id, 'duplicate_conflict',
-                'request id was reused with different content',
-            ))
+            return self.encode_reply(
+                self.core_error_reply(
+                    request_id,
+                    'duplicate_conflict',
+                    'request id was reused with different content',
+                )
+            )
         dispatch_returned = False
         try:
             command = request.get('command')
             params = request.get('params', {})
             if not isinstance(command, str) or not command or len(command) > 128:
-                return self.encode_reply(self.core_error_reply(
-                    request_id, 'invalid_request',
-                    'command must be a non-empty string of at most 128 characters',
-                    getattr(self.adapter, 'state', None),
-                ))
+                return self.encode_reply(
+                    self.core_error_reply(
+                        request_id,
+                        'invalid_request',
+                        'command must be a non-empty string of at most 128 characters',
+                        getattr(self.adapter, 'state', None),
+                    )
+                )
             if not isinstance(params, dict):
-                return self.encode_reply(self.core_error_reply(
-                    request_id, 'invalid_request',
-                    'params must be a JSON object',
-                    getattr(self.adapter, 'state', None),
-                ))
+                return self.encode_reply(
+                    self.core_error_reply(
+                        request_id,
+                        'invalid_request',
+                        'params must be a JSON object',
+                        getattr(self.adapter, 'state', None),
+                    )
+                )
             if command == 'hello':
                 result = {
                     'backendVersion': APP_BACKEND_VERSION,
@@ -258,21 +282,31 @@ class JsonlRequestRouter:
         except Exception as error:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
             state = getattr(self.adapter, 'state', None)
-            code = ('outcome_unknown' if dispatch_returned else
-                    getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed'))
+            code = (
+                'outcome_unknown'
+                if dispatch_returned
+                else getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
+            )
             arguments = None
             if hasattr(error, 'presentation'):
                 presentation = error.presentation
                 diagnostic = getattr(error, 'diagnostic', None)
                 arguments = error.arguments
                 reply = self.error_reply(
-                    request_id, code, presentation, state, diagnostic=diagnostic,
+                    request_id,
+                    code,
+                    presentation,
+                    state,
+                    diagnostic=diagnostic,
                     arguments=arguments,
                 )
             else:
                 diagnostic = getattr(error, 'diagnostic', None) or str(error)
                 reply = self.core_error_reply(
-                    request_id, code, diagnostic, state,
+                    request_id,
+                    code,
+                    diagnostic,
+                    state,
                 )
             if dispatch_returned:
                 reply['error'].update(outcomeUnknown=True, terminal=True)

@@ -178,6 +178,16 @@ for name, outputs in DECISIONS.items():
             for _, step in all_steps[name]
         ), f'{name}: unclassified {output} must fail closed'
 
+# Scoped static tooling belongs to the existing Linux contract, including
+# workflow dispatch. Formatting is checked against the exact checkout.
+static_commands = set()
+for _, step in all_steps['linux-contracts.yml']:
+    for line in str(step.get('run') or '').splitlines():
+        if line.startswith(('python3 -m ruff ', 'python3 -m mypy')):
+            assert conjuncts(step.get('if')) == ["steps.scope.outputs.needs_linux == 'true'"], step
+            static_commands.add(tuple(shlex.split(line)[2:]))
+assert {('ruff', 'check'), ('ruff', 'format', '--check'), ('mypy',)} <= static_commands, static_commands
+
 # Recurring verification is PR-owned and diff-based gates need a PR base. Full
 # macOS contracts and the mutation audit run on every convergence event
 # (dispatch and the nightly schedule); release-candidate packaging/provenance

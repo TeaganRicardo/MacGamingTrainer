@@ -687,6 +687,7 @@ final class SaveUnstageAction: NSObject {
         self.entryID = entryID
     }
 
+    @MainActor
     @objc(removeClicked:) func clicked(_ sender: Any?) {
         presses += 1
         model.unstage(entryID: entryID, baseline: model.baselineGeneration!)

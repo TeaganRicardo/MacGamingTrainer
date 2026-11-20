@@ -109,7 +109,7 @@ final class LifecycleStubModel: TrainerHostModel {
     var statusTitle = TrainerTextToken(key: "host.disconnected")
     var connectionDetailText = TrainerTextToken(key: "lifecycleFixture.detail")
     var hostActionsEnabled: Bool = true
-    var launchActionFromHost: (() -> Void)? = nil
+    var launchActionFromHost: (@MainActor () -> Void)? = nil
 
     var toggleConnectionCount = 0
     var connectAutomaticallyCalls: [Bool] = []
@@ -211,6 +211,7 @@ enum DefaultBehaviorStubModule: TrainerGameModule {
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
+@MainActor
 func makeRestartableStoppedSession(pythonURL: URL, workerURL: URL) throws -> TrainerBackendSession {
     let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
         executableURL: pythonURL, argumentsPrefix: ["-u"], forceKillDelay: 0.05

@@ -134,7 +134,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var connectionDetailText: TrainerTextToken {
         TrainerTextToken(key: connected ? (heroReady ? "hades.ready" : "hades.waitingForHero") : "hades.connectionHelp")
     }
-    var launchActionFromHost: (() -> Void)? { { [weak self] in self?.send("launch", operation: "host.launchGame") } }
+    var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.send("launch", operation: "host.launchGame") } }
 
     init(session: TrainerBackendSession, backendScriptURL: URL? = nil,
          defaults: UserDefaults = .standard, logSink: TrainerLogSink? = nil) {
@@ -949,9 +949,10 @@ struct HadesGameModule: TrainerGameModule {
     static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
     static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }
     static func makeFeedback(model: HadesTrainerModel) -> HadesOperationFeedback { HadesOperationFeedback(model: model) }
-    static var managedBackupEditor: ((HadesTrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
+    static var managedBackupEditor: (@MainActor (HadesTrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
         { model, snapshot in makeSaveEditorWindow(model: model, snapshotID: snapshot.id) }
     }
+    @MainActor
     static func makeSaveEditorWindow(model: HadesTrainerModel, snapshotID: String? = nil) -> TrainerToolWindowContent {
         let editor = model.makeSaveEditorModel(snapshotID: snapshotID)
         return TrainerToolWindowContent(canClose: { !editor.busy }, onClose: editor.close) {

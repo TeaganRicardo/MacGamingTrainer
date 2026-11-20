@@ -411,6 +411,7 @@ struct Hades2SaveRetiredDraft: Identifiable {
     let text: String
 }
 
+@MainActor
 final class Hades2SaveEditorModel: ObservableObject {
     static let pageSize = 100
 
@@ -505,7 +506,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "host.save.error.workspaceExpired")
         }
     }
-    deinit { if let lifecycleObserver { backendSession.removeLifecycleObserver(lifecycleObserver) } }
+    isolated deinit { if let lifecycleObserver { backendSession.removeLifecycleObserver(lifecycleObserver) } }
 
     func open(language: TrainerPresentationLanguage) {
         self.language = language

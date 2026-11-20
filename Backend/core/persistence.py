@@ -4,6 +4,7 @@ Callers own serialization, schema compatibility, quarantine and error presentati
 This primitive preserves the original exception when a write cannot be installed;
 it does not implement Save transactions or recovery policy.
 """
+
 import os
 from pathlib import Path
 import tempfile
@@ -22,7 +23,9 @@ def atomic_write_text(path, text, *, encoding='utf-8'):
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, name = tempfile.mkstemp(
-            prefix='.' + path.name + '.', suffix='.tmp', dir=str(path.parent),
+            prefix='.' + path.name + '.',
+            suffix='.tmp',
+            dir=str(path.parent),
         )
         temporary = Path(name)
         with os.fdopen(descriptor, 'w', encoding=encoding, newline='') as stream:

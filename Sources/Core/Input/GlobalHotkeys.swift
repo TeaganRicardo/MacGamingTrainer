@@ -49,13 +49,14 @@ package enum TrainerHotkeyRegistrationFailure: Equatable {
     case registrationConflicts([TrainerHotkeyRegistrationConflict])
 }
 
+@MainActor
 private final class TrainerGlobalHotkeyRegistry {
     static let shared = TrainerGlobalHotkeyRegistry()
     private let signature: OSType = 0x4D475452
     private var handler: EventHandlerRef?
     private(set) var handlerInstallStatus: OSStatus = noErr
     private var nextEventID: UInt32 = 0
-    private var actions: [UInt32: () -> Void] = [:]
+    private var actions: [UInt32: @MainActor () -> Void] = [:]
     private var references: [UInt32: EventHotKeyRef] = [:]
     private(set) var selectedGameID: String?
     private var owners: [UUID: WeakOwner] = [:]
@@ -105,15 +106,18 @@ private final class TrainerGlobalHotkeyRegistry {
                 nil, MemoryLayout<EventHotKeyID>.size, nil, &identity
             )
             guard result == noErr else { return result }
-            let registry = Unmanaged<TrainerGlobalHotkeyRegistry>.fromOpaque(context).takeUnretainedValue()
-            guard identity.signature == registry.signature,
-                  let action = registry.actions[identity.id] else { return OSStatus(eventNotHandledErr) }
-            DispatchQueue.main.async(execute: action)
-            return noErr
+            // Carbon delivers application-target hotkeys on the main event loop.
+            return MainActor.assumeIsolated {
+                let registry = Unmanaged<TrainerGlobalHotkeyRegistry>.fromOpaque(context).takeUnretainedValue()
+                guard identity.signature == registry.signature,
+                      let action = registry.actions[identity.id] else { return OSStatus(eventNotHandledErr) }
+                DispatchQueue.main.async { action() }
+                return noErr
+            }
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 
-    func register(_ chord: HotkeyChord, action: @escaping () -> Void) -> (UInt32?, OSStatus) {
+    func register(_ chord: HotkeyChord, action: @escaping @MainActor () -> Void) -> (UInt32?, OSStatus) {
         nextEventID += 1
         let id = nextEventID
         var reference: EventHotKeyRef?
@@ -135,14 +139,15 @@ private final class TrainerGlobalHotkeyRegistry {
     }
 }
 
+@MainActor
 package final class GlobalHotkeys {
     private let registry = TrainerGlobalHotkeyRegistry.shared
     private let ownerID = UUID()
     private let gameID: String
     private var registeredIDs: [UInt32] = []
     private var bindings: [HotkeyBinding] = []
-    private let registrationChanged: (TrainerHotkeyRegistrationFailure?) -> Void
-    let action: (String) -> Void
+    private let registrationChanged: @MainActor (TrainerHotkeyRegistrationFailure?) -> Void
+    let action: @MainActor (String) -> Void
 
     static func selectGame(_ id: String?) { TrainerGlobalHotkeyRegistry.shared.selectGame(id) }
     static var isShortcutCaptureActive: Bool { TrainerGlobalHotkeyRegistry.shared.isCapturingShortcut }
@@ -150,8 +155,8 @@ package final class GlobalHotkeys {
     static func endShortcutCapture(_ token: UUID) { TrainerGlobalHotkeyRegistry.shared.endShortcutCapture(token) }
 
     package init(gameID: String,
-         registrationChanged: @escaping (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
-         action: @escaping (String) -> Void) {
+         registrationChanged: @escaping @MainActor (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
+         action: @escaping @MainActor (String) -> Void) {
         self.gameID = gameID
         self.registrationChanged = registrationChanged
         self.action = action
@@ -199,7 +204,7 @@ package final class GlobalHotkeys {
         return failure
     }
 
-    deinit {
+    isolated deinit {
         registry.unregister(registeredIDs)
         registry.remove(id: ownerID)
     }

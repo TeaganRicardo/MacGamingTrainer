@@ -69,11 +69,7 @@ class SaveRestoreTransaction:
     def _capture_rollback(self, target_running, require_idle=False):
         self._ensure_cold_target_still_stopped(target_running)
         current = list(self.resolver())
-        if (
-            self.busy_probe is not None
-            and (target_running or require_idle)
-            and self.busy_probe(tuple(current))
-        ):
+        if self.busy_probe is not None and (target_running or require_idle) and self.busy_probe(tuple(current)):
             raise SaveBusyError('Save files are currently busy.')
 
         rollback = Path(tempfile.mkdtemp(prefix='.rollback-', dir=str(self._transaction_parent())))
@@ -212,8 +208,7 @@ class SaveRestoreTransaction:
     def _install_entries(self, entries, destinations, progress=None):
         for key, source, digest in entries:
             destination, descriptor = destinations[key]
-            self._replace_file(source, destination, digest, directory_fd=descriptor,
-                               progress=progress, key=key)
+            self._replace_file(source, destination, digest, directory_fd=descriptor, progress=progress, key=key)
 
     def _delete_keys(self, keys, destinations, progress=None):
         for key in keys:
@@ -306,11 +301,7 @@ class SaveRestoreTransaction:
             if post_install_verify is not None:
                 post_install_verify()
                 if not self._verify_state(target_hashes, owned_keys):
-                    raise SaveRestoreError(
-                        '{} save set changed during post-install validation.'.format(
-                            operation_name
-                        )
-                    )
+                    raise SaveRestoreError('{} save set changed during post-install validation.'.format(operation_name))
             if target_running:
                 time.sleep(0.05)
                 if not self._verify_state(target_hashes, owned_keys):
@@ -359,9 +350,7 @@ class SaveRestoreTransaction:
             cleanup_rollback = True
             if not isinstance(error, Exception):
                 raise
-            raise SaveRestoreError(
-                '{} failed; previous saves were rolled back.'.format(operation_name)
-            ) from error
+            raise SaveRestoreError('{} failed; previous saves were rolled back.'.format(operation_name)) from error
         finally:
             destination_stack.close()
             if cleanup_rollback:
@@ -411,8 +400,7 @@ class SaveRestoreTransaction:
         entries = self._replacement_entries(replacements)
         replacement_keys = {key for key, _source, _digest in entries}
         if expected_hashes is not None and (
-            not isinstance(expected_hashes, dict)
-            or set(expected_hashes) != replacement_keys
+            not isinstance(expected_hashes, dict) or set(expected_hashes) != replacement_keys
         ):
             raise ValueError('Expected save hashes must cover every replacement target exactly.')
         if expected_paths is not None:
@@ -431,10 +419,7 @@ class SaveRestoreTransaction:
             for key in replacement_keys:
                 if key not in baseline_hashes:
                     raise SaveRestoreError('Save replacement target is not part of the current save set.')
-                if (
-                    expected_hashes is not None
-                    and expected_hashes[key] != baseline_hashes[key]
-                ):
+                if expected_hashes is not None and expected_hashes[key] != baseline_hashes[key]:
                     raise SaveRestoreError('Save changed since the edit was prepared.')
             target_hashes = dict(baseline_hashes)
             for key, _source, digest in entries:

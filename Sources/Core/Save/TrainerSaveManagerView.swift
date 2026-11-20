@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TrainerSaveManagerView: View {
     @ObservedObject var model: TrainerSaveManagerModel
-    var managedBackupEditor: ((TrainerSaveSnapshot) -> TrainerToolWindowContent)? = nil
+    var managedBackupEditor: (@MainActor (TrainerSaveSnapshot) -> TrainerToolWindowContent)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trainerToolWindows) private var toolWindows
     @Environment(\.trainerCloseToolWindow) private var closeWindow

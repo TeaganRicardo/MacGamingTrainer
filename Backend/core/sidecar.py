@@ -1,4 +1,5 @@
 """Generic optional-sidecar lifecycle and bounded JSONL request/reply transport."""
+
 from __future__ import annotations
 
 import json
@@ -151,7 +152,7 @@ class JsonLineSidecarClient:
         except (AttributeError, OSError, ValueError):
             while transmission['bytes'] < len(encoded):
                 transmission['attempted'] = True
-                count = stream.write(payload[transmission['bytes']:])
+                count = stream.write(payload[transmission['bytes'] :])
                 if not count:
                     raise BrokenPipeError('sidecar request write made no progress')
                 transmission['bytes'] += count
@@ -167,7 +168,7 @@ class JsonLineSidecarClient:
                     raise TimeoutError(f'sidecar request timed out after {self.reply_timeout_seconds:g}s')
                 try:
                     transmission['attempted'] = True
-                    count = os.write(fileno, payload[transmission['bytes']:])
+                    count = os.write(fileno, payload[transmission['bytes'] :])
                 except BlockingIOError:
                     continue
                 if not count:
@@ -188,9 +189,7 @@ class JsonLineSidecarClient:
             while total <= self.max_line_bytes:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not selector.select(remaining):
-                    raise TimeoutError(
-                        f"sidecar reply timed out after {self.reply_timeout_seconds:g}s"
-                    )
+                    raise TimeoutError(f"sidecar reply timed out after {self.reply_timeout_seconds:g}s")
                 chunk = os.read(
                     fileno,
                     min(65536, self.max_line_bytes + 1 - total),
@@ -207,12 +206,19 @@ class JsonLineSidecarClient:
 
     def request(self, method, params=None, *, outcome_unknown_on_loss=False, allow_start=True):
         if correlation() is None:
-            return self._request(method, params, outcome_unknown_on_loss=outcome_unknown_on_loss, allow_start=allow_start)
+            return self._request(
+                method, params, outcome_unknown_on_loss=outcome_unknown_on_loss, allow_start=allow_start
+            )
         started = time.perf_counter()
         metrics = {"method": method, "request_bytes": 0, "reply_bytes": 0, "count": 1, "outcome": "failed"}
         try:
-            response = self._request(method, params, outcome_unknown_on_loss=outcome_unknown_on_loss,
-                                     allow_start=allow_start, profile_metrics=metrics)
+            response = self._request(
+                method,
+                params,
+                outcome_unknown_on_loss=outcome_unknown_on_loss,
+                allow_start=allow_start,
+                profile_metrics=metrics,
+            )
             metrics["outcome"] = "error" if "error" in response else "ok"
             return response
         finally:
@@ -316,9 +322,7 @@ class JsonLineSidecarClient:
         try:
             response = json.loads(
                 raw_text,
-                parse_constant=lambda value: (_ for _ in ()).throw(
-                    ValueError("non-finite JSON value: " + value)
-                ),
+                parse_constant=lambda value: (_ for _ in ()).throw(ValueError("non-finite JSON value: " + value)),
             )
         except (json.JSONDecodeError, ValueError) as error:
             self._fail_terminal(
@@ -345,10 +349,7 @@ def _line_ended(raw):
 
 
 def _write_json_line(output_stream, payload, max_line_bytes):
-    encoded = (
-        json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
-        + b"\n"
-    )
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
     if len(encoded) > max_line_bytes:
         raise ValueError("sidecar reply exceeded the configured line limit")
     try:
@@ -386,9 +387,7 @@ def serve_jsonl_requests(
                 raw = raw.decode("utf-8")
             request = json.loads(
                 raw,
-                parse_constant=lambda value: (_ for _ in ()).throw(
-                    ValueError("non-finite JSON value: " + value)
-                ),
+                parse_constant=lambda value: (_ for _ in ()).throw(ValueError("non-finite JSON value: " + value)),
             )
             if not isinstance(request, dict):
                 raise ValueError("sidecar request must be an object")

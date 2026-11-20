@@ -23,6 +23,8 @@ Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module
 
 The base reference fixture requires no LLDB, Lua, sidecar, Save provider or editor. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the existing multi-module revision and provenance owner tests cover resident declarations and packaged source identity. These fixtures do not certify a game's native ABI.
 
+Call the Host-facing model and module UI factories on Swift's main actor. Swift harnesses that exercise these APIs use a main-actor entry point.
+
 ## Terminology, localization and shared responsibilities
 
 Native game terms come from the module's terminology owner and its verified reference sources. The current examples are `Backend/games/hades2/terminology.py` with the manifest-declared supported-build terminology resource, and Hades I's `catalog.py`, `world.py` and `save_owners.py`. Follow [terminology ownership](../../ENGINEERING_INVARIANTS.md#8-terminology-ownership) for bilingual native identities and Trainer-owned labels.
@@ -82,6 +84,8 @@ The contract above is the goal; these shared files still need edits or attention
 ## Run the owning lanes
 
 Run `python3 Tools/validate_game_module.py --all`, `python3 Tools/supported_build.py` and the affected narrow behavior tests before publication. Portable changes use Linux contracts. Ordinary Swift changes use selected native smoke and unified product typecheck. Entrypoint, module, native, package or build inputs require the full linked and signed product. Shared module/build boundaries also require the reference fixture matrix.
+
+For shared Python changes, create a virtual environment with the Python version used by Linux contracts and install the pinned tools with `python3 -m pip install -r Tools/python_static_requirements.txt`. From the repository root, run `python3 -m ruff check`, `python3 -m ruff format --check` and `python3 -m mypy`. `pyproject.toml` defines the shared packages Ruff checks and the protocol seams mypy checks.
 
 A module-matrix workflow-only change exercises its own reference lane and Linux contracts; it does not force the unrelated unified product build. Mixed changes choose all applicable responsibilities, while an unknown diff fails closed. The three required check contexts stay present. Full inventory, isolated module packaging and retained artifact provenance belong to exact-SHA convergence.
 
