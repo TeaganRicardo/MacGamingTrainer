@@ -72,9 +72,13 @@ func wait(_ predicate: () -> Bool) {
         let worker = URL(fileURLWithPath: CommandLine.arguments[2])
         let temporary = worker.deletingLastPathComponent()
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))
-        let model = Hades2TrainerModel(session: session, logSink: TrainerLogSink(url: temporary.appendingPathComponent("log")),
-            backendScriptURL: worker, runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log"))
-        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
+            logSink: TrainerLogSink(url: temporary.appendingPathComponent("log")),
+            backendScriptURL: worker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+
         wait { model.backendAvailable && !model.busy && model.canGenerateGathering(.flora) }
         check(model.gatheringProbabilities.isEmpty && model.gatheringTargets.count == 5, "Native defaults or five observed targets missing")
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
@@ -158,7 +162,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-frontend-') as td:
     home = td / 'home'; home.mkdir()
     compile_swift_test(
         games=('hades2',),
-        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', main],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+            main,
+        ],
         output=binary,
         swiftc=SWIFTC,
     )

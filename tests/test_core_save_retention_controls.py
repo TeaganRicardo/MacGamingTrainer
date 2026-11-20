@@ -136,16 +136,13 @@ func hostRect(_ control: NativeAccessibilityControl, in host: NSView, window: NS
 }
 
 final class HostSaveStubModel: ObservableObject, TrainerHostModel {
-    let backendAvailable = false
-    let busy = false
     let connected = false
-    let operation = TrainerTextToken(key: "")
     let statusTitle = TrainerTextToken(key: "host.disconnected")
     let connectionDetailText = TrainerTextToken(key: "host.gameLibrary")
     let hostActionsEnabled = false
-    func toggleConnectionFromHost() {}
+    func connectFromHost(reason: TrainerHostConnectReason) {}
+    func disconnectFromHost() {}
     func refreshFromHost() {}
-    func restartBackendFromHost() {}
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
 
@@ -172,7 +169,7 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
         supportsSaveManagement: false
     )
     static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
-    static func makeModel(session: TrainerBackendSession) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
     }
@@ -193,7 +190,7 @@ struct HostSupportedSaveModule: TrainerGameModule {
         supportsSaveManagement: true
     )
     static let presentation = TrainerGamePresentation(headerTitle: "SAVE")
-    static func makeModel(session: TrainerBackendSession) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
     }
@@ -220,7 +217,7 @@ struct Main {
             targetProcessName: "", targetBundleIdentifier: "", expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 1, supportsSaveManagement: true)
         try session.start(descriptor: descriptor, backendScriptURL: URL(fileURLWithPath: args[2]),
-                          applyPayload: { _ in }, resetGameState: {}, log: { _ in }, onStatusChange: { _ in })
+                          applyPayload: { _ in }, resetGameState: {}, log: { _ in })
         defer { session.stop(suppressTerminationError: true) }
         let model = TrainerSaveManagerModel(session: session)
         model.refresh()
@@ -497,9 +494,7 @@ struct Main {
 
         // TrainerHostView + TrainerHostSidebarCard Save Management wiring.
         HostSaveProbeBridge.captured = nil
-        let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(
-            model: HostUnsupportedSaveModule.makeModel(session: session), session: session
-        )
+        let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(session: session)
         let unsupportedWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -520,9 +515,7 @@ struct Main {
         unsupportedWindow.close()
 
         HostSaveProbeBridge.captured = nil
-        let supportedContext = TrainerGameContext<HostSupportedSaveModule>(
-            model: HostSupportedSaveModule.makeModel(session: session), session: session
-        )
+        let supportedContext = TrainerGameContext<HostSupportedSaveModule>(session: session)
         let hostWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false

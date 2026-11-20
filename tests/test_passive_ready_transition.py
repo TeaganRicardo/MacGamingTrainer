@@ -39,19 +39,19 @@ for token in (
 
 # Automatic connection carries the true-launch reason through the generic Host
 # contract (verified behaviorally in test_core_host_lifecycle_macos.py).
-assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
+assert 'func connectFromHost(reason: TrainerHostConnectReason)' in model
 assert 'launchAttachGate.deferUntilReady(' in model
 assert 'consumeDeferredLaunchAttachIfPossible()' in model
 # Backend recovery can delay Host's grant until after native readiness.
 # The gate owns readiness across backend restarts and clears it only on a
 # native reset or definitive target OS-process lifetime change.
-launch_connect = model[model.index('    func connectAutomaticallyFromHost('):model.index('    func refreshFromHost()', model.index('    func connectAutomaticallyFromHost('))]
+launch_connect = model[model.index('    private func connectAutomatically('):model.index('    func refreshFromHost()', model.index('    private func connectAutomatically('))]
 assert 'launchAttachGate.deferUntilReady(' in launch_connect
 assert 'consumeDeferredLaunchAttachIfPossible()' in launch_connect
-assert 'hostTargetLifetimeChanged(running: Bool)' in model
+assert 'hostTargetLifetimeChanged(observation: TrainerTargetObservation)' in model
 assert 'launchAttachGate.observeRuntimeReset()' in model
 
-assert 'toggleConnection(probeRuntime: true)' in model
+assert 'connect(probeRuntime: true' in model
 assert 'case connect(probeRuntime: Bool, recoverLostAttach: Bool)' in api
 assert '["probeRuntime": probeRuntime, "recoverLostAttach": recoverLostAttach]' in api
 
@@ -63,12 +63,12 @@ assert 'asyncAfter' not in foreground
 # the Trainer's launch notification. The pre-connect watcher start is therefore
 # paired with an idempotent post-connect start so the event-driven lifecycle
 # cannot be permanently missed without adding polling.
-toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)')
-toggle_end = model.index('\n    func restartBackendFromHost()', toggle_start)
-toggle = model[toggle_start:toggle_end]
-assert toggle.count('runLogWatcher.start()') >= 2
-completion_start = toggle.index('send(.connect')
-completion = toggle[completion_start:]
+connect_start = model.index('    private func connect(recoverLostAttach: Bool = false)')
+connect_end = model.index('\n    func launchGame()', connect_start)
+connect = model[connect_start:connect_end]
+assert connect.count('runLogWatcher.start()') >= 2
+completion_start = connect.index('send(.connect')
+completion = connect[completion_start:]
 assert completion.index('runLogWatcher.start()') < completion.index('consumeRunLogReadySignalIfPossible()')
 
 print('passive_ready_transition_ok')
@@ -103,7 +103,7 @@ for token in (
     assert token in model, token
 
 consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
-consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)', consume_start)
+consume_end = model.index('\n    private func connect(recoverLostAttach: Bool = false)', consume_start)
 run_log_refresh = model[consume_start:consume_end]
 assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
 assert 'status == "ready"' not in run_log_refresh
@@ -131,6 +131,6 @@ assert event_switch.index('send(.runtimeReset') < event_switch.index('case .runt
 ready_block = event_switch[event_switch.index('case .runtimeReady'):]
 assert ready_block.index('pendingRunReadySignal = true') < ready_block.index('guard connected else { return }')
 
-backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
-assert 'if !status.busy' in backend_start
-assert 'consumeRunLogReadySignalIfPossible()' in backend_start
+status_observer = model[model.index('        statusObserver ='):model.index('        DispatchQueue.main.async', model.index('        statusObserver ='))]
+assert 'if !current.busy' in status_observer
+assert 'consumeRunLogReadySignalIfPossible()' in status_observer

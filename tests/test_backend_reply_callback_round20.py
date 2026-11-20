@@ -97,8 +97,7 @@ struct Main {
             backendScriptURL: URL(fileURLWithPath: args[2]),
             applyPayload: { applied.append($0) },
             resetGameState: {},
-            log: { _ in },
-            onStatusChange: { _ in }
+            log: { _ in }
         )
 
         var events: [String] = []

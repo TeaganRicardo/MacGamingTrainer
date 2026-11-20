@@ -53,7 +53,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         let session = TrainerBackendSession(client: BackendClient(process:
             BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))
         try session.start(descriptor: Hades2GameModule.descriptor, backendScriptURL: worker,
-                          applyPayload: { _ in }, resetGameState: {}, log: { _ in }, onStatusChange: { _ in })
+                          applyPayload: { _ in }, resetGameState: {}, log: { _ in })
         let model = Hades2SaveEditorModel(session: session)
         let windows = TrainerToolWindowStore()
         func open(_ model: Hades2SaveEditorModel) -> NSWindow {

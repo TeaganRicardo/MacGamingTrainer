@@ -27,7 +27,7 @@ private func fields(_ view: NSView) -> [NSTextField] { (view as? NSTextField).ma
             executableURL: URL(fileURLWithPath: CommandLine.arguments[1]), argumentsPrefix: ["-u"])))
         try session.start(descriptor: Hades2GameModule.descriptor,
             backendScriptURL: URL(fileURLWithPath: CommandLine.arguments[2]),
-            applyPayload: { _ in }, resetGameState: {}, log: { _ in }, onStatusChange: { _ in })
+            applyPayload: { _ in }, resetGameState: {}, log: { _ in })
         let windows = TrainerToolWindowStore()
         func open(_ model: Hades2SaveEditorModel) -> NSWindow {
             windows.open(id: "container-journey", title: "Save container", localization: localization, theme: .standard) {

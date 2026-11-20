@@ -214,21 +214,19 @@ private func runGeometryVerification(workerURL: URL, tmpDir: URL) {
     )
 
     let h1Session = TrainerBackendSession(client: BackendClient())
-    let h1Model = HadesTrainerModel(
-        session: h1Session,
-        backendScriptURL: workerURL,
-        defaults: InMemoryDefaults(),
-        logSink: TrainerLogSink(url: tmpDir.appendingPathComponent("h1.log"))
-    )
+    let h1Model = makeFixtureModel(HadesGameModule.self, session: h1Session,
+        logSink: TrainerLogSink(url: tmpDir.appendingPathComponent("h1.log")),
+        backendScriptURL: workerURL) {
+        HadesTrainerModel(services: $0, defaults: InMemoryDefaults())
+    }
 
     let h2Session = TrainerBackendSession(client: BackendClient())
-    let h2Model = Hades2TrainerModel(
-        session: h2Session,
+    let h2Model = makeFixtureModel(Hades2GameModule.self, session: h2Session,
         logSink: TrainerLogSink(url: tmpDir.appendingPathComponent("h2.log")),
-        backendScriptURL: workerURL,
-        runLogDirectoryURL: tmpDir.appendingPathComponent("h2-run-logs"),
-        shortcutDefaults: InMemoryDefaults()
-    )
+        backendScriptURL: workerURL) {
+        Hades2TrainerModel(services: $0, runLogDirectoryURL: tmpDir.appendingPathComponent("h2-run-logs"), shortcutDefaults: InMemoryDefaults(),
+            shortcutDefaults: InMemoryDefaults())
+    }
 
     for language in [TrainerPresentationLanguage.zhCN, .en] {
         localization.language = language
@@ -437,8 +435,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-cross-geometry-") as directory:
     binary = folder / "cross_module_geometry"
     compile_swift_test(
         games=("hades", "hades2"),
-        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            main,
+        ],
         output=binary,
         cwd=ROOT,
     )

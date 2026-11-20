@@ -78,8 +78,7 @@ struct Runner {
             backendScriptURL: URL(fileURLWithPath: args[2]),
             applyPayload: { _ in },
             resetGameState: {},
-            log: { _ in },
-            onStatusChange: { _ in }
+            log: { _ in }
         )
         let model = TrainerSaveManagerModel(session: session)
         model.refresh()

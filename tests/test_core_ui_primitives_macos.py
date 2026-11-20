@@ -1120,17 +1120,13 @@ private func exerciseDisclosureProfilePickerPopover(localization: TrainerLocaliz
 // MARK: - Scenario 7: TrainerSidebarCard & TrainerGamePages
 
 final class StubPageModel: ObservableObject, TrainerHostModel {
-    @Published var backendStatus = TrainerBackendStatus()
-    var backendAvailable: Bool { true }
-    var busy: Bool { false }
     var connected: Bool { false }
-    var operation: TrainerTextToken { .init(key: "host.connected") }
     var statusTitle: TrainerTextToken { .init(key: "host.disconnected") }
     var connectionDetailText: TrainerTextToken { .init(key: "host.disconnected") }
     var hostActionsEnabled: Bool { true }
-    func toggleConnectionFromHost() {}
+    func connectFromHost(reason: TrainerHostConnectReason) {}
+    func disconnectFromHost() {}
     func refreshFromHost() {}
-    func restartBackendFromHost() {}
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
 
@@ -1141,7 +1137,7 @@ private struct StubPageModuleA: TrainerGameModule {
         expectedHostProtocolVersion: 1, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
     )
     static let presentation = TrainerGamePresentation(headerTitle: "Stub A")
-    static func makeModel(session: TrainerBackendSession) -> StubPageModel { StubPageModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubPageModel { StubPageModel() }
     static var pageATaps = 0
     static func makeContent(model: StubPageModel) -> some View {
         PageAView(onTap: { pageATaps += 1 })
@@ -1176,7 +1172,7 @@ private struct StubPageModuleB: TrainerGameModule {
         expectedHostProtocolVersion: 1, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
     )
     static let presentation = TrainerGamePresentation(headerTitle: "Stub B")
-    static func makeModel(session: TrainerBackendSession) -> StubPageModel { StubPageModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubPageModel { StubPageModel() }
     static func makeContent(model: StubPageModel) -> some View {
         VStack(alignment: .leading) {
             Button("PageBBtn") {}
@@ -1354,8 +1350,8 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
 
     // TrainerGamePages: active clicks, opacity hiding, inactive click/AX isolation, firstResponder resignation on switch.
     StubPageModuleA.pageATaps = 0
-    let ctxA = TrainerGameContext<StubPageModuleA>(model: StubPageModel(), session: TrainerBackendSession())
-    let ctxB = TrainerGameContext<StubPageModuleB>(model: StubPageModel(), session: TrainerBackendSession())
+    let ctxA = TrainerGameContext<StubPageModuleA>(session: TrainerBackendSession())
+    let ctxB = TrainerGameContext<StubPageModuleB>(session: TrainerBackendSession())
     let coordinator = TrainerApplicationCoordinator(contexts: [AnyTrainerGameContext(ctxA), AnyTrainerGameContext(ctxB)])
     let pagesView = TrainerGamePages(application: coordinator)
         .trainerTheme(theme)

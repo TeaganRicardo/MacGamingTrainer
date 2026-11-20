@@ -17,9 +17,18 @@ import Foundation
 journey = r'''
 _ = NSApplication.shared
 var received: [String] = []
+func services(for id: String) -> TrainerModuleServices {
+    TrainerModuleServices(
+        descriptor: GameModuleDescriptor(id: id, displayName: id, targetProcessName: "",
+            targetBundleIdentifier: "", expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1,
+            supportsSaveManagement: false),
+        session: TrainerBackendSession(), logSink: TrainerLogSink(url: URL(fileURLWithPath: "/dev/null")),
+        targetObservation: .init(isRunning: false, launchGeneration: 0)
+    )
+}
 GlobalHotkeys.selectGame("first")
-let first = GlobalHotkeys(gameID: "first") { received.append("first:" + $0) }
-let second = GlobalHotkeys(gameID: "second") { received.append("second:" + $0) }
+let first = services(for: "first").makeHotkeys { received.append("first:" + $0) }
+let second = services(for: "second").makeHotkeys { received.append("second:" + $0) }
 let modifiers = HotkeyChord.controlModifier | HotkeyChord.optionModifier | HotkeyChord.commandModifier
 func binding(_ key: UInt32, _ action: String) -> [HotkeyBinding] {
     [HotkeyBinding(actionID: action, chord: HotkeyChord(keyCode: key, modifiers: modifiers, keyLabel: "test"))]

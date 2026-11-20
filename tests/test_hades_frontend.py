@@ -385,8 +385,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let defaults=InMemoryDefaults()
         let client=BackendClient(process:BackendProcess(executableURL:python,forceKillDelay:0.1))
         let session=TrainerBackendSession(client:client)
-        let model=HadesTrainerModel(session:session,backendScriptURL:folder.appendingPathComponent("worker.py"),defaults:defaults,
-            logSink:TrainerLogSink(url:folder.appendingPathComponent("trainer.log")))
+        let model = makeFixtureModel(HadesGameModule.self, session: session,
+            logSink: TrainerLogSink(url:folder.appendingPathComponent("trainer.log")),
+            backendScriptURL: folder.appendingPathComponent("worker.py")) {
+            HadesTrainerModel(services: $0, defaults: defaults)
+        }
         var diagnosticEditors: [(String,HadesSaveEditorModel)] = []
         var diagnosticWindows: [(String,NSWindow)] = []
         func fixtureDiagnostics() -> String {
@@ -450,7 +453,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         func stopBackend() {
             var complete = false
-            model.prepareForTermination { complete = true }
+            model.prepareForTermination {
+                session.flushDiagnostics()
+                session.stop()
+                complete = true
+            }
             wait("prepareForTermination: backend shutdown completion") { complete }
         }
         recordPhase("start: " + journey)
@@ -621,7 +628,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
             }
             try setFixtureError(nil)
-            model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
+            model.connectFromHost(reason: .manual);wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
             check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")
         }
         var malformed=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
@@ -2245,8 +2252,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     binary = folder / 'frontend'
     compile_swift_test(
         games=('hades',),
-        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
-                         ROOT / 'tests/fixtures/swift/NativeAccessibility.swift', folder / 'main.swift'],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+            ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
+            folder / 'main.swift',
+        ],
         output=binary,
         cwd=ROOT,
     )

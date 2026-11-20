@@ -122,27 +122,20 @@ struct RetainedNavigationTool: View {
 }
 
 final class StartupAvailabilityModel: ObservableObject, TrainerHostModel {
-    @Published private(set) var backendStatus = TrainerBackendStatus()
     private let session: TrainerBackendSession
-    private let script: URL?
+    var backendStatus: TrainerBackendStatus { session.currentStatus }
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var connected: Bool { false }
-    var operation: TrainerTextToken { backendStatus.operation }
     var statusTitle: TrainerTextToken { TrainerTextToken(key: "host.disconnected") }
     var connectionDetailText: TrainerTextToken { statusTitle }
     var hostActionsEnabled: Bool { backendAvailable && !busy }
 
-    init(session: TrainerBackendSession, script: URL? = nil) { self.session = session; self.script = script }
-    func start() throws {
-        try session.start(descriptor: StartupAvailabilityModule.descriptor, backendScriptURL: script,
-            applyPayload: { _ in }, resetGameState: {}, log: { _ in },
-            onStatusChange: { [weak self] in self?.backendStatus = $0 })
-    }
+    init(services: TrainerModuleServices) { session = services.session }
     func refreshFromHost() { session.send("status", operation: "host.refreshStatus", announceSuccess: false) }
-    func toggleConnectionFromHost() { fatalError("startup fixture unexpectedly tried to connect a target") }
-    func restartBackendFromHost() { session.restart() }
-    func prepareForTermination(completion: @escaping () -> Void) { session.stop(); completion() }
+    func connectFromHost(reason: TrainerHostConnectReason) { fatalError("startup fixture unexpectedly tried to connect a target") }
+    func disconnectFromHost() {}
+
 }
 
 struct StartupAvailabilityModule: TrainerGameModule {
@@ -153,7 +146,7 @@ struct StartupAvailabilityModule: TrainerGameModule {
         expectedModuleProtocolVersion: HadesGameModule.descriptor.expectedModuleProtocolVersion,
         supportsSaveManagement: true)
     static let presentation = TrainerGamePresentation(headerTitle: "Startup fixture")
-    static func makeModel(session: TrainerBackendSession) -> StartupAvailabilityModel { .init(session: session) }
+    static func makeModel(services: TrainerModuleServices) -> StartupAvailabilityModel { .init(services: services) }
     static func makeContent(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
@@ -175,17 +168,19 @@ struct StartupAvailabilityModule: TrainerGameModule {
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
         defer { session.stop() }
-        let model = StartupAvailabilityModel(session: session, script: worker.appendingPathComponent("worker.py"))
-        if readyBeforeContext { try model.start() }
-        journeyCheck(model.backendAvailable == readyBeforeContext,
-                     "startup fixture did not establish its required availability ordering")
-        let context = TrainerGameContext<StartupAvailabilityModule>(model: model, session: session)
-        journeyCheck(!context.targetMonitor.isRunning, "startup fixture unexpectedly matched a running target")
-        if !readyBeforeContext {
-            journeyCheck(!session.isStarted && commands().isEmpty,
-                         "Context fabricated backend availability before the late module started")
-            try model.start()
+        let script = worker.appendingPathComponent("worker.py")
+        let log = TrainerLogSink(url: worker.appendingPathComponent("host.log"))
+        if readyBeforeContext {
+            try session.start(descriptor: StartupAvailabilityModule.descriptor, backendScriptURL: script,
+                applyPayload: { _ in }, resetGameState: {}, log: { log.append($0) })
         }
+        journeyCheck(session.currentStatus.backendAvailable == readyBeforeContext,
+                     "startup fixture did not establish its required availability ordering")
+        let context = TrainerGameContext<StartupAvailabilityModule>(session: session,
+            backendScriptURL: script, logSink: log)
+        let model = context.model
+        journeyCheck(!context.targetMonitor.isRunning, "startup fixture unexpectedly matched a running target")
+        journeyCheck(session.isStarted && model.backendAvailable, "Context did not start the backend")
         let diagnose = {
             let detail = "context_startup_failure \(name) status=\(model.backendStatus) saveBusy=\(context.saveManager.busy) saveError=\(context.saveManager.error) commands=\(commands())\n"
             FileHandle.standardError.write(Data(detail.utf8))
@@ -263,17 +258,22 @@ struct StartupAvailabilityModule: TrainerGameModule {
         let secondFolder = folder.appendingPathComponent("hades2")
         let firstLog = TrainerLogSink(url: firstFolder.appendingPathComponent("host.log"))
         let secondLog = TrainerLogSink(url: secondFolder.appendingPathComponent("host.log"))
-        let first = HadesTrainerModel(session: firstSession,
-            backendScriptURL: firstFolder.appendingPathComponent("worker.py"), defaults: InMemoryDefaults(),
-            logSink: firstLog)
-        let second = Hades2TrainerModel(session: secondSession,
-            logSink: secondLog,
-            backendScriptURL: secondFolder.appendingPathComponent("worker.py"),
-            runLogDirectoryURL: secondFolder.appendingPathComponent("run-log"))
-        let firstContext = TrainerGameContext<HadesGameModule>(model: first, session: firstSession)
-        let secondContext = TrainerGameContext<Hades2GameModule>(model: second, session: secondSession)
-        journeyCheck(!firstContext.targetMonitor.isRunning && !secondContext.targetMonitor.isRunning,
-                     "this synthetic navigation fixture requires both actual games to be closed")
+        func absentTarget() -> TrainerTargetProcessMonitor {
+            TrainerTargetProcessMonitor(snapshot: { .init(isRunning: false, launchGeneration: 0) })
+        }
+        let firstContext = TrainerGameContext<HadesGameModule>(session: firstSession,
+            backendScriptURL: firstFolder.appendingPathComponent("worker.py"), logSink: firstLog,
+            targetMonitor: absentTarget()) {
+                HadesTrainerModel(services: $0, defaults: InMemoryDefaults())
+            }
+        let secondContext = TrainerGameContext<Hades2GameModule>(session: secondSession,
+            backendScriptURL: secondFolder.appendingPathComponent("worker.py"), logSink: secondLog,
+            targetMonitor: absentTarget()) {
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: secondFolder.appendingPathComponent("run-log"),
+                                   shortcutDefaults: InMemoryDefaults())
+            }
+        let first = firstContext.model
+        let second = secondContext.model
         let application = TrainerApplicationCoordinator(contexts: [
             AnyTrainerGameContext(firstContext), AnyTrainerGameContext(secondContext)])
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())

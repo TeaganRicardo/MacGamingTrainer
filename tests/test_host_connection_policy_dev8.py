@@ -15,32 +15,53 @@ func fail(_ message: String) -> Never {
     fatalError(message)
 }
 
+extension TrainerConnectionPolicy {
+    mutating func choosesRestart(backendAvailable: Bool, busy: Bool, recoveryAllowed: Bool) -> Bool {
+        nextAutomaticAction(foreground: true, backendAvailable: backendAvailable, busy: busy,
+            connected: false, actionsEnabled: false, recoveryAllowed: recoveryAllowed,
+            requiresTargetRestart: false) == .restartBackend
+    }
+
+    mutating func choosesConnect(backendAvailable: Bool, busy: Bool, connected: Bool, actionsEnabled: Bool) -> Bool {
+        if case .connect = nextAutomaticAction(foreground: true, backendAvailable: backendAvailable, busy: busy,
+            connected: connected, actionsEnabled: actionsEnabled, recoveryAllowed: false,
+            requiresTargetRestart: false) { return true }
+        return false
+    }
+
+    mutating func choosesExitRefresh(backendAvailable: Bool, busy: Bool, connected: Bool) -> Bool {
+        nextAutomaticAction(foreground: false, backendAvailable: backendAvailable, busy: busy,
+            connected: connected, actionsEnabled: false, recoveryAllowed: true,
+            requiresTargetRestart: false) == .refreshAfterTargetExit
+    }
+}
+
 var policy = TrainerConnectionPolicy()
 
 // No target means no background restart/connect.
 policy.backendBecameUnavailable()
 policy.backendBecameAvailable()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
+if policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("restarted backend without a running target")
 }
-if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("connected without a running target")
 }
 
 // A target launch can recover a missing backend first, then connect exactly once
 // when that backend becomes available.
 policy.targetStateChanged(running: true)
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("launch did not request missing backend recovery")
 }
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
+if policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("backend restart request was not one-shot")
 }
 policy.backendBecameAvailable()
-if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if !policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("recovered backend did not lead to automatic connect")
 }
-if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("launch connect was not one-shot")
 }
 
@@ -56,7 +77,7 @@ coalescedLaunch.observeTarget(running: true, launchGeneration: 1)
 if !coalescedLaunch.backgroundConnectionAllowed {
     fail("launch generation was not staged before presence-based auto-connect")
 }
-if !coalescedLaunch.consumeAutomaticConnectIfEligible(
+if !coalescedLaunch.choosesConnect(
     backendAvailable: true, busy: false, connected: false, actionsEnabled: true
 ) {
     fail("staged launch did not preserve its single connect opportunity")
@@ -75,14 +96,14 @@ earlyActivation.observeTarget(
 if !earlyActivation.targetRunning {
     fail("activation did not preserve running-state evidence for Save safety")
 }
-if earlyActivation.consumeAutomaticBackendRestartIfEligible(
+if earlyActivation.choosesRestart(
     backendAvailable: false, busy: false, recoveryAllowed: true
 ) {
     fail("unconfirmed launch restarted backend before definitive launch")
 }
 earlyActivation.targetActivated()
 earlyActivation.backendBecameAvailable()
-if earlyActivation.consumeAutomaticConnectIfEligible(
+if earlyActivation.choosesConnect(
     backendAvailable: true, busy: false, connected: false, actionsEnabled: true
 ) {
     fail("activation/discovery attached LLDB before definitive launch")
@@ -90,7 +111,7 @@ if earlyActivation.consumeAutomaticConnectIfEligible(
 earlyActivation.observeTarget(
     running: true, launchGeneration: 1, allowDiscoveryConnect: false
 )
-if !earlyActivation.consumeAutomaticConnectIfEligible(
+if !earlyActivation.choosesConnect(
     backendAvailable: true, busy: false, connected: false, actionsEnabled: true
 ) {
     fail("definitive launch failed to release automatic connection")
@@ -108,13 +129,13 @@ launchPolicy.targetLaunched()
 if !launchPolicy.backgroundConnectionAllowed {
     fail("explicit launch did not grant background connection permission")
 }
-if launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
+if launchPolicy.choosesConnect(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
     fail("background launch connected while busy")
 }
 if !launchPolicy.backgroundConnectionAllowed {
     fail("busy state discarded background launch permission")
 }
-if !launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if !launchPolicy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("deferred background launch connect was lost")
 }
 if launchPolicy.backgroundConnectionAllowed {
@@ -123,34 +144,34 @@ if launchPolicy.backgroundConnectionAllowed {
 
 // Busy state defers the same bounded activation request instead of discarding it.
 policy.targetActivated()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, recoveryAllowed: true) {
+if policy.choosesRestart(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("restarted backend while host was busy")
 }
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("deferred backend restart was lost")
 }
 policy.backendBecameAvailable()
-if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
+if policy.choosesConnect(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
     fail("connected while host was busy")
 }
-if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if !policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("deferred activation connect was lost")
 }
 
 // An unexpected backend loss while the target is live becomes one fallback
 // restart request after the session-level recovery path is no longer busy.
 policy.backendBecameUnavailable()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, recoveryAllowed: true) {
+if policy.choosesRestart(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("host raced session-level backend recovery")
 }
-if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: true) {
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("backend loss did not preserve fallback recovery intent")
 }
 
 // Host-owned recovery eligibility (quit, incompatible protocol, no restartable
 // session) vetoes automatic backend churn.
 policy.targetActivated()
-if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, recoveryAllowed: false) {
+if policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: false) {
     fail("backend restarted while Host recovery was not allowed")
 }
 
@@ -158,10 +179,10 @@ if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy
 // suppressing the shared backend itself.
 policy.backendBecameAvailable()
 policy.connectionChanged(connected: true)
-policy.userWillToggleConnection(currentlyConnected: true)
+policy.userWillDisconnect()
 policy.targetActivated()
 policy.backendBecameAvailable()
-if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("manual detach was ignored")
 }
 if !policy.automaticConnectionSuppressed {
@@ -173,7 +194,7 @@ if !policy.automaticConnectionSuppressed {
 // treating every Alt-Tab as a new game lifetime or clearing manual detach.
 policy.targetStateChanged(running: true)
 policy.connectionChanged(connected: true)
-policy.userWillToggleConnection(currentlyConnected: true)
+policy.userWillDisconnect()
 policy.targetStateChanged(running: true)
 if !policy.automaticConnectionSuppressed {
     fail("same target snapshot cleared manual disconnect suppression")
@@ -188,7 +209,7 @@ if policy.connectRequested || policy.backendRestartRequested {
 var rapidRestartPolicy = TrainerConnectionPolicy()
 rapidRestartPolicy.targetStateChanged(running: true)
 rapidRestartPolicy.connectionChanged(connected: true)
-rapidRestartPolicy.userWillToggleConnection(currentlyConnected: true)
+rapidRestartPolicy.userWillDisconnect()
 rapidRestartPolicy.targetLaunched()
 if rapidRestartPolicy.automaticConnectionSuppressed {
     fail("true launch inherited manual disconnect suppression from the old process")
@@ -198,7 +219,7 @@ if !rapidRestartPolicy.backgroundConnectionAllowed || !rapidRestartPolicy.connec
 }
 
 // Explicit reconnect clears the suppression immediately.
-policy.userWillToggleConnection(currentlyConnected: false)
+policy.userWillConnect()
 if policy.automaticConnectionSuppressed {
     fail("manual reconnect did not clear suppression")
 }
@@ -210,21 +231,21 @@ var exitWhileBusyPolicy = TrainerConnectionPolicy()
 exitWhileBusyPolicy.targetStateChanged(running: true)
 exitWhileBusyPolicy.connectionChanged(connected: true)
 exitWhileBusyPolicy.targetStateChanged(running: false)
-if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+if exitWhileBusyPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: true,
     connected: true
 ) {
     fail("target-exit refresh ran while backend was busy")
 }
-if !exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+if !exitWhileBusyPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: false,
     connected: true
 ) {
     fail("target-exit refresh intent was lost after busy cleared")
 }
-if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+if exitWhileBusyPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: false,
     connected: true
@@ -236,11 +257,11 @@ if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
 var exitDuringConnect = TrainerConnectionPolicy()
 exitDuringConnect.targetStateChanged(running: true)
 exitDuringConnect.targetStateChanged(running: false)
-if exitDuringConnect.consumeTargetExitRefreshIfEligible(backendAvailable: true, busy: true, connected: false) {
+if exitDuringConnect.choosesExitRefresh(backendAvailable: true, busy: true, connected: false) {
     fail("target-exit refresh ran while connect remained busy")
 }
 exitDuringConnect.connectionChanged(connected: true)
-if !exitDuringConnect.consumeTargetExitRefreshIfEligible(backendAvailable: true, busy: false, connected: true) {
+if !exitDuringConnect.choosesExitRefresh(backendAvailable: true, busy: false, connected: true) {
     fail("in-flight connect discarded the target-exit refresh")
 }
 
@@ -252,7 +273,7 @@ var exitRelaunchWhileBusyPolicy = TrainerConnectionPolicy()
 exitRelaunchWhileBusyPolicy.targetStateChanged(running: true)
 exitRelaunchWhileBusyPolicy.connectionChanged(connected: true)
 exitRelaunchWhileBusyPolicy.targetStateChanged(running: false)
-if exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+if exitRelaunchWhileBusyPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: true,
     connected: true
@@ -261,7 +282,7 @@ if exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
 }
 exitRelaunchWhileBusyPolicy.targetStateChanged(running: true)
 exitRelaunchWhileBusyPolicy.targetLaunched()
-if !exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+if !exitRelaunchWhileBusyPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: false,
     connected: true
@@ -269,7 +290,7 @@ if !exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
     fail("replacement launch erased stale-connection refresh intent")
 }
 exitRelaunchWhileBusyPolicy.connectionChanged(connected: false)
-if !exitRelaunchWhileBusyPolicy.consumeAutomaticConnectIfEligible(
+if !exitRelaunchWhileBusyPolicy.choosesConnect(
     backendAvailable: true,
     busy: false,
     connected: false,
@@ -285,14 +306,14 @@ var missedExitRelaunchPolicy = TrainerConnectionPolicy()
 missedExitRelaunchPolicy.targetStateChanged(running: true)
 missedExitRelaunchPolicy.connectionChanged(connected: true)
 missedExitRelaunchPolicy.targetLaunched()
-if missedExitRelaunchPolicy.consumeTargetExitRefreshIfEligible(
+if missedExitRelaunchPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: true,
     connected: true
 ) {
     fail("lifetime refresh ran while old work was still busy")
 }
-if !missedExitRelaunchPolicy.consumeTargetExitRefreshIfEligible(
+if !missedExitRelaunchPolicy.choosesExitRefresh(
     backendAvailable: true,
     busy: false,
     connected: true
@@ -300,7 +321,7 @@ if !missedExitRelaunchPolicy.consumeTargetExitRefreshIfEligible(
     fail("definitive launch did not invalidate the prior connected lifetime")
 }
 missedExitRelaunchPolicy.connectionChanged(connected: false)
-if !missedExitRelaunchPolicy.consumeAutomaticConnectIfEligible(
+if !missedExitRelaunchPolicy.choosesConnect(
     backendAvailable: true,
     busy: false,
     connected: false,
@@ -318,26 +339,61 @@ silentReplacement.observeTarget(running: true, launchGeneration: 0, allowDiscove
 silentReplacement.connectionChanged(connected: true)
 silentReplacement.targetStateChanged(running: false, allowAutomaticConnect: false)
 silentReplacement.observeTarget(running: true, launchGeneration: 0, allowDiscoveryConnect: false)
-if !silentReplacement.consumeTargetExitRefreshIfEligible(
+if !silentReplacement.choosesExitRefresh(
     backendAvailable: true, busy: false, connected: true
 ) {
     fail("PID replacement without launch did not invalidate the old connection")
 }
-if silentReplacement.backgroundConnectionAllowed || silentReplacement.consumeAutomaticConnectIfEligible(
+if silentReplacement.backgroundConnectionAllowed || silentReplacement.choosesConnect(
     backendAvailable: true, busy: false, connected: false, actionsEnabled: true
 ) {
     fail("PID discovery was misidentified as a background attach grant")
 }
 
 // A real target restart resets the previous lifetime's detach/recovery state.
-policy.userWillToggleConnection(currentlyConnected: true)
+policy.userWillDisconnect()
 policy.targetStateChanged(running: false)
 if policy.automaticConnectionSuppressed || policy.connectRequested || policy.backendRestartRequested || policy.targetRunning {
     fail("target termination did not clear lifecycle state")
 }
 policy.targetStateChanged(running: true)
-if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+if !policy.choosesConnect(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
     fail("new target lifetime did not restore automatic connect")
+}
+
+// The Host executes exactly one next action. A replacement can invalidate
+// local observations before the backend refresh that owns the old attachment.
+var ordered = TrainerConnectionPolicy()
+ordered.observeTarget(running: true, launchGeneration: 0)
+ordered.connectionChanged(connected: true)
+ordered.observeTarget(running: true, launchGeneration: 1, allowDiscoveryConnect: false)
+ordered.retainTargetExitRefresh()
+ordered.connectionChanged(connected: false)
+if ordered.nextAutomaticAction(foreground: false, backendAvailable: true, busy: true,
+    connected: false, actionsEnabled: true, recoveryAllowed: true, requiresTargetRestart: false) != .none {
+    fail("old in-flight work did not delay the next action")
+}
+if ordered.nextAutomaticAction(foreground: false, backendAvailable: true, busy: false,
+    connected: false, actionsEnabled: true, recoveryAllowed: true, requiresTargetRestart: true) != .none {
+    fail("unknown outcome admitted an automatic action")
+}
+if ordered.nextAutomaticAction(foreground: false, backendAvailable: true, busy: false,
+    connected: false, actionsEnabled: true, recoveryAllowed: true, requiresTargetRestart: false) != .refreshAfterTargetExit {
+    fail("rapid replacement connected before the old attachment was refreshed")
+}
+ordered.backendBecameUnavailable()
+if ordered.nextAutomaticAction(foreground: false, backendAvailable: false, busy: false,
+    connected: false, actionsEnabled: false, recoveryAllowed: true, requiresTargetRestart: false) != .restartBackend {
+    fail("pending launch did not restore the backend before connection")
+}
+ordered.backendBecameAvailable()
+if ordered.nextAutomaticAction(foreground: false, backendAvailable: true, busy: false,
+    connected: false, actionsEnabled: true, recoveryAllowed: true, requiresTargetRestart: false) != .connect(targetJustLaunched: true) {
+    fail("the next action lost the single launch-time connection reason")
+}
+if ordered.nextAutomaticAction(foreground: true, backendAvailable: true, busy: false,
+    connected: false, actionsEnabled: true, recoveryAllowed: true, requiresTargetRestart: false) != .none {
+    fail("automatic connection repeated without another eligible event")
 }
 
 print("host_connection_policy_dev8_ok")

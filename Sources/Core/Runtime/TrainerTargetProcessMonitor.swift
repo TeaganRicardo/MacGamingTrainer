@@ -41,6 +41,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
     private let bundleIdentifier: String
     private let executablePathSuffix: String
     private let workspace: NSWorkspace
+    private let snapshot: (() -> TrainerTargetObservation)?
     private var observers: [NSObjectProtocol] = []
 
     init(processName: String, bundleIdentifier: String, executablePathSuffix: String = "", workspace: NSWorkspace = .shared) {
@@ -48,6 +49,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         self.bundleIdentifier = bundleIdentifier
         self.executablePathSuffix = executablePathSuffix
         self.workspace = workspace
+        snapshot = nil
         let currentPID = currentTargetProcessIdentifier()
         targetObservation = TrainerTargetObservation(
             isRunning: currentPID != nil,
@@ -102,13 +104,27 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         })
     }
 
+    init(snapshot: @escaping () -> TrainerTargetObservation) {
+        processName = ""
+        bundleIdentifier = ""
+        executablePathSuffix = ""
+        workspace = .shared
+        self.snapshot = snapshot
+        targetObservation = snapshot()
+    }
+
     isolated deinit {
         let center = workspace.notificationCenter
         observers.forEach(center.removeObserver)
     }
 
     func refresh() {
-        publishCurrentPresence()
+        if let snapshot {
+            let observed = snapshot()
+            if observed != targetObservation { targetObservation = observed }
+        } else {
+            publishCurrentPresence()
+        }
     }
 
     private func publishPresence(_ application: NSRunningApplication?) {

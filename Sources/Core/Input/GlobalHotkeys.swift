@@ -154,7 +154,7 @@ package final class GlobalHotkeys {
     static func beginShortcutCapture() -> UUID { TrainerGlobalHotkeyRegistry.shared.beginShortcutCapture() }
     static func endShortcutCapture(_ token: UUID) { TrainerGlobalHotkeyRegistry.shared.endShortcutCapture(token) }
 
-    package init(gameID: String,
+    init(gameID: String,
          registrationChanged: @escaping @MainActor (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
          action: @escaping @MainActor (String) -> Void) {
         self.gameID = gameID

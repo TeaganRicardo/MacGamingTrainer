@@ -283,8 +283,7 @@ func commands(at url: URL) -> [[String: Any]] {
             backendScriptURL: worker,
             applyPayload: { _ in },
             resetGameState: {},
-            log: { _ in },
-            onStatusChange: { _ in }
+            log: { _ in }
         )
 
         let editor = HadesSaveEditorModel(session: session)

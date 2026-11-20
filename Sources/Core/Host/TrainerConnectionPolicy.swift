@@ -7,12 +7,20 @@
 /// integration from inventing its own polling/reconnect semantics and makes
 /// manual detach and backend recovery behaviour independently testable.
 struct TrainerConnectionPolicy {
+    enum AutomaticAction: Equatable {
+        case refreshAfterTargetExit
+        case restartBackend
+        case connect(targetJustLaunched: Bool)
+        case none
+    }
+
     private(set) var targetRunning = false
     private(set) var connectRequested = false
     private(set) var backendRestartRequested = false
     private(set) var automaticConnectionSuppressed = false
     private(set) var backgroundConnectionAllowed = false
     private(set) var targetExitRefreshRequested = false
+    private var retainedTargetExitRefresh = false
     private var observedLaunchGeneration: UInt = 0
     private var awaitingDefinitiveLaunch = false
 
@@ -90,6 +98,7 @@ struct TrainerConnectionPolicy {
     }
 
     mutating func backendBecameUnavailable() {
+        retainedTargetExitRefresh = false
         guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // TrainerBackendSession owns its own bounded immediate recovery. This
         // pending host request is preserved while it is busy and becomes one
@@ -97,22 +106,21 @@ struct TrainerConnectionPolicy {
         backendRestartRequested = true
     }
 
-    mutating func userWillToggleConnection(currentlyConnected: Bool) {
-        if currentlyConnected {
-            automaticConnectionSuppressed = true
-            backgroundConnectionAllowed = false
-            connectRequested = false
-        } else {
-            // An explicit reconnect is user intent, so future lifecycle events
-            // may also reconnect if this immediate attempt does not succeed.
-            automaticConnectionSuppressed = false
-            backgroundConnectionAllowed = false
-        }
+    mutating func userWillDisconnect() {
+        automaticConnectionSuppressed = true
+        backgroundConnectionAllowed = false
+        connectRequested = false
+    }
+
+    mutating func userWillConnect() {
+        // Future lifecycle events may reconnect if this attempt fails.
+        automaticConnectionSuppressed = false
+        backgroundConnectionAllowed = false
     }
 
     mutating func connectionChanged(connected: Bool) {
         guard connected else {
-            if !targetRunning { targetExitRefreshRequested = false }
+            if !targetRunning && !retainedTargetExitRefresh { targetExitRefreshRequested = false }
             return
         }
         connectRequested = false
@@ -120,12 +128,41 @@ struct TrainerConnectionPolicy {
         backgroundConnectionAllowed = false
     }
 
+    /// Local state may already be invalidated while the backend still has an
+    /// old connection to refresh. Retain the refresh through that reset.
+    mutating func retainTargetExitRefresh() {
+        if targetExitRefreshRequested { retainedTargetExitRefresh = true }
+    }
+
+    mutating func nextAutomaticAction(
+        foreground: Bool, backendAvailable: Bool, busy: Bool, connected: Bool,
+        actionsEnabled: Bool, recoveryAllowed: Bool, requiresTargetRestart: Bool
+    ) -> AutomaticAction {
+        guard !requiresTargetRestart else { return .none }
+        if consumeTargetExitRefreshIfEligible(backendAvailable: backendAvailable, busy: busy, connected: connected) {
+            return .refreshAfterTargetExit
+        }
+        guard backgroundConnectionAllowed || foreground else { return .none }
+        if consumeAutomaticBackendRestartIfEligible(
+            backendAvailable: backendAvailable, busy: busy, recoveryAllowed: recoveryAllowed
+        ) {
+            return .restartBackend
+        }
+        let targetJustLaunched = backgroundConnectionAllowed
+        if consumeAutomaticConnectIfEligible(
+            backendAvailable: backendAvailable, busy: busy, connected: connected, actionsEnabled: actionsEnabled
+        ) {
+            return .connect(targetJustLaunched: targetJustLaunched)
+        }
+        return .none
+    }
+
     /// A target exit can arrive while a module request is still in flight.
     /// Preserve one refresh until the shared backend is idle so stale connected
     /// state cannot survive a non-runtime reply that completes after the exit.
     /// The invalidation survives a replacement launch: process presence does not
     /// make the old connection observation valid again.
-    mutating func consumeTargetExitRefreshIfEligible(
+    private mutating func consumeTargetExitRefreshIfEligible(
         backendAvailable: Bool,
         busy: Bool,
         connected: Bool
@@ -134,7 +171,9 @@ struct TrainerConnectionPolicy {
         // An in-flight connect can still report the exited target as connected.
         guard backendAvailable, !busy else { return false }
         targetExitRefreshRequested = false
-        return connected
+        let needsRefresh = connected || retainedTargetExitRefresh
+        retainedTargetExitRefresh = false
+        return needsRefresh
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
@@ -142,7 +181,7 @@ struct TrainerConnectionPolicy {
     /// eligibility (`TrainerGameContext.backendRestartAllowed`), never a module
     /// request gate: an unavailable backend is exactly when recovery must remain
     /// reachable.
-    mutating func consumeAutomaticBackendRestartIfEligible(
+    private mutating func consumeAutomaticBackendRestartIfEligible(
         backendAvailable: Bool,
         busy: Bool,
         recoveryAllowed: Bool
@@ -163,7 +202,7 @@ struct TrainerConnectionPolicy {
     /// Consumes one pending automatic-connect intent only when the global Host
     /// can safely issue it. Busy/unavailable states preserve the intent so the
     /// corresponding state transition can complete the same bounded attempt.
-    mutating func consumeAutomaticConnectIfEligible(
+    private mutating func consumeAutomaticConnectIfEligible(
         backendAvailable: Bool,
         busy: Bool,
         connected: Bool,

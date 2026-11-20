@@ -8,6 +8,18 @@ package struct GameModuleDescriptor {
     var backendGameID: String { id }
 }
 
+#if MGT_PROFILE_LEGACY_SESSION_STATUS
+extension TrainerBackendSession {
+    // Archived sources before Host-owned status observers require this callback.
+    func start(descriptor: GameModuleDescriptor, backendScriptURL: URL,
+               applyPayload: @escaping ([String: Any]) -> Void,
+               resetGameState: @escaping () -> Void, log: @escaping (String) -> Void) throws {
+        try start(descriptor: descriptor, backendScriptURL: backendScriptURL, applyPayload: applyPayload,
+                  resetGameState: resetGameState, log: log, onStatusChange: { _ in })
+    }
+}
+#endif
+
 @main
 struct Hades2ProfileHost {
     @MainActor
@@ -29,7 +41,7 @@ struct Hades2ProfileHost {
         try session.start(descriptor: GameModuleDescriptor(id: "hades2", expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: Int(args[4])!), backendScriptURL: URL(fileURLWithPath: args[1]),
             applyPayload: { value in payload.merge(value) { _, new in new }; applied += 1 },
-            resetGameState: {}, log: log, onStatusChange: { _ in })
+            resetGameState: {}, log: log)
         func wait(_ done: @escaping () -> Bool) {
             let deadline = Date().addingTimeInterval(20)
             while !done() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.001)) }

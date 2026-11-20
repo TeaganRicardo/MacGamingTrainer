@@ -50,11 +50,6 @@ for raw in sys.stdin:
         sys.exit(7)
 '''
 
-context_source = (ROOT / 'Sources/Core/Host/TrainerGameContext.swift').read_text()
-transition_start = context_source.index('        let pidChanged = previous.processIdentifier')
-target_transition = context_source[transition_start:context_source.index(
-    '        if previous.isRunning && observed.isRunning', transition_start)]
-
 # Stands in for Core's GameModuleDescriptor (Host/TrainerGameModule.swift),
 # which TrainerBackendSession reads; it compiles into TrainerCore.
 descriptor_stub = r'''
@@ -73,15 +68,6 @@ package struct GameModuleDescriptor {
 
 harness = r'''
 import Foundation
-
-struct TargetObservation {
-    let isRunning: Bool
-    let launchGeneration: UInt
-    let processIdentifier: Int32?
-}
-struct TargetModelProbe {
-    func hostTargetLifetimeChanged(observation: TargetObservation) {}
-}
 
 func fail(_ message: String) -> Never {
     fputs("FAIL: \(message)\n", stderr)
@@ -116,11 +102,6 @@ let backendProcess = BackendProcess(
     forceKillDelay: 0.10
 )
 let session = TrainerBackendSession(client: BackendClient(process: backendProcess, maxQueueDepth: 1))
-var lastKnownTargetProcessIdentifier: Int32?
-func observeTarget(previous: TargetObservation, observed: TargetObservation) {
-    let model = TargetModelProbe()
-__MGT_TARGET_LIFETIME_TRANSITION__
-}
 var states: [TrainerBackendStatus] = []
 var payloadCommands: [String] = []
 var hostLogs: [String] = []
@@ -132,6 +113,18 @@ var admittedDuringReply = false
 var duringReplyStarted = false
 var duringReplyDone: Bool?
 
+session.observeStatus { _, state in
+    states.append(state)
+    if expectingActionReceipt, !state.busy, !actionReceiptApplied, !admittedDuringReply {
+        admittedDuringReply = true
+        session.send("queued-during-unknown-status", operation: "must-not-run",
+            coalesceKey: "unknown-queue", started: { duringReplyStarted = true },
+                completion: { duringReplyDone = $0 })
+    }
+    if expectingActionReceipt, state.errorCode == "outcome_unknown", !actionReceiptApplied {
+        errorBeforeActionReceipt = true
+    }
+}
 try session.start(
     descriptor: descriptor,
     backendScriptURL: URL(fileURLWithPath: worker),
@@ -143,18 +136,6 @@ try session.start(
     },
     resetGameState: {},
     log: { hostLogs.append($0) },
-    onStatusChange: {
-        states.append($0)
-        if expectingActionReceipt, !$0.busy, !actionReceiptApplied, !admittedDuringReply {
-            admittedDuringReply = true
-            session.send("queued-during-unknown-status", operation: "must-not-run",
-                coalesceKey: "unknown-queue", started: { duringReplyStarted = true },
-                completion: { duringReplyDone = $0 })
-        }
-        if expectingActionReceipt, $0.errorCode == "outcome_unknown", !actionReceiptApplied {
-            errorBeforeActionReceipt = true
-        }
-    },
     backendLog: { backendLogs.append($0) }
 )
 if !session.currentStatus.backendAvailable { fail("backend not available after start") }
@@ -226,11 +207,7 @@ do {
                  requiresTrustedTarget: false, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
     if session.currentStatus.errorCode != "outcome_unknown" { fail("safe request hid the unresolved action") }
-    observeTarget(previous: .init(isRunning: false, launchGeneration: 0, processIdentifier: nil),
-                  observed: .init(isRunning: true, launchGeneration: 0, processIdentifier: 42))
-    if !session.currentStatus.requiresTargetRestart { fail("presence discovery released an unknown target outcome") }
-    observeTarget(previous: .init(isRunning: true, launchGeneration: 0, processIdentifier: 42),
-                  observed: .init(isRunning: true, launchGeneration: 1, processIdentifier: 42))
+    session.targetLifetimeChanged()
     if session.currentStatus.requiresTargetRestart || session.currentStatus.errorCode != nil {
         fail("definitive new target lifetime did not release its predecessor's gate")
     }
@@ -332,11 +309,9 @@ do {
     api.request(.setDesired(feature: "invincibility", value: false), runtimeConnected: true,
         operation: "connected intent", started: { connectedStarted = true }, completion: { connectedDone = $0 })
     if connectedDone != false || connectedStarted { fail("connected desired edit bypassed target uncertainty") }
-    observeTarget(previous: .init(isRunning: true, launchGeneration: 1, processIdentifier: 42),
-                  observed: .init(isRunning: false, launchGeneration: 1, processIdentifier: nil))
+    session.invalidateTargetObservation()
     if !session.currentStatus.requiresTargetRestart { fail("target absence released unknown runtime trust") }
-    observeTarget(previous: .init(isRunning: false, launchGeneration: 1, processIdentifier: nil),
-                  observed: .init(isRunning: true, launchGeneration: 1, processIdentifier: 43))
+    session.targetLifetimeChanged()
     if session.currentStatus.requiresTargetRestart { fail("a kernel-path target replacement after absence did not restore trust") }
 }
 
@@ -357,10 +332,11 @@ do {
 // An exit already scheduled for recovery cannot resurrect a terminating context.
 let quitting = TrainerBackendSession(client: BackendClient(process: BackendProcess(
     executableURL: URL(fileURLWithPath: ProcessInfo.processInfo.environment["MGT_DEV8_PYTHON"]!), forceKillDelay: 0.10)))
+quitting.observeStatus { _, state in
+    if !state.backendAvailable && state.busy { quitting.beginTermination() }
+}
 try quitting.start(descriptor: descriptor, backendScriptURL: URL(fileURLWithPath: worker), applyPayload: { _ in },
-    resetGameState: {}, log: { _ in }, onStatusChange: { state in
-        if !state.backendAvailable && state.busy { quitting.beginTermination() }
-    })
+    resetGameState: {}, log: { _ in })
 quitting.send("quit-crash", operation: "quit-crash")
 if !waitUntil(waitBudget, { !quitting.isStarted && !quitting.currentStatus.busy }) { fail("quit recovery did not settle") }
 let quitGeneration = quitting.lifecycleID
@@ -413,8 +389,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
     binary = td / 'session_test'
     command_log = td / 'commands.log'
     worker_path.write_text(textwrap.dedent(worker), encoding='utf-8')
-    journey_source = journey.replace('__MGT_TARGET_LIFETIME_TRANSITION__', target_transition)
-    main_path.write_text(harness + main_actor_entrypoint(journey_source), encoding='utf-8')
+    main_path.write_text(harness + main_actor_entrypoint(journey), encoding='utf-8')
     stub_path.write_text(descriptor_stub, encoding='utf-8')
     # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
     # Foundation-level files and a stub for GameModuleDescriptor.

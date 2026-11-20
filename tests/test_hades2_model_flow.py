@@ -24,7 +24,7 @@ if not SWIFTC or not PYTHON:
     raise SystemExit("swiftc/python3 required")
 
 worker = r'''
-import argparse, json, pathlib, sys
+import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
 log_path=pathlib.Path(__file__).with_suffix('.commands.jsonl')
 ready_path=pathlib.Path(__file__).with_suffix('.ready')
@@ -35,6 +35,18 @@ for raw in sys.stdin:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     observation = pathlib.Path(__file__).with_suffix('.observation.json')
     result = json.loads(observation.read_text()) if observation.exists() else {'connected':True}
+    if req['command'] == 'late-observation':
+        release = pathlib.Path(__file__).with_suffix('.release')
+        deadline = time.monotonic() + 5
+        while not release.exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        result = {'health': 999, 'lastAction': {
+            'requestId': req['id'], 'command': 'remove_trait', 'outcome': 'completed',
+        }}
+    if req['command'] == 'stale-pid':
+        result = {'connected': True, 'pid': 4141, 'health': 999}
+    if req['command'] == 'queued-observation':
+        result = {'health': 999}
     if req['command'] == 'set_desired':
         feature = req['params']['feature']; value = req['params']['value']
         if feature == 'gameSpeed': result['gameSpeed'] = value
@@ -50,6 +62,7 @@ for raw in sys.stdin:
 '''
 
 harness = r'''
+import Combine
 import Foundation
 
 func fail(_ message: String) -> Never {
@@ -230,15 +243,13 @@ struct Main {
                 backendScriptURL: worker,
                 applyPayload: { _ in },
                 resetGameState: {},
-                log: { _ in },
-                onStatusChange: { _ in }
+                log: { _ in }
             )
             waitForWorkerReady(ready)
-            let model = Hades2TrainerModel(
-                session: session,
-                logSink: TrainerLogSink(gameID: Hades2GameModule.descriptor.id),
-                shortcutDefaults: InMemoryDefaults()
-            )
+            let model = makeFixtureModel(Hades2GameModule.self, session: session,
+                logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("model.log"))) {
+                Hades2TrainerModel(services: $0, shortcutDefaults: InMemoryDefaults())
+            }
             model.connected = true
             model.status = "ready"
             model.scene = "run"
@@ -407,8 +418,9 @@ struct Main {
         // The shipped model owns decoding and completion on this path. No
         // native view, field editor, window or foreground activation is used.
         let observation = worker.deletingPathExtension().appendingPathExtension("observation.json")
-        func writeObservation(speed: Double) throws {
+        func writeObservation(speed: Double, pid: Int = 4141) throws {
             let value: [String: Any] = ["connected": true, "status": "ready", "scene": "run",
+                "pid": pid,
                 "gameSpeed": speed, "capabilities": ["setFeature": true],
                 "featureSupport": ["gameSpeed": true, "invincibility": true],
                 "desiredFeatures": ["invincibility": false], "activeFeatures": ["invincibility": false]]
@@ -416,16 +428,33 @@ struct Main {
         }
         try writeObservation(speed: 1.0)
         let observedSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
-        let observedModel = Hades2TrainerModel(session: observedSession,
-            logSink: TrainerLogSink(gameID: Hades2GameModule.descriptor.id), backendScriptURL: worker,
-            shortcutDefaults: InMemoryDefaults())
-        observedModel.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0, processIdentifier: nil))
+        let folder = worker.deletingLastPathComponent()
+        let logSink = TrainerLogSink(gameID: Hades2GameModule.descriptor.id,
+            homeDirectory: folder.appendingPathComponent("isolated-log-home"))
+        var target = TrainerTargetObservation(isRunning: true, launchGeneration: 0, processIdentifier: 4141)
+        let monitor = TrainerTargetProcessMonitor(snapshot: { target })
+        let detached = makeFixtureModel(Hades2GameModule.self, session: observedSession, logSink: logSink) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: folder.appendingPathComponent("detached-run-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+        detached.hostTargetLifetimeChanged(observation: target)
+        check(!observedSession.isStarted, "a module lifetime notification started the worker")
+        let context = TrainerGameContext<Hades2GameModule>(session: observedSession,
+            backendScriptURL: worker, logSink: logSink, targetMonitor: monitor) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: folder.appendingPathComponent("run-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+        let observedModel = context.model
         func waitFor(_ description: String, _ predicate: () -> Bool) {
             let deadline = Date().addingTimeInterval(10)
             while !predicate() && Date() < deadline { pump(0.01) }
             check(predicate(), description)
         }
         waitFor("model failed initial observation") { observedModel.backendAvailable && observedModel.connected && !observedModel.busy }
+        logSink.flush()
+        guard logSink.currentSessionURL() != nil else { fail("startup did not open a target log session") }
+        let startupLog = try String(contentsOf: logSink.currentLogURL(), encoding: .utf8)
+        check(startupLog.contains("请求 scan · "), "startup request was not recorded in the target session")
         let beforeCommit = commands(at: commandLog).count
         let commit = observedModel.completeTextEdit(.gameSpeed, text: "1.7", generation: observedModel.editGeneration)
         check(commit == "1.7", "explicit numeric commit was not normalized")
@@ -446,6 +475,34 @@ struct Main {
         check(rejected == "2.3" && observedModel.feedbackNotice != nil,
               "invalid explicit edit did not restore observed value and feedback")
         check(commands(at: commandLog).count == beforeInvalid, "invalid edit crossed the transport boundary")
+        var receiptKeys: [String] = []
+        let notices = observedModel.$feedbackNotice.compactMap { $0?.text.key }.sink { receiptKeys.append($0) }
+        var lateDone: Bool?
+        observedSession.send("late-observation", operation: "late", announceSuccess: false,
+            completion: { lateDone = $0 })
+        waitFor("late request did not start") { commands(at: commandLog).last?["command"] as? String == "late-observation" }
+        var queuedObservationDone: Bool?
+        observedSession.send("queued-observation", operation: "queued", announceSuccess: false,
+            completion: { queuedObservationDone = $0 })
+        try writeObservation(speed: 2.1, pid: 5151)
+        target = .init(isRunning: true, launchGeneration: 1, processIdentifier: 5151)
+        monitor.refresh()
+        check(!observedModel.connected && observedModel.pid == nil && context.services.targetObservation == target,
+              "target replacement retained the previous observation")
+        let release = worker.deletingPathExtension().appendingPathExtension("release")
+        try Data().write(to: release)
+        waitFor("new lifetime was not projected") { observedModel.connected && observedModel.pid == 5151 && !observedModel.busy }
+        check(lateDone == true && queuedObservationDone == true && receiptKeys.contains("hades2.receipt.completed"),
+              "target invalidation discarded the late request's verified action receipt")
+        check(observedModel.health != 999, "a sparse reply adopted runtime state from the previous lifetime")
+        notices.cancel()
+
+        var mismatchedDone: Bool?
+        observedSession.send("stale-pid", operation: "stale", announceSuccess: false,
+            completion: { mismatchedDone = $0 })
+        waitFor("stale PID reply did not settle") { mismatchedDone != nil && !observedModel.busy }
+        check(mismatchedDone == true && observedModel.connected && observedModel.pid == 5151 && observedModel.health != 999,
+              "late reply adopted the previous target PID after rapid replacement")
         observedSession.stop()
         print("hades2_live_trait_model_flow_ok")
     }
@@ -464,7 +521,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
 
     compile_swift_test(
         games=("hades2",),
-        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_path],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            main_path,
+        ],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

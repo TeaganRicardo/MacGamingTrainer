@@ -47,8 +47,8 @@ struct Hades2GameModule: TrainerGameModule {
         )
     }
 
-    static func makeModel(session: TrainerBackendSession) -> Hades2TrainerModel {
-        Hades2TrainerModel(session: session, logSink: TrainerLogSink(gameID: descriptor.id))
+    static func makeModel(services: TrainerModuleServices) -> Hades2TrainerModel {
+        Hades2TrainerModel(services: services)
     }
     static func makeContent(model: Hades2TrainerModel) -> Hades2TrainerView { Hades2TrainerView(model: model) }
     static func makeSidebarActions(model: Hades2TrainerModel) -> Hades2SidebarActions { Hades2SidebarActions(model: model) }

@@ -37,7 +37,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     ]
     @Published var connected = false
     @Published private(set) var editGeneration: UInt64 = 0
-    @Published private(set) var backendStatus = TrainerBackendStatus()
     @Published private var activeEditRequest: UUID?
     @Published private var pendingBlockingRequests = 0
     @Published private var pendingRepeatableSpawns = 0
@@ -48,11 +47,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var pendingFeatureIntents: [Hades2FeatureKey: PendingFeatureIntent] = [:]
     private var pendingBoonRarityRequestID: UUID?
     private var pendingGameSpeedRequestID: UUID?
-    private let backendSession: TrainerBackendSession
-    private let logSink: TrainerLogSink
-    private let backendScriptURL: URL?
+    private let services: TrainerModuleServices
+    private var statusObserver: UUID?
     private let runLogDirectoryURL: URL?
+    private var backendSession: TrainerBackendSession { services.session }
+    private var logSink: TrainerLogSink { services.logSink }
     private lazy var api = Hades2API(session: backendSession)
+    var backendStatus: TrainerBackendStatus { services.backendStatus }
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var backendProtocolVersion: Int? { backendStatus.backendProtocolVersion }
     var backendModuleProtocolVersion: Int? { backendStatus.backendModuleProtocolVersion }
@@ -104,40 +105,40 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var runtimeFeatureErrors: [String: String] = [:]
     private var runtimeFeaturePresentationTokens: [String: TrainerTextToken] = [:]
 
-    /// Core-owned error text (for example a protocol failure raised by the Host).
+    @Published private var localError: String?
+    @Published private var localNotice: String?
+
+    /// Host-keyed messages from local actions share the existing banner.
     var error: String {
-        get { backendStatus.error }
+        get { localError ?? backendStatus.error }
         set {
             // A Core-owned error is newer than anything the model has presented,
             // so a stale Hades-owned token must not keep winning the banner.
             if !newValue.isEmpty {
                 errorToken = nil
-                if newValue != backendStatus.error {
+                if newValue != error {
                     presentFeedback(TrainerTextToken(key: newValue), tone: .warning)
                 }
             }
-            backendStatus.error = newValue
+            localError = newValue
         }
     }
 
-    /// Core-owned notice text.
     var notice: String {
-        get { backendStatus.notice }
+        get { localNotice ?? backendStatus.notice }
         set {
             if !newValue.isEmpty {
                 noticeToken = nil
-                if newValue != backendStatus.notice {
+                if newValue != notice {
                     presentFeedback(TrainerTextToken(key: newValue), tone: .success)
                 }
             }
-            backendStatus.notice = newValue
+            localNotice = newValue
         }
     }
 
-    /// Latest backend-reported error as a token, with the arguments the backend
-    /// sent for it. Empty when the current error is Core-owned plain text.
     var backendErrorText: TrainerTextToken {
-        TrainerTextToken(key: backendStatus.error, arguments: backendStatus.errorArguments)
+        TrainerTextToken(key: error, arguments: localError == nil ? backendStatus.errorArguments : [])
     }
     /// Latest user-facing notice, resolved by the module's presentation layer.
     var noticeText: TrainerTextToken { noticeToken ?? TrainerTextToken(key: "") }
@@ -275,7 +276,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var activationGraceWorkItems: [Hades2FeatureKey: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<Hades2FeatureKey> = []
     private var hotkeys: GlobalHotkeys?
-    private var shuttingDown = false
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     private var worldActionsSupported: Bool {
@@ -417,6 +417,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     /// updates the connection card without a backend round trip.
     var statusTitle: Hades2Presentation.Text {
         if exiting { return Hades2Presentation.token("hades2.manage.exiting") }
+        if backendStatus.errorCode == "backend_start_failed" {
+            return Hades2Presentation.token("hades2.status.backendStopped")
+        }
         switch status {
         case "ready":
             if scene == "crossroads" { return Hades2Presentation.token("hades2.status.crossroads") }
@@ -437,31 +440,51 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init(session: TrainerBackendSession, logSink: TrainerLogSink,
-         backendScriptURL: URL? = nil, runLogDirectoryURL: URL? = nil,
+    init(services: TrainerModuleServices, runLogDirectoryURL: URL? = nil,
          shortcutDefaults: UserDefaults = .standard) {
-        backendSession = session
-        self.logSink = logSink
-        self.backendScriptURL = backendScriptURL
+        self.services = services
         self.runLogDirectoryURL = runLogDirectoryURL
         self.shortcutStore = Hades2ShortcutStore(defaults: shortcutDefaults)
+        statusObserver = backendSession.observeStatus { [weak self] previous, current in
+            guard let self else { return }
+            self.applyBackendStatus(current, previous: previous)
+            if !current.busy {
+                self.consumeDeferredLaunchAttachIfPossible()
+                self.consumeRunLogReadySignalIfPossible()
+            }
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.installHotkeys()
         }
     }
 
+    isolated deinit {
+        if let statusObserver { services.session.removeStatusObserver(statusObserver) }
+    }
+
     func makeSaveEditorModel(snapshotID: String? = nil) -> Hades2SaveEditorModel {
         Hades2SaveEditorModel(session: backendSession, snapshotID: snapshotID)
     }
 
-    func toggleConnectionFromHost() {
-        // A deliberate click overrides an unconsumed launch-time auto-attach.
-        launchAttachGate.cancel()
-        toggleConnection(probeRuntime: true, recoverLostAttach: true)
+    func connectFromHost(reason: TrainerHostConnectReason) {
+        guard !connected, backendAvailable, hostActionsEnabled else { return }
+        switch reason {
+        case .manual:
+            launchAttachGate.cancel()
+            connect(recoverLostAttach: true)
+        case .automatic(let targetJustLaunched):
+            connectAutomatically(targetJustLaunched: targetJustLaunched)
+        }
     }
 
-    func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
+    func disconnectFromHost() {
+        guard connected, backendAvailable, hostActionsEnabled else { return }
+        launchAttachGate.cancel()
+        sendBarrier(.disconnect, title: "host.disconnectGame")
+    }
+
+    private func connectAutomatically(targetJustLaunched: Bool) {
         if launchAttachGate.deferUntilReady(
             targetJustLaunched: targetJustLaunched,
             canObserveLifecycle: runLogWatcher.canObserveLifecycle
@@ -474,28 +497,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             consumeDeferredLaunchAttachIfPossible()
             return
         }
-        toggleConnection(probeRuntime: true)
-    }
-
-    func hostTargetLifetimeChanged(running: Bool) {
-        // Backend restart is not a game restart; definitive OS launch/exit is.
-        // Never carry a prior process's native readiness into this lifetime.
-        launchAttachGate.targetLifetimeChanged()
-        pendingRunReadySignal = false
-        runLogWatcher.targetLifetimeChanged(running: running)
+        connect()
     }
 
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
-        logSink.targetLifetimeChanged(
-            running: observation.isRunning,
-            identity: TrainerLogSink.TargetIdentity(
-                processName: Hades2GameModule.descriptor.targetProcessName,
-                bundleIdentifier: Hades2GameModule.descriptor.targetBundleIdentifier,
-                processIdentifier: observation.processIdentifier
-            )
-        )
-        hostTargetLifetimeChanged(running: observation.isRunning)
-        startBackend()
+        if connected || pid != nil {
+            resetTargetObservation()
+            status = observation.isRunning ? "disconnected" : "not_running"
+        }
+        launchAttachGate.targetLifetimeChanged()
+        pendingRunReadySignal = false
+        runLogWatcher.targetLifetimeChanged(running: observation.isRunning)
     }
 
     func refreshFromHost() {
@@ -578,7 +590,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         ) else { return }
         // The game has finished an observed boot/reset load cycle, so the
         // initial debugger attach and first runtime probe can now run together.
-        toggleConnection(probeRuntime: true)
+        connect()
     }
 
     private func consumeRunLogReadySignalIfPossible() {
@@ -597,69 +609,54 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
              })
     }
 
-    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false) {
-        if connected {
-            sendBarrier(.disconnect, title: "host.disconnectGame")
-        } else {
-            if probeRuntime {
-                pendingRunReadySignal = false
-            }
-            runLogWatcher.start()
-            send(.connect(probeRuntime: probeRuntime, recoverLostAttach: recoverLostAttach),
-                 title: "host.connectGame",
-                 completion: { [weak self] _ in
-                     guard let self else { return }
-                     self.runLogWatcher.start()
-                     self.consumeRunLogReadySignalIfPossible()
-                 })
-        }
+    private func connect(recoverLostAttach: Bool = false) {
+        pendingRunReadySignal = false
+        runLogWatcher.start()
+        send(.connect(probeRuntime: true, recoverLostAttach: recoverLostAttach),
+             title: "host.connectGame",
+             completion: { [weak self] _ in
+                 guard let self else { return }
+                 self.runLogWatcher.start()
+                 self.consumeRunLogReadySignalIfPossible()
+             })
     }
-
-    func restartBackendFromHost() { restartBackend() }
 
     func launchGame() { send(.launch, title: "host.launchGame") }
     func prepareDebugging() { send(.prepare, title: "hades2.manage.prepareSigning") }
     func restoreOriginalSignature() { send(.restore, title: "hades2.manage.restoreSigning") }
     func disableAll() { sendBarrier(.disableAll, title: "host.disableAll") }
 
-    private func restartBackend() {
-        guard !exiting else { return }
+    func backendWillRestart() {
         invalidateTextEdits()
         error = ""
         errorToken = nil
         notice = ""
         noticeToken = nil
-        backendSession.restart()
     }
 
-    private func startBackend() {
-        guard !terminationRequestedFromHost, !backendSession.isStarted else { return }
-        do {
-            try backendSession.start(
-                descriptor: Hades2GameModule.descriptor,
-                backendScriptURL: backendScriptURL,
-                applyPayload: { [weak self] payload in self?.apply(payload) },
-                resetGameState: { [weak self] in self?.resetAfterBackendTermination() },
-                log: { [weak self] line in self?.appendLog(line) },
-                onStatusChange: { [weak self] status in
-                    self?.applyBackendStatus(status)
-                    if !status.busy {
-                        self?.consumeDeferredLaunchAttachIfPossible()
-                        self?.consumeRunLogReadySignalIfPossible()
-                    }
-                },
-                backendLog: { [weak self] line in self?.appendLog(line, source: "BACKEND") }
-            )
-            send(.scan, title: "hades2.op.detectGame")
-        } catch {
-            // TrainerBackendSession owns startup failure identity, presentation,
-            // diagnostics, and status projection.
-            status = "backend_stopped"
-        }
+    func backendDidStart() {
+        send(.scan, title: "hades2.op.detectGame")
     }
 
-    private func resetAfterBackendTermination() {
+    func backendDidStop() {
+        resetTargetObservation()
         feedbackNotice = nil
+        pendingFeatureIntents.removeAll()
+        pendingBoonRarityRequestID = nil
+        pendingGameSpeedRequestID = nil
+        pendingRunReadySignal = false
+        noticeToken = nil
+        errorToken = nil
+        presentedActionReceipt = nil
+        receivedActionResultText = nil
+        diagnostics = []
+        diagnosticsPassed = 0
+        diagnosticsTotal = 0
+        notice = ""
+        status = "backend_stopped"
+    }
+
+    private func resetTargetObservation() {
         connected = false
         appliedGameSpeed = nil
         scene = "unknown"
@@ -667,15 +664,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activeFeatures = [:]
         dormantFeatures = [:]
         featureSupport = [:]
-        pendingFeatureIntents.removeAll()
-        pendingBoonRarityRequestID = nil
-        pendingGameSpeedRequestID = nil
         statSupport = [:]
         statAvailable = [:]
         // Observable state, so it cannot outlive the backend that produced it.
         // The next payload repopulates it; until then an empty list means
         // "not observed yet" rather than the previous run's traits.
         currentRunTraits = []
+        currentRunTraitScope = .currentRun
         worldActionExits = []
         worldOccurrence = nil
         selectedWorldExitToken = ""
@@ -684,23 +679,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
         invalidateTextEdits()
-        pendingRunReadySignal = false
         pid = nil
         // Empty means "not detected yet"; the connection detail resolves that as
         // its own key, so a restart returns to the awaiting-detection state.
         version = ""
         warning = ""
-        // Both the Core-owned strings and the Hades-owned tokens must be
-        // cleared: the banner prefers the token, so a stale token would
-        // outlive this reset.
         runtimeIssue = ""
         runtimeIssuePresentations = []
         runtimeFeatureErrors = [:]
         runtimeFeaturePresentationTokens = [:]
-        noticeToken = nil
-        errorToken = nil
-        presentedActionReceipt = nil
-        receivedActionResultText = nil
         // Lock flags and locked values mirror durable desired targets from the
         // backend preference store; retain those projections across a worker
         // restart. Unlocked values are observations and are cleared below.
@@ -739,15 +726,28 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         elements = []
         resources = []
         boons = []
-        diagnostics = []
-        diagnosticsPassed = 0
-        diagnosticsTotal = 0
-        notice = ""
-        noticeToken = nil
-        status = "backend_stopped"
     }
 
-    private func apply(_ payload: [String: Any]) {
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget {
+        if let identifier = payload["pid"] as? Int {
+            return .process(identifier: identifier)
+        }
+        if (payload["connected"] as? Bool) ?? connected {
+            // A sparse reply can omit its PID while retaining its connection.
+            return .process(identifier: payload.keys.contains("pid") ? nil : pid)
+        }
+        return .lifetime
+    }
+
+    func applyStaleBackendPayload(_ payload: [String: Any]) {
+        let patch = Hades2StatePatch(payload)
+        applyDesiredPatch(patch)
+        if let receipt = patch.lastAction { presentActionReceipt(receipt) }
+        if let profiles = patch.profiles { self.profiles = profiles }
+        if let shortcuts = patch.shortcuts { applyProfileShortcuts(shortcuts) }
+    }
+
+    func applyBackendPayload(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
         let runtimeDiagnostics = payload["runtimeDiagnostics"] as? [String: Any]
         logSink.updateCurrentSessionRuntimeIdentity(
@@ -808,21 +808,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             rebuildRuntimeIssuePresentations()
         }
 
-        if let desired = patch.desiredFeatures {
-            for (key, value) in desired {
-                // A reply for an earlier hotkey must not overwrite a newer
-                // locally accepted target while it is still queued.
-                self[keyPath: key.modelKeyPath] = pendingFeatureIntents[key]?.enabled ?? value
-            }
-        }
-        if let value = patch.gameSpeed, pendingGameSpeedRequestID == nil { gameSpeed = value }
-        if let value = patch.damageMultiplier { damageMultiplier = value }
-        if let value = patch.moneyLocked { moneyLocked = value }
-        if let value = patch.moneyMultiplier { moneyMultiplier = value }
-        if let value = patch.resourceMultiplier { resourceMultiplier = value }
-        if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil {
-            applyBoonRarity(rarity)
-        }
+        applyDesiredPatch(patch)
         if let value = patch.occurrenceTargets {
             occurrenceTargets = value
             repairOccurrenceSelection()
@@ -925,6 +911,22 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     }
 
+    private func applyDesiredPatch(_ patch: Hades2StatePatch) {
+        if let desired = patch.desiredFeatures {
+            for (key, value) in desired {
+                // A reply for an earlier hotkey must not overwrite a newer
+                // locally accepted target while it is still queued.
+                self[keyPath: key.modelKeyPath] = pendingFeatureIntents[key]?.enabled ?? value
+            }
+        }
+        if let value = patch.gameSpeed, pendingGameSpeedRequestID == nil { gameSpeed = value }
+        if let value = patch.damageMultiplier { damageMultiplier = value }
+        if let value = patch.moneyLocked { moneyLocked = value }
+        if let value = patch.moneyMultiplier { moneyMultiplier = value }
+        if let value = patch.resourceMultiplier { resourceMultiplier = value }
+        if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil { applyBoonRarity(rarity) }
+    }
+
     private func rebuildRuntimeIssuePresentations() {
         // The backend supplies a registry presentation for every resident
         // feature failure; its raw runtime text is diagnostic only and stays a
@@ -995,12 +997,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func applyBackendStatus(_ status: TrainerBackendStatus) {
-        let previous = backendStatus
+    private func applyBackendStatus(_ status: TrainerBackendStatus, previous: TrainerBackendStatus) {
+        let previousError = localError ?? previous.error
+        let previousNotice = localNotice ?? previous.notice
+        objectWillChange.send()
+        localError = nil
+        localNotice = nil
         if status.busy { receiptPresentedDuringReply = false }
         let hasReceiptFeedback = receiptPresentedDuringReply
         if !status.busy { receiptPresentedDuringReply = false }
-        backendStatus = status
         let resultConnectionLost = status.error == "hades2.error.commandResultConnectionLost"
         if resultConnectionLost {
             if hasReceiptFeedback {
@@ -1014,10 +1019,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
         if !hasReceiptFeedback || resultConnectionLost {
             if !status.error.isEmpty,
-               status.error != previous.error || status.errorArguments != previous.errorArguments {
+               status.error != previousError || status.errorArguments != previous.errorArguments {
                 errorToken = nil
                 presentFeedback(backendErrorText, tone: .warning)
-            } else if !status.notice.isEmpty, status.notice != previous.notice {
+            } else if !status.notice.isEmpty, status.notice != previousNotice {
                 noticeToken = nil
                 presentFeedback(TrainerTextToken(key: status.notice), tone: .information)
             }
@@ -2209,8 +2214,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func installHotkeys() {
         hotkeys = nil
-        let instance = GlobalHotkeys(gameID: Hades2GameModule.descriptor.id,
-                                     registrationChanged: { [weak self] failure in
+        let instance = services.makeHotkeys(registrationChanged: { [weak self] failure in
             self?.shortcutRegistrationFailure = failure
         }) { [weak self] actionID in
             guard let self, let action = ShortcutAction(rawValue: actionID) else { return }
@@ -2287,8 +2291,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func finishExit(completion: @escaping () -> Void) {
         invalidateTextEdits()
-        shuttingDown = true
-        backendSession.stop(suppressTerminationError: true)
         completion()
     }
 }

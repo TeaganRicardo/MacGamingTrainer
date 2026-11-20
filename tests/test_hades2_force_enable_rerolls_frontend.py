@@ -80,13 +80,12 @@ func wait(_ predicate: () -> Bool) {
                 process: BackendProcess(executableURL: python, argumentsPrefix: ["-u"])
             )
         )
-        let model = Hades2TrainerModel(
-            session: session,
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
             logSink: TrainerLogSink(url: temporary.appendingPathComponent("log")),
-            backendScriptURL: worker,
-            runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log")
-        )
-        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+            backendScriptURL: worker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
 
         wait { model.backendAvailable && !model.busy }
         check(!model.forceEnableRerolls, "force rerolls unexpectedly enabled")
@@ -151,7 +150,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-force-enable-rerolls-frontend-') as
     home.mkdir()
     compile_swift_test(
         games=('hades2',),
-        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', main],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+            main,
+        ],
         output=binary,
         swiftc=SWIFTC,
     )

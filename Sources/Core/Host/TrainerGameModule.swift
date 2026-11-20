@@ -56,15 +56,50 @@ package struct TrainerGamePresentation: Hashable {
     }
 }
 
+/// Services for one persistent game context, scoped to its module descriptor.
+@MainActor
+package final class TrainerModuleServices {
+    package let descriptor: GameModuleDescriptor
+    package let session: TrainerBackendSession
+    package let logSink: TrainerLogSink
+    package internal(set) var targetObservation: TrainerTargetObservation
+    package var backendStatus: TrainerBackendStatus { session.currentStatus }
+
+    init(descriptor: GameModuleDescriptor, session: TrainerBackendSession,
+         logSink: TrainerLogSink, targetObservation: TrainerTargetObservation) {
+        self.descriptor = descriptor
+        self.session = session
+        self.logSink = logSink
+        self.targetObservation = targetObservation
+    }
+
+    package func makeHotkeys(
+        registrationChanged: @escaping @MainActor (TrainerHotkeyRegistrationFailure?) -> Void = { _ in },
+        action: @escaping @MainActor (String) -> Void
+    ) -> GlobalHotkeys {
+        GlobalHotkeys(gameID: descriptor.id, registrationChanged: registrationChanged, action: action)
+    }
+}
+
+package enum TrainerHostConnectReason: Equatable {
+    case manual
+    case automatic(targetJustLaunched: Bool)
+}
+
+/// The module identifies target-bound payloads without exposing its wire
+/// vocabulary to Core. Sparse and disconnected state can still be bound to
+/// the lifetime in which the request started.
+package enum TrainerBackendPayloadTarget {
+    case independent
+    case lifetime
+    case process(identifier: Int?)
+}
+
 /// The App owns application lifecycle. A game model only prepares its own
 /// runtime for committed termination after the Host has drained all contexts.
 @MainActor
 package protocol TrainerHostModel: ObservableObject {
-    var backendAvailable: Bool { get }
-    var busy: Bool { get }
     var connected: Bool { get }
-    /// Language-neutral operation identity shown while a request is in flight.
-    var operation: TrainerTextToken { get }
     /// Language-neutral presentation tokens. The Host resolves them against the
     /// selected module's presentation layer, so a module never embeds localized
     /// copy in its observable state and a language switch re-renders without a
@@ -75,25 +110,33 @@ package protocol TrainerHostModel: ObservableObject {
     /// Optional module-owned launch operation; the Host owns its card placement.
     var launchActionFromHost: (@MainActor () -> Void)? { get }
 
-    func toggleConnectionFromHost()
-    func connectAutomaticallyFromHost(targetJustLaunched: Bool)
+    func connectFromHost(reason: TrainerHostConnectReason)
+    func disconnectFromHost()
     func refreshFromHost()
     func hostDidBecomeActive()
-    func hostTargetLifetimeChanged(running: Bool)
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation)
-    func restartBackendFromHost()
+    /// Initial module reads follow the Context's worker startup.
+    func backendDidStart()
+    func backendWillRestart()
+    func backendDidStop()
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget
+    func applyBackendPayload(_ payload: [String: Any])
+    func applyStaleBackendPayload(_ payload: [String: Any])
     func beginTerminationFromHost()
     func prepareForTermination(completion: @escaping () -> Void)
 }
 
 extension TrainerHostModel {
     package func beginTerminationFromHost() {}
+    package func prepareForTermination(completion: @escaping () -> Void) { completion() }
     package var launchActionFromHost: (@MainActor () -> Void)? { nil }
-    /// Automatic target connection carries only generic lifecycle context.
-    /// Modules that do not care about launch timing keep the normal toggle path.
-    package func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
-        toggleConnectionFromHost()
-    }
+    package func backendDidStart() {}
+    package func backendWillRestart() {}
+    package func backendDidStop() {}
+    package func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
+    package func applyBackendPayload(_ payload: [String: Any]) {}
+    /// A late reply may still carry an action receipt or durable metadata.
+    package func applyStaleBackendPayload(_ payload: [String: Any]) {}
 
     /// App activation is a safe point for game modules to perform an optional
     /// foreground-only refresh. The default is deliberately a no-op because
@@ -102,13 +145,7 @@ extension TrainerHostModel {
 
     /// Definitive target launch/exit invalidates game-owned observations from
     /// the prior OS process lifetime. Modules without such state may ignore it.
-    package func hostTargetLifetimeChanged(running: Bool) {}
-
-    /// Rich target identity is available to modules that own process-lifetime
-    /// diagnostics. Existing modules can continue consuming only presence.
-    package func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
-        hostTargetLifetimeChanged(running: observation.isRunning)
-    }
+    package func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {}
 }
 
 /// Game modules supply business content and game-specific actions. The host
@@ -124,7 +161,7 @@ package protocol TrainerGameModule {
 
     static var descriptor: GameModuleDescriptor { get }
     static var presentation: TrainerGamePresentation { get }
-    @MainActor static func makeModel(session: TrainerBackendSession) -> Model
+    @MainActor static func makeModel(services: TrainerModuleServices) -> Model
     @MainActor static func makeContent(model: Model) -> ContentView
     @MainActor static func makeSidebarActions(model: Model) -> SidebarActions
     @MainActor static func makeHeaderActions(model: Model) -> HeaderActions
