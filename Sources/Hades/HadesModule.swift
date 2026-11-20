@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 import TrainerCore
 
 final class HadesTrainerModel: ObservableObject, TrainerHostModel {
-    @Published private(set) var backendStatus = TrainerBackendStatus()
     @Published private(set) var connected = false
     @Published private(set) var heroReady = false
     @Published private(set) var invincible = false
@@ -71,15 +70,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var diagnostics: [HadesDiagnosticCheck] = []
     private var diagnosticsReport: [String: Any]?
 
-    private let session: TrainerBackendSession
-    private let logSink: TrainerLogSink
-    private let backendScriptURL: URL?
-    private var targetObservation: TrainerTargetObservation?
+    private let services: TrainerModuleServices
+    private var statusObserver: UUID?
+    private var session: TrainerBackendSession { services.session }
+    private var logSink: TrainerLogSink { services.logSink }
     private var shortcuts: HadesShortcutStore
-    private lazy var hotkeys = GlobalHotkeys(gameID: "hades", registrationChanged: { [weak self] failure in
+    private lazy var hotkeys = services.makeHotkeys(registrationChanged: { [weak self] failure in
         self?.shortcutRegistrationFailure = failure
     }) { [weak self] action in self?.performShortcut(action) }
 
+    var backendStatus: TrainerBackendStatus { services.backendStatus }
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: TrainerTextToken { backendStatus.operation }
@@ -136,46 +136,39 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.send("launch", operation: "host.launchGame") } }
 
-    init(session: TrainerBackendSession, backendScriptURL: URL? = nil,
-         defaults: UserDefaults = .standard, logSink: TrainerLogSink? = nil) {
-        self.session = session
-        self.backendScriptURL = backendScriptURL
-        self.logSink = logSink ?? TrainerLogSink(gameID: "hades")
+    init(services: TrainerModuleServices, defaults: UserDefaults = .standard) {
+        self.services = services
         self.shortcuts = HadesShortcutStore(defaults: defaults)
+        statusObserver = session.observeStatus { [weak self] previous, current in
+            self?.receiveStatus(current, previous: previous)
+        }
         DispatchQueue.main.async { [weak self] in
-            self?.startBackend()
             self?.installShortcuts()
         }
     }
 
-    private func startBackend() {
-        do {
-            try session.start(
-                descriptor: HadesGameModule.descriptor,
-                backendScriptURL: backendScriptURL,
-                applyPayload: { [weak self] in self?.apply($0) },
-                resetGameState: { [weak self] in self?.resetObservation() },
-                log: { [weak self] in self?.logSink.append($0) },
-                onStatusChange: { [weak self] in self?.receiveStatus($0) }
-            )
-            refreshFromHost()
-            send("catalog", operation: "hades.catalog", announceSuccess: false)
-        } catch {
-            // TrainerBackendSession publishes the startup failure.
-        }
+    isolated deinit {
+        if let statusObserver { services.session.removeStatusObserver(statusObserver) }
     }
 
-    func toggleConnectionFromHost() {
-        send(connected ? "disconnect" : "connect", operation: connected ? "host.disconnectGame" : "host.connectGame")
+    func backendDidStart() {
+        refreshFromHost()
+        send("catalog", operation: "hades.catalog", announceSuccess: false)
+    }
+
+    func backendDidStop() { resetObservation() }
+
+    func connectFromHost(reason: TrainerHostConnectReason) {
+        guard !connected, hostActionsEnabled else { return }
+        send("connect", operation: "host.connectGame")
+    }
+
+    func disconnectFromHost() {
+        guard connected, hostActionsEnabled else { return }
+        send("disconnect", operation: "host.disconnectGame")
     }
     func refreshFromHost() { send("status", operation: "host.refreshStatus", announceSuccess: false) }
-    func restartBackendFromHost() { session.restart() }
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
-        logSink.targetLifetimeChanged(running: observation.isRunning, identity: .init(
-            processName: HadesGameModule.descriptor.targetProcessName,
-            bundleIdentifier: HadesGameModule.descriptor.targetBundleIdentifier,
-            processIdentifier: observation.processIdentifier))
-        targetObservation = observation
         resetObservation()
     }
     func hostDidBecomeActive() { if connected && !busy { refreshFromHost() } }
@@ -752,16 +745,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     func prepareForTermination(completion: @escaping () -> Void) {
         guard backendAvailable else {
-            session.flushDiagnostics()
-            session.stop(suppressTerminationError: true)
             completion()
             return
         }
         send("disable_all", operation: "host.disableAll", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(); return }
-            self.send("disconnect", operation: "host.disconnectGame", announceSuccess: false) { [weak self] _ in
-                self?.session.flushDiagnostics()
-                self?.session.stop(suppressTerminationError: true)
+            self.send("disconnect", operation: "host.disconnectGame", announceSuccess: false) { _ in
                 completion()
             }
         }
@@ -801,27 +790,40 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         })
     }
 
-    private func receiveStatus(_ status: TrainerBackendStatus) {
-        let previousError = backendStatus.error
-        backendStatus = status
+    private func receiveStatus(_ status: TrainerBackendStatus, previous: TrainerBackendStatus) {
+        objectWillChange.send()
         switch status.errorCode {
         case "outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost":
             resetObservation()
         default: break
         }
-        if !status.error.isEmpty && status.error != previousError {
+        if !status.error.isEmpty && status.error != previous.error {
             presentFeedback(TrainerTextToken(key: status.error, arguments: status.errorArguments), tone: .warning)
         }
     }
 
-    private func apply(_ payload: [String: Any]) {
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget {
+        guard let connected = payload["connected"] as? Bool else { return .independent }
+        return connected ? .process(identifier: payload["pid"] as? Int) : .lifetime
+    }
+
+    func applyStaleBackendPayload(_ payload: [String: Any]) {
+        applyBackendPayload(payload, acceptsTargetObservation: false)
+    }
+
+    func applyBackendPayload(_ payload: [String: Any]) {
+        applyBackendPayload(payload, acceptsTargetObservation: true)
+    }
+
+    private func applyBackendPayload(_ payload: [String: Any], acceptsTargetObservation: Bool) {
         let catalogPayload = payload["catalog"] != nil
         do {
-            try decode(payload)
+            try decode(payload, acceptsTargetObservation: acceptsTargetObservation)
             // Only the same kind of payload proves its failure resolved.
             if catalogPayload { catalogIssue = nil }
-            else if payload["connected"] != nil { observationIssue = nil }
+            else if acceptsTargetObservation && payload["connected"] != nil { observationIssue = nil }
         } catch {
+            guard acceptsTargetObservation else { return }
             let issue = TrainerTextToken(key: catalogPayload ? "hades.error.catalog" : "hades.error.protocol")
             let previous = catalogPayload ? catalogIssue : observationIssue
             if catalogPayload { catalogIssue = issue } else {
@@ -832,7 +834,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func decode(_ payload: [String: Any]) throws {
+    private func decode(_ payload: [String: Any], acceptsTargetObservation: Bool) throws {
         let data = try JSONSerialization.data(withJSONObject: payload)
         if let rows = payload["profiles"] {
             profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
@@ -867,10 +869,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         guard payload["connected"] != nil else { return }
         let state = try JSONDecoder().decode(HadesObservation.self, from: data)
-        if state.connected, let observation = targetObservation {
-            if !observation.isRunning || (observation.processIdentifier != nil && state.pid != observation.processIdentifier) {
-                resetObservation(); return
-            }
+        guard acceptsTargetObservation else {
+            applyDurableIntent(state)
+            return
         }
         connected = state.connected
         heroReady = state.heroReady
@@ -898,6 +899,24 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         repairWorldActionSelection()
     }
 
+    private func applyDurableIntent(_ state: HadesObservation) {
+        let speedKey = HadesFeature.gameSpeed.rawValue
+        // The adapter always reports desired speed from preferences, even in a live snapshot.
+        let speed = state.features?[speedKey]?.gameSpeedIntent(preservingRuntimeFrom: features[speedKey])
+        if !connected && !state.connected {
+            // A detached reply can omit preferences. Retain existing values for those fields.
+            var desired = state.features ?? [:]
+            desired[speedKey] = speed
+            features.merge(desired) { _, value in value }
+            healthLocked = state.healthLocked ?? healthLocked
+            moneyLocked = state.moneyLocked ?? moneyLocked
+            rerollsLocked = state.rerollsLocked ?? rerollsLocked
+            boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
+        } else if let speed {
+            features[speedKey] = speed
+        }
+    }
+
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
         health = nil; maxHealth = nil; money = nil; rerolls = nil
@@ -906,12 +925,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         // the backend reprojects the preference document.
         godGauge = nil; maxGodGauge = nil
         target = nil
-        if case let .gameSpeed(desired, _, _, _, _) = features[HadesFeature.gameSpeed.rawValue] {
-            features[HadesFeature.gameSpeed.rawValue] = .gameSpeed(
-                desired: desired, actual: nil, active: nil,
-                errorPresentation: nil, errorArguments: []
-            )
-        }
+        let speedKey = HadesFeature.gameSpeed.rawValue
+        if let speed = features[speedKey]?.gameSpeedIntent() { features[speedKey] = speed }
         activeFeatures = [:]; dormantFeatures = [:]; resources = [:]; traits = []; world = nil
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""
@@ -944,7 +959,7 @@ struct HadesGameModule: TrainerGameModule {
         return HadesPresentation.text(key, language: language)
     }
 
-    static func makeModel(session: TrainerBackendSession) -> HadesTrainerModel { HadesTrainerModel(session: session) }
+    static func makeModel(services: TrainerModuleServices) -> HadesTrainerModel { HadesTrainerModel(services: services) }
     static func makeContent(model: HadesTrainerModel) -> HadesTrainerView { HadesTrainerView(model: model) }
     static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
     static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }

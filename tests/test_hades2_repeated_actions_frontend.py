@@ -212,17 +212,15 @@ struct Main {
             forceKillDelay: 0.10
         )
         let session = TrainerBackendSession(client: BackendClient(process: process))
-        let model = Hades2TrainerModel(
-            session: session,
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
             logSink: TrainerLogSink(
                 url: workerURL.deletingLastPathComponent().appendingPathComponent("fixture.log")
             ),
-            backendScriptURL: workerURL,
-            runLogDirectoryURL: workerURL.deletingLastPathComponent()
-        )
-        model.hostTargetLifetimeChanged(
-            observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0)
-        )
+            backendScriptURL: workerURL) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: workerURL.deletingLastPathComponent(),
+                shortcutDefaults: InMemoryDefaults())
+        }
+
         let startupDeadline = Date().addingTimeInterval(5.0)
         while (!model.backendAvailable || model.busy || !model.canAcceptRuntimeAction)
               && Date() < startupDeadline { pump(0.04) }
@@ -510,7 +508,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-repeat-actions-") as td:
     swift_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     compile_swift_test(
         games=("hades2",),
-        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", swift_path],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            swift_path,
+        ],
         output=binary_path,
         swiftc=SWIFTC,
         cwd=ROOT,

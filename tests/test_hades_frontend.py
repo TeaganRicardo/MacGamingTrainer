@@ -385,8 +385,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let defaults=InMemoryDefaults()
         let client=BackendClient(process:BackendProcess(executableURL:python,forceKillDelay:0.1))
         let session=TrainerBackendSession(client:client)
-        let model=HadesTrainerModel(session:session,backendScriptURL:folder.appendingPathComponent("worker.py"),defaults:defaults,
-            logSink:TrainerLogSink(url:folder.appendingPathComponent("trainer.log")))
+        let model = makeFixtureModel(HadesGameModule.self, session: session,
+            logSink: TrainerLogSink(url:folder.appendingPathComponent("trainer.log")),
+            backendScriptURL: folder.appendingPathComponent("worker.py")) {
+            HadesTrainerModel(services: $0, defaults: defaults)
+        }
         var diagnosticEditors: [(String,HadesSaveEditorModel)] = []
         var diagnosticWindows: [(String,NSWindow)] = []
         func fixtureDiagnostics() -> String {
@@ -450,7 +453,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         func stopBackend() {
             var complete = false
-            model.prepareForTermination { complete = true }
+            model.prepareForTermination {
+                session.flushDiagnostics()
+                session.stop()
+                complete = true
+            }
             wait("prepareForTermination: backend shutdown completion") { complete }
         }
         recordPhase("start: " + journey)
@@ -582,6 +589,81 @@ func pump(_ seconds: TimeInterval = 0.1) {
             return
         }
         if journey == "interlock" {
+            let speedKey = HadesFeature.gameSpeed.rawValue
+            model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 1))
+            let detachedReply: [String: Any] = [
+                "connected": false, "heroReady": false, "pid": NSNull(),
+                "features": ["invincibility": false, "damageMultiplier": 3,
+                             speedKey: ["desired": 2.5, "actual": 1.0, "active": false]],
+                "healthLocked": true, "moneyLocked": true, "rerollsLocked": true,
+                "boonRarityTarget": "Epic",
+            ]
+            model.applyStaleBackendPayload(detachedReply)
+            check(!model.isEnabled(.invincibility) && model.number(.damageMultiplier) == 3
+                  && model.healthLocked && model.moneyLocked && model.rerollsLocked
+                  && model.boonRarityTarget == "Epic" && model.number(.gameSpeed) == 2.5
+                  && model.features[speedKey]?.actualNumber == nil,
+                  "late detached reply discarded acknowledged Hades preferences")
+
+            var liveReply = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+            liveReply["features"] = ["invincibility": true, "damageMultiplier": 7,
+                speedKey: ["desired": 3.5, "actual": 4.5, "active": true,
+                           "errorPresentation": "host.timeWarp.error.verifyFailed", "errorArguments": ["4.5"]]]
+            liveReply["activeFeatures"] = ["invincibility": true]
+            liveReply["dormantFeatures"] = ["fullHealth": true]
+            liveReply["boonRarityTarget"] = "Common"
+            liveReply["invincible"] = true
+            model.applyStaleBackendPayload(liveReply)
+            check(!model.isEnabled(.invincibility) && model.number(.damageMultiplier) == 3
+                  && model.healthLocked && model.moneyLocked && model.rerollsLocked && model.boonRarityTarget == "Epic",
+                  "late live reply overwrote Hades preferences with resident state")
+            check(model.features[speedKey] == .gameSpeed(
+                desired: 3.5, actual: nil, active: nil, errorPresentation: nil, errorArguments: []
+            ), "late live reply lost the desired speed or published the retired process's speed observation")
+            check(!model.connected && !model.heroReady && !model.invincible && !model.canMutate && model.target == nil
+                  && model.health == nil && model.resources.isEmpty && model.world == nil
+                  && model.activeFeatures.isEmpty && model.dormantFeatures.isEmpty,
+                  "late live reply restored the retired hero or its observations")
+
+            // A worker that discovered detachment may report only the durable speed in features.
+            model.applyStaleBackendPayload([
+                "connected": false, "heroReady": false, "features": [speedKey: ["desired": 4.0]],
+                "healthLocked": false, "moneyLocked": true, "rerollsLocked": true, "boonRarityTarget": "Epic",
+            ])
+            check(!model.isEnabled(.invincibility) && model.number(.damageMultiplier) == 3
+                  && !model.healthLocked && model.moneyLocked && model.rerollsLocked && model.number(.gameSpeed) == 4,
+                  "partial detached reply erased unreported preferences or dropped its explicit unlock")
+
+            var replacementReply = liveReply
+            replacementReply["pid"] = 99
+            replacementReply["target"] = ["heroId": "run:hero:replacement"]
+            replacementReply["health"] = 75.0
+            replacementReply["boonRarityTarget"] = "Rare"
+            replacementReply["features"] = ["invincibility": true, "damageMultiplier": 6,
+                speedKey: ["desired": 4.0, "actual": 1.0, "active": false,
+                           "errorPresentation": "host.timeWarp.error.setFailed", "errorArguments": ["current"]]]
+            replacementReply["activeFeatures"] = ["fullHealth": true]
+            replacementReply["dormantFeatures"] = ["infiniteAmmo": true]
+            model.applyBackendPayload(replacementReply)
+            model.rejectInvalidValue()
+            let currentFeedback = model.feedback?.id
+            model.applyStaleBackendPayload(liveReply)
+            check(model.connected && model.heroReady && model.health == 75 && model.target?.heroId == "run:hero:replacement"
+                  && model.activeFeatures == ["fullHealth": true] && model.dormantFeatures == ["infiniteAmmo": true],
+                  "a mismatched PID discarded the verified replacement observation")
+            check(model.features[speedKey] == .gameSpeed(
+                desired: 3.5, actual: 1, active: false, errorPresentation: "host.timeWarp.error.setFailed",
+                errorArguments: ["current"]
+            ), "a mismatched PID discarded current speed evidence or reported retired-process evidence")
+            model.applyStaleBackendPayload(detachedReply)
+            model.applyStaleBackendPayload(["connected": true, "pid": 42, "heroReady": "malformed"])
+            check(model.canMutate && model.target?.heroId == "run:hero:replacement"
+                  && model.isEnabled(.invincibility) && model.number(.damageMultiplier) == 6
+                  && !model.healthLocked && !model.moneyLocked && !model.rerollsLocked
+                  && model.boonRarityTarget == "Rare" && model.number(.gameSpeed) == 2.5
+                  && model.observationIssue == nil && model.feedback?.id == currentFeedback,
+                  "late detached preferences or malformed stale state replaced current runtime or feedback")
+
             // Start with a live, explicitly observed replacement hero. The
             // prior UI scenario originally reached this same live identity
             // after multiple unrelated AX/control exercises, and the shared
@@ -621,7 +703,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 check(commands().count==afterFailure,"unsafe runtime error allowed a subsequent mutation: \(key)")
             }
             try setFixtureError(nil)
-            model.toggleConnectionFromHost();wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
+            model.connectFromHost(reason: .manual);wait("explicit reconnect reply after \(key): connected and error cleared") { model.connected && !model.busy && model.backendStatus.error.isEmpty }
             check(model.canMutate && model.target?.heroId=="run:hero:2","explicit reconnect did not restore current-hero authority")
         }
         var malformed=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
@@ -2245,8 +2327,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-frontend-') as directory:
     binary = folder / 'frontend'
     compile_swift_test(
         games=('hades',),
-        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
-                         ROOT / 'tests/fixtures/swift/NativeAccessibility.swift', folder / 'main.swift'],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+            ROOT / 'tests/fixtures/swift/NativeAccessibility.swift',
+            folder / 'main.swift',
+        ],
         output=binary,
         cwd=ROOT,
     )

@@ -26,9 +26,7 @@ while level:
     elif app_source[end] == "}":
         level -= 1
     end += 1
-app_initializer = app_source[start:end - 1].replace("Module.descriptor", "ActiveGameModule.descriptor").replace(
-    "self.init(model: Module.makeModel(session: session), session: session)",
-    "self.backendSession = session\n        self._model = StateObject(wrappedValue: ActiveGameModule.makeModel(session: session))")
+app_initializer = app_source[start:end - 1].replace("Module.descriptor", "ActiveGameModule.descriptor")
 startup_source = (ROOT / "Sources/Core/Host/TrainerApplicationStartup.swift").read_text().replace("import AppKit\n", "")
 strings = {}
 for language in ("zh-CN", "en"):
@@ -110,21 +108,19 @@ struct Descriptor {
     var targetBundleIdentifier: String { targetBundle }
     var targetExecutablePathSuffix: String { "" }
 }
-struct StateObject<T> { let wrappedValue: T }
 final class TrainerBackendSession {}
 enum ActiveGameModule {
     static let descriptor = Descriptor()
-    static func makeModel(session: TrainerBackendSession) -> Int {
-        record("attach \(getpid())")
-        return 1
-    }
 }
 ''' + startup_source + r'''
 @MainActor final class HostHarness {
-    let ownership: TrainerTargetOwnership
-    let backendSession: TrainerBackendSession
-    let _model: StateObject<Int>
-    init() {
+    private var ownership: TrainerTargetOwnership?
+    let session: TrainerBackendSession
+    init(session: TrainerBackendSession) {
+        self.session = session
+        record("attach \(getpid())")
+    }
+    convenience init() {
 ''' + app_initializer + r'''
     }
 }

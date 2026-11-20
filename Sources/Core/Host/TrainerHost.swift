@@ -55,17 +55,15 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
 struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    private let context: TrainerGameContext<Module>
-    @ObservedObject private var model: Module.Model
-    @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
+    @ObservedObject private var context: TrainerGameContext<Module>
+    private var model: Module.Model { context.model }
+    private var targetMonitor: TrainerTargetProcessMonitor { context.targetMonitor }
     @ObservedObject private var navigation: TrainerSectionNavigation
     let selected: Bool
     let onSelect: () -> Void
 
     init(context: TrainerGameContext<Module>, selected: Bool, onSelect: @escaping () -> Void) {
-        self.context = context
-        _model = ObservedObject(wrappedValue: context.model)
-        _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
+        _context = ObservedObject(wrappedValue: context)
         _navigation = ObservedObject(wrappedValue: context.navigation)
         self.selected = selected
         self.onSelect = onSelect
@@ -77,7 +75,7 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
             // Retain the existing owner and refresh before choosing launch or
             // connection; sidebar animation does not choose either action.
             targetMonitor.refresh()
-            if targetMonitor.isRunning { context.toggleConnection() }
+            if targetMonitor.isRunning { context.performConnectionAction() }
             else { launch() }
         }
     }
@@ -85,8 +83,8 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
     var body: some View {
         TrainerSidebarCard(
             descriptor: Module.descriptor, presentation: Module.presentation,
-            connected: model.connected, busy: model.busy, targetRunning: targetMonitor.isRunning,
-            operationToken: model.operation, statusToken: model.statusTitle,
+            connected: model.connected, busy: context.backendStatus.busy, targetRunning: context.services.targetObservation.isRunning,
+            operationToken: context.backendStatus.operation, statusToken: model.statusTitle,
             detailToken: model.connectionDetailText, selected: selected, onSelect: onSelect
         ) {
             context.connectionStatusCard(onLaunch: launchAction)

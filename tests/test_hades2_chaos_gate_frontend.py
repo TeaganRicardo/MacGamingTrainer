@@ -52,9 +52,13 @@ func wait(_ predicate: () -> Bool) {
         let worker = URL(fileURLWithPath: CommandLine.arguments[2])
         let temp = worker.deletingLastPathComponent()
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))
-        let model = Hades2TrainerModel(session: session, logSink: TrainerLogSink(url: temp.appendingPathComponent("log")),
-            backendScriptURL: worker, runLogDirectoryURL: temp.appendingPathComponent("no-game-log"))
-        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
+            logSink: TrainerLogSink(url: temp.appendingPathComponent("log")),
+            backendScriptURL: worker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temp.appendingPathComponent("no-game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+
         wait { model.backendAvailable && !model.busy && model.protocolCompatible }
         check(model.chaosGateProbability == nil, "default is not Native")
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
@@ -112,7 +116,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-frontend-') as directory
     home = temp / 'home'; home.mkdir()
     compile_swift_test(
         games=('hades2',),
-        harness_sources=[ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift', main],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift',
+            main,
+        ],
         output=binary,
         swiftc=SWIFTC,
     )

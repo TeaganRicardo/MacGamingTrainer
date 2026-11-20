@@ -19,10 +19,6 @@ package struct TrainerBackendStatus: Equatable {
     package init() {}
 }
 
-/// Runtime service around BackendClient. It is intentionally not ObservableObject:
-/// presentation models own observable state and receive immutable status values
-/// through `onStatusChange`.
-///
 /// Backend lifecycle recovery lives here instead of in a game module. An
 /// unexpected worker exit gets a bounded restart attempt; once the worker is
 /// back, the host-level target-process coordinator decides whether to reconnect
@@ -36,11 +32,11 @@ package final class TrainerBackendSession {
         let resetGameState: () -> Void
         let log: (String) -> Void
         let backendLog: (String) -> Void
-        let onStatusChange: (TrainerBackendStatus) -> Void
     }
 
     private let client: BackendClient
     private var status = TrainerBackendStatus()
+    private var statusObservers: [UUID: (TrainerBackendStatus, TrainerBackendStatus) -> Void] = [:]
     package private(set) var lifecycleID = UUID() {
         didSet { Array(lifecycleObservers.values).forEach { $0(lifecycleID) } }
     }
@@ -54,6 +50,8 @@ package final class TrainerBackendSession {
     private var terminationRequested = false
     private var targetLifetimeID = UUID()
     private var activeRequestTargetLifetimeID: UUID?
+    private var targetObservationID = UUID()
+    private var activeRequestTargetObservationID: UUID?
     private var activeRequestRequiresTrustedTarget = true
     private var uncertainFailure: BackendFailure?
     private var untrustedTargetLifetimeID: UUID?
@@ -64,18 +62,38 @@ package final class TrainerBackendSession {
 
     package var isRunning: Bool { client.isRunning }
     package var isStarted: Bool { client.isStarted }
-    var currentStatus: TrainerBackendStatus { status }
+    package var currentStatus: TrainerBackendStatus { status }
+
+    /// Observers receive the previous and current snapshot after publication.
+    /// A new observer can read `currentStatus` before the first transition.
+    @discardableResult
+    package func observeStatus(_ observer: @escaping (TrainerBackendStatus, TrainerBackendStatus) -> Void) -> UUID {
+        let id = UUID()
+        statusObservers[id] = observer
+        return id
+    }
+
+    package func removeStatusObserver(_ id: UUID) {
+        statusObservers.removeValue(forKey: id)
+    }
+
+    /// A target exit invalidates observations immediately. The independent
+    /// trust gate is released only on evidence of a new target lifetime.
+    func invalidateTargetObservation() { targetObservationID = UUID() }
+
+    var activeRequestHasCurrentTargetObservation: Bool {
+        activeRequestTargetObservationID == targetObservationID
+    }
     /// `restart()` needs the configuration recorded by a `start()` that got
     /// past script resolution; before that, a restart request is a no-op.
     var canRestart: Bool { !terminationRequested && configuration != nil }
 
-    package func start(
+    func start(
         descriptor: GameModuleDescriptor,
         backendScriptURL: URL? = nil,
         applyPayload: @escaping ([String: Any]) -> Void,
         resetGameState: @escaping () -> Void,
         log: @escaping (String) -> Void,
-        onStatusChange: @escaping (TrainerBackendStatus) -> Void,
         backendLog: ((String) -> Void)? = nil
     ) throws {
         guard !terminationRequested, !client.isStarted else { return }
@@ -83,7 +101,7 @@ package final class TrainerBackendSession {
         do {
             scriptURL = try resolveScriptURL(backendScriptURL)
         } catch {
-            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            publishStartupFailure(error, log: log)
             throw error
         }
         configuration = Configuration(
@@ -92,14 +110,13 @@ package final class TrainerBackendSession {
             applyPayload: applyPayload,
             resetGameState: resetGameState,
             log: log,
-            backendLog: backendLog ?? log,
-            onStatusChange: onStatusChange
+            backendLog: backendLog ?? log
         )
         automaticRecoveryAttempts = 0
         do {
             try startClient(clearStatus: true, recoveryNotice: nil)
         } catch {
-            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            publishStartupFailure(error, log: log)
             throw error
         }
     }
@@ -125,6 +142,9 @@ package final class TrainerBackendSession {
             completion?(false)
             return
         }
+        // A queued request was admitted against the old target even if it
+        // starts after a process change. Its receipt can still settle.
+        let admittedTargetObservationID = targetObservationID
         client.send(
             command,
             params: params,
@@ -135,6 +155,7 @@ package final class TrainerBackendSession {
             timeout: timeout,
             started: { [weak self] in
                 self?.activeRequestTargetLifetimeID = self?.targetLifetimeID
+                self?.activeRequestTargetObservationID = admittedTargetObservationID
                 self?.activeRequestRequiresTrustedTarget = requiresTrustedTarget
                 started?()
             },
@@ -147,7 +168,7 @@ package final class TrainerBackendSession {
     /// Restarts the worker in one action even when it is currently running.
     /// The old process remains owned until its termination callback fires, so a
     /// replacement worker cannot race the old stdout/LLDB state.
-    package func restart() {
+    func restart() {
         guard !terminationRequested, configuration != nil else { return }
         cancelRecovery()
         restartPending = true
@@ -175,7 +196,7 @@ package final class TrainerBackendSession {
         client.flushStderr()
     }
 
-    package func stop(suppressTerminationError: Bool = true) {
+    func stop(suppressTerminationError: Bool = true) {
         cancelRecovery()
         restartPending = false
         self.suppressTerminationError = suppressTerminationError
@@ -205,6 +226,7 @@ package final class TrainerBackendSession {
     /// Only definitive target-lifetime evidence releases a runtime trust gate.
     /// A new worker, activation, or the same PID does not establish that evidence.
     func targetLifetimeChanged() {
+        invalidateTargetObservation()
         targetLifetimeID = UUID()
         untrustedTargetLifetimeID = nil
         if uncertainFailure != nil {
@@ -225,11 +247,7 @@ package final class TrainerBackendSession {
         }
     }
 
-    private func publishStartupFailure(
-        _ error: Error,
-        log: (String) -> Void,
-        onStatusChange: (TrainerBackendStatus) -> Void
-    ) {
+    private func publishStartupFailure(_ error: Error, log: (String) -> Void) {
         let failure = BackendFailure(
             code: "backend_start_failed",
             presentation: "host.backend.error.startFailed",
@@ -242,8 +260,7 @@ package final class TrainerBackendSession {
         next.busy = false
         next.errorCode = failure.code
         next.error = failure.presentation
-        status = next
-        onStatusChange(next)
+        publishStatus(next)
         log("后端启动失败 [\(failure.code)]：\(failure.diagnostic ?? failure.presentation)")
     }
 
@@ -500,7 +517,12 @@ package final class TrainerBackendSession {
                 (next.requiresTargetRestart ? "host.backend.error.targetOutcomeUnknown" : "host.backend.error.outcomeUnknown")
             next.errorArguments = uncertainFailure.code == "outcome_unknown" ? uncertainFailure.presentationArguments : []
         }
+        publishStatus(next)
+    }
+
+    private func publishStatus(_ next: TrainerBackendStatus) {
+        let previous = status
         status = next
-        configuration?.onStatusChange(next)
+        Array(statusObservers.values).forEach { $0(previous, next) }
     }
 }

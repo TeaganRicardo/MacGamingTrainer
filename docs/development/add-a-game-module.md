@@ -25,6 +25,8 @@ The base reference fixture requires no LLDB, Lua, sidecar, Save provider or edit
 
 Call the Host-facing model and module UI factories on Swift's main actor. Swift harnesses that exercise these APIs use a main-actor entry point.
 
+`TrainerGameModule.makeModel(services:)` receives the Host-owned session, observable backend status, current target observation, descriptor, log sink and module-scoped hotkeys. The model supplies its game-specific payload and connection behavior. The Context records the target's log-session boundary before starting the backend and stops the session once the model's termination hook completes.
+
 ## Terminology, localization and shared responsibilities
 
 Native game terms come from the module's terminology owner and its verified reference sources. The current examples are `Backend/games/hades2/terminology.py` with the manifest-declared supported-build terminology resource, and Hades I's `catalog.py`, `world.py` and `save_owners.py`. Follow [terminology ownership](../../ENGINEERING_INVARIANTS.md#8-terminology-ownership) for bilingual native identities and Trainer-owned labels.

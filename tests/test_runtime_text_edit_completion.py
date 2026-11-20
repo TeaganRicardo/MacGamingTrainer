@@ -178,15 +178,17 @@ struct HeaderFixture: View {
    ((try? String(contentsOf:startups,encoding:.utf8)) ?? "").split(separator:"\n").count
   }
   let session=TrainerBackendSession(client:BackendClient(process:BackendProcess(executableURL:python,argumentsPrefix:["-u"])))
-  let model=Hades2TrainerModel(session:session,logSink:TrainerLogSink(url:temporary.appendingPathComponent("log")),backendScriptURL:worker,runLogDirectoryURL:temporary.appendingPathComponent("no-game-log"))
-  check(!session.isStarted && workerStartCount()==0,
-        "direct-model initialization eagerly started Backend before Host observed the target")
-  let initialObservation=TrainerTargetObservation(isRunning:false,launchGeneration:0)
-  model.hostTargetLifetimeChanged(observation:initialObservation)
+  let monitor=TrainerTargetProcessMonitor(snapshot: { .init(isRunning:true,launchGeneration:0) })
+  let context=TrainerGameContext<Hades2GameModule>(session:session,backendScriptURL:worker,
+    logSink:TrainerLogSink(url:temporary.appendingPathComponent("log")),targetMonitor:monitor) {
+      Hades2TrainerModel(services:$0,runLogDirectoryURL:temporary.appendingPathComponent("no-game-log"),
+        shortcutDefaults:InMemoryDefaults())
+  }
+  let model=context.model
   wait { model.canSetResource && !model.busy }
   check(session.isStarted && workerStartCount()==1,
-        "Host initial target observation did not start exactly one Backend worker")
-  model.hostTargetLifetimeChanged(observation:initialObservation)
+        "Context did not start exactly one Backend worker")
+  monitor.refresh()
   pump(0.15)
   check(model.canSetResource && workerStartCount()==1,
         "duplicate initial observation restarted the Backend worker")
@@ -801,7 +803,7 @@ struct HeaderFixture: View {
         "explicit generation ran before the completed probability or was replayed")
 
   phase("editing:disconnect")
-  model.toggleConnectionFromHost(); wait { !model.connected && !model.busy }
+  model.disconnectFromHost(); wait { !model.connected && !model.busy }
   let resourceCount=commands("set_resource").count
   check(model.completeTextEdit(.resource("Money"),text:"999",generation:model.editGeneration)=="200", "disconnected direct edit did not restore current state")
   pump(0.45); check(commands("set_resource").count==resourceCount, "disconnected runtime edit was submitted")

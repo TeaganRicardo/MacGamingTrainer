@@ -55,7 +55,10 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
         # Older --baseline-ref archives predate the shared JSON decoder.
         if (source / 'Sources/Core/Runtime/TrainerJSON.swift').exists():
             runtime_sources.append('TrainerJSON')
+        session_source = source / 'Sources/Core/Runtime/TrainerBackendSession.swift'
+        legacy_status = ['-D', 'MGT_PROFILE_LEGACY_SESSION_STATUS'] if 'onStatusChange:' in session_source.read_text() else []
         subprocess.run([compiler, '-parse-as-library', '-O', '-package-name', SWIFT_PACKAGE_NAME,
+            *legacy_status,
             *(str(source / ('Sources/Core/Runtime/' + name + '.swift'))
             for name in runtime_sources),
             str(main), '-o', str(binary)], check=True, capture_output=True, text=True, timeout=60)

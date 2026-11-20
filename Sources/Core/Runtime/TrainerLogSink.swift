@@ -144,7 +144,7 @@ package final class TrainerLogSink {
         self.managedSessions = false
     }
 
-    package init(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+    init(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
         let gameDirectory = Self.moduleLogDirectory(gameID: gameID, homeDirectory: homeDirectory)
         self.url = gameDirectory.appendingPathComponent("trainer.log")
         self.hostURL = gameDirectory.appendingPathComponent("trainer-host.log")
@@ -227,7 +227,7 @@ package final class TrainerLogSink {
 
     /// Enter or leave one OS target-process lifetime. Reconnects and Backend
     /// restarts never call this seam, so they remain inside the same session.
-    package func targetLifetimeChanged(running: Bool, identity: TargetIdentity) {
+    func targetLifetimeChanged(running: Bool, identity: TargetIdentity) {
         guard managedSessions else { return }
         queue.sync {
             do {

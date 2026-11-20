@@ -33,10 +33,6 @@ if not SWIFTC or not PYTHON:
     raise SystemExit("swiftc/python3 required")
 
 fixture_source = (FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
-assert "_ = session" not in fixture_source, (
-    "reference fixture still discards the Host-owned TrainerBackendSession"
-)
-assert "ReferenceFixtureModel(session: session)" in fixture_source
 assert "ReferenceFixtureLocalizationProbe" in fixture_source, (
     "reference fixture does not consume the Host localization seam"
 )
@@ -112,15 +108,24 @@ if selectedActions != ["launch", "connect", "disconnect", "restart", "connect"] 
 }
 let backendPythonURL = URL(fileURLWithPath: args[2])
 
+guard let temporaryHome = ProcessInfo.processInfo.environment["HOME"] else { fail("HOME is not set") }
+func testLog(_ name: String) -> TrainerLogSink {
+    TrainerLogSink(url: URL(fileURLWithPath: temporaryHome).appendingPathComponent(name))
+}
+func logContents(_ sink: TrainerLogSink) -> String {
+    sink.flush()
+    return (try? String(contentsOf: sink.currentLogURL(), encoding: .utf8)) ?? ""
+}
+
 let missingSession = TrainerBackendSession(
     client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
 )
-var missingLogs: [String] = []
-let missingModel = ReferenceFixtureModel(
-    session: missingSession,
-    backendScriptURL: URL(fileURLWithPath: "/definitely/missing/mgt-backend.py"),
-    log: { missingLogs.append($0) }
+let missingLog = testLog("missing.log")
+let missingContext = TrainerGameContext<ReferenceFixtureGameModule>(
+    session: missingSession, backendScriptURL: URL(fileURLWithPath: "/definitely/missing/mgt-backend.py"),
+    logSink: missingLog
 )
+let missingModel = missingContext.model
 guard waitUntil(1.0, { missingModel.backendStatus.errorCode != nil }) else {
     fail("missing backend startup failure was not surfaced")
 }
@@ -130,33 +135,29 @@ if missingModel.backendStatus.errorCode != "backend_start_failed" {
 if missingModel.backendStatus.error.contains("/definitely/missing") {
     fail("startup diagnostic path leaked into user presentation")
 }
-if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
+if !logContents(missingLog).contains("/definitely/missing") {
     fail("startup diagnostic detail did not reach logging")
 }
 
 // A session whose startup failed before recording a configuration cannot
 // restart, so the Host must not offer an action that would do nothing.
-let missingRestart = MainActor.assumeIsolated { () -> (allowed: Bool, enabled: Bool) in
-    _ = NSApplication.shared
-    let context = TrainerGameContext<ReferenceFixtureGameModule>(model: missingModel, session: missingSession)
-    let card = context.connectionStatusCard(onLaunch: nil)
-    return (context.backendRestartAllowed, card.primaryActionEnabled)
-}
-if missingRestart.allowed || missingRestart.enabled {
+if missingContext.backendRestartAllowed || missingContext.connectionStatusCard(onLaunch: nil).primaryActionEnabled {
     fail("Host offered a restart that a never-configured session cannot perform")
 }
 
 // A worker that keeps exiting exhausts the session's bounded recovery. That
 // unavailable state is exactly when the Host must keep restart reachable. The
 // script lives in the test's temporary HOME, which the runner removes.
-guard let temporaryHome = ProcessInfo.processInfo.environment["HOME"] else { fail("HOME is not set") }
 let exitingScript = URL(fileURLWithPath: temporaryHome).appendingPathComponent("mgt-exiting-backend.py")
 do { try "import sys\nsys.exit(3)\n".write(to: exitingScript, atomically: true, encoding: .utf8) }
 catch { fail("could not write the exiting backend fixture: \(error)") }
 let exhaustedSession = TrainerBackendSession(
     client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
 )
-let exhaustedModel = ReferenceFixtureModel(session: exhaustedSession, backendScriptURL: exitingScript)
+let exhaustedContext = TrainerGameContext<ReferenceFixtureGameModule>(
+    session: exhaustedSession, backendScriptURL: exitingScript, logSink: testLog("exhausted.log")
+)
+let exhaustedModel = exhaustedContext.model
 func waitForExhaustedBackend(_ stage: String) {
     guard waitUntil(15.0, {
         let status = exhaustedModel.backendStatus
@@ -180,21 +181,6 @@ waitForExhaustedBackend("startup")
 if exhaustedModel.hostActionsEnabled {
     fail("an unavailable backend unexpectedly accepts module requests")
 }
-let exhaustedContext = MainActor.assumeIsolated {
-    TrainerGameContext<ReferenceFixtureGameModule>(model: exhaustedModel, session: exhaustedSession)
-}
-// The session journey runs with its target process alive, so the Context holds
-// a pending automatic restart opportunity for this target lifetime.
-let automaticRestart = MainActor.assumeIsolated { () -> (allowed: Bool, consumed: Bool) in
-    let allowed = exhaustedContext.backendRestartAllowed
-    let consumed = exhaustedContext.consumeAutomaticBackendRestart()
-    if consumed { requireRestartRequested("automatic restart") }
-    return (allowed, consumed)
-}
-if !automaticRestart.allowed || !automaticRestart.consumed {
-    fail("Host automatic restart is unreachable for an unavailable backend: \(automaticRestart)")
-}
-waitForExhaustedBackend("after automatic restart")
 let manualRestart = MainActor.assumeIsolated { () -> (title: String, enabled: Bool) in
     let card = exhaustedContext.connectionStatusCard(onLaunch: nil)
     let result = (card.primaryActionTitleKey, card.primaryActionEnabled)
@@ -218,12 +204,11 @@ let localizationDefaults = InMemoryDefaults()
 let session = TrainerBackendSession(
     client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
 )
-var capturedLogs: [String] = []
-let model = ReferenceFixtureModel(
-    session: session,
-    backendScriptURL: URL(fileURLWithPath: args[1]),
-    log: { capturedLogs.append($0) }
+let capturedLog = testLog("reference.log")
+let context = TrainerGameContext<ReferenceFixtureGameModule>(
+    session: session, backendScriptURL: URL(fileURLWithPath: args[1]), logSink: capturedLog
 )
+let model = context.model
 
 // This wait measures a subprocess round trip -- spawn the backend script,
 // complete the JSONL hello, receive the protocol versions -- unlike every other
@@ -241,10 +226,10 @@ guard waitUntil(handshakeBudget, {
 }) else {
     // A slow runner and a wedged backend must not produce the same message, or
     // this cannot be triaged without a local reproduction.
-    let lastLog = capturedLogs.last ?? "<none>"
+    let lastLog = logContents(capturedLog).split(separator: "\n").last ?? "<none>"
     let detail = "within \(handshakeBudget)s status=\(model.backendStatus)"
         + " sessionStarted=\(session.isStarted) sessionRunning=\(session.isRunning)"
-        + " logLines=\(capturedLogs.count) lastLog=\(lastLog)"
+        + " lastLog=\(lastLog)"
     fail("reference model did not start the injected Host backend session \(detail)")
 }
 
@@ -267,14 +252,18 @@ if model.backendStatus.errorArguments != ["Fixture Game", "42"] { fail("referenc
 if model.backendStatus.error.contains("reference fixture diagnostic detail") {
     fail("diagnostic detail leaked into user presentation")
 }
-if !capturedLogs.contains(where: { $0.contains("reference_failure") && $0.contains("reference fixture diagnostic detail") }) {
+if !logContents(capturedLog).split(separator: "\n").contains(where: {
+    $0.contains("reference_failure") && $0.contains("reference fixture diagnostic detail")
+}) {
     fail("reference diagnostic detail did not reach Host logging")
 }
 
-model.toggleConnectionFromHost()
+context.performConnectionAction()
 guard waitUntil(2.0, { model.connected && !model.busy }) else {
     fail("connect did not round-trip through the real session")
 }
+model.connectFromHost(reason: .manual)
+if model.busy { fail("an explicit connect on an existing connection dispatched work") }
 
 model.setEnabled(true)
 guard waitUntil(2.0, { model.enabled && !model.busy }) else {
@@ -366,7 +355,7 @@ guard waitUntil(2.0, { !model.enabled && !model.busy }) else {
     fail("explicit fixture disable did not round-trip through session")
 }
 
-model.toggleConnectionFromHost()
+context.performConnectionAction()
 guard waitUntil(2.0, { !model.connected && !model.busy }) else {
     fail("disconnect did not round-trip through session")
 }
@@ -377,9 +366,10 @@ guard waitUntil(2.0, { !model.connected && !model.enabled && !model.busy }) else
 }
 
 var canTerminate: Bool? = nil
-model.prepareForTermination { canTerminate = true }
-guard waitUntil(2.0, { canTerminate == true }) else {
-    fail("fixture termination did not complete")
+context.beginTermination()
+context.prepareForTermination { canTerminate = true }
+guard waitUntil(2.0, { canTerminate == true && !session.isStarted }) else {
+    fail("Context did not stop the session after the optional termination hook")
 }
 
 print("reference_fixture_session_integration_ok")

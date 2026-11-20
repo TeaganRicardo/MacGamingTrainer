@@ -5,7 +5,7 @@ struct MaterialResource: Identifiable {
     let name: String
     let englishName: String
     let count: Double
-    let locked: Bool
+    var locked: Bool
     let sectionTitle: String
     let englishSectionTitle: String
     let sortOrder: Int
@@ -170,7 +170,7 @@ struct ElementCount: Identifiable, Equatable {
     let id: String
     let name: String
     let count: Double
-    let locked: Bool
+    var locked: Bool
 }
 
 struct TrainerProfile: Identifiable {

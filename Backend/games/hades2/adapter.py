@@ -164,6 +164,7 @@ class Hades2Adapter(GameAdapter):
             self.preference_initialized and not self.preference_write_blocked
         )
         self._preference_persistence_dirty=False
+        self._target_observations_retired = False
         self._overlay_preferences()
 
     @staticmethod
@@ -226,6 +227,9 @@ class Hades2Adapter(GameAdapter):
         return result
 
     def _overlay_preferences(self):
+        # After retirement, an amount can come only from a current durable lock
+        # until the resident reports a fresh observation.
+        observations_retired = self._target_observations_retired
         defaults=desired_feature_defaults()
         desired={key:bool(self.preferences.get(key,defaults[key])) for key in TOGGLES}
         self.state['desiredFeatures']=desired
@@ -240,7 +244,11 @@ class Hades2Adapter(GameAdapter):
             row=stats.get(stat) if isinstance(stats.get(stat),dict) else {}
             row=dict(row,locked=True,target=target,value=target);stats[stat]=row
         for stat,row in stats.items():
-            if stat not in stat_locks and isinstance(row,dict):row['locked']=False;row['target']=None
+            if stat not in stat_locks and isinstance(row,dict):
+                row['locked'] = False
+                row['target'] = None
+                if observations_retired:
+                    row['value'] = None
         self.state['stats']=stats
         vital=self.preferences.get('vitalLocks',{}) if isinstance(self.preferences.get('vitalLocks'),dict) else {}
         for key in ('health','mana','armor'):
@@ -248,19 +256,19 @@ class Hades2Adapter(GameAdapter):
         resources=self.preferences.get('resourceLocks',{}) if isinstance(self.preferences.get('resourceLocks'),dict) else {}
         self.state['biomeTimeLocked']=self.preferences.get('biomeTimerFrozen') is True
         self.state['moneyLocked']='Money' in resources
-        if 'Money' in resources:self.state['money']=resources['Money']
-        for item in self.state.get('resources',[]):
-            if isinstance(item,dict) and isinstance(item.get('id'),str):
-                item['locked']=item['id'] in resources
-                if item['locked']:item['count']=resources[item['id']]
+        if observations_retired or 'Money' in resources:
+            self.state['money'] = resources.get('Money')
         reroll=self.preferences.get('rerollsLock')
         self.state['rerollsLocked']=reroll is not None
-        if reroll is not None:self.state['rerolls']=reroll
+        if observations_retired or reroll is not None:
+            self.state['rerolls'] = reroll
         elements=self.preferences.get('elementLocks',{}) if isinstance(self.preferences.get('elementLocks'),dict) else {}
-        for item in self.state.get('elements',[]):
-            if isinstance(item,dict) and isinstance(item.get('id'),str):
-                item['locked']=item['id'] in elements
-                if item['locked']:item['count']=elements[item['id']]
+        for domain, locks in (('resources', resources), ('elements', elements)):
+            for item in self.state.get(domain, []):
+                if isinstance(item, dict) and isinstance(item.get('id'), str):
+                    item['locked'] = item['id'] in locks
+                    if observations_retired or item['locked']:
+                        item['count'] = locks.get(item['id'])
         self._project_time_warp()
 
     def _project_time_warp(self):
@@ -720,6 +728,28 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         return dict(self.state)
 
+    def _retire_target_observations(self):
+        # A waiting connection can publish this cache before the new resident
+        # has supplied any observations. Clear the old process's values
+        # explicitly so both full snapshots and sparse replies retire them.
+        self._target_observations_retired = True
+        self.state.update(dict.fromkeys((
+            "health", "maxHealth", "mana", "maxMana", "availableMana", "totalMaxMana",
+            "armor", "spellCharge", "spellChargeCost", "biomeTime", "money", "rerolls",
+            "runCount", "currentRunTraitsReason", "chaosGateTarget", "lastAction", "runtimeDiagnostics",
+        )))
+        self.state.update(
+            currentRunTraits=[], facilityOptions=[], stats={}, statSupport={}, statAvailable={},
+            featureSupport={}, featureErrors={}, featureErrorPresentations={},
+        )
+        for key in (*ACTION_RESULT_FIELDS, "residentDesiredLocks", "runtimeOutcomeUnknown", "error"):
+            self.state.pop(key, None)
+        # Row identity and names are catalog data. A count is absent until the
+        # new process reports it or this worker reprojects a durable lock.
+        for key in ("resources", "elements"):
+            self.state[key] = [dict(row, count=None) for row in self.state[key]]
+        self._overlay_preferences()
+
     def scan(self):
         try:
             identity=preparation.compatibility(strict=False)
@@ -736,15 +766,19 @@ class Hades2Adapter(GameAdapter):
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。')
         pid=pids[0] if pids else None
+        previous_pid=self.state.get('pid')
+        attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
         if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
-            attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
             same_process=pid is not None and attached_pid is not None and pid==attached_pid
             if not same_process:clear_active(self.state,preserve_desired=True)
             self._detach_runtime()
-        elif self.state.get('pid') is not None and pid!=self.state.get('pid'):
-            # A different game process cannot contain the prior session-local Lua module.
-            clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
-        previous_pid=self.state.get('pid')
+        elif previous_pid is not None and pid!=previous_pid:
+            clear_active(self.state,preserve_desired=True)
+            self.state['connected']=False
+        observed_pid=previous_pid or attached_pid
+        if observed_pid is not None and pid!=observed_pid:
+            # A failed detach still owns the old PID and never reaches here.
+            self._retire_target_observations()
         self.state['pid']=pid
         if pid!=previous_pid:
             self.runtime.invalidate_generation()
@@ -851,6 +885,9 @@ class Hades2Adapter(GameAdapter):
         # runtime values. Only expensive catalogs may be omitted. Profile/Save
         # command patches bypass this seam and retain Swift's absence semantics.
         decoded=dict(reply.payload) if isinstance(reply.payload,dict) else {}
+        # The native status projection establishes the new observation baseline.
+        if 'status' in decoded:
+            self._target_observations_retired = False
         prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
         catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
         if prior_warnings or catalog_warnings:

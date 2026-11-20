@@ -33,10 +33,10 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
 struct Main {
     static func main() {
         let session = TrainerBackendSession()
-        let model = Hades2TrainerModel(
-            session: session,
-            logSink: TrainerLogSink(url: URL(fileURLWithPath: "/dev/null"))
-        )
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
+            logSink: TrainerLogSink(url: URL(fileURLWithPath: "/dev/null"))) {
+            Hades2TrainerModel(services: $0, shortcutDefaults: InMemoryDefaults())
+        }
 
         // Full snapshots publish their collections. An unrelated scalar
         // mutation patch must preserve them without another publication or
@@ -51,15 +51,15 @@ struct Main {
             model.$boons.dropFirst().sink { _ in boonPublications += 1 },
             model.$elements.dropFirst().sink { _ in elementPublications += 1 },
         ]
-        model.apply(["resources": [], "currentRunTraits": [], "boons": [], "elements": []])
+        model.applyBackendPayload(["resources": [], "currentRunTraits": [], "boons": [], "elements": []])
         check(resourcePublications == 1 && traitPublications == 1
                 && boonPublications == 1 && elementPublications == 1,
               "full snapshot omitted a collection publication")
-        model.apply(["health": 88.0])
+        model.applyBackendPayload(["health": 88.0])
         check(model.health == 88 && resourcePublications == 1 && traitPublications == 1
                 && boonPublications == 1 && elementPublications == 1,
               "scalar mutation patch rebuilt an unchanged collection")
-        model.apply(["resources": [["id": "MetaCurrency", "name": "Synthetic Resource", "count": 42]]])
+        model.applyBackendPayload(["resources": [["id": "MetaCurrency", "name": "Synthetic Resource", "count": 42]]])
         check(resourcePublications == 2 && traitPublications == 1
                 && boonPublications == 1 && elementPublications == 1,
               "resource patch published an unrelated collection")
@@ -71,11 +71,11 @@ struct Main {
             "generationId": "generation", "runId": "run", "instanceId": "selected-502",
             "name": "OrdinaryDuplicate", "removalCapability": "nameLevelAllMatching",
         ]
-        model.apply(["currentRunTraits": [selectedTrait]])
+        model.applyBackendPayload(["currentRunTraits": [selectedTrait]])
         check(model.currentRunTraits.count == 1 && !model.currentRunTraits[0].canRemove,
               "legacy all-matching capability authorized selected-instance removal")
         selectedTrait["removalCapability"] = "singleInstanceForce"
-        model.apply(["currentRunTraits": [selectedTrait]])
+        model.applyBackendPayload(["currentRunTraits": [selectedTrait]])
         check(model.currentRunTraits[0].canRemove && model.currentRunTraits[0].instanceID == "selected-502",
               "single-instance capability lost selected identity")
 
@@ -93,21 +93,21 @@ struct Main {
         // U-03: a sparse payload cannot clear a warning. Explicit null or an
         // empty warnings array clears it; nonempty values replace it.
         model.warning = "stale warning"
-        model.apply([:])
+        model.applyBackendPayload([:])
         check(model.warning == "stale warning", "absent warning cleared the prior value")
-        model.apply(["warning": NSNull()])
+        model.applyBackendPayload(["warning": NSNull()])
         check(model.warning.isEmpty, "null warning did not clear the prior value")
-        model.apply(["warnings": ["current warning"]])
+        model.applyBackendPayload(["warnings": ["current warning"]])
         check(model.warning == "current warning", "present warnings array was not displayed")
-        model.apply(["status": "ready"])
+        model.applyBackendPayload(["status": "ready"])
         check(model.warning == "current warning", "unrelated status erased the warning")
-        model.apply(["warnings": [String]()])
+        model.applyBackendPayload(["warnings": [String]()])
         check(model.warning.isEmpty, "empty warnings array did not clear the prior value")
-        model.apply(["warning": "current warning"])
+        model.applyBackendPayload(["warning": "current warning"])
         check(model.warning == "current warning", "present warning string was not displayed")
-        model.apply(["warnings": NSNull(), "warning": "stale legacy warning"])
+        model.applyBackendPayload(["warnings": NSNull(), "warning": "stale legacy warning"])
         check(model.warning.isEmpty, "null warnings did not clear or defer to legacy warning")
-        model.apply(["warnings": ["array wins"], "warning": "legacy value"])
+        model.applyBackendPayload(["warnings": ["array wins"], "warning": "legacy value"])
         check(model.warning == "array wins", "warnings array did not take precedence")
 
         // Resident full snapshots explicitly clear nullable run observations;
@@ -131,7 +131,7 @@ struct Main {
                 "leaseToken": "occurrence-lease-1",
             ],
         ]
-        model.apply([
+        model.applyBackendPayload([
             "spellChargeCost": 20.0,
             "worldActions": sampleWorldActions,
             "occurrenceTargets": [
@@ -139,7 +139,7 @@ struct Main {
                 ["id": "shop:Charon", "kind": "shop", "sourceId": "Charon"],
             ],
         ])
-        model.apply(["profiles": []])
+        model.applyBackendPayload(["profiles": []])
         check(
             model.spellChargeCost == 20
                 && model.worldActionExits.count == 1
@@ -148,7 +148,7 @@ struct Main {
                 && model.occurrenceTargets.map(\.id) == ["npc:Nemesis", "shop:Charon"],
             "sparse Profile payload erased run or world-action state"
         )
-        model.apply([
+        model.applyBackendPayload([
             "spellChargeCost": NSNull(),
             "worldActions": ["exits": [[String: Any]]()],
         ])
@@ -164,7 +164,7 @@ struct Main {
         // arguments across the untyped backend payload. Legacy runtime-owned
         // featureErrors remain usable beside it rather than forcing either
         // owner into the other's localization table.
-        model.apply([
+        model.applyBackendPayload([
             "featureErrors": ["invincibility": "native runtime refusal"],
             "featureErrorPresentations": [
                 "gameSpeed": [
@@ -180,7 +180,7 @@ struct Main {
               "Host feature presentation key was flattened or lost")
         check(speedIssue?.token.arguments == ["-7"],
               "Host feature presentation arguments were lost")
-        model.apply(["status": "ready"])
+        model.applyBackendPayload(["status": "ready"])
         check(model.runtimeIssuePresentations.count == 2,
               "sparse state update erased runtime issue presentations")
 
@@ -195,7 +195,7 @@ struct Main {
         model.boonForceDuo = true
         model.moneyMultiplierEnabled = true
         model.resourceMultiplierEnabled = true
-        model.apply(["worldActions": sampleWorldActions])
+        model.applyBackendPayload(["worldActions": sampleWorldActions])
 
         model.connected = true
         model.pid = 123
@@ -266,11 +266,11 @@ struct Main {
             "outcome": "failed",
             "error": "synthetic failure",
         ]
-        model.apply(["lastAction": receipt])
+        model.applyBackendPayload(["lastAction": receipt])
         check(!model.noticeText.key.isEmpty, "action receipt was not presented before reset")
         check(model.noticeText.key == "hades2.receipt.accepted", "receipt did not present the accepted copy")
 
-        model.resetAfterBackendTermination()
+        model.backendDidStop()
 
         // U-04: backend termination must discard only observed/session state.
         check(!model.connected && model.pid == nil, "connection identity survived termination")
@@ -323,7 +323,7 @@ struct Main {
         // A Hades-owned token must not outlive a newer Core-owned message.
         // The banner prefers the Hades token, so a stale receipt error would
         // otherwise mask a real Core failure -- and a real success notice.
-        model.apply(["lastAction": failedReceipt])
+        model.applyBackendPayload(["lastAction": failedReceipt])
         check(!model.errorText.key.isEmpty, "a failed receipt did not present an error")
         model.error = "host.backend.error.operationFailed"
         check(model.errorText.key.isEmpty,
@@ -341,7 +341,7 @@ struct Main {
         // was still owned. Asserted on presented state, not on source text.
         model.clearPresentedNoticeForTest()
         model.clearPresentedErrorForTest()
-        model.apply(["lastAction": [
+        model.applyBackendPayload(["lastAction": [
             "requestId": "request-3",
             "command": "remove_trait",
             "outcome": "failed",
@@ -356,16 +356,16 @@ struct Main {
 
         // The receipt must be forgotten so an identical receipt from a new
         // backend lifetime is presented rather than deduplicated as stale.
-        model.apply(["lastAction": receipt])
+        model.applyBackendPayload(["lastAction": receipt])
         check(!model.noticeText.key.isEmpty, "last action receipt was not presented after termination")
         // Deduplication is keyed on receipt identity, not on the presented copy,
         // so the same receipt is suppressed until the copy is cleared.
         model.clearPresentedNoticeForTest()
-        model.apply(["lastAction": receipt])
+        model.applyBackendPayload(["lastAction": receipt])
         check(model.noticeText.key.isEmpty, "identical receipt was not deduplicated within one backend lifetime")
-        model.resetAfterBackendTermination()
+        model.backendDidStop()
         model.clearPresentedNoticeForTest()
-        model.apply(["lastAction": receipt])
+        model.applyBackendPayload(["lastAction": receipt])
         check(!model.noticeText.key.isEmpty, "last action receipt deduplication survived backend termination")
 
         // Durable desired intent remains available for replay.
@@ -394,8 +394,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-state-cleanup-") as td:
     main_path.write_text(harness, encoding="utf-8")
 
     model_source = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
-    model_source = model_source.replace("private func apply(_ payload:", "func apply(_ payload:")
-    model_source = model_source.replace("private func resetAfterBackendTermination()", "func resetAfterBackendTermination()")
     # Same-file helpers can clear private tokens without rewriting their
     # declarations or property observers in the production model.
     model_source += """
@@ -411,7 +409,11 @@ extension Hades2TrainerModel {
     compile_swift_test(
         games=("hades2",),
         patched={ROOT / "Sources/Hades2/Hades2Model.swift": testable_model},
-        harness_sources=[main_path],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            main_path,
+        ],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

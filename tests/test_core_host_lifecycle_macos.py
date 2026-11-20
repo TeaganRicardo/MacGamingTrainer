@@ -33,8 +33,22 @@ int main(void) {
 '''
 
 WORKER_PY = r'''
-import sys, time
-time.sleep(15)
+import argparse, json, sys, time
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--game", required=True)
+args = parser.parse_args()
+for raw in sys.stdin:
+    request = json.loads(raw)
+    if request["command"] == "wait":
+        release = Path(request["params"]["release"])
+        deadline = time.monotonic() + 5
+        while not release.exists() and time.monotonic() < deadline:
+            time.sleep(0.005)
+    print(json.dumps({"type": "result", "id": request["id"], "ok": True,
+        "protocolVersion": 6, "moduleProtocolVersion": 1, "gameID": args.game,
+        "result": {}}), flush=True)
 '''
 
 HARNESS = r'''
@@ -102,55 +116,58 @@ final class FakeRunningApp: NSRunningApplication, @unchecked Sendable {
 }
 
 final class LifecycleStubModel: TrainerHostModel {
-    var backendAvailable: Bool = false
-    var busy: Bool = false
     var connected: Bool = false
-    var operation = TrainerTextToken(key: "")
     var statusTitle = TrainerTextToken(key: "host.disconnected")
     var connectionDetailText = TrainerTextToken(key: "lifecycleFixture.detail")
     var hostActionsEnabled: Bool = true
     var launchActionFromHost: (@MainActor () -> Void)? = nil
 
-    var toggleConnectionCount = 0
+    var manualConnectCount = 0
     var connectAutomaticallyCalls: [Bool] = []
     var refreshCount = 0
     var didBecomeActiveCount = 0
     var targetLifetimeObservations: [TrainerTargetObservation] = []
     var restartBackendCount = 0
+    var staleReplyCount = 0
 
     func notifyChanged() {
         objectWillChange.send()
     }
 
-    func toggleConnectionFromHost() { toggleConnectionCount += 1 }
-    func connectAutomaticallyFromHost(targetJustLaunched: Bool) { connectAutomaticallyCalls.append(targetJustLaunched) }
+    func connectFromHost(reason: TrainerHostConnectReason) {
+        switch reason {
+        case .manual: manualConnectCount += 1
+        case .automatic(let targetJustLaunched): connectAutomaticallyCalls.append(targetJustLaunched)
+        }
+    }
+    func disconnectFromHost() {}
     func refreshFromHost() { refreshCount += 1 }
     func hostDidBecomeActive() { didBecomeActiveCount += 1 }
-    func hostTargetLifetimeChanged(running: Bool) {}
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
         targetLifetimeObservations.append(observation)
     }
-    func restartBackendFromHost() { restartBackendCount += 1 }
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .lifetime }
+    func applyStaleBackendPayload(_ payload: [String: Any]) { staleReplyCount += 1 }
+    func backendWillRestart() { restartBackendCount += 1 }
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
 
 final class DefaultBehaviorStubModel: TrainerHostModel {
-    var backendAvailable: Bool = true
-    var busy: Bool = false
     var connected: Bool = false
-    var operation = TrainerTextToken(key: "")
     var statusTitle = TrainerTextToken(key: "host.disconnected")
     var connectionDetailText = TrainerTextToken(key: "")
     var hostActionsEnabled: Bool = true
 
-    var toggleConnectionCount = 0
     var refreshCount = 0
     var restartBackendCount = 0
 
-    func toggleConnectionFromHost() { toggleConnectionCount += 1 }
+    var automaticConnectCount = 0
+    func connectFromHost(reason: TrainerHostConnectReason) {
+        if case .automatic = reason { automaticConnectCount += 1 }
+    }
+    func disconnectFromHost() {}
     func refreshFromHost() { refreshCount += 1 }
-    func hostTargetLifetimeChanged(running: Bool) {}
-    func restartBackendFromHost() { restartBackendCount += 1 }
+    func backendWillRestart() { restartBackendCount += 1 }
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
 
@@ -173,7 +190,7 @@ enum LifecycleStubModule: TrainerGameModule {
         supportsSaveManagement: false
     )
     static let presentation = TrainerGamePresentation(headerTitle: "Lifecycle Stub")
-    static func makeModel(session: TrainerBackendSession) -> LifecycleStubModel { LifecycleStubModel() }
+    static func makeModel(services: TrainerModuleServices) -> LifecycleStubModel { LifecycleStubModel() }
     static func makeContent(model: LifecycleStubModel) -> some View {
         Text("Lifecycle Content")
             .accessibilityIdentifier("lifecycleFixture.content")
@@ -201,7 +218,7 @@ enum LifecycleStubModule: TrainerGameModule {
 enum DefaultBehaviorStubModule: TrainerGameModule {
     static let descriptor = LifecycleStubModule.descriptor
     static let presentation = LifecycleStubModule.presentation
-    static func makeModel(session: TrainerBackendSession) -> DefaultBehaviorStubModel { DefaultBehaviorStubModel() }
+    static func makeModel(services: TrainerModuleServices) -> DefaultBehaviorStubModel { DefaultBehaviorStubModel() }
     static func makeContent(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
     static func makeSidebarActions(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
     static func makeHeaderActions(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
@@ -209,26 +226,6 @@ enum DefaultBehaviorStubModule: TrainerGameModule {
         TrainerEmptyCommands()
     }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
-}
-
-@MainActor
-func makeRestartableStoppedSession(pythonURL: URL, workerURL: URL) throws -> TrainerBackendSession {
-    let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
-        executableURL: pythonURL, argumentsPrefix: ["-u"], forceKillDelay: 0.05
-    )))
-    try session.start(
-        descriptor: LifecycleStubModule.descriptor,
-        backendScriptURL: workerURL,
-        applyPayload: { _ in },
-        resetGameState: {},
-        log: { _ in },
-        onStatusChange: { _ in }
-    )
-    session.stop()
-    waitUntil(3.0, message: "stopped session settles with canRestart == true") {
-        !session.isStarted && !session.currentStatus.busy && session.canRestart
-    }
-    return session
 }
 
 func spawnTargetProcess(at url: URL) throws -> Process {
@@ -284,11 +281,27 @@ struct Runner {
         check(localization.localized("host.shortcutSettings") != "host.shortcutSettings",
               "Host.strings table did not load beside test executable")
 
-        // 1. Atomic launch observation & background launch attach + default protocol forwarding.
+        func makeContext<Module: TrainerGameModule>(_ module: Module.Type, model: Module.Model) -> TrainerGameContext<Module> {
+            let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+                executableURL: pythonURL, argumentsPrefix: ["-u"], forceKillDelay: 0.05
+            )))
+            let log = TrainerLogSink(url: workerURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString))
+            return TrainerGameContext<Module>(session: session, backendScriptURL: workerURL, logSink: log) { _ in model }
+        }
+
+        func stopWorker(_ session: TrainerBackendSession) {
+            session.stop()
+            waitUntil(message: "worker stops with a restartable configuration") {
+                !session.isStarted && !session.currentStatus.busy && session.canRestart
+            }
+        }
+
+        // 1. Atomic launch observation and explicit automatic connect.
         do {
             let model = LifecycleStubModel()
-            model.backendAvailable = true
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
             var observations: [TrainerTargetObservation] = []
             let sub = context.targetMonitor.$targetObservation.dropFirst().sink { observations.append($0) }
 
@@ -305,9 +318,8 @@ struct Runner {
             let defaultModel = DefaultBehaviorStubModel()
             check(defaultModel.launchActionFromHost == nil,
                   "TrainerHostModel default launchActionFromHost must be nil")
-            let defaultContext = TrainerGameContext<DefaultBehaviorStubModule>(
-                model: defaultModel, session: TrainerBackendSession()
-            )
+            let defaultContext = makeContext(DefaultBehaviorStubModule.self, model: defaultModel)
+            defer { defaultContext.session.stop() }
             localization.language = .en
             let defaultWindow = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 320, height: 320),
@@ -331,11 +343,11 @@ struct Runner {
             defaultWindow.close()
 
             postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41009)
-            check(defaultModel.toggleConnectionCount == 1,
-                  "TrainerHostModel default connectAutomaticallyFromHost did not forward to toggleConnectionFromHost")
+            check(defaultModel.automaticConnectCount == 1,
+                  "automatic launch did not call the explicit connect action")
             NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
             pump(0.05)
-            check(defaultModel.refreshCount == 0 && defaultModel.toggleConnectionCount == 1
+            check(defaultModel.refreshCount == 0 && defaultModel.automaticConnectCount == 1
                   && defaultModel.restartBackendCount == 0,
                   "TrainerHostModel default hostDidBecomeActive caused unexpected side effects")
             withExtendedLifetime(defaultContext) {}
@@ -343,10 +355,10 @@ struct Runner {
 
         // 2. Background gate & didActivateApplicationNotification separation + allowDiscoveryConnect: false.
         do {
-            let session = try makeRestartableStoppedSession(pythonURL: pythonURL, workerURL: workerURL)
             let model = LifecycleStubModel()
-            model.backendAvailable = false
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: session)
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            stopWorker(context.session)
 
             // Silent discovery via refresh() must keep allowDiscoveryConnect == false.
             let discovered = try spawnTargetProcess(at: targetURL)
@@ -354,7 +366,7 @@ struct Runner {
             context.targetMonitor.refresh()
             pump(0.05)
             check(context.targetMonitor.isRunning, "targetMonitor.refresh did not discover running target")
-            check(!context.consumeAutomaticBackendRestart(),
+            check(model.restartBackendCount == 0,
                   "discovery refresh unexpectedly authorized automatic backend restart")
             terminateTarget(discovered)
             context.targetMonitor.refresh()
@@ -363,30 +375,20 @@ struct Runner {
             // Activation before launch must not authorize restart.
             postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: 41002)
             check(model.restartBackendCount == 0, "activation before launch triggered backend restart")
-            check(!context.consumeAutomaticBackendRestart(), "activation before launch queued restart")
 
             // Launch consumes backend restart while preserving backgroundConnectionAllowed.
             postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41002)
             check(model.restartBackendCount == 1, "launch did not consume backend restart")
-            check(!context.consumeAutomaticBackendRestart(), "launch restart was not consumed")
+            waitUntil(message: "backend availability after launch permits a single connection") {
+                model.connectAutomaticallyCalls == [true]
+            }
 
-            // Activation sets targetActivated() without calling reconcileAutomaticConnection().
             let activationsBefore = context.targetMonitor.activationGeneration
             postWorkspace(NSWorkspace.didActivateApplicationNotification, pid: 41002)
             check(context.targetMonitor.activationGeneration == activationsBefore &+ 1,
                   "didActivate did not increment activationGeneration")
-            check(model.restartBackendCount == 1,
-                  "activationGeneration sink called reconcileAutomaticConnection() directly")
-            check(context.consumeAutomaticBackendRestart(),
-                  "activationGeneration sink did not call connectionPolicy.targetActivated()")
-            check(model.restartBackendCount == 2, "consumeAutomaticBackendRestart did not call restartBackendFromHost")
+            check(model.restartBackendCount == 1, "launch restarted the backend more than once")
 
-            // After launch connect consumes backgroundConnectionAllowed, non-launch background events cannot connect.
-            model.backendAvailable = true
-            model.notifyChanged()
-            pump(0.05)
-            check(model.connectAutomaticallyCalls == [true],
-                  "backend becoming available after launch did not connect: \(model.connectAutomaticallyCalls)")
             model.connected = true
             model.notifyChanged()
             pump(0.05)
@@ -408,9 +410,10 @@ struct Runner {
             let pid1 = p1.processIdentifier
 
             let model = LifecycleStubModel()
-            model.backendAvailable = true
+
             model.connected = true
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
             check(context.targetMonitor.isRunning && context.targetMonitor.targetObservation.processIdentifier == pid1,
                   "initial monitor did not find target PID \(pid1)")
             model.refreshCount = 0
@@ -449,62 +452,58 @@ struct Runner {
             }
         }
 
-        // 4. reconcileAutomaticConnection() ordering invariants.
+        // 4. Discovery invalidates in-flight state. Session-owned busy then
+        // delays exit and replacement refresh.
         do {
-            // 4a: Target exit refresh runs while backgroundConnectionAllowed == false && NSApp.isActive == false.
+            let model = LifecycleStubModel()
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            func holdRequest() -> URL {
+                let release = workerURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+                context.session.send("wait", params: ["release": release.path], operation: "hold", announceSuccess: false)
+                check(context.backendStatus.busy && !context.canTerminate, "shared request did not block quit")
+                return release
+            }
+            let discoveryRequest = holdRequest()
             let pExit = try spawnTargetProcess(at: targetURL)
             defer { terminateTarget(pExit) }
-            let model = LifecycleStubModel()
-            model.backendAvailable = true
+            context.targetMonitor.refresh()
+            check(context.targetMonitor.isRunning && context.targetMonitor.launchGeneration == 0,
+                  "fixture did not discover its target without a launch notification")
+            try Data().write(to: discoveryRequest)
+            waitUntil(message: "pre-discovery request settles") { !context.backendStatus.busy }
+            check(model.staleReplyCount == 1 && model.connectAutomaticallyCalls.isEmpty,
+                  "target discovery adopted the previous absence or started an automatic connection")
+
             model.connected = true
-            model.busy = true
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+            let firstRequest = holdRequest()
             terminateTarget(pExit)
             context.targetMonitor.refresh()
-            pump(0.05)
-            check(model.refreshCount == 0, "exit refresh ran while busy == true")
-            model.busy = false
-            model.notifyChanged()
-            pump(0.05)
-            check(model.refreshCount == 1,
-                  "exit refresh did not bypass backgroundConnectionAllowed/isActive gate after busy cleared")
+            check(model.refreshCount == 0, "exit refresh ran while the session was busy")
+            try Data().write(to: firstRequest)
+            waitUntil(message: "idle session refreshes exited target while backgrounded") {
+                model.refreshCount == 1 && context.canTerminate
+            }
 
-            // 4b: Launch while connected & busy still runs exit-refresh first before reconnecting.
             model.refreshCount = 0
-            model.connectAutomaticallyCalls.removeAll()
-            model.connected = true
-            model.busy = true
-            model.notifyChanged()
-            pump(0.05)
+            let secondRequest = holdRequest()
             postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41003)
             check(model.refreshCount == 0 && model.connectAutomaticallyCalls.isEmpty,
-                  "launch acted while busy == true")
-            model.busy = false
-            model.notifyChanged()
-            pump(0.05)
-            check(model.refreshCount == 1 && model.connectAutomaticallyCalls.isEmpty,
-                  "exit refresh did not run before launch connect")
+                  "launch acted before the previous request completed")
+            try Data().write(to: secondRequest)
+            waitUntil(message: "replacement refresh precedes its launch connect") { model.refreshCount == 1 }
+            check(model.connectAutomaticallyCalls.isEmpty, "launch connected before exit refresh")
             model.connected = false
             model.notifyChanged()
-            pump(0.05)
-            check(model.connectAutomaticallyCalls == [true],
-                  "launch reconnect did not run after exit refresh cleared connected")
+            waitUntil(message: "launch connects after old attachment refresh") {
+                model.connectAutomaticallyCalls == [true]
+            }
 
-            // 4c: Automatic backend restart is gated by backgroundConnectionAllowed || NSApp.isActive.
-            let restartSession = try makeRestartableStoppedSession(pythonURL: pythonURL, workerURL: workerURL)
-            let restartModel = LifecycleStubModel()
-            restartModel.backendAvailable = true
-            let restartContext = TrainerGameContext<LifecycleStubModule>(model: restartModel, session: restartSession)
-            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41004)
-            check(restartModel.connectAutomaticallyCalls == [true],
-                  "setup launch did not consume backgroundConnectionAllowed")
-            // Now backgroundConnectionAllowed == false, targetRunning == true, awaitingDefinitiveLaunch == false.
-            restartModel.backendAvailable = false
-            restartModel.notifyChanged()
+            // A consumed launch opportunity cannot grant background restart.
+            stopWorker(context.session)
             pump(0.05)
-            check(restartModel.restartBackendCount == 0,
-                  "automatic backend restart ran without backgroundConnectionAllowed or NSApp.isActive")
-            withExtendedLifetime(restartContext) {}
+            check(model.restartBackendCount == 0,
+                  "automatic backend restart ran without foreground or launch permission")
         }
 
         // 5. NSApplication.didBecomeActiveNotification (applicationBecameActive).
@@ -513,9 +512,10 @@ struct Runner {
             let pSilent = try spawnTargetProcess(at: targetURL)
             defer { terminateTarget(pSilent) }
             let model = LifecycleStubModel()
-            model.backendAvailable = true
+
             model.connected = true
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
             terminateTarget(pSilent)
             model.refreshCount = 0
             model.didBecomeActiveCount = 0
@@ -526,36 +526,17 @@ struct Runner {
             check(model.didBecomeActiveCount == 1, "applicationBecameActive did not notify model.hostDidBecomeActive")
         }
         do {
-            // 5b: Silent busy-clear reconciled by applicationBecameActive without modelChanged().
-            let pBusy = try spawnTargetProcess(at: targetURL)
-            defer { terminateTarget(pBusy) }
+            // 5b: Silent start seen on didBecomeActive uses allowDiscoveryConnect: false.
             let model = LifecycleStubModel()
-            model.backendAvailable = true
-            model.connected = true
-            model.busy = true
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
-            terminateTarget(pBusy)
-            context.targetMonitor.refresh()
-            pump(0.05)
-            check(model.refreshCount == 0, "refresh ran before busy cleared")
-            model.busy = false // deliberately do not call notifyChanged()
-            NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
-            pump(0.05)
-            check(model.refreshCount == 1,
-                  "applicationBecameActive did not reconcile pending automatic/exit work")
-        }
-        do {
-            // 5c: Silent start seen on didBecomeActive uses allowDiscoveryConnect: false.
-            let session = try makeRestartableStoppedSession(pythonURL: pythonURL, workerURL: workerURL)
-            let model = LifecycleStubModel()
-            model.backendAvailable = false
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: session)
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            stopWorker(context.session)
             let pLate = try spawnTargetProcess(at: targetURL)
             defer { terminateTarget(pLate) }
             NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
             pump(0.05)
             check(context.targetMonitor.isRunning, "didBecomeActive did not detect silently started target")
-            check(model.restartBackendCount == 0 && !context.consumeAutomaticBackendRestart(),
+            check(model.restartBackendCount == 0,
                   "didBecomeActive target discovery granted automatic attach/restart")
         }
 
@@ -564,8 +545,9 @@ struct Runner {
             for language in [TrainerPresentationLanguage.en, .zhCN] {
                 localization.language = language
                 let model = LifecycleStubModel()
-                model.backendAvailable = true
-                let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+
+                let context = makeContext(LifecycleStubModule.self, model: model)
+                defer { context.session.stop() }
 
                 let lateTarget = try spawnTargetProcess(at: targetURL)
                 defer { terminateTarget(lateTarget) }
@@ -595,10 +577,11 @@ struct Runner {
             // Sidebar card + connectionStatusCard interactions.
             localization.language = .en
             let model = LifecycleStubModel()
-            model.backendAvailable = true
+
             var launchCount = 0
             model.launchActionFromHost = { launchCount += 1 }
-            let context = TrainerGameContext<LifecycleStubModule>(model: model, session: TrainerBackendSession())
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
             check(!context.targetMonitor.isRunning, "expected absent target at sidebar setup")
 
             let sidebarWindow = NSWindow(
@@ -628,17 +611,17 @@ struct Runner {
             waitUntil(message: "Launch with absent target invokes launchAction") {
                 launchCount == 1
             }
-            check(model.toggleConnectionCount == 0,
-                  "Launch with absent target unexpectedly toggled connection")
+            check(model.manualConnectCount == 0,
+                  "Launch with absent target unexpectedly connected")
 
-            // Spawn target silently while UI still shows Launch -> pressing primary refreshes first & toggles connection.
+            // Spawn target silently while UI still shows Launch -> pressing primary refreshes first and connects.
             let silent1 = try spawnTargetProcess(at: targetURL)
             defer { terminateTarget(silent1) }
             check(namedNativeControl(sidebarHosting, role: "AXButton",
                                      name: localization.localized("host.launchGame"))!.press(),
                   "stale Launch button refused AX press")
             waitUntil(message: "launchAction refreshes targetMonitor before choosing connect vs launch") {
-                model.toggleConnectionCount == 1 && context.targetMonitor.isRunning
+                model.manualConnectCount == 1 && context.targetMonitor.isRunning
             }
             check(launchCount == 1, "launchAction invoked launch instead of connect for running target")
 
@@ -671,12 +654,12 @@ struct Runner {
                 namedNativeControl(sidebarHosting, role: "AXButton",
                                  name: localization.localized("host.connectGame"))?.enabled == true
             }
-            let prevToggle = model.toggleConnectionCount
+            let previousConnectCount = model.manualConnectCount
             check(namedNativeControl(sidebarHosting, role: "AXButton",
                                      name: localization.localized("host.connectGame"))!.press(),
                   "Connect Game refused AX press")
-            waitUntil(message: "Connect Game invokes toggleConnection") {
-                model.toggleConnectionCount == prevToggle + 1
+            waitUntil(message: "Connect Game invokes explicit connect") {
+                model.manualConnectCount == previousConnectCount + 1
             }
             sidebarWindow.contentView = nil
             sidebarWindow.close()

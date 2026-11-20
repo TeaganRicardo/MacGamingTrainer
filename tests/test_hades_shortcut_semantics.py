@@ -169,9 +169,11 @@ func wait(_ message: String, timeout: TimeInterval = 4, _ condition: () -> Bool)
         // 3. Real HadesTrainerModel room shortcut dispatch & gating.
         let session = TrainerBackendSession(client: BackendClient(process:
             BackendProcess(executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-        let model = HadesTrainerModel(session: session, backendScriptURL: worker,
-                                      defaults: InMemoryDefaults(),
-                                      logSink: TrainerLogSink(gameID: "hades"))
+        let model = makeFixtureModel(HadesGameModule.self, session: session,
+            logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("fixture.log")),
+            backendScriptURL: worker) {
+            HadesTrainerModel(services: $0, defaults: InMemoryDefaults())
+        }
         wait("model backend ready") { model.backendAvailable && model.connected && !model.busy }
         check(model.selectedChamberObject == "trove" && model.canSelectChamberObject,
               "model did not select initial chamber object")
@@ -285,7 +287,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-shortcuts-") as td:
     binary = folder / "hades-shortcuts"
     compile_swift_test(
         games=("hades",),
-        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_path],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            main_path,
+        ],
         output=binary,
         cwd=ROOT,
     )

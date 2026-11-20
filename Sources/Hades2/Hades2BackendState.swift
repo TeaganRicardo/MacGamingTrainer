@@ -11,6 +11,7 @@ struct Hades2FieldPatch<Value> {
 
 struct Hades2StatSnapshot {
     let value: Double?
+    let target: Double?
     let locked: Bool
 }
 
@@ -262,7 +263,11 @@ struct Hades2StatePatch {
         if let rows = payload["stats"] as? [String: Any] {
             stats = rows.reduce(into: [:]) { result, entry in
                 guard let row = entry.value as? [String: Any] else { return }
-                result[entry.key] = Hades2StatSnapshot(value: Self.number(row["value"]), locked: row["locked"] as? Bool ?? false)
+                result[entry.key] = Hades2StatSnapshot(
+                    value: Self.number(row["value"]),
+                    target: Self.number(row["target"]),
+                    locked: row["locked"] as? Bool ?? false
+                )
             }
         } else { stats = nil }
 
@@ -512,12 +517,14 @@ struct Hades2StatePatch {
     }
 
     private static func decodeElement(_ row: [String: Any]) -> ElementCount? {
-        guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+        guard !(row["count"] is NSNull),
+              let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return ElementCount(id: id, name: name, count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false)
     }
 
     private static func decodeResource(_ row: [String: Any]) -> MaterialResource? {
-        guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+        guard !(row["count"] is NSNull),
+              let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return MaterialResource(
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
             count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false,

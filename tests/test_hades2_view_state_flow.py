@@ -171,12 +171,13 @@ struct Main {
             try "1.0".write(to: speedURL, atomically: true, encoding: .utf8)
             let sliderSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
                 executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-            let sliderModel = Hades2TrainerModel(session: sliderSession,
+            let sliderModel = makeFixtureModel(Hades2GameModule.self, session: sliderSession,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("slider.log")),
-                backendScriptURL: worker,
-                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"),
-                shortcutDefaults: InMemoryDefaults())
-            sliderModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+                backendScriptURL: worker) {
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"),
+                    shortcutDefaults: InMemoryDefaults())
+            }
+
             let deadline = Date().addingTimeInterval(4)
             while (!sliderModel.backendAvailable || sliderModel.busy) && Date() < deadline { pump(0.02) }
             guard sliderModel.backendAvailable && !sliderModel.busy else { fail("slider backend startup") }
@@ -232,12 +233,13 @@ struct Main {
             try "3".write(to: availability, atomically: true, encoding: .utf8)
             let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
                 executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-            let model = Hades2TrainerModel(session: session,
+            let model = makeFixtureModel(Hades2GameModule.self, session: session,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("disclosure.log")),
-                backendScriptURL: worker,
-                runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"),
-                shortcutDefaults: InMemoryDefaults())
-            model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+                backendScriptURL: worker) {
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"),
+                    shortcutDefaults: InMemoryDefaults())
+            }
+
             let deadline = Date().addingTimeInterval(4)
             while (!model.backendAvailable || model.busy) && Date() < deadline { pump(0.02) }
             guard model.backendAvailable && !model.busy else { fail("disclosure backend startup") }
@@ -277,15 +279,13 @@ struct Main {
             backendScriptURL: worker,
             applyPayload: { _ in },
             resetGameState: {},
-            log: { _ in },
-            onStatusChange: { _ in }
+            log: { _ in }
         )
 
-        let model = Hades2TrainerModel(
-            session: session,
-            logSink: TrainerLogSink(gameID: Hades2GameModule.descriptor.id),
-            shortcutDefaults: InMemoryDefaults()
-        )
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
+            logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("model.log"))) {
+            Hades2TrainerModel(services: $0, shortcutDefaults: InMemoryDefaults())
+        }
         // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
         // real preferences directory; a real suite there cannot be cleaned up
         // afterwards.
@@ -429,7 +429,7 @@ struct Main {
         }
 
         let editGeneration = model.editGeneration
-        model.toggleConnectionFromHost()
+        model.disconnectFromHost()
         if model.editGeneration == editGeneration {
             fail("disconnect barrier did not invalidate editor drafts")
         }
@@ -439,11 +439,12 @@ struct Main {
         pump(0.20)
         let managementSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-        let managementModel = Hades2TrainerModel(session: managementSession,
+        let managementModel = makeFixtureModel(Hades2GameModule.self, session: managementSession,
             logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("management.log")),
-            backendScriptURL: worker,
-            shortcutDefaults: InMemoryDefaults())
-        managementModel.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+            backendScriptURL: worker) {
+            Hades2TrainerModel(services: $0, shortcutDefaults: InMemoryDefaults())
+        }
+
         managementWait(host, "management backend startup") { managementModel.backendAvailable && !managementModel.busy }
         managementModel.listProfiles()
         managementWait(host, "management inventory") { !managementModel.busy && managementModel.profiles.count == 1 }
@@ -576,14 +577,13 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
 
     let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
         executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-    let model = Hades2TrainerModel(
-        session: session,
+    let model = makeFixtureModel(Hades2GameModule.self, session: session,
         logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("world_exit.log")),
-        backendScriptURL: worker,
-        runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("world_exit-game-log"),
-        shortcutDefaults: InMemoryDefaults()
-    )
-    model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 0))
+        backendScriptURL: worker) {
+        Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("world_exit-game-log"),
+            shortcutDefaults: InMemoryDefaults())
+    }
+
     nativePickerWait("world_exit backend startup") {
         model.backendAvailable && !model.busy && model.canSelectWorldExit
             && model.selectedWorldExitToken == "exit:1"
@@ -850,6 +850,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     compile_swift_test(
         games=("hades2",),
         harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
             ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
             ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
             main_path,

@@ -254,15 +254,13 @@ func navigationTrace(_ message: String) {
         let python = URL(fileURLWithPath: CommandLine.arguments[2])
         let firstSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
         let secondSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python)))
-        func log(_ game: String, _ message: String) {
-            FileHandle.standardError.write(Data(("\(game): \(ProcessInfo.processInfo.systemUptime) \(message)\n").utf8))
-        }
-        let first = FirstFixtureModel(session: firstSession, backendScriptURL: server,
-                                      log: { log("first", $0) })
-        let second = SecondFixtureModel(session: secondSession, backendScriptURL: server,
-                                       log: { log("second", $0) })
-        let firstContext = TrainerGameContext<FirstFixtureGameModule>(model: first, session: firstSession)
-        let secondContext = TrainerGameContext<SecondFixtureGameModule>(model: second, session: secondSession)
+        let logFolder = server.deletingLastPathComponent()
+        let firstContext = TrainerGameContext<FirstFixtureGameModule>(session: firstSession,
+            backendScriptURL: server, logSink: TrainerLogSink(url: logFolder.appendingPathComponent("first.log")))
+        let secondContext = TrainerGameContext<SecondFixtureGameModule>(session: secondSession,
+            backendScriptURL: server, logSink: TrainerLogSink(url: logFolder.appendingPathComponent("second.log")))
+        let first = firstContext.model
+        let second = secondContext.model
         let application = TrainerApplicationCoordinator(contexts: [
             AnyTrainerGameContext(firstContext), AnyTrainerGameContext(secondContext)
         ])
@@ -272,8 +270,8 @@ func navigationTrace(_ message: String) {
             precondition(condition(), "Live context did not reach expected state at \(line); first=\(first.backendStatus), second=\(second.backendStatus)")
         }
         wait { first.backendAvailable && second.backendAvailable && !first.busy && !second.busy }
-        firstContext.toggleConnection()
-        secondContext.toggleConnection()
+        firstContext.performConnectionAction()
+        secondContext.performConnectionAction()
         wait { first.connected && second.connected && !first.busy && !second.busy }
         first.setEnabled(true)
         wait { first.enabled && !first.busy }
@@ -297,7 +295,7 @@ func navigationTrace(_ message: String) {
             precondition(firstDone == true && secondDone == true && !first.enabled && second.enabled,
                          "selection changed request/callback ownership")
             let secondPID = pids["second"]
-            firstSession.restart()
+            firstContext.restartBackend()
             wait { first.backendAvailable && !first.busy }
             recordPID(firstSession, "firstNew")
             recordPID(secondSession, "secondAfterRestart")
@@ -305,8 +303,21 @@ func navigationTrace(_ message: String) {
             precondition(pids["firstNew"] != pids["first"] && pids["secondAfterRestart"] == secondPID)
             precondition(second.connected && second.enabled && !first.enabled,
                          "worker restart polluted another module or replayed old intent")
-            firstSession.stop()
-            secondSession.stop()
+            // The later worker owns its outstanding write while both contexts
+            // freeze new actions, and Context owns worker stop after each hook.
+            first.postponeTermination = true
+            secondDone = nil
+            secondSession.send("set_enabled", params: ["value": false], operation: "pending quit write",
+                completion: { secondDone = $0 })
+            var terminated = false
+            application.prepareForTermination { terminated = true }
+            precondition(!terminated && first.pendingTermination == nil && secondSession.isStarted,
+                         "quit bypassed a shared-session request")
+            wait { secondDone == true && first.pendingTermination != nil }
+            precondition(!terminated && firstSession.isStarted && secondSession.isStarted,
+                         "a worker stopped before its module finished")
+            first.finishPostponedTermination()
+            wait { terminated && !firstSession.isStarted && !secondSession.isStarted }
             print("multi_game_context_state_ok")
             return
         }
@@ -531,7 +542,7 @@ func navigationTrace(_ message: String) {
         application.selectedGameID = "first_fixture"
         pageWindow.makeKeyAndOrderFront(nil)
         precondition(requestCount() == beforeNavigation + 1)
-        second.toggleConnectionFromHost()
+        secondContext.performConnectionAction()
         wait { !second.connected && !second.busy }
         precondition(gameButton("second_fixture").press())
         wait { application.selectedGameID == "second_fixture" }
@@ -548,8 +559,8 @@ func navigationTrace(_ message: String) {
                      "Quit bypassed a tool-window write barrier")
         precondition(application.terminationRequested && !firstContext.toolWindows.interactionEnabled)
         let beforeFrozenActions = requestCount()
-        firstContext.toggleConnection()
-        secondContext.toggleConnection()
+        firstContext.performConnectionAction()
+        secondContext.performConnectionAction()
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
         navigationPump(0.05)
         precondition(requestCount() == beforeFrozenActions,
@@ -725,14 +736,15 @@ def run_context_journey(*, state_only=False):
                 f"static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n        EmptyView()",
                 f'static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n'
                 f'        NavigationFixtureSidebar(gameID: "{name}", name: "{word}")').replace(
-                "    func prepareForTermination(completion: @escaping () -> Void) {",
+                "    func setEnabled(_ value: Bool)",
                 "    @Published var postponeTermination = false\n    var pendingTermination: (() -> Void)?\n"
-                "    func finishPostponedTermination() {\n        backendSession.stop()\n        let done = pendingTermination\n"
+                "    func finishPostponedTermination() {\n        let done = pendingTermination\n"
                 "        pendingTermination = nil\n        done?()\n    }\n"
                 "    func prepareForTermination(completion: @escaping () -> Void) {\n"
-                "        if postponeTermination { pendingTermination = completion; return }").replace(
-                "    func setEnabled(_ value: Bool)",
-                "    @Published var activations = 0\n    func hostDidBecomeActive() { activations += 1 }\n    func setEnabled(_ value: Bool)").replace(
+                "        if postponeTermination { pendingTermination = completion; return }\n"
+                "        completion()\n    }\n"
+                "    @Published var activations = 0\n    func hostDidBecomeActive() { activations += 1 }\n"
+                "    func setEnabled(_ value: Bool)").replace(
                 "    @ObservedObject var model:",
                 '    @State private var draft = "' + word + ' draft"\n    @ObservedObject var model:').replace(
                 "        VStack(alignment: .leading, spacing: 12) {",

@@ -133,7 +133,8 @@ for token in (
 # The cross-game fixture proves the exact same seam, including in-flight
 # operations rather than only static labels.
 for token in (
-    'operation: connected ? "host.disconnectGame" : "host.connectGame"',
+    'operation: "host.connectGame"',
+    'operation: "host.disconnectGame"',
     'operation: "host.refreshStatus"',
     'operation: value ? "host.feature.enable" : "host.feature.disable"',
     'localization: TrainerLocalizationStore',

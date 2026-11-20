@@ -3,17 +3,16 @@ import SwiftUI
 import TrainerCore
 
 final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
-    @Published private(set) var backendStatus = TrainerBackendStatus()
     @Published private(set) var connected = false
     @Published private(set) var enabled = false
 
-    private let backendSession: TrainerBackendSession
-    private let backendScriptURL: URL?
-    private let log: (String) -> Void
+    private let services: TrainerModuleServices
+    private var statusObserver: UUID?
+    private var backendSession: TrainerBackendSession { services.session }
 
+    var backendStatus: TrainerBackendStatus { services.backendStatus }
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
-    var operation: TrainerTextToken { backendStatus.operation }
     // Language-neutral tokens, exactly like a real game module. The fixture uses
     // the shared Host keys here; a module with its own namespace registers a
     // resolver instead. Core requires neither shape to know the module.
@@ -25,60 +24,35 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         backendAvailable && !busy && backendStatus.protocolCompatible
     }
 
-    init(
-        session: TrainerBackendSession,
-        backendScriptURL: URL? = nil,
-        log: @escaping (String) -> Void = { _ in }
-    ) {
-        backendSession = session
-        self.backendScriptURL = backendScriptURL
-        self.log = log
-        DispatchQueue.main.async { [weak self] in
-            self?.startBackend()
+    init(services: TrainerModuleServices) {
+        self.services = services
+        statusObserver = backendSession.observeStatus { [weak self] _, _ in
+            self?.objectWillChange.send()
         }
     }
 
-    func toggleConnectionFromHost() {
-        send(connected ? "disconnect" : "connect", operation: connected ? "host.disconnectGame" : "host.connectGame")
+    isolated deinit {
+        if let statusObserver { services.session.removeStatusObserver(statusObserver) }
     }
+
+    func connectFromHost(reason: TrainerHostConnectReason) {
+        guard !connected, hostActionsEnabled else { return }
+        send("connect", operation: "host.connectGame")
+    }
+
+    func disconnectFromHost() {
+        guard connected, hostActionsEnabled else { return }
+        send("disconnect", operation: "host.disconnectGame")
+    }
+
+    func backendDidStart() { refreshFromHost() }
 
     func refreshFromHost() {
         send("status", operation: "host.refreshStatus", announceSuccess: false)
     }
 
-    func restartBackendFromHost() {
-        backendSession.restart()
-    }
-
     func setEnabled(_ value: Bool) {
         send("set_enabled", params: ["value": value], operation: value ? "host.feature.enable" : "host.feature.disable")
-    }
-
-    func prepareForTermination(completion: @escaping () -> Void) {
-        backendSession.stop(suppressTerminationError: true)
-        completion()
-    }
-
-    private func startBackend() {
-        guard !backendSession.isStarted else {
-            refreshFromHost()
-            return
-        }
-        do {
-            try backendSession.start(
-                descriptor: ReferenceFixtureGameModule.descriptor,
-                backendScriptURL: backendScriptURL,
-                applyPayload: { [weak self] payload in self?.apply(payload) },
-                resetGameState: { [weak self] in self?.resetGameState() },
-                log: log,
-                onStatusChange: { [weak self] status in
-                    self?.backendStatus = status
-                }
-            )
-            refreshFromHost()
-        } catch {
-            // TrainerBackendSession already projected the typed startup failure.
-        }
     }
 
     private func send(
@@ -95,7 +69,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         )
     }
 
-    private func apply(_ payload: [String: Any]) {
+    func applyBackendPayload(_ payload: [String: Any]) {
         if let connected = payload["connected"] as? Bool {
             self.connected = connected
         }
@@ -104,7 +78,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func resetGameState() {
+    func backendDidStop() {
         connected = false
         enabled = false
     }
@@ -159,8 +133,8 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         headerTitle: "REFERENCE"
     )
 
-    static func makeModel(session: TrainerBackendSession) -> ReferenceFixtureModel {
-        ReferenceFixtureModel(session: session)
+    static func makeModel(services: TrainerModuleServices) -> ReferenceFixtureModel {
+        ReferenceFixtureModel(services: services)
     }
 
     static func makeContent(model: ReferenceFixtureModel) -> ReferenceFixtureContent {

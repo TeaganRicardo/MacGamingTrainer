@@ -70,6 +70,7 @@ package struct TrainerGamePageVisibilityObserver: View {
 @MainActor
 package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObject {
     package let model: Module.Model
+    let services: TrainerModuleServices
     let session: TrainerBackendSession
     let targetMonitor: TrainerTargetProcessMonitor
     let saveManager: TrainerSaveManagerModel
@@ -79,7 +80,6 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     private var ownership: TrainerTargetOwnership?
     private var connectionPolicy = TrainerConnectionPolicy()
     private var subscriptions: Set<AnyCancellable> = []
-    private var previousTarget: TrainerTargetObservation
     private var lastKnownTargetProcessIdentifier: pid_t?
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
@@ -91,35 +91,53 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
             targetBundleIdentifier: Module.descriptor.targetBundleIdentifier,
             executablePathSuffix: Module.descriptor.targetExecutablePathSuffix
         )
-        let session = TrainerBackendSession()
-        self.init(model: Module.makeModel(session: session), session: session)
+        self.init(session: TrainerBackendSession())
         self.ownership = ownership
     }
 
-    init(model: Module.Model, session: TrainerBackendSession) {
-        self.model = model
+    init(
+        session: TrainerBackendSession,
+        backendScriptURL: URL? = nil,
+        logSink: TrainerLogSink? = nil,
+        targetMonitor: TrainerTargetProcessMonitor? = nil,
+        makeModel: ((TrainerModuleServices) -> Module.Model)? = nil
+    ) {
+        let descriptor = Module.descriptor
+        let monitor = targetMonitor ?? TrainerTargetProcessMonitor(
+            processName: descriptor.targetProcessName,
+            bundleIdentifier: descriptor.targetBundleIdentifier,
+            executablePathSuffix: descriptor.targetExecutablePathSuffix
+        )
+        self.targetMonitor = monitor
         self.session = session
         saveManager = TrainerSaveManagerModel(session: session)
-        targetMonitor = TrainerTargetProcessMonitor(
-            processName: Module.descriptor.targetProcessName,
-            bundleIdentifier: Module.descriptor.targetBundleIdentifier,
-            executablePathSuffix: Module.descriptor.targetExecutablePathSuffix
+        services = TrainerModuleServices(
+            descriptor: descriptor, session: session,
+            logSink: logSink ?? TrainerLogSink(gameID: descriptor.id),
+            targetObservation: monitor.targetObservation
         )
-        previousTarget = targetMonitor.targetObservation
-        lastKnownTargetProcessIdentifier = previousTarget.processIdentifier
-        // This tracks the availability processed by this Context. A module
-        // can finish starting before the Context installs its subscription.
+        model = (makeModel ?? Module.makeModel)(services)
+        let target = services.targetObservation
+        lastKnownTargetProcessIdentifier = target.processIdentifier
         previousBackendAvailable = false
         previousConnected = model.connected
-        model.hostTargetLifetimeChanged(observation: previousTarget)
-        connectionPolicy.observeTarget(running: previousTarget.isRunning, launchGeneration: previousTarget.launchGeneration)
+        notifyTargetLifetime(target)
+        connectionPolicy.observeTarget(running: target.isRunning, launchGeneration: target.launchGeneration)
         model.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.modelChanged()
         }.store(in: &subscriptions)
-        targetMonitor.$targetObservation.dropFirst().sink { [weak self] observed in
+        let statusObserver = session.observeStatus { [weak self] _, _ in
+            // Session status can become idle mid-reply. Reconcile only after
+            // the payload and receipt have reached their owners.
+            DispatchQueue.main.async { [weak self] in self?.modelChanged() }
+        }
+        AnyCancellable { @Sendable [weak session] in
+            Task { @MainActor in session?.removeStatusObserver(statusObserver) }
+        }.store(in: &subscriptions)
+        monitor.$targetObservation.dropFirst().sink { [weak self] observed in
             self?.targetChanged(observed)
         }.store(in: &subscriptions)
-        targetMonitor.$activationGeneration.dropFirst().sink { [weak self] _ in
+        monitor.$activationGeneration.dropFirst().sink { [weak self] _ in
             guard self?.terminationRequested == false else { return }
             self?.connectionPolicy.targetActivated()
         }.store(in: &subscriptions)
@@ -129,12 +147,52 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
             self?.applicationBecameActive()
         }.store(in: &subscriptions)
-        // Reuse the transition owner once for an already-running backend.
-        // Leave an unavailable module's startup/recovery lifecycle unchanged.
-        if model.backendAvailable { modelChanged() }
+        if session.isStarted {
+            modelChanged()
+        } else {
+            startBackend(scriptURL: backendScriptURL)
+        }
     }
 
-    var canTerminate: Bool { !model.busy && !saveManager.busy && toolWindows.canCloseAll }
+    var backendStatus: TrainerBackendStatus { services.backendStatus }
+    var canTerminate: Bool { !backendStatus.busy && !saveManager.busy && toolWindows.canCloseAll }
+
+    private func startBackend(scriptURL: URL?) {
+        let logSink = services.logSink
+        do {
+            try session.start(
+                descriptor: services.descriptor,
+                backendScriptURL: scriptURL,
+                applyPayload: { [weak self] in self?.applyBackendPayload($0) },
+                resetGameState: { [weak model] in model?.backendDidStop() },
+                log: { logSink.append($0) },
+                backendLog: { logSink.append($0, source: "BACKEND") }
+            )
+            model.backendDidStart()
+        } catch {
+            // The session publishes the startup failure and records diagnostics.
+        }
+    }
+
+    private func applyBackendPayload(_ payload: [String: Any]) {
+        let current = services.targetObservation
+        let isCurrent: Bool
+        switch model.backendPayloadTarget(payload) {
+        case .independent:
+            isCurrent = true
+        case .lifetime:
+            isCurrent = session.activeRequestHasCurrentTargetObservation
+        case .process(let identifier):
+            isCurrent = session.activeRequestHasCurrentTargetObservation && current.isRunning
+                && (current.processIdentifier == nil || identifier == current.processIdentifier.map(Int.init))
+            if !isCurrent { connectionPolicy.retainTargetExitRefresh() }
+        }
+        if isCurrent {
+            model.applyBackendPayload(payload)
+        } else {
+            model.applyStaleBackendPayload(payload)
+        }
+    }
 
     /// Host-owned backend recovery eligibility for both the automatic restart
     /// opportunity and the connection card's restart action. It reads the
@@ -145,19 +203,14 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     /// worker never clears the session's unknown-outcome target trust gate.
     /// A session whose startup never recorded a configuration cannot restart.
     var backendRestartAllowed: Bool {
-        let status = session.currentStatus
+        let status = backendStatus
         return !terminationRequested && session.canRestart && !status.busy && status.protocolCompatible
     }
 
-    /// Consumes the pending automatic backend-restart opportunity with the
-    /// Host-owned eligibility. Callers apply the foreground/launch and
-    /// unknown-outcome gates of `reconcileAutomaticConnection` first.
-    func consumeAutomaticBackendRestart() -> Bool {
-        guard connectionPolicy.consumeAutomaticBackendRestartIfEligible(
-            backendAvailable: model.backendAvailable, busy: model.busy, recoveryAllowed: backendRestartAllowed
-        ) else { return false }
-        model.restartBackendFromHost()
-        return true
+    func restartBackend() {
+        guard backendRestartAllowed else { return }
+        model.backendWillRestart()
+        session.restart()
     }
 
     /// The sidebar connection card's single production composition. The module
@@ -165,24 +218,29 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     func connectionStatusCard(onLaunch: (@MainActor () -> Void)?) -> TrainerConnectionStatusCard {
         TrainerConnectionStatusCard(
             connected: model.connected,
-            backendAvailable: model.backendAvailable,
+            backendAvailable: backendStatus.backendAvailable,
             actionsEnabled: model.hostActionsEnabled,
             restartEnabled: backendRestartAllowed,
             onRefresh: { [targetMonitor, model] in
                 targetMonitor.refresh()
                 model.refreshFromHost()
             },
-            onPrimary: toggleConnection,
-            onRestart: model.restartBackendFromHost,
-            targetRunning: targetMonitor.isRunning,
+            onPrimary: performConnectionAction,
+            onRestart: restartBackend,
+            targetRunning: services.targetObservation.isRunning,
             onLaunch: onLaunch
         )
     }
 
-    func toggleConnection() {
+    func performConnectionAction() {
         guard !terminationRequested else { return }
-        connectionPolicy.userWillToggleConnection(currentlyConnected: model.connected)
-        model.toggleConnectionFromHost()
+        if model.connected {
+            connectionPolicy.userWillDisconnect()
+            model.disconnectFromHost()
+        } else {
+            connectionPolicy.userWillConnect()
+            model.connectFromHost(reason: .manual)
+        }
     }
 
     func registerPresentation(_ localization: TrainerLocalizationStore) {
@@ -193,11 +251,12 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
 
     private func modelChanged() {
         guard !terminationRequested else { objectWillChange.send(); return }
-        if model.backendAvailable != previousBackendAvailable {
-            previousBackendAvailable = model.backendAvailable
-            if model.backendAvailable {
+        let backendAvailable = backendStatus.backendAvailable
+        if backendAvailable != previousBackendAvailable {
+            previousBackendAvailable = backendAvailable
+            if backendAvailable {
                 connectionPolicy.backendBecameAvailable()
-                if Module.descriptor.supportsSaveManagement, !targetMonitor.isRunning {
+                if services.descriptor.supportsSaveManagement, !services.targetObservation.isRunning {
                     saveManager.applyStagedIfPossible()
                 }
             } else {
@@ -213,33 +272,48 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     private func targetChanged(_ observed: TrainerTargetObservation) {
-        guard !terminationRequested else { return }
-        let previous = previousTarget
-        previousTarget = observed
+        let previous = services.targetObservation
+        guard previous != observed else { return }
+        services.targetObservation = observed
+        // Already-admitted replies still settle during quit. Keep validating
+        // their observations without scheduling any new lifecycle work.
+        guard !terminationRequested else {
+            session.invalidateTargetObservation()
+            return
+        }
+        let launched = observed.launchGeneration != previous.launchGeneration
         let pidChanged = previous.processIdentifier != observed.processIdentifier
-        if observed.launchGeneration != previous.launchGeneration ||
-            (lastKnownTargetProcessIdentifier != nil && observed.processIdentifier != nil &&
-             lastKnownTargetProcessIdentifier != observed.processIdentifier) {
-            session.targetLifetimeChanged()
-        }
+        let replacement = lastKnownTargetProcessIdentifier != nil && observed.processIdentifier != nil &&
+            lastKnownTargetProcessIdentifier != observed.processIdentifier
         if let pid = observed.processIdentifier { lastKnownTargetProcessIdentifier = pid }
-        if observed.launchGeneration != previous.launchGeneration || pidChanged ||
-            (previous.isRunning && !observed.isRunning) {
-            model.hostTargetLifetimeChanged(observation: observed)
-        }
-        if previous.isRunning && observed.isRunning && pidChanged &&
-            observed.launchGeneration == previous.launchGeneration {
+        if previous.isRunning && observed.isRunning && pidChanged && !launched {
             connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)
         }
         connectionPolicy.observeTarget(
             running: observed.isRunning, launchGeneration: observed.launchGeneration,
             allowDiscoveryConnect: false
         )
-        if !observed.isRunning, Module.descriptor.supportsSaveManagement, model.backendAvailable {
+        if model.connected { connectionPolicy.retainTargetExitRefresh() }
+        notifyTargetLifetime(observed)
+        if launched || replacement {
+            session.targetLifetimeChanged()
+        } else {
+            session.invalidateTargetObservation()
+        }
+        if !observed.isRunning, services.descriptor.supportsSaveManagement, backendStatus.backendAvailable {
             saveManager.applyStagedIfPossible()
         }
         reconcileAutomaticConnection()
         objectWillChange.send()
+    }
+
+    private func notifyTargetLifetime(_ observation: TrainerTargetObservation) {
+        services.logSink.targetLifetimeChanged(running: observation.isRunning, identity: .init(
+            processName: services.descriptor.targetProcessName,
+            bundleIdentifier: services.descriptor.targetBundleIdentifier,
+            processIdentifier: observation.processIdentifier
+        ))
+        model.hostTargetLifetimeChanged(observation: observation)
     }
 
     private func applicationBecameActive() {
@@ -254,28 +328,39 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     private func reconcileAutomaticConnection() {
-        guard !terminationRequested, !session.currentStatus.requiresTargetRestart else { return }
-        if connectionPolicy.consumeTargetExitRefreshIfEligible(
-            backendAvailable: model.backendAvailable, busy: model.busy, connected: model.connected
+        guard !terminationRequested else { return }
+        let status = backendStatus
+        switch connectionPolicy.nextAutomaticAction(
+            foreground: NSApp?.isActive == true,
+            backendAvailable: status.backendAvailable, busy: status.busy,
+            connected: model.connected, actionsEnabled: model.hostActionsEnabled,
+            recoveryAllowed: backendRestartAllowed, requiresTargetRestart: status.requiresTargetRestart
         ) {
+        case .refreshAfterTargetExit:
             model.refreshFromHost()
-            return
+        case .restartBackend:
+            restartBackend()
+        case .connect(let targetJustLaunched):
+            model.connectFromHost(reason: .automatic(targetJustLaunched: targetJustLaunched))
+        case .none:
+            break
         }
-        guard connectionPolicy.backgroundConnectionAllowed || NSApp.isActive else { return }
-        if consumeAutomaticBackendRestart() { return }
-        let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed
-        guard connectionPolicy.consumeAutomaticConnectIfEligible(
-            backendAvailable: model.backendAvailable, busy: model.busy,
-            connected: model.connected, actionsEnabled: model.hostActionsEnabled
-        ) else { return }
-        model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)
     }
 
     func beginTermination() {
         terminationRequested = true
-        session.beginTermination()
         model.beginTerminationFromHost()
+        session.beginTermination()
         toolWindows.setInteractionEnabled(false)
+    }
+
+    func prepareForTermination(completion: @escaping () -> Void) {
+        model.prepareForTermination { [session, logSink = services.logSink] in
+            session.flushDiagnostics()
+            session.stop(suppressTerminationError: true)
+            logSink.flush()
+            completion()
+        }
     }
 }
 
@@ -306,7 +391,7 @@ package final class AnyTrainerGameContext: ObservableObject, Identifiable {
         }
         connectedValue = { context.model.connected }
         canTerminateValue = { context.canTerminate }
-        terminate = context.model.prepareForTermination
+        terminate = context.prepareForTermination
         closeWindows = context.toolWindows.closeAll
         suspendInteraction = context.beginTermination
         subscription = context.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }

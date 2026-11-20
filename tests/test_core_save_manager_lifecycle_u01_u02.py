@@ -118,17 +118,27 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 final class StubHostModel: ObservableObject, TrainerHostModel {
-    @Published var backendAvailable = false
-    let busy = false
     let connected = false
-    let operation = TrainerTextToken(key: "")
     let statusTitle = TrainerTextToken(key: "")
     let connectionDetailText = TrainerTextToken(key: "")
     let hostActionsEnabled = true
-    func toggleConnectionFromHost() {}
+    func connectFromHost(reason: TrainerHostConnectReason) {}
+    func disconnectFromHost() {}
     func refreshFromHost() {}
-    func restartBackendFromHost() {}
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
+}
+
+@MainActor
+func runningTargetMonitor(for descriptor: GameModuleDescriptor) -> TrainerTargetProcessMonitor {
+    let monitor = TrainerTargetProcessMonitor(
+        processName: descriptor.targetProcessName,
+        bundleIdentifier: descriptor.targetBundleIdentifier,
+        executablePathSuffix: descriptor.targetExecutablePathSuffix
+    )
+    guard waitUntil(1.0, { monitor.refresh(); return monitor.isRunning }) else {
+        fail("fixture target process was not observed running")
+    }
+    return monitor
 }
 
 enum SaveContextConfig {
@@ -149,7 +159,7 @@ struct SupportedSaveTargetModule: TrainerGameModule {
         )
     }
     static let presentation = TrainerGamePresentation(headerTitle: "SAVE TARGET")
-    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -173,7 +183,7 @@ struct UnsupportedSaveTargetModule: TrainerGameModule {
         )
     }
     static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE TARGET")
-    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -194,7 +204,7 @@ struct UnsupportedSaveModule: TrainerGameModule {
         supportsSaveManagement: false
     )
     static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
-    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -215,7 +225,7 @@ struct SupportedNoTargetModule: TrainerGameModule {
         supportsSaveManagement: true
     )
     static let presentation = TrainerGamePresentation(headerTitle: "SAVE IDLE")
-    static func makeModel(session: TrainerBackendSession) -> StubHostModel { StubHostModel() }
+    static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -233,6 +243,10 @@ struct Runner {
         let args = CommandLine.arguments
         if args.count != 6 { fail("expected python + worker + recovery fixture + target binary + target suffix") }
         SaveContextConfig.targetSuffix = args[5]
+        let fixtureHome = URL(fileURLWithPath: args[2]).deletingLastPathComponent()
+        func fixtureLog(for descriptor: GameModuleDescriptor) -> TrainerLogSink {
+            TrainerLogSink(gameID: descriptor.id, homeDirectory: fixtureHome)
+        }
         let process = BackendProcess(
             executableURL: URL(fileURLWithPath: args[1]),
             argumentsPrefix: ["-u"],
@@ -253,8 +267,7 @@ struct Runner {
             log: { message in
                 if message.hasPrefix("请求 core.save.delete ·") { dispatchedDeletes += 1 }
                 if message.hasPrefix("请求 core.save.apply_staged ·") { dispatchedApplyStaged += 1 }
-            },
-            onStatusChange: { _ in }
+            }
         )
         let model = TrainerSaveManagerModel(session: session)
         model.refresh()
@@ -425,6 +438,7 @@ struct Runner {
 
         // TrainerGameContext owns event-driven staged restore application on
         // backend availability and target exit only when Save management is enabled.
+        if !session.currentStatus.backendAvailable { fail("fixture worker is not available") }
         do {
             let targetProcess = Process()
             targetProcess.executableURL = URL(fileURLWithPath: args[4])
@@ -438,13 +452,11 @@ struct Runner {
                     targetProcess.waitUntilExit()
                 }
             }
-            let modelA = StubHostModel()
-            var contextA: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelA, session: session)
-            if !waitUntil(1.0, { contextA!.targetMonitor.refresh(); return contextA!.targetMonitor.isRunning }) {
-                fail("fixture target process was not observed running")
-            }
+            let monitor = runningTargetMonitor(for: SupportedSaveTargetModule.descriptor)
             let beforeA = dispatchedApplyStaged
-            modelA.backendAvailable = true
+            var contextA: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor), targetMonitor: monitor
+            )
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             if dispatchedApplyStaged != beforeA {
                 fail("running target allowed staged restore apply on backend availability")
@@ -463,9 +475,9 @@ struct Runner {
 
         do {
             let beforeB = dispatchedApplyStaged
-            let modelB = StubHostModel()
-            var contextB: TrainerGameContext<UnsupportedSaveModule>? = TrainerGameContext(model: modelB, session: session)
-            modelB.backendAvailable = true
+            var contextB: TrainerGameContext<UnsupportedSaveModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: UnsupportedSaveModule.descriptor)
+            )
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             if dispatchedApplyStaged != beforeB {
                 fail("supportsSaveManagement=false dispatched staged restore apply")
@@ -475,26 +487,30 @@ struct Runner {
         }
 
         do {
-            let beforeC = dispatchedApplyStaged
-            let modelC = StubHostModel()
-            var contextC: TrainerGameContext<SupportedNoTargetModule>? = TrainerGameContext(model: modelC, session: session)
-            modelC.backendAvailable = true
-            if !waitUntil(2.0, { dispatchedApplyStaged == beforeC + 1 }) {
+            let process = BackendProcess(
+                executableURL: URL(fileURLWithPath: args[1]), argumentsPrefix: ["-u"], forceKillDelay: 0.10
+            )
+            let freshSession = TrainerBackendSession(client: BackendClient(process: process))
+            defer { freshSession.stop() }
+            let contextC = TrainerGameContext<SupportedNoTargetModule>(
+                session: freshSession, backendScriptURL: URL(fileURLWithPath: args[2]),
+                logSink: fixtureLog(for: SupportedNoTargetModule.descriptor)
+            )
+            if !waitUntil(2.0, { contextC.saveManager.pendingRestore?.indeterminate == true }) {
                 fail("backend availability without target did not trigger staged restore apply")
             }
-            if !waitUntil(2.0, { !contextC!.saveManager.busy }) {
+            if !waitUntil(2.0, { !contextC.saveManager.busy }) {
                 fail("staged restore apply on backend availability did not settle")
             }
-            contextC = nil
         }
 
         // targetChanged(_:) guards: target start while backend available must not apply;
         // target exit with supportsSaveManagement=false or backendAvailable=false must not apply.
         do {
-            let modelD = StubHostModel()
-            var contextD: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelD, session: session)
             let initBefore = dispatchedApplyStaged
-            modelD.backendAvailable = true
+            var contextD: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor)
+            )
             if !waitUntil(2.0, { dispatchedApplyStaged == initBefore + 1 && !contextD!.saveManager.busy }) {
                 fail("contextD initial backend availability apply did not settle")
             }
@@ -536,12 +552,10 @@ struct Runner {
                     targetProcess.waitUntilExit()
                 }
             }
-            let modelE = StubHostModel()
-            var contextE: TrainerGameContext<UnsupportedSaveTargetModule>? = TrainerGameContext(model: modelE, session: session)
-            if !waitUntil(1.0, { contextE!.targetMonitor.refresh(); return contextE!.targetMonitor.isRunning }) {
-                fail("contextE did not observe launched target")
-            }
-            modelE.backendAvailable = true
+            let monitor = runningTargetMonitor(for: UnsupportedSaveTargetModule.descriptor)
+            var contextE: TrainerGameContext<UnsupportedSaveTargetModule>? = TrainerGameContext(
+                session: session, logSink: fixtureLog(for: UnsupportedSaveTargetModule.descriptor), targetMonitor: monitor
+            )
             RunLoop.current.run(until: Date().addingTimeInterval(0.20))
             let beforeExitE = dispatchedApplyStaged
             targetProcess.terminate()
@@ -567,18 +581,22 @@ struct Runner {
                     targetProcess.waitUntilExit()
                 }
             }
-            let modelF = StubHostModel()
-            var contextF: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(model: modelF, session: session)
-            if !waitUntil(1.0, { contextF!.targetMonitor.refresh(); return contextF!.targetMonitor.isRunning }) {
-                fail("contextF did not observe launched target")
-            }
-            let beforeExitF = dispatchedApplyStaged
+            let monitor = runningTargetMonitor(for: SupportedSaveTargetModule.descriptor)
+            let missingExecutable = URL(fileURLWithPath: args[4]).appendingPathExtension("missing")
+            let unavailableSession = TrainerBackendSession(
+                client: BackendClient(process: BackendProcess(executableURL: missingExecutable, argumentsPrefix: []))
+            )
+            var contextF: TrainerGameContext<SupportedSaveTargetModule>? = TrainerGameContext(
+                session: unavailableSession, backendScriptURL: URL(fileURLWithPath: args[2]),
+                logSink: fixtureLog(for: SupportedSaveTargetModule.descriptor), targetMonitor: monitor
+            )
+            if unavailableSession.currentStatus.backendAvailable { fail("missing executable started a worker") }
             targetProcess.terminate()
             targetProcess.waitUntilExit()
             contextF!.targetMonitor.refresh()
             RunLoop.current.run(until: Date().addingTimeInterval(0.20))
-            if dispatchedApplyStaged != beforeExitF {
-                fail("targetChanged dispatched staged restore apply while backendAvailable is false")
+            if !contextF!.saveManager.error.isEmpty || contextF!.saveManager.busy {
+                fail("targetChanged tried to apply a staged restore while the worker was unavailable")
             }
             contextF = nil
         }

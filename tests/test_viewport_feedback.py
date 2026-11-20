@@ -529,13 +529,13 @@ struct Main {
             forceKillDelay: 0.10
         )
         let session = TrainerBackendSession(client: BackendClient(process: process))
-        let model = Hades2TrainerModel(
-            session: session,
+        let model = makeFixtureModel(Hades2GameModule.self, session: session,
             logSink: TrainerLogSink(url: temporary.appendingPathComponent("trainer.log")),
-            backendScriptURL: worker,
-            runLogDirectoryURL: temporary.appendingPathComponent("game-log")
-        )
-        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+            backendScriptURL: worker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+
         wait { model.backendAvailable && !model.busy && model.feedbackNotice != nil }
         if CommandLine.arguments.count == 4 && CommandLine.arguments[3] == "interactions" {
             try exerciseFeedbackInput(model: model, worker: worker)
@@ -737,7 +737,8 @@ struct Main {
         ]).write(to: issues)
         // Explicit worker restart keeps this disk-backed fixture's structured
         // issues separate from the preceding one-shot receipt journey.
-        model.restartBackendFromHost()
+        model.backendWillRestart()
+        session.restart()
         wait { model.backendAvailable && !model.busy }
         model.refreshFromHost()
         wait(message: "structured runtime issues did not reach the current-issues projection") {
@@ -769,15 +770,15 @@ struct Main {
         let faultSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10
         )))
-        let faultModel = Hades2TrainerModel(
-            session: faultSession,
+        let faultModel = makeFixtureModel(Hades2GameModule.self, session: faultSession,
             logSink: TrainerLogSink(url: temporary.appendingPathComponent("fault.log")),
-            backendScriptURL: faultWorker,
-            runLogDirectoryURL: temporary.appendingPathComponent("fault-game-log")
-        )
+            backendScriptURL: faultWorker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("fault-game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
         var faultEvents: [String] = []
         let faultObservation = faultModel.$feedbackNotice.compactMap { $0 }.sink { faultEvents.append($0.text.key) }
-        faultModel.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+
         wait { faultModel.backendAvailable && !faultModel.busy }
         faultModel.openSellTraits()
         wait(message: "receipt suppression hid asynchronous backend recovery") {
@@ -800,13 +801,13 @@ struct Main {
             let ackSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
                 executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10
             )))
-            let ackModel = Hades2TrainerModel(
-                session: ackSession,
+            let ackModel = makeFixtureModel(Hades2GameModule.self, session: ackSession,
                 logSink: TrainerLogSink(url: temporary.appendingPathComponent("ack-\(outcome).log")),
-                backendScriptURL: ackWorker,
-                runLogDirectoryURL: temporary.appendingPathComponent("ack-\(outcome)-game-log")
-            )
-            ackModel.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+                backendScriptURL: ackWorker) {
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("ack-\(outcome)-game-log"),
+                    shortcutDefaults: InMemoryDefaults())
+            }
+
             wait { ackModel.backendAvailable && !ackModel.busy }
             ackModel.openSellTraits()
             wait(message: "known receipt hid the terminal command-connection recovery notice") {
@@ -859,8 +860,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     stub.write_text(textwrap.dedent(worker.replace("__MGT_MODULE_PROTOCOL__", str(json.loads((ROOT / "Backend/games/hades2/module.json").read_text())["protocolVersion"]))))
     compile_swift_test(
         games=("hades2",),
-        harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-                         ROOT / "tests/fixtures/swift/NativeAccessibility.swift", main],
+        harness_sources=[
+            ROOT / "tests/fixtures/swift/TrainerBackendFixture.swift",
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            ROOT / "tests/fixtures/swift/NativeAccessibility.swift",
+            main,
+        ],
         output=binary,
         swiftc=SWIFTC,
         cwd=ROOT,

@@ -9,9 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from games.hades2.adapter import Hades2Adapter, clear_active
 from games.hades2.command_contract import Hades2CommandContract
 from games.hades2.desired_reconciliation import Hades2DesiredStateReconciler
 from games.hades2.preferences import Hades2PreferenceStore
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 from lua_runtime_support import require_lua52
 
 class Probe:
@@ -47,21 +49,23 @@ assert Hades2PreferenceStore.defaults()["biomeTimerFrozen"] is False
 assert Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})["biomeTimerFrozen"] is True
 assert Hades2PreferenceStore.normalize({"biomeTimerFrozen": 1})["biomeTimerFrozen"] is False
 
-from games.hades2.adapter import Hades2Adapter, clear_active
-shadow = Hades2Adapter.__new__(Hades2Adapter)
-shadow.state = {"biomeTime": 150, "biomeTimeLocked": False}
-shadow._time_warp_speed = None
-shadow._time_warp_error = None
-shadow.preferences = Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})
-shadow._overlay_preferences()
-assert shadow.state["biomeTimeLocked"] is True
-clear_active(shadow.state, preserve_desired=True)
-assert shadow.state["biomeTime"] is None and shadow.state["biomeTimeLocked"] is False
-shadow._overlay_preferences()
-assert shadow.state["biomeTimeLocked"] is True
-shadow.preferences["biomeTimerFrozen"] = False
-shadow._overlay_preferences()
-assert shadow.state["biomeTimeLocked"] is False
+with tempfile.TemporaryDirectory(prefix="mgt-biome-timer-projection-") as temporary:
+    adapter = Hades2Adapter(
+        context=hades2_adapter_context(temporary),
+        resident_session=FakeResidentSession(),
+        time_warp_controller=FakeTimeWarpController(),
+    )
+    adapter.state.update(biomeTime=150, biomeTimeLocked=False)
+    adapter.preferences = Hades2PreferenceStore.normalize({"biomeTimerFrozen": True})
+    adapter._overlay_preferences()
+    assert adapter.state["biomeTimeLocked"] is True
+    clear_active(adapter.state, preserve_desired=True)
+    assert adapter.state["biomeTime"] is None and adapter.state["biomeTimeLocked"] is False
+    adapter._overlay_preferences()
+    assert adapter.state["biomeTimeLocked"] is True
+    adapter.preferences["biomeTimerFrozen"] = False
+    adapter._overlay_preferences()
+    assert adapter.state["biomeTimeLocked"] is False
 
 diff = Hades2DesiredStateReconciler(None)
 def biome_actions(desired, observed):
