@@ -131,7 +131,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
             // the payload and receipt have reached their owners.
             DispatchQueue.main.async { [weak self] in self?.modelChanged() }
         }
-        AnyCancellable { [weak session] in
+        AnyCancellable { @Sendable [weak session] in
             Task { @MainActor in session?.removeStatusObserver(statusObserver) }
         }.store(in: &subscriptions)
         monitor.$targetObservation.dropFirst().sink { [weak self] observed in
