@@ -224,7 +224,7 @@ private func runGeometryVerification(workerURL: URL, tmpDir: URL) {
     let h2Model = makeFixtureModel(Hades2GameModule.self, session: h2Session,
         logSink: TrainerLogSink(url: tmpDir.appendingPathComponent("h2.log")),
         backendScriptURL: workerURL) {
-        Hades2TrainerModel(services: $0, runLogDirectoryURL: tmpDir.appendingPathComponent("h2-run-logs"), shortcutDefaults: InMemoryDefaults(),
+        Hades2TrainerModel(services: $0, runLogDirectoryURL: tmpDir.appendingPathComponent("h2-run-logs"),
             shortcutDefaults: InMemoryDefaults())
     }
 

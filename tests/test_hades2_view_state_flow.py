@@ -174,7 +174,7 @@ struct Main {
             let sliderModel = makeFixtureModel(Hades2GameModule.self, session: sliderSession,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("slider.log")),
                 backendScriptURL: worker) {
-                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"), shortcutDefaults: InMemoryDefaults(),
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("slider-game-log"),
                     shortcutDefaults: InMemoryDefaults())
             }
 
@@ -236,7 +236,7 @@ struct Main {
             let model = makeFixtureModel(Hades2GameModule.self, session: session,
                 logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("disclosure.log")),
                 backendScriptURL: worker) {
-                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"), shortcutDefaults: InMemoryDefaults(),
+                Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("disclosure-game-log"),
                     shortcutDefaults: InMemoryDefaults())
             }
 
@@ -580,7 +580,7 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
     let model = makeFixtureModel(Hades2GameModule.self, session: session,
         logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("world_exit.log")),
         backendScriptURL: worker) {
-        Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("world_exit-game-log"), shortcutDefaults: InMemoryDefaults(),
+        Hades2TrainerModel(services: $0, runLogDirectoryURL: worker.deletingLastPathComponent().appendingPathComponent("world_exit-game-log"),
             shortcutDefaults: InMemoryDefaults())
     }
 

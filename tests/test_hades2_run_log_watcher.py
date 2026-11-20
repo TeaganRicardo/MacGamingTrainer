@@ -84,13 +84,14 @@ pump(0.35)
 // rather than crossing the debugger boundary at process discovery/launch.
 var hostPolicy = TrainerConnectionPolicy()
 hostPolicy.targetLaunched()
-if !hostPolicy.consumeAutomaticConnectIfEligible(
-    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
-) {
+guard case .connect(let targetJustLaunched) = hostPolicy.nextAutomaticAction(
+    foreground: false, backendAvailable: true, busy: false, connected: false, actionsEnabled: true,
+    recoveryAllowed: false, requiresTargetRestart: false
+) else {
     fatalError("fresh launch did not grant the one automatic connect intent")
 }
 var launchGate = Hades2LaunchAttachGate()
-if !launchGate.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: true) {
+if !launchGate.deferUntilReady(targetJustLaunched: targetJustLaunched, canObserveLifecycle: true) {
     fatalError("fresh launch tried to attach before runtime readiness")
 }
 if !launchGate.deferUntilReady(targetJustLaunched: false, canObserveLifecycle: true) {
