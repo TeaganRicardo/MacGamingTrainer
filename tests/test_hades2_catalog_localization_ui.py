@@ -697,6 +697,13 @@ common_controls = trait_manager[
 # The named Apply/Expire/Advance controls now use Core's compact
 # text-only button: label containment is owned by the shared primitive.
 assert contextual_controls.count('TrainerSecondaryActionButton(') >= 3
+# The native compact button constrains height even without the explicit text
+# limit in the fixture. Keep the shared label's own single-line policy pinned.
+shared_actions = (ROOT / "Sources/Core/UI/Components/TrainerListControls.swift").read_text()
+action_label = shared_actions.split('private struct TrainerActionButtonLabel', 1)[1].split(
+    'private struct TrainerActionWidthModifier', 1
+)[0]
+assert '.lineLimit(1)' in action_label
 assert common_controls.count('.lineLimit(1)') >= 4
 assert '"hades2.traits.targetRarity": "稀有度"' in zh_presentation
 assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation

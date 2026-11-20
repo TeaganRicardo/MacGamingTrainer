@@ -35,6 +35,15 @@ func pump(_ duration: TimeInterval = 0.08) {
     }
 }
 
+func waitForPaint(_ message: String, _ predicate: () -> Bool) {
+    let deadline = Date().addingTimeInterval(3)
+    while Date() < deadline {
+        if predicate() { return }
+        pump(0.01)
+    }
+    check(false, message)
+}
+
 final class Model: ObservableObject {
     @Published var value = 1.0
     @Published var enabled = false
@@ -63,10 +72,35 @@ func increment(_ control: NativeAccessibilityControl) -> Bool {
     typealias Perform = @convention(c) (AnyObject, Selector) -> Bool
     return unsafeBitCast(control.object.method(for: selector), to: Perform.self)(control.object, selector)
 }
-func thumbCenter(_ view: NSView) -> Double {
+func rasterize(_ view: NSView) -> NSBitmapImageRep {
     view.layoutSubtreeIfNeeded()
     let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
     view.cacheDisplay(in: view.bounds, to: bitmap)
+    return bitmap
+}
+
+func sampledColor(_ bitmap: NSBitmapImageRep, at point: NSPoint, in view: NSView) -> NSColor {
+    let bounds = view.bounds
+    let scaleX = CGFloat(bitmap.pixelsWide) / bounds.width
+    let scaleY = CGFloat(bitmap.pixelsHigh) / bounds.height
+    let x = max(0, min(bitmap.pixelsWide - 1, Int((point.x * scaleX).rounded())))
+    let localY = view.isFlipped ? point.y : bounds.height - point.y
+    let y = max(0, min(bitmap.pixelsHigh - 1, Int((localY * scaleY).rounded())))
+    return bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) ?? .black
+}
+
+func trackHasColor(in view: NSView, matching: (NSColor) -> Bool) -> Bool {
+    let bitmap = rasterize(view)
+    for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
+        for y in stride(from: CGFloat(25.5), through: CGFloat(28.5), by: 0.5) {
+            if matching(sampledColor(bitmap, at: NSPoint(x: x, y: y), in: view)) { return true }
+        }
+    }
+    return false
+}
+
+func thumbCenter(_ view: NSView) -> Double {
+    let bitmap = rasterize(view)
     var total = 0.0
     var count = 0
     for y in 0..<bitmap.pixelsHigh {
@@ -250,35 +284,19 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
         window.setContentSize(NSSize(width: 264, height: 54))
         model.enabled = true
         model.value = 10
-        pump(0.2)
-        host.layoutSubtreeIfNeeded()
-        do {
-            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-            host.cacheDisplay(in: host.bounds, to: bitmap)
-            let scaleX = CGFloat(bitmap.pixelsWide) / host.bounds.width
-            let scaleY = CGFloat(bitmap.pixelsHigh) / host.bounds.height
-            func sampleColor(ptX: CGFloat, ptY: CGFloat) -> NSColor {
-                let px = max(0, min(bitmap.pixelsWide - 1, Int((ptX * scaleX).rounded())))
-                let rawY = host.isFlipped ? ptY : (host.bounds.height - ptY)
-                let py = max(0, min(bitmap.pixelsHigh - 1, Int((rawY * scaleY).rounded())))
-                return bitmap.colorAt(x: px, y: py)?.usingColorSpace(.deviceRGB) ?? .black
+        waitForPaint("filled slider track did not render TrainerTheme.standard.accent") {
+            abs(thumbCenter(host) - expectedThumb()) < 1.5 && trackHasColor(in: host) { c in
+                c.blueComponent > c.redComponent && c.blueComponent > c.greenComponent + 0.15
             }
-            var foundPurpleTrack = false
-            for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
-                for dy in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
-                    let c = sampleColor(ptX: x, ptY: 27 + dy)
-                    if c.blueComponent > c.redComponent && c.blueComponent > c.greenComponent + 0.15 {
-                        foundPurpleTrack = true
-                    }
-                }
-            }
-            check(foundPurpleTrack, "filled slider track did not render TrainerTheme.standard.accent")
+        }
 
+        do {
+            let bitmap = rasterize(host)
             func maxBandLuma(centerX: CGFloat) -> CGFloat {
                 var best: CGFloat = 0
                 for dx in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
                     for dy in [CGFloat(-3.2), CGFloat(-2.5), CGFloat(2.5), CGFloat(3.2)] {
-                        let c = sampleColor(ptX: centerX + dx, ptY: 27 + dy)
+                        let c = sampledColor(bitmap, at: NSPoint(x: centerX + dx, y: 27 + dy), in: host)
                         let luma = (c.redComponent + c.greenComponent + c.blueComponent) / 3.0
                         best = max(best, luma)
                     }
@@ -372,25 +390,11 @@ func key(_ code: UInt16, characters: String, in window: NSWindow) {
             greenWin.isReleasedWhenClosed = false
             greenWin.contentView = greenHost
             greenWin.orderBack(nil)
-            pump(0.1)
-            greenHost.layoutSubtreeIfNeeded()
-            let bitmap = greenHost.bitmapImageRepForCachingDisplay(in: greenHost.bounds)!
-            greenHost.cacheDisplay(in: greenHost.bounds, to: bitmap)
-            let scaleX = CGFloat(bitmap.pixelsWide) / greenHost.bounds.width
-            let scaleY = CGFloat(bitmap.pixelsHigh) / greenHost.bounds.height
-            var foundGreen = false
-            for x in stride(from: CGFloat(30), to: CGFloat(210), by: 2) {
-                for dy in stride(from: CGFloat(-1.5), through: CGFloat(1.5), by: 0.5) {
-                    let px = max(0, min(bitmap.pixelsWide - 1, Int((x * scaleX).rounded())))
-                    let rawY = greenHost.isFlipped ? (27 + dy) : (greenHost.bounds.height - (27 + dy))
-                    let py = max(0, min(bitmap.pixelsHigh - 1, Int((rawY * scaleY).rounded())))
-                    if let c = bitmap.colorAt(x: px, y: py)?.usingColorSpace(.deviceRGB),
-                       c.greenComponent > c.redComponent + 0.3 && c.greenComponent > c.blueComponent + 0.3 {
-                        foundGreen = true
-                    }
+            waitForPaint("slider did not follow the environment's accent color") {
+                trackHasColor(in: greenHost) { c in
+                    c.greenComponent > c.redComponent + 0.3 && c.greenComponent > c.blueComponent + 0.3
                 }
             }
-            check(foundGreen, "slider did not follow @Environment(\\.trainerTheme) accent color")
             greenWin.contentView = nil
             greenWin.close()
         }

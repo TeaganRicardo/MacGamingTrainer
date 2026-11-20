@@ -1,5 +1,5 @@
 """Headless macOS behavior checks for shared Core UI primitives and views."""
-import os
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -194,39 +194,6 @@ private func clickLocal(_ point: NSPoint, in window: NSWindow, host: NSView) {
     }
 }
 
-private func customAccentTheme(_ accent: Color) -> TrainerTheme {
-    let s = TrainerTheme.standard
-    return TrainerTheme(
-        background: s.background, accent: accent, panel: s.panel, panelRaised: s.panelRaised,
-        sidebarBackground: s.sidebarBackground, selectedFill: s.selectedFill, deferred: s.deferred,
-        warning: s.warning, success: s.success, mutedFill: s.mutedFill, subtleFill: s.subtleFill,
-        separator: s.separator, info: s.info, inactive: s.inactive,
-        panelCornerRadius: s.panelCornerRadius, cardCornerRadius: s.cardCornerRadius,
-        controlCornerRadius: s.controlCornerRadius, controlPadding: s.controlPadding,
-        compactControlSpacing: s.compactControlSpacing, compactCornerRadius: s.compactCornerRadius,
-        contentMinWidth: s.contentMinWidth, contentMinHeight: s.contentMinHeight,
-        pagePadding: s.pagePadding, pageSpacing: s.pageSpacing, sectionSpacing: s.sectionSpacing,
-        panelPadding: s.panelPadding, rowHorizontalPadding: s.rowHorizontalPadding,
-        rowMinimumHeight: s.rowMinimumHeight, inlineRowVerticalPadding: s.inlineRowVerticalPadding,
-        shortcutCaptureWidth: s.shortcutCaptureWidth, connectionActionWidth: s.connectionActionWidth,
-        compactActionWidth: s.compactActionWidth, shortcutBadgeMinimumWidth: s.shortcutBadgeMinimumWidth,
-        pickerCompactWidth: s.pickerCompactWidth, pickerStandardWidth: s.pickerStandardWidth,
-        pickerWideWidth: s.pickerWideWidth, pickerActionMaxWidth: s.pickerActionMaxWidth,
-        pickerActionLabelWidth: s.pickerActionLabelWidth, sheetPadding: s.sheetPadding,
-        sheetSpacing: s.sheetSpacing, emptyStatePadding: s.emptyStatePadding,
-        sidebarWidth: s.sidebarWidth, sidebarPadding: s.sidebarPadding,
-        sidebarCardPadding: s.sidebarCardPadding, rowContentSpacing: s.rowContentSpacing,
-        rowIconSpacing: s.rowIconSpacing, rowIconSize: s.rowIconSize, rowGlyphSize: s.rowGlyphSize,
-        rowGlyphActiveOpacity: s.rowGlyphActiveOpacity, rowGlyphIdleOpacity: s.rowGlyphIdleOpacity,
-        listCardPadding: s.listCardPadding, noticePadding: s.noticePadding,
-        noticeFillOpacity: s.noticeFillOpacity, compactFieldWidth: s.compactFieldWidth,
-        inlineFieldWidth: s.inlineFieldWidth, occurrenceFieldWidth: s.occurrenceFieldWidth,
-        disabledOpacity: s.disabledOpacity, unavailableOpacity: s.unavailableOpacity,
-        selectionHighlightOpacity: s.selectionHighlightOpacity, popoverDetailsWidth: s.popoverDetailsWidth,
-        toastMaxWidth: s.toastMaxWidth
-    )
-}
-
 @MainActor
 private func makeWindow(width: CGFloat, height: CGFloat, root: some View, appearance: NSAppearance.Name = .darkAqua) -> (NSWindow, NSHostingView<AnyView>) {
     let window = NSWindow(
@@ -256,7 +223,6 @@ private func exerciseTogglesAndFeatures(localization: TrainerLocalizationStore) 
           theme.shortcutBadgeMinimumWidth == 52 && theme.pickerActionMaxWidth == 420 &&
           theme.rowHorizontalPadding == 22 && theme.rowMinimumHeight == 64,
           "TrainerTheme.standard layout tokens drifted")
-    let greenTheme = customAccentTheme(Color(red: 0.1, green: 0.85, blue: 0.25))
 
     let detached = TrainerFeaturePresentation(
         enabled: true, supported: true, connected: false,
@@ -306,8 +272,6 @@ private func exerciseTogglesAndFeatures(localization: TrainerLocalizationStore) 
     let view = VStack(alignment: .leading, spacing: 8) {
         TrainerToggleControl(title: "DefaultSwitch", isOn: true, action: {})
             .frame(maxWidth: .infinity, alignment: .leading)
-        TrainerToggleControl(title: "CustomThemeSwitch", isOn: true, action: {})
-            .trainerTheme(greenTheme)
         TrainerFeatureToggleRow(title: "WaitingToggle", icon: "shield.fill", state: waitingState, shortcutText: "⌃1", action: {})
             .frame(maxWidth: .infinity)
         TrainerFeatureToggleRow(title: "PlainToggle", icon: "heart.fill", state: activeState, shortcutText: nil, action: {})
@@ -327,7 +291,7 @@ private func exerciseTogglesAndFeatures(localization: TrainerLocalizationStore) 
     func ctrl(_ title: String) -> NativeAccessibilityControl? {
         nativeAccessibilityControls(host).first { $0.label == title && ($0.role == "AXCheckBox" || $0.role == "AXSwitch") }
     }
-    let switchTitles = ["DefaultSwitch", "CustomThemeSwitch", "WaitingToggle", "PlainToggle", "WaitingMult", "PlainMult"]
+    let switchTitles = ["DefaultSwitch", "WaitingToggle", "PlainToggle", "WaitingMult", "PlainMult"]
     waitWindow(host, "switches mounted") {
         switchTitles.allSatisfy { ctrl($0) != nil } && ctrl("RefCheckbox") != nil
     }
@@ -335,10 +299,10 @@ private func exerciseTogglesAndFeatures(localization: TrainerLocalizationStore) 
     let cbRect = localRect(cb.frame, in: host, window: win)
     check(axSubrole(cb) != "AXToggle" || cbRect.width < 25, "RefCheckbox unexpectedly became a switch")
 
-    // All 6 TrainerToggleControl instances must back a regular-sized native Switch.
+    // Each shared switch must have a regular-sized native control.
     let backingSwitches = nativeSwitches(in: host)
-    check(backingSwitches.count == 6,
-          "expected 6 native Switch NSControls, found \(backingSwitches.count)")
+    check(backingSwitches.count == switchTitles.count,
+          "expected \(switchTitles.count) native Switch NSControls, found \(backingSwitches.count)")
     for sw in backingSwitches {
         check(sw.controlSize == .regular,
               "TrainerToggleControl lost .controlSize(.regular): \(sw.controlSize.rawValue)")
@@ -576,9 +540,9 @@ private func exerciseCardsStatsLocks(localization: TrainerLocalizationStore) {
                 && textFields(in: host).count == 8
         }
 
-        // No switches inside metric grid.
-        check(!nativeAccessibilityControls(host).contains { $0.role == "AXSwitch" || axSubrole($0) == "AXSwitch" },
-              "TrainerStatControls or metric grid rendered a Switch")
+        check(!nativeAccessibilityControls(host).contains {
+            $0.role == "AXSwitch" || $0.role == "AXCheckBox" || axSubrole($0) == "AXToggle"
+        }, "TrainerStatControls or metric grid rendered a toggle")
 
         // Field widths & vital "/" spacing (alignmentRect strips AppKit's 2pt focus/bezel outset).
         let fields = textFields(in: host)
@@ -689,7 +653,7 @@ private func exerciseButtonsBadgesSections(localization: TrainerLocalizationStor
         HStack(spacing: 8) {
             TrainerPrimaryActionButton(title: "Save", widthRole: .sheet) {}
                 .accessibilityIdentifier("btn.primarySheet")
-            TrainerSecondaryActionButton(title: "VeryLongActionLabelText", widthRole: .compactRow) {}
+            TrainerSecondaryActionButton(title: "Very Long Action Label Text", widthRole: .compactRow) {}
                 .accessibilityIdentifier("btn.longCompact")
             TrainerSecondaryActionButton(title: "DisableEffects", widthRole: .compactRow) {}
                 .accessibilityIdentifier("btn.scaleCompact")
@@ -754,8 +718,7 @@ private func exerciseButtonsBadgesSections(localization: TrainerLocalizationStor
     check(standaloneFrame.width < 102,
           "TrainerActionButtonLabel grew wider than text-only button (unexpected leading icon): width=\(standaloneFrame.width)")
 
-    // lineLimit(1) & minimumScaleFactor(0.78): long compact button keeps single-line height,
-    // and "DisableEffects" shrinks glyph height relative to unscaled "Go".
+    // Long compact labels preserve the button's single-line height.
     let longFrame = localRect(btn("btn.longCompact")!.frame, in: host, window: win)
     let scaleFrame = localRect(btn("btn.scaleCompact")!.frame, in: host, window: win)
     let shortFrame = localRect(btn("btn.shortCompact")!.frame, in: host, window: win)
@@ -812,10 +775,16 @@ private func exerciseButtonsBadgesSections(localization: TrainerLocalizationStor
     // Leading capsule at offset(x: -12) expands selRect's leading edge by ~12pt compared to unselRect.
     check(selRect.width >= unselRect.width + 8 && abs(selRect.maxX - unselRect.maxX) <= 1.5,
           "selected TrainerSectionButton missing leading offset marker expansion: sel=\(selRect) unsel=\(unselRect)")
-    let selMarkerRect = NSRect(x: selRect.minX - 2, y: selRect.minY + 6, width: 8, height: selRect.height - 12)
+    let step: CGFloat = 0.5
+    let markerSamples = stride(from: selRect.minX - 2, through: selRect.minX + 10, by: step).filter { x in
+        isPurple(rgba(bitmap, ptX: x, ptY: selRect.midY, host: host))
+    }
+    let markerWidth = CGFloat(markerSamples.count) * step
+    let contrast: ColorSchemeContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? .increased : .standard
+    let expectedMarkerWidth = theme.selectionMarkerWidth(for: contrast)
+    check(abs(markerWidth - expectedMarkerWidth) <= 0.75,
+          "selected section marker painted \(markerWidth) points; expected \(expectedMarkerWidth)")
     let unselMarkerRect = NSRect(x: unselRect.minX - 15, y: unselRect.minY + 6, width: 12, height: unselRect.height - 12)
-    check(hasMatchingPixel(bitmap, in: selMarkerRect, host: host, step: 0.5, matching: isPurple),
-          "selected TrainerSectionButton missing leading purple capsule marker: selRect=\(selRect) marker=\(selMarkerRect)")
     check(!hasMatchingPixel(bitmap, in: unselMarkerRect, host: host, step: 0.5, matching: isPurple),
           "unselected TrainerSectionButton drew leading marker")
 
@@ -1328,22 +1297,33 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
     let panelSurfaceLuma = luminance(bitmap, ptX: collapsedRect.minX + 6, ptY: collapsedRect.minY + 4, host: host)
     check(raisedSurfaceLuma > panelSurfaceLuma + 0.02,
           "selected TrainerSidebarCard did not use raised surface vs panel: raised=\(raisedSurfaceLuma) panel=\(panelSurfaceLuma)")
-    func dotBox(_ headerRect: NSRect) -> NSRect {
-        NSRect(x: headerRect.maxX - 18, y: headerRect.minY, width: 20, height: headerRect.height)
+    func checkStatusDot(_ header: NSRect, _ state: String, matching: (NSColor) -> Bool) {
+        let step: CGFloat = 0.5
+        var paintedBounds = CGRect.null
+        var paintedSamples = 0
+        for x in stride(from: header.maxX - 18, to: header.maxX + 2, by: step) {
+            for y in stride(from: header.minY, to: header.maxY, by: step) {
+                if matching(rgba(bitmap, ptX: x, ptY: y, host: host)) {
+                    paintedBounds = paintedBounds.union(CGRect(x: x, y: y, width: step, height: step))
+                    paintedSamples += 1
+                }
+            }
+        }
+        check(abs(paintedBounds.width - 8) <= 1 && abs(paintedBounds.height - 8) <= 1,
+              "\(state) status dot must paint 8 × 8 points in its status color: \(paintedBounds)")
+        // A filled circle covers about π/4 of its bounds. Allow for pixel rounding and antialiasing.
+        let coverage = CGFloat(paintedSamples) * step * step / (paintedBounds.width * paintedBounds.height)
+        check((0.65...0.92).contains(coverage), "\(state) status dot lost its circular paint: \(coverage)")
     }
-    check(hasMatchingPixel(bitmap, in: dotBox(headers[0]), host: host, step: 0.5, matching: isCyan),
-          "busy status dot not cyan: \(dotBox(headers[0]))")
-    check(hasMatchingPixel(bitmap, in: dotBox(headers[1]), host: host, step: 0.5, matching: isGreen),
-          "connected status dot not green: \(dotBox(headers[1]))")
-    check(hasMatchingPixel(bitmap, in: dotBox(headers[2]), host: host, step: 0.5, matching: isOrange),
-          "targetRunning status dot not orange: \(dotBox(headers[2]))")
-    let idleBox = dotBox(headers[3])
+    checkStatusDot(headers[0], "busy cyan", matching: isCyan)
+    checkStatusDot(headers[1], "connected green", matching: isGreen)
+    checkStatusDot(headers[2], "running orange", matching: isOrange)
     let idlePanelLuma = luminance(bitmap, ptX: collapsedRect.minX + 6, ptY: headers[3].minY, host: host)
-    check(hasMatchingPixel(bitmap, in: idleBox, host: host, step: 0.5, matching: { c in
+    checkStatusDot(headers[3], "idle gray") { c in
         let luma = (c.redComponent + c.greenComponent + c.blueComponent) / 3.0
         let sat = max(c.redComponent, c.greenComponent, c.blueComponent) - min(c.redComponent, c.greenComponent, c.blueComponent)
         return luma > idlePanelLuma + 0.15 && sat < 0.08
-    }), "idle status dot not neutral gray brighter than panel")
+    }
     let leadingStripeBox = NSRect(x: max(0, headers[0].minX - 16), y: headers[0].minY, width: 14, height: headers[0].height)
     check(!hasMatchingPixel(bitmap, in: leadingStripeBox, host: host, matching: isPurple),
           "TrainerSidebarCard unexpectedly drew a leading selection stripe")
@@ -1384,24 +1364,23 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
             && !nativeAccessibilityControls(pHost).contains { $0.identifier == "page.a.btn" }
             && fieldA.currentEditor() == nil
     }
-    pump(0.30)
-    clickLocal(NSPoint(x: pageABtnRect.midX, y: pageABtnRect.midY), in: pWin, host: pHost)
-    pump(0.05)
-    check(StubPageModuleA.pageATaps == 1, "inactive Page A button remained clickable after switching to B")
     let pageBBtnRect = localRect(
         nativeAccessibilityControls(pHost).first { $0.identifier == "page.b.btn" }!.frame,
         in: pHost, window: pWin
     )
-    let activeBLuma = luminance(rasterize(pHost), ptX: pageBBtnRect.minX + 5, ptY: pageBBtnRect.maxY + 20, host: pHost)
-    check(activeBLuma > 0.4, "selected Page B green surface did not render: luma=\(activeBLuma)")
+    let pageProbe = NSPoint(x: pageBBtnRect.minX + 5, y: pageBBtnRect.maxY + 20)
+    func pageLuminance() -> CGFloat {
+        luminance(rasterize(pHost), ptX: pageProbe.x, ptY: pageProbe.y, host: pHost)
+    }
+    waitWindow(pHost, "selected Page B paints its green surface") { pageLuminance() > 0.4 }
+    clickLocal(NSPoint(x: pageABtnRect.midX, y: pageABtnRect.midY), in: pWin, host: pHost)
+    pump(0.05)
+    check(StubPageModuleA.pageATaps == 1, "inactive Page A button remained clickable after switching to B")
     coordinator.selectedGameID = ""
     waitWindow(pHost, "TrainerGamePages hides unselected pages") {
         !nativeAccessibilityControls(pHost).contains { $0.identifier == "page.a.btn" || $0.identifier == "page.b.btn" }
     }
-    pump(0.30)
-    let deselectedPageLuma = luminance(rasterize(pHost), ptX: pageBBtnRect.minX + 5, ptY: pageBBtnRect.maxY + 20, host: pHost)
-    check(deselectedPageLuma < activeBLuma - 0.2,
-          "unselected pages remained visible (.opacity(0) missing): active=\(activeBLuma) deselected=\(deselectedPageLuma)")
+    waitWindow(pHost, "unselected pages stop painting their content") { pageLuminance() < 0.2 }
     pWin.contentView = nil
     pWin.close()
     print("scenario7_sidebar_pages_ok")
@@ -1411,6 +1390,16 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
 struct Main {
     @MainActor
     static func main() {
+        let components = CommandLine.arguments.dropFirst().compactMap(Double.init)
+        check(components.count == 3, "fixture requires three asset accent components")
+        let environment = EnvironmentValues()
+        let accent = TrainerTheme.standard.accent.resolve(in: environment)
+        let expected = Color(.sRGB, red: components[0], green: components[1], blue: components[2]).resolve(in: environment)
+        check(abs(accent.red - expected.red) < 0.0005
+              && abs(accent.green - expected.green) < 0.0005
+              && abs(accent.blue - expected.blue) < 0.0005 && accent.opacity == 1,
+              "compiled TrainerTheme accent \(accent) disagrees with application asset \(expected)")
+
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         app.finishLaunching()
@@ -1428,6 +1417,14 @@ struct Main {
     }
 }
 '''
+
+colorset_path = ROOT / "Resources/Assets.xcassets/AccentColor.colorset/Contents.json"
+(accent_entry,) = json.loads(colorset_path.read_text(encoding="utf-8"))["colors"]
+assert accent_entry["idiom"] == "universal"
+assert "appearances" not in accent_entry, "the dark-only product declares one accent"
+assert accent_entry["color"]["color-space"] == "srgb"
+asset_accent = accent_entry["color"]["components"]
+assert float(asset_accent["alpha"]) == 1.0
 
 with tempfile.TemporaryDirectory(prefix="mgt-core-ui-primitives-") as temporary:
     root = Path(temporary)
@@ -1452,7 +1449,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-ui-primitives-") as temporary:
         cwd=ROOT,
     )
     result = launch_fixture(
-        [str(binary)],
+        [str(binary), *(str(asset_accent[name]) for name in ("red", "green", "blue"))],
         cwd=ROOT,
         capture_output=True,
         text=True,

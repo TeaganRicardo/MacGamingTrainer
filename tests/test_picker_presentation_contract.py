@@ -1,6 +1,5 @@
 """Root regression for issue #653: workbench Pickers have one Core presentation owner."""
 
-import json
 from pathlib import Path
 import re
 
@@ -20,29 +19,6 @@ for repaint in (
 # Kept (no headless render hook): macOS renders native popup accent neutral gray in inactive headless windows, so Picker .tint(theme.accent) has no PR-safe render hook.
 assert ".tint(theme.accent)" in picker
 
-
-def srgb_triplet(text: str) -> tuple[float, float, float]:
-    match = re.search(
-        r"accent: Color\(red: ([\d.]+), green: ([\d.]+), blue: ([\d.]+)\)", text
-    )
-    assert match, "TrainerTheme accent declaration is missing"
-    return tuple(float(value) for value in match.groups())
-
-
-theme_accent = srgb_triplet((ROOT / "Sources/Core/UI/TrainerTheme.swift").read_text())
-colorset = json.loads(
-    (ROOT / "Resources/Assets.xcassets/AccentColor.colorset/Contents.json").read_text()
-)
-(entry,) = colorset["colors"]
-assert entry["idiom"] == "universal"
-assert "appearances" not in entry, "the dark-only product declares one accent"
-assert entry["color"]["color-space"] == "srgb"
-components = entry["color"]["components"]
-asset_accent = tuple(float(components[name]) for name in ("red", "green", "blue"))
-assert float(components["alpha"]) == 1.0
-assert all(abs(a - b) < 0.0005 for a, b in zip(asset_accent, theme_accent)), (
-    f"application accent {asset_accent} diverged from TrainerTheme accent {theme_accent}"
-)
 
 # Appearance is owned once at the AppKit application boundary, so windows,
 # sheets, panels, menus and reconstructed popups never resolve the light bezel.

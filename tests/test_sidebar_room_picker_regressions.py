@@ -19,6 +19,13 @@ def region(text: str, start: str, end: str | None = None) -> str:
     return remainder.split(end, 1)[0] if end else remainder
 
 
+# The native fixture measures the marker under the current display contrast.
+# SwiftUI's contrast environment is read-only, so retain the link to it here.
+section_controls = source("Sources/Core/UI/Components/TrainerListControls.swift")
+section = region(section_controls, "struct TrainerSectionButton", "enum TrainerActionWidthRole")
+assert "theme.selectionMarkerWidth(for: contrast)" in section
+
+
 # Both sidebar navigation sets start with the first visible Values section
 # selected; subsequent navigation transfers the marker to the chosen row.
 for path in ("Sources/Hades/HadesWorkbenchNavigation.swift", "Sources/Hades2/Views/Hades2HostActions.swift"):
