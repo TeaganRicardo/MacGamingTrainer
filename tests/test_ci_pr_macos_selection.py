@@ -167,7 +167,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-prereq-routing-") as directory:
     assert custom_routing.selection(["tests/test_custom.py"])["prerequisites"] == ["custom_tool"]
     assert custom_routing.selection(["Tools/ci_prerequisites/custom_tool.sh"])["selected"] == ["test_custom.py"]
     assert custom_routing.selection(["Sources/alpha/Module.swift"])["prerequisites"] == ["alpha_tool"]
+    assert custom_routing.selection(["Tools/ci_prerequisites/alpha_tool.sh"])["selected"] == ["test_alpha_frontend.py"]
     assert custom_routing.all_prerequisites() == ["alpha_tool", "custom_tool"]
+    manifest_scope = classify_scope(
+        ["Tools/ci_prerequisites/alpha_tool.sh"],
+        root=project, reference_prefixes=(), app_resource_sources=(),
+    )
+    assert manifest_scope["needs_macos"] and not manifest_scope["needs_build"], manifest_scope
 
     (project / "tests/test_bad.py").write_text('MGT_PLATFORM = "macos"\nMGT_PREREQUISITES = ("missing_prereq",)\n', encoding="utf-8")
     try:

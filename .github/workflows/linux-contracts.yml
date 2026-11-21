@@ -59,7 +59,8 @@ jobs:
       - name: Install declared Linux CI prerequisites
         if: steps.scope.outputs.needs_linux == 'true'
         run: |
-          for prereq in $(python3 Tools/discover_linux_tests.py --root "$PWD" --prerequisites); do
+          prereqs="$(python3 Tools/discover_linux_tests.py --root "$PWD" --prerequisites)"
+          for prereq in $prereqs; do
             bash "Tools/ci_prerequisites/${prereq}.sh"
           done
 

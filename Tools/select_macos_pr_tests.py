@@ -13,7 +13,7 @@ from module_inventory import MODULES_RELATIVE, discover_module_ids
 from product_support import CORE_SWIFT_SOURCES
 from supported_build import resolved_resource_source
 from test_inputs import affected_tests, is_native_fixture, load_macos_test_dependencies_and_prerequisites
-from test_inventory import ROOT, discover_module_test_prerequisites, prerequisite_path
+from test_inventory import ROOT, discover_module_test_prerequisites, module_smoke_tests
 
 BUILD_SMOKE = "test_build_signing_metadata_macos.py"
 
@@ -103,11 +103,6 @@ class MacOSTestRouting:
         }
 
 
-def module_smoke_tests(game: str, tests: set[str]) -> set[str]:
-    names = {f"test_{game}_{suffix}.py" for suffix in ("model_flow", "view_state_flow", "frontend")}
-    return {test for test in tests if test.rsplit("/", 1)[-1] in names}
-
-
 def load_routing(root: Path = ROOT, *, changed: list[str] | tuple[str, ...] = ()) -> MacOSTestRouting:
     manifests = {}
     sources = {}
@@ -134,16 +129,13 @@ def load_routing(root: Path = ROOT, *, changed: list[str] | tuple[str, ...] = ()
     tests = set(dependencies)
     module_prereqs = discover_module_test_prerequisites(root)
     for game, (manifest_path, manifest) in manifests.items():
-        declared_prereqs = module_prereqs.get(game, ())
         runtime_inputs = {manifest_path} | {
             resolved_resource_source(resource["source"], manifest.get("supportedBuild"))
             for resource in manifest.get("appResources", [])
-        } | {prerequisite_path(prereq) for prereq in declared_prereqs}
+        }
         consumers = module_smoke_tests(game, tests) | affected_tests([manifest_path], dependencies)
         for name in consumers:
             dependencies[name] |= runtime_inputs
-            if declared_prereqs:
-                prerequisites[name] = prerequisites.get(name, frozenset()) | frozenset(declared_prereqs)
         entitlements = manifest.get("buildRequirements", {}).get("entitlements")
         if entitlements and BUILD_SMOKE in tests:
             dependencies[BUILD_SMOKE] |= {entitlements}

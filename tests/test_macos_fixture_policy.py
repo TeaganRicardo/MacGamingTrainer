@@ -23,7 +23,7 @@ from macos_fixture_policy import (
     HOSTED_ARCH, HOSTED_PROFILE, LOCAL_MINIMUM_SECONDS, LOCAL_PROFILE,
     MAXIMUM_BUDGET_SECONDS, PROFILE_VARIABLE, PROVISIONAL_BUDGET_SECONDS,
     FixtureBudget, FixturePolicyError, FixtureWatchdogExpired,
-    resolve_budget, resolve_profile, run_watchdog, validate_journey_budgets,
+    launch_fixture, resolve_budget, resolve_profile, run_watchdog, validate_journey_budgets,
 )
 from macos_toolchain_identity import SUPPORTED_RUNNER_ARCH, SUPPORTED_RUNNER_LABEL
 from select_macos_pr_tests import PR_DEFERRED, load_routing
@@ -324,6 +324,21 @@ assert PROVISIONAL_BUDGET_SECONDS == LOCAL_MINIMUM_SECONDS
 
 # Provisional budgets let a new native journey run before hosted samples exist,
 # using LOCAL_MINIMUM_SECONDS while non-provisional resolution stays fail-closed.
+for missing_budgets in (None, [], {}):
+    try:
+        resolve_budget("new_game.provisional_smoke", HOSTED, budgets=missing_budgets)
+    except FixturePolicyError:
+        pass
+    else:
+        raise AssertionError(f"non-provisional budgets={missing_budgets!r} accepted")
+
+try:
+    resolve_budget("new_game.provisional_smoke", HOSTED, budgets=[], provisional=True)
+except FixturePolicyError:
+    pass
+else:
+    raise AssertionError("non-mapping budgets=[] accepted with provisional=True")
+
 for budgets_arg in (None, {}, MODULE_BUDGETS["hades"]):
     hosted_provisional = resolve_budget(
         "new_game.provisional_smoke", HOSTED, budgets=budgets_arg, provisional=True
@@ -339,6 +354,16 @@ for budgets_arg in (None, {}, MODULE_BUDGETS["hades"]):
     assert local_provisional.profile == LOCAL_PROFILE
     assert local_provisional.seconds == PROVISIONAL_BUDGET_SECONDS
     assert local_provisional.provisional is True
+
+launched = launch_fixture(
+    [sys.executable, "-c", "pass"],
+    journey="new_game.provisional_launch",
+    provisional=True,
+    environ={},
+    capture_output=True,
+    check=True,
+)
+assert launched.returncode == 0
 
 # Hosted macOS jobs declaring this verified profile is a parsed-model rule in
 # test_ci_workflow_contract.py.

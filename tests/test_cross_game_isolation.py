@@ -310,7 +310,7 @@ def check_python_import_boundaries(root: Path) -> list[str]:
         game_tool_dir = root / 'Tools' / 'games' / spec.id
         owned_files = [
             (spec.backend_dir, backend_root if spec.backend_dir.is_relative_to(backend_root) else spec.backend_dir.parent),
-            (game_tool_dir, backend_root),
+            (game_tool_dir, root / 'Tools'),
         ]
         for directory, pkg_root in owned_files:
             for path in _iter_python_files(directory, root, tracked):
@@ -432,8 +432,10 @@ def check_manifest_derived_identities(root: Path) -> list[str]:
         pat = _boundary_pattern(other_tokens)
         if pat is None:
             continue
-        all_mod_files = _iter_python_files(spec.backend_dir, root, tracked) + _iter_swift_files(
-            spec.frontend_dir, root, tracked
+        all_mod_files = (
+            _iter_python_files(spec.backend_dir, root, tracked)
+            + _iter_python_files(root / 'Tools' / 'games' / spec.id, root, tracked)
+            + _iter_swift_files(spec.frontend_dir, root, tracked)
         )
         for path in all_mod_files:
             rel = path.relative_to(root).as_posix()
@@ -1245,5 +1247,27 @@ with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
     assert _is_key_allowed_for_module('shortcut.layoutVersion', False, 'hades2')
     assert not _is_key_allowed_for_module('shortcut.newUnlistedKey', False, 'hades2')
     assert not _is_key_allowed_for_module('shortcut.layoutVersion', False, 'alpha')
+
+    # 3g. Tools/games/<id>/ isolation catches relative & absolute foreign imports,
+    # token leaks, and unowned top-level Tools/ scripts referencing a game module.
+    (synth / 'Tools/games/alpha').mkdir(parents=True)
+    for filename, snippet in (
+        ('bad_rel.py', 'from ..beta import adapter\n'),
+        ('bad_abs.py', 'from games.beta import adapter\n'),
+    ):
+        bad_tool = synth / 'Tools/games/alpha' / filename
+        bad_tool.write_text(snippet, encoding='utf-8')
+        assert any('imports foreign game' in err for err in check_python_import_boundaries(synth)), filename
+        bad_tool.unlink()
+
+    leaky_top = synth / 'Tools/leaky_tool.py'
+    leaky_top.write_text('import games.alpha\n', encoding='utf-8')
+    assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
+    leaky_top.unlink()
+
+    tok_tool = synth / 'Tools/games/alpha/leak_token.py'
+    tok_tool.write_text('CLS = "BetaAdapter"\n', encoding='utf-8')
+    assert any('foreign module identifiers' in err for err in check_manifest_derived_identities(synth))
+    tok_tool.unlink()
 
 print('cross_game_isolation_ok')

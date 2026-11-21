@@ -16,6 +16,7 @@ from test_inventory import (
     discover_module_test_prerequisites,
     discover_test_inventory,
     load_macos_only_tests,
+    module_smoke_tests,
     prerequisite_path,
 )
 
@@ -289,13 +290,22 @@ def load_macos_test_dependencies_and_prerequisites(
     source_dirs: dict[str, str] | None = None,
 ) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
     """Return (inputs, prerequisites) for each macOS test entrypoint."""
-    return load_test_dependency_graph(
+    dependencies, prerequisites = load_test_dependency_graph(
         root,
         tests=load_macos_only_tests(root),
         changed_paths=changed_paths,
         source_dirs=source_dirs,
         include_runner_smoke=True,
     )
+    all_tests = set(dependencies)
+    for game, declared_prereqs in discover_module_test_prerequisites(root).items():
+        manifest_path = (MODULES_RELATIVE / game / "module.json").as_posix()
+        prereq_files = frozenset(prerequisite_path(prereq) for prereq in declared_prereqs)
+        consumers = module_smoke_tests(game, all_tests) | affected_tests([manifest_path], dependencies)
+        for name in consumers:
+            dependencies[name] = dependencies[name] | prereq_files
+            prerequisites[name] = prerequisites.get(name, frozenset()) | frozenset(declared_prereqs)
+    return dependencies, prerequisites
 
 
 def load_macos_test_dependencies(

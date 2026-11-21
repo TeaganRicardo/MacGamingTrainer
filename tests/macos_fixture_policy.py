@@ -142,6 +142,8 @@ def resolve_budget(journey: str, environ: Mapping[str, str] | None = None, *,
         hosted = PROVISIONAL_BUDGET_SECONDS
         is_provisional = True
     else:
+        if not isinstance(budgets, Mapping):
+            raise FixturePolicyError("domain journey budgets must be a non-empty mapping")
         if budgets:
             validate_journey_budgets(budgets)
         elif not provisional:

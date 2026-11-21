@@ -148,7 +148,7 @@ jobs:
           prereqs="$(python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["prerequisites"]))' "$selection")"
           if [ -n "$prereqs" ]; then
             echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
-            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '.')" >> "$GITHUB_OUTPUT"
             echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerequisites=" >> "$GITHUB_OUTPUT"
@@ -164,7 +164,7 @@ jobs:
           prereqs="$(python3 Tools/select_macos_pr_tests.py --all-prerequisites | paste -sd ' ' -)"
           if [ -n "$prereqs" ]; then
             echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
-            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '.')" >> "$GITHUB_OUTPUT"
             echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerequisites=" >> "$GITHUB_OUTPUT"

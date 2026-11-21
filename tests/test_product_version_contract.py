@@ -52,6 +52,7 @@ if tomllib is not None:
 else:
     ruff_target = re.search(r'^target-version\s*=\s*"([^"]+)"', pyproject_text, re.M).group(1)
     mypy_version = re.search(r'^python_version\s*=\s*"([^"]+)"', pyproject_text, re.M).group(1)
-assert ruff_target == 'py' + mypy_version.replace('.', ''), (ruff_target, mypy_version)
+assert ruff_target == 'py39', ruff_target
+assert mypy_version == '3.10', mypy_version
 
 print('product_version_contract_ok')

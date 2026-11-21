@@ -324,8 +324,12 @@ for marker in ('lua5.2', 'liblua5.2-dev', 'lua-5.2.4', 'lua52_native'):
 
 assert any(
     '--prerequisites' in str(step.get('run') or '') and 'Tools/ci_prerequisites/' in str(step.get('run') or '')
+    and 'for ' not in next(
+        (line for line in str(step.get('run') or '').splitlines() if '--prerequisites' in line),
+        '',
+    )
     for _, step in all_steps['linux-contracts.yml']
-), 'linux-contracts.yml must install declared CI prerequisites generically'
+), 'linux-contracts.yml must capture prerequisites before looping so discovery errors fail closed'
 
 build2_steps = steps(workflows['build2-macos.yml']['jobs']['build'])
 assert any(

@@ -46,6 +46,11 @@ def declared_prerequisites(tree: ast.Module, source: str, *, root: Path | None =
     return tuple(prereqs)
 
 
+def module_smoke_tests(game: str, tests: set[str]) -> set[str]:
+    names = {f"test_{game}_{suffix}.py" for suffix in ("model_flow", "view_state_flow", "frontend")}
+    return {test for test in tests if test.rsplit("/", 1)[-1] in names}
+
+
 def discover_module_test_prerequisites(root: Path = ROOT) -> dict[str, tuple[str, ...]]:
     games_root = root / "Backend" / "games"
     if not games_root.is_dir():
@@ -57,13 +62,19 @@ def discover_module_test_prerequisites(root: Path = ROOT) -> dict[str, tuple[str
         if not isinstance(req, dict):
             raise ValueError(f"{manifest_path}: buildRequirements must be an object")
         raw_prereqs = req.get("testPrerequisites", [])
-        if not isinstance(raw_prereqs, list) or len(set(raw_prereqs)) != len(raw_prereqs):
+        if not isinstance(raw_prereqs, list):
             raise ValueError(f"{manifest_path}: buildRequirements.testPrerequisites must be a list of unique names")
-        if raw_prereqs:
-            discovered[manifest_path.parent.name] = tuple(
-                validate_prerequisite(item, manifest_path.relative_to(root).as_posix(), root=root)
-                for item in raw_prereqs
-            )
+        validated: list[str] = []
+        seen: set[str] = set()
+        source = manifest_path.relative_to(root).as_posix()
+        for item in raw_prereqs:
+            name = validate_prerequisite(item, source, root=root)
+            if name in seen:
+                raise ValueError(f"{source}: duplicate CI prerequisite {name!r}")
+            seen.add(name)
+            validated.append(name)
+        if validated:
+            discovered[manifest_path.parent.name] = tuple(validated)
     return discovered
 
 

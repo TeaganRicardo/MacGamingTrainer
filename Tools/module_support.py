@@ -241,12 +241,16 @@ def load_manifest(game_id: str) -> BuildManifest:
     if debugger_entitlement and not entitlements:
         raise ManifestError('debuggerEntitlement requires an entitlements file.')
     raw_prereqs = req.get('testPrerequisites', [])
-    if not isinstance(raw_prereqs, list) or len(set(raw_prereqs)) != len(raw_prereqs):
+    if not isinstance(raw_prereqs, list):
         raise ManifestError('buildRequirements.testPrerequisites must be a list of unique names.')
     test_prerequisites = []
+    seen_prereqs = set()
     for prereq in raw_prereqs:
         if not isinstance(prereq, str) or not _PREREQUISITE_RE.fullmatch(prereq):
             raise ManifestError(f'buildRequirements.testPrerequisites contains invalid name: {prereq!r}.')
+        if prereq in seen_prereqs:
+            raise ManifestError('buildRequirements.testPrerequisites must not contain duplicates.')
+        seen_prereqs.add(prereq)
         if not (ROOT / 'Tools' / 'ci_prerequisites' / f'{prereq}.sh').is_file():
             raise ManifestError(f'buildRequirements.testPrerequisites references unknown prerequisite: {prereq!r}.')
         test_prerequisites.append(prereq)
