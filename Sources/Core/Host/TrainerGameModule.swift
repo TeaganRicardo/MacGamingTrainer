@@ -119,6 +119,12 @@ package protocol TrainerHostModel: ObservableObject {
     func backendDidStart()
     func backendWillRestart()
     func backendDidStop()
+    /// Every module declares which target a payload describes; there is no
+    /// default. `.independent` applies the payload whatever target is running,
+    /// so use it only for state that never depends on one. `.lifetime` drops a
+    /// reply whose request began under an earlier target observation, and
+    /// `.process` also drops one that reports another process identifier.
+    /// Dropped payloads go to `applyStaleBackendPayload`.
     func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget
     func applyBackendPayload(_ payload: [String: Any])
     func applyStaleBackendPayload(_ payload: [String: Any])
@@ -133,7 +139,6 @@ extension TrainerHostModel {
     package func backendDidStart() {}
     package func backendWillRestart() {}
     package func backendDidStop() {}
-    package func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
     package func applyBackendPayload(_ payload: [String: Any]) {}
     /// A late reply may still carry an action receipt or durable metadata.
     package func applyStaleBackendPayload(_ payload: [String: Any]) {}

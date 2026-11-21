@@ -27,6 +27,8 @@ Call the Host-facing model and module UI factories on Swift's main actor. Swift 
 
 `TrainerGameModule.makeModel(services:)` receives the Host-owned session, observable backend status, current target observation, descriptor, log sink and module-scoped hotkeys. The model supplies its game-specific payload and connection behavior. The Context records the target's log-session boundary before starting the backend and stops the session once the model's termination hook completes.
 
+Each model must declare `backendPayloadTarget(_:)`; Core has no default. Return `.process(identifier:)` for payloads that describe an attached process, and report that process ID from the backend. Return `.lifetime` for other target-dependent state, and `.independent` only for state that never depends on a target. The Context sends a payload it rejects as stale to `applyStaleBackendPayload(_:)`, so a reply from a replaced or exited target never updates the live view. The reference fixture shows the `.lifetime` case.
+
 ## Terminology, localization and shared responsibilities
 
 Native game terms come from the module's terminology owner and its verified reference sources. The current examples are `Backend/games/hades2/terminology.py` with the manifest-declared supported-build terminology resource, and Hades I's `catalog.py`, `world.py` and `save_owners.py`. Follow [terminology ownership](../../ENGINEERING_INVARIANTS.md#8-terminology-ownership) for bilingual native identities and Trainer-owned labels.

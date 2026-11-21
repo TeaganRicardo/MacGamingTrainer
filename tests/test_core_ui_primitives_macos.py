@@ -1127,6 +1127,7 @@ final class StubPageModel: ObservableObject, TrainerHostModel {
     func connectFromHost(reason: TrainerHostConnectReason) {}
     func disconnectFromHost() {}
     func refreshFromHost() {}
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
 

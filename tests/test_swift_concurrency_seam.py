@@ -249,6 +249,7 @@ final class SeamStubModel: TrainerHostModel {
     func connectFromHost(reason: TrainerHostConnectReason) {}
     func disconnectFromHost() {}
     func refreshFromHost() {}
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
 }
 
 enum SeamStubModule: TrainerGameModule {

@@ -172,6 +172,7 @@ final class DefaultBehaviorStubModel: TrainerHostModel {
     }
     func disconnectFromHost() {}
     func refreshFromHost() { refreshCount += 1 }
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
     func backendWillRestart() { restartBackendCount += 1 }
     func prepareForTermination(completion: @escaping () -> Void) { completion() }
 }
