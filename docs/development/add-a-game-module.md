@@ -85,10 +85,10 @@ The contract above is the goal; these shared files still need edits or attention
 
 ## Run the owning lanes
 
-Run `python3 Tools/validate_game_module.py --all`, `python3 Tools/supported_build.py` and the affected narrow behavior tests before publication. Portable changes use Linux contracts. Ordinary Swift changes use selected native smoke and unified product typecheck. Entrypoint, module, native, package or build inputs require the full linked and signed product. Shared module/build boundaries also require the reference fixture matrix.
+Run `python3 Tools/validate_game_module.py --all`, `python3 Tools/supported_build.py` and the affected narrow behavior tests before publication.
 
 For shared Python changes, create a virtual environment with the Python version used by Linux contracts and install the pinned tools with `python3 -m pip install -r Tools/python_static_requirements.txt`. From the repository root, run `python3 -m ruff check`, `python3 -m ruff format --check` and `python3 -m mypy`. `pyproject.toml` defines the shared packages Ruff checks and the protocol seams mypy checks.
 
-A module-matrix workflow-only change exercises its own reference lane and Linux contracts; it does not force the unrelated unified product build. Mixed changes choose all applicable responsibilities, while an unknown diff fails closed. The three required check contexts stay present. Full inventory, isolated module packaging and retained artifact provenance belong to exact-SHA convergence.
+PR scope routing lives in [Tools/ci_docs_only.py](../../Tools/ci_docs_only.py) and [tests/test_ci_docs_only.py](../../tests/test_ci_docs_only.py). See [CI and build provenance](ci.md) for the three required check contexts, `--typecheck` vs full builds, convergence dispatch, Action pinning and provenance verification.
 
 Resolve the current main and open overlapping PRs before starting. Develop, independently review and merge the final tested head separately. Record the exact source and the scope each check proves. Product versions and releases are prepared in separate intentional work.

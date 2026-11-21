@@ -47,3 +47,4 @@ xcrun lldb -P
 - [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md) — stable ownership, lifecycle, replay, and Save-safety rules.
 - [GAME_MODULES.md](GAME_MODULES.md) — Core/game-module contract.
 - [VERSIONING.md](VERSIONING.md) — release and versioning policy.
+- [docs/development/ci.md](docs/development/ci.md) — CI routing, toolchain pinning and build provenance policy.
