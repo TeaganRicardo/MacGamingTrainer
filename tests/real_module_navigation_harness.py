@@ -133,6 +133,7 @@ final class StartupAvailabilityModel: ObservableObject, TrainerHostModel {
 
     init(services: TrainerModuleServices) { session = services.session }
     func refreshFromHost() { session.send("status", operation: "host.refreshStatus", announceSuccess: false) }
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
     func connectFromHost(reason: TrainerHostConnectReason) { fatalError("startup fixture unexpectedly tried to connect a target") }
     func disconnectFromHost() {}
 

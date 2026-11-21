@@ -69,6 +69,19 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         )
     }
 
+    /// Connection state describes the target that was running when the request
+    /// began. This backend reports no process identifier; a backend that
+    /// attaches to a process should report it and return `.process`.
+    func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget {
+        payload["connected"] is Bool ? .lifetime : .independent
+    }
+
+    /// The rejected reply described an earlier target. Read the state again
+    /// under the current one rather than keep showing what it replaced.
+    func applyStaleBackendPayload(_ payload: [String: Any]) {
+        refreshFromHost()
+    }
+
     func applyBackendPayload(_ payload: [String: Any]) {
         if let connected = payload["connected"] as? Bool {
             self.connected = connected
