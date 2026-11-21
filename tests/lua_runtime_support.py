@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
+MGT_PREREQUISITES = ("lua52",)
 
 # Shared guard that routes every harness dispatch through the production JSON
 # boundary (see the file header for the defect it closes).

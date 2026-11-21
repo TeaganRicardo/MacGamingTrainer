@@ -8,7 +8,7 @@ import re
 import subprocess
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 OUTPUT = ROOT / 'Backend/games/hades/catalog.json'
 SCRIPTS = ('WeaponSets.lua', 'TraitData.lua', 'LootData.lua', 'GiftData.lua', 'StoreData.lua', 'NPCData.lua')
 RESOURCE_TEXT_IDS = {

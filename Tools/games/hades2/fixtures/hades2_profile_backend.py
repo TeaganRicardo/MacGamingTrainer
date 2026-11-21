@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-HARNESS = Path(__file__).resolve().parents[2]
+HARNESS = Path(__file__).resolve().parents[4]
 SOURCE = Path(os.environ.get('MGT_PROFILE_SOURCE_ROOT', HARNESS))
 sys.path[:0] = [str(SOURCE / 'Backend'), str(HARNESS / 'tests')]
 # Older baseline sources predate probes. The external harness owns their
@@ -66,7 +66,7 @@ class OfflineLuaTransport:
         self.counter = 0
         self.events = open(os.environ["MGT_PROFILE_EVENTS"], "a", encoding="utf-8")
         self.lua = subprocess.Popen([
-            require_lua52('operation profile'), str(HARNESS / 'Tools/fixtures/hades2_operation_profile.lua'),
+            require_lua52('operation profile'), str(HARNESS / 'Tools/games/hades2/fixtures/hades2_operation_profile.lua'),
             str(SOURCE / 'Backend/games/hades2/runtime/hades.lua'), '1',
             os.environ.get('MGT_PROFILE_TRAITS', '32'), os.environ.get('MGT_PROFILE_CATALOG', '96'),
             os.environ.get('MGT_PROFILE_RESOURCES', '32'), 'serve',

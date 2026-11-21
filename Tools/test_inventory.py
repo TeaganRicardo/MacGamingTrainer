@@ -4,10 +4,67 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PREREQUISITES_DIR = Path("Tools/ci_prerequisites")
+_PREREQUISITE_RE = re.compile(r"^[a-z0-9_][a-z0-9_-]*$")
+
+
+def prerequisite_path(name: str) -> str:
+    return f"{PREREQUISITES_DIR.as_posix()}/{name}.sh"
+
+
+def validate_prerequisite(name: object, source: str, *, root: Path | None = None) -> str:
+    if not isinstance(name, str) or not _PREREQUISITE_RE.fullmatch(name):
+        raise ValueError(f"{source}: invalid CI prerequisite name: {name!r}")
+    if root is not None and not (root / PREREQUISITES_DIR / f"{name}.sh").is_file():
+        raise ValueError(f"{source}: unknown CI prerequisite {name!r} (missing {prerequisite_path(name)})")
+    return name
+
+
+def declared_prerequisites(tree: ast.Module, source: str, *, root: Path | None = None) -> tuple[str, ...]:
+    values = declarations(tree, "MGT_PREREQUISITES")
+    if not values:
+        return ()
+    message = f"{source}: MGT_PREREQUISITES must be a literal list of unique prerequisite names"
+    if len(values) != 1 or not isinstance(values[0], (ast.List, ast.Tuple)):
+        raise ValueError(message)
+    prereqs: list[str] = []
+    seen: set[str] = set()
+    for element in values[0].elts:
+        if not isinstance(element, ast.Constant) or not isinstance(element.value, str):
+            raise ValueError(message)
+        name = validate_prerequisite(element.value, source, root=root)
+        if name in seen:
+            raise ValueError(message)
+        seen.add(name)
+        prereqs.append(name)
+    return tuple(prereqs)
+
+
+def discover_module_test_prerequisites(root: Path = ROOT) -> dict[str, tuple[str, ...]]:
+    games_root = root / "Backend" / "games"
+    if not games_root.is_dir():
+        return {}
+    discovered: dict[str, tuple[str, ...]] = {}
+    for manifest_path in sorted(games_root.glob("*/module.json")):
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        req = raw.get("buildRequirements", {}) if isinstance(raw, dict) else {}
+        if not isinstance(req, dict):
+            raise ValueError(f"{manifest_path}: buildRequirements must be an object")
+        raw_prereqs = req.get("testPrerequisites", [])
+        if not isinstance(raw_prereqs, list) or len(set(raw_prereqs)) != len(raw_prereqs):
+            raise ValueError(f"{manifest_path}: buildRequirements.testPrerequisites must be a list of unique names")
+        if raw_prereqs:
+            discovered[manifest_path.parent.name] = tuple(
+                validate_prerequisite(item, manifest_path.relative_to(root).as_posix(), root=root)
+                for item in raw_prereqs
+            )
+    return discovered
 
 
 def declarations(tree: ast.Module, name: str) -> list[ast.expr | None]:

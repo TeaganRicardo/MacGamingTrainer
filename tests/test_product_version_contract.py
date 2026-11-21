@@ -1,7 +1,13 @@
+import json
 import plistlib
 import re
 import sys
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.9/3.10 compatibility
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parents[1]
 plist = plistlib.loads((ROOT / 'Info.plist').read_bytes())
@@ -32,5 +38,20 @@ assert 'Game module contract — 0.1 baseline' not in modules
 # release identity. The live backend resolves that value from the product SemVer.
 assert '__PRODUCT_VERSION__' in fixture
 assert '"backendVersion": "0.1"' not in fixture
+
+# Single source of truth for Python version across CI workflows and runtime manifest.
+python_runtime_version = json.loads((ROOT / 'Tools/python_runtime.json').read_text(encoding='utf-8'))['version']
+dot_python_version = (ROOT / '.python-version').read_text(encoding='utf-8').strip()
+assert dot_python_version == python_runtime_version, (dot_python_version, python_runtime_version)
+
+pyproject_text = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+if tomllib is not None:
+    pyproject = tomllib.loads(pyproject_text)
+    ruff_target = pyproject['tool']['ruff']['target-version']
+    mypy_version = pyproject['tool']['mypy']['python_version']
+else:
+    ruff_target = re.search(r'^target-version\s*=\s*"([^"]+)"', pyproject_text, re.M).group(1)
+    mypy_version = re.search(r'^python_version\s*=\s*"([^"]+)"', pyproject_text, re.M).group(1)
+assert ruff_target == 'py' + mypy_version.replace('.', ''), (ruff_target, mypy_version)
 
 print('product_version_contract_ok')

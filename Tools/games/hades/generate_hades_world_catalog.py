@@ -4,11 +4,14 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
 
 from generate_hades_catalog import render_text, text_records
-
-
-ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / 'Backend/games/hades/world_catalog.json'
 OLYMPIANS = ('ZeusUpgrade', 'PoseidonUpgrade', 'AthenaUpgrade', 'AphroditeUpgrade',
              'AresUpgrade', 'ArtemisUpgrade', 'DionysusUpgrade', 'DemeterUpgrade')

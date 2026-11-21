@@ -17,7 +17,7 @@ TESTS = ROUTING.tests
 assert ROUTING.relevant_tests([]) == sorted(TESTS)
 assert ROUTING.selection([])["selected"] == sorted(TESTS - PR_DEFERRED.keys())
 assert ROUTING.selection(["README.md"]) == {
-    "relevant": [], "selected": [], "deferred": {}, "requirements": {"lua52_native": False},
+    "relevant": [], "selected": [], "deferred": {}, "prerequisites": [],
 }
 assert ROUTING.relevant_tests(["tests/fixtures/swift/InMemoryDefaults.swift"]) == sorted(TESTS)
 assert set(PR_DEFERRED) <= TESTS
@@ -109,7 +109,7 @@ for helper, consumers in (
     }),
 ):
     assert consumers <= set(ROUTING.relevant_tests([helper])), helper
-assert ROUTING.relevant_tests(["Tools/profile_hades2_operations.py"]) == []
+assert ROUTING.relevant_tests(["Tools/games/hades2/profile_hades2_operations.py"]) == []
 assert ROUTING.relevant_tests(["tests/test_debugserver_ownership.py"]) == []
 
 for changed_path, owner in (
@@ -137,8 +137,45 @@ assert set(result["relevant"]) == set(result["selected"]) | set(result["deferred
 for name, detail in result["deferred"].items():
     assert name in TESTS and detail["reason"] and "workflow_dispatch" in detail["verification_owner"]
 
-for path in ("Backend/games/hades2/native/EffectBlockQuery.c", ".github/workflows/build2-macos.yml"):
-    assert ROUTING.selection([path])["requirements"]["lua52_native"], path
+for path in (
+    "Backend/games/hades2/native/EffectBlockQuery.c",
+    ".github/workflows/build2-macos.yml",
+    "Tools/ci_prerequisites/lua52.sh",
+):
+    assert "lua52" in ROUTING.selection([path])["prerequisites"], path
+assert ROUTING.selection(["Sources/Hades2/Hades2View.swift"])["prerequisites"] == []
+
+with tempfile.TemporaryDirectory(prefix="mgt-prereq-routing-") as directory:
+    project = Path(directory)
+    (project / "app.json").write_text(json.dumps({"modules": ["alpha"]}), encoding="utf-8")
+    (project / "Backend/games/alpha").mkdir(parents=True)
+    (project / "Backend/games/alpha/module.json").write_text(json.dumps({
+        "id": "alpha", "frontend": {"sourceDirectory": "Sources/alpha"},
+        "buildRequirements": {"testPrerequisites": ["alpha_tool"]},
+    }), encoding="utf-8")
+    (project / "Sources/alpha").mkdir(parents=True)
+    (project / "Sources/alpha/Module.swift").write_text("", encoding="utf-8")
+    (project / "Tools/ci_prerequisites").mkdir(parents=True)
+    (project / "Tools/ci_prerequisites/custom_tool.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (project / "Tools/ci_prerequisites/alpha_tool.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    (project / "tests/helpers").mkdir(parents=True)
+    (project / "tests/helpers/custom_helper.py").write_text('MGT_PREREQUISITES = ("custom_tool",)\n', encoding="utf-8")
+    (project / "tests/test_alpha_frontend.py").write_text('MGT_PLATFORM = "macos"\n', encoding="utf-8")
+    (project / "tests/test_custom.py").write_text('MGT_PLATFORM = "macos"\nfrom helpers import custom_helper\n', encoding="utf-8")
+
+    custom_routing = load_routing(project)
+    assert custom_routing.selection(["tests/test_custom.py"])["prerequisites"] == ["custom_tool"]
+    assert custom_routing.selection(["Tools/ci_prerequisites/custom_tool.sh"])["selected"] == ["test_custom.py"]
+    assert custom_routing.selection(["Sources/alpha/Module.swift"])["prerequisites"] == ["alpha_tool"]
+    assert custom_routing.all_prerequisites() == ["alpha_tool", "custom_tool"]
+
+    (project / "tests/test_bad.py").write_text('MGT_PLATFORM = "macos"\nMGT_PREREQUISITES = ("missing_prereq",)\n', encoding="utf-8")
+    try:
+        load_routing(project)
+    except ValueError as error:
+        assert "missing_prereq" in str(error), error
+    else:
+        raise AssertionError("unknown MGT_PREREQUISITES accepted")
 
 # Every macOS inventory entry must be reachable from real non-test/helper files
 # or actual helper files.
@@ -165,11 +202,12 @@ _HADES2_REFERENCE = json.loads((ROOT / "Backend/games/hades2/module.json").read_
 _NON_BEHAVIOR_MACOS_EXACT = frozenset({
     _HADES2_REFERENCE + "/installed_source_hashes.json",
     ".gitignore",
+    ".python-version",
     "AppIcon.icns",
     "ContractFixtures/host_protocol_v6.json",
     "Info.plist",
     "LICENSE",
-    "Tools/hades2_profile_workloads.py",
+    "Tools/macos_toolchain_identity.py",
     "Tools/module_inventory.py",
     "Tools/product_support.py",
     "Tools/python_runtime.json",
@@ -178,8 +216,6 @@ _NON_BEHAVIOR_MACOS_EXACT = frozenset({
 })
 _NON_BEHAVIOR_MACOS_PREFIXES = (
     "Resources/Assets.xcassets/",
-    "Tools/fixtures/",
-    "Tools/generate_",
 )
 unexplained_zero_test = []
 for path in sorted(set(tracked_non_test)):

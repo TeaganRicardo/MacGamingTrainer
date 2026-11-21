@@ -72,11 +72,49 @@ with tempfile.TemporaryDirectory() as temporary_root:
     assert empty.returncode != 0, 'zero portable tests must fail closed'
 
     native.write_text('MGT_PLATFORM = "macOS"\n')
-    invalid = subprocess.run(
+    invalid_platform = subprocess.run(
         [sys.executable, str(ROOT / 'Tools/test_inventory.py'), '--root', str(fixture_root)],
         capture_output=True, text=True,
     )
-    assert invalid.returncode != 0 and 'test_excluded_fixture.py' in invalid.stderr
+    assert invalid_platform.returncode != 0 and 'test_excluded_fixture.py' in invalid_platform.stderr
+
+# Generic prerequisite discovery from portable tests and module manifests.
+with tempfile.TemporaryDirectory() as prereq_root_dir:
+    prereq_root = Path(prereq_root_dir)
+    (prereq_root / 'Tools/ci_prerequisites').mkdir(parents=True)
+    (prereq_root / 'Tools/ci_prerequisites/sample_pkg.sh').write_text('#!/usr/bin/env bash\n')
+    (prereq_root / 'Tools/ci_prerequisites/manifest_pkg.sh').write_text('#!/usr/bin/env bash\n')
+    (prereq_root / 'Backend/games/alpha').mkdir(parents=True)
+    (prereq_root / 'Backend/games/alpha/module.json').write_text(
+        '{"buildRequirements": {"testPrerequisites": ["manifest_pkg"]}}\n'
+    )
+    (prereq_root / 'tests').mkdir()
+    (prereq_root / 'tests/helper.py').write_text('MGT_PREREQUISITES = ("sample_pkg",)\n')
+    (prereq_root / 'tests/test_uses_helper.py').write_text('import helper\n')
+    prereqs = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(prereq_root), '--prerequisites'],
+        check=True, capture_output=True, text=True,
+    )
+    assert prereqs.stdout.splitlines() == ['manifest_pkg', 'sample_pkg'], prereqs.stdout
+
+    (prereq_root / 'tests/test_unknown.py').write_text('MGT_PREREQUISITES = ("no_such_prereq",)\n')
+    unknown = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(prereq_root), '--prerequisites'],
+        capture_output=True, text=True,
+    )
+    assert unknown.returncode != 0 and 'no_such_prereq' in unknown.stderr
+
+repo_linux_prereqs = subprocess.run(
+    [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(ROOT), '--prerequisites'],
+    check=True, capture_output=True, text=True,
+)
+assert repo_linux_prereqs.stdout.splitlines() == ['lua52'], repo_linux_prereqs.stdout
+
+repo_macos_prereqs = subprocess.run(
+    [sys.executable, str(ROOT / 'Tools/select_macos_pr_tests.py'), '--all-prerequisites'],
+    check=True, capture_output=True, text=True,
+)
+assert repo_macos_prereqs.stdout.splitlines() == ['lua52'], repo_macos_prereqs.stdout
 
 assert not fixture_root.exists(), 'temporary discovery fixture was not cleaned up'
 

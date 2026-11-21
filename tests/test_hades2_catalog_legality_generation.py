@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERATOR = ROOT / "Tools/generate_hades2_catalog_legality.py"
+GENERATOR = ROOT / "Tools/games/hades2/generate_hades2_catalog_legality.py"
 
 
 result = subprocess.run(

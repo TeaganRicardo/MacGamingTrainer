@@ -6,7 +6,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
-sys.path.insert(0, str(ROOT / 'Tools'))
+sys.path.insert(0, str(ROOT / 'Tools' / 'games' / 'hades'))
 
 from games.hades.catalog import catalog, get_entry, resource_catalog, data, trait_names
 from generate_hades_catalog import generate, RESOURCE_TEXT_IDS, EVIDENCE_SCRIPTS

@@ -151,12 +151,8 @@ def _iter_swift_files(directory: Path, root: Path, tracked: Optional[frozenset[s
     return [p for p in sorted(directory.rglob('*.swift')) if not _ignore_local_finder_duplicate(p, root, tracked)]
 
 
-def _is_game_owned_tool(path: Path, game_ids: Iterable[str]) -> bool:
-    stem = path.stem
-    for gid in game_ids:
-        if stem.startswith(f'{gid}_') or stem.startswith(f'generate_{gid}_') or stem.startswith(f'profile_{gid}_'):
-            return True
-    return False
+def _is_game_owned_tool(path: Path, game_ids: Iterable[str], root: Path) -> bool:
+    return any(path.is_relative_to(root / 'Tools' / 'games' / gid) for gid in game_ids)
 
 
 def _resolved_python_imports(py_path: Path, package_root: Optional[Path]) -> set[str]:
@@ -294,7 +290,7 @@ def check_python_import_boundaries(root: Path) -> list[str]:
     shared_py = (
         _iter_python_files(backend_root / 'core', root, tracked)
         + _iter_python_files(backend_root / 'debugger', root, tracked)
-        + [path for path in _iter_python_files(root / 'Tools', root, tracked) if not _is_game_owned_tool(path, all_ids)]
+        + [path for path in _iter_python_files(root / 'Tools', root, tracked) if not _is_game_owned_tool(path, all_ids, root)]
     )
 
     for path in shared_py:
@@ -311,23 +307,28 @@ def check_python_import_boundaries(root: Path) -> list[str]:
 
     for spec in specs:
         other_ids = all_ids - {spec.id}
-        pkg_root = backend_root if spec.backend_dir.is_relative_to(backend_root) else spec.backend_dir.parent
-        for path in _iter_python_files(spec.backend_dir, root, tracked):
-            rel = path.relative_to(root).as_posix()
-            for target in sorted(_resolved_python_imports(path, pkg_root)):
-                imported_game = _target_matches_any_games_pkg(target)
-                if imported_game is not None and imported_game not in ('games', spec.id):
-                    errors.append(f'{rel}: module {spec.id!r} imports foreign game package {target!r}')
-                    continue
-                for other in sorted(other_ids):
-                    if _target_matches_game(target, other):
-                        errors.append(f'{rel}: module {spec.id!r} imports foreign game {other!r} ({target})')
-            for call_text in _non_constant_dynamic_imports(path):
-                errors.append(f'{rel}: module {spec.id!r} uses non-constant dynamic import {call_text!r}')
-            for literal in _non_docstring_string_literals(path):
-                lit_gid = _literal_game_target(literal)
-                if lit_gid is not None and lit_gid != spec.id:
-                    errors.append(f'{rel}: module {spec.id!r} references foreign game string {literal!r}')
+        game_tool_dir = root / 'Tools' / 'games' / spec.id
+        owned_files = [
+            (spec.backend_dir, backend_root if spec.backend_dir.is_relative_to(backend_root) else spec.backend_dir.parent),
+            (game_tool_dir, backend_root),
+        ]
+        for directory, pkg_root in owned_files:
+            for path in _iter_python_files(directory, root, tracked):
+                rel = path.relative_to(root).as_posix()
+                for target in sorted(_resolved_python_imports(path, pkg_root)):
+                    imported_game = _target_matches_any_games_pkg(target)
+                    if imported_game is not None and imported_game not in ('games', spec.id):
+                        errors.append(f'{rel}: module {spec.id!r} imports foreign game package {target!r}')
+                        continue
+                    for other in sorted(other_ids):
+                        if _target_matches_game(target, other):
+                            errors.append(f'{rel}: module {spec.id!r} imports foreign game {other!r} ({target})')
+                for call_text in _non_constant_dynamic_imports(path):
+                    errors.append(f'{rel}: module {spec.id!r} uses non-constant dynamic import {call_text!r}')
+                for literal in _non_docstring_string_literals(path):
+                    lit_gid = _literal_game_target(literal)
+                    if lit_gid is not None and lit_gid != spec.id:
+                        errors.append(f'{rel}: module {spec.id!r} references foreign game string {literal!r}')
     return errors
 
 

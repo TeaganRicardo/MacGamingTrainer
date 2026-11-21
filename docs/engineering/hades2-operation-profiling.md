@@ -5,7 +5,7 @@ operation latency and resident maintenance measurements. Run the opt-in offline
 tool before proposing an optimization:
 
 ```sh
-python3 Tools/profile_hades2_operations.py --output /tmp/hades2-profile.json
+python3 Tools/games/hades2/profile_hades2_operations.py --output /tmp/hades2-profile.json
 ```
 
 This creates temporary processes and in-memory game-shaped tables. It never
@@ -59,7 +59,7 @@ outcome.
 first-connection symbol-index work under #376. Run its separate opt-in workload:
 
 ```sh
-python3 Tools/profile_hades2_operations.py --mode first-touch --output /tmp/hades2-first-touch.json
+python3 Tools/games/hades2/profile_hades2_operations.py --mode first-touch --output /tmp/hades2-first-touch.json
 ```
 
 This alternates five baseline and five production workers, each with a new
@@ -101,7 +101,7 @@ optional Selene/door/store/Nemesis reroll families are absent. The default trait
 inventory is empty. Select explicit mounted and exact-acquisition catalog sizes:
 
 ```sh
-python3 Tools/profile_hades2_operations.py --mode resident --samples 100 \
+python3 Tools/games/hades2/profile_hades2_operations.py --mode resident --samples 100 \
   --resident-traits 64 --resident-catalog-traits 512 --output /tmp/hades2-populated.json
 ```
 

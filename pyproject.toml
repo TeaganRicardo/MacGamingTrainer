@@ -1,6 +1,8 @@
 [tool.ruff]
 include = ["Backend/core/**/*.py", "Backend/core/**/*.pyi"]
-target-version = "py39"
+# Runtime code still executes under Xcode's Python 3.9, so Syntax must stay
+# 3.9-compatible while static checks share the mypy 3.10 floor (CI uses .python-version).
+target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]

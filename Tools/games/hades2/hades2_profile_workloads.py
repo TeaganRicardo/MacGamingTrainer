@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT / 'Tools') not in sys.path:
     sys.path.insert(0, str(ROOT / 'Tools'))
 from swift_module_layout import SWIFT_PACKAGE_NAME  # noqa: E402
@@ -49,7 +49,7 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
     with tempfile.TemporaryDirectory(prefix='mgt-profile-e2e-') as temporary:
         folder = Path(temporary)
         main = folder / 'main.swift'
-        main.write_bytes((ROOT / 'Tools/fixtures/hades2_profile_host.swift').read_bytes())
+        main.write_bytes((ROOT / 'Tools/games/hades2/fixtures/hades2_profile_host.swift').read_bytes())
         binary = folder / 'host'
         runtime_sources = ['BackendProcess', 'BackendClient', 'TrainerBackendSession']
         # Older --baseline-ref archives predate the shared JSON decoder.
@@ -68,7 +68,7 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
                            MGT_PROFILE_TRAITS=str(traits), MGT_PROFILE_CATALOG=str(catalog_traits),
                            MGT_PROFILE_RESOURCES=str(resources))
         module = json.loads((source / 'Backend/games/hades2/module.json').read_text())
-        run = subprocess.run([str(binary), str(ROOT / 'Tools/fixtures/hades2_profile_backend.py'),
+        run = subprocess.run([str(binary), str(ROOT / 'Tools/games/hades2/fixtures/hades2_profile_backend.py'),
                               sys.executable, str(samples), str(module['protocolVersion'])],
                              env=environment, check=False, capture_output=True, text=True, timeout=120)
         if run.returncode:
@@ -185,7 +185,7 @@ def profile_time_warp(samples, summarize, source=ROOT):
         native = source / 'Native/ProcessTimeWarp'
         subprocess.run(['cc', '-O2', '-std=c11', '-D_DEFAULT_SOURCE', '-I', str(folder),
                         '-I', str(native), '-I', str(native / 'vendor/fishhook'),
-                        str(ROOT / 'Tools/fixtures/hades2_time_warp_profile.c'), '-lm', '-o', str(binary)],
+                        str(ROOT / 'Tools/games/hades2/fixtures/hades2_time_warp_profile.c'), '-lm', '-o', str(binary)],
                        check=True, capture_output=True, text=True, timeout=30)
         run = subprocess.run([str(binary), str(samples)], check=True, capture_output=True, text=True, timeout=30)
     metrics = collections.defaultdict(list)

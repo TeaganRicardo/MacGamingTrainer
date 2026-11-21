@@ -38,6 +38,8 @@ jobs:
       needs_macos: ${{ steps.scope.outputs.needs_macos }}
       needs_build: ${{ steps.scope.outputs.needs_build }}
       needs_full_build: ${{ steps.scope.outputs.needs_full_build }}
+      runner_label: ${{ steps.toolchain.outputs.runner_label }}
+      developer_dir: ${{ steps.toolchain.outputs.developer_dir }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -49,7 +51,11 @@ jobs:
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.15.0'
+          python-version-file: .python-version
+
+      - name: Resolve macOS toolchain profile
+        id: toolchain
+        run: python3 Tools/macos_toolchain_identity.py --print-github-output >> "$GITHUB_OUTPUT"
 
       - name: Classify change scope
         id: scope
@@ -70,7 +76,7 @@ jobs:
   build:
     needs: scope
     if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && needs.scope.outputs.runner_label || 'ubuntu-latest' }}
     # Convergence (every event without a PR diff: dispatch and the nightly
     # schedule) runs the full native inventory, the resident mutation gate and
     # the unified build in one job; a measured dispatch run reached the 30 minute
@@ -79,13 +85,10 @@ jobs:
     # original 30 minutes so their cost does not change.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 60 }}
     env:
-      # Pull requests and explicit convergence both run on the ARM64 profile.
-      # The independent x64 pool was tried to avoid ARM64 queue starvation, but
-      # the product declares only the arm64 architecture: those jobs built an
-      # artifact CI never executed and needed a 2x timeout scale that hid the
-      # real margins instead of measuring them.
-      MGT_MACOS_RUNNER_LABEL: macos-26
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Runner label and Xcode path come from Tools/macos_toolchain_identity.py
+      # via the scope job.
+      MGT_MACOS_RUNNER_LABEL: ${{ needs.scope.outputs.runner_label }}
+      DEVELOPER_DIR: ${{ needs.scope.outputs.developer_dir }}
 
     steps:
       - name: Require scope classification
@@ -111,7 +114,7 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         if: needs.scope.outputs.needs_macos == 'true'
         with:
-          python-version: '3.15.0'
+          python-version-file: .python-version
 
       - name: Verify selected macOS toolchain
         if: needs.scope.outputs.needs_macos == 'true'
@@ -142,63 +145,47 @@ jobs:
         run: |
           selection="$RUNNER_TEMP/macos-selection.json"
           python3 Tools/select_macos_pr_tests.py "$BASE_SHA" "$HEAD_SHA" --output "$selection"
-          python3 - "$selection" <<'PYTHON'
-          import json, os, sys
-          selection = json.load(open(sys.argv[1]))
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('lua52_native=' + str(selection['requirements']['lua52_native']).lower() + '\n')
-          PYTHON
+          prereqs="$(python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["prerequisites"]))' "$selection")"
+          if [ -n "$prereqs" ]; then
+            echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
+            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+            echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerequisites=" >> "$GITHUB_OUTPUT"
+            echo "cache_key=none" >> "$GITHUB_OUTPUT"
+            echo "has_prerequisites=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "MGT_MACOS_SELECTION=$selection" >> "$GITHUB_ENV"
 
-      - name: Cache Lua 5.2 runtime test dependency
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || steps.test-selection.outputs.lua52_native == 'true')
-        id: lua52-cache
+      - name: Resolve macOS convergence prerequisites
+        id: convergence-prereqs
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
+        run: |
+          prereqs="$(python3 Tools/select_macos_pr_tests.py --all-prerequisites | paste -sd ' ' -)"
+          if [ -n "$prereqs" ]; then
+            echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
+            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+            echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerequisites=" >> "$GITHUB_OUTPUT"
+            echo "cache_key=none" >> "$GITHUB_OUTPUT"
+            echo "has_prerequisites=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache declared macOS CI prerequisites
+        if: needs.scope.outputs.needs_macos == 'true' && (steps.test-selection.outputs.has_prerequisites == 'true' || steps.convergence-prereqs.outputs.has_prerequisites == 'true')
+        id: prereqs-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ${{ runner.temp }}/lua-5.2.4
-          key: lua-5.2.4-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/ci-prerequisites
+          key: ci-prereqs-${{ runner.os }}-${{ runner.arch }}-${{ steps.test-selection.outputs.cache_key || steps.convergence-prereqs.outputs.cache_key }}-${{ hashFiles('Tools/ci_prerequisites/*.sh') }}
 
-      - name: Build Lua 5.2 runtime test dependency
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || steps.test-selection.outputs.lua52_native == 'true')
+      - name: Install declared macOS CI prerequisites
+        if: needs.scope.outputs.needs_macos == 'true' && (steps.test-selection.outputs.has_prerequisites == 'true' || steps.convergence-prereqs.outputs.has_prerequisites == 'true')
         run: |
-          archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
-          lua_root="$RUNNER_TEMP/lua-5.2.4"
-          if [ -x "$lua_root/src/lua" ] \
-            && [ -f "$lua_root/src/liblua.a" ] \
-            && [ -f "$lua_root/src/lua.h" ] \
-            && [ -f "$lua_root/src/lauxlib.h" ] \
-            && [ -f "$lua_root/src/lualib.h" ] \
-            && [ "$("$lua_root/src/lua" -e 'io.write(_VERSION)' 2>/dev/null)" = 'Lua 5.2' ]; then
-            echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          rm -rf "$lua_root"
-          mkdir -p "$lua_root"
-          fetched=false
-          for mirror in \
-            "https://www.lua.org/ftp/lua-5.2.4.tar.gz|b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b" \
-            "https://deb.debian.org/debian/pool/main/l/lua5.2/lua5.2_5.2.4.orig.tar.gz|86fb7e23cbbddfcd92684e5f8017ff41c9112251d1656dbece415a97fad171c0" \
-            "https://archive.ubuntu.com/ubuntu/pool/universe/l/lua5.2/lua5.2_5.2.4.orig.tar.gz|86fb7e23cbbddfcd92684e5f8017ff41c9112251d1656dbece415a97fad171c0"; do
-            url="${mirror%|*}"
-            expected_sha="${mirror##*|}"
-            # Retry transport errors across multiple verified mirrors; exact SHA-256
-            # checks guarantee identical Lua 5.2.4 source regardless of mirror.
-            if curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 -o "$archive" "$url" \
-              && printf '%s  %s\n' "$expected_sha" "$archive" | shasum -a 256 -c -; then
-              fetched=true
-              break
-            fi
-            rm -f "$archive"
+          for prereq in ${{ steps.test-selection.outputs.prerequisites || steps.convergence-prereqs.outputs.prerequisites }}; do
+            bash "Tools/ci_prerequisites/${prereq}.sh"
           done
-          if [ "$fetched" != "true" ]; then
-            echo "Failed to download and verify Lua 5.2.4 from all configured mirrors." >&2
-            exit 1
-          fi
-          tar -xzf "$archive" --strip-components=1 -C "$lua_root"
-          rm -f "$archive"
-          make -C "$lua_root/src" generic
-          test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
-          echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
 
       - name: Run full macOS contracts for convergence
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'

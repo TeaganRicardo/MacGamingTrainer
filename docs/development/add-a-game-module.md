@@ -4,7 +4,7 @@ A normal module adds its backend directory, frontend directory, resources and be
 
 ## Declare the integration
 
-Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module ID and an adapter inside `games.<id>`. The shared validator checks layout, paths and independent diagnostic identity before compilation.
+Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module ID and an adapter inside `games.<id>`. Put game-owned source generators, offline profilers and profiler fixtures under `Tools/games/<id>/` rather than top-level `Tools/`. The shared validator checks layout, paths and independent diagnostic identity before compilation.
 
 `Sources/<Game>/` compiles as its own Swift module named `<Game>`. Its files `import TrainerCore` and see only Core's `package` declarations; the compiler rejects a reference to another game, and Core cannot import a game, so product Swift types need no game prefix. Swift test harnesses compile the same modules: a harness names the games it loads (`compile_swift_test(games=...)` in `tests/swift_test_compiler.py`), never their source files, and imports them `@testable`. Only a portable harness, which the Linux lane runs without SwiftUI/AppKit, lists Foundation-level files as explicit modules and says so. The generated `<moduleType>Binding` is the only declaration the App sees, so keep the module's own types at the default access level. `UserDefaults` is still one shared domain: give every key a `<id>.` prefix.
 
@@ -45,7 +45,9 @@ Test discovery reads platform declarations without executing the files. Unmarked
 
 The selector follows Python imports and literal file paths through test helpers. It derives Swift sources and the manifests used to generate bindings from the product layout used by `compile_swift_test`. Declare opaque inputs in a top-level `MGT_INPUTS` tuple, such as interpolated resource paths, files copied into a scratch checkout, and Backend Python files that exercise platform-specific behavior. Use repository-relative paths and a trailing slash for a directory. Native fixture sources under `tests/` select the full native inventory.
 
-Use `tests/macos_fixture_policy.py` for an actual native journey's outer watchdog. Give the journey one budget and one launch. Preserve named semantic predicates and their own failures inside the harness; compilation timeouts and an LLDB coordinator with its own worker cleanup are different contracts. Never multiply budgets or wrap an existing coordinator with a second watchdog. Unknown hosted profiles fail closed. Runtime timing is observation, never a speed threshold.
+If a test or helper requires external OS packages or runtimes in CI, declare `MGT_PREREQUISITES = ("<name>",)` (or `buildRequirements.testPrerequisites` in `module.json`) and provide `Tools/ci_prerequisites/<name>.sh`. Both Linux and macOS CI lanes discover and install declared prerequisites dynamically.
+
+Use `tests/macos_fixture_policy.py` for an actual native journey's outer watchdog. Give the journey one budget and one launch. Before hosted timings are measured on a new journey, call `launch_fixture(..., provisional=True)` (or `resolve_budget(..., provisional=True)`), which applies `PROVISIONAL_BUDGET_SECONDS` (`90s`, equal to `LOCAL_MINIMUM_SECONDS`) while rejecting undeclared journeys when `provisional=False`; once hosted samples exist, record its verified budget under `tests/fixture_budgets/<domain>.py` and remove `provisional=True`. Preserve named semantic predicates and their own failures inside the harness; compilation timeouts and an LLDB coordinator with its own worker cleanup are different contracts. Never multiply budgets or wrap an existing coordinator with a second watchdog. Unknown hosted profiles fail closed. Runtime timing is observation, never a speed threshold.
 
 `Tools/select_macos_pr_tests.py` reads changed paths from the merge base and writes one structured relevant/selected/deferred result. Adding a native entry or editing its declared inputs changes the test file itself, which selects that entry. The runner executes the selected list and uses that same result to report any deferred tests, their reasons and the exact-SHA verification owner.
 
@@ -78,10 +80,8 @@ The contract above is the goal; these shared files still need edits or attention
 
 | Shared file | When | Removal owner |
 | --- | --- | --- |
-| An entry in `tests/fixture_budgets/` (for example `hades2_flow.py`, `multi_game.py`) | Each native journey; an unknown journey fails closed | #772 (provisional budgets) |
 | `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
 | `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
-| Lua 5.2 prerequisite steps in `linux-contracts.yml` and `build2-macos.yml` | The module's tests need a different runtime | #772 (generic prerequisites) |
 
 ## Run the owning lanes
 

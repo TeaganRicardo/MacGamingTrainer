@@ -25,9 +25,9 @@ import io
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 SOURCE_ROOT = Path(os.environ.get("MGT_PROFILE_SOURCE_ROOT", ROOT))
-sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests")]
+sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests"), str(Path(__file__).resolve().parent)]
 
 from hades2_lldb_worker_support import phase, run_lldb_worker
 
@@ -286,7 +286,7 @@ def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_c
     from lua_runtime_support import require_lua52
 
     lua = require_lua52("offline Hades operation profiling")
-    fixture = ROOT / "Tools/fixtures/hades2_operation_profile.lua"
+    fixture = ROOT / "Tools/games/hades2/fixtures/hades2_operation_profile.lua"
     runtime = SOURCE_ROOT / "Backend/games/hades2/runtime/hades.lua"
     completed = subprocess.run(
         [lua, str(fixture), str(runtime), str(samples), str(trait_count), str(catalog_trait_count), str(resource_count)],
@@ -454,9 +454,9 @@ def main():
     report["exact_head_evidence"] = report["source_clean"] and not report["harness_working_tree_changes"]
     report["harness_sha256"] = {
         name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-        for name in ("Tools/profile_hades2_operations.py", "Tools/hades2_profile_workloads.py",
-                     "Tools/fixtures/hades2_operation_profile.lua", "Tools/fixtures/hades2_profile_backend.py",
-                     "Tools/fixtures/hades2_profile_host.swift", "Tools/fixtures/hades2_time_warp_profile.c",
+        for name in ("Tools/games/hades2/profile_hades2_operations.py", "Tools/games/hades2/hades2_profile_workloads.py",
+                     "Tools/games/hades2/fixtures/hades2_operation_profile.lua", "Tools/games/hades2/fixtures/hades2_profile_backend.py",
+                     "Tools/games/hades2/fixtures/hades2_profile_host.swift", "Tools/games/hades2/fixtures/hades2_time_warp_profile.c",
                      "Backend/core/operation_profile.py", "tests/test_process_time_warp_install_contract.py",
                      "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py", "tests/hades2_debugserver_owner.py",
                      "tests/hades2_resident_session_fakes.py", "tests/lua_runtime_support.py")}

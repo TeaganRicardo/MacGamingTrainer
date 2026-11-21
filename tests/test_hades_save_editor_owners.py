@@ -6,7 +6,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests/fixtures'))
-sys.path.insert(0, str(ROOT / 'Tools'))
+sys.path.insert(0, str(ROOT / 'Tools' / 'games' / 'hades'))
 
 from hades_save import Entries, build_save, environment, root_state
 from games.hades.save_document import HadesSaveDocument

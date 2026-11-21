@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ci_docs_only import changed_paths
 from module_inventory import MODULES_RELATIVE, discover_module_ids
 from product_support import CORE_SWIFT_SOURCES
 from supported_build import resolved_resource_source
-from test_inputs import affected_tests, is_native_fixture, load_macos_test_dependencies
-from test_inventory import ROOT
+from test_inputs import affected_tests, is_native_fixture, load_macos_test_dependencies_and_prerequisites
+from test_inventory import ROOT, discover_module_test_prerequisites, prerequisite_path
 
 BUILD_SMOKE = "test_build_signing_metadata_macos.py"
 
@@ -55,6 +55,8 @@ class MacOSTestRouting:
     dependencies: dict[str, frozenset[str]]
     sources: dict[str, str]
     app_modules: tuple[str, ...]
+    prerequisites: dict[str, frozenset[str]] = field(default_factory=dict)
+    module_prerequisites: tuple[str, ...] = ()
 
     def relevant_tests(self, paths: list[str]) -> list[str]:
         if not paths:
@@ -79,16 +81,25 @@ class MacOSTestRouting:
             return sorted(self.tests)
         return sorted(chosen)
 
+    def all_prerequisites(self) -> list[str]:
+        all_names = set(self.module_prerequisites)
+        for items in self.prerequisites.values():
+            all_names.update(items)
+        return sorted(all_names)
+
     def selection(self, paths: list[str]) -> dict:
         relevant = self.relevant_tests(paths)
         selected = [name for name in relevant if name not in PR_DEFERRED]
+        selected_prerequisites = sorted({
+            prereq
+            for name in selected
+            for prereq in self.prerequisites.get(name, ())
+        })
         return {
             "relevant": relevant,
             "selected": selected,
             "deferred": {name: asdict(PR_DEFERRED[name]) for name in relevant if name in PR_DEFERRED},
-            "requirements": {"lua52_native": any(
-                "tests/lua_native_prerequisites.py" in self.dependencies[name] for name in selected
-            )},
+            "prerequisites": selected_prerequisites,
         }
 
 
@@ -115,32 +126,46 @@ def load_routing(root: Path = ROOT, *, changed: list[str] | tuple[str, ...] = ()
         not isinstance(game, str) or game not in sources for game in games
     ) or len(set(games)) != len(games):
         raise ValueError("app.json modules must be a non-empty array of unique, declared game IDs")
-    dependencies = load_macos_test_dependencies(root, source_dirs=sources, changed_paths=changed)
+    dependencies, prerequisites = load_macos_test_dependencies_and_prerequisites(
+        root, source_dirs=sources, changed_paths=changed,
+    )
     if not dependencies:
         raise ValueError("no macOS tests discovered")
     tests = set(dependencies)
+    module_prereqs = discover_module_test_prerequisites(root)
     for game, (manifest_path, manifest) in manifests.items():
+        declared_prereqs = module_prereqs.get(game, ())
         runtime_inputs = {manifest_path} | {
             resolved_resource_source(resource["source"], manifest.get("supportedBuild"))
             for resource in manifest.get("appResources", [])
-        }
+        } | {prerequisite_path(prereq) for prereq in declared_prereqs}
         consumers = module_smoke_tests(game, tests) | affected_tests([manifest_path], dependencies)
         for name in consumers:
             dependencies[name] |= runtime_inputs
+            if declared_prereqs:
+                prerequisites[name] = prerequisites.get(name, frozenset()) | frozenset(declared_prereqs)
         entitlements = manifest.get("buildRequirements", {}).get("entitlements")
         if entitlements and BUILD_SMOKE in tests:
             dependencies[BUILD_SMOKE] |= {entitlements}
-    return MacOSTestRouting(tests, dependencies, sources, tuple(games))
+    all_module_prereqs = tuple(sorted({p for items in module_prereqs.values() for p in items}))
+    return MacOSTestRouting(tests, dependencies, sources, tuple(games), prerequisites, all_module_prereqs)
 
 
 def main(argv: list[str]) -> int:
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("base_sha")
-    parser.add_argument("head_sha")
+    parser.add_argument("base_sha", nargs="?")
+    parser.add_argument("head_sha", nargs="?")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--all-prerequisites", action="store_true")
     args = parser.parse_args(argv[1:])
     try:
+        if args.all_prerequisites:
+            for prereq in load_routing().all_prerequisites():
+                print(prereq)
+            return 0
+        if args.base_sha is None or args.head_sha is None:
+            parser.error("base_sha and head_sha are required unless --all-prerequisites is set")
         paths = changed_paths(args.base_sha, args.head_sha)
         selection = load_routing(changed=paths).selection(paths)
         if args.output:

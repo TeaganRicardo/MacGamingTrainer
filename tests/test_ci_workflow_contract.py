@@ -196,7 +196,9 @@ assert {('ruff', 'check'), ('ruff', 'format', '--check'), ('mypy',)} <= static_c
 LANES = (
     ('diff gate', PULL_REQUEST, lambda run, step: 'Tools/check_runtime_revision.py' in run),
     ('macOS PR smoke', PULL_REQUEST,
-     lambda run, step: 'Tools/run_macos_checks.sh --pr' in run or 'Tools/select_macos_pr_tests.py' in run),
+     lambda run, step: 'Tools/run_macos_checks.sh --pr' in run or ('Tools/select_macos_pr_tests.py' in run and '--all-prerequisites' not in run)),
+    ('macOS convergence prerequisites', CONVERGENCE,
+     lambda run, step: 'Tools/select_macos_pr_tests.py --all-prerequisites' in run),
     ('full macOS contracts', CONVERGENCE, lambda run, step: re.search(r'Tools/run_macos_checks\.sh\s*$', run, re.M)),
     ('mutation audit', CONVERGENCE, lambda run, step: 'Tools/mutation_gate.py' in run),
     ('package/provenance', DISPATCH, lambda run, step: '_build_provenance.py' in run or 'ditto -c' in run),
@@ -205,8 +207,8 @@ LANES = (
 )
 EXPECTED_LANES = {
     'linux-contracts.yml': {'diff gate'},
-    'build2-macos.yml': {'macOS PR smoke', 'full macOS contracts', 'mutation audit',
-                         'package/provenance', 'retained artifact'},
+    'build2-macos.yml': {'macOS PR smoke', 'macOS convergence prerequisites', 'full macOS contracts',
+                         'mutation audit', 'package/provenance', 'retained artifact'},
     'module-build-matrix.yml': {'package/provenance', 'retained artifact'},
 }
 for name, expected in EXPECTED_LANES.items():
@@ -254,18 +256,21 @@ for name, workflow in workflows.items():
     for job_id, job in workflow['jobs'].items():
         assert not any('runner.' in str(value) for value in (job.get('env') or {}).values()), (name, job_id)
 
-# Project Python always runs on the interpreter pinned by Tools/python_runtime.json.
+# Project Python always runs on the interpreter pinned in .python-version and Tools/python_runtime.json.
 RUNTIME_VERSION = json.loads((ROOT / 'Tools/python_runtime.json').read_text())['version']
 match = re.fullmatch(r'(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?', RUNTIME_VERSION)
 assert match, f'unsupported pinned Python version format: {RUNTIME_VERSION}'
 CI_PYTHON_VERSION = f'{match.group(1)}-{match.group(2)}.{match.group(3)}' if match.group(2) else match.group(1)
+assert (ROOT / '.python-version').read_text(encoding='utf-8').strip() == CI_PYTHON_VERSION
 for name, workflow in workflows.items():
     for job_id, job in workflow['jobs'].items():
         job_steps = steps(job)
         setups = [index for index, step in enumerate(job_steps)
                   if str(step.get('uses', '')).startswith('actions/setup-python@')]
         for index in setups:
-            assert job_steps[index]['with']['python-version'] == CI_PYTHON_VERSION, (name, job_id)
+            setup_with = job_steps[index]['with']
+            assert setup_with.get('python-version-file') == '.python-version', (name, job_id, setup_with)
+            assert 'python-version' not in setup_with, (name, job_id, setup_with)
         python_runs = [index for index, step in enumerate(job_steps)
                        if re.search(r'\bpython3?\b', str(step.get('run') or ''))]
         if python_runs:
@@ -308,26 +313,43 @@ assert re.search(r'^\s*needed=\$\(python3 Tools/release_tag\.py --push-precheck 
 for step in release_steps[scope_index + 1:]:
     assert "steps.release-scope.outputs.release_needed == 'true'" in conjuncts(step.get('if')), step
 
-# Lua 5.2.4 setup caches the compiled interpreter and keeps multiple SHA-256
-# verified download mirrors so upstream ftp downtime never blocks macOS CI.
+# Workflows discover and execute declared CI prerequisites generically without
+# hardcoding Lua packages or mirrors; Lua 5.2.4 mirrors & SHA-256 checks live in
+# Tools/ci_prerequisites/lua52.sh.
+linux_workflow_text = (WORKFLOW_DIR / 'linux-contracts.yml').read_text(encoding='utf-8')
+build2_workflow_text = (WORKFLOW_DIR / 'build2-macos.yml').read_text(encoding='utf-8')
+for marker in ('lua5.2', 'liblua5.2-dev', 'lua-5.2.4', 'lua52_native'):
+    assert marker not in linux_workflow_text, ('linux-contracts.yml', marker)
+    assert marker not in build2_workflow_text, ('build2-macos.yml', marker)
+
+assert any(
+    '--prerequisites' in str(step.get('run') or '') and 'Tools/ci_prerequisites/' in str(step.get('run') or '')
+    for _, step in all_steps['linux-contracts.yml']
+), 'linux-contracts.yml must install declared CI prerequisites generically'
+
 build2_steps = steps(workflows['build2-macos.yml']['jobs']['build'])
 assert any(
     str(step.get('uses', '')).startswith('actions/cache@')
-    and 'lua-5.2.4' in str((step.get('with') or {}).get('path'))
+    and 'ci-prerequisites' in str((step.get('with') or {}).get('path'))
     for step in build2_steps
-), 'build2-macos.yml must cache Lua 5.2.4'
-lua_build_run = next(
-    str(step.get('run') or '')
+), 'build2-macos.yml must cache ci-prerequisites'
+assert any(
+    'Tools/ci_prerequisites/${prereq}.sh' in str(step.get('run') or '')
     for step in build2_steps
-    if step.get('name') == 'Build Lua 5.2 runtime test dependency'
-)
+), 'build2-macos.yml must install declared CI prerequisites generically'
+
+lua52_script = ROOT / 'Tools/ci_prerequisites/lua52.sh'
+assert lua52_script.is_file() and os.access(str(lua52_script), os.X_OK), lua52_script
+lua52_text = lua52_script.read_text(encoding='utf-8')
 for marker in (
     'https://www.lua.org/ftp/lua-5.2.4.tar.gz',
     'https://deb.debian.org/debian/pool/main/l/lua5.2/lua5.2_5.2.4.orig.tar.gz',
     'https://archive.ubuntu.com/ubuntu/pool/universe/l/lua5.2/lua5.2_5.2.4.orig.tar.gz',
     'shasum -a 256 -c -',
+    'MGT_LUA52=',
+    'lua5.2',
 ):
-    assert marker in lua_build_run, marker
+    assert marker in lua52_text, marker
 
 
 def runs(step):
@@ -357,24 +379,54 @@ for name in workflows:
             action_commits.setdefault(action, set()).add(commit)
 assert all(len(commits) == 1 for commits in action_commits.values()), action_commits
 
-# macOS jobs run on the runner profile and Xcode that Tools/macos_toolchain_identity.py
-# verifies and that the native fixture watchdog budgets were measured on, and
-# verify that toolchain before building.
+# macOS jobs resolve the runner profile and Xcode path from Tools/macos_toolchain_identity.py
+# without hardcoding runner labels or Xcode paths in YAML, and verify that toolchain
+# before building.
 sys.path.insert(0, str(ROOT / 'Tools'))
-from macos_toolchain_identity import SUPPORTED_DEVELOPER_DIR, SUPPORTED_RUNNER_PROFILES  # noqa: E402
-from macos_fixture_policy import HOSTED_PROFILE, PROFILE_VARIABLE  # noqa: E402
+from macos_toolchain_identity import (  # noqa: E402
+    SUPPORTED_DEVELOPER_DIR,
+    SUPPORTED_RUNNER_ARCH,
+    SUPPORTED_RUNNER_LABEL,
+    SUPPORTED_RUNNER_PROFILES,
+)
+from macos_fixture_policy import HOSTED_ARCH, HOSTED_PROFILE, PROFILE_VARIABLE  # noqa: E402
+
+assert HOSTED_PROFILE == SUPPORTED_RUNNER_LABEL
+assert HOSTED_ARCH == SUPPORTED_RUNNER_ARCH
+assert HOSTED_PROFILE in SUPPORTED_RUNNER_PROFILES
+toolchain_output = subprocess.check_output(
+    [sys.executable, str(ROOT / 'Tools/macos_toolchain_identity.py'), '--print-github-output'],
+    text=True,
+)
+assert dict(line.split('=', 1) for line in toolchain_output.splitlines()) == {
+    'runner_label': SUPPORTED_RUNNER_LABEL,
+    'developer_dir': SUPPORTED_DEVELOPER_DIR,
+    'runner_arch': SUPPORTED_RUNNER_ARCH,
+}, toolchain_output
 
 macos_jobs = []
 for name, workflow in workflows.items():
+    raw_yaml = (WORKFLOW_DIR / name).read_text(encoding='utf-8')
+    assert not re.search(r'\bmacos-\d+', raw_yaml), (name, 'hardcoded macOS runner label in workflow YAML')
+    assert '/Applications/Xcode_' not in raw_yaml, (name, 'hardcoded DEVELOPER_DIR in workflow YAML')
+    assert PROFILE_VARIABLE not in (workflow.get('env') or {}), name
+    assert 'DEVELOPER_DIR' not in (workflow.get('env') or {}), name
     for job_id, job in workflow['jobs'].items():
-        labels = set(re.findall(r"\bmacos[\w.-]*", str(job['runs-on']), re.I))
-        if not labels:
+        if 'needs.scope.outputs.runner_label' not in str(job['runs-on']):
             continue
         macos_jobs.append((name, job_id))
-        environment = {**(workflow.get('env') or {}), **(job.get('env') or {})}
-        assert labels == {environment.get(PROFILE_VARIABLE)} == {HOSTED_PROFILE}, (name, job_id, labels)
-        assert HOSTED_PROFILE in SUPPORTED_RUNNER_PROFILES, HOSTED_PROFILE
-        assert environment.get('DEVELOPER_DIR') == SUPPORTED_DEVELOPER_DIR, (name, job_id)
+        scope_job = workflow['jobs']['scope']
+        scope_outputs = scope_job.get('outputs') or {}
+        assert 'steps.toolchain.outputs.runner_label' in str(scope_outputs.get('runner_label')), (name, scope_outputs)
+        assert 'steps.toolchain.outputs.developer_dir' in str(scope_outputs.get('developer_dir')), (name, scope_outputs)
+        assert any(
+            step.get('id') == 'toolchain'
+            and 'Tools/macos_toolchain_identity.py --print-github-output' in runs(step)
+            for step in steps(scope_job)
+        ), (name, 'scope job must emit toolchain outputs')
+        job_env = job.get('env') or {}
+        assert job_env.get(PROFILE_VARIABLE) == '${{ needs.scope.outputs.runner_label }}', (name, job_id, job_env)
+        assert job_env.get('DEVELOPER_DIR') == '${{ needs.scope.outputs.developer_dir }}', (name, job_id, job_env)
         job_runs = [runs(step) for step in steps(job)]
         identity = next((index for index, run in enumerate(job_runs) if 'Tools/macos_toolchain_identity.py' in run), None)
         assert identity is not None, f'{name}: {job_id} never verifies its macOS toolchain'

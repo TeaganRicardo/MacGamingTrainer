@@ -9,7 +9,15 @@ from typing import Iterable
 
 from module_inventory import MODULES_RELATIVE
 from product_support import CORE_SWIFT_SOURCES
-from test_inventory import ROOT, declarations, load_macos_only_tests
+from test_inventory import (
+    ROOT,
+    declarations,
+    declared_prerequisites,
+    discover_module_test_prerequisites,
+    discover_test_inventory,
+    load_macos_only_tests,
+    prerequisite_path,
+)
 
 PATH_LITERAL = re.compile(r"[\w.-]+(?:/[\w.-]+)*")
 SUPPORT_ROOTS = ("tests", "Tools")
@@ -148,20 +156,15 @@ def is_native_fixture(path: str) -> bool:
     return path.startswith("tests/") and path.endswith((".swift", ".c", ".h", ".m", ".mm", ".plist", ".so", ".dylib"))
 
 
-def load_macos_test_dependencies(
-    root: Path = ROOT, *, changed_paths: Iterable[str] = (),
+def load_test_dependency_graph(
+    root: Path = ROOT,
+    *,
+    tests: Iterable[str],
+    changed_paths: Iterable[str] = (),
     source_dirs: dict[str, str] | None = None,
-) -> dict[str, frozenset[str]]:
-    """Return the input paths of each native entrypoint, including indirect helpers.
-
-    Pure-Python Backend modules listed in PORTABLE_BACKEND_IMPORTS remain
-    Linux-owned unless explicitly declared in MGT_INPUTS. Any other Backend
-    module imported or referenced by a test or its tests/ helpers is derived
-    automatically, alongside indirect runtime/data inputs declared in
-    MGT_INPUTS (where a trailing slash denotes a directory input). When the
-    product's source directories are supplied, include the sources compiled by
-    Swift harnesses.
-    """
+    include_runner_smoke: bool = False,
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """Return (inputs, prerequisites) for each requested entrypoint under tests/."""
     changed = set(changed_paths)
 
     @lru_cache(maxsize=None)
@@ -231,9 +234,9 @@ def load_macos_test_dependencies(
         ) | frozenset(path for path in changed if path.startswith(prefix) and path.endswith(".swift"))
 
     @lru_cache(maxsize=None)
-    def direct_inputs(path: str) -> tuple[set[str], set[str]]:
+    def direct_inputs(path: str) -> tuple[set[str], set[str], tuple[str, ...]]:
         if not (root / path).is_file():
-            return set(), set()
+            return set(), set(), ()
         tree = ast.parse((root / path).read_text(encoding="utf-8"), filename=path)
         declared = declared_inputs(tree, path)
         for input_path in declared:
@@ -243,10 +246,11 @@ def load_macos_test_dependencies(
                 present = (root / input_path).is_file()
             if not present:
                 raise ValueError(f"{path}: missing declared macOS test input {input_path}")
+        prereqs = declared_prerequisites(tree, path, root=root)
         source = PurePosixPath(path)
         imports = imported_files(tree, source)
         named = named_files(tree, source)
-        inputs = imports | named | set(declared)
+        inputs = imports | named | set(declared) | {prerequisite_path(prereq) for prereq in prereqs}
         if source_dirs is not None:
             for compiled in compiled_layout_inputs(tree, source_dirs):
                 if compiled.endswith("/"):
@@ -257,20 +261,73 @@ def load_macos_test_dependencies(
             helper for helper in (named - set(declared)) | imports
             if helper.endswith(".py") and helper.startswith(("tests/", "Tools/"))
         }
-        return inputs, helpers
+        return inputs, helpers, prereqs
 
-    result = {}
-    for name in sorted(load_macos_only_tests(root)):
+    result: dict[str, frozenset[str]] = {}
+    prerequisites: dict[str, frozenset[str]] = {}
+    for name in sorted(tests):
         entry = f"tests/{name}"
         inputs: set[str] = set()
+        prereqs: set[str] = set()
         work = [entry]
         seen = {entry}
         while work:
-            found, helpers = direct_inputs(work.pop())
+            found, helpers, direct_prereqs = direct_inputs(work.pop())
             inputs.update(found)
+            prereqs.update(direct_prereqs)
             work.extend(helpers - seen)
             seen.update(helpers)
-        if name in MACOS_RUNNER_SMOKE:
+        if include_runner_smoke and name in MACOS_RUNNER_SMOKE:
             inputs.update(MACOS_RUNNER_PATHS)
         result[name] = frozenset(inputs - {entry})
-    return result
+        prerequisites[name] = frozenset(prereqs)
+    return result, prerequisites
+
+
+def load_macos_test_dependencies_and_prerequisites(
+    root: Path = ROOT, *, changed_paths: Iterable[str] = (),
+    source_dirs: dict[str, str] | None = None,
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """Return (inputs, prerequisites) for each macOS test entrypoint."""
+    return load_test_dependency_graph(
+        root,
+        tests=load_macos_only_tests(root),
+        changed_paths=changed_paths,
+        source_dirs=source_dirs,
+        include_runner_smoke=True,
+    )
+
+
+def load_macos_test_dependencies(
+    root: Path = ROOT, *, changed_paths: Iterable[str] = (),
+    source_dirs: dict[str, str] | None = None,
+) -> dict[str, frozenset[str]]:
+    """Return the input paths of each native entrypoint, including indirect helpers.
+
+    Pure-Python Backend modules listed in PORTABLE_BACKEND_IMPORTS remain
+    Linux-owned unless explicitly declared in MGT_INPUTS. Any other Backend
+    module imported or referenced by a test or its tests/ helpers is derived
+    automatically, alongside indirect runtime/data inputs declared in
+    MGT_INPUTS (where a trailing slash denotes a directory input) and
+    MGT_PREREQUISITES scripts. When the product's source directories are
+    supplied, include the sources compiled by Swift harnesses.
+    """
+    dependencies, _ = load_macos_test_dependencies_and_prerequisites(
+        root, changed_paths=changed_paths, source_dirs=source_dirs,
+    )
+    return dependencies
+
+
+def load_portable_test_prerequisites(root: Path = ROOT) -> tuple[str, ...]:
+    """Return declared CI prerequisites across portable tests and module manifests."""
+    portable_tests = [
+        name for name, platform in discover_test_inventory(root).items()
+        if platform is None
+    ]
+    _, test_prereqs = load_test_dependency_graph(root, tests=portable_tests)
+    declared: set[str] = set()
+    for items in test_prereqs.values():
+        declared.update(items)
+    for items in discover_module_test_prerequisites(root).values():
+        declared.update(items)
+    return tuple(sorted(declared))

@@ -34,7 +34,10 @@ The JSONL artifact holds three record kinds:
 `timing` records are **raw observations**, one per fixture launch, not a per-run
 aggregate. That is deliberate: a distribution is only meaningful when several
 runs can be merged, and an aggregate cannot be merged. `read_timings` skips the
-`coverage` and `result` rows, so an artifact can be fed back in whole.
+`coverage` and `result` rows, so an artifact can be fed back in whole. New
+native journeys without measured samples yet can pass `provisional=True`
+(`PROVISIONAL_BUDGET_SECONDS`, equal to `LOCAL_MINIMUM_SECONDS`) before
+recording a measured per-journey entry under `tests/fixture_budgets/`.
 
 ## Building a distribution
 
