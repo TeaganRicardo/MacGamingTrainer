@@ -76,6 +76,12 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         payload["connected"] is Bool ? .lifetime : .independent
     }
 
+    /// The rejected reply described an earlier target. Read the state again
+    /// under the current one rather than keep showing what it replaced.
+    func applyStaleBackendPayload(_ payload: [String: Any]) {
+        refreshFromHost()
+    }
+
     func applyBackendPayload(_ payload: [String: Any]) {
         if let connected = payload["connected"] as? Bool {
             self.connected = connected

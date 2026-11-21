@@ -123,8 +123,10 @@ package protocol TrainerHostModel: ObservableObject {
     /// default. `.independent` applies the payload whatever target is running,
     /// so use it only for state that never depends on one. `.lifetime` drops a
     /// reply whose request began under an earlier target observation, and
-    /// `.process` also drops one that reports another process identifier.
-    /// Dropped payloads go to `applyStaleBackendPayload`.
+    /// `.process` also drops one that reports another process identifier or
+    /// arrives while no target is running. Dropped payloads go to
+    /// `applyStaleBackendPayload`, which should re-read or keep only state
+    /// that does not depend on the target.
     func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget
     func applyBackendPayload(_ payload: [String: Any])
     func applyStaleBackendPayload(_ payload: [String: Any])

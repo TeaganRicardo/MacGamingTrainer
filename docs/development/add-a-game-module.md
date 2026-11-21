@@ -27,7 +27,7 @@ Call the Host-facing model and module UI factories on Swift's main actor. Swift 
 
 `TrainerGameModule.makeModel(services:)` receives the Host-owned session, observable backend status, current target observation, descriptor, log sink and module-scoped hotkeys. The model supplies its game-specific payload and connection behavior. The Context records the target's log-session boundary before starting the backend and stops the session once the model's termination hook completes.
 
-Each model must declare `backendPayloadTarget(_:)`; Core has no default. Return `.process(identifier:)` for payloads that describe an attached process, and report that process ID from the backend. Return `.lifetime` for other target-dependent state, and `.independent` only for state that never depends on a target. The Context sends a payload it rejects as stale to `applyStaleBackendPayload(_:)`, so a reply from a replaced or exited target never updates the live view. The reference fixture shows the `.lifetime` case.
+Each model must declare `backendPayloadTarget(_:)`; Core has no default. Return `.process(identifier:)` for payloads that describe an attached process, and report that process ID from the backend. Return `.lifetime` for other target-dependent state, and `.independent` only for state that never depends on a target. The Context sends a payload it rejects as stale to `applyStaleBackendPayload(_:)`, so a reply from a replaced or exited target never updates the live view. That handler should read the state again, or keep only state that doesn't depend on the target. The reference fixture shows the `.lifetime` case and re-reads.
 
 ## Terminology, localization and shared responsibilities
 
