@@ -1,6 +1,6 @@
 """Generate versioned Hades II Save Editor identities from installed Lua.
 
-Usage: python3 Tools/generate_hades2_save_ids.py PATH/TO/Content/Scripts
+Usage: python3 Tools/games/hades2/generate_hades2_save_ids.py PATH/TO/Content/Scripts
 Prints the native identity module to stdout. Re-run against the supported game
 build, inspect the diff, then replace save_native_ids.py.
 """
@@ -104,7 +104,7 @@ def npc_ids(scripts):
 
 
 def field_meanings(scripts):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Backend"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "Backend"))
     from games.hades2.save_investigation import _ASSIGN, _braces, _masked
 
     interactions, objectives, hashes, inheritance = defaultdict(set), {}, {}, {}
@@ -186,7 +186,7 @@ def render_words(items):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scripts", type=Path, help="Installed Content/Scripts directory")
-    supported = json.loads((Path(__file__).resolve().parents[1] / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))["supportedBuild"]
+    supported = json.loads((Path(__file__).resolve().parents[3] / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))["supportedBuild"]
     parser.add_argument("--version", default="1." + supported["bundleVersion"])
     parser.add_argument("--steam-build", default=supported["steamBuildID"])
     args = parser.parse_args()

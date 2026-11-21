@@ -26,7 +26,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-HOSTED_PROFILE = "macos-26"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from Tools.macos_toolchain_identity import (  # noqa: E402
+    SUPPORTED_RUNNER_ARCH,
+    SUPPORTED_RUNNER_LABEL,
+)
+
+HOSTED_PROFILE = SUPPORTED_RUNNER_LABEL
+HOSTED_ARCH = SUPPORTED_RUNNER_ARCH
 LOCAL_PROFILE = "local"
 
 # GitHub Actions exports this label from the owning workflow. A hosted run that
@@ -40,6 +50,9 @@ MAXIMUM_BUDGET_SECONDS = 300.0
 # retired global multiplier: a loaded laptop is not a CI failure, and a genuine
 # hang still reports within the ceiling instead of running forever.
 LOCAL_MINIMUM_SECONDS = 90.0
+# New native journeys may launch with `provisional=True` at this documented floor
+# before hosted timings are measured, then record a verified per-journey budget.
+PROVISIONAL_BUDGET_SECONDS = LOCAL_MINIMUM_SECONDS
 GROUP_TERMINATION_GRACE_SECONDS = 2.0
 DIAGNOSTIC_TAIL_CHARACTERS = 4096
 DIAGNOSTIC_LINE_COUNT = 12
@@ -56,9 +69,11 @@ class FixtureBudget:
     journey: str
     profile: str
     seconds: float
+    provisional: bool = False
 
     def describe(self) -> str:
-        return f"journey={self.journey} profile={self.profile} budget={self.seconds:g}s"
+        base = f"journey={self.journey} profile={self.profile} budget={self.seconds:g}s"
+        return f"{base} provisional=true" if self.provisional else base
 
 
 class FixtureWatchdogExpired(RuntimeError):
@@ -106,27 +121,46 @@ def resolve_profile(environ: Mapping[str, str] | None = None) -> str:
             "running native fixtures"
         )
     architecture = env.get("RUNNER_ARCH", "").strip()
-    if architecture and architecture != "ARM64":
+    if architecture and architecture != HOSTED_ARCH:
         raise FixturePolicyError(
-            f"hosted profile {HOSTED_PROFILE} requires ARM64, got {architecture!r}; "
+            f"hosted profile {HOSTED_PROFILE} requires {HOSTED_ARCH}, got {architecture!r}; "
             "the product declares arm64 only"
         )
     return HOSTED_PROFILE
 
 
 def resolve_budget(journey: str, environ: Mapping[str, str] | None = None, *,
-                   budgets: Mapping[str, float]) -> FixtureBudget:
+                   budgets: Mapping[str, float] | None = None,
+                   provisional: bool = False) -> FixtureBudget:
     """Resolve one journey's watchdog for the active profile."""
-    validate_journey_budgets(budgets)
-    if journey not in budgets:
-        raise FixturePolicyError(f"undeclared macOS fixture journey: {journey!r}")
+    if not isinstance(journey, str) or not journey or journey != journey.strip():
+        raise FixturePolicyError(f"invalid macOS fixture journey name: {journey!r}")
+    is_provisional = False
+    if budgets is None:
+        if not provisional:
+            raise FixturePolicyError("domain journey budgets must be a non-empty mapping")
+        hosted = PROVISIONAL_BUDGET_SECONDS
+        is_provisional = True
+    else:
+        if not isinstance(budgets, Mapping):
+            raise FixturePolicyError("domain journey budgets must be a non-empty mapping")
+        if budgets:
+            validate_journey_budgets(budgets)
+        elif not provisional:
+            raise FixturePolicyError("domain journey budgets must be a non-empty mapping")
+        if journey in budgets:
+            hosted = budgets[journey]
+        elif provisional:
+            hosted = PROVISIONAL_BUDGET_SECONDS
+            is_provisional = True
+        else:
+            raise FixturePolicyError(f"undeclared macOS fixture journey: {journey!r}")
     profile = resolve_profile(environ)
-    hosted = budgets[journey]
     if profile == HOSTED_PROFILE:
         seconds = hosted
     else:
         seconds = min(MAXIMUM_BUDGET_SECONDS, max(hosted, LOCAL_MINIMUM_SECONDS))
-    return FixtureBudget(journey, profile, float(seconds))
+    return FixtureBudget(journey, profile, float(seconds), provisional=is_provisional)
 
 
 def _source_identity(environ: Mapping[str, str]) -> str:
@@ -359,12 +393,13 @@ def run_watchdog(argv: Sequence[str], *, budget: FixtureBudget,
 
 
 def launch_fixture(argv: Sequence[str], *, journey: str,
-                   budgets: Mapping[str, float],
+                   budgets: Mapping[str, float] | None = None,
+                   provisional: bool = False,
                    environ: Mapping[str, str] | None = None,
                    phase_file: Path | None = None,
                    diagnostics: Iterable[Path] = (), **kwargs) -> subprocess.CompletedProcess:
     """Resolve, announce and enforce one journey's watchdog."""
-    budget = resolve_budget(journey, environ, budgets=budgets)
+    budget = resolve_budget(journey, environ, budgets=budgets, provisional=provisional)
     print(f"macos_fixture_watchdog_start {budget.describe()}", flush=True)
     return run_watchdog(argv, budget=budget, environ=environ, phase_file=phase_file,
                         diagnostics=diagnostics, **kwargs)

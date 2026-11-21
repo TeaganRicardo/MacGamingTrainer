@@ -8,7 +8,7 @@ import tempfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "Tools/fixtures")]
+sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "Tools/games/hades2/fixtures")]
 from games.hades2 import resident_session
 from games.hades2.resident_session import Hades2ResidentSession, TransportError, lua_value
 

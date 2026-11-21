@@ -151,12 +151,8 @@ def _iter_swift_files(directory: Path, root: Path, tracked: Optional[frozenset[s
     return [p for p in sorted(directory.rglob('*.swift')) if not _ignore_local_finder_duplicate(p, root, tracked)]
 
 
-def _is_game_owned_tool(path: Path, game_ids: Iterable[str]) -> bool:
-    stem = path.stem
-    for gid in game_ids:
-        if stem.startswith(f'{gid}_') or stem.startswith(f'generate_{gid}_') or stem.startswith(f'profile_{gid}_'):
-            return True
-    return False
+def _is_game_owned_tool(path: Path, game_ids: Iterable[str], root: Path) -> bool:
+    return any(path.is_relative_to(root / 'Tools' / 'games' / gid) for gid in game_ids)
 
 
 def _resolved_python_imports(py_path: Path, package_root: Optional[Path]) -> set[str]:
@@ -294,7 +290,7 @@ def check_python_import_boundaries(root: Path) -> list[str]:
     shared_py = (
         _iter_python_files(backend_root / 'core', root, tracked)
         + _iter_python_files(backend_root / 'debugger', root, tracked)
-        + [path for path in _iter_python_files(root / 'Tools', root, tracked) if not _is_game_owned_tool(path, all_ids)]
+        + [path for path in _iter_python_files(root / 'Tools', root, tracked) if not _is_game_owned_tool(path, all_ids, root)]
     )
 
     for path in shared_py:
@@ -311,23 +307,28 @@ def check_python_import_boundaries(root: Path) -> list[str]:
 
     for spec in specs:
         other_ids = all_ids - {spec.id}
-        pkg_root = backend_root if spec.backend_dir.is_relative_to(backend_root) else spec.backend_dir.parent
-        for path in _iter_python_files(spec.backend_dir, root, tracked):
-            rel = path.relative_to(root).as_posix()
-            for target in sorted(_resolved_python_imports(path, pkg_root)):
-                imported_game = _target_matches_any_games_pkg(target)
-                if imported_game is not None and imported_game not in ('games', spec.id):
-                    errors.append(f'{rel}: module {spec.id!r} imports foreign game package {target!r}')
-                    continue
-                for other in sorted(other_ids):
-                    if _target_matches_game(target, other):
-                        errors.append(f'{rel}: module {spec.id!r} imports foreign game {other!r} ({target})')
-            for call_text in _non_constant_dynamic_imports(path):
-                errors.append(f'{rel}: module {spec.id!r} uses non-constant dynamic import {call_text!r}')
-            for literal in _non_docstring_string_literals(path):
-                lit_gid = _literal_game_target(literal)
-                if lit_gid is not None and lit_gid != spec.id:
-                    errors.append(f'{rel}: module {spec.id!r} references foreign game string {literal!r}')
+        game_tool_dir = root / 'Tools' / 'games' / spec.id
+        owned_files = [
+            (spec.backend_dir, backend_root if spec.backend_dir.is_relative_to(backend_root) else spec.backend_dir.parent),
+            (game_tool_dir, root / 'Tools'),
+        ]
+        for directory, pkg_root in owned_files:
+            for path in _iter_python_files(directory, root, tracked):
+                rel = path.relative_to(root).as_posix()
+                for target in sorted(_resolved_python_imports(path, pkg_root)):
+                    imported_game = _target_matches_any_games_pkg(target)
+                    if imported_game is not None and imported_game not in ('games', spec.id):
+                        errors.append(f'{rel}: module {spec.id!r} imports foreign game package {target!r}')
+                        continue
+                    for other in sorted(other_ids):
+                        if _target_matches_game(target, other):
+                            errors.append(f'{rel}: module {spec.id!r} imports foreign game {other!r} ({target})')
+                for call_text in _non_constant_dynamic_imports(path):
+                    errors.append(f'{rel}: module {spec.id!r} uses non-constant dynamic import {call_text!r}')
+                for literal in _non_docstring_string_literals(path):
+                    lit_gid = _literal_game_target(literal)
+                    if lit_gid is not None and lit_gid != spec.id:
+                        errors.append(f'{rel}: module {spec.id!r} references foreign game string {literal!r}')
     return errors
 
 
@@ -431,8 +432,10 @@ def check_manifest_derived_identities(root: Path) -> list[str]:
         pat = _boundary_pattern(other_tokens)
         if pat is None:
             continue
-        all_mod_files = _iter_python_files(spec.backend_dir, root, tracked) + _iter_swift_files(
-            spec.frontend_dir, root, tracked
+        all_mod_files = (
+            _iter_python_files(spec.backend_dir, root, tracked)
+            + _iter_python_files(root / 'Tools' / 'games' / spec.id, root, tracked)
+            + _iter_swift_files(spec.frontend_dir, root, tracked)
         )
         for path in all_mod_files:
             rel = path.relative_to(root).as_posix()
@@ -1244,5 +1247,27 @@ with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
     assert _is_key_allowed_for_module('shortcut.layoutVersion', False, 'hades2')
     assert not _is_key_allowed_for_module('shortcut.newUnlistedKey', False, 'hades2')
     assert not _is_key_allowed_for_module('shortcut.layoutVersion', False, 'alpha')
+
+    # 3g. Tools/games/<id>/ isolation catches relative & absolute foreign imports,
+    # token leaks, and unowned top-level Tools/ scripts referencing a game module.
+    (synth / 'Tools/games/alpha').mkdir(parents=True)
+    for filename, snippet in (
+        ('bad_rel.py', 'from ..beta import adapter\n'),
+        ('bad_abs.py', 'from games.beta import adapter\n'),
+    ):
+        bad_tool = synth / 'Tools/games/alpha' / filename
+        bad_tool.write_text(snippet, encoding='utf-8')
+        assert any('imports foreign game' in err for err in check_python_import_boundaries(synth)), filename
+        bad_tool.unlink()
+
+    leaky_top = synth / 'Tools/leaky_tool.py'
+    leaky_top.write_text('import games.alpha\n', encoding='utf-8')
+    assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
+    leaky_top.unlink()
+
+    tok_tool = synth / 'Tools/games/alpha/leak_token.py'
+    tok_tool.write_text('CLS = "BetaAdapter"\n', encoding='utf-8')
+    assert any('foreign module identifiers' in err for err in check_manifest_derived_identities(synth))
+    tok_tool.unlink()
 
 print('cross_game_isolation_ok')

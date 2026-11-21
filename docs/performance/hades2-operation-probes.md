@@ -1,6 +1,6 @@
 # Hades II operation phase evidence
 
-`Tools/profile_hades2_operations.py` is an opt-in, bounded offline evidence tool.
+`Tools/games/hades2/profile_hades2_operations.py` is an opt-in, bounded offline evidence tool.
 It never launches Hades II and uses temporary native stubs, preferences, sources
 and LuaTable save state. It does not read the installed game or real saves.
 Production probes emit small `OperationProfile` JSON records through existing
@@ -16,7 +16,7 @@ Swift is needed for Host observations; an unavailable compiler is explicitly
 reported as unobserved. No timing threshold is an always-on correctness gate.
 
 ```sh
-python3 Tools/profile_hades2_operations.py --mode offline --samples 30 --trials 3 \
+python3 Tools/games/hades2/profile_hades2_operations.py --mode offline --samples 30 --trials 3 \
   --probe-control --baseline-ref <current-main-full-sha> --output /tmp/operation-profile.json
 ```
 

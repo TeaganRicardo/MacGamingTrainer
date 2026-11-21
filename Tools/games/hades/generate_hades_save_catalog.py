@@ -5,10 +5,14 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[3]
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
 
 from generate_hades_catalog import RESOURCE_TEXT_IDS, text_records, render_text
-
-ROOT = Path(__file__).resolve().parents[1]
 
 _LUA_TOKEN = re.compile(r'--\[\[.*?\]\]|--[^\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_]\w*|-?\d+(?:\.\d+)?|[{}\[\]=,;.]', re.DOTALL)
 

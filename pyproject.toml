@@ -1,5 +1,8 @@
 [tool.ruff]
 include = ["Backend/core/**/*.py", "Backend/core/**/*.pyi"]
+# Backend scripts imported by LLDB/Hades workers execute under Xcode's Python
+# 3.9, so keep the Ruff syntax target at py39 even though mypy requires >=3.10
+# and CI workflows use the .python-version interpreter (see Tools/python_runtime.json).
 target-version = "py39"
 line-length = 120
 

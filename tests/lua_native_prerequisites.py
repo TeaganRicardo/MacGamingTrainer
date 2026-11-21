@@ -14,6 +14,8 @@ from pathlib import Path
 
 from lua_runtime_support import require_lua52
 
+MGT_PREREQUISITES = ("lua52",)
+
 _SETUP = (
     "Install Lua 5.2 development headers and a linkable library, plus a C/C++ "
     "compiler (Debian/Ubuntu: lua5.2 liblua5.2-dev build-essential; "

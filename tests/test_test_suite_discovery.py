@@ -72,11 +72,93 @@ with tempfile.TemporaryDirectory() as temporary_root:
     assert empty.returncode != 0, 'zero portable tests must fail closed'
 
     native.write_text('MGT_PLATFORM = "macOS"\n')
-    invalid = subprocess.run(
+    invalid_platform = subprocess.run(
         [sys.executable, str(ROOT / 'Tools/test_inventory.py'), '--root', str(fixture_root)],
         capture_output=True, text=True,
     )
-    assert invalid.returncode != 0 and 'test_excluded_fixture.py' in invalid.stderr
+    assert invalid_platform.returncode != 0 and 'test_excluded_fixture.py' in invalid_platform.stderr
+
+# Generic prerequisite discovery from portable tests and module manifests.
+with tempfile.TemporaryDirectory() as prereq_root_dir:
+    prereq_root = Path(prereq_root_dir)
+    (prereq_root / 'Tools/ci_prerequisites').mkdir(parents=True)
+    (prereq_root / 'Tools/ci_prerequisites/sample_pkg.sh').write_text('#!/usr/bin/env bash\n')
+    (prereq_root / 'Tools/ci_prerequisites/manifest_pkg.sh').write_text('#!/usr/bin/env bash\n')
+    (prereq_root / 'Backend/games/alpha').mkdir(parents=True)
+    (prereq_root / 'Backend/games/alpha/module.json').write_text(
+        '{"buildRequirements": {"testPrerequisites": ["manifest_pkg"]}}\n'
+    )
+    (prereq_root / 'tests').mkdir()
+    (prereq_root / 'tests/helper.py').write_text('MGT_PREREQUISITES = ("sample_pkg",)\n')
+    (prereq_root / 'tests/test_uses_helper.py').write_text('import helper\n')
+    prereqs = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(prereq_root), '--prerequisites'],
+        check=True, capture_output=True, text=True,
+    )
+    assert prereqs.stdout.splitlines() == ['manifest_pkg', 'sample_pkg'], prereqs.stdout
+
+    (prereq_root / 'tests/test_unknown.py').write_text('MGT_PREREQUISITES = ("no_such_prereq",)\n')
+    unknown = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(prereq_root), '--prerequisites'],
+        capture_output=True, text=True,
+    )
+    assert unknown.returncode != 0 and 'no_such_prereq' in unknown.stderr
+
+    (prereq_root / 'tests/test_unknown.py').unlink()
+    for bad_manifest in (
+        '{"buildRequirements": {"testPrerequisites": [{"bad": 1}]}}\n',
+        '{"buildRequirements": {"testPrerequisites": ["manifest_pkg", "manifest_pkg"]}}\n',
+    ):
+        (prereq_root / 'Backend/games/alpha/module.json').write_text(bad_manifest)
+        bad = subprocess.run(
+            [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(prereq_root), '--prerequisites'],
+            capture_output=True, text=True,
+        )
+        assert bad.returncode == 2 and 'TypeError' not in bad.stderr, bad.stderr
+
+sys.path.insert(0, str(ROOT / 'Tools'))
+import module_support  # noqa: E402
+for bad_prereqs in ([{"bad": 1}], ["lua52", "lua52"]):
+    with tempfile.TemporaryDirectory() as fake_root_dir:
+        fake_root = Path(fake_root_dir)
+        (fake_root / 'Tools/ci_prerequisites').mkdir(parents=True)
+        (fake_root / 'Tools/ci_prerequisites/lua52.sh').write_text('#!/usr/bin/env bash\n')
+        (fake_root / 'Backend/games/alpha').mkdir(parents=True)
+        (fake_root / 'Backend/games/alpha/adapter.py').write_text('class A: pass\n')
+        (fake_root / 'Backend/games/alpha/module.json').write_text(
+            '{"schemaVersion": 1, "id": "alpha", "displayName": "Alpha", "protocolVersion": 21, '
+            '"backend": {"adapter": "games.alpha.adapter:A"}, '
+            '"frontend": {"sourceDirectory": "Sources/Alpha", "moduleType": "AlphaModule", '
+            '"architectures": ["arm64"], "minimumMacOS": "14.0"}, '
+            '"targetApplication": {"processName": "Alpha", "bundleIdentifier": "com.example.alpha"}, '
+            '"buildRequirements": {"testPrerequisites": '
+            + repr(bad_prereqs).replace("'", '"') + '}}\n'
+        )
+        (fake_root / 'Sources/Alpha').mkdir(parents=True)
+        (fake_root / 'Info.plist').write_bytes(b'<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>App</string></dict></plist>')
+        original_root = module_support.ROOT
+        try:
+            module_support.ROOT = fake_root
+            try:
+                module_support.load_manifest('alpha')
+            except module_support.ManifestError:
+                pass
+            else:
+                raise AssertionError(f"expected ManifestError for testPrerequisites={bad_prereqs!r}")
+        finally:
+            module_support.ROOT = original_root
+
+repo_linux_prereqs = subprocess.run(
+    [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(ROOT), '--prerequisites'],
+    check=True, capture_output=True, text=True,
+)
+assert repo_linux_prereqs.stdout.splitlines() == ['lua52'], repo_linux_prereqs.stdout
+
+repo_macos_prereqs = subprocess.run(
+    [sys.executable, str(ROOT / 'Tools/select_macos_pr_tests.py'), '--all-prerequisites'],
+    check=True, capture_output=True, text=True,
+)
+assert repo_macos_prereqs.stdout.splitlines() == ['lua52'], repo_macos_prereqs.stdout
 
 assert not fixture_root.exists(), 'temporary discovery fixture was not cleaned up'
 

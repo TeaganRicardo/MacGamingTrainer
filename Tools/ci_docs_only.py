@@ -21,31 +21,40 @@ from module_inventory import (
 from test_inputs import MACOS_RUNNER_PATHS, affected_tests, is_native_fixture, load_macos_test_dependencies
 from test_inventory import load_macos_only_tests
 
-NON_PRODUCT_TOOL_PATHS = {
-    "Tools/check_runtime_revision.py",
-    "Tools/discover_linux_tests.py",
-    "Tools/release_tag.py",
+# Explicit product build inputs under Tools/ and repo root that compile, package,
+# sign, or select toolchains for the distributed App. Other Tools/ scripts,
+# CI prerequisite installers, and game-owned Tools/games/<id>/ tooling remain
+# portable unless a macOS test declares them.
+BUILD_INPUT_TOOL_PATHS = frozenset({
+    ".python-version",
+    "Tools/build_module_native.py",
+    "Tools/clean_signing_metadata.py",
+    "Tools/generate_game_binding.py",
+    "Tools/macos_toolchain_identity.py",
     "Tools/module_inventory.py",
-    "Tools/python_static_requirements.txt",
-    # The mutation audit runs only in Build 2 macOS convergence; a PR that edits
-    # it has no macOS work to verify (tests/test_mutation_gate_contract.py is
-    # portable).
-    "Tools/mutation_gate.py",
-    "Tools/run_linux_checks.sh",
-    "Tools/ci_docs_only.py",
-    "Tools/summarize_macos_coverage.py",
-    "pyproject.toml",
-    *MACOS_RUNNER_PATHS,
-}
+    "Tools/module_support.py",
+    "Tools/product_support.py",
+    "Tools/publish_module_build.py",
+    "Tools/python_runtime.json",
+    "Tools/resident_runtime.py",
+    "Tools/supported_build.py",
+    "Tools/swift_module_layout.py",
+    "Tools/validate_game_module.py",
+    "Tools/verify_build_provenance.py",
+    "Tools/verify_module_build.py",
+    "Tools/write_build_provenance.py",
+})
 # Only native/module composition boundaries need the reference-fixture compiler lane.
 # Pure Backend implementation and game-owned Swift changes are verified by their
 # owning lanes; invoking a second macOS app build adds no isolation evidence.
 MODULE_EXACT_PATHS = {
     ".github/workflows/module-build-matrix.yml",
+    ".python-version",
     "app.json",
     "Tools/build_module_native.py",
     "Tools/clean_signing_metadata.py",
     "Tools/generate_game_binding.py",
+    "Tools/macos_toolchain_identity.py",
     "Tools/module_inventory.py",
     "Tools/module_support.py",
     "Tools/product_support.py",
@@ -123,10 +132,9 @@ def _is_portable_input(
         # A change to Build 2's own execution recipe must exercise the real
         # macOS product; the separate module-matrix workflow owns its lane.
         return path != ".github/workflows/build2-macos.yml"
-    if path.startswith("Tools/profile_") and path.endswith(".py"):
-        # Instrumentation tools consume test helpers; they are not product inputs.
-        return True
-    if path in NON_PRODUCT_TOOL_PATHS:
+    if path in BUILD_INPUT_TOOL_PATHS:
+        return False
+    if path == "pyproject.toml" or path.startswith("Tools/"):
         return True
     if is_executable_reference_data(path, reference_prefixes):
         return path not in app_resource_sources

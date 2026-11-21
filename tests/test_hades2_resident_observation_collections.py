@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "Tools/fixtures")]
+sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "Tools/games/hades2/fixtures")]
 
 from games.hades2 import localization, resident_session
 from games.hades2.resident_session import Hades2ResidentSession, ResidentSessionError, lua_value

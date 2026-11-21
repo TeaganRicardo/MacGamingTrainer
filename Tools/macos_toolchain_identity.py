@@ -8,9 +8,11 @@ from typing import Mapping, Sequence
 
 
 # The product declares arm64 only and every lane runs on this profile (#671).
-# tests/macos_fixture_policy.py must verify the same hosted profile.
+# tests/macos_fixture_policy.py imports this single authoritative profile.
+SUPPORTED_RUNNER_LABEL = "macos-26"
+SUPPORTED_RUNNER_ARCH = "ARM64"
 SUPPORTED_RUNNER_PROFILES = {
-    "macos-26": "ARM64",
+    SUPPORTED_RUNNER_LABEL: SUPPORTED_RUNNER_ARCH,
 }
 SUPPORTED_DEVELOPER_DIR = "/Applications/Xcode_26.6.app/Contents/Developer"
 SUPPORTED_XCODE_VERSION = "26.6"
@@ -195,8 +197,16 @@ def verify_recorded_macos_toolchain(toolchain: object) -> None:
         raise RuntimeError("provenance SDK identity is not macosx")
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    args = list(os.sys.argv[1:] if argv is None else argv)
     try:
+        if args == ["--print-github-output"]:
+            print(f"runner_label={SUPPORTED_RUNNER_LABEL}")
+            print(f"developer_dir={SUPPORTED_DEVELOPER_DIR}")
+            print(f"runner_arch={SUPPORTED_RUNNER_ARCH}")
+            return 0
+        if args:
+            raise RuntimeError(f"unsupported arguments: {' '.join(args)}")
         print(json.dumps(collect_macos_toolchain(), indent=2, sort_keys=True))
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(error, file=os.sys.stderr)

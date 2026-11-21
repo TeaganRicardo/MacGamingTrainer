@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / 'Tools'), str(ROOT / 'Backend'), str(ROOT / 'tests')]
+sys.path[:0] = [str(ROOT / 'Tools' / 'games' / 'hades2'), str(ROOT / 'Backend'), str(ROOT / 'tests')]
 from hades2_profile_workloads import profile_end_to_end, profile_save_queries, profile_time_warp, read_records
 from profile_hades2_operations import profile_resident, summarize
 
@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-profile-backend-protocol-') as temp
         {'id': 'warm', 'command': 'status', 'params': {}},
     ]
     run = subprocess.run(
-        [sys.executable, str(ROOT / 'Tools/fixtures/hades2_profile_backend.py')],
+        [sys.executable, str(ROOT / 'Tools/games/hades2/fixtures/hades2_profile_backend.py')],
         input=''.join(json.dumps(request) + '\n' for request in requests),
         env=dict(os.environ, MGT_PROFILE_OPERATIONS='1', MGT_PROFILE_TEMP=str(folder),
                  MGT_PROFILE_EVENTS=str(events), MGT_PROFILE_SOURCE_ROOT=str(ROOT),

@@ -23,6 +23,7 @@ from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE
 _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 _BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
 _MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
+_PREREQUISITE_RE = re.compile(r'^[a-z0-9_][a-z0-9_-]*$')
 _SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
 _ABSENT = object()
 
@@ -54,6 +55,7 @@ class BuildRequirements:
     lldb_python: bool
     debugger_entitlement: bool
     entitlements: str
+    test_prerequisites: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -238,7 +240,21 @@ def load_manifest(game_id: str) -> BuildManifest:
         entitlements = _safe_relative_path(entitlements, 'buildRequirements.entitlements')
     if debugger_entitlement and not entitlements:
         raise ManifestError('debuggerEntitlement requires an entitlements file.')
-    requirements = BuildRequirements(lldb_python, debugger_entitlement, entitlements)
+    raw_prereqs = req.get('testPrerequisites', [])
+    if not isinstance(raw_prereqs, list):
+        raise ManifestError('buildRequirements.testPrerequisites must be a list of unique names.')
+    test_prerequisites = []
+    seen_prereqs = set()
+    for prereq in raw_prereqs:
+        if not isinstance(prereq, str) or not _PREREQUISITE_RE.fullmatch(prereq):
+            raise ManifestError(f'buildRequirements.testPrerequisites contains invalid name: {prereq!r}.')
+        if prereq in seen_prereqs:
+            raise ManifestError('buildRequirements.testPrerequisites must not contain duplicates.')
+        seen_prereqs.add(prereq)
+        if not (ROOT / 'Tools' / 'ci_prerequisites' / f'{prereq}.sh').is_file():
+            raise ManifestError(f'buildRequirements.testPrerequisites references unknown prerequisite: {prereq!r}.')
+        test_prerequisites.append(prereq)
+    requirements = BuildRequirements(lldb_python, debugger_entitlement, entitlements, tuple(test_prerequisites))
 
     resources_value = raw.get('appResources', [])
     if not isinstance(resources_value, list):

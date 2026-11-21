@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.15.0'
+          python-version-file: .python-version
 
       - name: Classify change scope
         id: scope
@@ -56,9 +56,13 @@ jobs:
           python3 -m ruff format --check
           python3 -m mypy
 
-      - name: Install Lua 5.2 runtime test dependency
+      - name: Install declared Linux CI prerequisites
         if: steps.scope.outputs.needs_linux == 'true'
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends lua5.2 liblua5.2-dev
+        run: |
+          prereqs="$(python3 Tools/discover_linux_tests.py --root "$PWD" --prerequisites)"
+          for prereq in $prereqs; do
+            bash "Tools/ci_prerequisites/${prereq}.sh"
+          done
 
       - name: Enforce diff-based invariants
         if: steps.scope.outputs.needs_linux == 'true' && github.event_name == 'pull_request'

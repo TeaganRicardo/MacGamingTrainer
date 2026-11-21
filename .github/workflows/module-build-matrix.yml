@@ -16,8 +16,6 @@ env:
   # merge ref), so every consumer sees exactly the proposed changes.
   BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
   HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-  MGT_MACOS_RUNNER_LABEL: macos-26
-  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
 jobs:
   scope:
@@ -25,6 +23,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       needs_module: ${{ steps.scope.outputs.needs_module }}
+      runner_label: ${{ steps.toolchain.outputs.runner_label }}
+      developer_dir: ${{ steps.toolchain.outputs.developer_dir }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -36,7 +36,11 @@ jobs:
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: '3.15.0'
+          python-version-file: .python-version
+
+      - name: Resolve macOS toolchain profile
+        id: toolchain
+        run: python3 Tools/macos_toolchain_identity.py --print-github-output >> "$GITHUB_OUTPUT"
 
       - name: Classify change scope
         id: scope
@@ -51,16 +55,16 @@ jobs:
   build:
     needs: scope
     if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && 'macos-26' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && needs.scope.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
       # Hades isolated diagnostics remain part of explicit release convergence,
       # while PRs run only the reference fixture for shared module seams.
       MGT_RUN_MODULE_BUILD: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') }}
-      # Pull requests and explicit convergence share the ARM64 profile; the
-      # selected profile is verified below.
-      MGT_MACOS_RUNNER_LABEL: macos-26
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # Runner label and Xcode path come from Tools/macos_toolchain_identity.py
+      # via the scope job.
+      MGT_MACOS_RUNNER_LABEL: ${{ needs.scope.outputs.runner_label }}
+      DEVELOPER_DIR: ${{ needs.scope.outputs.developer_dir }}
     strategy:
       fail-fast: false
       matrix:
@@ -92,7 +96,7 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         if: env.MGT_RUN_MODULE_BUILD == 'true'
         with:
-          python-version: '3.15.0'
+          python-version-file: .python-version
 
       - name: Verify selected macOS toolchain
         if: env.MGT_RUN_MODULE_BUILD == 'true'

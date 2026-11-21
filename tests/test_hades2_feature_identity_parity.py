@@ -21,7 +21,7 @@ from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
 from hades2_resident_session_fakes import FakeResidentSession, hades2_adapter_context
 from swift_test_compiler import SwiftModule, compile_swift_test
 
-GENERATOR_PATH = ROOT / "Tools/generate_hades2_feature_bindings.py"
+GENERATOR_PATH = ROOT / "Tools/games/hades2/generate_hades2_feature_bindings.py"
 GENERATED_SWIFT = ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift"
 LUA_SOURCE = ROOT / "Backend/games/hades2/runtime/hades.lua"
 

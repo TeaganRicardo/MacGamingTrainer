@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 SNAPSHOT = ROOT / "docs/reference/hades2/1.139672-24556151"
 POLICY_PATH = SNAPSHOT / "catalog_legality_policy.json"
 OUTPUT_PATH = SNAPSHOT / "catalog_legality.csv"
@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.stderr.writelines(diff)
     print(
         "catalog_legality.csv is stale; run "
-        "python3 Tools/generate_hades2_catalog_legality.py --write",
+        "python3 Tools/games/hades2/generate_hades2_catalog_legality.py --write",
         file=sys.stderr,
     )
     return 1
