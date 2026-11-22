@@ -48,7 +48,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
             Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
         func text(_ key: String, _ arguments: [String] = []) -> String {
-            Hades2GameModule.resolveText(key: key, arguments: arguments, localization: localization)
+            localization.string(key, arguments: arguments)
         }
         let session = TrainerBackendSession(client: BackendClient(process:
             BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))

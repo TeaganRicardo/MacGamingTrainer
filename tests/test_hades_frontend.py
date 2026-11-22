@@ -834,7 +834,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 query: { model.workbenchSearch }, matches: { query in
                     HadesWorkbenchCatalog.matches(query, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
                         TrainerPresentationLanguage.allCases.map {
-                            HadesGameModule.resolveText(key: key, language: $0, localization: localization)
+                            localization.string(key,language:$0)
                         }
                     }.map { (id: $0.id, destination: $0.section.id) }
                 }, commands: commands)
@@ -956,20 +956,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
-                    HadesGameModule.resolveText(key:key,language:$0,localization:localization)
+                    localization.string(key,language:$0)
                 }
             }
         }
         check(searchFunctions("profile").contains { $0.section == .management && $0.id == "hades.manage.profiles" },
             "profile manager was absent from bilingual workbench discovery")
-        let diagnosticsZh = HadesGameModule.resolveText(key:"hades.manage.diagnostics",language:.zhCN,localization:localization)
-        let diagnosticsEn = HadesGameModule.resolveText(key:"hades.manage.diagnostics",language:.en,localization:localization)
+        let diagnosticsZh = localization.string("hades.manage.diagnostics",language:.zhCN)
+        let diagnosticsEn = localization.string("hades.manage.diagnostics",language:.en)
         check(searchFunctions(diagnosticsZh).contains { $0.id == "hades.manage.diagnostics" }
               && searchFunctions(diagnosticsEn).contains { $0.id == "hades.manage.diagnostics" },
               "current diagnostics label was absent from bilingual workbench discovery")
         check(searchFunctions("disable").contains { $0.id == "shortcut.disableAll" },
             "Host-owned function names were not localized in search")
-        check(HadesGameModule.resolveText(key:"host.disableAll",language:.zhCN,localization:localization) != "host.disableAll",
+        check(localization.string("host.disableAll",language:.zhCN) != "host.disableAll",
             "Host management label leaked raw localization key")
         check(searchFunctions("invincibility").contains { $0.section == .common && $0.id == "shortcut.invincibility" },
             "English workbench feature lookup failed")
@@ -1410,7 +1410,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("native Gems 80 save_editor_stage/query replies: one acknowledged action, editor idle") { !editor.busy && editor.review.count == 1 && !editor.queryLoading }
         check(editor.review.actions.first?.typedValue == .number(80),"completed native input did not enter Changes")
         editorWindow.contentView?.layoutSubtreeIfNeeded();pump(0.3)
-        let applyTitle=HadesGameModule.resolveText(key:"hades.apply",localization:localization)
+        let applyTitle=localization.string("hades.apply")
         guard let applyControl=namedNativeControl(editorWindow.contentView!,role:"AXButton",name:applyTitle) else {
             fatalError("revealed Changes has no native Apply action")
         }

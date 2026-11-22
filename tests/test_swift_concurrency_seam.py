@@ -262,7 +262,7 @@ enum SeamStubModule: TrainerGameModule {
         expectedModuleProtocolVersion: 1,
         supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "Seam Stub")
+    static let presentation = TrainerGamePresentation()
 
     static func makeModel(services: TrainerModuleServices) -> SeamStubModel { SeamStubModel() }
     static func makeContent(model: SeamStubModel) -> some View { EmptyView() }

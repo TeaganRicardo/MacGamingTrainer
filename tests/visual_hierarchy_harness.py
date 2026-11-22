@@ -43,7 +43,7 @@ private struct VisualHierarchyFixture: View {
             }
         } content: {
             VStack(alignment: .leading, spacing: TrainerTheme.standard.pageSpacing) {
-                TrainerPageHeader(title: presentation.headerTitle) { EmptyView() }
+                TrainerPageHeader(title: descriptor.displayName) { EmptyView() }
                 TrainerSection(title: title("Run values", "当前数值"), icon: "chart.bar") {
                     TrainerMetricGrid {
                         TrainerVitalMetricCard(title: title("Health", "生命值"), icon: "heart", tint: .red,

@@ -266,7 +266,7 @@ struct HadesSidebarActions: View {
             ForEach(HadesWorkbenchSection.visible) { section in
                 if section == .management { Divider().padding(.vertical, 2) }
                 TrainerSectionButton(
-                    title: HadesPresentation.text(section.titleKey, language: localization.language),
+                    title: localization.string(section.titleKey),
                     systemImage: section.icon,
                     selected: selectedSection == section.id || (selectedSection == nil && section == .values)
                 ) {
@@ -297,7 +297,7 @@ struct HadesHeaderActions: View {
         if let resource = entry.resource {
             return resource.name(language: localization.language.rawValue)
         }
-        return HadesGameModule.resolveText(key: entry.titleKey, localization: localization)
+        return localization.string(entry.titleKey)
     }
 
     private func locate(_ entry: HadesWorkbenchEntry) {
@@ -308,18 +308,18 @@ struct HadesHeaderActions: View {
     var body: some View {
         TrainerWorkbenchSearchField(
             text: $model.workbenchSearch,
-            placeholder: HadesPresentation.text("hades.workbench.search", language: localization.language),
+            placeholder: localization.string("hades.workbench.search"),
             clearLabel: localization.localized("host.search.clear"),
-            emptyLabel: HadesPresentation.text("hades.workbench.searchEmpty", language: localization.language),
+            emptyLabel: localization.string("hades.workbench.searchEmpty"),
             search: { query in
                 HadesWorkbenchCatalog.matches(query, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
                     TrainerPresentationLanguage.allCases.map {
-                        HadesGameModule.resolveText(key: key, language: $0, localization: localization)
+                        localization.string(key, language: $0)
                     }
                 }
             },
             title: label,
-            detail: { HadesGameModule.resolveText(key: $0.section.titleKey, localization: localization) },
+            detail: { localization.string($0.section.titleKey) },
             icon: { $0.icon },
             onNavigate: locate
         )

@@ -270,7 +270,7 @@ func commands(at url: URL) -> [[String: Any]] {
             HadesGameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
         func text(_ key: String) -> String {
-            HadesGameModule.resolveText(key: key, localization: localization)
+            localization.string(key)
         }
 
         let python = URL(fileURLWithPath: args[1])

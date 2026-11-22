@@ -9,7 +9,7 @@ struct HadesGatheringPanel: View {
     @State private var amount = "100"
     @State private var capturedTarget: HadesHeroTarget?
 
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private func text(_ key: String) -> String { localization.string(key) }
 
     /// The current-room observation explains why Generate is unavailable.
     private var fishingHelp: String {
@@ -60,7 +60,7 @@ struct HadesRoomsPanel: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
 
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private func text(_ key: String) -> String { localization.string(key) }
     private var doors: [HadesWorldDoor] { model.world?.doors ?? [] }
     private func termName(_ identifier: String) -> String {
         model.worldTerms[identifier]?[localization.language.rawValue]

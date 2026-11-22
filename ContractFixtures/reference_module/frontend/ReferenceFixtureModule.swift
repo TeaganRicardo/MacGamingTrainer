@@ -142,8 +142,7 @@ struct ReferenceFixtureContent: View {
 
 struct ReferenceFixtureGameModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation(
-        sidebarIconSystemName: "checkmark.seal",
-        headerTitle: "REFERENCE"
+        sidebarIconSystemName: "checkmark.seal"
     )
 
     static func makeModel(services: TrainerModuleServices) -> ReferenceFixtureModel {

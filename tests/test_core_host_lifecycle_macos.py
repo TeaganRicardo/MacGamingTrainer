@@ -195,7 +195,7 @@ enum LifecycleStubModule: TrainerGameModule {
         expectedModuleProtocolVersion: 1,
         supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "Lifecycle Stub")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> LifecycleStubModel { LifecycleStubModel() }
     static func makeContent(model: LifecycleStubModel) -> some View {
         Text("Lifecycle Content")
@@ -292,12 +292,17 @@ struct Runner {
         check(localization.localized("host.shortcutSettings") != "host.shortcutSettings",
               "Host.strings table did not load beside test executable")
 
-        func makeContext<Module: TrainerGameModule>(_ module: Module.Type, model: Module.Model) -> TrainerGameContext<Module> {
+        func makeContext<Module: TrainerGameModule>(
+            _ module: Module.Type,
+            model: Module.Model,
+            localization: TrainerLocalizationStore? = nil
+        ) -> TrainerGameContext<Module> {
             let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
                 executableURL: pythonURL, argumentsPrefix: ["-u"], forceKillDelay: 0.05
             )))
             let log = TrainerLogSink(url: workerURL.deletingLastPathComponent().appendingPathComponent(UUID().uuidString))
-            return TrainerGameContext<Module>(session: session, backendScriptURL: workerURL, logSink: log) { _ in model }
+            return TrainerGameContext<Module>(session: session, backendScriptURL: workerURL,
+                logSink: log, localization: localization) { _ in model }
         }
 
         func stopWorker(_ session: TrainerBackendSession) {
@@ -571,11 +576,15 @@ struct Runner {
         // 6. Rendered TrainerHostView + TrainerHostSidebarCard + connectionStatusCard (en & zh-CN).
         do {
             for language in [TrainerPresentationLanguage.en, .zhCN] {
-                localization.language = language
+                let stepLocalization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+                stepLocalization.language = language
                 let model = LifecycleStubModel()
 
-                let context = makeContext(LifecycleStubModule.self, model: model)
+                let context = makeContext(LifecycleStubModule.self, model: model, localization: stepLocalization)
                 defer { context.session.stop() }
+                check(stepLocalization.string(TrainerTextToken(key: "lifecycleFixture.hello")) ==
+                      LifecycleStubModule.presentationText(key: "lifecycleFixture.hello", arguments: [], language: language),
+                      "TrainerGameContext init did not register module presentation")
 
                 let lateTarget = try spawnTargetProcess(at: targetURL)
                 defer { terminateTarget(lateTarget) }
@@ -587,15 +596,13 @@ struct Runner {
                 hostViewWindow.isReleasedWhenClosed = false
                 let hostViewHosting = NSHostingView(
                     rootView: TrainerHostView(context: context)
-                        .environmentObject(localization)
+                        .environmentObject(stepLocalization)
                         .trainerTheme(.standard)
                 )
                 hostViewWindow.contentView = hostViewHosting
                 hostViewWindow.orderBack(nil)
-                waitWindow(hostViewHosting, message: "TrainerHostView onAppear refreshes monitor & registers presentation") {
-                    context.targetMonitor.isRunning &&
-                    localization.string(TrainerTextToken(key: "lifecycleFixture.hello")) ==
-                        LifecycleStubModule.presentationText(key: "lifecycleFixture.hello", arguments: [], language: language)
+                waitWindow(hostViewHosting, message: "TrainerHostView onAppear refreshes monitor") {
+                    context.targetMonitor.isRunning
                 }
                 hostViewWindow.contentView = nil
                 hostViewWindow.close()

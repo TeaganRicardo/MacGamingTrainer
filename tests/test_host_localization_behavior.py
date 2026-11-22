@@ -15,6 +15,7 @@ assert SWIFT, "swiftc is required for the macOS localization behavior test"
 
 harness = r'''import Foundation
 import Combine
+import SwiftUI
 
 @MainActor
 @main
@@ -40,7 +41,7 @@ struct LocalizationBehaviorTest {
 
         // A module contributes its own namespace and resolver; Core stores only
         // the closure, so its tokens re-resolve on a language switch.
-        missingValue.registerModulePresentation(prefix: "fixture.") { key, arguments, language in
+        let registered = missingValue.registerModulePresentation(prefix: "fixture.") { key, arguments, language in
             let tables: [String: [TrainerPresentationLanguage: String]] = [
                 "fixture.ready": [.zhCN: "夹具就绪", .en: "Fixture Ready"],
                 "fixture.count": [.zhCN: "共 {0} 项", .en: "{0} Items"],
@@ -51,6 +52,25 @@ struct LocalizationBehaviorTest {
             }
             return value
         }
+        precondition(registered, "valid non-overlapping module prefix must register")
+        // Reject invalid, Host-overlapping and mutually overlapping prefixes.
+        for badPrefix in ["", ".", "fixture", "fix", "h", "ho", "host", "host.", "host.ext.", "fixture.", "fixture.sub."] {
+            let accepted = missingValue.registerModulePresentation(prefix: badPrefix) { key, _, _ in
+                "HIJACK[\(badPrefix):\(key)]"
+            }
+            precondition(!accepted, "invalid or overlapping prefix must be rejected: \(badPrefix)")
+        }
+        precondition(missingValue.string(TrainerTextToken(key: "host.gameLibrary")) == "游戏库",
+                     "rejected overlapping prefix must not hijack Host keys")
+        precondition(missingValue.string(TrainerTextToken(key: "fixture.sub.item")) == "fixture.sub.item",
+                     "rejected sub-prefix must not override the owning module")
+        precondition(missingValue.string(TrainerTextToken(key: "host.ext.item")) == "host.ext.item",
+                     "rejected host sub-prefix must not claim host namespace")
+        precondition(missingValue.string(TrainerTextToken(key: "hades2.vital.health")) != "HIJACK[fixture:hades2.vital.health]"
+                     && missingValue.registerModulePresentation(prefix: "hades.") { _, _, _ in "HADES" },
+                     "disjoint sibling dot-terminated prefixes must still be allowed")
+        precondition(missingValue.registerModulePresentation(prefix: "hades2.") { _, _, _ in "HADES2" },
+                     "prefix validation must distinguish hades. from hades2.")
         precondition(
             missingValue.string(TrainerTextToken(key: "fixture.ready")) == "夹具就绪",
             "a registered module namespace must resolve"
@@ -103,14 +123,12 @@ struct LocalizationBehaviorTest {
             missingValue.string(TrainerTextToken(key: "fixture.count", arguments: ["4"])) == "4 Items",
             "module arguments must re-resolve on a language switch"
         )
-        // A module that does not declare its own namespace falls back to the
-        // protocol default of "". Every key has that prefix, so the module
-        // resolver would swallow Host-owned chrome and replace the whole shell
-        // with its own copy. Registering must refuse that.
+        // An empty or reserved prefix must fail closed even when ignored.
         let emptyPrefix = TrainerLocalizationStore(defaults: defaults)
-        emptyPrefix.registerModulePresentation(prefix: "") { key, _, _ in
-            "MODULE[\(key)]"
-        }
+        precondition(
+            !emptyPrefix.registerModulePresentation(prefix: "") { key, _, _ in "MODULE[\(key)]" },
+            "empty module prefix must return false"
+        )
         precondition(
             emptyPrefix.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library",
             "an empty module prefix must not hijack Host-owned keys"
@@ -124,15 +142,89 @@ struct LocalizationBehaviorTest {
             "an empty module prefix must not claim unowned keys"
         )
 
-        missingValue.removeModulePresentation(prefix: "fixture.")
-        precondition(
-            missingValue.string(TrainerTextToken(key: "fixture.ready")) == "fixture.ready",
-            "removing a module must remove its copy"
+        // Building contexts via TrainerApplicationCoordinator registers every
+        // module's presentation immediately without waiting for TrainerHostView.onAppear.
+        struct AlphaModule: TrainerGameModule {
+            final class Model: TrainerHostModel {
+                var connected: Bool { false }
+                var statusTitle: TrainerTextToken { .init(key: "alpha.ready") }
+                var connectionDetailText: TrainerTextToken { .init(key: "alpha.ready") }
+                var hostActionsEnabled: Bool { true }
+                func connectFromHost(reason: TrainerHostConnectReason) {}
+                func disconnectFromHost() {}
+                func refreshFromHost() {}
+                func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
+            }
+            static let descriptor = GameModuleDescriptor(
+                id: "alpha", displayName: "Alpha", targetProcessName: "MGTAlphaNone", targetBundleIdentifier: "test.alpha",
+                expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
+            )
+            static let presentation = TrainerGamePresentation(sidebarIconSystemName: "circle")
+            static let presentationKeyPrefix = "alpha."
+            @MainActor static func makeModel(services: TrainerModuleServices) -> Model { Model() }
+            @MainActor static func makeContent(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeSidebarActions(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeHeaderActions(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
+            static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
+                if key == "alpha.ready" { return language == .en ? "Alpha Ready" : "甲就绪" }
+                return key
+            }
+        }
+        struct BetaModule: TrainerGameModule {
+            final class Model: TrainerHostModel {
+                var connected: Bool { false }
+                var statusTitle: TrainerTextToken { .init(key: "beta.ready") }
+                var connectionDetailText: TrainerTextToken { .init(key: "beta.ready") }
+                var hostActionsEnabled: Bool { true }
+                func connectFromHost(reason: TrainerHostConnectReason) {}
+                func disconnectFromHost() {}
+                func refreshFromHost() {}
+                func backendPayloadTarget(_ payload: [String: Any]) -> TrainerBackendPayloadTarget { .independent }
+            }
+            static let descriptor = GameModuleDescriptor(
+                id: "beta", displayName: "Beta", targetProcessName: "MGTBetaNone", targetBundleIdentifier: "test.beta",
+                expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
+            )
+            static let presentation = TrainerGamePresentation(sidebarIconSystemName: "square")
+            static let presentationKeyPrefix = "beta."
+            @MainActor static func makeModel(services: TrainerModuleServices) -> Model { Model() }
+            @MainActor static func makeContent(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeSidebarActions(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeHeaderActions(model: Model) -> some View { EmptyView() }
+            @MainActor static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
+            static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
+                if key == "beta.ready" { return language == .en ? "Beta Ready" : "乙就绪" }
+                return key
+            }
+        }
+        let coordinatorLocalization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+        coordinatorLocalization.language = .en
+        let alphaContext = TrainerGameContext<AlphaModule>(session: TrainerBackendSession(),
+            backendScriptURL: FileManager.default.temporaryDirectory.appendingPathComponent("missing-alpha.py"),
+            logSink: TrainerLogSink(gameID: "alpha", homeDirectory: FileManager.default.temporaryDirectory))
+        let betaContext = TrainerGameContext<BetaModule>(session: TrainerBackendSession(),
+            backendScriptURL: FileManager.default.temporaryDirectory.appendingPathComponent("missing-beta.py"),
+            logSink: TrainerLogSink(gameID: "beta", homeDirectory: FileManager.default.temporaryDirectory))
+        defer {
+            alphaContext.session.stop(suppressTerminationError: true)
+            betaContext.session.stop(suppressTerminationError: true)
+        }
+        let coordinator = TrainerApplicationCoordinator(
+            contexts: [AnyTrainerGameContext(alphaContext), AnyTrainerGameContext(betaContext)],
+            localization: coordinatorLocalization
         )
-        precondition(
-            missingValue.localized("host.gameLibrary") == "Game Library",
-            "removing a module must not disturb the shared Host table"
-        )
+        precondition(coordinator.selectedGameID == "alpha", "coordinator selects initial module")
+        precondition(coordinatorLocalization.string(TrainerTextToken(key: "alpha.ready")) == "Alpha Ready",
+                     "selected context presentation must register before any view appears")
+        precondition(coordinatorLocalization.string(TrainerTextToken(key: "beta.ready")) == "Beta Ready",
+                     "unselected context presentation must also register before any view appears")
+        precondition(coordinatorLocalization.string(TrainerTextToken(key: "host.save.fileCount", arguments: ["3"])) == "3 files",
+                     "registered module prefixes must keep Host key argument resolution intact")
+        // Registering a broader parent prefix after a sub-prefix must also fail.
+        precondition(missingValue.registerModulePresentation(prefix: "subonly.child.") { _, _, _ in "CHILD" })
+        precondition(!missingValue.registerModulePresentation(prefix: "subonly.") { _, _, _ in "PARENT" },
+                     "parent prefix overlapping an existing sub-prefix must be rejected")
         precondition(emitted == [.zhCN, .en], "published language must update live observers")
         precondition(TrainerLocalizationStore(defaults: defaults).language == .en, "saved selection must load on next launch")
         missingValue.language = .zhCN

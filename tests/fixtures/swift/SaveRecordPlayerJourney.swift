@@ -39,7 +39,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix) {
             Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
-        func text(_ key: String) -> String { Hades2GameModule.resolveText(key: key, localization: localization) }
+        func text(_ key: String) -> String { localization.string(key) }
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: URL(fileURLWithPath: CommandLine.arguments[1]), argumentsPrefix: ["-u"])))
         try session.start(descriptor: Hades2GameModule.descriptor,
@@ -203,7 +203,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         until("native reward intent did not acknowledge") { !reopened.busy && reopened.pendingCount == 2 }
         let beforeRewardApply = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
         func installedPress(_ key: String, _ arguments: [String] = []) {
-            let label = Hades2GameModule.resolveText(key: key, arguments: arguments, localization: localization)
+            let label = localization.string(key, arguments: arguments)
             guard let button = namedNativeControl(installedRoot, role: "AXButton", name: label), button.enabled, button.press()
             else { fatalError("installed record action missing: \(key)") }
             pump()

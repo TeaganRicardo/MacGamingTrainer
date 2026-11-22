@@ -8,7 +8,7 @@ enum Hades2ManagementCatalog {
         openSaveEditor: (() -> Void)? = nil, openSaveManagement: (() -> Void)? = nil
     ) -> TrainerManagementCatalog {
         @MainActor func text(_ key: String) -> String {
-            Hades2GameModule.resolveText(key: key, localization: localization)
+            localization.string(key)
         }
         let canUseBackend = { model.backendAvailable && model.protocolCompatible && !model.exiting }
         let canStartBackendAction = { canUseBackend() && !model.busy }

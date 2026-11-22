@@ -955,7 +955,7 @@ struct Main {
             fail("staging mutated the loaded source row before Apply")
         }
         window.contentView?.layoutSubtreeIfNeeded();pump(0.3)
-        let applyTitle = Hades2GameModule.resolveText(key: "hades2.saveEditor.apply", localization: localization)
+        let applyTitle = localization.string("hades2.saveEditor.apply")
         guard let applyControl = namedNativeControl(window.contentView!, role: "AXButton", name: applyTitle) else {
             fail("revealed review drawer has no native Apply control")
         }
@@ -1015,9 +1015,7 @@ struct Main {
             || unrelatedDraftField.stringValue != "3.5" {
             fail("Unrelated invalid draft was not retained before per-item removal")
         }
-        let nectarCorrection = "Nectar: " + Hades2GameModule.resolveText(
-            key: "hades2.saveEditor.invalidDraft", localization: localization
-        )
+        let nectarCorrection = "Nectar: " + localization.string("hades2.saveEditor.invalidDraft")
         if namedNativeControl(window.contentView!, role: "AXStaticText", name: nectarCorrection) == nil {
             let observed = nativeAccessibilityControls(window.contentView!).filter {
                 $0.text?.contains("Nectar") == true || $0.text?.contains("valid") == true
@@ -1436,7 +1434,7 @@ struct Main {
         if nativeAccessibilityControls(window.contentView!).contains(where: { $0.role == "AXDisclosureTriangle" }) {
             fail("retiredDrafts still renders an isolated AXDisclosureTriangle instead of TrainerDisclosureButton")
         }
-        let retiredTitle = Hades2GameModule.resolveText(key: "hades2.saveEditor.retiredDrafts", localization: localization)
+        let retiredTitle = localization.string("hades2.saveEditor.retiredDrafts")
         guard let retiredToggle = namedNativeControl(window.contentView!, role: "AXButton", name: retiredTitle),
               retiredToggle.press() else {
             fail("TrainerDisclosureButton for retiredDrafts missing")
@@ -1750,8 +1748,8 @@ struct Main {
             localization.language = language
             pumpUntil { !model.querying && model.total == 201 }
             pump(0.10)
-            let previousName = Hades2GameModule.resolveText(key: "hades2.saveEditor.previousPage", localization: localization)
-            let nextName = Hades2GameModule.resolveText(key: "hades2.saveEditor.nextPage", localization: localization)
+            let previousName = localization.string("hades2.saveEditor.previousPage")
+            let nextName = localization.string("hades2.saveEditor.nextPage")
             guard let next = namedNativeControl(content, role: "AXButton", name: nextName),
                   let previous = namedNativeControl(content, role: "AXButton", name: previousName),
                   next.enabled, !previous.enabled,
@@ -1767,7 +1765,7 @@ struct Main {
                 fail("The named previous-page action did not become available")
             }
             pumpUntil { !model.querying && model.offset == 0 }
-            let refreshRowsName = Hades2GameModule.resolveText(key: "hades2.saveEditor.refreshRows", localization: localization)
+            let refreshRowsName = localization.string("hades2.saveEditor.refreshRows")
             let beforeRowsRefresh = commands(at: commandLog).filter { $0["command"] as? String == "save_editor_query" }.count
             guard let refreshRows = namedNativeControl(content, role: "AXButton", name: refreshRowsName),
                   refreshRows.enabled,

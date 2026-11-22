@@ -941,23 +941,8 @@ private struct PendingFeatureIntent {
 }
 
 struct HadesGameModule: TrainerGameModule {
-    static let presentation = TrainerGamePresentation(sidebarIconSystemName: "flame.fill", platformLabel: "Intel · Rosetta", headerTitle: "HADES")
+    static let presentation = TrainerGamePresentation(sidebarIconSystemName: "flame.fill")
     static let presentationKeyPrefix = "hades."
-
-    /// Function discovery and module-hosted controls may contain Host-owned keys.
-    /// Resolve those through Host localization in the requested language.
-    @MainActor
-    static func resolveText(
-        key: String,
-        language: TrainerPresentationLanguage? = nil,
-        localization: TrainerLocalizationStore
-    ) -> String {
-        let language = language ?? localization.language
-        guard key.hasPrefix(presentationKeyPrefix) else {
-            return localization.string(key, arguments: [], language: language)
-        }
-        return HadesPresentation.text(key, language: language)
-    }
 
     static func makeModel(services: TrainerModuleServices) -> HadesTrainerModel { HadesTrainerModel(services: services) }
     static func makeContent(model: HadesTrainerModel) -> HadesTrainerView { HadesTrainerView(model: model) }

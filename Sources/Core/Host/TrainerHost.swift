@@ -47,7 +47,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .environment(\.trainerGamePageVisibility, context.pageVisibility)
         .onAppear {
             targetMonitor.refresh()
-            context.registerPresentation(localization)
         }
     }
 }

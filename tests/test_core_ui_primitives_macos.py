@@ -1137,7 +1137,7 @@ private struct StubPageModuleA: TrainerGameModule {
         targetProcessName: "NoneA", targetBundleIdentifier: "test.none.a",
         expectedHostProtocolVersion: 1, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "Stub A")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubPageModel { StubPageModel() }
     static var pageATaps = 0
     static func makeContent(model: StubPageModel) -> some View {
@@ -1172,7 +1172,7 @@ private struct StubPageModuleB: TrainerGameModule {
         targetProcessName: "NoneB", targetBundleIdentifier: "test.none.b",
         expectedHostProtocolVersion: 1, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "Stub B")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubPageModel { StubPageModel() }
     static func makeContent(model: StubPageModel) -> some View {
         VStack(alignment: .leading) {
@@ -1198,7 +1198,7 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
         targetProcessName: "NoneSide", targetBundleIdentifier: "test.none.side",
         expectedHostProtocolVersion: 1, expectedModuleProtocolVersion: 1, supportsSaveManagement: false
     )
-    let pres = TrainerGamePresentation(headerTitle: "Sidebar Game")
+    let pres = TrainerGamePresentation()
     var selects = 0
     var expandedActions = 0
 
@@ -1356,7 +1356,10 @@ private func exerciseSidebarAndPages(localization: TrainerLocalizationStore) {
         logSink: TrainerLogSink(gameID: StubPageModuleA.descriptor.id, homeDirectory: fixtureHome))
     let ctxB = TrainerGameContext<StubPageModuleB>(session: TrainerBackendSession(),
         logSink: TrainerLogSink(gameID: StubPageModuleB.descriptor.id, homeDirectory: fixtureHome))
-    let coordinator = TrainerApplicationCoordinator(contexts: [AnyTrainerGameContext(ctxA), AnyTrainerGameContext(ctxB)])
+    let coordinator = TrainerApplicationCoordinator(
+        contexts: [AnyTrainerGameContext(ctxA), AnyTrainerGameContext(ctxB)],
+        localization: localization
+    )
     let pagesView = TrainerGamePages(application: coordinator)
         .trainerTheme(theme)
         .environmentObject(localization)

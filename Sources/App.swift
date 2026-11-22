@@ -78,15 +78,18 @@ private struct WindowCloseBridge: NSViewRepresentable {
 @main struct TrainerApplication: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var application: TrainerApplicationCoordinator
-    @StateObject private var localization = TrainerLocalizationStore()
+    @StateObject private var localization: TrainerLocalizationStore
 
     private var appDisplayName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Mac Gaming Trainer"
     }
 
     init() {
+        let localization = TrainerLocalizationStore()
+        _localization = StateObject(wrappedValue: localization)
         _application = StateObject(wrappedValue: TrainerApplicationCoordinator(
-            contexts: TrainerGameCatalog.makeContexts()
+            contexts: TrainerGameCatalog.makeContexts(),
+            localization: localization
         ))
     }
 

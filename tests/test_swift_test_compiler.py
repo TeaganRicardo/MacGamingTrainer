@@ -538,7 +538,7 @@ struct EquivalenceHarness {
         localization.language = .en
         let enTitle = localization.string("hades2.chaosGate.title")
         let patch = Hades2StatePatch(["chaosGateProbability": 25.5])
-        print("eq_ok|\\(Hades2GameModule.presentation.headerTitle)|\\(enTitle)|\\(patch.chaosGateProbability.value ?? -1)|\\(Hades2GameModuleBinding.descriptor.id)")
+        print("eq_ok|\\(Hades2GameModule.presentation.sidebarIconSystemName)|\\(enTitle)|\\(patch.chaosGateProbability.value ?? -1)|\\(Hades2GameModuleBinding.descriptor.id)")
     }
 }
 """,
@@ -600,7 +600,7 @@ struct EquivalenceHarness {
             for binary in (direct_bin, cold_bin, warm_bin)
         ]
         assert outputs[0] == outputs[1] == outputs[2], outputs
-        assert outputs[0].startswith("eq_ok|HADES II|Chaos Gate|25.5|hades2"), outputs[0]
+        assert outputs[0].startswith("eq_ok|moonphase.waning.crescent|Chaos Gate|25.5|hades2"), outputs[0]
 
 
 if __name__ == "__main__":

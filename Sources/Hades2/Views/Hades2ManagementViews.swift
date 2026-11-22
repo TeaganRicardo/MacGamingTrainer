@@ -8,7 +8,7 @@ struct Hades2ProfileManagerView: View {
     @Binding var isPresented: Bool
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     var body: some View {
@@ -35,7 +35,7 @@ struct Hades2DiagnosticsView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     private var enabled: Bool {
@@ -67,7 +67,7 @@ struct Hades2ShortcutSettingsView: View {
             entries: Hades2WorkbenchCatalog.orderedShortcutActions.map { action in
                 TrainerShortcutSettingsEntry(
                     id: action.rawValue,
-                    title: Hades2GameModule.resolveText(key: action.presentationKey, localization: localization),
+                    title: localization.string(action.presentationKey),
                     icon: action.icon,
                     chordText: model.shortcutText(action),
                     isEditable: action != .disableAll

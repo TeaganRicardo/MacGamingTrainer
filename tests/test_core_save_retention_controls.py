@@ -169,7 +169,7 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
         expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1,
         supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
@@ -179,7 +179,7 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
     static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
         TrainerEmptyCommands()
     }
-    static let presentationKeyPrefix = "fixture."
+    static let presentationKeyPrefix = "hostNoSaveFixture."
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -190,7 +190,7 @@ struct HostSupportedSaveModule: TrainerGameModule {
         expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 1,
         supportsSaveManagement: true
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "SAVE")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
@@ -200,7 +200,7 @@ struct HostSupportedSaveModule: TrainerGameModule {
     static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
         TrainerEmptyCommands()
     }
-    static let presentationKeyPrefix = "fixture."
+    static let presentationKeyPrefix = "hostSaveFixture."
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
