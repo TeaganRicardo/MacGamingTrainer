@@ -11,10 +11,13 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from collections.abc import Iterable
+import uuid
+from collections import OrderedDict
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Optional, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Optional, Protocol, TypeVar
 
 from .errors import PresentableError
 from .save_resolution import ResolvedSaveFile
@@ -23,6 +26,24 @@ if TYPE_CHECKING:
     from .save_service import CoreSaveService
 
 _Document = TypeVar("_Document")
+_Workspace = TypeVar("_Workspace", bound="SaveEditorWorkspaceProtocol")
+
+
+class StructuredSaveEligibilityProtocol(Protocol):
+    """Protocol for game-owned save member eligibility predicates."""
+
+    def editor_files(self, files: Sequence[ResolvedSaveFile]) -> Sequence[Mapping[str, Any]]: ...
+    def is_source(self, relative_path: str) -> bool: ...
+
+
+class SaveEditorWorkspaceProtocol(Protocol):
+    """Minimum lifecycle surface managed by Core's workspace registry."""
+
+    identifier: str
+    baseline_generation: str
+
+    def summary(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+    def set_target(self, target: object) -> dict[str, Any]: ...
 
 
 class StructuredSaveCodec(Protocol[_Document]):
@@ -77,6 +98,15 @@ class StructuredSaveEditRecoveryError(PresentableError, ValueError):
             super().__init__(self.code, "host.save.error.recoveryUnresolved", diagnostic=diagnostic, message=diagnostic)
 
 
+@dataclass(frozen=True)
+class StructuredSaveEligibility:
+    """Game-owned save file eligibility, source validation, and default-source selection."""
+
+    editor_files: Callable[..., list[dict[str, Any]]]
+    is_source: Callable[[str], bool]
+    default_source: Optional[Callable[[Sequence[ResolvedSaveFile]], Optional[dict[str, str]]]] = None
+
+
 class StructuredSaveEditSession(Generic[_Document]):
     """One pinned structured source and explicit physical replacement target."""
 
@@ -87,6 +117,8 @@ class StructuredSaveEditSession(Generic[_Document]):
         "_source_identity",
         "_target",
         "_version_pinned",
+        "_eligibility",
+        "_source_metadata",
         "_source_sha256",
         "_original_sha256",
         "_document",
@@ -105,6 +137,8 @@ class StructuredSaveEditSession(Generic[_Document]):
         document: _Document,
         *,
         version_pinned: bool = False,
+        eligibility: Optional[Any] = None,
+        source_metadata: Optional[Mapping[str, str]] = None,
     ) -> None:
         self._save_service = save_service
         self._codec = codec
@@ -112,6 +146,8 @@ class StructuredSaveEditSession(Generic[_Document]):
         self._source_identity = dict(source_identity)
         self._target = target
         self._version_pinned = bool(version_pinned)
+        self._eligibility = eligibility
+        self._source_metadata = dict(source_metadata) if source_metadata is not None else dict(source_identity)
         self._source_sha256 = original_sha256
         self._original_sha256 = original_sha256
         self._document = document
@@ -128,6 +164,8 @@ class StructuredSaveEditSession(Generic[_Document]):
         snapshot_id: Optional[str] = None,
         target: object = None,
         version_pinned: bool = False,
+        eligibility: Optional[Any] = None,
+        source_metadata: Optional[Mapping[str, str]] = None,
     ) -> StructuredSaveEditSession[_Document]:
         identity = cls._identity(source_identity, "source")
         selected, raw = save_service.read_source_file(
@@ -145,10 +183,105 @@ class StructuredSaveEditSession(Generic[_Document]):
             sha256(raw).hexdigest(),
             document,
             version_pinned=version_pinned,
+            eligibility=eligibility,
+            source_metadata=source_metadata,
         )
         if target is not None:
             session.set_target(target)
         return session
+
+    @staticmethod
+    def _eligible_target_identities(
+        save_service: CoreSaveService, eligibility: StructuredSaveEligibilityProtocol
+    ) -> list[dict[str, str]]:
+        editor_files_fn = getattr(eligibility, "editor_files", None)
+        if not callable(editor_files_fn):
+            raise TypeError("Save eligibility must expose callable editor_files.")
+        return [
+            {"rootId": str(row["rootId"]), "relativePath": str(row["relativePath"])}
+            for row in editor_files_fn(save_service.resolved_files())
+        ]
+
+    @classmethod
+    def open_selected(
+        cls,
+        save_service: CoreSaveService,
+        codec: StructuredSaveCodec[_Document],
+        eligibility: StructuredSaveEligibilityProtocol,
+        *,
+        source: Optional[Mapping[str, Any]] = None,
+        relative_path: Optional[str] = None,
+        root_id: Optional[str] = None,
+        snapshot_id: Optional[str] = None,
+        target: Optional[Mapping[str, Any]] = None,
+        default_target: bool = False,
+        version_pinned: bool = False,
+    ) -> StructuredSaveEditSession[_Document]:
+        is_source_fn = getattr(eligibility, "is_source", None)
+        if not callable(is_source_fn):
+            raise TypeError("Save eligibility must expose callable is_source.")
+
+        if source is not None:
+            checked_source = (
+                cls._identity(dict(source), "source")
+                if isinstance(source, Mapping)
+                else cls._identity(source, "source")
+            )
+            selected_root: Optional[str] = checked_source["rootId"]
+            selected_path = checked_source["relativePath"]
+        elif relative_path is not None:
+            if not isinstance(relative_path, str) or not relative_path:
+                raise ValueError("Save Editor source must identify one save file.")
+            selected_root = root_id
+            selected_path = relative_path
+        else:
+            default_fn = getattr(eligibility, "default_source", None)
+            default_choice: Optional[Mapping[str, str]] = (
+                default_fn(save_service.source_files(snapshot_id)) if callable(default_fn) else None
+            )
+            if default_choice is None:
+                raise ValueError("Save Editor requires an explicit supported source file.")
+            checked_default = cls._identity(dict(default_choice), "source")
+            selected_root = checked_default["rootId"]
+            selected_path = checked_default["relativePath"]
+
+        if not is_source_fn(selected_path):
+            raise ValueError("Save Editor source is not a supported profile save.")
+
+        matches = [
+            row
+            for row in save_service.source_files(snapshot_id)
+            if row.relative_path == selected_path and (selected_root is None or row.root_id == selected_root)
+        ]
+        if len(matches) != 1:
+            raise ValueError("Save Editor source is missing or ambiguous.")
+
+        matched = matches[0]
+        identity = {"rootId": matched.root_id, "relativePath": matched.relative_path}
+        source_metadata: dict[str, str] = {"kind": "managedBackup" if snapshot_id is not None else "currentFile"}
+        if snapshot_id is not None:
+            source_metadata["snapshotId"] = snapshot_id
+        source_metadata.update(identity)
+
+        selected_target: Optional[dict[str, str]] = None
+        if target is not None:
+            selected_target = cls._identity(dict(target) if isinstance(target, Mapping) else target, "target")
+            if selected_target not in cls._eligible_target_identities(save_service, eligibility):
+                raise ValueError("Save Editor target is missing or unsupported.")
+        elif default_target:
+            if identity in cls._eligible_target_identities(save_service, eligibility):
+                selected_target = dict(identity)
+
+        return cls.open(
+            save_service,
+            identity,
+            codec,
+            snapshot_id=snapshot_id,
+            target=selected_target,
+            version_pinned=version_pinned,
+            eligibility=eligibility,
+            source_metadata=source_metadata,
+        )
 
     @staticmethod
     def _identity(identity: object, role: str) -> dict[str, str]:
@@ -165,6 +298,9 @@ class StructuredSaveEditSession(Generic[_Document]):
 
     def _resolve_target(self, identity: object) -> ResolvedSaveFile:
         selected = self._identity(identity, "target")
+        if self._eligibility is not None:
+            if selected not in self._eligible_target_identities(self._save_service, self._eligibility):
+                raise ValueError("Save Editor target is missing or unsupported.")
         matches = [
             row
             for row in self._save_service.resolved_files()
@@ -183,9 +319,9 @@ class StructuredSaveEditSession(Generic[_Document]):
     def document(self) -> _Document:
         return self._document
 
-    @document.setter
-    def document(self, value: _Document) -> None:
-        self._document = value
+    @property
+    def source(self) -> dict[str, str]:
+        return dict(self._source_metadata)
 
     @property
     def source_identity(self) -> dict[str, str]:
@@ -263,12 +399,12 @@ class StructuredSaveEditSession(Generic[_Document]):
         if self._recovery_unresolved:
             raise StructuredSaveEditRecoveryError(self._recovery_paths)
 
-    def apply(self) -> dict[str, object]:
+    def apply(self, candidate: _Document) -> dict[str, object]:
         self._require_resolved()
         if self._target is None:
             raise ValueError("Save Editor requires an explicitly selected physical write target.")
 
-        encoded = self._encode(self._document)
+        encoded = self._encode(candidate)
         # The game codec validates the entire candidate before Core begins a
         # filesystem transaction. No caller-supplied raw-byte write is exposed.
         self._codec.decode(encoded)
@@ -314,6 +450,7 @@ class StructuredSaveEditSession(Generic[_Document]):
                 self._capture_recovery_after_failure(error, recovery_before)
                 raise
             self._original_sha256 = encoded_sha256
+            self._document = candidate
         except BaseException:
             try:
                 temporary.cleanup()
@@ -331,3 +468,161 @@ class StructuredSaveEditSession(Generic[_Document]):
             "runtimeReloaded": False,
             **result,
         }
+
+
+DEFAULT_MAX_OPEN_SAVE_WORKSPACES = 8
+_UNSET = object()
+
+
+class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
+    """Core registry owning open Save Editor workspaces, baselines, eviction, and standard routes."""
+
+    STANDARD_COMMANDS = frozenset(
+        {
+            "inventory",
+            "open",
+            "close",
+            "target",
+            "save_editor_inventory",
+            "save_editor_open",
+            "save_editor_close",
+            "save_editor_target",
+        }
+    )
+
+    def __init__(
+        self,
+        get_save_service: Callable[[], Optional[CoreSaveService]],
+        *,
+        inventory: Callable[[CoreSaveService, Optional[str]], dict[str, Any]],
+        open_workspace: Callable[..., _Workspace],
+        max_open: int = DEFAULT_MAX_OPEN_SAVE_WORKSPACES,
+        unavailable_error: Optional[Callable[[], Exception]] = None,
+        not_open_error: Optional[Callable[[object], Exception]] = None,
+        stale_baseline_error: Optional[Callable[[], Exception]] = None,
+    ) -> None:
+        if type(max_open) is not int or max_open < 1:
+            raise ValueError("max_open must be a positive integer.")
+        self._get_save_service = get_save_service
+        self._inventory = inventory
+        self._open_workspace = open_workspace
+        self._max_open = max_open
+        self._unavailable_error = unavailable_error or (
+            lambda: ValueError("Save Editor save management is unavailable.")
+        )
+        self._not_open_error = not_open_error or (lambda _identifier: ValueError("Save Editor workspace is not open."))
+        self._stale_baseline_error = stale_baseline_error or (
+            lambda: ValueError("Save Editor document baseline is stale; refresh before editing.")
+        )
+        self._workspaces: OrderedDict[str, _Workspace] = OrderedDict()
+
+    def _require_save_service(self) -> CoreSaveService:
+        service = self._get_save_service()
+        if service is None:
+            raise self._unavailable_error()
+        return service
+
+    @staticmethod
+    def _close_workspace(workspace: object) -> None:
+        close_fn = getattr(workspace, "close", None)
+        if callable(close_fn):
+            close_fn()
+
+    def clear(self) -> None:
+        while self._workspaces:
+            _identifier, workspace = self._workspaces.popitem(last=False)
+            self._close_workspace(workspace)
+
+    def __len__(self) -> int:
+        return len(self._workspaces)
+
+    def __contains__(self, identifier: object) -> bool:
+        return isinstance(identifier, str) and identifier in self._workspaces
+
+    def __getitem__(self, identifier: str) -> _Workspace:
+        return self._workspaces[identifier]
+
+    def get(self, identifier: str, default: Optional[_Workspace] = None) -> Optional[_Workspace]:
+        return self._workspaces.get(identifier, default)
+
+    def inventory(self, params: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+        service = self._require_save_service()
+        raw_snapshot = params.get("snapshotId") if params is not None else None
+        if raw_snapshot is not None and not isinstance(raw_snapshot, str):
+            raise ValueError("Save Editor snapshot identity must be a string.")
+        return self._inventory(service, raw_snapshot)
+
+    def open(self, params: Optional[Mapping[str, Any]] = None, *, language: Optional[str] = None) -> dict[str, Any]:
+        service = self._require_save_service()
+        raw = params or {}
+        workspace = self._open_workspace(
+            service,
+            snapshot_id=raw.get("snapshotId"),
+            source=raw.get("source"),
+            target=raw.get("target"),
+        )
+        while len(self._workspaces) >= self._max_open:
+            _evicted_id, evicted = self._workspaces.popitem(last=False)
+            self._close_workspace(evicted)
+
+        workspace_id = uuid.uuid4().hex
+        baseline_generation = uuid.uuid4().hex
+        workspace.identifier = workspace_id
+        workspace.baseline_generation = baseline_generation
+        self._workspaces[workspace_id] = workspace
+        return workspace.summary(language) if language is not None else workspace.summary()
+
+    def require(self, identifier: object) -> _Workspace:
+        if not isinstance(identifier, str) or not identifier or identifier not in self._workspaces:
+            raise self._not_open_error(identifier)
+        self._workspaces.move_to_end(identifier)
+        return self._workspaces[identifier]
+
+    def require_baseline(self, identifier: object, generation: object) -> _Workspace:
+        workspace = self.require(identifier)
+        if generation != workspace.baseline_generation:
+            raise self._stale_baseline_error()
+        return workspace
+
+    def rotate_baseline(self, identifier: str) -> str:
+        workspace = self.require(identifier)
+        new_generation = uuid.uuid4().hex
+        workspace.baseline_generation = new_generation
+        return new_generation
+
+    def close(self, params: Mapping[str, Any]) -> dict[str, bool]:
+        identifier = params.get("workspaceId")
+        if not isinstance(identifier, str):
+            raise self._not_open_error(identifier)
+        self.require(identifier)
+        workspace = self._workspaces.pop(identifier)
+        self._close_workspace(workspace)
+        return {"closed": True}
+
+    def target(self, params: Mapping[str, Any], *, require_baseline: bool = True) -> dict[str, Any]:
+        identifier = params.get("workspaceId")
+        if require_baseline:
+            workspace = self.require_baseline(identifier, params.get("baselineGeneration"))
+        else:
+            workspace = self.require(identifier)
+        return workspace.set_target(params["target"])
+
+    def handle(
+        self,
+        command: str,
+        params: Optional[Mapping[str, Any]] = None,
+        *,
+        language: Optional[str] = None,
+        require_baseline: bool = True,
+    ) -> dict[str, Any]:
+        name = command[len("save_editor_") :] if command.startswith("save_editor_") else command
+        payload = params or {}
+        if name == "inventory":
+            return self.inventory(payload)
+        if name == "open":
+            return self.open(payload, language=language)
+        if name == "close":
+            return self.close(payload)
+        if name == "target":
+            return self.target(payload, require_baseline=require_baseline)
+        raise ValueError("Unknown standard Save Editor operation.")

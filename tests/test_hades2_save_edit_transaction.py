@@ -13,9 +13,9 @@ from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_resolution import DefaultSaveProvider, SaveProviderContext
 from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError
 from core.save_service import CoreSaveService
+from core.structured_save_edit import StructuredSaveEditSession
 from games.hades2.save_document import Hades2SaveDocument, HadesSaveFormatError
-from games.hades2.save_edit import Hades2SaveEditSession
-from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2.save_workspace import Hades2SaveWorkspace, _CODEC, _ELIGIBILITY
 from games.hades2 import save_advanced
 
 
@@ -147,15 +147,31 @@ def expect_error(error_type, action, label):
     raise AssertionError("{} unexpectedly succeeded".format(label))
 
 
+def open_hades2_session(service):
+    return StructuredSaveEditSession.open_selected(
+        service,
+        _CODEC,
+        _ELIGIBILITY,
+        relative_path="Profile1.sav",
+        default_target=True,
+    )
+
+
+def clone_doc(session, meta_points=None):
+    doc = Hades2SaveDocument.from_bytes(session.document.to_bytes())
+    if meta_points is not None:
+        doc.lua_state["GameState"]["MetaPoints"] = meta_points
+    return doc
+
+
 # Successful apply is bound to one structured document, captures a normal
 # pre-mutation snapshot, atomically replaces the profile, and reopens it as a
 # valid Hades document before reporting success.
 service, save_path, original, state, spec, data_root = make_environment("success")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
+session = open_hades2_session(service)
 assert session.original_sha256
 assert session.document.lua_state["GameState"]["MetaPoints"] == 123.0
-session.document.lua_state["GameState"]["MetaPoints"] = 999.0
-result = session.apply()
+result = session.apply(clone_doc(session, 999.0))
 assert result["applied"] is True
 assert result["replaced"] is True
 assert result["relativePath"] == "Profile1.sav"
@@ -168,16 +184,17 @@ previous = service.store.load_verified_snapshot(result["previousSnapshotId"])
 assert (previous["root"] / "files/main/Profile1.sav").read_bytes() == original
 
 snapshot_count = len(service.list_state()["snapshots"])
-expect_error(ValueError, session.apply, "unchanged document reapply")
+expect_error(ValueError, lambda: session.apply(clone_doc(session)), "unchanged document reapply")
 assert len(service.list_state()["snapshots"]) == snapshot_count
 
 # Invalid structured state is rejected before Core crosses the destructive
 # transaction seam. No recovery snapshot is created because no mutation was
 # attempted.
 service, save_path, original, _state, _spec, _data_root = make_environment("invalid-structured")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["UnsupportedValue"] = object()
-expect_error(HadesSaveFormatError, session.apply, "invalid structured document")
+session = open_hades2_session(service)
+bad_doc = clone_doc(session)
+bad_doc.lua_state["GameState"]["UnsupportedValue"] = object()
+expect_error(HadesSaveFormatError, lambda: session.apply(bad_doc), "invalid structured document")
 assert save_path.read_bytes() == original
 assert service.list_state()["snapshots"] == []
 
@@ -192,11 +209,10 @@ class RawWriteSurface:
 
 
 service, save_path, original, _state, _spec, _data_root = make_environment("raw-surface")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document = RawWriteSurface(build_save(777))
+session = open_hades2_session(service)
 raw_surface_rejected = False
 try:
-    session.apply()
+    session.apply(RawWriteSurface(build_save(777)))
 except TypeError:
     raw_surface_rejected = True
 
@@ -204,9 +220,8 @@ except TypeError:
 # the recoverable filesystem transaction only; it does not claim that Hades
 # reloaded its in-memory state.
 service, save_path, original, state, _spec, _data_root = make_environment("running", running=True)
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 200.0
-running_result = session.apply()
+session = open_hades2_session(service)
+running_result = session.apply(clone_doc(session, 200.0))
 assert running_result["applied"] is True
 assert running_result["replaced"] is True
 assert running_result["hot"] is True
@@ -228,11 +243,10 @@ service, save_path, original, _state, _spec, _data_root = make_environment(
     running=True,
     provider=busy_provider,
 )
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 201.0
+session = open_hades2_session(service)
 provider_busy_rejected = False
 try:
-    session.apply()
+    session.apply(clone_doc(session, 201.0))
 except SaveBusyError:
     provider_busy_rejected = True
 
@@ -240,11 +254,10 @@ except SaveBusyError:
 # edit guard. A later external write remains authoritative and is never
 # overwritten by the old editor session.
 service, save_path, original, _state, _spec, _data_root = make_environment("stale")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 300.0
+session = open_hades2_session(service)
 external = build_save(301)
 save_path.write_bytes(external)
-expect_error(SaveRestoreError, session.apply, "stale edit")
+expect_error(SaveRestoreError, lambda: session.apply(clone_doc(session, 300.0)), "stale edit")
 assert save_path.read_bytes() == external
 assert service.list_state()["snapshots"] == []
 
@@ -252,8 +265,7 @@ assert service.list_state()["snapshots"] == []
 # as a post-mutation failure: rollback restores and verifies the exact original
 # bytes while the persistent pre-mutation snapshot remains available.
 service, save_path, original, _state, _spec, _data_root = make_environment("write-failure")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 400.0
+session = open_hades2_session(service)
 real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 failed_target_write = False
 
@@ -270,7 +282,7 @@ def fail_after_target_replace(self, source, destination, digest, **options):
 
 save_restore_module.SaveRestoreTransaction._replace_file = fail_after_target_replace
 try:
-    expect_error(SaveRestoreError, session.apply, "write failure")
+    expect_error(SaveRestoreError, lambda: session.apply(clone_doc(session, 400.0)), "write failure")
 finally:
     save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 assert failed_target_write is True
@@ -287,8 +299,7 @@ service, save_path, original, _state, _spec, _data_root = make_environment(
     "post-verify-race",
     running=True,
 )
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 500.0
+session = open_hades2_session(service)
 foreign_after_verify = build_save(501)
 load_descriptor = Hades2SaveDocument.__dict__["load"]
 real_load = Hades2SaveDocument.load
@@ -304,7 +315,7 @@ Hades2SaveDocument.load = classmethod(racing_load)
 post_verify_race_blocked = False
 try:
     try:
-        session.apply()
+        session.apply(clone_doc(session, 500.0))
     except SaveRestoreError:
         post_verify_race_blocked = True
 finally:
@@ -315,8 +326,7 @@ post_verify_race_rolled_back = save_path.read_bytes() == original
 # directory remains discoverable through the existing Core Save state instead
 # of being hidden or deleted.
 service, save_path, original, _state, _spec, _data_root = make_environment("rollback-failure")
-session = Hades2SaveEditSession.open(service, "Profile1.sav")
-session.document.lua_state["GameState"]["MetaPoints"] = 600.0
+session = open_hades2_session(service)
 real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 target_replace_calls = 0
 
@@ -337,7 +347,7 @@ save_restore_module.SaveRestoreTransaction._replace_file = fail_target_and_rollb
 try:
     rollback_error = expect_error(
         SaveRollbackError,
-        session.apply,
+        lambda: session.apply(clone_doc(session, 600.0)),
         "rollback failure",
     )
 finally:

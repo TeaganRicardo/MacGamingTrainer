@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from core.save_restore import SaveRestoreError
 from core.save_metadata import remove_owned_save_tree
-from test_core_structured_save_edit import CODEC, environment, open_session
+from test_core_structured_save_edit import CODEC, FixtureDocument, environment, open_session
 
 
 class SaveMetadataTests(unittest.TestCase):
@@ -37,9 +37,8 @@ class SaveMetadataTests(unittest.TestCase):
                 self.assertEqual(copy.read_bytes(), original)
                 self.assertFalse(copy.stat().st_flags & stat.UF_IMMUTABLE)
                 session = open_session(service)
-                session.document.value = 77
                 with self.assertRaises(SaveRestoreError) as failure:
-                    session.apply()
+                    session.apply(FixtureDocument(77))
                 self.assertEqual(failure.exception.code, "restore_failed")
                 self.assertEqual(target.read_bytes(), original)
                 self.assertTrue(target.stat().st_flags & stat.UF_IMMUTABLE)

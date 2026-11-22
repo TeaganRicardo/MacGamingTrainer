@@ -13,9 +13,9 @@ from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
 from core.save_resolution import SaveProviderContext
 from core.save_service import CoreSaveService
+from core.structured_save_edit import StructuredSaveEditSession
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
-from games.hades2.save_edit import Hades2SaveEditSession
 from games.hades2.save_workspace import Hades2SaveWorkspace
 from games.hades2.command_contract import Hades2CommandContract
 
@@ -288,7 +288,7 @@ failure_saves, failed_apply = environment("apply-failure", {})
 failed_apply.stage("resource:MetaCurrency", "set", 42, language="en")
 original_document = failed_apply.document
 original_disk = (failure_saves / "Profile1.sav").read_bytes()
-with patch.object(Hades2SaveEditSession, "apply", side_effect=RuntimeError("simulated apply failure")):
+with patch.object(StructuredSaveEditSession, "apply", side_effect=RuntimeError("simulated apply failure")):
     try:
         failed_apply.apply()
     except RuntimeError:

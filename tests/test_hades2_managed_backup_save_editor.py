@@ -159,7 +159,7 @@ def environment(folder):
     service = CoreSaveService("hades2", spec, folder / "data", lambda: state["running"],
         provider_loader=lambda _: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=folder / "AbsentGame.app")))
     context = hades2_adapter_context(folder / "preferences")
-    adapter = Hades2Adapter(context=context, transport=object(), time_warp_controller=object())
+    adapter = Hades2Adapter(context=context, transport=object(), time_warp_controller=object(), game_path=folder / "AbsentGame.app")
     adapter.bind_save_service(service)
     return root, service, state, adapter
 

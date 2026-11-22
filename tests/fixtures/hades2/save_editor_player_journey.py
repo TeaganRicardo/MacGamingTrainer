@@ -93,12 +93,14 @@ def document(amount, marker):
 
 
 class SaveOnlyAdapter(Hades2Adapter):
-    def __init__(self, context):
+    def __init__(self, context, game_path=None):
         # Deliberately skip Hades runtime/debugger initialization. Inherited
         # Save methods still use the real command/workspace/service owners.
         GameAdapter.__init__(self, context)
+        self._explicit_game_path = Path(game_path) if game_path is not None else None
+        self._game_path = self._explicit_game_path
         self.command_contract = Hades2CommandContract(self)
-        self.save_workspaces = {}
+        self.save_workspaces = self._create_save_workspaces()
 
     def dispatch(self, command, params, request_id):
         if not command.startswith("save_editor_"):
@@ -217,12 +219,9 @@ def main():
         game_id=args.game, display_name="Hades II", module_protocol_version=protocol,
         module_dir=module, public_metadata={"protocolVersion": protocol},
         save_management=spec,
-    ))
+    ), game_path=base / "native-game")
     router = JsonlRequestRouter(adapter, save_data_root=base / "data",
                                 target_running_probe=lambda: False)
-    # Source lookups remain contained in this temporary game tree. An authored
-    # corpus may explain context; it cannot inspect an installed game tree.
-    router.save_service.provider = Hades2SaveProvider(SaveProviderContext(adapter.context.module_dir, game_path=base / "native-game"))
     for raw in sys.stdin:
         request = json.loads(raw)
         with (base / "commands.jsonl").open("a") as log:

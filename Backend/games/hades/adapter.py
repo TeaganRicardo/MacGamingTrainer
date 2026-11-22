@@ -3,6 +3,7 @@ from functools import partial
 
 from core.adapter import AdapterError, GameAdapter
 from core.errors import PresentableError
+from core.structured_save_edit import SaveEditorWorkspaceRegistry
 from core.target_probe import (
     AmbiguousTargetError,
     BoundedCommandTimeoutError,
@@ -58,7 +59,36 @@ class HadesAdapter(GameAdapter):
             self._preferences_error = error
         self._game_speed_actual = None
         self._game_speed_error = None
-        self.save_workspaces = {}
+        self.save_workspaces = SaveEditorWorkspaceRegistry(
+            lambda: self.save_service,
+            inventory=self._hades_save_inventory,
+            open_workspace=self._hades_save_open,
+            unavailable_error=lambda: AdapterError(
+                'save_editor_unavailable',
+                'hades.saveEditor.error',
+                arguments=['Save management is unavailable.'],
+            ),
+            not_open_error=lambda _identifier: ValueError(
+                'This editor workspace is closed. Reopen the selected document.'
+            ),
+            stale_baseline_error=lambda: ValueError(
+                'This control belongs to an earlier document baseline. Refresh the editor before editing.'
+            ),
+        )
+
+    def bind_save_service(self, save_service):
+        super().bind_save_service(save_service)
+        self.save_workspaces.clear()
+
+    @staticmethod
+    def _hades_save_inventory(save_service, snapshot_id=None):
+        from .save_workspace import HadesSaveWorkspace
+        return HadesSaveWorkspace.inventory(save_service, snapshot_id)
+
+    @staticmethod
+    def _hades_save_open(save_service, *, snapshot_id=None, source=None, target=None):
+        from .save_workspace import HadesSaveWorkspace
+        return HadesSaveWorkspace.open(save_service, snapshot_id=snapshot_id, source=source, target=target)
 
     def dispatch(self, command, params, request_id):
         if command.startswith('save_editor_'):
@@ -329,26 +359,12 @@ class HadesAdapter(GameAdapter):
         raise AdapterError('unknown_command', 'hades.error.unknownCommand')
 
     def _save_editor(self, command, params):
-        from .save_workspace import HadesSaveWorkspace
-        if self.save_service is None:
-            raise AdapterError('save_editor_unavailable', 'hades.saveEditor.error',
-                               arguments=['Save management is unavailable.'])
         try:
-            if command == 'inventory':
-                return HadesSaveWorkspace.inventory(self.save_service, params.get('snapshotId'))
             if command == 'open':
-                workspace = HadesSaveWorkspace.open(self.save_service,
-                    snapshot_id=params.get('snapshotId'), source=params.get('source'), target=params.get('target'))
-                self.save_workspaces[workspace.identifier] = workspace
-                return workspace.summary(params.get('language', 'en'))
-            identifier = params.get('workspaceId')
-            if not isinstance(identifier, str) or identifier not in self.save_workspaces:
-                raise ValueError('This editor workspace is closed. Reopen the selected document.')
-            workspace = self.save_workspaces[identifier]
-            if command == 'close':
-                del self.save_workspaces[identifier]
-                return {'closed': True}
-            if command == 'target': return workspace.set_target(params['target'], baseline_generation=params.get('baselineGeneration'))
+                return self.save_workspaces.open(params, language=params.get('language', 'en'))
+            if command in ('inventory', 'close', 'target'):
+                return self.save_workspaces.handle(command, params, require_baseline=True)
+            workspace = self.save_workspaces.require(params.get('workspaceId'))
             if command == 'query':
                 return workspace.query(**{key: value for key, value in params.items() if key != 'workspaceId'})
             language = params.get('language', 'en')

@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-permanent-entities-") as directory:
     )
     service = CoreSaveService("hades2", spec, base / "data", lambda: False,
                               provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=game)))
-    workspace = Hades2SaveWorkspace.open(service)
+    workspace = Hades2SaveWorkspace.open(service, game_path=game)
     original = path.read_bytes()
     frog = entity(workspace, "familiar:FrogFamiliar", "Frinos")
     fields = {row["id"]: row for row in frog["items"]}
