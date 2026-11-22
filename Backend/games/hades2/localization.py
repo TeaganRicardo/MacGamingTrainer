@@ -10,11 +10,32 @@ from .config import GAME_APP
 
 _DEFAULT_GAME_APP = GAME_APP
 _OFFICIAL_TEXT_CACHE = {}
+_RESOLVED_GAME_APP = None
 
 
 def invalidate_display_names():
     """A new resident/source generation must resolve installed text afresh."""
+    global _RESOLVED_GAME_APP
+    _RESOLVED_GAME_APP = None
     _OFFICIAL_TEXT_CACHE.clear()
+
+
+def _resolve_game_app(game_path=None):
+    global _RESOLVED_GAME_APP
+    if game_path is not None:
+        return Path(game_path)
+    if GAME_APP != _DEFAULT_GAME_APP:
+        return Path(GAME_APP)
+    # Some tests clear _OFFICIAL_TEXT_CACHE directly without calling invalidate_display_names().
+    if not _OFFICIAL_TEXT_CACHE:
+        _RESOLVED_GAME_APP = None
+    if _RESOLVED_GAME_APP is not None:
+        return _RESOLVED_GAME_APP
+    from .preparation import resolve_paths
+    game = resolve_paths()[0]
+    if game.exists():
+        _RESOLVED_GAME_APP = game
+    return game
 
 def _sjson_unescape(value):
     return (value.replace(r'\\"', '"').replace(r'\\n', '\n')
@@ -41,13 +62,7 @@ def _clean_display_name(value):
 
 def _load_official_display_names(language, game_path=None):
     language = str(language)
-    if game_path is not None:
-        game = Path(game_path)
-    elif GAME_APP != _DEFAULT_GAME_APP:
-        game = Path(GAME_APP)
-    else:
-        from .preparation import resolve_paths
-        game = resolve_paths()[0]
+    game = _resolve_game_app(game_path)
     cache_key = (str(game), language)
     cached = _OFFICIAL_TEXT_CACHE.get(cache_key)
     if cached is not None:

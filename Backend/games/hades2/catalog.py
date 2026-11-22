@@ -281,7 +281,7 @@ def _english_group_label(value, english_names):
     return _PRODUCT_LABEL_EN_BY_ZH.get(value, '')
 
 
-def localize_catalog(decoded):
+def localize_catalog(decoded, game_path=None):
     entries=decoded.get('rewards')
     if not isinstance(entries,list):entries=decoded.get('boons')
     if not isinstance(entries,list):entries=[]
@@ -319,8 +319,8 @@ def localize_catalog(decoded):
     linked_ids=set(_LINKED_OFFICIAL_NAME_IDS.values())
     linked_ids.update(base_id for base_id,_,_ in _LINKED_PROVISIONAL_RULES.values())
     localization_ids=unique | linked_ids | set(_SPECIAL_SOURCE_LOCALIZATION_IDS.values()) | set(_NATIVE_CHOICE_TITLE_IDS.values()) | set(_OFFICIAL_CATEGORY_TITLE_IDS.values()) | {_OLYMPIAN_BOON_TITLE_ID, _SELENE_TALENT_TITLE_ID, _HAMMER_TITLE_ID, _ECHO_LAST_RUN_TITLE_ID}
-    zh=localization.official_display_names(localization_ids,'zh-CN')
-    en=localization.official_display_names(localization_ids,'en')
+    zh=localization.official_display_names(localization_ids,'zh-CN',game_path=game_path)
+    en=localization.official_display_names(localization_ids,'en',game_path=game_path)
     fallback_special=[]
     for item in entries:
         if not isinstance(item,dict):continue

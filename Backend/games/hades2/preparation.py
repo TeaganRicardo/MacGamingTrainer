@@ -383,8 +383,8 @@ def restore(data_dir=None):
 
 def official_display_names(*args, **kwargs):
     from .localization import official_display_names as implementation
-    if len(args) < 3:
-        kwargs.setdefault('game_path', resolve_paths()[0])
+    if len(args) < 3 and 'game_path' not in kwargs:
+        kwargs['game_path'] = resolve_paths()[0]
     return implementation(*args, **kwargs)
 
 if __name__ == '__main__':

@@ -12,7 +12,7 @@ from core.process_time_warp import ProcessTimeWarpError
 from core.save_resolution import SaveProviderContext
 from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, locate_target
 
-from . import preparation
+from . import localization, preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
@@ -779,11 +779,18 @@ class Hades2Adapter(GameAdapter):
                 if running_bundle is not None
                 else preparation.compatibility(strict=False)
             )
+            previous_game_path = self._game_path
             game_dir = identity.get('game')
             if isinstance(game_dir, str) and game_dir:
                 self._game_path = Path(game_dir)
             elif running_bundle is not None:
                 self._game_path = running_bundle
+            if self._game_path is not None:
+                if previous_game_path is not None and self._game_path != previous_game_path:
+                    localization.invalidate_display_names()
+                set_game_path = getattr(self.runtime, 'set_game_path', None)
+                if callable(set_game_path):
+                    set_game_path(self._game_path)
             version = str(identity['version'])
             self.state.update(
                 version=version if version.startswith('1.') else '1.' + version,
