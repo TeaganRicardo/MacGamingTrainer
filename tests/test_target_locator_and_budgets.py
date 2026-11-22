@@ -327,7 +327,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
 
         context = GameAdapterContext.from_manifest(HADES2_MANIFEST, home=home)
         adapter = Hades2Adapter(context=context, resident_session=_LiveSession(), time_warp_controller=_Controller())
-        state = adapter.scan()
+        with patch(
+            "games.hades2.preparation.locate_target",
+            side_effect=AssertionError("compatibility must reuse adapter running_bundle"),
+        ):
+            state = adapter.scan()
         assert state["pid"] == 7777 and state["version"] == "1.999999" and state["steamBuild"] == "88888888"
         assert adapter.install_path().resolve() == run_app.resolve()
         assert adapter.save_provider_context().game_path.resolve() == run_app.resolve()
@@ -416,7 +420,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             # Updating to a different bundle on a subsequent connect invalidates cached text cleanly.
             ext_located = LocatedTarget(7778, ext_exe, ext_app)
             with patch("games.hades2.adapter.locate_target", return_value=ext_located), patch(
-                "games.hades2.preparation.locate_target", return_value=ext_located
+                "games.hades2.preparation.locate_target",
+                side_effect=AssertionError("connect scan must reuse adapter running_bundle"),
             ):
                 session_adapter.connect()
                 assert [c[1] for c in resolve_calls] == [{"game_path": ext_app, "query_running": True}], resolve_calls
@@ -424,6 +429,56 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
                 obs_ext = session_adapter.observe_runtime()
                 assert obs_ext["rewards"][0]["name"] == "外置赐福"
                 assert len(resolve_calls) == 0, f"reconnected observation called resolve_paths: {resolve_calls}"
+
+        # preparation.prepare() and preparation.restore() refuse to proceed while Hades II is running
+        # or when target lookup is ambiguous/unavailable, without reading or writing backups/executables.
+        guard_data = base / "guard_data"
+        with patch(
+            "games.hades2.preparation.resolve_paths",
+            side_effect=AssertionError("running-game guard must block before resolve_paths"),
+        ), patch(
+            "games.hades2.preparation._command",
+            side_effect=AssertionError("running-game guard must block before external commands"),
+        ):
+            for op in (preparation.prepare, preparation.restore):
+                with patch("games.hades2.preparation.locate_target", return_value=live_located):
+                    try:
+                        op(guard_data)
+                    except RuntimeError as error:
+                        pres = error_presentation.presentation_for(str(error))
+                        assert pres == ("hades2.error.prepareWhileRunning", ["Hades II"]), pres
+                    else:
+                        raise AssertionError(f"preparation.{op.__name__} ran while game was running")
+                with patch("games.hades2.preparation.locate_target", side_effect=AmbiguousTargetError("multiple")):
+                    try:
+                        op(guard_data)
+                    except RuntimeError as error:
+                        pres = error_presentation.presentation_for(str(error))
+                        assert pres == ("hades2.error.multipleProcesses", ["Hades II"]), pres
+                    else:
+                        raise AssertionError(f"preparation.{op.__name__} ignored AmbiguousTargetError")
+                with patch(
+                    "games.hades2.preparation.locate_target",
+                    side_effect=BoundedCommandTimeoutError(["/bin/ps"], 5.0),
+                ):
+                    try:
+                        op(guard_data)
+                    except RuntimeError as error:
+                        pres = error_presentation.presentation_for(str(error))
+                        assert pres == ("hades2.error.timeout", ["/bin/ps", "5"]), pres
+                    else:
+                        raise AssertionError(f"preparation.{op.__name__} ignored BoundedCommandTimeoutError")
+        assert not guard_data.exists()
+
+        # When locate_target reports the game is stopped, restore() passes _require_stopped()
+        # and proceeds to compatibility/backup lookup.
+        with patch("games.hades2.preparation.locate_target", return_value=None):
+            try:
+                preparation.restore(guard_data)
+            except RuntimeError as error:
+                assert "没有与当前文件匹配的原始签名备份" in str(error), error
+            else:
+                raise AssertionError("preparation.restore unexpectedly succeeded without backup")
 
         # Scan timeout & empty-stderr process errors preserve structured presentation keys without Chinese leakage.
         with patch("games.hades2.adapter.locate_target", side_effect=BoundedCommandTimeoutError(["/bin/ps"], 2.0)):
