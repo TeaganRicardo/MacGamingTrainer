@@ -84,6 +84,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
     private var terminationRequested = false
+    private var registeredStoreIDs: Set<ObjectIdentifier> = []
 
     package convenience init() {
         let ownership = TrainerApplicationStartup.requireOwnership(
@@ -95,11 +96,17 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         self.ownership = ownership
     }
 
+    package convenience init(localization: TrainerLocalizationStore) {
+        self.init()
+        registerPresentation(localization)
+    }
+
     init(
         session: TrainerBackendSession,
         backendScriptURL: URL? = nil,
         logSink: TrainerLogSink? = nil,
         targetMonitor: TrainerTargetProcessMonitor? = nil,
+        localization: TrainerLocalizationStore? = nil,
         makeModel: ((TrainerModuleServices) -> Module.Model)? = nil
     ) {
         let descriptor = Module.descriptor
@@ -147,6 +154,9 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification).sink { [weak self] _ in
             self?.applicationBecameActive()
         }.store(in: &subscriptions)
+        if let localization {
+            registerPresentation(localization)
+        }
         if session.isStarted {
             modelChanged()
         } else {
@@ -244,9 +254,12 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     func registerPresentation(_ localization: TrainerLocalizationStore) {
-        localization.registerModulePresentation(prefix: Module.presentationKeyPrefix) { key, arguments, language in
+        guard !Module.presentationKeyPrefix.isEmpty else { return }
+        guard registeredStoreIDs.insert(ObjectIdentifier(localization)).inserted else { return }
+        let registered = localization.registerModulePresentation(prefix: Module.presentationKeyPrefix) { key, arguments, language in
             Module.presentationText(key: key, arguments: arguments, language: language)
         }
+        precondition(registered, "Invalid or overlapping module presentation prefix: \(Module.presentationKeyPrefix)")
     }
 
     private func modelChanged() {
@@ -376,6 +389,7 @@ package final class AnyTrainerGameContext: ObservableObject, Identifiable {
     private let canTerminateValue: () -> Bool
     private let terminate: (@escaping () -> Void) -> Void
     private let closeWindows: () -> Void
+    private let registerPresentationResolver: (TrainerLocalizationStore) -> Void
     private var subscription: AnyCancellable?
 
     package init<Module>(_ context: TrainerGameContext<Module>) {
@@ -394,6 +408,7 @@ package final class AnyTrainerGameContext: ObservableObject, Identifiable {
         terminate = context.prepareForTermination
         closeWindows = context.toolWindows.closeAll
         suspendInteraction = context.beginTermination
+        registerPresentationResolver = context.registerPresentation
         subscription = context.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
@@ -413,6 +428,9 @@ package final class AnyTrainerGameContext: ObservableObject, Identifiable {
     func closeToolWindows() { closeWindows() }
     private let suspendInteraction: () -> Void
     func suspendUserActions() { suspendInteraction() }
+    func registerPresentation(_ localization: TrainerLocalizationStore) {
+        registerPresentationResolver(localization)
+    }
 }
 
 @MainActor
@@ -433,9 +451,10 @@ package final class TrainerApplicationCoordinator: ObservableObject {
     private var finalizingContext = false
     private var finalizationStarted = false
 
-    package init(contexts: [AnyTrainerGameContext]) {
+    package init(contexts: [AnyTrainerGameContext], localization: TrainerLocalizationStore) {
         precondition(!contexts.isEmpty)
         self.contexts = contexts
+        contexts.forEach { $0.registerPresentation(localization) }
         selectedGameID = contexts[0].id
         contexts.forEach { $0.pageVisibilityChanged($0.id == selectedGameID) }
         GlobalHotkeys.selectGame(selectedGameID)

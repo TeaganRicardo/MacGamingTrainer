@@ -7,7 +7,7 @@ struct Hades2BoonRarityPanel: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     var body: some View {

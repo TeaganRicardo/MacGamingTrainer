@@ -13,7 +13,7 @@ struct Hades2SidebarActions: View {
             ForEach(Hades2WorkbenchSection.allCases) { section in
                 if section == .management { Divider().padding(.vertical, 2) }
                 TrainerSectionButton(
-                    title: Hades2GameModule.resolveText(key: section.titleKey, localization: localization),
+                    title: localization.string(section.titleKey),
                     systemImage: section.icon,
                     selected: selectedSection == section.id || (selectedSection == nil && section == .values)
                 ) {
@@ -46,18 +46,18 @@ struct Hades2HeaderActions: View {
     var body: some View {
         TrainerWorkbenchSearchField(
             text: $model.workbenchSearch,
-            placeholder: Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization),
+            placeholder: localization.string("hades2.workbench.search"),
             clearLabel: localization.localized("host.search.clear"),
-            emptyLabel: Hades2GameModule.resolveText(key: "hades2.workbench.searchEmpty", localization: localization),
+            emptyLabel: localization.string("hades2.workbench.searchEmpty"),
             search: { query in
                 Hades2WorkbenchCatalog.matches(query) { key in
                     TrainerPresentationLanguage.allCases.map {
-                        Hades2GameModule.resolveText(key: key, language: $0, localization: localization)
+                        localization.string(key, language: $0)
                     }
                 }
             },
-            title: { Hades2GameModule.resolveText(key: $0.titleKey, localization: localization) },
-            detail: { Hades2GameModule.resolveText(key: $0.section.titleKey, localization: localization) },
+            title: { localization.string($0.titleKey) },
+            detail: { localization.string($0.section.titleKey) },
             icon: { $0.icon },
             onNavigate: locate
         )

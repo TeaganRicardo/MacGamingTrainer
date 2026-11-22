@@ -170,7 +170,7 @@ struct SupportedSaveTargetModule: TrainerGameModule {
             supportsSaveManagement: true
         )
     }
-    static let presentation = TrainerGamePresentation(headerTitle: "SAVE TARGET")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -194,7 +194,7 @@ struct UnsupportedSaveTargetModule: TrainerGameModule {
             supportsSaveManagement: false
         )
     }
-    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE TARGET")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -215,7 +215,7 @@ struct UnsupportedSaveModule: TrainerGameModule {
         expectedModuleProtocolVersion: 5,
         supportsSaveManagement: false
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "NO SAVE")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
@@ -236,7 +236,7 @@ struct SupportedNoTargetModule: TrainerGameModule {
         expectedModuleProtocolVersion: 5,
         supportsSaveManagement: true
     )
-    static let presentation = TrainerGamePresentation(headerTitle: "SAVE IDLE")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }

@@ -11,7 +11,7 @@ struct HadesSaveEditorView: View {
     @State private var confirmingRead = false
 
     init(model: HadesSaveEditorModel) { _model = StateObject(wrappedValue: model) }
-    private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
+    private func text(_ key: String) -> String { localization.string(key) }
     private var hasReview: Bool { model.review.count > 0 }
 
     private enum ResultPhase: Equatable { case source, loading, empty, content }
@@ -473,7 +473,7 @@ private struct HadesSaveEditorField: View {
     @State private var draft: String?
     @State private var focused = false
 
-    private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
+    private func text(_ key: String) -> String { localization.string(key) }
     private var pending: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
     private var value: HadesSaveValue? {
         pending?.operation == "set" ? (pending?.typedValue ?? row.typedValue) : row.typedValue
@@ -724,7 +724,7 @@ private struct HadesSaveTypedEditor: View {
     @State private var discarding = false
     @State private var editing = false
     @State private var editingKey = false
-    private func text(_ key: String) -> String { HadesGameModule.resolveText(key: key, localization: localization) }
+    private func text(_ key: String) -> String { localization.string(key) }
     private var action: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
     private var native: Bool {
         if forceTyped { return false }

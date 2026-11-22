@@ -8,7 +8,7 @@ struct HadesEffectLifecycleControls: View {
     @Environment(\.trainerTheme) private var theme
     @State private var uses = HadesNumberDraft(value: 0)
 
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private func text(_ key: String) -> String { localization.string(key) }
 
     private var canApplyUses: Bool {
         guard model.canMutate, trait.canSetUses == true,

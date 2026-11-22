@@ -146,7 +146,7 @@ struct StartupAvailabilityModule: TrainerGameModule {
         expectedHostProtocolVersion: HadesGameModule.descriptor.expectedHostProtocolVersion,
         expectedModuleProtocolVersion: HadesGameModule.descriptor.expectedModuleProtocolVersion,
         supportsSaveManagement: true)
-    static let presentation = TrainerGamePresentation(headerTitle: "Startup fixture")
+    static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StartupAvailabilityModel { .init(services: services) }
     static func makeContent(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
     static func makeSidebarActions(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
@@ -192,7 +192,11 @@ struct StartupAvailabilityModule: TrainerGameModule {
         journeyCheck(context.saveManager.error.isEmpty && model.backendStatus.error.isEmpty,
                      "startup fixture restore handshake failed")
         let lifetime = session.lifecycleID
-        let application = TrainerApplicationCoordinator(contexts: [AnyTrainerGameContext(context)])
+        let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+        let application = TrainerApplicationCoordinator(
+            contexts: [AnyTrainerGameContext(context)],
+            localization: localization
+        )
         for statusCount in 1...2 {
             application.selectedGameID = StartupAvailabilityModule.descriptor.id
             model.objectWillChange.send()
@@ -275,12 +279,11 @@ struct StartupAvailabilityModule: TrainerGameModule {
             }
         let first = firstContext.model
         let second = secondContext.model
-        let application = TrainerApplicationCoordinator(contexts: [
-            AnyTrainerGameContext(firstContext), AnyTrainerGameContext(secondContext)])
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         localization.language = .en
-        firstContext.registerPresentation(localization)
-        secondContext.registerPresentation(localization)
+        let application = TrainerApplicationCoordinator(contexts: [
+            AnyTrainerGameContext(firstContext), AnyTrainerGameContext(secondContext)],
+            localization: localization)
         let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: 1077, height: 800),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -487,10 +490,10 @@ struct StartupAvailabilityModule: TrainerGameModule {
         journeyCheck(second.numericControlsExpanded, "real Hades II sidebar bypassed its reveal adapter")
         for target in Hades2WorkbenchSection.allCases {
             navigate(target.id, secondContext.navigation)
-            _ = headingFrame(Hades2GameModule.resolveText(key: target.titleKey, localization: localization), in: secondScroll)
+            _ = headingFrame(localization.string(target.titleKey), in: secondScroll)
         }
         navigate(Hades2WorkbenchSection.common.id, secondContext.navigation)
-        checkHeading(Hades2GameModule.resolveText(key: Hades2WorkbenchSection.common.titleKey, localization: localization),
+        checkHeading(localization.string(Hades2WorkbenchSection.common.titleKey),
                      in: secondScroll)
         let secondCommon = secondScroll.contentView.bounds.origin.y
         for target in [Hades2WorkbenchSection.management, .values, .common, .common] {

@@ -143,58 +143,18 @@ for token in (
 
 print("hades2_host_action_localization_regression_ok")
 
-# A Host-owned key resolved through the Hades view helper must not be looked up
-# in the Hades tables. `host.disableAll` keeps its Host key and Host resource on
-# purpose, and before the fallback existed it rendered as a literal
-# `[host.disableAll]` in the shortcut sheet — a regression against main.
-#
-# The fallback now lives once, in `Hades2GameModule.resolveText`, so this asserts
-# the *rule* at the seam every call site routes through rather than the shape of
-# one view's private helper. Pinning the inline `hasPrefix` guard here is what
-# let the other three helpers in `Hades2ManagementViews.swift` keep the bug.
-module_text = game_module
-resolver = module_text[module_text.index("static func resolveText"):]
-resolver = resolver[:resolver.index("\n    static func makeModel")]
-assert 'guard key.hasPrefix(Hades2Presentation.Key.prefix) else {' in resolver, (
-    "the module resolver has no Host-key fallback")
-assert "localization.string(key, arguments: arguments, language: language)" in resolver, (
-    "a Host key is not resolved through the Host table")
-# A Hades key must still resolve through the module tables, not the Host one.
-assert "Hades2Presentation.shared.string(" in resolver
+# Presentation resolvers are registered when contexts are built, so modules
+# do not define per-module `resolveText` bypasses; views and token resolvers
+# route every key directly through `localization.string`.
+assert "func resolveText" not in game_module
+hades_module = (ROOT / "Sources/Hades/HadesModule.swift").read_text(encoding="utf-8")
+assert "func resolveText" not in hades_module
+assert "localization.string(token)" in hades_view
+assert "localization.string(key)" in hades_view
+assert "localization.string(key)" in management
+assert "localization.string(action.presentationKey)" in management
 
-# Backend and runtime-issue tokens may be Host- or Hades-owned. The shared
-# token resolver in the main view must therefore route through the same
-# owner-aware module seam; calling Hades2Presentation directly would drop Host
-# arguments or render the raw Host key.
-resolved_helper = re.search(
-    r"private func resolved\(_ token: TrainerTextToken\) -> String \{(.*?)\n    \}",
-    hades_view,
-    re.S,
-)
-assert resolved_helper, "main Hades view lost its presentation-token resolver"
-assert "Hades2GameModule.resolveText" in resolved_helper.group(1), (
-    "presentation tokens bypass owner-aware Host/module resolution"
-)
-assert "Hades2Presentation.shared" not in resolved_helper.group(1), (
-    "Host presentation tokens are still being forced through the Hades catalogue"
-)
-
-# Every single-key `text()` helper must route through that one resolver, so the
-# fallback cannot be present in one view and missing from another. The
-# `arguments:` overload is a different thing — it resolves an already-owned
-# Hades token, which by construction is never a Host key.
-for source in (hades_view, management):
-    for helper in re.findall(
-        r"private func text\(_ key: String\) -> String \{(.*?)\n    \}",
-        source,
-        re.S,
-    ):
-        assert "Hades2GameModule.resolveText" in helper, (
-            "a Hades text() helper bypasses resolveText, so it has no Host fallback")
-        assert 'hasPrefix("hades2.")' not in helper, (
-            "a duplicated inline fallback can drift from the shared resolver")
-
-# And the fallback must be real: the Host table actually owns that key.
+# Both Host and module tables must actually resolve `host.disableAll`.
 for language, expected in (("zh-CN", "全部关闭"), ("en", "Disable All")):
     host_strings = (ROOT / f"Resources/Localization/{language}.lproj/Host.strings").read_text(encoding="utf-8")
     assert f'"host.disableAll" = "{expected}"' in host_strings, (

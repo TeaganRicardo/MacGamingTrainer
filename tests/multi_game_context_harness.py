@@ -261,9 +261,10 @@ func navigationTrace(_ message: String) {
             backendScriptURL: server, logSink: TrainerLogSink(url: logFolder.appendingPathComponent("second.log")))
         let first = firstContext.model
         let second = secondContext.model
+        let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         let application = TrainerApplicationCoordinator(contexts: [
             AnyTrainerGameContext(firstContext), AnyTrainerGameContext(secondContext)
-        ])
+        ], localization: localization)
         func wait(line: UInt = #line, _ condition: () -> Bool) {
             let limit = Date(timeIntervalSinceNow: 30)
             while !condition() && Date() < limit { navigationPump(0.01) }
@@ -321,7 +322,6 @@ func navigationTrace(_ message: String) {
             print("multi_game_context_state_ok")
             return
         }
-        let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         var mayClose = false
         var closes = 0
         let toolDraft = NSTextField(string: "retained tool draft")
@@ -713,6 +713,7 @@ def run_context_journey(*, state_only=False):
             shutil.copytree(FIXTURE / "backend", destination)
             adapter = destination / "adapter.py"
             adapter.write_text("import os, time, json\nfrom pathlib import Path\n" + adapter.read_text().replace(
+                "referenceFixture.", word.lower() + "Fixture.").replace(
                 "    def dispatch(self, command, params, request_id):",
                 "    def dispatch(self, command, params, request_id):\n"
                 "        with Path(__file__).with_name('navigation_requests.jsonl').open('a') as log:\n"
@@ -732,6 +733,7 @@ def run_context_journey(*, state_only=False):
             source = project / manifest["frontend"]["sourceDirectory"] / (word + "Module.swift")
             source.parent.mkdir(parents=True)
             source.write_text((FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
+                "referenceFixture.", word.lower() + "Fixture.").replace(
                 "ReferenceFixture", word + "Fixture").replace(
                 f"static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n        EmptyView()",
                 f'static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n'

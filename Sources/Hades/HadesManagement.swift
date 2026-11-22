@@ -21,7 +21,7 @@ struct HadesManagementUtilities: View {
     @Environment(\.trainerToolWindows) private var toolWindows
 
     private func text(_ key: String) -> String {
-        HadesGameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     var body: some View {
@@ -41,7 +41,7 @@ struct HadesProfileManagerView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     private func text(_ key: String) -> String {
-        HadesGameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     var body: some View {
@@ -64,7 +64,7 @@ struct HadesDiagnosticsView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     private func text(_ key: String) -> String {
-        HadesGameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     private var enabled: Bool { model.canUseBackend && model.canAcceptRuntimeAction }

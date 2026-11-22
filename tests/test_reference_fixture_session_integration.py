@@ -333,11 +333,6 @@ let localizationContractPassed = MainActor.assumeIsolated {
     guard localization.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library" else {
         return false
     }
-    // Unregistering must remove the module's copy completely.
-    localization.removeModulePresentation(prefix: ReferenceFixtureGameModule.presentationKeyPrefix)
-    guard localization.string(TrainerTextToken(key: "referenceFixture.connected")) == "referenceFixture.connected" else {
-        return false
-    }
     return TrainerLocalizationStore(defaults: localizationDefaults).language == .en
 }
 if !localizationContractPassed {

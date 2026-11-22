@@ -35,7 +35,7 @@ struct HadesTrainerView: View {
     private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
     private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
 
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private func text(_ key: String) -> String { localization.string(key) }
 
     private func featureState(_ feature: HadesFeature) -> TrainerFeatureControlState {
         model.featurePresentation(feature).trainerControlState(using: theme, localization: localization)
@@ -447,7 +447,7 @@ private struct HadesCatalogView: View {
     }
 
     private func text(_ key: String) -> String {
-        HadesPresentation.text(key, language: localization.language)
+        localization.string(key)
     }
 
     private func sourceTitle(_ group: SourceGroup) -> String {
@@ -664,7 +664,7 @@ private struct HadesCurrentTraitsPanel: View {
     @State private var selectedTraitName = ""
 
     private func text(_ key: String) -> String {
-        HadesPresentation.text(key, language: localization.language)
+        localization.string(key)
     }
 
     private func catalogEntry(_ trait: HadesCurrentTrait) -> HadesCatalogEntry? {
@@ -673,11 +673,11 @@ private struct HadesCurrentTraitsPanel: View {
 
     private func sourceLabel(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
         guard let entry = catalogEntry(trait) else {
-            return HadesPresentation.text("hades.kind.special", language: language)
+            return localization.string("hades.kind.special", language: language)
         }
         let source = entry.source(language: language.rawValue)
         if !source.isEmpty { return source }
-        return HadesPresentation.text("hades.kind.\(entry.kind)", language: language)
+        return localization.string("hades.kind.\(entry.kind)", language: language)
     }
 
     private var matches: [HadesCurrentTrait] {
@@ -791,7 +791,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
     @Environment(\.trainerTheme) private var theme
 
     private func text(_ key: String) -> String {
-        HadesPresentation.text(key, language: localization.language)
+        localization.string(key)
     }
 
     var body: some View {
@@ -879,7 +879,7 @@ private struct HadesCurrentTraitRow: View {
 
     private var entry: HadesCatalogEntry? { model.catalog.first { $0.id == trait.name } }
     private var rarities: [String] { entry?.rarities ?? [trait.rarity] }
-    private func text(_ key: String) -> String { HadesPresentation.text(key, language: localization.language) }
+    private func text(_ key: String) -> String { localization.string(key) }
 
     init(model: HadesTrainerModel, trait: HadesCurrentTrait) {
         self.model = model

@@ -64,27 +64,32 @@ public final class TrainerLocalizationStore: ObservableObject {
         return localized(value, arguments: arguments)
     }
 
-    /// Register the selected module's presentation resolver.
+    /// Register a module's presentation resolver when its context is built.
     ///
     /// This is a game-agnostic seam: the module supplies a closure that maps its
     /// own key namespace to text, and the Host simply re-resolves tokens when the
-    /// language changes. Core stores no module vocabulary, and removing a
-    /// module cannot leave stale copy behind.
+    /// language changes. Prefixes must be non-empty, dot-terminated, disjoint from
+    /// `host.`, and non-overlapping across registered modules.
+    @discardableResult
     public func registerModulePresentation(
         prefix: String,
         resolver: @escaping (String, [String], TrainerPresentationLanguage) -> String
-    ) {
-        // A module that declares no namespace gets the protocol default of "",
-        // and every key has that prefix. Registering it would send Host-owned
-        // chrome through the module's resolver and replace the whole shell with
-        // its own copy. An empty namespace owns nothing, so it registers
-        // nothing rather than claiming everything.
-        guard !prefix.isEmpty else { return }
+    ) -> Bool {
+        guard Self.isValidModulePrefix(prefix),
+              !Self.prefixOverlaps(prefix, "host."),
+              !moduleResolvers.keys.contains(where: { Self.prefixOverlaps(prefix, $0) }) else {
+            return false
+        }
         moduleResolvers[prefix] = resolver
+        return true
     }
 
-    public func removeModulePresentation(prefix: String) {
-        moduleResolvers.removeValue(forKey: prefix)
+    private static func isValidModulePrefix(_ prefix: String) -> Bool {
+        prefix.count > 1 && prefix.hasSuffix(".")
+    }
+
+    private static func prefixOverlaps(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.hasPrefix(rhs) || rhs.hasPrefix(lhs)
     }
 
     /// Resolve one token from whichever layer owns it.

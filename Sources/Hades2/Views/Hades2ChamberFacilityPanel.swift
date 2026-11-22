@@ -9,7 +9,7 @@ struct Hades2ChamberFacilityPanel: View {
     @Environment(\.trainerTheme) private var theme
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     var body: some View {

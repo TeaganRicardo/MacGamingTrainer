@@ -215,7 +215,7 @@ struct Main {
             localization.language = .en
             localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
                 resolver: Hades2GameModule.presentationText)
-            let name = Hades2GameModule.resolveText(key: "hades2.gameSpeed.a11y", localization: localization)
+            let name = localization.string("hades2.gameSpeed.a11y")
             try exerciseModuleSlider(Hades2TrainerView(model: sliderModel), localization: localization,
                 sliderLabel: name, fieldLabel: name, gameID: "hades2", mutation: "set_desired",
                 currentValue: { sliderModel.gameSpeed }, busy: { sliderModel.busy },
@@ -247,7 +247,7 @@ struct Main {
             localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
                 resolver: Hades2GameModule.presentationText)
             func label(_ key: String, _ language: TrainerPresentationLanguage) -> String {
-                Hades2GameModule.resolveText(key: key, language: language, localization: localization)
+                localization.string(key, language: language)
             }
             try exerciseModuleDisclosure(Hades2TrainerView(model: model), localization: localization, gameID: "hades2",
                 expanded: Binding(get: { model.numericControlsExpanded }, set: { model.numericControlsExpanded = $0 }),
@@ -291,14 +291,16 @@ struct Main {
         // afterwards.
         let localizationDefaults = InMemoryDefaults()
         let localization = TrainerLocalizationStore(defaults: localizationDefaults)
+        localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
+            resolver: Hades2GameModule.presentationText)
         if args.count == 4 && args[3] == "search" {
             exerciseWorkbenchSearch(Hades2HeaderActions(model: model), localization: localization,
-                placeholder: { Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization) },
-                emptyLabel: { Hades2GameModule.resolveText(key: "hades2.workbench.searchEmpty", localization: localization) },
+                placeholder: { localization.string("hades2.workbench.search") },
+                emptyLabel: { localization.string("hades2.workbench.searchEmpty") },
                 query: { model.workbenchSearch }, matches: { query in
                     Hades2WorkbenchCatalog.matches(query) { key in
                         TrainerPresentationLanguage.allCases.map {
-                            Hades2GameModule.resolveText(key: key, language: $0, localization: localization)
+                            localization.string(key, language: $0)
                         }
                     }.map { (id: $0.id, destination: $0.section.id) }
                 }, commands: { commands(at: commandLog) })
@@ -452,7 +454,7 @@ struct Main {
         localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
             resolver: Hades2GameModule.presentationText)
         var profilesPresented = true
-        func text(_ key: String) -> String { Hades2GameModule.resolveText(key: key, localization: localization) }
+        func text(_ key: String) -> String { localization.string(key) }
         exerciseProfileManager(
             Hades2ProfileManagerView(model: managementModel,
                 isPresented: Binding(get: { profilesPresented }, set: { profilesPresented = $0 })),
@@ -658,8 +660,8 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
     func targetPicker() -> NativeAccessibilityControl? { control("AXPopUpButton", "hades2.worldActions.target") }
     func applyButton() -> NativeAccessibilityControl? { control("AXButton", "hades2.worldActions.apply") }
 
-    let applyTitle = Hades2GameModule.resolveText(key: "hades2.worldActions.apply", localization: localization)
-    let cancelTitle = Hades2GameModule.resolveText(key: "hades2.worldActions.cancel", localization: localization)
+    let applyTitle = localization.string("hades2.worldActions.apply")
+    let cancelTitle = localization.string("hades2.worldActions.cancel")
 
     nativePickerWait("real Hades2TrainerView worldExitPanel AX controls mount") {
         exitPicker()?.enabled == true && targetPicker()?.enabled == true && applyButton()?.enabled == true
@@ -690,15 +692,15 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
                                         opening: .pointer, inspectMenu: { menu in
         for reasonID in disabledReasonIDs {
             let key = "hades2.worldActions.unavailable.\(reasonID)"
-            let suffix = " · " + Hades2GameModule.resolveText(key: key, localization: localization)
+            let suffix = " · " + localization.string(key)
             let matching = menu.items.filter { !$0.isHidden && $0.title.hasSuffix(suffix) }
             guard matching.count == 1 && !matching[0].isEnabled else {
                 fail("native picker must show exactly one disabled \(reasonID) option: \(menu.items.map { ($0.title, $0.isEnabled) })")
             }
         }
     })
-    let rewardsHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.rewards", localization: localization)
-    let routesHeader = "# " + Hades2GameModule.resolveText(key: "hades2.worldActions.routes", localization: localization)
+    let rewardsHeader = "# " + localization.string("hades2.worldActions.rewards")
+    let routesHeader = "# " + localization.string("hades2.worldActions.routes")
     guard targetMenu.count >= 4 && targetMenu.contains(rewardsHeader) && targetMenu.contains(routesHeader) else {
         fail("worldExitPanel target menu lost section headers: \(targetMenu)")
     }

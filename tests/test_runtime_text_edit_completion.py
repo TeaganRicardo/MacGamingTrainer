@@ -179,8 +179,9 @@ struct HeaderFixture: View {
   }
   let session=TrainerBackendSession(client:BackendClient(process:BackendProcess(executableURL:python,argumentsPrefix:["-u"])))
   let monitor=TrainerTargetProcessMonitor(snapshot: { .init(isRunning:true,launchGeneration:0) })
+  let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
   let context=TrainerGameContext<Hades2GameModule>(session:session,backendScriptURL:worker,
-    logSink:TrainerLogSink(url:temporary.appendingPathComponent("log")),targetMonitor:monitor) {
+    logSink:TrainerLogSink(url:temporary.appendingPathComponent("log")),targetMonitor:monitor,localization:localization) {
       Hades2TrainerModel(services:$0,runLogDirectoryURL:temporary.appendingPathComponent("no-game-log"),
         shortcutDefaults:InMemoryDefaults())
   }
@@ -192,7 +193,6 @@ struct HeaderFixture: View {
   pump(0.15)
   check(model.canSetResource && workerStartCount()==1,
         "duplicate initial observation restarted the Backend worker")
-  let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
   if journey == "navigation" {
    let visibility=PageVisibility()
    let host=NSHostingView(rootView:HeaderFixture(model:model,visibility:visibility).environmentObject(localization))
@@ -203,7 +203,7 @@ struct HeaderFixture: View {
    func hasPopover() -> Bool {
     NSApp.windows.contains { $0.isVisible && $0.accessibilityRole() == .popover }
    }
-   let searchLabel=Hades2GameModule.resolveText(key:"hades2.workbench.search",localization:localization)
+   let searchLabel=localization.string("hades2.workbench.search")
    // SwiftUI owns the authored AX label; its backing NSTextField exposes the
    // placeholder used by the other search-field native journeys. Inspect both
    // surfaces rather than requiring SwiftUI's AX label on the AppKit editor.
@@ -296,17 +296,17 @@ struct HeaderFixture: View {
      if expectedHeight == 129 {
       check(model.boonRarityTarget == "Heroic", "minimum rarity did not default to Heroic")
       check(fields(rowHost).allSatisfy { !$0.isEditable }, "retired probability editor is still mounted")
-      let title=Hades2GameModule.resolveText(key:"hades2.rarity.title",localization:localization)
+      let title=localization.string("hades2.rarity.title")
       guard let toggle=namedNativeControl(rowHost,role:"AXCheckBox",name:title) else { fatalError("rarity switch missing") }
       check(toggle.press(), "rarity switch could not be activated")
       wait { model.boonRarityEnabled && !model.busy }
-      let forceName=Hades2GameModule.resolveText(key:"hades2.rarity.legendary",localization:localization)
+      let forceName=localization.string("hades2.rarity.legendary")
       guard let force=namedNativeControl(rowHost,role:"AXCheckBox",name:forceName) else { fatalError("force legendary missing") }
       check(force.press(), "force legendary could not be activated")
       wait { model.boonForceLegendary && !model.busy }
       check(model.boonRarityTarget == "Heroic", "force setting changed the minimum rarity")
       check(abs(toggle.frame.midY-force.frame.midY) > 32, "force controls did not remain below the minimum row")
-      let duoName=Hades2GameModule.resolveText(key:"hades2.rarity.duo",localization:localization)
+      let duoName=localization.string("hades2.rarity.duo")
       guard let duo=namedNativeControl(rowHost,role:"AXCheckBox",name:duoName) else { fatalError("force duo missing") }
       check(duo.press(), "force duo could not be activated")
       wait { model.boonForceDuo && !model.busy }
@@ -334,7 +334,7 @@ struct HeaderFixture: View {
   phase("\(journey):host-ready")
   check(!fields(host).contains(where:{$0.isEditable && $0.accessibilityLabel()=="—"}),
         "a numeric input still exposes its visual placeholder as its native accessibility name")
-  let traitTargetName=Hades2GameModule.resolveText(key:"hades2.traits.targetLevel",localization:localization)
+  let traitTargetName=localization.string("hades2.traits.targetLevel")
   check(fields(host).contains(where:{$0.isEditable && !$0.isEnabled && $0.accessibilityLabel()==traitTargetName}),
         "the unavailable trait target-level input lost its semantic native name")
   try? FileManager.default.removeItem(at:log)
@@ -352,18 +352,18 @@ struct HeaderFixture: View {
    for language in [TrainerPresentationLanguage.en, .zhCN] {
     localization.language=language; pump()
     for key in ["hades2.feature.moneyMultiplier", "hades2.feature.resourceMultiplier", "hades2.rarity.title"] {
-     let name=Hades2GameModule.resolveText(key:key,localization:localization)
+     let name=localization.string(key)
      check(nativeAccessibilityControls(host).contains { element in
       ["AXCheckBox", "AXSwitch"].contains(element.role ?? "") && element.label==name
      }, "a native feature switch lost its semantic name: \(name)")
     }
-    let healthName=Hades2GameModule.resolveText(key:"hades2.vital.health",localization:localization)
+    let healthName=localization.string("hades2.vital.health")
     let lockName=localization.localized("host.lockValue",arguments:[healthName])
     check(namedNativeControl(host,role:"AXButton",name:lockName) != nil,
           "the native lock action lost its target name: \(lockName)")
    }
    func managementAction(_ key:String) -> NativeAccessibilityControl {
-    let name=Hades2GameModule.resolveText(key:key,localization:localization)
+    let name=localization.string(key)
     guard let action=namedNativeControl(host,role:"AXButton",name:name) else { fatalError("management action missing: \(name)") }
     return action
    }
@@ -371,7 +371,7 @@ struct HeaderFixture: View {
    // Management navigation uses its own capability. Opening an existing Save
    // document only focuses its window, even while a runtime request is busy.
    model.connected=true; model.pid=nil; pump()
-   let saveTitle=Hades2GameModule.resolveText(key:"hades2.saveEditor.title",localization:localization)
+   let saveTitle=localization.string("hades2.saveEditor.title")
    check(managementAction("hades2.saveEditor.title").press(),"Save entry did not open its native tool")
    wait { commands("save_editor_inventory").count==1 }
    guard let saveWindow=NSApp.windows.first(where:{$0.title==saveTitle}) else { fatalError("Save entry did not use the independent tool-window owner") }
@@ -427,7 +427,7 @@ struct HeaderFixture: View {
      layoutWindow.contentView=layoutHost; layoutHost.layoutSubtreeIfNeeded(); pump()
      let bounds=layoutWindow.convertToScreen(layoutHost.convert(layoutHost.bounds,to:nil)).insetBy(dx:-1,dy:-1)
      for key in managementKeys {
-      let label=Hades2GameModule.resolveText(key:key,localization:localization)
+      let label=localization.string(key)
       let matches=nativeAccessibilityControls(layoutHost).filter{$0.role=="AXButton" && $0.label==label}
       check(matches.count==1,"a management action was missing or duplicated at width \(width): \(label)")
       check(matches[0].frame.width>0 && matches[0].frame.height>0 && bounds.contains(matches[0].frame),
@@ -456,9 +456,9 @@ struct HeaderFixture: View {
   let secondTrait=inputTrait("Input Second",level:4,uses:9)
   model.capabilities["traitMutation"]=true
   model.currentRunTraits=[firstTrait,secondTrait]
-  let levelName=Hades2GameModule.resolveText(key:"hades2.traits.targetLevel",localization:localization)
-  let usesName=Hades2GameModule.resolveText(key:"hades2.traits.remainingUses",localization:localization)
-  let traitPickerName=Hades2GameModule.resolveText(key:"hades2.traits.manager",localization:localization)
+  let levelName=localization.string("hades2.traits.targetLevel")
+  let usesName=localization.string("hades2.traits.remainingUses")
+  let traitPickerName=localization.string("hades2.traits.manager")
   var mountedLevel:NSTextField?
   var mountedPicker:NativeAccessibilityControl?
   wait("native Hades II selected-trait inputs did not mount") {
@@ -639,7 +639,7 @@ struct HeaderFixture: View {
    check(mutations().count==4 && money.stringValue=="402", "invalid draft was applied or not restored: '\(invalid)' draft=\(money.stringValue) mutations=\(mutations().count) feedback=\(String(describing:model.feedbackNotice))")
    check(model.feedbackNotice?.text.key=="hades2.input.invalid", "invalid draft lost validation feedback")
    let native = money as! TrainerTextField.Field
-   check(native.presentation == .invalid && native.validationMessage == Hades2GameModule.resolveText(key:"hades2.input.invalid",localization:localization)
+   check(native.presentation == .invalid && native.validationMessage == localization.string("hades2.input.invalid")
          && native.accessibilityHelp() == native.validationMessage,
          "invalid numeric input lost its field-local visible/accessibility feedback")
   }
@@ -704,7 +704,7 @@ struct HeaderFixture: View {
   // Damage now lives in the collapsed numeric area. Exercise the same native
   // multiplier editing/completion contract through the visible Gold gain field;
   // the typed completion cases below still cover Damage's command identity.
-  let multiplierName=Hades2GameModule.resolveText(key:"hades2.feature.moneyMultiplier",localization:localization)
+  let multiplierName=localization.string("hades2.feature.moneyMultiplier")
   guard let gainMultiplier=fields(host).first(where:{$0.isEditable && $0.accessibilityLabel()==multiplierName}) else { fatalError("gold gain multiplier field missing") }
   let multiplierEditor=edit(gainMultiplier,to:"5.25",in:window); pump(0.45)
   check(gainMultiplier.currentEditor() != nil && commands("set_desired").isEmpty, "multiplier typing dismissed focus or applied early")
@@ -746,7 +746,7 @@ struct HeaderFixture: View {
   phase("editing:native-probability")
   // Native is an empty editable field, not a 100% draft. Editing survives a
   // status observation; focus/blur without input must never set a preference.
-  let nativeLabel=Hades2GameModule.resolveText(key:"hades2.gathering.native",localization:localization)
+  let nativeLabel=localization.string("hades2.gathering.native")
   guard let nativeField=fields(host).first(where:{$0.isEditable && $0.placeholderString==nativeLabel && $0.stringValue.isEmpty})
   else { fatalError("Native gathering editor was not mounted as an empty field") }
   let nativeCount=commands("set_gathering_desired").count

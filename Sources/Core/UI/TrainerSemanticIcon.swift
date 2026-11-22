@@ -40,7 +40,6 @@ package enum TrainerSemanticIcon {
     package enum Context {
         package static let fishing = "fish.fill"
         package static let portal = "circle.hexagongrid.fill"
-        static let reward = "gift.fill"
         package static let characterReward = "moon.stars.fill"
         package static let doorway = "door.left.hand.open"
     }
@@ -67,8 +66,6 @@ package enum TrainerSemanticIcon {
         package static let acquire = "plus.circle.fill"
         package static let apply = "checkmark.circle.fill"
         package static let generate = "plus.circle.fill"
-        static let save = "square.and.arrow.down"
-        static let load = "arrow.down.circle"
         package static let edit = "square.and.pencil"
         package static let rename = "pencil"
         static let protect = "lock"

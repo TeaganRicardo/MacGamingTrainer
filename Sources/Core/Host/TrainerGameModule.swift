@@ -46,13 +46,9 @@ extension EnvironmentValues {
 
 package struct TrainerGamePresentation: Hashable {
     let sidebarIconSystemName: String
-    let platformLabel: String
-    let headerTitle: String
 
-    package init(sidebarIconSystemName: String = "gamecontroller.fill", platformLabel: String = "", headerTitle: String) {
+    package init(sidebarIconSystemName: String = "gamecontroller.fill") {
         self.sidebarIconSystemName = sidebarIconSystemName
-        self.platformLabel = platformLabel
-        self.headerTitle = headerTitle
     }
 }
 

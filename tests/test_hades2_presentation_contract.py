@@ -368,7 +368,7 @@ assert not unregistered, sorted(set(unregistered))
 
 # 9. Every Swift call site names a real key, and no Hades Swift file embeds
 #    user-facing Chinese copy.
-CALL_SITE = re.compile(r'text\("([^"]+)"\)|presentation\("([^"]+)"\)|token\("([^"]+)"\)')
+CALL_SITE = re.compile(r'text\("([^"]+)"\)|presentation\("([^"]+)"\)|token\("([^"]+)"\)|localization\.string\("([^"]+)"')
 for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")):
     body = path.read_text(encoding="utf-8")
     for match in CALL_SITE.finditer(body):

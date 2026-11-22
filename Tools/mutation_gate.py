@@ -223,12 +223,16 @@ def manifest() -> list[Mutation]:
         # --- presentation seam --------------------------------------------
         Mutation(
             ident="seam-empty-prefix",
-            invariant="a module with no namespace cannot claim Host-owned keys",
+            invariant="a module with no namespace or an overlapping namespace cannot claim Host-owned keys",
             path=ROOT / "Sources/Core/Host/TrainerLocalization.swift",
-            old="        guard !prefix.isEmpty else { return }\n",
+            old=("        guard Self.isValidModulePrefix(prefix),\n"
+                 "              !Self.prefixOverlaps(prefix, \"host.\"),\n"
+                 "              !moduleResolvers.keys.contains(where: { Self.prefixOverlaps(prefix, $0) }) else {\n"
+                 "            return false\n"
+                 "        }\n"),
             new="",
             test="tests/test_host_localization_behavior.py",
-            note="#202: presentationKeyPrefix defaults to \"\", and \"\" prefixes every key",
+            note="#202: presentationKeyPrefix defaults to \"\", and invalid/overlapping prefixes must be rejected",
         ),
         Mutation(
             ident="seam-literal-feature-title",

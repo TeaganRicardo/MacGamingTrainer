@@ -26,7 +26,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix) {
             Hades2GameModule.presentationText(key: $0, arguments: $1, language: $2)
         }
-        func text(_ key: String) -> String { Hades2GameModule.resolveText(key: key, localization: localization) }
+        func text(_ key: String) -> String { localization.string(key) }
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: URL(fileURLWithPath: CommandLine.arguments[1]), argumentsPrefix: ["-u"])))
         try session.start(descriptor: Hades2GameModule.descriptor,

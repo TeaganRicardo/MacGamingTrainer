@@ -252,24 +252,14 @@ struct Hades2TrainerView: View {
         }
     }
 
-    /// Resolve one Hades presentation key against the live Host language.
+    /// Resolve one presentation key against the live Host language.
     private func text(_ key: String) -> String {
-        // Some shell actions the module hosts (Disable All) keep their Host key
-        // and Host resource, so a non-Hades prefix must resolve through the Host
-        // table rather than being looked up as a Hades key.
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
-    /// Resolve a presentation token through the owner of its namespace.
-    ///
-    /// Hades tokens stay module-owned; Host tokens (including Core Time Warp
-    /// failures) resolve through Host.strings with the same argument channel.
+    /// Resolve a presentation token through the Host localization store.
     private func resolved(_ token: TrainerTextToken) -> String {
-        Hades2GameModule.resolveText(
-            key: token.key,
-            arguments: token.arguments,
-            localization: localization
-        )
+        localization.string(token)
     }
 
     /// Next-room reward label in the active language. Each key resolves both
@@ -285,15 +275,10 @@ struct Hades2TrainerView: View {
         // Prefer the registry's localized element name; an id the table does not
         // know falls back to the official name the backend supplied. The argument
         // is text, not a key, so it is passed as-is.
-        let localized = Hades2GameModule.presentationText(
-            key: key,
-            arguments: [],
-            language: localization.language
-        )
-        return Hades2GameModule.presentationText(
-            key: "hades2.element.generic",
-            arguments: [localized == key ? element.name : localized],
-            language: localization.language
+        let localized = localization.string(key)
+        return localization.string(
+            "hades2.element.generic",
+            arguments: [localized == key ? element.name : localized]
         )
     }
 
@@ -357,11 +342,7 @@ struct Hades2TrainerView: View {
     /// Resolve a Hades key with runtime arguments against the live Host
     /// language. An argument is runtime text unless it is another owned key.
     private func text(_ key: String, arguments: [String]) -> String {
-        Hades2GameModule.presentationText(
-            key: key,
-            arguments: arguments,
-            language: localization.language
-        )
+        localization.string(key, arguments: arguments)
     }
 
     private func currentRunTraitName(_ trait: CurrentRunTrait) -> String {
@@ -1205,7 +1186,7 @@ struct Hades2TrainerView: View {
             text("hades2.metric.spellCharge"), icon: Hades2WorkbenchIcon.spellCharge, text: $spellCharge,
             focus: .spellCharge, color: .purple,
             detail: model.spellChargeCost.map { cost in
-                    Hades2GameModule.presentationText(key: "hades2.metric.cost", arguments: [number(cost)], language: localization.language)
+                    localization.string("hades2.metric.cost", arguments: [number(cost)])
                 } ?? nil,
             edit: .counter("spellCharge")
         )

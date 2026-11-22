@@ -33,9 +33,7 @@ struct Hades2SaveEditorView: View {
     }
 
     private func text(_ key: String, arguments: [String] = []) -> String {
-        Hades2GameModule.resolveText(
-            key: key, arguments: arguments, localization: localization
-        )
+        localization.string(key, arguments: arguments)
     }
 
     private var entities: [Hades2SaveEditorEntity] {

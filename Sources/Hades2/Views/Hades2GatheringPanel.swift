@@ -8,7 +8,7 @@ struct Hades2GatheringPanel: View {
     @State private var percentages: [Hades2GatheringFamily: String] = [:]
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     private func synchronize(_ families: [Hades2GatheringFamily] = Hades2GatheringFamily.allCases) {

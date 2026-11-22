@@ -8,7 +8,7 @@ struct Hades2ChaosGatePanel: View {
     @State private var percentage = ""
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
 
     private func synchronize() {

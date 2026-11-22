@@ -28,7 +28,7 @@ struct Hades2SaveAdvancedValueView: View {
     }
 
     private func text(_ key: String) -> String {
-        Hades2GameModule.resolveText(key: key, localization: localization)
+        localization.string(key)
     }
     private var mutations: [String] { detail?.mutationKinds ?? entry.mutationKinds }
     private var editable: Bool { loaded && (detail?.editable ?? entry.editable) && !model.busy && entry.baselineGeneration == model.baselineGeneration }
