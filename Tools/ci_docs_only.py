@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "Tools"
@@ -21,28 +21,25 @@ from module_inventory import (
 from test_inputs import MACOS_RUNNER_PATHS, affected_tests, is_native_fixture, load_macos_test_dependencies
 from test_inventory import load_macos_only_tests
 
-# Explicit product build inputs under Tools/ and repo root that compile, package,
-# sign, or select toolchains for the distributed App. Other Tools/ scripts,
-# CI prerequisite installers, and game-owned Tools/games/<id>/ tooling remain
-# portable unless a macOS test declares them.
-BUILD_INPUT_TOOL_PATHS = frozenset({
-    ".python-version",
-    "Tools/build_module_native.py",
-    "Tools/clean_signing_metadata.py",
-    "Tools/generate_game_binding.py",
-    "Tools/macos_toolchain_identity.py",
-    "Tools/module_inventory.py",
-    "Tools/module_support.py",
-    "Tools/product_support.py",
-    "Tools/publish_module_build.py",
-    "Tools/python_runtime.json",
-    "Tools/resident_runtime.py",
-    "Tools/supported_build.py",
-    "Tools/swift_module_layout.py",
-    "Tools/validate_game_module.py",
-    "Tools/verify_build_provenance.py",
-    "Tools/verify_module_build.py",
-    "Tools/write_build_provenance.py",
+# Explicit portable Tools/ scripts and config files that never compile, package,
+# sign, or select toolchains for the distributed App. Game-owned tooling under
+# Tools/games/<id>/ and CI prerequisite installers under Tools/ci_prerequisites/
+# are also portable unless a macOS test declares them; any other Tools/ file
+# fails closed to the macOS build.
+PORTABLE_TOOL_PATHS = frozenset({
+    "pyproject.toml",
+    "Tools/check_runtime_revision.py",
+    "Tools/ci_docs_only.py",
+    "Tools/discover_linux_tests.py",
+    # The mutation audit runs only in Build 2 macOS convergence; a PR that edits
+    # it has no macOS work to verify (tests/test_mutation_gate_contract.py is
+    # portable).
+    "Tools/mutation_gate.py",
+    "Tools/python_static_requirements.txt",
+    "Tools/release_tag.py",
+    "Tools/run_linux_checks.sh",
+    "Tools/summarize_macos_coverage.py",
+    *MACOS_RUNNER_PATHS,
 })
 # Only native/module composition boundaries need the reference-fixture compiler lane.
 # Pure Backend implementation and game-owned Swift changes are verified by their
@@ -132,10 +129,15 @@ def _is_portable_input(
         # A change to Build 2's own execution recipe must exercise the real
         # macOS product; the separate module-matrix workflow owns its lane.
         return path != ".github/workflows/build2-macos.yml"
-    if path in BUILD_INPUT_TOOL_PATHS:
-        return False
-    if path == "pyproject.toml" or path.startswith("Tools/"):
+    if path in PORTABLE_TOOL_PATHS:
         return True
+    parts = PurePosixPath(path).parts
+    if len(parts) >= 4 and parts[:2] == ("Tools", "games"):
+        return True
+    if len(parts) == 3 and parts[:2] == ("Tools", "ci_prerequisites") and path.endswith(".sh"):
+        return True
+    if path.startswith("Tools/"):
+        return False
     if is_executable_reference_data(path, reference_prefixes):
         return path not in app_resource_sources
     return False
