@@ -137,7 +137,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         document: _Document,
         *,
         version_pinned: bool = False,
-        eligibility: Optional[Any] = None,
+        eligibility: Optional[StructuredSaveEligibilityProtocol] = None,
         source_metadata: Optional[Mapping[str, str]] = None,
     ) -> None:
         self._save_service = save_service
@@ -164,7 +164,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         snapshot_id: Optional[str] = None,
         target: object = None,
         version_pinned: bool = False,
-        eligibility: Optional[Any] = None,
+        eligibility: Optional[StructuredSaveEligibilityProtocol] = None,
         source_metadata: Optional[Mapping[str, str]] = None,
     ) -> StructuredSaveEditSession[_Document]:
         identity = cls._identity(source_identity, "source")
@@ -246,7 +246,7 @@ class StructuredSaveEditSession(Generic[_Document]):
             selected_path = checked_default["relativePath"]
 
         if not is_source_fn(selected_path):
-            raise ValueError("Save Editor source is not a supported profile save.")
+            raise ValueError("Save Editor source is not a supported structured save.")
 
         matches = [
             row
@@ -471,7 +471,6 @@ class StructuredSaveEditSession(Generic[_Document]):
 
 
 DEFAULT_MAX_OPEN_SAVE_WORKSPACES = 8
-_UNSET = object()
 
 
 class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
@@ -561,16 +560,21 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
             source=raw.get("source"),
             target=raw.get("target"),
         )
-        while len(self._workspaces) >= self._max_open:
-            _evicted_id, evicted = self._workspaces.popitem(last=False)
-            self._close_workspace(evicted)
-
         workspace_id = uuid.uuid4().hex
         baseline_generation = uuid.uuid4().hex
         workspace.identifier = workspace_id
         workspace.baseline_generation = baseline_generation
+        try:
+            summary = workspace.summary(language) if language is not None else workspace.summary()
+        except Exception:
+            self._close_workspace(workspace)
+            raise
+        while len(self._workspaces) >= self._max_open:
+            _evicted_id, evicted = self._workspaces.popitem(last=False)
+            self._close_workspace(evicted)
+
         self._workspaces[workspace_id] = workspace
-        return workspace.summary(language) if language is not None else workspace.summary()
+        return summary
 
     def require(self, identifier: object) -> _Workspace:
         if not isinstance(identifier, str) or not identifier or identifier not in self._workspaces:

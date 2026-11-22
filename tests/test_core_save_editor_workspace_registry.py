@@ -3,6 +3,7 @@
 import json
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import GameAdapterContext  # noqa: E402
 from core.module_manifest import SaveManagementSpec, SaveRootSpec  # noqa: E402
+from core.save_resolution import SaveResolutionError, load_save_provider  # noqa: E402
 from core.save_service import CoreSaveService  # noqa: E402
 import core.structured_save_edit as sse  # noqa: E402
 from core.structured_save_edit import StructuredSaveEditSession  # noqa: E402
@@ -208,20 +210,66 @@ def main():
         id3 = w3["workspaceId"]
         assert id1 in registry and id3 in registry and id2 not in registry
 
-        # Stale baseline is rejected cleanly.
+        # If workspace.summary() fails on open, existing workspaces must not be evicted or leaked.
+        created_failing = []
+
+        class _FailingSummaryWorkspace(_DummyWorkspace):
+            def summary(self, language="en"):
+                raise ValueError("Unsupported editor language.")
+
+        def _failing_open(_svc, *, snapshot_id=None, source=None, target=None):
+            ws = _FailingSummaryWorkspace(
+                StructuredSaveEditSession.open_selected(
+                    _svc, CODEC, eligibility, source=source, snapshot_id=snapshot_id, target=target, default_target=True
+                )
+            )
+            created_failing.append(ws)
+            return ws
+
+        failing_registry = sse.SaveEditorWorkspaceRegistry(
+            lambda: service,
+            inventory=lambda svc, snapshot_id=None: {
+                "sources": eligibility.editor_files(svc.source_files(snapshot_id))
+            },
+            open_workspace=_failing_open,
+            max_open=1,
+        )
+        # Seed one healthy workspace via manual _workspaces insertion or a switchable flag.
+        healthy = _DummyWorkspace(session)
+        failing_registry._workspaces["keep"] = healthy
+        try:
+            failing_registry.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}}, language="fr")
+        except ValueError as err:
+            assert "Unsupported editor language" in str(err)
+        else:
+            raise AssertionError("open succeeded when workspace.summary() raised")
+        assert list(failing_registry._workspaces) == ["keep"]
+        assert not healthy.closed
+        assert len(created_failing) == 1 and created_failing[0].closed
+
+        # Stale baseline is rejected cleanly, and rotate_baseline invalidates the prior token.
         try:
             registry.require_baseline(id1, "wrong-generation")
         except ValueError:
             pass
         else:
             raise AssertionError("stale baseline unexpectedly accepted")
+        rotated_gen = registry.rotate_baseline(id1)
+        assert rotated_gen != gen1
+        try:
+            registry.require_baseline(id1, gen1)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("previous baseline stayed valid after rotate_baseline")
+        assert registry.require_baseline(id1, rotated_gen) is registry[id1]
 
         # Standard target routing updates target and preserves workspace.
         targeted = registry.handle(
             "target",
             {
                 "workspaceId": id1,
-                "baselineGeneration": gen1,
+                "baselineGeneration": rotated_gen,
                 "target": {"rootId": "main", "relativePath": "Profile2.sav"},
             },
         )
@@ -285,6 +333,26 @@ def main():
         hades2_adapter.save_workspaces._workspaces["synthetic"] = _DummyWorkspace(backup_session)
         hades2_adapter.close()
         assert len(hades2_adapter.save_workspaces) == 0
+
+    fake_module_name = "games._test_non_provider"
+    fake_module = types.ModuleType(fake_module_name)
+    fake_module.__file__ = str(ROOT / "Backend/core/save_resolution.py")
+
+    class _NotASaveProvider:
+        def __init__(self, context):
+            self.context = context
+
+    fake_module.NotASaveProvider = _NotASaveProvider
+    sys.modules[fake_module_name] = fake_module
+    try:
+        try:
+            load_save_provider(f"{fake_module_name}:NotASaveProvider")
+        except SaveResolutionError as error:
+            assert "SaveProvider contract" in str(error), error
+        else:
+            raise AssertionError("Expected load_save_provider to reject non-SaveProvider object.")
+    finally:
+        sys.modules.pop(fake_module_name, None)
 
     print("core_save_editor_workspace_registry_ok")
 

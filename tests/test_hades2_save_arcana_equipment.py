@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
                 i: table(dict(enumerate(row, 1))) for i, row in enumerate(layout, 1)
             })
         path.write_bytes(fixture.to_bytes())
-        return Hades2SaveWorkspace.open(service)
+        return Hades2SaveWorkspace.open(service, game_path=base / "no-game")
 
     # Worked current-build requirements fix every automatic rule and the
     # deterministic tie-break independently of table iteration order.
@@ -346,7 +346,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
         assert saved["GameState"]["FamiliarUpgrades"]["FrogHealthBonus"] is True
         assert saved["GameState"]["FamiliarUpgrades"]["FutureFamiliarUpgrade"] == "preserve"
         assert saved["CurrentRun"]["Sentinel"] == "unchanged"
-        reopened = Hades2SaveWorkspace.open(service)
+        reopened = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
         row = next(row for row in reopened.query(domain="weapons", limit=200)["items"]
                    if row["id"] == "familiarUpgrade:FrogHealthBonus")
         assert row["value"] == desired
