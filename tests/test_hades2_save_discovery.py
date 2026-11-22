@@ -9,8 +9,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.save_resolution import ResolvedSaveFile
 from core.structured_save_edit import StructuredSaveEditSession
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
-from games.hades2.save_edit import Hades2SaveEditSession, _CODEC
-from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2.save_workspace import Hades2SaveWorkspace, _CODEC
 
 
 def table(values):
@@ -67,17 +66,22 @@ def document():
     return Hades2SaveDocument(header, [root])
 
 
-class Session(Hades2SaveEditSession):
+class Session(StructuredSaveEditSession):
     def __init__(self):
         original = document()
         identity = {"rootId": "fixture", "relativePath": "Profile1.sav"}
         # Discovery is an in-memory read-only fixture; it supplies the real
         # Core session contract without resolving or mutating any save file.
-        core = StructuredSaveEditSession(
-            None, _CODEC, ResolvedSaveFile("fixture", "Profile1.sav", Path("Profile1.sav")),
-            identity, None, hashlib.sha256(original.to_bytes()).hexdigest(), original,
+        super().__init__(
+            None,
+            _CODEC,
+            ResolvedSaveFile("fixture", "Profile1.sav", Path("Profile1.sav")),
+            identity,
+            None,
+            hashlib.sha256(original.to_bytes()).hexdigest(),
+            original,
+            source_metadata={"kind": "currentFile", **identity},
         )
-        super().__init__(None, core, source={"kind": "currentFile", **identity})
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:

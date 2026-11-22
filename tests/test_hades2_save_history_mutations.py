@@ -59,7 +59,7 @@ class HistoryMutationTests(unittest.TestCase):
 
     def open(self):
         target = {'rootId': 'main', 'relativePath': 'Profile1.sav'}
-        return Hades2SaveWorkspace.open(self.service, source=target, target=target)
+        return Hades2SaveWorkspace.open(self.service, source=target, target=target, game_path=self.game)
 
     def row(self, identity):
         return next(row for group in self.editor.query(domain='entities', scope='records', limit=100,

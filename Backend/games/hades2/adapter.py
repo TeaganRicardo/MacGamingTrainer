@@ -10,9 +10,10 @@ from typing import Any
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import ProcessTimeWarpError
 from core.save_resolution import SaveProviderContext
+from core.structured_save_edit import SaveEditorWorkspaceRegistry
 from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, locate_target
 
-from . import localization, preparation
+from . import localization, preparation, save_advanced
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
@@ -118,7 +119,7 @@ _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
 class Hades2Adapter(GameAdapter):
-    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None):
+    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None, game_path=None):
         if context is None:
             context = GameAdapterContext.from_manifest(MODULE_MANIFEST)
         super().__init__(context)
@@ -140,7 +141,8 @@ class Hades2Adapter(GameAdapter):
             )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
-        self._game_path = None
+        self._explicit_game_path = Path(game_path) if game_path is not None else None
+        self._game_path = self._explicit_game_path
         self._time_warp_speed=None;self._time_warp_pid=None;self._time_warp_error=None
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
@@ -158,7 +160,7 @@ class Hades2Adapter(GameAdapter):
         self.profile_service=Hades2ProfileService(self.legacy_data_dir/'profiles')
         self.command_contract=Hades2CommandContract(self)
         self.reply_projection=Hades2ReplyProjection()
-        self.save_workspaces={}
+        self.save_workspaces = self._create_save_workspaces()
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
         # replay is a no-op; if Hades itself restarted, the same profile is
@@ -169,6 +171,23 @@ class Hades2Adapter(GameAdapter):
         self._preference_persistence_dirty=False
         self._target_observations_retired = False
         self._overlay_preferences()
+
+    def _create_save_workspaces(self) -> SaveEditorWorkspaceRegistry:
+        return SaveEditorWorkspaceRegistry(
+            lambda: self.save_service,
+            inventory=Hades2SaveWorkspace.inventory,
+            open_workspace=lambda service, **kwargs: Hades2SaveWorkspace.open(
+                service,
+                game_path=self._workspace_game_path(),
+                **kwargs,
+            ),
+            unavailable_error=lambda: ValueError("Save Editor save management is unavailable."),
+            not_open_error=lambda _identifier: ValueError("Save Editor workspace is not open."),
+            stale_baseline_error=lambda: save_advanced.AdvancedMutationError(
+                "Save Editor document baseline is stale; refresh before editing.",
+                conflict=True,
+            ),
+        )
 
     @staticmethod
     def _default_preferences():
@@ -1079,41 +1098,34 @@ class Hades2Adapter(GameAdapter):
             self._project_detached_runtime()
         return dict(self.state)
 
+    def _workspace_game_path(self) -> Path:
+        if self._explicit_game_path is not None:
+            return self._explicit_game_path
+        if self._game_path is not None:
+            return self._game_path
+        return self.install_path()
+
     def bind_save_service(self, save_service):
         super().bind_save_service(save_service)
-        self.save_workspaces = {}
+        self.save_workspaces.clear()
 
     def _require_save_workspace(self, identifier):
-        workspace = self.save_workspaces.get(identifier)
-        if workspace is None:
-            raise ValueError("Save Editor workspace is not open.")
-        return workspace
+        return self.save_workspaces.require(identifier)
 
     def validate_save_workspace(self, identifier):
-        return self._require_save_workspace(identifier)
+        return self.save_workspaces.require(identifier)
 
     def save_editor_inventory(self, params):
-        if self.save_service is None:
-            raise ValueError("Save Editor save management is unavailable.")
-        return Hades2SaveWorkspace.inventory(self.save_service, params.get("snapshotId"))
+        return self.save_workspaces.inventory(params)
 
     def open_save_editor(self, params=None):
-        if self.save_service is None:
-            raise ValueError("Save Editor save management is unavailable.")
-        params = params or {}
-        workspace = Hades2SaveWorkspace.open(self.save_service,
-            snapshot_id=params.get("snapshotId"), source=params.get("source"), target=params.get("target"))
-        self.save_workspaces[workspace.identifier] = workspace
-        return workspace.summary()
+        return self.save_workspaces.open(params)
 
     def close_save_editor(self, params):
-        identifier = params["workspaceId"]
-        self._require_save_workspace(identifier)
-        del self.save_workspaces[identifier]
-        return {"closed": True}
+        return self.save_workspaces.close(params)
 
     def set_save_editor_target(self, params):
-        return self._require_save_workspace(params["workspaceId"]).set_target(params["target"])
+        return self.save_workspaces.target(params, require_baseline="baselineGeneration" in params)
 
     def query_save_editor(self, params):
         query = {key: value for key, value in params.items() if key != "workspaceId"}
@@ -1179,6 +1191,7 @@ class Hades2Adapter(GameAdapter):
         return self.reply_projection.publish(reply,self.command_contract.reply_kind(command))
 
     def close(self):
+        self.save_workspaces.clear()
         try:
             self.disconnect()
         except Exception:

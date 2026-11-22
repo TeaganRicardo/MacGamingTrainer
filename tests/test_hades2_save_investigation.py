@@ -355,8 +355,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
         def __init__(self):
             self.document = Hades2SaveDocument.from_bytes(target.read_bytes())
 
-        def apply(self):
-            encoded = self.document.to_bytes()
+        def apply(self, candidate=None):
+            target_doc = self.document if candidate is None else candidate
+            encoded = target_doc.to_bytes()
             Hades2SaveDocument.from_bytes(encoded)
             target.write_bytes(encoded)
             self.document = Hades2SaveDocument.load(target)

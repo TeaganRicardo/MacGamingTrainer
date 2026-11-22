@@ -89,12 +89,12 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         # unavailable until a game adapter explicitly selects a physical target.
         saves, service, original = environment(base / "no-target")
         unbound = open_session(service, target=None)
-        unbound.document.value = 19
-        rejects(ValueError, unbound.apply)
+        rejects(ValueError, lambda: unbound.apply(FixtureDocument(19)))
         assert service.list_state()["snapshots"] == []
         unbound.set_target(identity("Profile1.sav"))
-        unbound.apply()
+        unbound.apply(FixtureDocument(19))
         assert CODEC.decode((saves / "Profile1.sav").read_bytes()).value == 19
+        assert unbound.document.value == 19
 
         # Source identity and source digest stay pinned while the rolling
         # baseline advances after each verified edit to an explicitly chosen target.
@@ -104,23 +104,22 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         assert session.source_sha256 == hashlib.sha256(original).hexdigest()
         assert session.target == identity("Profile2.sav")
         first = CODEC.encode(FixtureDocument(21))
-        session.document.value = 21
-        first_result = session.apply()
+        first_result = session.apply(FixtureDocument(21))
         assert first_result["applied"] and first_result["replaced"]
         assert (saves / "Profile2.sav").read_bytes() == first
         assert (saves / "Profile1.sav").read_bytes() == original
         assert session.source_sha256 == hashlib.sha256(original).hexdigest()
         assert session.original_sha256 == hashlib.sha256(first).hexdigest()
+        assert session.document.value == 21
         previous = service.store.load_verified_snapshot(first_result["previousSnapshotId"])
         assert (previous["root"] / "files/main/Profile2.sav").read_bytes() == CODEC.encode(FixtureDocument(20))
 
         second = CODEC.encode(FixtureDocument(22))
-        session.document.value = 22
-        second_result = session.apply()
+        second_result = session.apply(FixtureDocument(22))
         assert (saves / "Profile2.sav").read_bytes() == second
         assert session.original_sha256 == hashlib.sha256(second).hexdigest()
         snapshots = len(service.list_state()["snapshots"])
-        rejects(ValueError, session.apply)
+        rejects(ValueError, lambda: session.apply(FixtureDocument(22)))
         assert len(service.list_state()["snapshots"]) == snapshots
 
         # An explicit target must be a currently declared physical save file.
@@ -131,31 +130,29 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         # digest is rejected before any destructive transaction or backup.
         saves, service, original = environment(base / "unchanged")
         session = open_session(service)
-        rejects(ValueError, session.apply)
+        rejects(ValueError, lambda: session.apply(FixtureDocument(session.document.value)))
         assert service.list_state()["snapshots"] == []
-        session.document.value = "malformed"
-        rejects(ValueError, session.apply)
+        rejects(ValueError, lambda: session.apply(FixtureDocument("malformed")))
         assert (saves / "Profile1.sav").read_bytes() == original
         assert service.list_state()["snapshots"] == []
-        session.document = b"arbitrary bytes"
-        rejects(TypeError, session.apply)
+        rejects(TypeError, lambda: session.apply(b"arbitrary bytes"))
+        rejects(AttributeError, lambda: setattr(session, "document", b"arbitrary bytes"))
         assert (saves / "Profile1.sav").read_bytes() == original
 
         saves, service, original = environment(base / "stale")
         session = open_session(service)
-        session.document.value = 11
         external = CODEC.encode(FixtureDocument(12))
         (saves / "Profile1.sav").write_bytes(external)
-        rejects(SaveRestoreError, session.apply)
+        rejects(SaveRestoreError, lambda: session.apply(FixtureDocument(11)))
         assert (saves / "Profile1.sav").read_bytes() == external
         assert service.list_state()["snapshots"] == []
         assert session.original_sha256 == hashlib.sha256(original).hexdigest()
+        assert session.document.value == 10
 
         # A failed install with a verified rollback remains retryable; the
         # original baseline advances only after the later confirmed success.
         saves, service, original = environment(base / "rollback-ok")
         session = open_session(service)
-        session.document.value = 13
         real_replace = SaveRestoreTransaction._replace_file
         calls = []
 
@@ -168,19 +165,20 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
             return real_replace(self, source, destination, digest, **options)
 
         with patch.object(SaveRestoreTransaction, "_replace_file", fail_once_after_install):
-            rejects(SaveRestoreError, session.apply)
+            rejects(SaveRestoreError, lambda: session.apply(FixtureDocument(13)))
         assert len(calls) == 2
         assert (saves / "Profile1.sav").read_bytes() == original
         assert session.recovery_path is None
         assert session.original_sha256 == hashlib.sha256(original).hexdigest()
-        session.apply()
+        assert session.document.value == 10
+        session.apply(FixtureDocument(13))
         assert CODEC.decode((saves / "Profile1.sav").read_bytes()).value == 13
+        assert session.document.value == 13
 
         # A failed rollback preserves terminal recovery evidence and permanently
         # prevents this session from replaying the uncertain candidate.
         saves, service, original = environment(base / "rollback-failed")
         session = open_session(service)
-        session.document.value = 14
         calls = []
 
         def fail_install_and_rollback(self, source, destination, digest, **options):
@@ -193,10 +191,10 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
             return real_replace(self, source, destination, digest, **options)
 
         with patch.object(SaveRestoreTransaction, "_replace_file", fail_install_and_rollback):
-            failure = rejects(SaveRollbackError, session.apply)
+            failure = rejects(SaveRollbackError, lambda: session.apply(FixtureDocument(14)))
             assert session.recovery_path == str(failure.recovery_path)
             assert session.recovery_unresolved is True
-            blocked = rejects(ValueError, session.apply)
+            blocked = rejects(ValueError, lambda: session.apply(FixtureDocument(14)))
             assert blocked.code == "rollback_failed"
             assert blocked.presentation == "host.save.error.rollbackFailed"
             assert blocked.recovery_path == str(failure.recovery_path)
@@ -211,7 +209,6 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         # same session rather than relying on the Hades I-only error attribute.
         saves, service, original = environment(base / "rollback-interrupted")
         session = open_session(service)
-        session.document.value = 15
         calls = []
 
         def interrupt_rollback(self, source, destination, digest, **options):
@@ -224,10 +221,10 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
             return real_replace(self, source, destination, digest, **options)
 
         with patch.object(SaveRestoreTransaction, "_replace_file", interrupt_rollback):
-            rejects(KeyboardInterrupt, session.apply)
+            rejects(KeyboardInterrupt, lambda: session.apply(FixtureDocument(15)))
             assert session.recovery_path is not None
             assert session.recovery_unresolved is True
-            rejects(ValueError, session.apply)
+            rejects(ValueError, lambda: session.apply(FixtureDocument(15)))
         assert len(calls) == 2
         recovery = Path(session.recovery_path)
         assert recovery.is_dir()
@@ -239,7 +236,6 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
         # inventing a recovery path.
         saves, service, original = environment(base / "recovery-uninspectable")
         session = open_session(service)
-        session.document.value = 16
         real_paths = service.recovery_paths
         path_queries = []
 
@@ -262,11 +258,11 @@ def test_structured_edit_session_owns_the_complete_recoverable_lifecycle():
             return real_replace(self, source, destination, digest, **options)
 
         with patch.object(SaveRestoreTransaction, "_replace_file", interrupt_uninspectable_rollback):
-            rejects(KeyboardInterrupt, session.apply)
+            rejects(KeyboardInterrupt, lambda: session.apply(FixtureDocument(16)))
         assert session.recovery_unresolved is True
         assert session.recovery_path is None
         service.recovery_paths = real_paths
-        blocked = rejects(ValueError, session.apply)
+        blocked = rejects(ValueError, lambda: session.apply(FixtureDocument(16)))
         assert blocked.code == "rollback_failed"
         assert blocked.presentation == "host.save.error.recoveryUnresolved"
         assert len(path_queries) == 2

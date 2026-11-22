@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     )
     service = CoreSaveService("hades2", spec, base / "data", lambda: False,
         provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=base / "no-game")))
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     rows = {row["id"]: row for row in editor.query(domain="progression", language="en", limit=200)["items"]}
     assert rows["card:ChanneledCast:Equipped"]["editable"], "reliable native equipment Boolean is read-only"
     original = path.read_bytes()
@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
 
     # Enabling the native five-cost automatic card supplies the smallest
     # deterministic set of manual prerequisites and enough purchased Grasp.
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("card:MaxHealthPerRoom:Equipped", "set", True)
     effects = {row["id"]: row for row in editor.review(language="en")["changes"]}
     for name in ("LowManaDamageBonus", "CastCount", "LastStand", "ManaOverTime"):
@@ -95,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     saved = Hades2SaveDocument.load(path).lua_state["GameState"]
     assert saved["MetaUpgradeState"]["MaxHealthPerRoom"]["Equipped"] is True
     assert saved["MetaUpgradeCostCache"] == 15
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("card:MaxHealthPerRoom:Equipped", "set", False)
     effects = {row["id"]: row for row in editor.review()["changes"]}
     assert effects["linked:card:ManaOverTime:Equipped"]["after"] is False
@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     assert saved["MetaUpgradeState"]["ManaOverTime"]["Unlocked"] is True
     assert saved["MetaUpgradeLimitLevel"] == 3, "automatic teardown revoked purchased capacity"
 
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     equipment = {row["id"]: row for row in editor.query(domain="weapons", language="en", limit=200)["items"]}
     assert equipment["weapon:WeaponStaffSwing"]["editable"], "starter ownership is arbitrarily read-only"
     assert equipment["familiarUpgrade:FrogHealthBonus"]["editable"], "missing native owner cannot be created"
@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     assert saved["WeaponsUnlocked"]["DaggerBlockAspect"] is True
     assert saved["EquippedFamiliar"] == "FrogFamiliar"
     assert saved["FamiliarsUnlocked"]["FrogFamiliar"] is True
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("aspect:DaggerBackstabAspect", "set", 0)
     editor.stage("weapon:WeaponStaffSwing", "set", False)
     assert "linked:weapon:WeaponDagger" in {row["id"] for row in editor.review()["changes"]}
@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
                 i: table(dict(enumerate(row, 1))) for i, row in enumerate(layout, 1)
             })
         path.write_bytes(fixture.to_bytes())
-        return Hades2SaveWorkspace.open(service)
+        return Hades2SaveWorkspace.open(service, game_path=base / "no-game")
 
     # Worked current-build requirements fix every automatic rule and the
     # deterministic tie-break independently of table iteration order.
@@ -210,7 +210,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     state["EquippedFamiliar"] = "FutureFamiliar"
     state["FamiliarUpgrades"] = table({"FrogHealthBonus3": True, "FutureFamiliarUpgrade": True})
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
     editor.stage("tool:ToolPickaxe", "set", 1)
     editor.stage("familiarUpgrade:FrogHealthBonus", "set", 2)
@@ -258,7 +258,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     state["MetaUpgradeState"]["ChanneledCast"]["Unlocked"] = True
     state["MetaUpgradeCardLayout"] = True
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("card:ChanneledCast:Level", "set", 3)
     editor.stage("card:FutureCard:Level", "set", 20)
     editor.apply()
@@ -271,7 +271,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     fixture.lua_state["GameState"]["MetaUpgradeState"]["ChanneledCast"]["AdjacencyBonuses"] = table({
         "CustomMultiplier": 2, "UnknownBonus": "preserve"})
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     editor.stage("card:ChanneledCast:Equipped", "set", True)
     adjacency = next(row for row in editor.review(language="en")["changes"]
                      if row["id"] == "linked:arcanaCache:AdjacencyBonuses:ChanneledCast")
@@ -284,7 +284,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     fixture = copy.deepcopy(document)
     fixture.lua_state["GameState"].pop("MetaUpgradeState", None)
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     missing = editor.query(domain="entities", scope="growth", search="BonusHealth", language="en")
     assert any(group["id"] == "arcana:BonusHealth" for group in missing["entities"])
     editor.stage("card:BonusHealth:Level", "set", 2)
@@ -297,7 +297,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     fixture.lua_state["GameState"]["MetaUpgradeState"]["ChanneledCast"]["Level"] = table({"bad": "shape"})
     fixture.lua_state["GameState"]["MetaUpgradeUnlockedCountCache"] = table({"invalid": "projection"})
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     known = next(row for row in editor.query(domain="progression", limit=200)["items"]
                  if row["id"] == "card:ChanneledCast:Level")
     assert known["editable"] and known["value"] is None
@@ -313,7 +313,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     state["MetaUpgradeState"]["FutureCard"] = table({"Level": "opaque-v1", "Unlocked": 2.5,
                                                        "Unknown": "preserve"})
     path.write_bytes(fixture.to_bytes())
-    editor = Hades2SaveWorkspace.open(service)
+    editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
     unknown = {row["id"]: row for row in editor.query(domain="progression", language="en", limit=200)["items"]}
     assert "card:FutureCard:Equipped" not in unknown, "unknown metadata invented an absent field"
     assert unknown["card:FutureCard:Level"]["valueType"] == "string"
@@ -336,7 +336,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
         fixture.lua_state["GameState"]["FamiliarUpgrades"] = table({
             "FrogHealthBonus": membership, "FutureFamiliarUpgrade": "preserve"})
         path.write_bytes(fixture.to_bytes())
-        editor = Hades2SaveWorkspace.open(service)
+        editor = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
         row = next(row for row in editor.query(domain="weapons", limit=200)["items"]
                    if row["id"] == "familiarUpgrade:FrogHealthBonus")
         assert row["value"] == before, (membership, row["value"])
@@ -346,7 +346,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
         assert saved["GameState"]["FamiliarUpgrades"]["FrogHealthBonus"] is True
         assert saved["GameState"]["FamiliarUpgrades"]["FutureFamiliarUpgrade"] == "preserve"
         assert saved["CurrentRun"]["Sentinel"] == "unchanged"
-        reopened = Hades2SaveWorkspace.open(service)
+        reopened = Hades2SaveWorkspace.open(service, game_path=base / "no-game")
         row = next(row for row in reopened.query(domain="weapons", limit=200)["items"]
                    if row["id"] == "familiarUpgrade:FrogHealthBonus")
         assert row["value"] == desired

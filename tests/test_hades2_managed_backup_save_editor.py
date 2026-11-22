@@ -159,7 +159,7 @@ def environment(folder):
     service = CoreSaveService("hades2", spec, folder / "data", lambda: state["running"],
         provider_loader=lambda _: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2", game_path=folder / "AbsentGame.app")))
     context = hades2_adapter_context(folder / "preferences")
-    adapter = Hades2Adapter(context=context, transport=object(), time_warp_controller=object())
+    adapter = Hades2Adapter(context=context, transport=object(), time_warp_controller=object(), game_path=folder / "AbsentGame.app")
     adapter.bind_save_service(service)
     return root, service, state, adapter
 
@@ -273,8 +273,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:
     saves, service, state, adapter = environment(folder)
     snapshot = service.backup()["id"]
     original_backup = contents(Path(service.folder(snapshot)))
-    workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
-        source=identity("Profile2.sav"), target=identity("Profile3.sav"))
+    workspace = Hades2SaveWorkspace.open(
+        service, snapshot_id=snapshot, source=identity("Profile2.sav"), target=identity("Profile3.sav"),
+        game_path=folder / "AbsentGame.app",
+    )
     workspace.stage("resource:MetaCurrency", "set", 91)
     latest = _save_bytes(700, 700, "latest-before-hot-write")
     (saves / "Profile3.sav").write_bytes(latest)
@@ -292,8 +294,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:
 
     # Recovery behavior remains identical after the successful hot write. Open a
     # fresh pinned workspace so the failure cases below start from known intent.
-    workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
-        source=identity("Profile2.sav"), target=identity("Profile3.sav"))
+    workspace = Hades2SaveWorkspace.open(
+        service, snapshot_id=snapshot, source=identity("Profile2.sav"), target=identity("Profile3.sav"),
+        game_path=folder / "AbsentGame.app",
+    )
     workspace.stage("resource:MetaCurrency", "set", 92)
     post_hot = (saves / "Profile3.sav").read_bytes()
 
@@ -344,8 +348,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-identity-") as temporary:
     folder = Path(temporary)
     saves, service, state, adapter = environment(folder)
     snapshot = service.backup()["id"]
-    workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
-        source=identity("Profile2.sav"), target=identity("Profile3.sav"))
+    workspace = Hades2SaveWorkspace.open(
+        service, snapshot_id=snapshot, source=identity("Profile2.sav"), target=identity("Profile3.sav"),
+        game_path=folder / "AbsentGame.app",
+    )
     workspace.stage("resource:MetaCurrency", "set", 92)
     # A changed contained backup also cannot silently rebase the open document;
     # it is rejected only if the user explicitly opens that source again.
@@ -353,7 +359,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-identity-") as temporary:
     source_path.write_bytes(_save_bytes(800, 800, "tampered-source"))
     assert workspace.review()["changes"][0]["before"] == 20
     try:
-        Hades2SaveWorkspace.open(service, snapshot_id=snapshot)
+        Hades2SaveWorkspace.open(service, snapshot_id=snapshot, game_path=folder / "AbsentGame.app")
     except SaveSnapshotError:
         pass
     else:
@@ -398,13 +404,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-multiple-roots-") as tempora
     preserved = contents(Path(service.folder(snapshot)))
     assert Hades2SaveWorkspace.inventory(service, snapshot)["defaultSource"] is None
     try:
-        Hades2SaveWorkspace.open(service, snapshot_id=snapshot)
+        Hades2SaveWorkspace.open(service, snapshot_id=snapshot, game_path=folder / "AbsentGame.app")
     except ValueError:
         pass
     else:
         raise AssertionError("two root identities silently collapsed into one active source")
-    workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
-        source=identity("Profile2.sav", "second"))
+    workspace = Hades2SaveWorkspace.open(
+        service,
+        snapshot_id=snapshot,
+        source=identity("Profile2.sav", "second"),
+        game_path=folder / "AbsentGame.app",
+    )
     assert workspace.summary()["target"] is None
     assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] == 90
     workspace.stage("resource:MetaCurrency", "set", 91)

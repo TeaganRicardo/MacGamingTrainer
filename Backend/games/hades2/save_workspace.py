@@ -7,10 +7,12 @@ to receive the complete Lua tree just to browse or search it.
 
 import json
 import math
+from pathlib import Path
 import uuid
 from types import SimpleNamespace
 
 from core.errors import PresentableError
+from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveEligibility
 
 from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
@@ -20,8 +22,30 @@ from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_mutation_utils import owner as lua_owner
 from .save_document import clone_lua_value, AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
-from .save_edit import Hades2SaveEditSession
 from .save_provider import editor_default_source, editor_files, profile_file_identity
+
+
+class _Hades2SaveCodec:
+    """Keep Hades II's version-17/18 container and luabins rules game-owned."""
+
+    def encode(self, document: Hades2SaveDocument) -> bytes:
+        if not isinstance(document, Hades2SaveDocument):
+            raise TypeError("Save Editor applies only structured Hades II save documents.")
+        return document.to_bytes()
+
+    def decode(self, payload: bytes) -> Hades2SaveDocument:
+        return Hades2SaveDocument.from_bytes(payload)
+
+    def load(self, path: Path) -> Hades2SaveDocument:
+        return Hades2SaveDocument.load(path)
+
+
+_CODEC = _Hades2SaveCodec()
+_ELIGIBILITY = StructuredSaveEligibility(
+    editor_files=editor_files,
+    is_source=lambda relative_path: profile_file_identity(relative_path) is not None,
+    default_source=editor_default_source,
+)
 
 
 _MAX_EXACT_LUA_INTEGER = 9_007_199_254_740_991
@@ -165,10 +189,11 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier", "baseline_generation")
+    __slots__ = ("_session", "_preview_document", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier", "baseline_generation")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
+        self._preview_document = None
         self._game_path = game_path
         self._pending = {}
         self._investigation = None
@@ -183,6 +208,8 @@ class Hades2SaveWorkspace:
 
     @property
     def document(self):
+        if self._preview_document is not None:
+            return self._preview_document
         return self._session.document
 
     @classmethod
@@ -197,30 +224,22 @@ class Hades2SaveWorkspace:
         return {"sources": sources, "targets": targets, "defaultSource": default}
 
     @classmethod
-    def open(cls, save_service, *, snapshot_id=None, source=None, target=None):
+    def open(cls, save_service, *, snapshot_id=None, source=None, target=None, game_path=None):
         default_target = source is None
-        if source is None:
-            source = editor_default_source(save_service.source_files(snapshot_id))
-        if not isinstance(source, dict) or set(source) != {"rootId", "relativePath"}:
-            raise ValueError("Save Editor requires an explicit supported source file.")
-        identity = profile_file_identity(source["relativePath"])
+        session = StructuredSaveEditSession.open_selected(
+            save_service,
+            _CODEC,
+            _ELIGIBILITY,
+            source=source,
+            snapshot_id=snapshot_id,
+            target=target,
+            default_target=default_target,
+            version_pinned=True,
+        )
+        identity = profile_file_identity(session.source["relativePath"])
         if identity is None:
             raise ValueError("Save Editor source is not a supported profile document.")
-        provider = save_service.provider
-        game_path = provider.context.game_path if provider is not None else None
-        return cls(
-            Hades2SaveEditSession.open(
-                save_service,
-                source["relativePath"],
-                root_id=source["rootId"],
-                snapshot_id=snapshot_id,
-                target=target,
-                default_target=default_target,
-                version_pinned=True,
-            ),
-            identity[0],
-            game_path=game_path,
-        )
+        return cls(session, identity[0], game_path=game_path)
 
     def set_target(self, identity):
         self._session.set_target(identity)
@@ -1875,7 +1894,7 @@ class Hades2SaveWorkspace:
         source_document = self._session.document
         candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
         self._apply_and_validate_intents(candidate, self._pending.values())
-        self._session.document = candidate
+        self._preview_document = candidate
         try:
             continuous = []
             for entry_id, before in draft_candidates.items():
@@ -1885,10 +1904,9 @@ class Hades2SaveWorkspace:
                     continue
                 if before["domain"] == after["domain"] and before["path"] == after["path"]:
                     continuous.append(entry_id)
-            result = self._session.apply()
-        except BaseException:
-            self._session.document = source_document
-            raise
+        finally:
+            self._preview_document = None
+        result = self._session.apply(candidate)
 
         change_count = len(self._pending)
         self._pending.clear()

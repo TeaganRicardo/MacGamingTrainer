@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from core.save_snapshots import SaveNotFoundError, SaveSnapshotError
 from core.save_resolution import DefaultSaveProvider, SaveProviderContext
 from core.save_restore import SaveRestoreError
-from test_core_structured_save_edit import CODEC, environment, open_session
+from test_core_structured_save_edit import CODEC, FixtureDocument, environment, open_session
 
 
 class SaveCommittedFeedbackTests(unittest.TestCase):
@@ -47,9 +47,8 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
             saves, service, _ = environment(Path(temporary))
             service.provider = Provider(SaveProviderContext(Path(temporary)))
             session = open_session(service)
-            session.document.value = 77
             with self.assertLogs(level="WARNING"):
-                result = session.apply()
+                result = session.apply(FixtureDocument(77))
             self.assertTrue(result["applied"])
             self.assertEqual(CODEC.load(saves / "Profile1.sav").value, 77)
             self.assertEqual(service.list_state()["namingWarning"], "provider_invalid")
@@ -58,7 +57,6 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             saves, service, original = environment(Path(temporary))
             session = open_session(service)
-            session.document.value = 77
             real_temporary_directory = tempfile.TemporaryDirectory
 
             class FailingCleanup(real_temporary_directory):
@@ -68,14 +66,13 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
 
             with patch("core.structured_save_edit.tempfile.TemporaryDirectory", FailingCleanup):
                 with self.assertLogs(level="ERROR"):
-                    result = session.apply()
+                    result = session.apply(FixtureDocument(77))
             self.assertTrue(result["applied"])
             self.assertEqual(result["maintenanceWarning"], "staging_cleanup_failed")
             self.assertEqual(CODEC.load(saves / "Profile1.sav").value, 77)
             self.assertEqual(session.original_sha256, hashlib.sha256((saves / "Profile1.sav").read_bytes()).hexdigest())
             self.assertEqual(session.source_sha256, hashlib.sha256(original).hexdigest())
-            session.document.value = 78
-            self.assertTrue(session.apply()["applied"])
+            self.assertTrue(session.apply(FixtureDocument(78))["applied"])
             self.assertEqual(CODEC.load(saves / "Profile1.sav").value, 78)
 
     def test_missing_snapshot_has_one_not_found_code_without_masking_corruption(self):
@@ -97,7 +94,6 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             saves, service, original = environment(Path(temporary))
             session = open_session(service)
-            session.document.value = 77
             real_directory = tempfile.TemporaryDirectory
 
             class FailingCleanup(real_directory):
@@ -110,7 +106,7 @@ class SaveCommittedFeedbackTests(unittest.TestCase):
                 "core.structured_save_edit.tempfile.TemporaryDirectory", FailingCleanup
             ), self.assertLogs(level="ERROR"):
                 with self.assertRaises(SaveRestoreError) as raised:
-                    session.apply()
+                    session.apply(FixtureDocument(77))
             self.assertIs(raised.exception, failure)
             self.assertEqual((saves / "Profile1.sav").read_bytes(), original)
             self.assertEqual(session.original_sha256, hashlib.sha256(original).hexdigest())

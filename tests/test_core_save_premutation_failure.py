@@ -97,10 +97,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-premutation-') as directory:
     (saves / 'Profile1.sav').write_bytes(b'current-bytes')
     target = {'rootId': 'main', 'relativePath': 'Profile1.sav'}
     session = StructuredSaveEditSession.open(service, target, BytesCodec(), target=target)
-    session.document = bytearray(b'edited-bytes')
+    candidate = bytearray(b'edited-bytes')
     os.open = refuse_staging()
     try:
-        session.apply()
+        session.apply(candidate)
     except SaveRollbackError as error:
         raise AssertionError('an untouched editor target was reported as a failed rollback') from error
     except Exception:
@@ -110,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-premutation-') as directory:
     finally:
         os.open = REAL_OPEN
     assert (saves / 'Profile1.sav').read_bytes() == b'current-bytes'
-    session.apply()
+    session.apply(candidate)
     assert (saves / 'Profile1.sav').read_bytes() == b'edited-bytes', 'the editor session was locked'
 
 # A real replacement followed by a failure still rolls back every file.

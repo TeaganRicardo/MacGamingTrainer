@@ -5,12 +5,36 @@ import math
 from pathlib import Path
 import uuid
 
+from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveEligibility
+
 from .catalog import trait_names, resource_catalog
 from .save_document import HadesSaveDocument, LuaTable, AmbiguousKeyError
-from .save_edit import HadesSaveEditSession
 from .save_owners import NATIVE_OWNERS, ENTITY_DEPTHS, ordinary_purpose
-from .save_provider import editor_files, active_profile_bytes
+from .save_provider import editor_files, active_profile_bytes, profile_file_identity
 from . import save_values as values
+
+
+class _HadesSaveCodec:
+    """Keep Hades I container and luabins validation game-owned."""
+
+    def encode(self, document: HadesSaveDocument) -> bytes:
+        if not isinstance(document, HadesSaveDocument):
+            raise TypeError('Save Editor applies only structured Hades save documents.')
+        return document.to_bytes()
+
+    def decode(self, payload: bytes) -> HadesSaveDocument:
+        return HadesSaveDocument.from_bytes(payload)
+
+    def load(self, path: Path) -> HadesSaveDocument:
+        return HadesSaveDocument.load(path)
+
+
+_CODEC = _HadesSaveCodec()
+_ELIGIBILITY = StructuredSaveEligibility(
+    editor_files=editor_files,
+    is_source=lambda relative_path: profile_file_identity(relative_path) is not None,
+)
+_UNSET = object()
 
 
 _CATALOG = json.loads(Path(__file__).with_name('save_catalog.json').read_text())
@@ -194,8 +218,16 @@ class HadesSaveWorkspace:
         if source is None: source = inventory['defaultSource']
         if not isinstance(source, dict) or set(source) != {'rootId', 'relativePath'}:
             raise ValueError('Choose one physical Hades save document to open.')
-        session = HadesSaveEditSession.open(service, source['relativePath'], root_id=source['rootId'],
-            snapshot_id=snapshot_id, target=target, default_target=False, version_pinned=True)
+        session = StructuredSaveEditSession.open_selected(
+            service,
+            _CODEC,
+            _ELIGIBILITY,
+            source=source,
+            snapshot_id=snapshot_id,
+            target=target,
+            default_target=False,
+            version_pinned=True,
+        )
         return cls(session)
 
     def summary(self, language='en'):
@@ -206,8 +238,9 @@ class HadesSaveWorkspace:
                 'recoveryPaths': list(self.session.recovery_paths),
                 'recoveryUnresolved': self.session.recovery_unresolved}
 
-    def set_target(self, target, *, baseline_generation):
-        self._require_generation(baseline_generation)
+    def set_target(self, target, *, baseline_generation=_UNSET):
+        if baseline_generation is not _UNSET:
+            self._require_generation(baseline_generation)
         self.session.set_target(target)
         return self.summary()
 
@@ -668,17 +701,12 @@ class HadesSaveWorkspace:
         if language not in ('en', 'zh-CN'): raise ValueError('Unsupported editor language.')
         return self._plan(tuple(self.pending.values()), language)[1]
 
-    def apply(self, *, baseline_generation):
-        self._require_generation(baseline_generation)
+    def apply(self, *, baseline_generation=_UNSET):
+        if baseline_generation is not _UNSET:
+            self._require_generation(baseline_generation)
         if not self.pending: raise ValueError('There are no staged changes to apply.')
         candidate, _ = self._plan(tuple(self.pending.values()), 'en')
-        original = self.session.document
-        self.session.document = candidate
-        try:
-            result = self.session.apply()
-        except BaseException:
-            self.session.document = original
-            raise
+        result = self.session.apply(candidate)
         self.pending.clear()
         self.baseline_generation = uuid.uuid4().hex
         return {**result, 'baselineGeneration': self.baseline_generation, 'verified': True, 'workspaceId': self.identifier,
