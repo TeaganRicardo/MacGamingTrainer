@@ -12,11 +12,11 @@ import TrainerCore
 ///    `Backend/games/hades2/terminology.py` also validates, so one native label
 ///    keeps one identity and one target-build provenance.
 ///
-/// The bundled tables are packaged through module `appResources` and load from
-/// `Contents/Resources`, mirroring the Host `Host.strings` seam. The model stays
-/// language-neutral: it produces `Text` values, and the presentation boundary
-/// resolves them against the live Host language, so switching language
-/// re-renders without a backend restart or a game reconnect.
+/// The bundled tables are packaged through module `appResources` under
+/// `Contents/Resources/Modules/hades2/`, mirroring the Host `Host.strings` seam.
+/// The model stays language-neutral: it produces `Text` values, and the
+/// presentation boundary resolves them against the live Host language, so
+/// switching language re-renders without a backend restart or a game reconnect.
 enum Hades2Presentation {
     enum Key {
         static let prefix = "hades2."
@@ -43,98 +43,71 @@ enum Hades2Presentation {
 
     /// Resolves keys against a Host language. The catalogue holds only immutable
     /// tables; the language is supplied per call because the Host store, not this
-    /// module, owns the observable language state.
+    /// Read-only bilingual table + terminology expander. `Localization` inside
+    /// `TrainerHost`, not this module, owns the observable language state.
     struct Catalog {
-        private let tables: [TrainerPresentationLanguage: [String: String]]
+        private let stringTable: TrainerModuleStringTable
         private let terminology: Hades2TerminologyCatalog
 
         init(
             tables: [TrainerPresentationLanguage: [String: String]],
             terminology: Hades2TerminologyCatalog
         ) {
-            self.tables = tables
             self.terminology = terminology
+            self.stringTable = TrainerModuleStringTable(
+                tables: tables,
+                resolveArgumentKeys: true,
+                transform: { template, language in
+                    terminology.expand(template, fallbackLanguage: language)
+                }
+            )
+        }
+
+        fileprivate init(
+            moduleID: String,
+            terminology: Hades2TerminologyCatalog
+        ) {
+            self.terminology = terminology
+            self.stringTable = TrainerModuleStringTable(
+                moduleID: moduleID,
+                resolveArgumentKeys: true,
+                transform: { template, language in
+                    terminology.expand(template, fallbackLanguage: language)
+                }
+            )
         }
 
         func text(_ value: Text, language: TrainerPresentationLanguage) -> String {
-            let template = tables[language]?[value.key] ?? value.key
-            let expanded = terminology.expand(template, fallbackLanguage: language)
-            let rendered = Hades2Presentation.substitute(
-                expanded,
-                arguments: value.arguments,
-                // An argument is normally runtime text (a display name, a process
-                // name). Resolve it as a key only when this catalogue owns it, so a
-                // receipt can name another key without a raw value being mistaken
-                // for one.
-                map: { _, argument in
-                    self.hasKey(argument)
-                        ? self.string(argument, language: language)
-                        : argument
-                }
-            )
-            // A placeholder with no argument is a defect, and a literal "{0}" in
-            // player-facing text is worse than a missing value, so drop it.
-            return Hades2Presentation.dropUnfilledPlaceholders(rendered)
+            stringTable.string(value.key, language: language, arguments: value.arguments)
         }
 
         func string(_ key: String, language: TrainerPresentationLanguage, arguments: [String] = []) -> String {
-            text(token(key, arguments: arguments), language: language)
+            stringTable.string(key, language: language, arguments: arguments)
         }
 
         /// True when every shipped language defines this key. A drifting table
         /// pair would otherwise leave one language showing a raw key, which the
         /// parity test and this accessor both surface.
         func hasKey(_ key: String) -> Bool {
-            TrainerPresentationLanguage.allCases.allSatisfy { tables[$0]?[key] != nil }
+            stringTable.hasKey(key)
         }
 
         var termKeys: [String] { terminology.termKeys }
     }
 
-    /// Placeholder substitution, matching the `{0}` convention `Host.strings`
-    /// already uses.
-    ///
-    /// Arguments are mapped first, which lets one argument be another key of
-    /// this same catalogue: a receipt is a sentence composed from an operation
-    /// key and a status key, and the module owns both halves.
     static func substitute(
         _ template: String,
         arguments: [String],
         map: (Int, String) -> String
     ) -> String {
-        var result = template
-        for index in arguments.indices.reversed() {
-            result = result.replacingOccurrences(of: "{\(index)}", with: map(index, arguments[index]))
-        }
-        return result
+        TrainerModuleStringTable.substitute(template, arguments: arguments, map: map)
     }
 
-    /// Remove `{n}` placeholders that no argument filled.
     static func dropUnfilledPlaceholders(_ text: String) -> String {
-        var result = text
-        for index in stride(from: 32, through: 0, by: -1) {
-            result = result.replacingOccurrences(of: "{\(index)}", with: "")
-        }
-        return result
+        TrainerModuleStringTable.dropUnfilledPlaceholders(text)
     }
 
     // MARK: - Loading
-
-    /// Resource search order. A packaged module keeps its tables in
-    /// `Contents/Resources`; a source-tree build finds them beside this file.
-    private static func candidateURLs(language: TrainerPresentationLanguage) -> [URL] {
-        let filename = "hades2.\(language.rawValue).json"
-        var urls: [URL] = []
-        if let resources = Bundle.main.resourceURL {
-            urls.append(resources.appendingPathComponent(filename))
-        }
-        urls.append(
-            URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()
-                .appendingPathComponent("Localization/\(filename)")
-        )
-        return urls
-    }
 
     private static let catalog: Catalog = loadCatalog()
 
@@ -151,22 +124,11 @@ enum Hades2Presentation {
     }
 
     static func decodeTable(_ data: Data) -> [String: String]? {
-        guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return payload["entries"] as? [String: String]
+        TrainerModuleStringTable.decodeTable(data)
     }
 
     private static func loadCatalog() -> Catalog {
-        var tables: [TrainerPresentationLanguage: [String: String]] = [:]
-        for language in TrainerPresentationLanguage.allCases {
-            for url in candidateURLs(language: language)
-            where FileManager.default.fileExists(atPath: url.path) {
-                guard let data = try? Data(contentsOf: url),
-                      let entries = decodeTable(data) else { continue }
-                tables[language] = entries
-                break
-            }
-        }
-        return Catalog(tables: tables, terminology: Hades2TerminologyCatalog())
+        Catalog(moduleID: "hades2", terminology: Hades2TerminologyCatalog())
     }
 }
 
@@ -208,30 +170,7 @@ struct Hades2TerminologyCatalog {
     ]
 
     private static func loadReference() -> [String: Any] {
-        var candidates: [URL] = []
-        if let resources = Bundle.main.resourceURL {
-            candidates.append(resources.appendingPathComponent("ui_terminology.json"))
-        }
-        // Source tree: Sources/Hades2/Presentation/<this file> -> repository root
-        let repositoryRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // Sources/Hades2/Presentation
-            .deletingLastPathComponent()   // Sources/Hades2
-            .deletingLastPathComponent()   // Sources
-            .deletingLastPathComponent()   // <repo>
-        let manifestURL = repositoryRoot.appendingPathComponent("Backend/games/hades2/module.json")
-        if let data = try? Data(contentsOf: manifestURL),
-           let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let supported = manifest["supportedBuild"] as? [String: Any],
-           let referenceDirectory = supported["referenceDirectory"] as? String {
-            candidates.append(repositoryRoot.appendingPathComponent(referenceDirectory)
-                .appendingPathComponent("ui_terminology.json"))
-        }
-        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
-            guard let data = try? Data(contentsOf: url),
-                  let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            return document
-        }
-        return [:]
+        TrainerModuleResources.jsonObject(moduleID: "hades2", relativePath: "ui_terminology.json") ?? [:]
     }
 
     /// Expands `{term:<registry key>}` placeholders.

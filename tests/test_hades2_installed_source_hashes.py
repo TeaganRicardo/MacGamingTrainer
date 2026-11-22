@@ -60,7 +60,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-source-hashes-bundle-") as temporar
     resources = Path(temporary) / "Mac Gaming Trainer.app/Contents/Resources"
     module_file = resources / "Backend/games/hades2/config.py"
     module_file.parent.mkdir(parents=True)
-    assert config.supported_reference_path(NAME, module_file) == (resources / declared[0]["destination"]).resolve()
+    assert config.supported_reference_path(NAME, module_file) == (
+        resources / "Modules" / "hades2" / declared[0]["destination"]
+    ).resolve()
 try:
     config.supported_reference_path("undeclared_reference.json")
 except LookupError:

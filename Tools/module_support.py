@@ -2,6 +2,7 @@ import json
 import plistlib
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -272,9 +273,10 @@ def load_manifest(game_id: str) -> BuildManifest:
         source_path = (ROOT / source).resolve()
         if not source_path.is_file() or ROOT.resolve() not in source_path.parents:
             raise ManifestError(f'{field}.source must exist inside the project root.')
-        if destination in destinations:
+        key = unicodedata.normalize('NFC', destination).casefold()
+        if key in destinations:
             raise ManifestError(f'appResources has duplicate destination: {destination}.')
-        destinations.add(destination)
+        destinations.add(key)
         app_resources.append(AppResource(source, destination))
 
     frontend_path = (ROOT / source_directory).resolve()

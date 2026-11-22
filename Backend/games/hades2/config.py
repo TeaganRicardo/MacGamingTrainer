@@ -257,5 +257,5 @@ def supported_reference_path(name: str, module_file: Path = Path(__file__)) -> P
         raise LookupError(f'Hades II reference file {name!r} is not a declared supportedBuild app resource.')
     resource_root = Path(module_file).resolve().parents[3]
     if resource_root.name == 'Resources' and resource_root.parent.name == 'Contents':
-        return resource_root / destinations[0]
+        return resource_root / 'Modules' / MODULE_MANIFEST.id / destinations[0]
     return resource_root / SUPPORTED_BUILD['referenceDirectory'] / name

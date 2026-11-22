@@ -82,10 +82,15 @@ from pathlib import Path
 
 layout_tool = Path(sys.argv[1])
 sys.path.insert(0, str(layout_tool.parent))
-swift_library_modules = import_module(layout_tool.stem).swift_library_modules
-modules = swift_library_modules([game for game in sys.argv[2].split(',') if game], sys.argv[3])
-print(json.dumps([[module['name'], module['dependencies'], [str(path) for path in sources]]
-                  for module, sources in modules]))
+product_support = import_module(layout_tool.stem)
+game_ids = [game for game in sys.argv[2].split(',') if game]
+modules = product_support.swift_library_modules(game_ids, sys.argv[3])
+resources = product_support.swift_harness_resources(game_ids)
+print(json.dumps({
+    'modules': [[module['name'], module['dependencies'], [str(path) for path in sources]]
+                for module, sources in modules],
+    'resources': resources,
+}))
 """
 
 
@@ -106,12 +111,12 @@ class SwiftModule:
         object.__setattr__(self, "dependencies", tuple(self.dependencies))
 
 
-def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = ROOT) -> tuple[SwiftModule, ...]:
-    """TrainerCore and each game's frontend module, as the product compiles them.
-
-    ``Tools/product_support.py`` of ``checkout`` derives the layout from that
-    checkout's manifests and writes the generated sources under ``directory``.
-    """
+def _harness_layout_and_resources(
+    games: Sequence[str],
+    directory: Path,
+    *,
+    checkout: Path = ROOT,
+) -> tuple[tuple[SwiftModule, ...], list[dict[str, str]]]:
     layout_tool = Path(checkout) / "Tools/product_support.py"
     result = subprocess.run(
         [sys.executable, "-I", "-c", _LAYOUT_PROGRAM, str(layout_tool), ",".join(games), str(directory)],
@@ -119,11 +124,22 @@ def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = RO
     )
     if result.returncode:
         raise SwiftCompilerError(f"{checkout} could not derive its Swift layout:\n{result.stderr}")
-    records = json.loads(result.stdout)
-    return tuple(
+    payload = json.loads(result.stdout)
+    modules = tuple(
         SwiftModule(name, tuple(Path(path) for path in sources), tuple(dependencies))
-        for name, dependencies, sources in records
+        for name, dependencies, sources in payload["modules"]
     )
+    return modules, list(payload.get("resources", []))
+
+
+def harness_layout(games: Sequence[str], directory: Path, *, checkout: Path = ROOT) -> tuple[SwiftModule, ...]:
+    """TrainerCore and each game's frontend module, as the product compiles them.
+
+    ``Tools/product_support.py`` of ``checkout`` derives the layout from that
+    checkout's manifests and writes the generated sources under ``directory``.
+    """
+    modules, _resources = _harness_layout_and_resources(games, directory, checkout=checkout)
+    return modules
 
 
 def default_cache_dir(environ: Mapping[str, str] | None = None) -> Path:
@@ -645,8 +661,9 @@ def compile_swift_test(
     with tempfile.TemporaryDirectory(prefix="mgt-swift-test-") as scratch_root, ExitStack() as leases:
         scratch = Path(scratch_root)
         generated_root = scratch / "generated"
+        staged_resources: list[dict[str, str]] = []
         if modules is None:
-            library = harness_layout(games, generated_root, checkout=checkout)
+            library, staged_resources = _harness_layout_and_resources(games, generated_root, checkout=checkout)
         else:
             if games:
                 raise ValueError("explicit modules replace the product layout; do not also name games")
@@ -721,4 +738,13 @@ def compile_swift_test(
             str(output_path),
         ]
         subprocess.run(cmd, check=True, cwd=cwd, env=child_env)
+        for resource in staged_resources:
+            destination = (
+                output_path.parent
+                / "Modules"
+                / resource["moduleID"]
+                / resource["destination"]
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(resource["source"], destination)
     return output_path
