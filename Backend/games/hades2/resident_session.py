@@ -120,17 +120,21 @@ def lua_value(value):
 
 
 class Hades2ResidentSession:
-    def __init__(self, transport, bootstrap=None):
+    def __init__(self, transport, bootstrap=None, game_path=None):
         self._transport = transport
         if bootstrap is None:
             bootstrap = (Path(__file__).with_name("runtime") / "hades.lua").read_text()
         self._bootstrap = bootstrap
+        self._game_path = Path(game_path) if game_path is not None else None
         self._generation_ready = False
         self._catalog_ready = False
         self._observation_generation = None
         self._observation_revision = None
         self._observation_collections = {}
         self._connection_error = None
+
+    def set_game_path(self, game_path):
+        self._game_path = Path(game_path) if game_path is not None else None
 
     @property
     def pid(self):
@@ -423,6 +427,8 @@ class Hades2ResidentSession:
             self._observation_generation = None
             self._observation_revision = None
             self._observation_collections = {}
+            if self._game_path is not None:
+                return localize_catalog(payload, game_path=self._game_path), False
             return localize_catalog(payload), False
         generation = metadata.get("generation")
         revision = metadata.get("revision")
@@ -444,7 +450,10 @@ class Hades2ResidentSession:
         generation_reset = self._observation_generation is not None and not same_generation
         if not same_generation:
             invalidate_display_names()
-        payload = localize_catalog(payload)
+        if self._game_path is not None:
+            payload = localize_catalog(payload, game_path=self._game_path)
+        else:
+            payload = localize_catalog(payload)
         current = {}
         for key in _OBSERVATION_COLLECTIONS:
             if key in retained:

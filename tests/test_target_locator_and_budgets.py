@@ -336,6 +336,95 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             "WeaponUpgrade": "外置赐福"
         }
 
+        # Repeated catalog localization without an explicit game_path resolves the install path
+        # once until invalidated; adapter observations pass the adapter's known _game_path so
+        # resident status/mutation calls never run /bin/ps at all.
+        localization.invalidate_display_names()
+        resolve_calls = []
+        original_resolve = preparation.resolve_paths
+
+        def counting_resolve(*args, **kwargs):
+            resolve_calls.append((args, kwargs))
+            return original_resolve(*args, **kwargs)
+
+        with patch("games.hades2.preparation.resolve_paths", side_effect=counting_resolve):
+            from games.hades2 import catalog
+            from games.hades2.resident_session import Hades2ResidentSession
+
+            first_cat = catalog.localize_catalog({"rewards": [{"id": "WeaponUpgrade"}]})
+            second_cat = catalog.localize_catalog({"rewards": [{"id": "WeaponUpgrade"}]})
+            assert first_cat["rewards"][0]["name"] == "运行中目录赐福"
+            assert second_cat["rewards"][0]["name"] == "运行中目录赐福"
+            assert len(resolve_calls) == 1, f"expected 1 resolve_paths call, got {len(resolve_calls)}"
+
+            localization.invalidate_display_names()
+            resolve_calls.clear()
+
+            class _FakeLuaTransport:
+                def __init__(self):
+                    self.pid = 7777
+                    self.tainted = False
+                    self.last_duration = 0.01
+                    self.last_expression_duration = 0.005
+
+                def alive(self):
+                    return True
+
+                def attach(self, pid, **_kwargs):
+                    self.pid = pid
+
+                def detach(self):
+                    self.pid = None
+
+                def close(self):
+                    self.pid = None
+
+                def execute(self, _source, **_kwargs):
+                    return (
+                        '{"status":"ready","scene":"run","capabilities":{},'
+                        '"desiredFeatures":{},"activeFeatures":{},"dormantFeatures":{},'
+                        '"featureErrors":{},"rewards":[{"id":"WeaponUpgrade"}]}'
+                    )
+
+            class _TimeWarpStub:
+                def current_speed(self):
+                    return 1.0
+
+                def set_speed(self, value):
+                    return float(value)
+
+                def reset(self):
+                    return 1.0
+
+            session = Hades2ResidentSession(_FakeLuaTransport(), bootstrap="")
+            session_adapter = Hades2Adapter(
+                context=context,
+                resident_session=session,
+                time_warp_controller=_TimeWarpStub(),
+            )
+            session_adapter.scan()
+            # scan() calls compatibility(game_path=running_bundle) which passes explicit game_path
+            # and never spawns locate_target; subsequent resident observations call resolve_paths zero times.
+            assert [c[1] for c in resolve_calls] == [{"game_path": run_app, "query_running": True}], resolve_calls
+            resolve_calls.clear()
+            obs_one = session_adapter.observe_runtime()
+            obs_two = session_adapter.observe_runtime()
+            assert obs_one["rewards"][0]["name"] == "运行中目录赐福"
+            assert obs_two["rewards"][0]["name"] == "运行中目录赐福"
+            assert len(resolve_calls) == 0, f"adapter observations called resolve_paths: {resolve_calls}"
+
+            # Updating to a different bundle on a subsequent connect invalidates cached text cleanly.
+            ext_located = LocatedTarget(7778, ext_exe, ext_app)
+            with patch("games.hades2.adapter.locate_target", return_value=ext_located), patch(
+                "games.hades2.preparation.locate_target", return_value=ext_located
+            ):
+                session_adapter.connect()
+                assert [c[1] for c in resolve_calls] == [{"game_path": ext_app, "query_running": True}], resolve_calls
+                resolve_calls.clear()
+                obs_ext = session_adapter.observe_runtime()
+                assert obs_ext["rewards"][0]["name"] == "外置赐福"
+                assert len(resolve_calls) == 0, f"reconnected observation called resolve_paths: {resolve_calls}"
+
         # Scan timeout & empty-stderr process errors preserve structured presentation keys without Chinese leakage.
         with patch("games.hades2.adapter.locate_target", side_effect=BoundedCommandTimeoutError(["/bin/ps"], 2.0)):
             try:
