@@ -1,6 +1,6 @@
 # Player history and statistics ownership
 
-Supported target: see `PROJECT_STATUS.md`. This is source and fixture evidence; it does not establish game/load/rendered acceptance.
+Supported target: see `Backend/games/hades2/module.json` (`supportedBuild`). This is source and fixture evidence; it does not establish game/load/rendered acceptance.
 
 `RunLogic.lua:1848-1856` appends a completed run to `GameState.RunHistory`; it then strips history for saving. `RunHistoryData.lua:645-658` defines native result values. `RunLogic.lua:2764-2797` and `RunHistoryLogic.lua:141-165,278-345` use those results, recorded time, ending location, Fear and trait cache for the history screen. The Save projection identifies runs by their preserved numeric history index; unknown result/location/trait identities stay explicitly unidentified and searchable by raw diagnostic identity. The editable result retains its native numeric value; the existing enum wire uses string choice keys with bilingual `choiceNames`, and Stage normalizes the selected key back to an integer. Location and bounty fields retain their original strings instead of substituting display names into saved values. Both native result labels and raw identities remain searchable across languages.
 

@@ -2,7 +2,7 @@
 
 The game's Lua state survives a debugger detach and is replaced only by a
 same-process Lua reset, so these journeys keep one persistent Lua history and
-model a reset by clearing it. Contract: ENGINEERING_INVARIANTS.md sections 2-4
+model a reset by clearing it. Contract: AGENTS.md hard rules 2 and 6
 (desired state survives detach/backend restart and replays after a reset;
 observable state is never inferred from desired state alone).
 """

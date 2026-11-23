@@ -4,10 +4,10 @@ This directory stores versioned research/reference snapshots extracted from inst
 
 Status rules:
 
-- `1.139672-24556151/` is the retained **frozen census/research snapshot**. Historical roadmap identifiers inside its research notes are traceability only; current planning authority is GitHub issue #124.
+- `1.139672-24556151/` is the retained **frozen census/research snapshot**. Historical roadmap identifiers inside its research notes are traceability only; current planning authority is the open GitHub issues.
 - `1.143476-25481925/` preserves the source evidence for that verified build. Which snapshot is the active production dependency is declared by `Backend/games/hades2/module.json.supportedBuild.referenceDirectory`; do not infer it from this prose.
 - The terminology file under the module-declared `supportedBuild.referenceDirectory` is an intentional production dependency, packaged via `appResources`' `@supportedBuild/ui_terminology.json` reference. The earlier census terminology snapshot stays historical and is not packaged.
-- Generated inventories, matrices, and research ledgers are evidence. They do not override current production code, `ENGINEERING_INVARIANTS.md`, or current issue sequencing.
+- Generated inventories, matrices, and research ledgers are evidence. They do not override current production code, `AGENTS.md`, or the open issues.
 
 The frozen 1.139672 snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
 
