@@ -66,11 +66,13 @@ assert 'if let actual = model.appliedGameSpeed' in hades2_view
 assert '"host.timeWarp.actual" : "host.timeWarp.pending"' in hades2_view
 assert '(.common, ["hades.gameSpeed"])' in nav
 # Both modules title the same control identically; each owns its own pair.
-presentation = (ROOT / 'Sources/Hades/HadesPresentation.swift').read_text()
+hades_titles = {
+    language: json.loads((ROOT / f'Sources/Hades/Presentation/Localization/hades.{language}.json').read_text())['entries']['hades.gameSpeed']
+    for language in ('zh-CN', 'en')
+}
 hades2_title = {language: json.loads((ROOT / f'Sources/Hades2/Presentation/Localization/hades2.{language}.json')
                                      .read_text())['entries']['hades2.gameSpeed.title'] for language in ('zh-CN', 'en')}
-assert (f'"hades.gameSpeed": .init(zhCN: "{hades2_title["zh-CN"]}", en: "{hades2_title["en"]}")'
-        in presentation), hades2_title
+assert hades_titles == hades2_title, (hades_titles, hades2_title)
 assert 'gameSpeed' not in (ROOT / 'Backend/games/hades/runtime.lua').read_text().split('local resourceNames', 1)[0].split('local defaults = {', 1)[1], \
     'process-owned game speed leaked into resident Lua defaults'
 print('hades_game_speed_control_discovery_and_ownership_ok')

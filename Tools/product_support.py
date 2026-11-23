@@ -2,7 +2,6 @@
 import json
 import platform
 import re
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,17 +36,12 @@ class BuildSelection:
     def normalized(self):
         modules = [normalized_manifest(module) for module in self.modules]
         resources = []
-        destinations = {}
         for module in self.modules:
             for resource in module.app_resources:
-                key = unicodedata.normalize('NFC', resource.destination).casefold()
-                if key in destinations:
-                    raise ManifestError(
-                        f'App resource destination {resource.destination!r} is shared by '
-                        f'{destinations[key]} and {module.id}.'
-                    )
-                destinations[key] = module.id
-                resources.append({'source': resource.source, 'destination': resource.destination})
+                resources.append({
+                    'source': resource.source,
+                    'destination': f'Modules/{module.id}/{resource.destination}',
+                })
         return {
             'id': self.selection_id,
             'moduleIDs': list(self.ids),
@@ -136,6 +130,20 @@ def swift_library_modules(game_ids, generated):
     generate_module_sources(manifests, Path(generated))
     modules = [module for module in swift_layout(manifests)['modules'] if module['role'] != 'app']
     return swift_module_sources(modules, ROOT, generated)
+
+
+def swift_harness_resources(game_ids):
+    """Declared `appResources` for ``game_ids`` as `(moduleID, source, destination)` dicts."""
+    resources = []
+    for game_id in game_ids:
+        manifest = load_manifest(game_id)
+        for resource in manifest.app_resources:
+            resources.append({
+                'moduleID': manifest.id,
+                'source': str(ROOT / resource.source),
+                'destination': resource.destination,
+            })
+    return resources
 
 
 def load_selection(selection='all'):

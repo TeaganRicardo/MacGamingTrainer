@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     else:
         raise AssertionError('A package missing the second game was accepted')
 
-    # A case-insensitive destination collision fails before any App is copied.
+    # Per-module resource namespacing lets distinct modules reuse identical filenames cleanly.
     resource = project / 'shared.txt'
     resource.write_text('source')
     for name, destination in (('one', 'Shared.json'), ('two', 'shared.json')):
@@ -179,11 +179,24 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         data = json.loads(manifest.read_text())
         data['appResources'] = [{'source': 'shared.txt', 'destination': destination}]
         manifest.write_text(json.dumps(data))
+    namespaced = product_support.load_selection().normalized()['appResources']
+    assert [item['destination'] for item in namespaced] == [
+        'Modules/one/Shared.json', 'Modules/two/shared.json'
+    ], namespaced
+
+    # Intra-module case-insensitive destination collisions are still rejected.
+    manifest = project / 'Backend/games/one/module.json'
+    data = json.loads(manifest.read_text())
+    data['appResources'] = [
+        {'source': 'shared.txt', 'destination': 'Shared.json'},
+        {'source': 'shared.txt', 'destination': 'shared.json'},
+    ]
+    manifest.write_text(json.dumps(data))
     try:
         product_support.load_selection()
     except ManifestError as error:
-        assert 'shared by one and two' in str(error)
+        assert 'duplicate destination' in str(error)
     else:
-        raise AssertionError('Conflicting module resource destinations were accepted')
+        raise AssertionError('Intra-module duplicate resource destinations were accepted')
 
 print('product_build_ok')

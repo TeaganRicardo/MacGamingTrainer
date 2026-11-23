@@ -109,6 +109,21 @@ def verify_module_build(game_id, dist_dir):
             native = games_dir / module.id / 'native' / library.filename
             if not native.is_file() or native.is_symlink():
                 raise ValueError(f'Declared module native library is missing or unsafe: {native}')
+        for resource in module.app_resources:
+            packaged = resources / 'Modules' / module.id / resource.destination
+            expected_source = ROOT / resource.source
+            if not packaged.is_file() or packaged.is_symlink() or packaged.read_bytes() != expected_source.read_bytes():
+                raise ValueError(f'Declared module app resource is missing or differs from source: {packaged}')
+    modules_resources = resources / 'Modules'
+    if modules_resources.exists():
+        if modules_resources.is_symlink() or not modules_resources.is_dir():
+            raise ValueError(f'Packaged module resource root is unsafe: {modules_resources}')
+        expected_resource_dirs = {module.id for module in manifest.modules if module.app_resources}
+        actual_resource_dirs = {entry.name for entry in modules_resources.iterdir()}
+        if actual_resource_dirs != expected_resource_dirs:
+            raise ValueError(
+                f'Packaged module resource directories differ from selection: {sorted(actual_resource_dirs)}'
+            )
     return app
 
 

@@ -42,9 +42,10 @@ assert ({row['id'] for row in rows if row['group'] == 'olympian'}
 # other section has a Trainer-owned bilingual label in the frontend.
 chaos = next(row for row in rows if row['id'] == 'TrialUpgrade')
 assert chaos['section'] == 'chaos' and chaos['sectionNames'] == {'zh-CN': '卡俄斯', 'en': 'Chaos'}
-presentation = (ROOT / 'Sources/Hades/HadesPresentation.swift').read_text()
+hades_zh = json.loads((ROOT / 'Sources/Hades/Presentation/Localization/hades.zh-CN.json').read_text())['entries']
+hades_en = json.loads((ROOT / 'Sources/Hades/Presentation/Localization/hades.en.json').read_text())['entries']
 for section in {row['section'] for row in rows if 'sectionNames' not in row}:
-    assert f'"hades.rewardSection.{section}"' in presentation, section
+    assert f'hades.rewardSection.{section}' in hades_zh and f'hades.rewardSection.{section}' in hades_en, section
 
 # The generator owns the committed grouping and reads native section titles
 # from the official text of the section's identity.

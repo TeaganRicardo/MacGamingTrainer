@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / 'Backend/games/hades2/module.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text())
-APP = json.loads(subprocess.check_output([sys.executable, str(ROOT / 'Tools/validate_game_module.py'), 'hades2', '--json'], text=True))['app']
+VALIDATED = json.loads(subprocess.check_output([sys.executable, str(ROOT / 'Tools/validate_game_module.py'), 'hades2', '--json'], text=True))
+APP = VALIDATED['app']
 VERIFY = ROOT / 'Tools/verify_module_build.py'
 PYTHON_RUNTIME_SOURCE = json.loads((ROOT / 'Tools/python_runtime.json').read_text())
 
@@ -59,6 +60,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
         native = games / 'native' / library['filename']
         native.parent.mkdir(exist_ok=True)
         native.write_bytes(b'temporary native library fixture')
+    for resource in VALIDATED.get('appResources', []):
+        packaged = resources / 'Modules' / 'hades2' / resource['destination']
+        packaged.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / resource['source'], packaged)
     (resources / 'ACTIVE_GAME_ID').write_text('hades2\n')
     info = {
         'CFBundleIdentifier': APP['bundleIdentifier'],
@@ -95,6 +100,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
         refused = subprocess.run(command, text=True, capture_output=True)
         assert refused.returncode != 0 and 'native library' in refused.stderr
         native.write_bytes(b'temporary native library fixture')
+
+    first_resource = VALIDATED.get('appResources', [])[0]
+    first_packaged = resources / 'Modules' / 'hades2' / first_resource['destination']
+    first_packaged.unlink()
+    missing_resource = subprocess.run(command, text=True, capture_output=True)
+    assert missing_resource.returncode != 0 and 'app resource' in missing_resource.stderr
+    shutil.copy2(ROOT / first_resource['source'], first_packaged)
 
     # python-build-standalone exposes python3 as an in-tree symlink to the
     # versioned interpreter. That is safe only while the resolved target stays

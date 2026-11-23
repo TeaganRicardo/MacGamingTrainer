@@ -12,14 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 manifest = json.loads((ROOT / "Backend/games/hades2/module.json").read_text())
 reference_path = ROOT / manifest["supportedBuild"]["referenceDirectory"] / "ui_terminology.json"
 reference = json.loads(reference_path.read_text())
-hades_presentation = (ROOT / "Sources/Hades/HadesPresentation.swift").read_text()
-
-pair_pattern = re.compile(
-    r'"([^"]+)":\s*\.init\(zhCN:\s*"([^"]*)",\s*en:\s*"([^"]*)"\)'
-)
+hades_zh = json.loads((ROOT / "Sources/Hades/Presentation/Localization/hades.zh-CN.json").read_text())["entries"]
+hades_en = json.loads((ROOT / "Sources/Hades/Presentation/Localization/hades.en.json").read_text())["entries"]
+assert set(hades_zh) == set(hades_en), "Hades JSON presentation keys drifted between zh-CN and en"
 hades_labels = {
-    key: {"zh-CN": zh, "en": en}
-    for key, zh, en in pair_pattern.findall(hades_presentation)
+    key: {"zh-CN": hades_zh[key], "en": hades_en[key]}
+    for key in hades_zh
 }
 
 def hades2_labels(language: str) -> dict[str, str]:
@@ -120,22 +118,19 @@ for hades_key, hades2_key in shared_labels.items():
         )
 
 hades2_presentation = (ROOT / "Sources/Hades2/Presentation/Hades2Presentation.swift").read_text()
-# Run the unmodified Swift source in a temporary repository whose manifest
-# points elsewhere. Source fallback must follow the manifest's reference owner.
+assert "#filePath" not in hades2_presentation
+assert "#filePath" not in (ROOT / "Sources/Hades/HadesPresentation.swift").read_text()
+
+# Verify Hades2TerminologyCatalog reads packaged `Modules/hades2/ui_terminology.json`
+# rather than falling back to source-tree `#filePath`.
 swiftc = shutil.which("swiftc")
 if not swiftc:
     raise SystemExit("swiftc required")
 with tempfile.TemporaryDirectory(prefix="mgt-terminology-manifest-") as temporary:
     repository = Path(temporary)
-    source = repository / "Sources/Hades2/Presentation/Hades2Presentation.swift"
-    source.parent.mkdir(parents=True)
-    source.write_text(hades2_presentation)
-    module = repository / "Backend/games/hades2/module.json"
-    module.parent.mkdir(parents=True)
-    module.write_text(json.dumps({"supportedBuild": {"referenceDirectory": "docs/relocated-reference"}}))
-    registry = repository / "docs/relocated-reference/ui_terminology.json"
-    registry.parent.mkdir(parents=True)
-    registry.write_text(json.dumps({"officialTerms": {"probe": {
+    packaged = repository / "Modules/hades2/ui_terminology.json"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text(json.dumps({"officialTerms": {"probe": {
         "value": "迁移术语", "englishValue": "Relocated term",
     }}}))
     core_stubs = repository / "TrainerCoreStubs.swift"
@@ -151,16 +146,18 @@ package enum TrainerPresentationLanguage: String, CaseIterable { case zhCN = "zh
     main.write_text('''
 let terms = Hades2TerminologyCatalog()
 precondition(terms.value(forTerm: "officialTerms.probe", language: .en) == "Relocated term",
-             "Swift source fallback did not follow the manifest referenceDirectory")
+             "Terminology lookup did not read packaged Modules/hades2 resource")
 precondition(terms.value(forTerm: "officialTerms.probe", language: .zhCN) == "迁移术语",
-             "Swift source fallback lost the manifest's bilingual reference")
+             "Terminology lookup lost packaged bilingual reference")
 ''')
     binary = repository / "terminology-reference"
     # Portable: the Linux lane has no SwiftUI/AppKit, so this compiles only these
     # Foundation-level files and a stub for the Core text token and language.
     compile_swift_test(
-        modules=[SwiftModule(SWIFT_CORE_MODULE, [core_stubs]),
-                 SwiftModule("Hades2", [source], (SWIFT_CORE_MODULE,))],
+        modules=[
+            SwiftModule(SWIFT_CORE_MODULE, [core_stubs, ROOT / "Sources/Core/Host/TrainerModuleResources.swift"]),
+            SwiftModule("Hades2", [ROOT / "Sources/Hades2/Presentation/Hades2Presentation.swift"], (SWIFT_CORE_MODULE,)),
+        ],
         harness_sources=[main], output=binary, flags=(), swiftc=swiftc, cwd=ROOT,
     )
     subprocess.run([str(binary)], check=True)
@@ -179,7 +176,7 @@ hades_runtime = (ROOT / "Backend/games/hades/runtime.lua").read_text()
 assert "case invincibility, heal," not in hades_types
 assert ".heal," not in hades_nav
 assert "func heal()" not in hades_module
-assert '"hades.heal"' not in hades_presentation
+assert "hades.heal" not in hades_zh and "hades.heal" not in hades_en
 assert '"hades.heal"' not in hades_view
 assert "function runtime.heal()" not in hades_runtime
 assert "command == 'heal'" not in hades_adapter

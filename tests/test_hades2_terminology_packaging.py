@@ -21,9 +21,10 @@ def test_bundled_resource_wins_over_source_tree_fallback():
         resources = Path(temporary) / "Mac Gaming Trainer.app/Contents/Resources"
         module_file = resources / "Backend/games/hades2/terminology.py"
         source_reference = resources / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
-        bundled_reference = resources / "ui_terminology.json"
+        bundled_reference = resources / "Modules/hades2/ui_terminology.json"
         module_file.parent.mkdir(parents=True)
         source_reference.parent.mkdir(parents=True)
+        bundled_reference.parent.mkdir(parents=True)
         shutil.copyfile(SOURCE_REFERENCE, source_reference)
         bundled_data = json.loads(SOURCE_REFERENCE.read_text(encoding="utf-8"))
         bundled_data["target"]["steamBuild"] = "bundled-resource"
@@ -52,10 +53,11 @@ def test_present_but_invalid_bundle_is_not_hidden_by_source_fallback():
     with tempfile.TemporaryDirectory(prefix="mgt-terminology-invalid-bundle-") as temporary:
         resources = Path(temporary) / "Mac Gaming Trainer.app/Contents/Resources"
         module_file = resources / "Backend/games/hades2/terminology.py"
-        bundled_reference = resources / "ui_terminology.json"
+        bundled_reference = resources / "Modules/hades2/ui_terminology.json"
         source_reference = resources / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
         module_file.parent.mkdir(parents=True)
         source_reference.parent.mkdir(parents=True)
+        bundled_reference.parent.mkdir(parents=True)
         shutil.copyfile(SOURCE_REFERENCE, source_reference)
         bundled_reference.write_text("{invalid", encoding="utf-8")
 
@@ -105,16 +107,16 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
 
     # The unified production package includes the module-owned resources.
     assert "./build.sh --all" in macos_workflow
-    assert 'test -f "$app/Contents/Resources/ui_terminology.json"' in macos_workflow
-    assert 'test -f "$app/Contents/Resources/hades2.zh-CN.json"' in macos_workflow
-    assert 'test -f "$app/Contents/Resources/hades2.en.json"' in macos_workflow
+    assert 'test -f "$app/Contents/Resources/Modules/hades2/ui_terminology.json"' in macos_workflow
+    assert 'test -f "$app/Contents/Resources/Modules/hades2/hades2.zh-CN.json"' in macos_workflow
+    assert 'test -f "$app/Contents/Resources/Modules/hades2/hades2.en.json"' in macos_workflow
 
     # Independently built modules exclude resources owned by other games.
     assert "- reference_fixture" in module_matrix
     assert "- hades2" not in module_matrix
-    assert 'test ! -e "$app/Contents/Resources/ui_terminology.json"' in module_matrix
-    assert 'test ! -e "$app/Contents/Resources/hades2.zh-CN.json"' in module_matrix
-    assert 'test ! -e "$app/Contents/Resources/hades2.en.json"' in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/Modules/hades2/ui_terminology.json"' in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/Modules/hades2/hades2.zh-CN.json"' in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/Modules/hades2/hades2.en.json"' in module_matrix
 
 
 for _test in (

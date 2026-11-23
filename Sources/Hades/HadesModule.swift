@@ -963,10 +963,6 @@ struct HadesGameModule: TrainerGameModule {
         HadesManagementCommands(model: model, localization: localization)
     }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
-        var result = HadesPresentation.text(key, language: language)
-        for argument in arguments {
-            if let range = result.range(of: "%@") { result.replaceSubrange(range, with: argument) }
-        }
-        return result
+        HadesPresentation.text(key, language: language, arguments: arguments)
     }
 }
