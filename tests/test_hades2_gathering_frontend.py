@@ -235,7 +235,7 @@ func wait(_ message: String = "worker/model did not reach expected state", _ pre
         check(offlineModel.status == "disconnected" && offlineModel.health == nil && offlineModel.biomeTime == nil
                 && offlineModel.dodgeValue == nil && offlineModel.gardenScopeToken == nil,
               "a durable acknowledgment restored runtime data from the prior observation")
-        check(offlineModel.diagnosticsPassed == 1 && offlineModel.diagnostics.first?.name == "Worker verified",
+        check(offlineModel.diagnosticsPassed == 1 && offlineModel.diagnostics.first?.name.key == "Worker verified",
               "a diagnostics reply was discarded while its worker had no verified target baseline")
         offlineModel.refreshFromHost()
         wait("a current full detached snapshot was rejected") {

@@ -179,14 +179,6 @@ struct TrainerProfile: Identifiable {
     let updatedAt: String
 }
 
-struct DiagnosticCheck: Identifiable {
-    var id: String { name }
-    let name: String
-    let ok: Bool
-    let detail: String
-}
-
-
 // MARK: - Current-run trait/buff inventory
 //
 // A row projected from live runtime state, never from the acquisition catalog

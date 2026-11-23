@@ -15,7 +15,7 @@ import subprocess
 from core.errors import PresentableError
 
 from . import preparation, save_advanced, save_container
-from .diagnostics import build_diagnostics, export_diagnostics
+from .diagnostics import build_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import (
     CONNECT_ATTACH_HEADROOM_SECONDS,
@@ -24,8 +24,6 @@ from .operation_budgets import (
     DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
     DISABLE_ALL_OPERATION_BUDGET_SECONDS,
     DISCONNECT_OPERATION_BUDGET_SECONDS,
-    EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
-    EXPORT_REVEAL_TIMEOUT_SECONDS,
     LAUNCH_OPERATION_BUDGET_SECONDS,
     LAUNCH_TIMEOUT_SECONDS,
     LOAD_PROFILE_OPERATION_BUDGET_SECONDS,
@@ -609,17 +607,6 @@ def _diagnostics(adapter, params):
     return build_diagnostics(adapter)
 
 
-def _export_diagnostics(adapter, params):
-    result = export_diagnostics(adapter)
-    subprocess.run(
-        ["/usr/bin/open", "-R", result["diagnosticBundle"]],
-        check=True,
-        timeout=EXPORT_REVEAL_TIMEOUT_SECONDS,
-        shell=False,
-    )
-    return result
-
-
 def _launch(adapter, params):
     url = adapter.context.steam_launch_url
     if url is None:
@@ -876,12 +863,6 @@ _COMMAND_SPECS = (
         timeout=DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 5.0,
         inner=DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
         invoke=_diagnostics,
-    ),
-    _spec(
-        "export_diagnostics",
-        timeout=EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 10.0,
-        inner=EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
-        invoke=_export_diagnostics,
     ),
     _spec(
         "prepare",

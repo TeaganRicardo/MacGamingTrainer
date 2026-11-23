@@ -28,14 +28,14 @@ enum Hades2ManagementCatalog {
             },
             shortcuts: .init(.shortcuts, localization: localization,
                              enabled: { !model.exiting }) { model.shortcutSettingsPresented = true },
-            log: .init(.log, localization: localization, action: model.openLog),
+            log: .init(.log, localization: localization, action: model.diagnosticsService.openLog),
             diagnostics: .init(id: "diagnostics", title: text("hades2.manage.diagnostics"),
                                icon: TrainerSemanticIcon.Tool.diagnostics, enabled: canStartBackendAction) {
                 model.diagnosticsPresented = true
                 model.runDiagnostics()
             },
-            logHistory: .init(.logHistory, localization: localization, action: model.openLogHistory),
-            clearLogs: .init(.clearLogs, localization: localization, action: model.clearCompletedLogs),
+            logHistory: .init(.logHistory, localization: localization, action: model.diagnosticsService.openLogHistory),
+            clearLogs: .init(.clearLogs, localization: localization, action: model.diagnosticsService.clearCompletedLogs),
             saveEditor: openSaveEditor.map { open in
                 .init(id: "saveEditor", title: text("hades2.saveEditor.title"), icon: TrainerSemanticIcon.Tool.saveEditor,
                       enabled: canUseBackend, action: open)

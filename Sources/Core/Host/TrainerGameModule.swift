@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -54,19 +55,44 @@ package struct TrainerGamePresentation: Hashable {
 
 /// Services for one persistent game context, scoped to its module descriptor.
 @MainActor
-package final class TrainerModuleServices {
+package final class TrainerModuleServices: ObservableObject {
     package let descriptor: GameModuleDescriptor
     package let session: TrainerBackendSession
     package let logSink: TrainerLogSink
-    package internal(set) var targetObservation: TrainerTargetObservation
-    package var backendStatus: TrainerBackendStatus { session.currentStatus }
+    package let feedback: TrainerFeedbackCenter
+    package let diagnostics: TrainerDiagnosticsService
+    @Published package internal(set) var targetObservation: TrainerTargetObservation
+    @Published package private(set) var backendStatus: TrainerBackendStatus
+    package let backendStatusTransitions = PassthroughSubject<
+        (previous: TrainerBackendStatus, current: TrainerBackendStatus), Never
+    >()
+    private var statusObserver: UUID?
 
     init(descriptor: GameModuleDescriptor, session: TrainerBackendSession,
-         logSink: TrainerLogSink, targetObservation: TrainerTargetObservation) {
+         logSink: TrainerLogSink, targetObservation: TrainerTargetObservation,
+         feedback: TrainerFeedbackCenter? = nil,
+         diagnostics: TrainerDiagnosticsService? = nil) {
+        let resolvedFeedback = feedback ?? TrainerFeedbackCenter(initialStatus: session.currentStatus)
+        let resolvedDiagnostics = diagnostics ?? TrainerDiagnosticsService(
+            descriptor: descriptor, session: session, logSink: logSink, feedback: resolvedFeedback
+        )
         self.descriptor = descriptor
         self.session = session
         self.logSink = logSink
+        self.feedback = resolvedFeedback
+        self.diagnostics = resolvedDiagnostics
         self.targetObservation = targetObservation
+        self._backendStatus = Published(initialValue: session.currentStatus)
+        self.statusObserver = session.observeStatus { [weak self] previous, current in
+            guard let self else { return }
+            self.backendStatus = current
+            self.backendStatusTransitions.send((previous: previous, current: current))
+            self.feedback.receiveBackendStatus(previous: previous, current: current)
+        }
+    }
+
+    isolated deinit {
+        if let statusObserver { session.removeStatusObserver(statusObserver) }
     }
 
     package func makeHotkeys(
@@ -103,6 +129,9 @@ package protocol TrainerHostModel: ObservableObject {
     var statusTitle: TrainerTextToken { get }
     var connectionDetailText: TrainerTextToken { get }
     var hostActionsEnabled: Bool { get }
+    /// Module-owned unresolved current issues projected into the Host's
+    /// persistent feedback center; Core appends active backend failures.
+    var hostCurrentIssues: [TrainerCurrentIssue] { get }
     /// Optional module-owned launch operation; the Host owns its card placement.
     var launchActionFromHost: (@MainActor () -> Void)? { get }
 
@@ -133,6 +162,7 @@ package protocol TrainerHostModel: ObservableObject {
 extension TrainerHostModel {
     package func beginTerminationFromHost() {}
     package func prepareForTermination(completion: @escaping () -> Void) { completion() }
+    package var hostCurrentIssues: [TrainerCurrentIssue] { [] }
     package var launchActionFromHost: (@MainActor () -> Void)? { nil }
     package func backendDidStart() {}
     package func backendWillRestart() {}
@@ -159,7 +189,6 @@ package protocol TrainerGameModule {
     associatedtype ContentView: View
     associatedtype SidebarActions: View
     associatedtype HeaderActions: View
-    associatedtype FeedbackView: View = EmptyView
     associatedtype ManagementCommands: Commands
 
     static var descriptor: GameModuleDescriptor { get }
@@ -168,7 +197,6 @@ package protocol TrainerGameModule {
     @MainActor static func makeContent(model: Model) -> ContentView
     @MainActor static func makeSidebarActions(model: Model) -> SidebarActions
     @MainActor static func makeHeaderActions(model: Model) -> HeaderActions
-    @MainActor static func makeFeedback(model: Model) -> FeedbackView
     @MainActor static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> ManagementCommands
 
     /// Optional game-owned workbench for a generic verified backup row.
@@ -191,10 +219,6 @@ extension TrainerGameModule {
     @MainActor package static var managedBackupEditor: (@MainActor (Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { nil }
     /// A module without its own namespace has no module-owned text to resolve.
     package static var presentationKeyPrefix: String { "" }
-
-    /// Modules opt into viewport feedback without changing the shared Host or
-    /// adding another session. The default contributes no view or empty space.
-    @MainActor package static func makeFeedback(model: Model) -> EmptyView { EmptyView() }
 }
 
 package struct TrainerEmptyCommands: Commands {
