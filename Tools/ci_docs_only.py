@@ -55,6 +55,7 @@ MODULE_EXACT_PATHS = {
     "Tools/macos_toolchain_identity.py",
     "Tools/module_inventory.py",
     "Tools/module_support.py",
+    "Tools/package_app.py",
     "Tools/product_support.py",
     "Tools/publish_module_build.py",
     "Tools/supported_build.py",

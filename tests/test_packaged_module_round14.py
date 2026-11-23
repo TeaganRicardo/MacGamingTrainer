@@ -110,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-packaged-debugger-') as temporary:
     backend = Path(temporary) / 'Backend'
     backend.mkdir()
     source = (root / 'build.sh').read_text()
-    composition = source.split('cp -R "$ROOT/Backend/core"', 1)[1].split('\n"$PYTHON" - "$NORMALIZED_MANIFEST"', 1)[0]
+    composition = source.split('cp -R "$ROOT/Backend/core"', 1)[1].split('\n"$PYTHON" "$PACKAGE_APP" package-app-resources', 1)[0]
     subprocess.run(['bash', '-eu', '-c', 'GAME_IDS=(hades hades2)\ncp -R "$ROOT/Backend/core"' + composition],
                    env={**os.environ, 'ROOT': str(root), 'BACKEND': str(backend), 'REQUIRES_LLDB': '1'}, check=True)
     imported = subprocess.run([sys.executable, '-I', '-c', '''

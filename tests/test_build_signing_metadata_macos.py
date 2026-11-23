@@ -5,6 +5,7 @@ MGT_INPUTS = (
     "Native/",
     "Tools/build_module_native.py",
     "Tools/macos_toolchain_identity.py",
+    "Tools/package_app.py",
     "Tools/verify_module_build.py",
     "Tools/write_build_provenance.py",
     "Tools/verify_build_provenance.py",
