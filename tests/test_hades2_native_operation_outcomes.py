@@ -265,6 +265,27 @@ assert(seen and seen.Name == 'MaxHealthDrop')
 assert(CurrentRun.LastReward == nil, 'Echo choice kept its synthetic last reward after a native fault')
 '''
 
+# A special-blessing choice leaves no trace of the Trainer's synthetic loot in
+# the run: its history entries and loot pickup are rolled back.
+cases["special_choice_history"] = BASE + ASYNC + r'''
+OpenUpgradeChoiceMenu = function(source)
+  CurrentRun.LootChoiceHistory = CurrentRun.LootChoiceHistory or {}
+  table.insert(CurrentRun.LootChoiceHistory, { Name = source.Name })
+  GameState.LootPickups[source.Name] = 1
+end
+CurrentRun.LootChoiceHistory = nil
+M.dispatch('open_special_choice', { source = 'Arachne', requestId = 'history-absent' })
+pending()
+assert(CurrentRun.LootChoiceHistory == nil, 'special choice left a synthetic run history')
+local history = { { Name = 'RealChoice' } }
+CurrentRun.LootChoiceHistory = history
+M.dispatch('open_special_choice', { source = 'Arachne', requestId = 'history-present' })
+pending()
+assert(CurrentRun.LootChoiceHistory == history and #history == 1 and history[1].Name == 'RealChoice',
+  'special choice changed the run history')
+assert(GameState.LootPickups.MacGamingTrainerSpecial_Arachne == nil, 'special choice left a synthetic loot pickup')
+'''
+
 with tempfile.TemporaryDirectory(prefix="mgt-native-outcomes-") as temporary:
     for name, source in cases.items():
         harness = Path(temporary) / (name + ".lua")

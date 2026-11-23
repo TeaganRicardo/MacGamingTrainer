@@ -125,6 +125,15 @@ assert len(prefixes) > 10, prefixes
 for namespace, prefix, name in sorted(prefixes):
     assert any(key.startswith(prefix) for key in TABLES[namespace]["en"]), f"{name}: no entries for {prefix}*"
 
+# Player text in Swift comes from the tables. Core runtime log sentences and
+# Hades I's explicit zh-CN/en name pairs are the only Chinese Swift literals.
+CJK = re.compile(r"[\u3400-\u9fff]")
+for path in [*(ROOT / "Sources/Hades2").rglob("*.swift"), *(ROOT / "Sources/Core").rglob("*.swift")]:
+    if path.is_relative_to(ROOT / "Sources/Core/Runtime"):
+        continue
+    for token in literals(path):
+        assert not CJK.search(token), f"{path.relative_to(ROOT)} hard-codes player text: {token!r}"
+
 # 4. Backend errors reach the player as keys in both languages.
 hades2_keys = set(TABLES["hades2"]["en"])
 for key in {rule["key"] for rule in error_presentation.REGISTRY} | {error_presentation.RUNTIME_FALLBACK_KEY}:
