@@ -201,13 +201,14 @@ enum LifecycleStubModule: TrainerGameModule {
         Text("Lifecycle Content")
             .accessibilityIdentifier("lifecycleFixture.content")
     }
-    static func makeSidebarActions(model: LifecycleStubModel) -> some View {
-        Button("Sidebar Extra") {}
-            .accessibilityIdentifier("lifecycleFixture.sidebarAction")
-    }
-    static func makeHeaderActions(model: LifecycleStubModel) -> some View { EmptyView() }
-    static func makeManagementCommands(model: LifecycleStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
+    static func workbenchSections(model: LifecycleStubModel) -> [TrainerWorkbenchSectionItem] {
+        [
+            TrainerWorkbenchSectionItem(
+                id: "extra",
+                titleKey: "lifecycleFixture.hello",
+                icon: "star"
+            )
+        ]
     }
     static var presentationKeyPrefix: String { "lifecycleFixture." }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
@@ -226,11 +227,6 @@ enum DefaultBehaviorStubModule: TrainerGameModule {
     static let presentation = LifecycleStubModule.presentation
     static func makeModel(services: TrainerModuleServices) -> DefaultBehaviorStubModel { DefaultBehaviorStubModel() }
     static func makeContent(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
-    static func makeSidebarActions(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
-    static func makeHeaderActions(model: DefaultBehaviorStubModel) -> some View { EmptyView() }
-    static func makeManagementCommands(model: DefaultBehaviorStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -632,9 +628,9 @@ struct Runner {
             sidebarWindow.contentView = sidebarHosting
             sidebarWindow.orderBack(nil)
 
-            waitWindow(sidebarHosting, message: "sidebar card renders actions and Launch button") {
+            waitWindow(sidebarHosting, message: "sidebar card renders Host section and Launch button") {
                 nativeAccessibilityControls(sidebarHosting).contains {
-                    $0.role == "AXButton" && $0.identifier == "lifecycleFixture.sidebarAction"
+                    $0.role == "AXButton" && $0.identifier == "trainer.section.extra"
                 } && namedNativeControl(sidebarHosting, role: "AXButton",
                                       name: localization.localized("host.launchGame"))?.enabled == true
             }
@@ -765,6 +761,34 @@ struct Runner {
                 )
                 check(catalog.groups[0].actions.map(\.id) == ["refreshStatus", "saveEditor", "saveManagement", "disableAll"],
                       "daily group with saveEditor/saveManagement drifted: \(catalog.groups[0].actions.map(\.id))")
+
+                // Sparse and empty optional catalogs omit empty rows/groups without fabricating slots.
+                check(TrainerManagementCatalog().groups.isEmpty,
+                      "empty TrainerManagementCatalog fabricated groups")
+                let sparseCatalog = TrainerManagementCatalog(
+                    titles: .init(localization: localization),
+                    refresh: makeCommon(.refreshStatus),
+                    profiles: makeCustom("profiles")
+                )
+                check(sparseCatalog.groups.map(\.id) == ["daily", "settings"]
+                      && sparseCatalog.groups.map(\.title) == [
+                          localization.localized("host.manage.daily"),
+                          localization.localized("host.manage.settings"),
+                      ]
+                      && sparseCatalog.groups.flatMap(\.actions).map(\.id) == ["refreshStatus", "profiles"],
+                      "optional TrainerManagementCatalog retained empty groups/rows or wrong default titles")
+
+                let contextForMenu = makeContext(LifecycleStubModule.self, model: LifecycleStubModel())
+                defer { contextForMenu.session.stop() }
+                let hostResolved = sparseCatalog.resolvingHostDefaults(
+                    localization: localization,
+                    diagnostics: contextForMenu.services.diagnostics,
+                    saveManagement: saveMgmtAction
+                )
+                check(hostResolved.groups.map(\.id) == ["daily", "settings", "maintenance"]
+                      && hostResolved.groups[0].actions.map(\.id) == ["refreshStatus", "saveManagement"]
+                      && hostResolved.groups[2].actions.map(\.id) == ["log", "logHistory", "clearLogs"],
+                      "Host resolution dropped or misordered optional management actions")
 
                 // Disabled action guard inside perform().
                 saveMgmtAction.perform()

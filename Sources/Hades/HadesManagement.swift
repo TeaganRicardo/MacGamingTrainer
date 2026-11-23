@@ -8,23 +8,10 @@ struct HadesSettingsProfile: Decodable, Identifiable {
 }
 
 struct HadesManagementUtilities: View {
-    @ObservedObject var model: HadesTrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerManagementActions) private var managementActions
-    @Environment(\.trainerToolWindows) private var toolWindows
-
-    private func text(_ key: String) -> String {
-        localization.string(key)
-    }
+    @Environment(\.trainerManagementGroups) private var managementGroups
 
     var body: some View {
-        let catalog = HadesManagementCatalog.make(model: model, localization: localization,
-            openSaveEditor: {
-                toolWindows.open("hades-save-editor", text("hades.saveEditor.title")) {
-                    HadesGameModule.makeSaveEditorWindow(model: model)
-                }
-            }, openSaveManagement: managementActions.openSaveManagement)
-        TrainerManagementGroups(groups: catalog.groups)
+        TrainerManagementGroups(groups: managementGroups)
             .trainerPanel()
     }
 }

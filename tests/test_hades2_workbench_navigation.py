@@ -11,11 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Tools'))
 from supported_build import supported_reference_directory
 from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test
-for path in ('Sources/Hades/HadesWorkbenchNavigation.swift',
-             'Sources/Hades2/Views/Hades2HostActions.swift'):
-    header_actions = (ROOT/path).read_text()
-    assert 'TrainerWorkbenchSearchField(' in header_actions
-    assert 'resultsPresented' not in header_actions
+trainer_host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
+assert 'TrainerWorkbenchSearchField(' in trainer_host
+assert 'resultsPresented' not in trainer_host
 SWIFTC = shutil.which('swiftc')
 assert SWIFTC, 'swiftc required for workbench search behavior'
 reference = json.loads((supported_reference_directory('hades2')/'ui_terminology.json').read_text())

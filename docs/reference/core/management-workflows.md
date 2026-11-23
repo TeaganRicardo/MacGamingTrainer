@@ -1,12 +1,17 @@
 # Shared management workflows
 
-`TrainerManagementCatalog` supplies the shared daily/settings/maintenance
-grouping used by `TrainerManagementGroups` and `TrainerManagementCommandMenu`.
-Core owns common Host labels, semantic icons, adaptive action rows and menu
-composition. Module catalogs bind those actions to their original model and
-retain live eligibility rules; each action rechecks eligibility when invoked.
-Document actions are optional Host/tool-window capabilities, and game-specific
-maintenance actions and explanatory copy remain module-supplied.
+`TrainerManagementCatalog` supplies the optional daily/settings/maintenance
+grouping used by `TrainerManagementGroups` (via `\.trainerManagementGroups`)
+and `TrainerManagementCommandMenu`. Core owns common Host labels, semantic
+icons, adaptive action rows and menu composition. Every slot and section title
+in `TrainerManagementCatalog` is optional, and empty rows or groups are
+omitted. `TrainerGameContext` resolves the shared Host log actions (`log`,
+`logHistory`, `clearLogs`) and optional `saveManagement` capability for both the
+management page and App menu, while module catalogs bind their own optional
+actions (`refresh`, `disableAll`, `profiles`, `shortcuts`, `diagnostics`,
+`saveEditor` and game-specific maintenance rows) and explanatory copy to their
+original model and retain live eligibility rules; each action rechecks
+eligibility when invoked.
 
 The generated application menu still includes only the selected persistent game
 context and disappears during application termination. Both modules expose

@@ -87,15 +87,10 @@ struct Hades2ShortcutSettingsView: View {
 }
 
 struct Hades2ManagementUtilities: View {
-    @ObservedObject var model: Hades2TrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    @Environment(\.trainerManagementActions) private var managementActions
-    let openSaveEditor: () -> Void
+    @Environment(\.trainerManagementGroups) private var managementGroups
 
     var body: some View {
-        let catalog = Hades2ManagementCatalog.make(model: model, localization: localization,
-            openSaveEditor: openSaveEditor, openSaveManagement: managementActions.openSaveManagement)
-        TrainerManagementGroups(groups: catalog.groups)
+        TrainerManagementGroups(groups: managementGroups)
             .trainerPanel()
     }
 }

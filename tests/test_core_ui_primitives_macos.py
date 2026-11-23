@@ -1143,9 +1143,6 @@ private struct StubPageModuleA: TrainerGameModule {
     static func makeContent(model: StubPageModel) -> some View {
         PageAView(onTap: { pageATaps += 1 })
     }
-    static func makeSidebarActions(model: StubPageModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubPageModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubPageModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -1183,9 +1180,6 @@ private struct StubPageModuleB: TrainerGameModule {
         .frame(width: 400, height: 320, alignment: .topLeading)
         .background(Color.cyan)
     }
-    static func makeSidebarActions(model: StubPageModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubPageModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubPageModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 

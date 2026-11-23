@@ -173,11 +173,6 @@ struct SupportedSaveTargetModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -197,11 +192,6 @@ struct UnsupportedSaveTargetModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -218,11 +208,6 @@ struct UnsupportedSaveModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 
@@ -239,11 +224,6 @@ struct SupportedNoTargetModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StubHostModel { StubHostModel() }
     static func makeContent(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeSidebarActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StubHostModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StubHostModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 

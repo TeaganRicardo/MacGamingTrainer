@@ -3,7 +3,8 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
-host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
+trainer_host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
+generator = (ROOT / "Tools/generate_game_binding.py").read_text(encoding="utf-8")
 management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
 hades_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 model = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
@@ -16,6 +17,9 @@ zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encodi
 
 required = {
     "host.trainerMenu",
+    "host.manage.daily",
+    "host.manage.settings",
+    "host.manage.maintenance",
     "host.shortcutSettings",
     "host.viewRuntimeLog",
     "host.viewLog",
@@ -42,48 +46,34 @@ for key in required:
     assert token in zh, f"Chinese Host resource missing {key}"
 
 # Shell placement is Host-owned even when a module supplies the action callback.
-for literal in (
-    'Label("快捷键设置"',
-    'Label("查看运行日志"',
-    'Label("启动游戏"',
-    'CommandMenu("修改器")',
-    'Button("刷新状态")',
-    'Button("全部关闭")',
-    'Button("快捷键设置")',
-    'Button("查看日志")',
-):
-    assert literal not in host_actions, f"Host shell action copy bypasses localization seam: {literal}"
-
-assert not re.search(r"[\u3400-\u9fff]", host_actions), (
+assert not re.search(r"[\u3400-\u9fff]", trainer_host + game_module), (
     "shell-placement actions must not own one-language copy"
 )
 
 for token in (
     '@EnvironmentObject private var localization: TrainerLocalizationStore',
-    'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu")',
-    'Hades2ManagementCatalog.make(model: model, localization: localization).groups',
+    'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"), groups: groups)',
 ):
-    assert token in host_actions, token
+    assert token in trainer_host + generator, token
 
 # Launch is now on the active game's Host-owned connection card (Core card/host
 # behavior verified in test_reference_fixture_session_integration.py and test_core_host_lifecycle_macos.py).
-header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
-assert "TrainerWorkbenchSearchField(" in header_actions
-assert "launchGame" not in header_actions
+assert "TrainerWorkbenchSearchField(" in trainer_host
+assert "launchGame" not in trainer_host
 
-sidebar_actions = host_actions[
-    host_actions.index("struct Hades2SidebarActions"):
-    host_actions.index("struct Hades2HeaderActions")
+sidebar_sections = trainer_host[
+    trainer_host.index("struct TrainerHostSidebarSections"):
+    trainer_host.index("struct TrainerHostWorkbenchSearch")
 ]
-assert "shortcutSettingsPresented" not in sidebar_actions
-assert "openLog()" not in sidebar_actions
-assert "host.viewRuntimeLog" not in sidebar_actions
+assert "shortcutSettingsPresented" not in sidebar_sections
+assert "openLog()" not in sidebar_sections
+assert "host.viewRuntimeLog" not in sidebar_sections
 
 # Commands are outside the View environment tree, so the existing Host store is
 # injected explicitly through the game-module seam rather than recreated.
 assert "TrainerGameCatalogCommands(application: application, localization: localization)" in app
-assert "Hades2ManagementCommands(model: model, localization: localization)" in game_module
-assert "@ObservedObject private var localization: TrainerLocalizationStore" in host_actions
+assert "static func makeManagementCatalog(" in game_module
+assert "context.managementGroups(localization: localization)" in generator
 
 # Generic shortcut capture/registration chrome is Host-owned (rendered behavior
 # verified in test_core_host_lifecycle_macos.py); Hades action names remain module-owned for B03.

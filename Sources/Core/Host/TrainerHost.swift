@@ -5,39 +5,28 @@ import SwiftUI
 struct TrainerHostView<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    private let context: TrainerGameContext<Module>
+    @ObservedObject private var context: TrainerGameContext<Module>
     @ObservedObject private var model: Module.Model
     @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
     @ObservedObject private var saveManager: TrainerSaveManagerModel
     private var toolWindows: TrainerToolWindowStore { context.toolWindows }
 
     init(context: TrainerGameContext<Module>) {
-        self.context = context
+        _context = ObservedObject(wrappedValue: context)
         _model = ObservedObject(wrappedValue: context.model)
         _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
         _saveManager = ObservedObject(wrappedValue: context.saveManager)
     }
 
-    private var managementActions: TrainerManagementActions {
-        guard Module.descriptor.supportsSaveManagement else { return .none }
-        return TrainerManagementActions(openSaveManagement: {
-            toolWindows.open(id: "host-save-management", title: localization.localized("host.saveManagement"),
-                             localization: localization, theme: theme) {
-                saveManager.refresh()
-                return TrainerToolWindowContent(canClose: { !saveManager.busy }) {
-                    TrainerSaveManagerView(model: saveManager, managedBackupEditor:
-                        Module.managedBackupEditor.map { factory in { snapshot in factory(model, snapshot) } })
-                }
-            }
-        })
-    }
-
     var body: some View {
         TrainerWorkbenchViewport(navigation: context.navigation) {
             VStack(alignment: .leading, spacing: theme.pageSpacing) {
-                Module.makeHeaderActions(model: model)
+                if let search = Module.workbenchSearch(model: model) {
+                    TrainerHostWorkbenchSearch(catalog: search)
+                }
                 Module.makeContent(model: model)
-                    .environment(\.trainerManagementActions, managementActions)
+                    .environment(\.trainerManagementGroups,
+                                 context.managementGroups(localization: localization, theme: theme))
             }
             .frame(minWidth: theme.contentMinWidth, maxWidth: .infinity, minHeight: theme.contentMinHeight, alignment: .topLeading)
         } feedback: {
@@ -48,6 +37,81 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .onAppear {
             targetMonitor.refresh()
         }
+    }
+}
+
+package struct TrainerHostSidebarSections: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerNavigateToSection) private var navigate
+    @Environment(\.trainerSelectedSection) private var selectedSection
+    let sections: [TrainerWorkbenchSectionItem]
+    let feedback: TrainerFeedbackCenter
+    let diagnostics: TrainerDiagnosticsService
+
+    package init(
+        sections: [TrainerWorkbenchSectionItem],
+        feedback: TrainerFeedbackCenter,
+        diagnostics: TrainerDiagnosticsService
+    ) {
+        self.sections = sections
+        self.feedback = feedback
+        self.diagnostics = diagnostics
+    }
+
+    package var body: some View {
+        if !sections.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Divider().padding(.vertical, 2)
+                ForEach(sections) { section in
+                    if section.separatedFromPrevious { Divider().padding(.vertical, 2) }
+                    let button = TrainerSectionButton(
+                        title: localization.string(section.titleKey),
+                        systemImage: section.icon,
+                        selected: selectedSection == section.id
+                            || (selectedSection == nil && section.id == sections.first?.id)
+                    ) {
+                        section.onSelect?()
+                        navigate(section.id)
+                    }
+                    .accessibilityIdentifier("trainer.section.\(section.id)")
+                    if let shortcut = section.keyboardShortcut {
+                        button.keyboardShortcut(shortcut)
+                    } else {
+                        button
+                    }
+                }
+                TrainerHostSidebarIssuesEntry(feedback: feedback, diagnostics: diagnostics)
+            }
+        } else {
+            TrainerHostSidebarIssuesEntry(feedback: feedback, diagnostics: diagnostics)
+        }
+    }
+}
+
+package struct TrainerHostWorkbenchSearch: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerNavigateToSection) private var navigate
+    let catalog: TrainerWorkbenchSearchCatalog
+
+    package init(catalog: TrainerWorkbenchSearchCatalog) {
+        self.catalog = catalog
+    }
+
+    package var body: some View {
+        TrainerWorkbenchSearchField(
+            text: catalog.query,
+            placeholder: localization.string(catalog.placeholderKey),
+            clearLabel: localization.localized("host.search.clear"),
+            emptyLabel: localization.string(catalog.emptyLabelKey),
+            search: { query in catalog.search(query, localization) },
+            title: { $0.title },
+            detail: { $0.detail },
+            icon: { $0.icon },
+            onNavigate: { result in
+                result.onNavigate()
+                navigate(result.sectionID)
+            }
+        )
     }
 }
 
@@ -87,7 +151,11 @@ struct TrainerHostSidebarCard<Module: TrainerGameModule>: View {
             detailToken: model.connectionDetailText, selected: selected, onSelect: onSelect
         ) {
             context.connectionStatusCard(onLaunch: launchAction)
-            Module.makeSidebarActions(model: model)
+            TrainerHostSidebarSections(
+                sections: Module.workbenchSections(model: model),
+                feedback: context.feedback,
+                diagnostics: context.services.diagnostics
+            )
         }
         .environment(\.trainerNavigateToSection, navigation.navigate)
         .environment(\.trainerSelectedSection, navigation.selection)

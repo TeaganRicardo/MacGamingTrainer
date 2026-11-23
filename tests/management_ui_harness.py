@@ -34,10 +34,10 @@ func exerciseManagementRouting(localization: TrainerLocalizationStore) {
     ], "common command order drifted or an absent document action was fabricated")
     managementCheck(!second.groups.flatMap(\.actions).contains { $0.id == "optional" },
                     "optional command leaked into another context")
-    first.refresh.perform(); second.diagnostics.perform(); first.additionalMaintenance[0].perform()
+    first.refresh?.perform(); second.diagnostics?.perform(); first.additionalMaintenance[0].perform()
     available["first"] = false
-    first.refresh.perform(); first.profiles.perform(); first.additionalMaintenance[0].perform()
-    second.profiles.perform()
+    first.refresh?.perform(); first.profiles?.perform(); first.additionalMaintenance[0].perform()
+    second.profiles?.perform()
     managementCheck(events == ["first:refreshStatus", "second:diagnostics", "first:optional", "second:profiles"],
                     "captured commands lost their context or ignored live unavailability")
 }

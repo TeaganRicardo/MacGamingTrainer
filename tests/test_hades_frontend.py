@@ -523,7 +523,10 @@ func pump(_ seconds: TimeInterval = 0.1) {
                   "a known runtime failure was not projected as a current issue")
             let failureNotice=model.feedback!.id
             let sidebarHost=NSHostingView(rootView:ManagementPageFixture(
-                content:HadesGameModule.makeSidebarActions(model:model).frame(width:220),visibility:feedbackVisibility)
+                content:TrainerHostSidebarSections(
+                    sections:HadesGameModule.workbenchSections(model:model),
+                    feedback:model.feedbackCenter,diagnostics:model.diagnosticsService
+                ).frame(width:220),visibility:feedbackVisibility)
                 .environmentObject(localization))
             let sidebarWindow=NSWindow(contentRect:NSRect(x:0,y:200,width:240,height:420),
                 styleMask:[.titled],backing:.buffered,defer:false)
@@ -828,7 +831,15 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         if journey == "search" {
             recordPhase("search: native focus and discovery")
-            exerciseWorkbenchSearch(HadesHeaderActions(model: model), localization: localization,
+            struct HadesSearchFixture: View {
+                @ObservedObject var model: HadesTrainerModel
+                var body: some View {
+                    if let catalog = HadesGameModule.workbenchSearch(model: model) {
+                        TrainerHostWorkbenchSearch(catalog: catalog)
+                    }
+                }
+            }
+            exerciseWorkbenchSearch(HadesSearchFixture(model: model), localization: localization,
                 placeholder: { HadesPresentation.text("hades.workbench.search", language: localization.language) },
                 emptyLabel: { HadesPresentation.text("hades.workbench.searchEmpty", language: localization.language) },
                 query: { model.workbenchSearch }, matches: { query in
@@ -845,42 +856,64 @@ func pump(_ seconds: TimeInterval = 0.1) {
         if journey == "management" {
             recordPhase("management: routing and layout")
             exerciseManagementRouting(localization: localization)
-            let menuCatalog = HadesManagementCatalog.make(model: model, localization: localization)
-            check(menuCatalog.additionalMaintenance.isEmpty && menuCatalog.saveEditor == nil && menuCatalog.saveManagement == nil,
-                  "Hades app menu fabricated unavailable image or document commands")
-            menuCatalog.profiles.perform()
-            wait("profile menu routed to Hades") { !model.busy && model.profilesPresented && commands().last?["command"] as? String == "list_profiles" }
-            model.profilesPresented = false
-            menuCatalog.diagnostics.perform()
-            wait("diagnostics menu routed to Hades") { !model.busy && model.diagnosticsPresented && commands().last?["command"] as? String == "diagnostics" }
-            model.diagnosticsPresented = false
-            var editorOpens = 0, backupOpens = 0
+            let menuSession = TrainerBackendSession(client: BackendClient(
+                process: BackendProcess(executableURL: python, forceKillDelay: 0.1)))
+            let menuContext = TrainerGameContext<HadesGameModule>(
+                session: menuSession,
+                backendScriptURL: folder.appendingPathComponent("worker.py"),
+                logSink: TrainerLogSink(url: folder.appendingPathComponent("menu.log")),
+                targetMonitor: TrainerTargetProcessMonitor(snapshot: { .init(isRunning: false, launchGeneration: 0) })
+            ) {
+                HadesTrainerModel(services: $0, defaults: InMemoryDefaults())
+            }
+            let menuModel = menuContext.model
+            wait("menu context backend startup") {
+                menuModel.backendAvailable && !menuModel.busy && !menuContext.saveManager.busy
+            }
+            let menuCatalog = menuContext.resolvedManagementCatalog(localization: localization)!
+            check(menuCatalog.additionalMaintenance.isEmpty && menuCatalog.saveEditor != nil && menuCatalog.saveManagement != nil,
+                  "Hades Host-resolved app menu omitted Save Editor or Save Management, or fabricated extra maintenance")
+            check(menuContext.managementGroups(localization: localization).flatMap(\.actions).map(\.id) == menuCatalog.groups.flatMap(\.actions).map(\.id),
+                  "Hades App menu actions diverged from resolved Management page groups")
+            menuCatalog.profiles?.perform()
+            wait("profile menu routed to Hades") { !menuModel.busy && menuModel.profilesPresented && commands().last?["command"] as? String == "list_profiles" }
+            menuModel.profilesPresented = false
+            menuCatalog.diagnostics?.perform()
+            wait("diagnostics menu routed to Hades") { !menuModel.busy && menuModel.diagnosticsPresented && commands().last?["command"] as? String == "diagnostics" }
+            menuModel.diagnosticsPresented = false
+            var editorOpens = 0
             let documentCatalog = HadesManagementCatalog.make(model: model, localization: localization,
-                openSaveEditor: { editorOpens += 1 }, openSaveManagement: { backupOpens += 1 })
-            documentCatalog.saveEditor?.perform(); documentCatalog.saveManagement?.perform()
-            check(editorOpens == 1 && backupOpens == 1, "Hades optional document actions lost their original callbacks")
+                openSaveEditor: { editorOpens += 1 })
+                .resolvingHostDefaults(localization: localization, diagnostics: model.diagnosticsService,
+                                      saveManagement: menuCatalog.saveManagement)
+            documentCatalog.saveEditor?.perform()
+            check(editorOpens == 1, "Hades optional document action lost its original callback")
             // Per-action gates: a request in flight closes the commands that
             // start another request, while backend-owned Save tools stay open.
             recordPhase("management: per-action gates while a request runs")
             model.saveProfile("Closing while saving")
             wait("slow profile save in flight") { model.busy }
             check(documentCatalog.saveEditor?.isEnabled == true && documentCatalog.saveManagement?.isEnabled == true
-                  && documentCatalog.shortcuts.isEnabled && documentCatalog.log.isEnabled,
+                  && documentCatalog.shortcuts?.isEnabled == true && documentCatalog.log?.isEnabled == true,
                   "a running request closed Hades tools that start no request")
-            check(!documentCatalog.refresh.isEnabled && !documentCatalog.profiles.isEnabled
-                  && !documentCatalog.diagnostics.isEnabled && !documentCatalog.disableAll.isEnabled
+            check(documentCatalog.refresh?.isEnabled == false && documentCatalog.profiles?.isEnabled == false
+                  && documentCatalog.diagnostics?.isEnabled == false && documentCatalog.disableAll?.isEnabled == false
                   && !model.canAcceptRuntimeAction,
                   "a running request admitted another Hades backend command")
             wait("slow profile save reply") { !model.busy && model.profiles.contains { $0.name == "Closing while saving" } }
             model.deleteProfile("Closing while saving")
             wait("gate fixture profile removed") { !model.busy && model.profiles.map(\.name) == ["Fixture"] }
-            check(documentCatalog.refresh.isEnabled && documentCatalog.diagnostics.isEnabled && model.canAcceptRuntimeAction,
+            check(documentCatalog.refresh?.isEnabled == true && documentCatalog.diagnostics?.isEnabled == true && model.canAcceptRuntimeAction,
                   "idle Hades backend commands stayed closed")
+            let layoutCatalog: () -> TrainerManagementCatalog = {
+                HadesManagementCatalog.make(model: model, localization: localization, openSaveEditor: {})
+                    .resolvingHostDefaults(localization: localization, diagnostics: model.diagnosticsService,
+                                          saveManagement: menuContext.resolvedManagementCatalog(localization: localization)?.saveManagement)
+            }
             exerciseManagementLayout(content: {
-                HadesManagementUtilities(model: model)
-                    .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
-            }, catalog: { HadesManagementCatalog.make(model: model, localization: localization,
-                    openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
+                HadesManagementUtilities()
+                    .environment(\.trainerManagementGroups, layoutCatalog().groups)
+            }, catalog: layoutCatalog, localization: localization)
             exerciseManagementPageDismissal(HadesTrainerView(model: model), localization: localization,
                 show: { model.diagnosticsPresented = true }, dismissed: { !model.diagnosticsPresented })
             exerciseModuleShortcutSheet(HadesTrainerView(model: model), localization: localization,
@@ -918,14 +951,18 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 nonpassingStatus: "host.diagnostics.failed", busy: { model.busy }, count: { model.diagnostics.count },
                 dismissed: { !model.diagnosticsPresented }, commands: commands, setMode: setDiagnosticsMode)
             stopBackend()
+            menuSession.stop()
             model.profilesPresented = false; model.diagnosticsPresented = false
+            menuModel.profilesPresented = false; menuModel.diagnosticsPresented = false
             let afterShutdown = commands().count
             wait("captured Hades commands disabled after backend shutdown") {
-                !menuCatalog.refresh.isEnabled && !menuCatalog.profiles.isEnabled && !menuCatalog.diagnostics.isEnabled
+                menuCatalog.refresh?.isEnabled == false
+                    && menuCatalog.profiles?.isEnabled == false
+                    && menuCatalog.diagnostics?.isEnabled == false
             }
-            menuCatalog.refresh.perform(); menuCatalog.profiles.perform(); menuCatalog.diagnostics.perform()
+            menuCatalog.refresh?.perform(); menuCatalog.profiles?.perform(); menuCatalog.diagnostics?.perform()
             pump()
-            check(commands().count == afterShutdown && !model.profilesPresented && !model.diagnosticsPresented,
+            check(commands().count == afterShutdown && !menuModel.profilesPresented && !menuModel.diagnosticsPresented,
                   "captured Hades commands crossed their retired backend lifetime")
             recordPhase("passed: management")
             print("hades_management_native_workflows_ok")

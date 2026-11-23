@@ -5,7 +5,7 @@ import TrainerCore
 enum HadesManagementCatalog {
     static func make(
         model: HadesTrainerModel, localization: TrainerLocalizationStore,
-        openSaveEditor: (() -> Void)? = nil, openSaveManagement: (() -> Void)? = nil
+        openSaveEditor: (() -> Void)? = nil
     ) -> TrainerManagementCatalog {
         @MainActor func text(_ key: String) -> String {
             localization.string(key)
@@ -26,20 +26,14 @@ enum HadesManagementCatalog {
                 model.listProfiles()
             },
             shortcuts: .init(.shortcuts, localization: localization) { model.shortcutSettingsPresented = true },
-            log: .init(.log, localization: localization, action: model.diagnosticsService.openLog),
             diagnostics: .init(id: "diagnostics", title: text("hades.manage.diagnostics"),
                                icon: TrainerSemanticIcon.Tool.diagnostics, enabled: canStartBackendAction) {
                 model.diagnosticsPresented = true
                 model.runDiagnostics()
             },
-            logHistory: .init(.logHistory, localization: localization, action: model.diagnosticsService.openLogHistory),
-            clearLogs: .init(.clearLogs, localization: localization, action: model.diagnosticsService.clearCompletedLogs),
             saveEditor: openSaveEditor.map { open in
                 .init(id: "saveEditor", title: text("hades.saveEditor.title"), icon: TrainerSemanticIcon.Tool.saveEditor,
                       enabled: canUseBackend, action: open)
-            },
-            saveManagement: openSaveManagement.map { open in
-                .init(.saveManagement, localization: localization, enabled: canUseBackend, action: open)
             }
         )
     }

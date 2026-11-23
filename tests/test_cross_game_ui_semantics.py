@@ -337,8 +337,10 @@ for key in (
     assert f'"{key}"' in hades2_icon_map, f"missing Hades II discovery icon: {key}"
 
 assert "searchAliasKeys" not in hades_nav
-hades2_host = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text()
-assert "icon: { $0.icon }" in hades2_host
+trainer_host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text()
+assert "icon: { $0.icon }" in trainer_host
+assert "icon: entry.icon" in (ROOT / "Sources/Hades/HadesModule.swift").read_text()
+assert "icon: entry.icon" in (ROOT / "Sources/Hades2/Hades2Module.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades/HadesTrainerView.swift").read_text()
 assert "TrainerSemanticIcon.Concept.controls" in (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
 assert 'ForEach(["Common", "Rare", "Epic", "Heroic"]' in hades_view
@@ -405,7 +407,7 @@ for path, start, end in (
     assert "model.runDiagnostics" in adapter and "model.exportDiagnostics" in adapter
     assert "ManagementError(model, localization: localization)" in adapter
 assert "family.icon" in (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text()
-assert "icon: { $0.icon }" in hades_nav
+assert "icon: { $0.icon }" in trainer_host
 
 
 # #706: one Chaos pair row and no duplicate direct Chaos acquisition,

@@ -259,6 +259,65 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         }
     }
 
+    var canOpenSaveManagementFromHost: Bool {
+        let status = backendStatus
+        return status.backendAvailable && status.protocolCompatible
+            && !terminationRequested && model.canAcceptManagementActionsFromHost
+    }
+
+    func openSaveManagement(localization: TrainerLocalizationStore, theme: TrainerTheme) {
+        guard Module.descriptor.supportsSaveManagement, canOpenSaveManagementFromHost else { return }
+        toolWindows.open(
+            id: "host-save-management",
+            title: localization.localized("host.saveManagement"),
+            localization: localization,
+            theme: theme
+        ) {
+            self.saveManager.refresh()
+            return TrainerToolWindowContent(canClose: { !self.saveManager.busy }) {
+                TrainerSaveManagerView(
+                    model: self.saveManager,
+                    managedBackupEditor: Module.managedBackupEditor.map { factory in
+                        { snapshot in factory(self.model, snapshot) }
+                    }
+                )
+            }
+        }
+    }
+
+    package func resolvedManagementCatalog(
+        localization: TrainerLocalizationStore,
+        theme: TrainerTheme = .standard
+    ) -> TrainerManagementCatalog? {
+        guard let catalog = Module.makeManagementCatalog(
+            model: model,
+            localization: localization,
+            toolWindows: toolWindows.actions(localization: localization, theme: theme)
+        ) else {
+            return nil
+        }
+        let saveManagementAction: TrainerManagementAction? = Module.descriptor.supportsSaveManagement
+            ? TrainerManagementAction(
+                .saveManagement,
+                localization: localization,
+                enabled: { [weak self] in self?.canOpenSaveManagementFromHost ?? false },
+                action: { [weak self] in self?.openSaveManagement(localization: localization, theme: theme) }
+            )
+            : nil
+        return catalog.resolvingHostDefaults(
+            localization: localization,
+            diagnostics: services.diagnostics,
+            saveManagement: saveManagementAction
+        )
+    }
+
+    package func managementGroups(
+        localization: TrainerLocalizationStore,
+        theme: TrainerTheme = .standard
+    ) -> [TrainerManagementGroup] {
+        resolvedManagementCatalog(localization: localization, theme: theme)?.groups ?? []
+    }
+
     func registerPresentation(_ localization: TrainerLocalizationStore) {
         guard !Module.presentationKeyPrefix.isEmpty else { return }
         guard registeredStoreIDs.insert(ObjectIdentifier(localization)).inserted else { return }

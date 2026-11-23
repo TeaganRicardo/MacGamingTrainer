@@ -163,9 +163,6 @@ struct LocalizationBehaviorTest {
             static let presentationKeyPrefix = "alpha."
             @MainActor static func makeModel(services: TrainerModuleServices) -> Model { Model() }
             @MainActor static func makeContent(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeSidebarActions(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeHeaderActions(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
             static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
                 if key == "alpha.ready" { return language == .en ? "Alpha Ready" : "甲就绪" }
                 return key
@@ -190,9 +187,6 @@ struct LocalizationBehaviorTest {
             static let presentationKeyPrefix = "beta."
             @MainActor static func makeModel(services: TrainerModuleServices) -> Model { Model() }
             @MainActor static func makeContent(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeSidebarActions(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeHeaderActions(model: Model) -> some View { EmptyView() }
-            @MainActor static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
             static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
                 if key == "beta.ready" { return language == .en ? "Beta Ready" : "乙就绪" }
                 return key

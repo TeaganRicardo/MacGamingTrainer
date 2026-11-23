@@ -117,6 +117,9 @@
 "host.save.error.invalidSnapshot" = "The save backup is invalid and cannot be restored.";
 "host.save.error.restoreFailed" = "The save restore failed.";
 "host.trainerMenu" = "Trainer";
+"host.manage.daily" = "Game and Tools";
+"host.manage.settings" = "Settings";
+"host.manage.maintenance" = "Diagnostics and Maintenance";
 "host.shortcutSettings" = "Shortcut Settings";
 "host.viewRuntimeLog" = "View Runtime Log";
 "host.viewLog" = "View Current Log";
