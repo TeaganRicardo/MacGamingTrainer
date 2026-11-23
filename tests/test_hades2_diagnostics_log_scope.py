@@ -1,17 +1,20 @@
+"""Verify Hades II diagnostics returns only key+arguments checks and state, with no Host log ZIP builder."""
 import json
+import re
 import sys
 import tempfile
-import zipfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2 import diagnostics
+from games.hades2 import command_contract, diagnostics
 from hades2_resident_session_fakes import hades2_adapter_context
 
 
-class DeadTransport:
+class DeadRuntime:
     def alive(self):
         return False
 
@@ -19,181 +22,52 @@ class DeadTransport:
 class FakeAdapter:
     game_id = "hades2"
     module_protocol_version = 5
-    transport = DeadTransport()
+    runtime = DeadRuntime()
     state = {}
 
     def __init__(self, context):
         self.context = context
-        self.legacy_data_dir = context.data_dir.parent
 
     def list_profiles(self):
         return []
 
 
-with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
+diagnostics_source = (ROOT / "Backend/games/hades2/diagnostics.py").read_text(encoding="utf-8")
+assert not hasattr(diagnostics, "export_diagnostics"), "Python export_diagnostics ZIP builder must be removed"
+assert "export_diagnostics" not in command_contract.COMMAND_SPECS
+for forbidden in ("zipfile", "current-session.json", "trainer-host.log", "log_dir"):
+    assert forbidden not in diagnostics_source, f"Hades II diagnostics must not inspect Host logs: {forbidden}"
+
+with tempfile.TemporaryDirectory(prefix="mgt-hades2-diagnostics-contract-") as td:
     home = Path(td) / "home"
     adapter = FakeAdapter(hades2_adapter_context(home))
-    legacy_data = home / "Library/Application Support/MacGamingTrainer"
-    log_directory = (
-        home
-        / "Library/Application Support/MacGamingTrainer"
-        / "hades2"
-    )
-    sessions = log_directory / "sessions"
-    session_id = "session-1"
-    session_directory = sessions / session_id
-    session_directory.mkdir(parents=True)
+    en_entries = json.loads(
+        (ROOT / "Sources/Hades2/Presentation/Localization/hades2.en.json").read_text(encoding="utf-8")
+    )["entries"]
+    zh_entries = json.loads(
+        (ROOT / "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json").read_text(encoding="utf-8")
+    )["entries"]
 
-    # The legacy flat path must not become the selected session source once a
-    # Session Bundle is active.
-    (log_directory / "trainer.log").write_text(
-        "STALE LEGACY PATH MUST NOT EXPORT\n",
-        encoding="utf-8",
-    )
-    (log_directory / "trainer-host.log").write_text(
-        "HOST CONTEXT MUST NOT REPLACE SESSION\n",
-        encoding="utf-8",
-    )
-    manifest = {
-        "schemaVersion": 1,
-        "id": session_id,
-        "startedAt": "2026-10-16T00:00:00Z",
-        "endedAt": None,
-        "targetProcessName": "Hades II",
-        "targetBundleIdentifier": "com.supergiantgames.hades2",
-        "targetPID": 1234,
-        "appVersion": "0.3.0",
-        "appBuild": "6",
-        "gameVersion": "1.143476",
-        "runtimeRevision": 112,
-        "state": "active",
-        "endReason": None,
-        "streams": {
-            "HOST": "host.log",
-            "BACKEND": "backend.log",
-            "RUNTIME": "runtime.log",
-        },
-        "legacy": False,
-    }
-    (session_directory / "manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (session_directory / "host.log").write_text(
-        "HOST SESSION HOST STREAM\n",
-        encoding="utf-8",
-    )
-    (session_directory / "backend.log").write_text(
-        "BACKEND SESSION BACKEND STREAM\n",
-        encoding="utf-8",
-    )
-    (session_directory / "runtime.log").write_text(
-        "RUNTIME SESSION RUNTIME STREAM\n",
-        encoding="utf-8",
-    )
-    (log_directory / "current-session.json").write_text(
-        json.dumps({"id": session_id}, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    with (
+        patch.object(diagnostics.preparation, "GAME", home / "MissingGame"),
+        patch.object(diagnostics.preparation, "SAVES", home / "MissingSaves"),
+        patch.object(diagnostics.preparation, "compatibility", side_effect=RuntimeError("no game")),
+        patch("core.target_probe.subprocess.run", return_value=SimpleNamespace(returncode=1, stdout="", stderr="missing")),
+    ):
+        report = diagnostics.build_diagnostics(adapter)
 
-    old_session = sessions / "old-session"
-    old_session.mkdir(parents=True)
-    (old_session / "manifest.json").write_text(
-        json.dumps({
-            **manifest,
-            "id": "old-session",
-            "state": "completed",
-        }, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (old_session / "host.log").write_text(
-        "OLD SESSION MUST NOT EXPORT\n",
-        encoding="utf-8",
-    )
-
-    (legacy_data / "trainer.log").write_text(
-        "LEGACY LOG MUST NOT EXPORT\n",
-        encoding="utf-8",
-    )
-
-    result = diagnostics.export_diagnostics(adapter)
-    archive_path = Path(result["diagnosticBundle"])
-    assert archive_path.is_file()
-    assert archive_path.parent == legacy_data / "diagnostics"
-
-    with zipfile.ZipFile(archive_path) as archive:
-        names = set(archive.namelist())
-        assert "trainer-session/manifest.json" in names
-        assert "trainer-session/host.log" in names
-        assert "trainer-session/backend.log" in names
-        assert "trainer-session/runtime.log" in names
-        assert "trainer-session.log" not in names
-        assert "trainer-session.json" not in names
-        assert "trainer-host.log.tail" not in names
-        assert "trainer-session/legacy.log" not in names
-
-        assert "STALE LEGACY PATH" not in archive.read(
-            "trainer-session/host.log"
-        ).decode("utf-8")
-        assert "HOST SESSION HOST STREAM" in archive.read(
-            "trainer-session/host.log"
-        ).decode("utf-8")
-        assert "BACKEND SESSION BACKEND STREAM" in archive.read(
-            "trainer-session/backend.log"
-        ).decode("utf-8")
-        assert "RUNTIME SESSION RUNTIME STREAM" in archive.read(
-            "trainer-session/runtime.log"
-        ).decode("utf-8")
-        assert "OLD SESSION" not in "\n".join(names)
-        assert "LEGACY LOG" not in "\n".join(
-            archive.read(name).decode("utf-8")
-            for name in names
-            if name.endswith(".log")
-        )
-
-        report = json.loads(archive.read("report.json"))
-        assert report["protocolVersion"] == 6
-        assert report["trainerLogScope"] == "current_target_session"
-        assert report["trainerSession"]["id"] == session_id
-        assert report["trainerSession"]["streams"] == manifest["streams"]
-        assert report["trainerLogStreams"] == ["BACKEND", "HOST", "RUNTIME"]
-
-        exported_manifest = json.loads(
-            archive.read("trainer-session/manifest.json")
-        )
-        assert exported_manifest == manifest
-
-    # The old flat file is no longer an export source. Its filesystem state
-    # must not prevent reading a valid Session Bundle.
-    legacy_flat = log_directory / "trainer.log"
-    legacy_flat.unlink()
-    legacy_flat.symlink_to(legacy_data / "trainer.log")
-    symlinked_result = diagnostics.export_diagnostics(adapter)
-    with zipfile.ZipFile(symlinked_result["diagnosticBundle"]) as archive:
-        assert "trainer-session/backend.log" in archive.namelist()
-        assert "BACKEND SESSION BACKEND STREAM" in archive.read(
-            "trainer-session/backend.log"
-        ).decode("utf-8")
-        assert "LEGACY LOG MUST NOT EXPORT" not in "\n".join(
-            archive.read(name).decode("utf-8")
-            for name in archive.namelist() if name.endswith(".log")
-        )
-
-    # With no target session pointer, export the Host context explicitly rather
-    # than selecting completed history or the legacy trainer.log path.
-    (log_directory / "current-session.json").unlink()
-    host_result = diagnostics.export_diagnostics(adapter)
-    host_archive_path = Path(host_result["diagnosticBundle"])
-    with zipfile.ZipFile(host_archive_path) as archive:
-        names = set(archive.namelist())
-        assert "trainer-host.log.tail" in names
-        assert "trainer-session/manifest.json" not in names
-        assert "trainer-session/host.log" not in names
-        host_tail = archive.read("trainer-host.log.tail").decode("utf-8")
-        assert "HOST CONTEXT MUST NOT REPLACE SESSION" in host_tail
-        host_report = json.loads(archive.read("report.json"))
-        assert host_report["trainerLogScope"] == "host_context"
-        assert host_report["trainerSession"] is None
-        assert host_report["trainerLogStreams"] == []
+    assert "diagnosticBundle" not in report
+    assert "checks" in report and "state" in report
+    for check in report["checks"]:
+        name = check["name"]
+        assert name.startswith("hades2.diagnostics.check."), name
+        assert name in en_entries and name in zh_entries, name
+        assert not re.search(r"[\u3400-\u9fff]", name), name
+        detail = check["detail"]
+        if detail.startswith("hades2.diagnostics.detail."):
+            assert detail in en_entries and detail in zh_entries, detail
+        for arg in check.get("nameArguments", []):
+            if str(arg).startswith("hades2."):
+                assert arg in en_entries and arg in zh_entries, arg
 
 print("hades2_diagnostics_log_scope_ok")

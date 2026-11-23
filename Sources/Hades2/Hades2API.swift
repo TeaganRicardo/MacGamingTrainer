@@ -57,7 +57,7 @@ enum Hades2Request {
     case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
     case deleteProfile(String)
-    case diagnostics, exportDiagnostics
+    case diagnostics
     case prepare, restore
 
     var command: Hades2Command {
@@ -120,7 +120,6 @@ enum Hades2Request {
         case .loadProfile: return .loadProfile
         case .deleteProfile: return .deleteProfile
         case .diagnostics: return .diagnostics
-        case .exportDiagnostics: return .exportDiagnostics
         case .prepare: return .prepare
         case .restore: return .restore
         }

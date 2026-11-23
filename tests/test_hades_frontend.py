@@ -472,7 +472,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 resolver:HadesGameModule.presentationText)
             let feedbackVisibility = TrainerGamePageVisibility()
             let feedbackHost = NSHostingView(rootView: ManagementPageFixture(
-                content: HadesGameModule.makeFeedback(model: model), visibility: feedbackVisibility)
+                content: TrainerHostOperationFeedback(feedback: model.feedbackCenter), visibility: feedbackVisibility)
                 .environmentObject(localization))
             let feedbackWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 150),
                 styleMask: [.titled], backing: .buffered, defer: false)

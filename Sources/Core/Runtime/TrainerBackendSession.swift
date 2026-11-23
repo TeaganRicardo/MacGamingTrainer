@@ -15,6 +15,7 @@ package struct TrainerBackendStatus: Equatable {
     package var error = ""
     package var errorArguments: [String] = []
     package var notice = ""
+    package var isStartFailure: Bool { errorCode == "backend_start_failed" }
 
     package init() {}
 }
@@ -36,7 +37,7 @@ package final class TrainerBackendSession {
 
     private let client: BackendClient
     private var status = TrainerBackendStatus()
-    private var statusObservers: [UUID: (TrainerBackendStatus, TrainerBackendStatus) -> Void] = [:]
+    private var statusObservers: [(id: UUID, observer: (TrainerBackendStatus, TrainerBackendStatus) -> Void)] = []
     package private(set) var lifecycleID = UUID() {
         didSet { Array(lifecycleObservers.values).forEach { $0(lifecycleID) } }
     }
@@ -69,12 +70,12 @@ package final class TrainerBackendSession {
     @discardableResult
     package func observeStatus(_ observer: @escaping (TrainerBackendStatus, TrainerBackendStatus) -> Void) -> UUID {
         let id = UUID()
-        statusObservers[id] = observer
+        statusObservers.append((id: id, observer: observer))
         return id
     }
 
     package func removeStatusObserver(_ id: UUID) {
-        statusObservers.removeValue(forKey: id)
+        statusObservers.removeAll { $0.id == id }
     }
 
     /// A target exit invalidates observations immediately. The independent
@@ -523,6 +524,6 @@ package final class TrainerBackendSession {
     private func publishStatus(_ next: TrainerBackendStatus) {
         let previous = status
         status = next
-        Array(statusObservers.values).forEach { $0(previous, next) }
+        statusObservers.forEach { $0.observer(previous, next) }
     }
 }

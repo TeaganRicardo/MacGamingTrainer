@@ -2,7 +2,7 @@ import Foundation
 import TrainerCore
 
 extension Hades2TrainerModel {
-    var currentIssues: [TrainerCurrentIssue] {
+    var hostCurrentIssues: [TrainerCurrentIssue] {
         var issues: [TrainerCurrentIssue] = []
         func append(_ id: String, _ text: TrainerTextToken, title: TrainerTextToken? = nil) {
             guard !text.key.isEmpty else { return }
@@ -10,7 +10,7 @@ extension Hades2TrainerModel {
         }
         if let result = receivedActionResultText { append("result", result) }
         append("operation", errorText)
-        if backendErrorText != errorText { append("backend", backendErrorText) }
+        if let local = localErrorToken, local != errorText { append("local", local) }
         if !runtimeIssuePresentations.isEmpty {
             for issue in runtimeIssuePresentations {
                 let title = issue.featureID == "gameSpeed"

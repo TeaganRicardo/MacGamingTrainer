@@ -131,7 +131,7 @@ assert names == [
     "open_special_choice", "save_editor_inventory", "save_editor_open", "save_editor_target", "save_editor_query",
     "save_editor_detail", "save_editor_stage", "save_editor_unstage", "save_editor_review", "save_editor_cancel",
     "save_editor_apply", "save_editor_close", "list_profiles", "save_profile", "load_profile",
-    "delete_profile", "diagnostics", "export_diagnostics", "prepare", "restore",
+    "delete_profile", "diagnostics", "prepare", "restore",
 ]
 timeouts = {row["name"]: row["timeoutSeconds"] for row in metadata}
 assert {name: value for name, value in timeouts.items() if value != budgets.DEFAULT_COMMAND_TIMEOUT_SECONDS} == {
@@ -148,7 +148,6 @@ assert {name: value for name, value in timeouts.items() if value != budgets.DEFA
     "save_editor_apply": float(budgets.SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0),
     "load_profile": float(budgets.LOAD_PROFILE_OPERATION_BUDGET_SECONDS + 6.0),
     "diagnostics": float(budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 5.0),
-    "export_diagnostics": float(budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 10.0),
     "prepare": float(budgets.PREPARATION_OPERATION_BUDGET_SECONDS + 45.0),
     "restore": float(budgets.RESTORE_OPERATION_BUDGET_SECONDS + 25.0),
 }
@@ -568,15 +567,11 @@ assert probe.calls == [("delete_profile", "Build")]
 # locally instead of exposing them through the external command interface.
 system_events = []
 old_build_diagnostics = command_contract_module.build_diagnostics
-old_export_diagnostics = command_contract_module.export_diagnostics
 old_subprocess_run = command_contract_module.subprocess.run
 old_prepare = command_contract_module.preparation.prepare
 old_restore = command_contract_module.preparation.restore
 try:
     command_contract_module.build_diagnostics = lambda adapter: {"diagnostics": True}
-    command_contract_module.export_diagnostics = lambda adapter: {
-        "diagnosticBundle": "/tmp/fake-diagnostics.zip"
-    }
     command_contract_module.subprocess.run = (
         lambda argv, **kwargs: system_events.append((list(argv), dict(kwargs)))
     )
@@ -584,14 +579,6 @@ try:
     command_contract_module.preparation.restore = lambda data_dir: {"restored": True, "dataDir": data_dir}
 
     assert contract.dispatch("diagnostics", {}, "diag") == {"diagnostics": True}
-    assert contract.dispatch("export_diagnostics", {}, "export") == {
-        "diagnosticBundle": "/tmp/fake-diagnostics.zip"
-    }
-    assert system_events[-1][0] == [
-        "/usr/bin/open",
-        "-R",
-        "/tmp/fake-diagnostics.zip",
-    ]
 
     probe.calls.clear()
     contract.dispatch("launch", {}, "launch")
@@ -609,7 +596,6 @@ try:
     expect_error("prepare", {}, "请断开连接并退出游戏后操作。")
 finally:
     command_contract_module.build_diagnostics = old_build_diagnostics
-    command_contract_module.export_diagnostics = old_export_diagnostics
     command_contract_module.subprocess.run = old_subprocess_run
     command_contract_module.preparation.prepare = old_prepare
     command_contract_module.preparation.restore = old_restore

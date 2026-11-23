@@ -125,3 +125,41 @@ struct TrainerFeedbackDetails: View {
         .onExitCommand(perform: onClose)
     }
 }
+
+package struct TrainerHostOperationFeedback: View {
+    @ObservedObject var feedback: TrainerFeedbackCenter
+
+    package init(feedback: TrainerFeedbackCenter) {
+        self.feedback = feedback
+    }
+
+    package var body: some View {
+        TrainerOperationFeedback(
+            notice: feedback.notice,
+            hasCurrentIssues: !feedback.currentIssues.isEmpty,
+            detailsNoticeID: feedback.detailsNoticeID,
+            onDismiss: feedback.dismiss,
+            onShowDetails: { feedback.showDetails(for: $0) }
+        )
+    }
+}
+
+package struct TrainerHostSidebarIssuesEntry: View {
+    @ObservedObject var feedback: TrainerFeedbackCenter
+    let diagnostics: TrainerDiagnosticsService
+
+    package init(feedback: TrainerFeedbackCenter, diagnostics: TrainerDiagnosticsService) {
+        self.feedback = feedback
+        self.diagnostics = diagnostics
+    }
+
+    package var body: some View {
+        TrainerCurrentIssuesEntry(
+            issues: feedback.currentIssues,
+            detailsPresented: feedback.detailsPresented,
+            onShowDetails: { feedback.showDetails() },
+            onCloseDetails: feedback.closeDetails,
+            onOpenLog: diagnostics.openLog
+        )
+    }
+}

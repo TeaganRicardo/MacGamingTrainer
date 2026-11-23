@@ -131,7 +131,7 @@ struct Hades2StatePatch {
     let statAvailable: [String: Bool]?
     let stats: [String: Hades2StatSnapshot]?
     let profiles: [TrainerProfile]?
-    let diagnostics: [DiagnosticCheck]?
+    let diagnostics: [Hades2DiagnosticCheck]?
     let diagnosticsPassed: Int?
     let diagnosticsTotal: Int?
     let shortcuts: [String: Any]?
@@ -272,7 +272,7 @@ struct Hades2StatePatch {
         } else { stats = nil }
 
         profiles = (payload["profiles"] as? [[String: Any]])?.compactMap(Self.decodeProfile)
-        diagnostics = (payload["checks"] as? [[String: Any]])?.compactMap(Self.decodeDiagnostic)
+        diagnostics = (payload["checks"] as? [[String: Any]])?.compactMap(Hades2DiagnosticCheck.decode)
         diagnosticsPassed = payload["passed"] as? Int
         diagnosticsTotal = payload["total"] as? Int
         shortcuts = payload["shortcuts"] as? [String: Any]
@@ -457,12 +457,6 @@ struct Hades2StatePatch {
         guard let name = row["name"] as? String else { return nil }
         return TrainerProfile(name: name, updatedAt: row["updatedAt"] as? String ?? "")
     }
-
-    private static func decodeDiagnostic(_ row: [String: Any]) -> DiagnosticCheck? {
-        guard let name = row["name"] as? String else { return nil }
-        return DiagnosticCheck(name: name, ok: row["ok"] as? Bool ?? false, detail: String(describing: row["detail"] ?? ""))
-    }
-
 
     private static func decodeCurrentRunTrait(_ row: [String: Any]) -> CurrentRunTrait? {
         guard

@@ -216,6 +216,8 @@
 "host.diagnostics.warning" = "警告";
 "host.diagnostics.failed" = "未通过";
 "host.diagnostics.unknown" = "未知";
+"host.error.logOpen" = "无法打开日志目录，请检查文件访问权限。";
+"host.error.diagnosticsExport" = "无法导出诊断；请检查日志和目标文件的访问权限。";
 
 "host.disclosure.expanded" = "已展开";
 "host.disclosure.collapsed" = "已折叠";

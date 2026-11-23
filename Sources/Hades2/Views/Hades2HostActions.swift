@@ -22,13 +22,7 @@ struct Hades2SidebarActions: View {
                 }
                 .accessibilityIdentifier("trainer.section.\(section.id)")
             }
-            TrainerCurrentIssuesEntry(
-                issues: model.currentIssues,
-                detailsPresented: model.feedbackDetailsPresented,
-                onShowDetails: { model.showFeedbackDetails() },
-                onCloseDetails: model.closeFeedbackDetails,
-                onOpenLog: model.openLog
-            )
+            TrainerHostSidebarIssuesEntry(feedback: model.feedbackCenter, diagnostics: model.diagnosticsService)
         }
     }
 }

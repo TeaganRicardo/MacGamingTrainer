@@ -59,7 +59,6 @@ enum Hades2Command: String {
     case loadProfile = "load_profile"
     case deleteProfile = "delete_profile"
     case diagnostics = "diagnostics"
-    case exportDiagnostics = "export_diagnostics"
     case prepare = "prepare"
     case restore = "restore"
 
@@ -78,7 +77,6 @@ enum Hades2Command: String {
         case .saveEditorApply: return 30.0
         case .loadProfile: return 55.0
         case .diagnostics: return 70.0
-        case .exportDiagnostics: return 85.0
         case .prepare: return 560.0
         case .restore: return 240.0
         default: return 6.0

@@ -1,7 +1,6 @@
 import sys
 import tempfile
 import json
-import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -62,21 +61,23 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
         "warnings": [],
     })
 
-    checks = {item["name"]: item for item in result["checks"]}
-    assert checks["运行时状态刷新"]["ok"] is False
-    assert "status refresh failed" in checks["运行时状态刷新"]["detail"]
-    for name in (
-        DISPLAY_NAME + " 进程",
-        "Lua 连接",
-        "Lua runtime revision",
-        "当前场景",
-        "Hero ObjectId",
-        "Run Count",
+    checks = {item["id"]: item for item in result["checks"]}
+    assert checks["runtimeRefresh"]["name"] == "hades2.diagnostics.check.runtimeRefresh"
+    assert checks["runtimeRefresh"]["ok"] is False
+    assert "status refresh failed" in checks["runtimeRefresh"]["detail"]
+    for check_id in (
+        "process",
+        "luaConnection",
+        "luaRevision",
+        "currentScene",
+        "heroObjectId",
+        "runCount",
     ):
-        assert checks[name]["ok"] is False, name
-    process_check = checks[DISPLAY_NAME + " 进程"]
-    assert "未运行" not in process_check["detail"]
-    assert str(STALE_STATE["pid"]) in process_check["detail"]
+        assert checks[check_id]["ok"] is False, check_id
+    process_check = checks["process"]
+    assert process_check["nameArguments"] == [DISPLAY_NAME]
+    assert process_check["detail"] == "hades2.diagnostics.detail.unavailableLastPid"
+    assert process_check["detailArguments"] == [str(STALE_STATE["pid"])]
     assert result["state"] == {}
     assert [call['kind'] for call in adapter.runtime.calls] == ["observe"]
 
@@ -105,11 +106,11 @@ def test_feature_support_inventory_tracks_schema_without_a_mirror():
 
     feature_checks = [
         item for item in result["checks"]
-        if item["name"].startswith("功能支持 · ")
+        if item["id"].startswith("featureSupport.")
     ]
-    feature_ids = [item["name"].removeprefix("功能支持 · ") for item in feature_checks]
+    feature_ids = [item["id"].removeprefix("featureSupport.") for item in feature_checks]
     assert feature_ids == [*schema.TOGGLES, synthetic, "gameSpeed"], feature_ids
-    assert next(item for item in feature_checks if item["name"].endswith(synthetic))["ok"] is True
+    assert next(item for item in feature_checks if item["id"].endswith(synthetic))["ok"] is True
 
 
 def test_incompatible_game_identity_fails_check_and_reports_warnings():
@@ -123,15 +124,16 @@ def test_incompatible_game_identity_fails_check_and_reports_warnings():
         "warnings": [warning],
     })
 
-    checks = {item["name"]: item for item in result["checks"]}
-    identity_check = checks["游戏版本 / Build"]
+    checks = {item["id"]: item for item in result["checks"]}
+    identity_check = checks["gameBuild"]
+    assert identity_check["name"] == "hades2.diagnostics.check.gameBuild"
     assert identity_check["ok"] is False
     assert warning in identity_check["detail"]
     assert result["state"]["status"] == fresh_state["status"]
     assert result["passed"] < result["total"]
 
 
-def test_public_read_and_export_are_read_only_for_each_connection_outcome():
+def test_public_diagnostics_read_is_read_only_for_each_connection_outcome():
     identity = {"version": "143476", "steam_build": "25481925", "compatible": True}
     for mode in ("connected", "disconnected", "observation_failure", "alive_failure"):
         adapter = make_adapter(refresh_result=STALE_STATE)
@@ -143,16 +145,11 @@ def test_public_read_and_export_are_read_only_for_each_connection_outcome():
             adapter.runtime.alive = failed_alive
         adapter.preferences['invincibility'] = True
         before = json.dumps(adapter.preferences, sort_keys=True)
-        for command in ("diagnostics", "export_diagnostics"):
-            result = build(adapter, identity, command)
-            refresh = next(row for row in result['checks'] if row['name'] == '运行时状态刷新')
-            assert refresh['ok'] is (mode == 'connected'), mode
-            if command == 'export_diagnostics':
-                with zipfile.ZipFile(result['diagnosticBundle']) as archive:
-                    report = json.loads(archive.read('report.json'))
-                    assert report['checks'] == result['checks']
-            assert json.dumps(adapter.preferences, sort_keys=True) == before
-            assert not adapter.preference_store.path.exists()
+        result = build(adapter, identity, "diagnostics")
+        refresh = next(row for row in result['checks'] if row['id'] == 'runtimeRefresh')
+        assert refresh['ok'] is (mode == 'connected'), mode
+        assert json.dumps(adapter.preferences, sort_keys=True) == before
+        assert not adapter.preference_store.path.exists()
         assert all(call['kind'] == 'observe' for call in adapter.runtime.calls)
 
 
@@ -160,5 +157,5 @@ if __name__ == "__main__":
     test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok()
     test_feature_support_inventory_tracks_schema_without_a_mirror()
     test_incompatible_game_identity_fails_check_and_reports_warnings()
-    test_public_read_and_export_are_read_only_for_each_connection_outcome()
+    test_public_diagnostics_read_is_read_only_for_each_connection_outcome()
     print("diagnostics_live_status_ok")

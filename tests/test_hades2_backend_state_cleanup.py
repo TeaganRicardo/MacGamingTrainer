@@ -248,7 +248,7 @@ struct Main {
             nativeChoiceEnglishTitle: "", acquisitionMode: "", rarities: [], supportsLevel: false,
             sortSection: 0, sortGroup: 0, sortOrder: 0
         )]
-        model.diagnostics = [DiagnosticCheck(name: "check", ok: false, detail: "detail")]
+        model.diagnostics = [TrainerDiagnosticCheck(name: "check", ok: false, detail: "detail")]
         model.diagnosticsPassed = 0
         model.diagnosticsTotal = 1
         model.warning = "runtime warning"

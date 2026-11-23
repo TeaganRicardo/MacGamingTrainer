@@ -306,7 +306,6 @@ func exerciseSeam<Module: TrainerGameModule>(_ type: Module.Type) {
     _ = Module.makeContent(model: model)
     _ = Module.makeSidebarActions(model: model)
     _ = Module.makeHeaderActions(model: model)
-    _ = Module.makeFeedback(model: model)
     let localization = TrainerLocalizationStore()
     _ = Module.makeManagementCommands(model: model, localization: localization)
     _ = Module.managedBackupEditor
@@ -350,11 +349,6 @@ func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Mode
     "makeHeaderActions": """
 func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Model) {
     _ = Module.makeHeaderActions(model: model)
-}
-""",
-    "makeFeedback": """
-func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Model) {
-    _ = Module.makeFeedback(model: model)
 }
 """,
     "makeManagementCommands": """

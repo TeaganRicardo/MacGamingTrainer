@@ -41,7 +41,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             }
             .frame(minWidth: theme.contentMinWidth, maxWidth: .infinity, minHeight: theme.contentMinHeight, alignment: .topLeading)
         } feedback: {
-            Module.makeFeedback(model: model)
+            TrainerHostOperationFeedback(feedback: context.feedback)
         }
         .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
         .environment(\.trainerGamePageVisibility, context.pageVisibility)

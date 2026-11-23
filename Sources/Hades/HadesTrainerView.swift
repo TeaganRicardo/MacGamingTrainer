@@ -2,20 +2,6 @@ import AppKit
 import SwiftUI
 import TrainerCore
 
-struct HadesOperationFeedback: View {
-    @ObservedObject var model: HadesTrainerModel
-
-    var body: some View {
-        TrainerOperationFeedback(
-            notice: model.feedback,
-            hasCurrentIssues: !model.currentIssues.isEmpty,
-            detailsNoticeID: model.feedbackDetailsNoticeID,
-            onDismiss: model.dismissFeedback,
-            onShowDetails: { model.showFeedbackDetails(for: $0) }
-        )
-    }
-}
-
 struct HadesTrainerView: View {
     private enum EditField: Hashable {
         case value(HadesHeroValue)

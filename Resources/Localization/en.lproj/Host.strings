@@ -216,6 +216,8 @@
 "host.diagnostics.warning" = "Warning";
 "host.diagnostics.failed" = "Failed";
 "host.diagnostics.unknown" = "Unknown";
+"host.error.logOpen" = "Unable to open the log folder. Check file access permissions.";
+"host.error.diagnosticsExport" = "Unable to export diagnostics. Check access to the logs and destination file.";
 
 "host.disclosure.expanded" = "Expanded";
 "host.disclosure.collapsed" = "Collapsed";

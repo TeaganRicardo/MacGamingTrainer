@@ -184,8 +184,6 @@
     "hades.diagnostics.connection": "Hades Connection",
     "hades.diagnostics.hero": "Current Hero Observation",
     "hades.diagnostics.speed": "Game Speed Observation",
-    "hades.error.diagnosticsExport": "Unable to export diagnostics. Check access to the logs and destination file.",
-    "hades.error.logOpen": "Unable to open the log directory. Check access permissions.",
     "hades.disableAllPending": "Settings reset. Reconnect or restart the game to clear in-game effects.",
     "hades.moneyNoDecrease": "Infinite Gold",
     "hades.rerollsNoDecrease": "Infinite Rerolls",

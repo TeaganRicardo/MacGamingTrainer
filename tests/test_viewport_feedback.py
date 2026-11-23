@@ -201,7 +201,7 @@ struct FeedbackInteractionPage: View {
                 Color.clear.frame(height: 1100)
             }
         } feedback: {
-            Hades2GameModule.makeFeedback(model: model)
+            TrainerHostOperationFeedback(feedback: model.feedbackCenter)
         }
         .environment(\.trainerGamePageVisibility, visibility.pageVisibility)
     }
@@ -565,7 +565,7 @@ struct Main {
                 Color.clear.frame(height: 1800)
             }
         } feedback: {
-            Hades2GameModule.makeFeedback(model: model)
+            TrainerHostOperationFeedback(feedback: model.feedbackCenter)
         }.environmentObject(localization))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 900),
                               styleMask: [.titled], backing: .buffered, defer: false)
@@ -613,7 +613,7 @@ struct Main {
         )
         let underlyingNoticeHit = host.hitTest(noticeTextPoint)
         var feedbackEvents: [UUID] = []
-        let observation = model.$feedbackNotice.compactMap { $0 }.sink { feedbackEvents.append($0.id) }
+        let observation = model.feedbackCenter.$notice.compactMap { $0 }.sink { feedbackEvents.append($0.id) }
 
         func nextNotice(_ expectedKey: String) -> TrainerFeedbackNotice {
             let previousID = model.feedbackNotice?.id
@@ -777,7 +777,7 @@ struct Main {
                 shortcutDefaults: InMemoryDefaults())
         }
         var faultEvents: [String] = []
-        let faultObservation = faultModel.$feedbackNotice.compactMap { $0 }.sink { faultEvents.append($0.text.key) }
+        let faultObservation = faultModel.feedbackCenter.$notice.compactMap { $0 }.sink { faultEvents.append($0.text.key) }
 
         wait { faultModel.backendAvailable && !faultModel.busy }
         faultModel.openSellTraits()

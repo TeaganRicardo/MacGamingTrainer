@@ -25,6 +25,16 @@ package struct TrainerDiagnosticEntry: Identifiable {
         self.detail = detail
         self.status = status
     }
+
+    @MainActor
+    package init(check: TrainerDiagnosticCheck, localization: TrainerLocalizationStore) {
+        self.init(
+            id: check.id,
+            name: localization.string(check.name),
+            detail: localization.string(check.detail),
+            status: check.ok ? .passed : .failed
+        )
+    }
 }
 
 package struct TrainerDiagnosticsLabels {

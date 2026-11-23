@@ -47,7 +47,7 @@ struct Hades2DiagnosticsView: View {
             labels: .init(title: text("hades2.diagnostics.title"), explanation: text("hades2.diagnostics.explanation"),
                 refresh: text("hades2.diagnostics.rerun"), export: text("hades2.diagnostics.export")),
             checks: model.diagnostics.map {
-                .init(id: $0.id, name: $0.name, detail: $0.detail, status: $0.ok ? .passed : .failed)
+                TrainerDiagnosticEntry(check: $0, localization: localization)
             },
             busy: model.busy, canRefresh: enabled, canExport: enabled,
             error: hades2ManagementError(model, localization: localization),

@@ -480,7 +480,7 @@ struct Main {
               "invalid explicit edit did not restore observed value and feedback")
         check(commands(at: commandLog).count == beforeInvalid, "invalid edit crossed the transport boundary")
         var receiptKeys: [String] = []
-        let notices = observedModel.$feedbackNotice.compactMap { $0?.text.key }.sink { receiptKeys.append($0) }
+        let notices = observedModel.feedbackCenter.$notice.compactMap { $0?.text.key }.sink { receiptKeys.append($0) }
         var lateDone: Bool?
         observedSession.send("late-observation", operation: "late", announceSuccess: false,
             completion: { lateDone = $0 })

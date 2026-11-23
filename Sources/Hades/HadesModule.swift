@@ -1,7 +1,7 @@
+import Combine
 import Foundation
 import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import TrainerCore
 
 final class HadesTrainerModel: ObservableObject, TrainerHostModel {
@@ -53,10 +53,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var target: HadesHeroTarget?
     @Published private(set) var shortcutRegistrationFailure: TrainerHotkeyRegistrationFailure?
     @Published private(set) var shortcutRevision = 0
-    /// A transient presentation event, separate from the owner state below.
-    @Published private(set) var feedback: TrainerFeedbackNotice?
-    @Published private(set) var feedbackDetailsPresented = false
-    @Published private(set) var feedbackDetailsNoticeID: UUID?
+    /// Host-owned feedback and diagnostics state forwarded from `TrainerModuleServices`.
+    var feedbackCenter: TrainerFeedbackCenter { services.feedback }
+    var diagnosticsService: TrainerDiagnosticsService { services.diagnostics }
+    var feedback: TrainerFeedbackNotice? { services.feedback.notice }
+    var feedbackDetailsPresented: Bool { services.feedback.detailsPresented }
+    var feedbackDetailsNoticeID: UUID? { services.feedback.detailsNoticeID }
+    var currentIssues: [TrainerCurrentIssue] { services.feedback.currentIssues }
     /// Owner-state failures. Each one remains current until the same kind of
     /// payload decodes again; a one-shot rejection is only feedback.
     @Published private(set) var catalogIssue: TrainerTextToken?
@@ -67,11 +70,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var profilesPresented = false
     @Published var diagnosticsPresented = false
     @Published private(set) var profiles: [HadesSettingsProfile] = []
-    @Published private(set) var diagnostics: [HadesDiagnosticCheck] = []
+    @Published private(set) var diagnostics: [TrainerDiagnosticCheck] = []
     private var diagnosticsReport: [String: Any]?
 
     private let services: TrainerModuleServices
-    private var statusObserver: UUID?
+    private var subscriptions: Set<AnyCancellable> = []
     private var session: TrainerBackendSession { services.session }
     private var logSink: TrainerLogSink { services.logSink }
     private var shortcuts: HadesShortcutStore
@@ -139,16 +142,17 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     init(services: TrainerModuleServices, defaults: UserDefaults = .standard) {
         self.services = services
         self.shortcuts = HadesShortcutStore(defaults: defaults)
-        statusObserver = session.observeStatus { [weak self] previous, current in
-            self?.receiveStatus(current, previous: previous)
-        }
+        services.feedback.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &subscriptions)
+        services.backendStatusTransitions
+            .sink { [weak self] previous, current in
+                self?.receiveStatus(current, previous: previous)
+            }
+            .store(in: &subscriptions)
         DispatchQueue.main.async { [weak self] in
             self?.installShortcuts()
         }
-    }
-
-    isolated deinit {
-        if let statusObserver { services.session.removeStatusObserver(statusObserver) }
     }
 
     func backendDidStart() {
@@ -537,54 +541,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func loadProfile(_ name: String) { send(.loadProfile(name: name), operation: "hades.profile.load") }
     func deleteProfile(_ name: String) { send(.deleteProfile(name: name), operation: "host.delete") }
     func runDiagnostics() { send(.diagnostics, operation: "hades.manage.diagnostics", announceSuccess: false) }
-    func openLog() {
-        session.flushDiagnostics()
-        logSink.flush()
-        NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())
-    }
-    func openLogHistory() {
-        do {
-            logSink.flush()
-            try FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(logSink.historyURL)
-        } catch { presentFeedback(TrainerTextToken(key: "hades.error.logOpen"), tone: .warning) }
-    }
-    func clearCompletedLogs() {
-        let cleared = logSink.clearCompletedSessions()
-        presentFeedback(TrainerTextToken(key: cleared ? "host.logs.cleared" : "host.logs.clearFailed"),
-                        tone: cleared ? .success : .warning)
-    }
     func exportDiagnostics() {
         session.flushDiagnostics()
         logSink.flush()
         send(.diagnostics, operation: "hades.diagnostics.export", announceSuccess: false) { [weak self] ok in
-            guard ok, let self, var report = self.diagnosticsReport else { return }
-            self.session.flushDiagnostics()
-            self.logSink.flush()
-            do {
-                var logs: [String: String] = [:]
-                let urls: [URL]
-                if let bundle = self.logSink.currentSessionURL() {
-                    urls = ["manifest.json", "host.log", "backend.log", "runtime.log"].map { bundle.appendingPathComponent($0) }
-                } else { urls = [self.logSink.currentLogURL()] }
-                for url in urls where FileManager.default.fileExists(atPath: url.path) {
-                    logs[url.lastPathComponent] = try String(contentsOf: url, encoding: .utf8)
-                }
-                report["logs"] = logs
-                let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
-                let panel = NSSavePanel()
-                panel.allowedContentTypes = [.json]
-                panel.nameFieldStringValue = "Hades-Diagnostics.json"
-                panel.begin { [weak self] response in
-                    guard response == .OK, let url = panel.url else { return }
-                    do {
-                        try data.write(to: url, options: .atomic)
-                        self?.presentFeedback(TrainerTextToken(key: "host.backend.notice.completed"), tone: .success)
-                    } catch {
-                        self?.presentFeedback(TrainerTextToken(key: "hades.error.diagnosticsExport"), tone: .warning)
-                    }
-                }
-            } catch { self.presentFeedback(TrainerTextToken(key: "hades.error.diagnosticsExport"), tone: .warning) }
+            guard ok, let self, let report = self.diagnosticsReport else { return }
+            self.services.diagnostics.exportReport(report)
         }
     }
     /// The originating field shows the same rejection inline; this is only the
@@ -592,23 +554,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func rejectInvalidValue() { presentFeedback(TrainerTextToken(key: "hades.error.invalidValue"), tone: .warning) }
 
     private func presentFeedback(_ text: TrainerTextToken, tone: TrainerFeedbackTone) {
-        feedback = TrainerFeedbackNotice(text: text, tone: tone)
+        services.feedback.present(text, tone: tone)
     }
 
     /// Consume only the transient presentation event; current issues keep
     /// their owner state.
-    func dismissFeedback(_ id: UUID) { if feedback?.id == id { feedback = nil } }
+    func dismissFeedback(_ id: UUID) { services.feedback.dismiss(id) }
 
     func showFeedbackDetails(for noticeID: UUID? = nil) {
-        guard !currentIssues.isEmpty else { return }
-        if let noticeID, feedback?.id != noticeID { return }
-        feedbackDetailsNoticeID = noticeID ?? feedback?.id
-        feedbackDetailsPresented = true
+        services.feedback.showDetails(for: noticeID)
     }
 
     func closeFeedbackDetails() {
-        feedbackDetailsPresented = false
-        feedbackDetailsNoticeID = nil
+        services.feedback.closeDetails()
     }
     func traitName(_ trait: HadesCurrentTrait, language: TrainerPresentationLanguage) -> String {
         catalog.first { $0.id == trait.name }?.name(language: language.rawValue)
@@ -749,19 +707,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
         var payload = request.params
         for (key, value) in extraParams { payload[key] = value }
-        session.send(request.command.rawValue, params: payload, operation: operation, announceSuccess: announceSuccess,
+        let expectedPending = (request.command == .disableAll || request.command == .loadProfile) && !connected
+        session.send(request.command.rawValue, params: payload, operation: operation,
+                     announceSuccess: announceSuccess && !expectedPending,
                      timeout: request.command.timeout,
                      requiresTrustedTarget: request.command.requiresTrustedTarget(connected: connected),
                      completion: { [weak self] ok in
-            if announceSuccess, ok, let self {
-                let pendingCleanup = request.command == .disableAll && !self.connected
-                let pendingProfile = request.command == .loadProfile && !self.connected
-                let noticeKey: String
-                if pendingCleanup { noticeKey = "hades.disableAllPending" }
-                else if pendingProfile { noticeKey = "hades.profile.pending" }
-                else { noticeKey = "host.backend.notice.completed" }
-                self.presentFeedback(TrainerTextToken(key: noticeKey),
-                                     tone: pendingCleanup || pendingProfile ? .warning : .success)
+            if announceSuccess, ok, let self, !self.connected,
+               request.command == .disableAll || request.command == .loadProfile {
+                let noticeKey = request.command == .disableAll ? "hades.disableAllPending" : "hades.profile.pending"
+                self.presentFeedback(TrainerTextToken(key: noticeKey), tone: .warning)
             }
             completion?(ok)
         })
@@ -773,9 +728,6 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         case "outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost":
             resetObservation()
         default: break
-        }
-        if !status.error.isEmpty && status.error != previous.error {
-            presentFeedback(TrainerTextToken(key: status.error, arguments: status.errorArguments), tone: .warning)
         }
     }
 
@@ -817,9 +769,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
                 from: JSONSerialization.data(withJSONObject: rows))
         }
-        if let report = payload["diagnostics"] as? [String: Any], let checks = report["checks"] {
-            diagnostics = try JSONDecoder().decode([HadesDiagnosticCheck].self,
-                from: JSONSerialization.data(withJSONObject: checks))
+        if let report = payload["diagnostics"] as? [String: Any],
+           let checks = report["checks"] as? [[String: Any]] {
+            diagnostics = checks.compactMap(TrainerDiagnosticCheck.decode)
             diagnosticsReport = report
         }
         if payload["catalog"] != nil {
@@ -925,7 +877,6 @@ struct HadesGameModule: TrainerGameModule {
     static func makeContent(model: HadesTrainerModel) -> HadesTrainerView { HadesTrainerView(model: model) }
     static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
     static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }
-    static func makeFeedback(model: HadesTrainerModel) -> HadesOperationFeedback { HadesOperationFeedback(model: model) }
     static var managedBackupEditor: (@MainActor (HadesTrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
         { model, snapshot in makeSaveEditorWindow(model: model, snapshotID: snapshot.id) }
     }

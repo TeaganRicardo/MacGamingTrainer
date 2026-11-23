@@ -285,7 +285,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
         assert scan_state["status"] == "not_running"
         assert adapter.save_provider_context().game_path.resolve() == ext_app.resolve()
         diag = diagnostics.build_diagnostics(adapter)
-        install_check = next(row for row in diag["checks"] if row["name"] == "Hades II 安装")
+        install_check = next(row for row in diag["checks"] if row["id"] == "install")
         assert install_check["ok"] is True and Path(install_check["detail"]).resolve() == ext_app.resolve()
 
     # Steam metadata strings in steamapps/libraryfolders.vdf do not short-circuit config/libraryfolders.vdf.

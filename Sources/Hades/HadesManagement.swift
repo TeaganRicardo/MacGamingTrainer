@@ -7,13 +7,6 @@ struct HadesSettingsProfile: Decodable, Identifiable {
     var id: String { name }
 }
 
-struct HadesDiagnosticCheck: Decodable, Identifiable {
-    let name: String
-    let ok: Bool
-    let detail: String
-    var id: String { name }
-}
-
 struct HadesManagementUtilities: View {
     @ObservedObject var model: HadesTrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
@@ -74,7 +67,7 @@ struct HadesDiagnosticsView: View {
             labels: .init(title: text("hades.manage.diagnostics"), explanation: text("hades.diagnostics.explanation"),
                 refresh: text("hades.diagnostics.rerun"), export: text("hades.diagnostics.export")),
             checks: model.diagnostics.map {
-                .init(id: $0.id, name: text($0.name), detail: $0.detail, status: $0.ok ? .passed : .failed)
+                TrainerDiagnosticEntry(check: $0, localization: localization)
             },
             busy: model.busy, canRefresh: enabled, canExport: enabled,
             error: hadesManagementError(model, localization: localization),

@@ -16,6 +16,7 @@ func makeFixtureModel<Module: TrainerGameModule>(
         targetObservation: .init(isRunning: false, launchGeneration: 0)
     )
     let model = makeModel(services)
+    services.feedback.setIssueProvider(observing: model) { [weak model] in model?.hostCurrentIssues ?? [] }
     if let backendScriptURL {
         do {
             try session.start(

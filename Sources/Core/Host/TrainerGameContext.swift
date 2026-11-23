@@ -72,6 +72,8 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     package let model: Module.Model
     let services: TrainerModuleServices
     let session: TrainerBackendSession
+    var feedback: TrainerFeedbackCenter { services.feedback }
+    var diagnostics: TrainerDiagnosticsService { services.diagnostics }
     let targetMonitor: TrainerTargetProcessMonitor
     let saveManager: TrainerSaveManagerModel
     let toolWindows = TrainerToolWindowStore()
@@ -124,6 +126,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
             targetObservation: monitor.targetObservation
         )
         model = (makeModel ?? Module.makeModel)(services)
+        services.feedback.setIssueProvider(observing: model) { [weak model] in model?.hostCurrentIssues ?? [] }
         let target = services.targetObservation
         lastKnownTargetProcessIdentifier = target.processIdentifier
         previousBackendAvailable = false
@@ -174,7 +177,10 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
                 descriptor: services.descriptor,
                 backendScriptURL: scriptURL,
                 applyPayload: { [weak self] in self?.applyBackendPayload($0) },
-                resetGameState: { [weak model] in model?.backendDidStop() },
+                resetGameState: { [weak model, feedback = services.feedback] in
+                    feedback.clearNotice()
+                    model?.backendDidStop()
+                },
                 log: { logSink.append($0) },
                 backendLog: { logSink.append($0, source: "BACKEND") }
             )
