@@ -1,4 +1,9 @@
-"""Single-source Hades II error-registry contract for issue #204."""
+"""Hades II runtime and backend errors map to presentation keys and arguments (#204).
+
+An error message that maps to no key reaches the player as raw Chinese text.
+"""
+import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -10,64 +15,7 @@ from core.adapter import AdapterError
 from games.hades2 import error_presentation
 from games.hades2 import runtime_error_presentation
 
-RUNTIME_SOURCE = (ROOT / "Backend/games/hades2/runtime_error_presentation.py").read_text(encoding="utf-8")
-LUA = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-
-# Runtime mappings must be derived from the declarative registry rather than
-# mirrored in a second module.
-for forbidden in ("_RUNTIME_KEYS", "_COMPOSED_PREFIXES", "_SHARED_COMPOSED", "_FALLBACK_KEY"):
-    assert forbidden not in RUNTIME_SOURCE, f"runtime error mapping mirror survived: {forbidden}"
-
-runtime_rules = [rule for rule in error_presentation.REGISTRY if rule.get("runtime")]
-assert runtime_rules, "the registry declares no runtime refusals"
-assert getattr(error_presentation, "RUNTIME_FALLBACK_KEY", None) == "hades2.error.runtimeActionFailed"
-
-# Every runtime entry carries its scope and producer provenance. This is the
-# reverse half of coverage: a dead registry entry must fail even if no caller
-# happens to probe it.
-def function_block(name):
-    # Match the function name exactly: "action" must not bind the earlier
-    # actionFingerprint/actionReceipt helpers.
-    marker = f"local function {name}("
-    start = LUA.find(marker)
-    assert start >= 0, f"missing Lua helper producer {name}"
-    end = LUA.find("\n  local function ", start + len(marker))
-    return LUA[start:] if end < 0 else LUA[start:end]
-
-
-def command_block(name):
-    marker = f'if command == "{name}" then'
-    start = LUA.find(marker)
-    assert start >= 0, f"missing Lua command producer {name}"
-    end = LUA.find('\n    if command == "', start + len(marker))
-    return LUA[start:] if end < 0 else LUA[start:end]
-
-
-for rule in runtime_rules:
-    runtime = rule["runtime"]
-    commands = runtime.get("commands")
-    producer = runtime.get("producer")
-    assert commands == "*" or (
-        isinstance(commands, (list, tuple)) and commands and all(isinstance(value, str) and value for value in commands)
-    ), rule
-    assert isinstance(producer, dict), rule
-    kind, name = producer.get("kind"), producer.get("name")
-    assert kind in {"command", "helper"} and isinstance(name, str) and name, rule
-    block = command_block(name) if kind == "command" else function_block(name)
-    if rule["match"] == "literal":
-        assert rule["message"] in block, f"dead runtime literal: {rule}"
-    elif rule["match"] == "prefix":
-        assert rule["prefix"] in block, f"dead runtime prefix: {rule}"
-    elif rule["match"] == "regex":
-        # The only shared dynamic helper composes Unsupported <purpose>: missing
-        # <function>. Assert both static source fragments exist in the declared
-        # producer rather than pretending the regex itself is Lua source.
-        assert "Unsupported " in block and ": missing " in block, f"dead runtime regex: {rule}"
-    else:
-        raise AssertionError(f"unsupported runtime registry shape: {rule['match']}")
-
-# Behaviour snapshot from the pre-#204 funnel. The refactor may change the
-# registration site, not the key/argument result.
+# Runtime refusals, as the resident raises them, map to these keys.
 CASES = (
     ("open_sell_traits", "Cannot open boon sell screen while another screen is active", "hades2.error.sellScreenBusy", ()),
     ("open_sell_traits", "Boon selling requires a live trait owner", "hades2.error.sellNeedsTraitOwner", ()),
@@ -145,5 +93,128 @@ presented = runtime_error_presentation.present_runtime_error("remove_trait", unk
 assert presented.code == "lua_error"
 assert presented.presentation == error_presentation.RUNTIME_FALLBACK_KEY
 assert tuple(presented.arguments) == ()
+
+# Backend messages: interpolated values become arguments, never part of the
+# key, and unregistered developer text is not reclassified as player copy.
+assert error_presentation.presentation_for("请先启动 Hades II 并进入存档。") == ("hades2.error.gameNotRunning", ["Hades II"])
+assert error_presentation.presentation_for("查询 Hades II 进程失败（-9）：boom") == (
+    "hades2.error.processQueryFailed", ["Hades II", "-9", "boom"])
+assert error_presentation.presentation_for("未知功能。") == ("hades2.error.unknownFeature", [])
+assert error_presentation.presentation_for("Hades II module manifest is missing a valid steamAppId.")[0] is None
+
+# The registry itself has no duplicate, invalid or shadowed rule; a shadowed
+# rule silently sends a player's error to the wrong key.
+assert not error_presentation.check_registry(), error_presentation.check_registry()
+assert not error_presentation._unreachable(error_presentation.REGISTRY)
+
+# Every player-facing message the Hades II backend raises maps to a key, fills
+# every {n} of its English template, and passes no untranslated sentence text
+# as an argument. Messages are read with `ast`, so f-strings, concatenation,
+# `.format` and an assembled `message = ...` are seen as the player sees them.
+EN = json.loads((ROOT / "Sources/Hades2/Presentation/Localization/hades2.en.json").read_text(encoding="utf-8"))["entries"]
+CJK = re.compile(r"[㐀-鿿]")
+STRING_ARG = re.compile(r"""f?['"]([^'"\n]+)['"]""")
+TABLE_ENTRY = re.compile(r"""['"](?:error|message)['"]\s*:\s*f?['"]([^'"\n]+)['"]""")
+BOUNDARY_DAMAGE = re.compile(r"[　-〿＀-￯]")
+ERROR_SHAPED = re.compile(
+    r"(失败|错误|无法|不可用|未连接|未运行|未解析|未经验证|需要|请先|请在|已保留|保持不变|不支持|"
+    r"已结束|已退出|已断开|超时|不得|不能|拒绝|不再支持|不一致|不存在|未找到|未知)")
+# Modules whose Chinese strings are labels or report data, never raised errors,
+# and functions that return explicit bilingual row data (exempt only while they
+# contain no raise).
+ERROR_FREE_MODULES = {"catalog.py", "diagnostics.py", "save_history.py", "save_investigation.py"}
+BILINGUAL_DATA_FUNCTIONS = {
+    "save_advanced.py": {"row", "warning"},
+    "save_workspace.py": {"_discovery_reason"},
+    "save_narrative.py": {"entry_row"},
+    "save_quest_rewards.py": {"rows"},
+}
+
+
+def shape(node):
+    """The sentence a string expression renders, with runtime values as X."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(shape(value) for value in node.values)
+    if isinstance(node, ast.FormattedValue):
+        if isinstance(node.value, ast.Attribute):
+            return shape(node.value)
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return node.value.value
+        return "X"
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = shape(node.left), shape(node.right)
+        return (left + right) if left and right else (left or right or "X")
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        return shape(node.left) + "X"
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == "format":
+            return re.sub(r"\{\}", "X", shape(func.value))
+        if isinstance(func, ast.Attribute) and func.attr in {"join", "strip"}:
+            return shape(func.value)
+        if isinstance(func, ast.Name) and func.id in {"str", "repr", "format"}:
+            return "X"
+        return ""
+    if isinstance(node, ast.Name):
+        return "X" if node.id in {"message", "detail", "warning", "error"} else node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def raised_messages(tree):
+    found = []
+    for node in ast.walk(tree):
+        arguments = []
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            arguments = node.exc.args
+            # `(code, message)` for Hades errors, `(message)` otherwise.
+            if len(arguments) > 1 and isinstance(arguments[0], ast.Constant):
+                arguments = arguments[1:]
+        elif isinstance(node, ast.Assign) and isinstance(node.value, (ast.Constant, ast.JoinedStr)) and any(
+                isinstance(target, ast.Name) and target.id == "message" for target in node.targets):
+            arguments = [node.value]
+        for argument in arguments:
+            text = re.sub(r"\s+([。，、；：）】」』])", r"\1", re.sub(r"\s+", " ", shape(argument)).strip())
+            if CJK.search(text):
+                found.append(text)
+    return found
+
+
+unregistered = []
+for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
+    if path.name == "error_presentation.py":
+        continue
+    body = path.read_text(encoding="utf-8")
+    tree = ast.parse(body)
+    messages = raised_messages(tree) + [match.group(1) for match in TABLE_ENTRY.finditer(body)]
+    if path.name not in ERROR_FREE_MODULES:
+        data_spans = [
+            (node.lineno, node.end_lineno) for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in BILINGUAL_DATA_FUNCTIONS.get(path.name, ())
+            and not any(isinstance(child, ast.Raise) for child in ast.walk(node))
+        ]
+        messages += [
+            literal.group(1) for literal in STRING_ARG.finditer(body)
+            if CJK.search(literal.group(1)) and ERROR_SHAPED.search(literal.group(1))
+            and not any(start <= body.count("\n", 0, literal.start()) + 1 <= end for start, end in data_spans)
+        ]
+    for message in messages:
+        if not CJK.search(message):
+            continue
+        key, arguments = error_presentation.presentation_for(re.sub(r"\{[^}]*\}", "X", message))
+        if key is None:
+            unregistered.append(f"{path.name}: {message!r}")
+            continue
+        template = EN.get(key)
+        assert template is not None, f"{key} is missing from the en table"
+        assert len(arguments) == len(re.findall(r"\{(\d+)\}", template)), (path.name, message, key, arguments)
+        for argument in arguments:
+            assert not (argument and (CJK.search(argument) or BOUNDARY_DAMAGE.search(argument))), (
+                f"{path.name}: {message!r} -> {key} argument {argument!r} carries untranslated sentence text")
+assert not unregistered, sorted(set(unregistered))
 
 print("hades2_error_registry_single_source_ok")

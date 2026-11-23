@@ -66,7 +66,7 @@ class OfflineLuaTransport:
         self.counter = 0
         self.events = open(os.environ["MGT_PROFILE_EVENTS"], "a", encoding="utf-8")
         self.lua = subprocess.Popen([
-            require_lua52('operation profile'), str(HARNESS / 'Tools/games/hades2/fixtures/hades2_operation_profile.lua'),
+            require_lua52('operation profile'), str(HARNESS / 'tests/fixtures/hades2/offline_resident.lua'),
             str(SOURCE / 'Backend/games/hades2/runtime/hades.lua'), '1',
             os.environ.get('MGT_PROFILE_TRAITS', '32'), os.environ.get('MGT_PROFILE_CATALOG', '96'),
             os.environ.get('MGT_PROFILE_RESOURCES', '32'), 'serve',
