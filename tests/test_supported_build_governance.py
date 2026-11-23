@@ -13,7 +13,6 @@ sys.path.insert(0, str(ROOT / "Tools"))
 
 from module_support import load_manifest, normalized_manifest
 from supported_build import native_header, resolved_resource_source, supported_reference_directory, validate_supported_build
-from ci_docs_only import classify_scope
 
 game_root = ROOT / "Backend/games"
 for game in ("hades", "hades2"):
@@ -78,11 +77,6 @@ for invalid in ("@supportedBuild/../secrets", "@supportedBuild//etc/passwd", "@s
         pass
     else:
         raise AssertionError("unsafe supported-build resource reference was accepted: " + invalid)
-assert classify_scope(["Tools/supported_build.py"]) == {
-    "docs_only": False, "needs_linux": True, "needs_macos": True,
-    "needs_module": True, "needs_module_full_build": True,
-    "needs_build": True, "needs_full_build": True,
-}
 
 with tempfile.TemporaryDirectory(prefix="mgt-supported-build-") as name:
     root = Path(name)

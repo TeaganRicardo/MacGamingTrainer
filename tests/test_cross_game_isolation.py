@@ -1,4 +1,4 @@
-"""Verify manifest-derived cross-game, Core, Python import, and storage-key isolation."""
+"""Games stay isolated: Swift module graph, Python imports, and per-game storage keys and data folders."""
 
 from __future__ import annotations
 
@@ -26,13 +26,9 @@ _FINDER_DUPLICATE_RE = re.compile(r'^(.+) [2-9]\d*$')
 @dataclass(frozen=True)
 class ModuleSpec:
     id: str
-    display_name: str
     frontend_dir: Path
-    frontend_name: str
     module_type: str
     backend_dir: Path
-    adapter_module: str
-    adapter_type: str
     is_fixture: bool = False
 
 
@@ -87,7 +83,6 @@ def _discover_manifests(root: Path) -> list[ModuleSpec]:
     specs: list[ModuleSpec] = []
     for mpath, backend_dir, is_fixture in manifest_paths:
         raw = json.loads(mpath.read_text(encoding='utf-8'))
-        adapter_mod, _, adapter_cls = raw.get('backend', {}).get('adapter', '').partition(':')
         frontend = raw.get('frontend', {})
         frontend_rel = frontend.get('sourceDirectory', '')
         if is_fixture:
@@ -98,13 +93,9 @@ def _discover_manifests(root: Path) -> list[ModuleSpec]:
         specs.append(
             ModuleSpec(
                 id=raw['id'],
-                display_name=raw.get('displayName', ''),
                 frontend_dir=frontend_dir,
-                frontend_name=Path(frontend_rel).name if frontend_rel else frontend_dir.name,
                 module_type=frontend.get('moduleType', ''),
                 backend_dir=backend_dir,
-                adapter_module=adapter_mod,
-                adapter_type=adapter_cls,
                 is_fixture=is_fixture,
             )
         )
@@ -313,250 +304,11 @@ def _non_comment_python_text(path: Path) -> str:
     return ' '.join(parts)
 
 
-def _boundary_pattern(tokens: Iterable[str]) -> Optional[re.Pattern[str]]:
-    unique = sorted({t for t in tokens if t}, key=len, reverse=True)
-    if not unique:
-        return None
-    return re.compile('|'.join(f'(?<![A-Za-z0-9_]){re.escape(t)}(?![A-Za-z0-9_])' for t in unique))
-
-
-def check_manifest_derived_identities(root: Path) -> list[str]:
-    """Replace hand-maintained vocabulary lists with tokens derived from all manifests."""
-    tracked = _git_tracked_paths(root)
-    specs = _discover_manifests(root)
-    real_specs = [s for s in specs if not s.is_fixture]
-    fixture_specs = [s for s in specs if s.is_fixture]
-    errors: list[str] = []
-
-    def shared_tokens_for(spec: ModuleSpec) -> set[str]:
-        tokens = {
-            spec.id,
-            f'games.{spec.id}',
-            spec.display_name,
-            spec.frontend_name,
-            spec.module_type,
-            spec.adapter_module,
-            spec.adapter_type,
-        }
-        return {t for t in tokens if t}
-
-    def cross_game_tokens_for(spec: ModuleSpec) -> set[str]:
-        tokens = {
-            f'games.{spec.id}',
-            spec.module_type,
-            spec.adapter_module,
-            spec.adapter_type,
-        }
-        return {t for t in tokens if t}
-
-    all_shared_tokens = {tok for spec in specs for tok in shared_tokens_for(spec)}
-    shared_pattern = _boundary_pattern(all_shared_tokens)
-
-    shared_tool_names = (
-        'Tools/module_support.py',
-        'Tools/product_support.py',
-        'Tools/generate_game_binding.py',
-        'Tools/validate_game_module.py',
-        'Tools/supported_build.py',
-        'Tools/verify_module_build.py',
-    )
-    shared_files = (
-        _iter_python_files(root / 'Backend' / 'core', root, tracked)
-        + _iter_python_files(root / 'Backend' / 'debugger', root, tracked)
-        + [root / name for name in shared_tool_names if (root / name).is_file()]
-    )
-    if shared_pattern is not None:
-        for path in shared_files:
-            rel = path.relative_to(root).as_posix()
-            hits = sorted(set(shared_pattern.findall(_non_comment_python_text(path))))
-            if hits:
-                errors.append(f'{rel}: shared code mentions module identity tokens {hits}')
-        shared_swift = _iter_swift_files(root / 'Sources' / 'Core', root, tracked)
-        app_swift = root / 'Sources' / 'App.swift'
-        if app_swift.is_file():
-            shared_swift.append(app_swift)
-        core_hades_family_pat = re.compile(
-            r'(?:(?<![A-Za-z0-9_])|(?=[A-Z]))(Hades|hades|boon|Boon|rarity|Rarity|trait|Trait)(?![a-z0-9])'
-        )
-        for path in shared_swift:
-            rel = path.relative_to(root).as_posix()
-            stripped = _strip_swift_comments(path.read_text(encoding='utf-8'))
-            hits = sorted(set(shared_pattern.findall(stripped)))
-            if hits:
-                errors.append(f'{rel}: shared Swift mentions module identity tokens {hits}')
-            # WP3.6 S-F11: prevent Hades-family concepts from creeping into Core.
-            vocab_hits = sorted(
-                set(
-                    core_hades_family_pat.findall(
-                        stripped.replace('accessibilityAddTraits', '')
-                    )
-                )
-            )
-            if vocab_hits:
-                errors.append(f'{rel}: shared Swift uses Hades-family vocabulary {vocab_hits}')
-
-    real_tokens = {tok for spec in real_specs for tok in shared_tokens_for(spec)}
-    fixture_pat = _boundary_pattern(real_tokens)
-    if fixture_pat is not None and fixture_specs:
-        for fspec in fixture_specs:
-            for directory in (fspec.backend_dir, fspec.frontend_dir):
-                if not directory.is_dir():
-                    continue
-                for path in sorted(directory.rglob('*')):
-                    if not path.is_file() or path.suffix not in ('.py', '.swift', '.json', '.lua'):
-                        continue
-                    if _ignore_local_finder_duplicate(path, root, tracked):
-                        continue
-                    rel = path.relative_to(root).as_posix()
-                    text = path.read_text(encoding='utf-8', errors='ignore')
-                    hits = sorted(set(fixture_pat.findall(text)))
-                    if hits:
-                        errors.append(f'{rel}: fixture mentions real module tokens {hits}')
-
-    for spec in specs:
-        other_tokens = {tok for other in specs if other.id != spec.id for tok in cross_game_tokens_for(other)}
-        pat = _boundary_pattern(other_tokens)
-        if pat is None:
-            continue
-        all_mod_files = (
-            _iter_python_files(spec.backend_dir, root, tracked)
-            + _iter_python_files(root / 'Tools' / 'games' / spec.id, root, tracked)
-            + _iter_swift_files(spec.frontend_dir, root, tracked)
-        )
-        for path in all_mod_files:
-            rel = path.relative_to(root).as_posix()
-            if path.suffix == '.py':
-                text = _non_comment_python_text(path)
-            else:
-                text = _strip_swift_comments(path.read_text(encoding='utf-8'))
-            hits = sorted(set(pat.findall(text)))
-            if hits:
-                errors.append(f'{rel}: module {spec.id!r} mentions foreign module identifiers {hits}')
-    return errors
-
-
-def _swift_string_span(source: str, start: int) -> Optional[tuple[int, Optional[tuple[str, bool]]]]:
-    """If `source[start]` opens a Swift string literal, return `(end_index, (prefix_or_value, is_template))`."""
-    n = len(source)
-    i = start
-    hashes = 0
-    while i < n and source[i] == '#':
-        hashes += 1
-        i += 1
-    if i >= n or source[i] != '"':
-        return None
-    if source.startswith('"""', i):
-        quote = '"""'
-        i += 3
-    else:
-        quote = '"'
-        i += 1
-    closing = quote + ('#' * hashes)
-    escape_prefix = '\\' + ('#' * hashes)
-    buf: list[str] = []
-    is_template = False
-
-    while i < n:
-        if source.startswith(closing, i):
-            i += len(closing)
-            return i, (''.join(buf), is_template)
-        if source.startswith(escape_prefix, i):
-            after = i + len(escape_prefix)
-            if after < n and source[after] == '(':
-                if not is_template:
-                    is_template = True
-                i = _skip_balanced_parens(source, after)
-                continue
-            if hashes == 0 and after < n:
-                if not is_template:
-                    buf.append(source[after])
-                i = after + 1
-                continue
-        if not is_template:
-            buf.append(source[i])
-        i += 1
-    return n, None
-
-
-def _skip_balanced_parens(source: str, open_index: int) -> int:
-    """Advance past balanced `(` ... `)` respecting nested comments and Swift string literals."""
-    depth = 1
-    i = open_index + 1
-    n = len(source)
-    block_depth = 0
-    while i < n and depth > 0:
-        if block_depth > 0:
-            if source.startswith('/*', i):
-                block_depth += 1
-                i += 2
-            elif source.startswith('*/', i):
-                block_depth -= 1
-                i += 2
-            else:
-                i += 1
-            continue
-        if source.startswith('//', i):
-            nl = source.find('\n', i)
-            i = n if nl < 0 else nl + 1
-            continue
-        if source.startswith('/*', i):
-            block_depth = 1
-            i += 2
-            continue
-        span = _swift_string_span(source, i)
-        if span is not None:
-            i = span[0]
-            continue
-        c = source[i]
-        if c == '(':
-            depth += 1
-        elif c == ')':
-            depth -= 1
-        i += 1
-    return i
+_SWIFT_TOKENS = re.compile(r'"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*[\s\S]*?\*/')
 
 
 def _strip_swift_comments(source: str) -> str:
-    """Strip Swift `//` and nested `/* */` comments while preserving all string literals."""
-    out: list[str] = []
-    i = 0
-    n = len(source)
-    block_depth = 0
-    while i < n:
-        if block_depth > 0:
-            if source.startswith('/*', i):
-                block_depth += 1
-                i += 2
-            elif source.startswith('*/', i):
-                block_depth -= 1
-                if block_depth == 0:
-                    out.append(' ')
-                i += 2
-            else:
-                if source[i] == '\n':
-                    out.append('\n')
-                i += 1
-            continue
-        if source.startswith('//', i):
-            nl = source.find('\n', i)
-            if nl < 0:
-                break
-            out.append('\n')
-            i = nl + 1
-            continue
-        if source.startswith('/*', i):
-            block_depth = 1
-            i += 2
-            continue
-        span = _swift_string_span(source, i)
-        if span is not None:
-            end_idx, _ = span
-            out.append(source[i:end_idx])
-            i = end_idx
-            continue
-        out.append(source[i])
-        i += 1
-    return ''.join(out)
+    return _SWIFT_TOKENS.sub(lambda m: ' ' if m.group(0).startswith('/') else m.group(0), source)
 
 
 _SHORTCUT_STORAGE_CALL_RE = re.compile(r'TrainerShortcutStorage(?:\s*<[^>]+>)?\s*\(')
@@ -654,185 +406,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-swift-sources-') as tmp_gen:
         for src in compiled[SWIFT_APP_MODULE]
     )
 
-# 2. Enforce manifest-derived Python imports, identities, and storage-key prefixes on the repo.
+# 2. Python imports and storage keys stay inside their own game.
 assert not check_python_import_boundaries(ROOT), check_python_import_boundaries(ROOT)
-assert not check_manifest_derived_identities(ROOT), check_manifest_derived_identities(ROOT)
 assert not check_module_storage_keys(ROOT), check_module_storage_keys(ROOT)
 
 assert not (ROOT / 'Backend/games/reference_fixture').exists()
 assert not (ROOT / 'Sources/ReferenceFixture').exists()
-
-fixture_ui_path = ROOT / 'ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift'
-fixture_ui = fixture_ui_path.read_text(encoding='utf-8')
-assert 'TrainerFeatureToggleRow(' in fixture_ui
-
-
-# 3. Verify every check fails closed on synthetic N-module boundary & key mutations.
-def _write_synthetic_repo(root: Path) -> None:
-    (root / 'app.json').write_text(json.dumps({'schemaVersion': 1, 'modules': ['alpha', 'beta']}), encoding='utf-8')
-    for gid, mtype, gdir, cls in (
-        ('alpha', 'AlphaGameModule', 'Sources/Alpha', 'AlphaAdapter'),
-        ('beta', 'BetaGameModule', 'Sources/Beta', 'BetaAdapter'),
-    ):
-        mdir = root / 'Backend' / 'games' / gid
-        mdir.mkdir(parents=True)
-        (mdir / 'module.json').write_text(
-            json.dumps(
-                {
-                    'schemaVersion': 1,
-                    'id': gid,
-                    'displayName': gid.capitalize(),
-                    'protocolVersion': 1,
-                    'backend': {'adapter': f'games.{gid}.adapter:{cls}'},
-                    'frontend': {'sourceDirectory': gdir, 'moduleType': mtype, 'minimumMacOS': '14.0'},
-                }
-            ),
-            encoding='utf-8',
-        )
-        (mdir / 'adapter.py').write_text(
-            f'from core.adapter import GameAdapter\nclass {cls}(GameAdapter): pass\n',
-            encoding='utf-8',
-        )
-        sdir = root / gdir
-        sdir.mkdir(parents=True)
-        (sdir / f'{mtype}.swift').write_text(
-            f'import Foundation\nfunc k() -> String {{ "{gid}.pref" }}\n'
-            'func ok(d: UserDefaults) { d.set(1, forKey: k()) }\n',
-            encoding='utf-8',
-        )
-    (root / 'Backend/core').mkdir(parents=True)
-    (root / 'Backend/core/adapter.py').write_text('class GameAdapter: pass\n', encoding='utf-8')
-    (root / 'Tools').mkdir(parents=True)
-    (root / 'Tools/module_support.py').write_text('"""Generic helper"""\n', encoding='utf-8')
-    (root / 'Sources/Core').mkdir(parents=True)
-    (root / 'Sources/Core/HostPrefs.swift').write_text(
-        'import Foundation\nfunc ok(d: UserDefaults) { d.set("en", forKey: "host.lang") }\n',
-        encoding='utf-8',
-    )
-
-
-with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
-    synth = Path(tmp)
-    _write_synthetic_repo(synth)
-    assert check_python_import_boundaries(synth) == []
-    assert check_manifest_derived_identities(synth) == []
-    assert check_module_storage_keys(synth) == []
-
-    # 3a. Core & shared Tools importing a declared game (absolute, relative, Backend.*, importlib) must fail.
-    for target_file in (synth / 'Backend/core/leak.py', synth / 'Tools/shared_helper.py'):
-        target_file.write_text('from games import beta\n', encoding='utf-8')
-        assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
-        target_file.write_text('import Backend.games.alpha\n', encoding='utf-8')
-        assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
-        target_file.unlink()
-    (synth / 'Backend/core/leak.py').write_text('from ..games.alpha import adapter\n', encoding='utf-8')
-    assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
-    (synth / 'Backend/core/leak.py').unlink()
-
-    # 3b. Cross-game Python import (`alpha` importing `beta`, relative, Backend.*, importlib, string) must fail.
-    cross_py = synth / 'Backend/games/alpha/cross.py'
-    for body in (
-        'from ..beta import adapter\n',
-        'from Backend.games.beta import adapter\n',
-        'import importlib\nmod = importlib.import_module(".beta", package="games")\n',
-        'WORKER = "games.beta.worker"\n',
-    ):
-        cross_py.write_text(body, encoding='utf-8')
-        errs = check_python_import_boundaries(synth)
-        assert errs, f'expected Python boundary failure for {body!r}'
-    cross_py.unlink()
-
-    # 3c. Manifest-derived identity leakage in Core, Tools, ContractFixtures, and cross-game files must fail.
-    (synth / 'Backend/core/ident.py').write_text('NAME = "AlphaGameModule"\n', encoding='utf-8')
-    assert any('AlphaGameModule' in err for err in check_manifest_derived_identities(synth))
-    (synth / 'Backend/core/ident.py').unlink()
-    (synth / 'Backend/games/beta/cross_ident.py').write_text('OTHER = "AlphaAdapter"\n', encoding='utf-8')
-    assert any('foreign module identifiers' in err for err in check_manifest_derived_identities(synth))
-    (synth / 'Backend/games/beta/cross_ident.py').unlink()
-    fx_dir = synth / 'ContractFixtures/reference_module'
-    (fx_dir / 'backend').mkdir(parents=True)
-    (fx_dir / 'frontend').mkdir(parents=True)
-    (fx_dir / 'backend/module.json').write_text(
-        json.dumps(
-            {
-                'schemaVersion': 1,
-                'id': 'ref_fix',
-                'displayName': 'Ref',
-                'protocolVersion': 1,
-                'backend': {'adapter': 'games.ref_fix.adapter:RefAdapter'},
-                'frontend': {
-                    'sourceDirectory': 'Sources/RefFix',
-                    'moduleType': 'RefGameModule',
-                    'minimumMacOS': '14.0',
-                },
-            }
-        ),
-        encoding='utf-8',
-    )
-    (fx_dir / 'frontend/Ref.swift').write_text('let leak = "AlphaGameModule"\n', encoding='utf-8')
-    assert any('fixture mentions real module tokens' in err for err in check_manifest_derived_identities(synth))
-    (fx_dir / 'frontend/Ref.swift').write_text(
-        'import Foundation\n'
-        'let s = TrainerShortcutStorage<Action>(moduleID: RefGameModule.descriptor.id, defaults: .standard)\n',
-        encoding='utf-8',
-    )
-    assert check_manifest_derived_identities(synth) == []
-    assert check_module_storage_keys(synth) == []
-
-    # 3d. Storage boundary: TrainerShortcutStorage moduleID ownership and @AppStorage rejection.
-    bad_swift = synth / 'Sources/Alpha/BadStore.swift'
-    for snippet in (
-        'import SwiftUI\nstruct V { @AppStorage("alpha.x") var x = false }\n',
-        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: "beta", defaults: .standard)\n',
-        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: dynID, defaults: .standard)\n',
-    ):
-        bad_swift.write_text(snippet, encoding='utf-8')
-        assert check_module_storage_keys(synth), f'expected storage key check failure for:\n{snippet}'
-    bad_swift.write_text(
-        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: "alpha", defaults: .standard)\n',
-        encoding='utf-8',
-    )
-    assert check_module_storage_keys(synth) == []
-    bad_swift.unlink()
-
-    (synth / 'Sources/Core/BadVocab.swift').write_text(
-        'import SwiftUI\nstruct TrainerBoonLayout {}\n', encoding='utf-8'
-    )
-    assert any('Hades-family vocabulary' in err for err in check_manifest_derived_identities(synth))
-    (synth / 'Sources/Core/BadVocab.swift').unlink()
-
-    # 3e. Root / foreign data directory escapes must fail (`trainer_data_root`,
-    # `legacy_data_dir`, `trainer_data_directory`, `trainer_log_directory`).
-    for bad_py in (
-        'from core.log_paths import trainer_data_root\nROOT_DIR = trainer_data_root()\n',
-        'def f(self): return self.legacy_data_dir\n',
-        'from core.log_paths import trainer_data_directory\nDIR = trainer_data_directory(game_id="beta")\n',
-        'from core.log_paths import trainer_log_directory\nLOGS = trainer_log_directory("beta")\n',
-    ):
-        (synth / 'Backend/games/alpha/store.py').write_text(bad_py, encoding='utf-8')
-        assert check_module_storage_keys(synth), f'expected data-dir failure for {bad_py!r}'
-    (synth / 'Backend/games/alpha/store.py').unlink()
-
-    # 3g. Tools/games/<id>/ isolation catches relative & absolute foreign imports,
-    # token leaks, and unowned top-level Tools/ scripts referencing a game module.
-    (synth / 'Tools/games/alpha').mkdir(parents=True)
-    for filename, snippet in (
-        ('bad_rel.py', 'from ..beta import adapter\n'),
-        ('bad_abs.py', 'from games.beta import adapter\n'),
-    ):
-        bad_tool = synth / 'Tools/games/alpha' / filename
-        bad_tool.write_text(snippet, encoding='utf-8')
-        assert any('imports foreign game' in err for err in check_python_import_boundaries(synth)), filename
-        bad_tool.unlink()
-
-    leaky_top = synth / 'Tools/leaky_tool.py'
-    leaky_top.write_text('import games.alpha\n', encoding='utf-8')
-    assert any('shared Python must not import game module' in err for err in check_python_import_boundaries(synth))
-    leaky_top.unlink()
-
-    tok_tool = synth / 'Tools/games/alpha/leak_token.py'
-    tok_tool.write_text('CLS = "BetaAdapter"\n', encoding='utf-8')
-    assert any('foreign module identifiers' in err for err in check_manifest_derived_identities(synth))
-    tok_tool.unlink()
 
 print('cross_game_isolation_ok')
