@@ -10,6 +10,7 @@ import sys
 import time
 
 from core.adapter import AdapterError
+from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 
 APP_INSTANCE_SYMBOL = '_ZN3sgg3App8INSTANCEE'
 AUTO_RESET_SYMBOL = '_ZN3sgg5Debug21AUTO_RESET_TIME_SCALEE'
@@ -31,7 +32,7 @@ class HadesSimulationTimeWarp:
     MINIMUM = 0.0
     MAXIMUM = 10.0
     FIXED_STEP_MAXIMUM = 5.0
-    BOUNDED_TIMEOUT_SECONDS = 3.0
+    BOUNDED_TIMEOUT_SECONDS = PROCESS_CONTROL_TIMEOUT_SECONDS
 
     def __init__(self, transport):
         self.transport = transport

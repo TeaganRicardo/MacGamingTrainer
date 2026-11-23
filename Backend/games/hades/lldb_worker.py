@@ -8,6 +8,7 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
+from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 from .schema import (DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, LOCK_FIELDS, MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
                      feature_document, feature_value)
 from .world import (mutation_params as world_mutation_params, runtime_definitions,
@@ -78,7 +79,7 @@ class HadesLLDBWorker:
         return result
 
     def _trait_command(self, source, command_id):
-        deadline = time.monotonic() + 3
+        deadline = time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS
         receipt = self.transport.execute(source, mutating=True)
         owner = 'MacGamingTrainerHades'
         identifier = lua_literal(command_id)

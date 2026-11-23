@@ -71,9 +71,12 @@ enum Hades2Command: String {
         case .disconnect: return 12.0
         case .launch: return 50.0
         case .disableAll: return 65.0
+        case .saveEditorInventory: return 30.0
+        case .saveEditorOpen: return 35.0
         case .saveEditorQuery: return 30.0
         case .saveEditorDetail: return 30.0
         case .saveEditorApply: return 30.0
+        case .loadProfile: return 55.0
         case .diagnostics: return 70.0
         case .exportDiagnostics: return 85.0
         case .prepare: return 560.0
