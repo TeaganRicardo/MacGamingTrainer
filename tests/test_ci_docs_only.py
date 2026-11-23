@@ -31,13 +31,25 @@ MACOS_ONLY = {"test_hades2_run_log_watcher.py"}
 DEPENDENCIES = module.load_macos_test_dependencies()
 
 
-def assert_scope(paths, *, docs_only, linux, macos, module_build, build=None, full_build=None):
+def assert_scope(
+    paths,
+    *,
+    docs_only,
+    linux,
+    macos,
+    module_build,
+    module_full_build=None,
+    build=None,
+    full_build=None,
+):
     expected_build = macos if build is None else build
+    expected_module_full = module_build if module_full_build is None else module_full_build
     assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY, test_dependencies=DEPENDENCIES) == {
         "docs_only": docs_only,
         "needs_linux": linux,
         "needs_macos": macos,
         "needs_module": module_build,
+        "needs_module_full_build": expected_module_full,
         "needs_build": expected_build,
         "needs_full_build": expected_build if full_build is None else full_build,
     }
@@ -150,6 +162,7 @@ assert_scope(
     linux=True,
     macos=True,
     module_build=True,
+    module_full_build=False,
     full_build=False,
 )
 assert_scope(
@@ -214,7 +227,7 @@ for source in (
     "Sources/Core/UI/Components/TrainerListControls.swift",
 ):
     assert_scope([source], docs_only=False, linux=True, macos=True,
-                 module_build=True, build=True, full_build=False)
+                 module_build=True, module_full_build=False, build=True, full_build=False)
 
 assert_scope(["tests/visual_hierarchy_harness.py"],
              docs_only=False, linux=True, macos=True, module_build=False, build=False)
@@ -346,6 +359,7 @@ assert module.classify_scope(
     "needs_linux": True,
     "needs_macos": False,
     "needs_module": False,
+    "needs_module_full_build": False,
     "needs_build": False,
     "needs_full_build": False,
 }
@@ -359,9 +373,23 @@ assert module.classify_scope(
     "needs_linux": True,
     "needs_macos": True,
     "needs_module": False,
+    "needs_module_full_build": False,
     "needs_build": True,
     "needs_full_build": True,
 }
+# Swift-only Core diffs typecheck the reference fixture instead of linking/signing it.
+assert_scope(
+    ["Sources/Core/UI/TrainerTheme.swift"],
+    docs_only=False, linux=True, macos=True, module_build=True, module_full_build=False, build=True, full_build=False,
+)
+assert_scope(
+    ["Sources/Core/UI/TrainerTheme.swift", "tests/test_ci_docs_only.py"],
+    docs_only=False, linux=True, macos=True, module_build=True, module_full_build=False, build=True, full_build=False,
+)
+assert_scope(
+    ["Sources/Core/UI/TrainerTheme.swift", "ContractFixtures/reference_module/backend/module.json"],
+    docs_only=False, linux=True, macos=True, module_build=True, module_full_build=True, build=True, full_build=True,
+)
 
 
 def git(root: Path, *args: str) -> None:
@@ -496,7 +524,7 @@ for base in ("", "0" * 40):
     ).stdout.split()
     assert emitted == [
         "docs_only=false", "needs_linux=true", "needs_macos=true",
-        "needs_module=true", "needs_build=true", "needs_full_build=true",
+        "needs_module=true", "needs_module_full_build=true", "needs_build=true", "needs_full_build=true",
     ], (base, emitted)
 
 print("ci_docs_only_ok")

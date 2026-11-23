@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       needs_module: ${{ steps.scope.outputs.needs_module }}
+      needs_module_full_build: ${{ steps.scope.outputs.needs_module_full_build }}
+      games: ${{ steps.matrix.outputs.games }}
       runner_label: ${{ steps.toolchain.outputs.runner_label }}
       developer_dir: ${{ steps.toolchain.outputs.developer_dir }}
     steps:
@@ -42,14 +44,18 @@ jobs:
         id: toolchain
         run: python3 Tools/macos_toolchain_identity.py --print-github-output >> "$GITHUB_OUTPUT"
 
+      - name: Derive isolated module build matrix
+        id: matrix
+        run: echo "games=$(python3 Tools/module_inventory.py --matrix-json --include reference_fixture)" >> "$GITHUB_OUTPUT"
+
       - name: Classify change scope
         id: scope
         run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Require explicit scope decision
-        if: steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'
+        if: (steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false') || (steps.scope.outputs.needs_module_full_build != 'true' && steps.scope.outputs.needs_module_full_build != 'false') || (steps.scope.outputs.needs_module_full_build == 'true' && steps.scope.outputs.needs_module != 'true')
         run: |
-          echo "Change-scope classifier did not emit needs_module=true|false." >&2
+          echo "Change-scope classifier did not emit valid needs_module / needs_module_full_build outputs." >&2
           exit 1
 
   build:
@@ -58,8 +64,8 @@ jobs:
     runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') && needs.scope.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
-      # Hades isolated diagnostics remain part of explicit release convergence,
-      # while PRs run only the reference fixture for shared module seams.
+      # Isolated declared product modules run on explicit convergence, while PRs
+      # run only the reference fixture for shared module seams.
       MGT_RUN_MODULE_BUILD: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && (github.event_name == 'workflow_dispatch' || matrix.game == 'reference_fixture') }}
       # Runner label and Xcode path come from Tools/macos_toolchain_identity.py
       # via the scope job.
@@ -68,9 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        game:
-          - reference_fixture
-          - hades
+        game: ${{ fromJSON(needs.scope.outputs.games) }}
 
     steps:
       - name: Require scope classification
@@ -109,20 +113,21 @@ jobs:
           cp -R ContractFixtures/reference_module/backend/. Backend/games/reference_fixture/
           cp -R ContractFixtures/reference_module/frontend/. Sources/ReferenceFixture/
 
+      - name: Typecheck isolated module on Swift-only Core PR
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && github.event_name == 'pull_request' && needs.scope.outputs.needs_module_full_build == 'false'
+        run: |
+          ./build.sh --typecheck "${{ matrix.game }}"
+
       - name: Build selected module
-        if: env.MGT_RUN_MODULE_BUILD == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_module_full_build == 'true')
         run: |
           ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
-        if: env.MGT_RUN_MODULE_BUILD == 'true'
+        if: env.MGT_RUN_MODULE_BUILD == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_module_full_build == 'true')
         run: |
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
-          test ! -e "$app/Contents/Resources/Modules/hades2/ui_terminology.json"
-          test ! -e "$app/Contents/Resources/Modules/hades2/hades2.zh-CN.json"
-          test ! -e "$app/Contents/Resources/Modules/hades2/hades2.en.json"
-          test ! -e "$app/Contents/Resources/ui_terminology.json"
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"

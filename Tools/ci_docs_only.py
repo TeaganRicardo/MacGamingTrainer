@@ -105,6 +105,12 @@ def needs_module_build_for_path(path: str) -> bool:
     )
 
 
+def needs_module_full_build_for_path(path: str) -> bool:
+    if path.startswith("Sources/Core/") and path.endswith(".swift"):
+        return False
+    return needs_module_build_for_path(path)
+
+
 def _is_portable_input(
     path: str,
     macos_only_tests: set[str],
@@ -195,6 +201,7 @@ def classify_scope(
             "needs_linux": True,
             "needs_macos": True,
             "needs_module": True,
+            "needs_module_full_build": True,
             "needs_build": True,
             "needs_full_build": True,
         }
@@ -225,11 +232,16 @@ def classify_scope(
             dependencies = load_macos_test_dependencies(root, changed_paths=normalized)
         needs_macos = bool(affected_tests(normalized, dependencies))
 
+    needs_module_full_build = not documentation and any(
+        needs_module_full_build_for_path(path) for path in normalized
+    )
+
     return {
         "docs_only": documentation and not needs_macos,
         "needs_linux": True,
         "needs_macos": needs_macos,
         "needs_module": needs_module,
+        "needs_module_full_build": needs_module_full_build,
         "needs_build": not documentation and any(
             needs_build_for_path(path, macos_only, reference_prefixes, packaged_resources)
             for path in normalized
@@ -286,7 +298,15 @@ def main(argv: list[str]) -> int:
     except (ModuleInventoryError, OSError, SyntaxError, ValueError, subprocess.SubprocessError) as error:
         print(f"ci scope: {error}", file=sys.stderr)
         return 2
-    for key in ("docs_only", "needs_linux", "needs_macos", "needs_module", "needs_build", "needs_full_build"):
+    for key in (
+        "docs_only",
+        "needs_linux",
+        "needs_macos",
+        "needs_module",
+        "needs_module_full_build",
+        "needs_build",
+        "needs_full_build",
+    ):
         print(f"{key}={'true' if scope[key] else 'false'}")
     return 0
 

@@ -187,7 +187,42 @@ def executable_reference_prefixes(game_ids) -> tuple[str, ...]:
     return tuple(f"docs/reference/{game_id}/" for game_id in sorted(set(game_ids)))
 
 
-def main() -> int:
+def module_matrix_games(root: Path = ROOT, extra_ids=()) -> list[str]:
+    """Return isolated CI build matrix targets from extra IDs plus declared app.json modules."""
+    app_path = root / "app.json"
+    try:
+        raw = json.loads(app_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ModuleInventoryError(f"{app_path}: cannot read app declaration: {error}") from error
+    modules = raw.get("modules") if isinstance(raw, dict) else None
+    if (
+        not isinstance(modules, list)
+        or not modules
+        or any(not isinstance(item, str) or not item for item in modules)
+        or len(set(modules)) != len(modules)
+    ):
+        raise ModuleInventoryError(f"{app_path}: app.json modules must be a non-empty array of unique game IDs")
+    games = []
+    for extra in extra_ids:
+        if extra and extra not in games:
+            games.append(extra)
+    for module_id in modules:
+        if module_id not in games:
+            games.append(module_id)
+    return games
+
+
+def main(argv=None) -> int:
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--matrix-json", action="store_true", help="Print JSON matrix IDs from app.json.")
+    parser.add_argument("--include", action="append", default=[], help="Leading matrix ID (for example a fixture).")
+    args = parser.parse_args(argv)
+    if args.include and not args.matrix_json:
+        parser.error("--include requires --matrix-json")
+    if args.matrix_json:
+        print(json.dumps(module_matrix_games(extra_ids=tuple(args.include))))
+        return 0
     for game_id in discover_module_ids():
         print(game_id)
     return 0

@@ -157,16 +157,38 @@ for name, job_id in REQUIRED_JOBS.items():
             f"needs.{dependency}.result != 'success'" in str(step.get('if')) and 'exit 1' in str(step.get('run'))
             for step in steps(job)
         ), f'{name}: {job_id} must fail closed when {dependency} fails'
+scope_job = workflows['module-build-matrix.yml']['jobs']['scope']
+assert any(
+    step.get('id') == 'matrix' and 'Tools/module_inventory.py --matrix-json --include reference_fixture' in str(step.get('run') or '')
+    for step in steps(scope_job)
+), scope_job
+assert 'steps.matrix.outputs.games' in str((scope_job.get('outputs') or {}).get('games')), scope_job
 games = workflows['module-build-matrix.yml']['jobs']['build']['strategy']['matrix']['game']
-assert 'reference_fixture' in games, games
-assert 'hades' in games, 'isolated Hades diagnostics run on explicit convergence'
+assert games == '${{ fromJSON(needs.scope.outputs.games) }}', games
+sys.path.insert(0, str(ROOT / 'Tools'))
+import module_inventory  # noqa: E402
+assert module_inventory.module_matrix_games(ROOT, extra_ids=('reference_fixture',)) == [
+    'reference_fixture',
+    *json.loads((ROOT / 'app.json').read_text(encoding='utf-8'))['modules'],
+]
+with tempfile.TemporaryDirectory(prefix='mgt-matrix-games-') as matrix_tmp:
+    (Path(matrix_tmp) / 'app.json').write_text(json.dumps({
+        'schemaVersion': 1,
+        'app': {'bundleIdentifier': 'com.example.t', 'displayName': 'T'},
+        'architectures': ['arm64'],
+        'minimumMacOS': '14.0',
+        'modules': ['alpha', 'beta', 'gamma'],
+    }), encoding='utf-8')
+    assert module_inventory.module_matrix_games(Path(matrix_tmp), extra_ids=('reference_fixture',)) == [
+        'reference_fixture', 'alpha', 'beta', 'gamma'
+    ]
 
 # An unclassified change (no true|false decision) fails closed instead of
 # silently taking the fast path.
 DECISIONS = {
     'linux-contracts.yml': ('needs_linux',),
     'build2-macos.yml': ('needs_macos', 'needs_full_build'),
-    'module-build-matrix.yml': ('needs_module',),
+    'module-build-matrix.yml': ('needs_module', 'needs_module_full_build'),
 }
 for name, outputs in DECISIONS.items():
     for output in outputs:
@@ -235,6 +257,25 @@ build2_app_steps = [step for _, step in all_steps['build2-macos.yml']
 assert len(build2_app_steps) == 2, [step.get('name') for step in build2_app_steps]
 for step in build2_app_steps:
     assert requires_convergence(step.get('if')), (step.get('name'), step.get('if'))
+
+matrix_typecheck = [
+    step for _, step in all_steps['module-build-matrix.yml']
+    if str(step.get('run') or '').strip() == './build.sh --typecheck "${{ matrix.game }}"'
+]
+assert len(matrix_typecheck) == 1, matrix_typecheck
+assert {
+    PULL_REQUEST,
+    "needs.scope.outputs.needs_module_full_build == 'false'",
+} <= set(conjuncts(matrix_typecheck[0].get('if')))
+matrix_full_steps = [
+    step for _, step in all_steps['module-build-matrix.yml']
+    if str(step.get('run') or '').strip() == './build.sh "${{ matrix.game }}"'
+    or 'codesign --verify' in str(step.get('run') or '')
+]
+assert len(matrix_full_steps) == 2, [step.get('name') for step in matrix_full_steps]
+for step in matrix_full_steps:
+    terms = {part.strip(' ()') for term in conjuncts(step.get('if')) for part in term.split('||')}
+    assert "needs.scope.outputs.needs_module_full_build == 'true'" in terms, (step.get('name'), step.get('if'))
 
 # Evidence belongs to the exact PR head: one workflow-level BASE/HEAD pair feeds
 # both the scope classifier and every executable checkout.

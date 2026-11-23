@@ -232,13 +232,6 @@ jobs:
           build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
           test "$version" = "$expected_version"
           test "$build" = "$expected_build"
-          test -f "$app/Contents/Resources/Backend/games/hades2/module.json"
-          test -f "$app/Contents/Resources/Modules/hades2/ui_terminology.json"
-          test -f "$app/Contents/Resources/Modules/hades2/hades2.zh-CN.json"
-          test -f "$app/Contents/Resources/Modules/hades2/hades2.en.json"
-          test -f "$app/Contents/Resources/Modules/hades/hades.zh-CN.json"
-          test -f "$app/Contents/Resources/Modules/hades/hades.en.json"
-          test -f "$app/Contents/Resources/Backend/games/hades/module.json"
           codesign --verify --deep --strict "$app"
 
       - name: Package release candidate

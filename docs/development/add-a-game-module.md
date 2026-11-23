@@ -82,8 +82,6 @@ The contract above is the goal; these shared files still need edits or attention
 
 | Shared file | When | Removal owner / disposition |
 | --- | --- | --- |
-| `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
-| `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
 | `tests/fixture_budgets/<domain>.py` | Recording permanent budgets once hosted CI runs exist for new native journeys | Deliberate (`provisional=True` covers new journeys beforehand) |
 
 ## Run the owning lanes

@@ -11,9 +11,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def declared_reference_directories(source_root: Path):
+    directories = []
+    for manifest_path in sorted((source_root / 'Backend/games').glob('*/module.json')):
+        data = json.loads(manifest_path.read_text(encoding='utf-8'))
+        supported = data.get('supportedBuild')
+        if isinstance(supported, dict) and isinstance(supported.get('referenceDirectory'), str):
+            directories.append(supported['referenceDirectory'])
+    return tuple(dict.fromkeys(directories))
+
+
 def fixture(root):
-    for directory in ('Backend', 'Tools', 'Sources', 'Resources',
-                      'docs/reference/hades', 'docs/reference/hades2'):
+    for directory in ('Backend', 'Tools', 'Sources', 'Resources', *declared_reference_directories(ROOT)):
         shutil.copytree(ROOT / directory, root / directory,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     for name in ('Info.plist', 'app.json'):
@@ -155,6 +164,26 @@ class AppIdentityContract(unittest.TestCase):
         result = run(self.root, 'verify_module_build.py', 'hades2', '--dist-dir', self.root / 'dist')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('CFBundleExecutable', result.stderr)
+
+    def test_third_module_declared_reference_directory_is_discovered(self):
+        with tempfile.TemporaryDirectory(prefix='mgt-ref-dirs-') as extra:
+            fake_root = Path(extra)
+            for gid, ref_dir in (('one', 'docs/reference/one'), ('two', 'docs/reference/two')):
+                manifest = fake_root / 'Backend/games' / gid / 'module.json'
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(json.dumps({
+                    'id': gid,
+                    'supportedBuild': {'referenceDirectory': ref_dir},
+                }))
+            self.assertEqual(
+                declared_reference_directories(fake_root),
+                ('docs/reference/one', 'docs/reference/two'),
+            )
+            hades2_ref = json.loads(
+                (ROOT / 'Backend/games/hades2/module.json').read_text(encoding='utf-8')
+            )['supportedBuild']['referenceDirectory']
+            self.assertIn('docs/reference/hades', declared_reference_directories(ROOT))
+            self.assertIn(hades2_ref, declared_reference_directories(ROOT))
 
 
 if __name__ == '__main__':

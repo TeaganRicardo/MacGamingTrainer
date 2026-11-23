@@ -16,6 +16,7 @@ from module_inventory import (
     discover_module_ids,
     executable_reference_prefixes,
     module_ids_for_diff,
+    module_matrix_games,
 )
 
 
@@ -121,5 +122,24 @@ with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-diff-") as tempora
         "Sources/Beta/table.json",
         "docs/reference/alpha/data.json",
     )
+
+# Isolated build matrix IDs come from optional leading IDs plus declared app.json modules.
+with tempfile.TemporaryDirectory(prefix="mgt-module-matrix-") as temporary:
+    root = Path(temporary)
+    (root / "app.json").write_text(json.dumps({"modules": ["beta", "alpha"]}), encoding="utf-8")
+    assert module_matrix_games(root) == ["beta", "alpha"]
+    assert module_matrix_games(root, extra_ids=("fixture", "beta", "fixture")) == [
+        "fixture",
+        "beta",
+        "alpha",
+    ]
+    for invalid in ({}, {"modules": []}, {"modules": ["alpha", "alpha"]}, {"modules": [""]}):
+        (root / "app.json").write_text(json.dumps(invalid), encoding="utf-8")
+        try:
+            module_matrix_games(root)
+        except ModuleInventoryError:
+            pass
+        else:
+            raise AssertionError(f"invalid app.json modules accepted: {invalid}")
 
 print("module_inventory_ok")
