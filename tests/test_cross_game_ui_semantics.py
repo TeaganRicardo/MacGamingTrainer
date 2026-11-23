@@ -181,10 +181,13 @@ assert '"hades.heal"' not in hades_view
 assert "function runtime.heal()" not in hades_runtime
 assert "command == 'heal'" not in hades_adapter
 assert "'set_value', 'heal', 'set_resource'" not in hades_schema
-assert 'removeObject(forKey: "hades.shortcut.heal")' in hades_types
+shortcut_store_core = (ROOT / "Sources/Core/Input/TrainerShortcutStore.swift").read_text()
+assert 'defaults.removeObject(forKey: "hades.shortcut.heal")' in hades_types
+assert "TrainerShortcutStore(" in hades_types
+assert "TrainerShortcutStorage(" in hades_types
 assert "HadesShortcutStore.defaultLayout()[self]!" in hades_types
 assert "TrainerHotkeyLayout.defaultLayout(" in hades_types
-assert "TrainerHotkeyLayout.resolvedLayout(" in hades_types
+assert "TrainerHotkeyLayout.resolvedLayout(" in shortcut_store_core
 assert re.search(
     r"orderedShortcutActions:\s*\[HadesShortcutAction\]\s*=\s*\[\s*\.invincibility,\s*\.fullHealth,",
     hades_nav,

@@ -1,90 +1,79 @@
-"""Hades-owned feature presets. Native saves and one-shot actions stay separate."""
-from datetime import datetime, timezone
-import hashlib
+"""Hades-owned preset storage over the shared Core ProfileStore."""
 import json
-import logging
 from pathlib import Path
 
 from core.adapter import AdapterError
-from core.persistence import atomic_write_text
-from .preferences import refuse_replacing_newer_schema
-from .schema import (PREFERENCE_SCHEMA_VERSION, newer_preference_schema, persisted_preference_document,
-                     preference_document)
+from core.persistence import ProfileStore, utc_iso_timestamp
+from .schema import (
+    PREFERENCE_SCHEMA_VERSION,
+    persisted_preference_document,
+    preference_document,
+)
 
 
-def _newer_format():
+def _invalid_name(*_args):
+    return AdapterError('profile_invalid', 'hades.error.profileInvalid')
+
+
+def _newer_format(*_args):
     return AdapterError('profile_unsupported_schema', 'hades.error.profileNewerFormat')
+
+
+def _read_failed(_reason=None, error=None):
+    diagnostic = str(error) if error is not None else None
+    return AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=diagnostic)
+
+
+def _write_failed(error):
+    return AdapterError('profile_write_failed', 'hades.error.profileWriteFailed', diagnostic=str(error))
 
 
 class HadesProfileStore:
     def __init__(self, root):
         self.root = Path(root)
+        self._store = ProfileStore(
+            self.root,
+            schema_version=PREFERENCE_SCHEMA_VERSION,
+            compatibility_floor=1,
+            payload_key='features',
+            normalize_payload=lambda features, version: persisted_preference_document(version, features),
+            prepare_save_payload=preference_document,
+            game_id='hades',
+            slug_length=None,
+            serialize=lambda document: json.dumps(document, ensure_ascii=False, allow_nan=False),
+            timestamp=utc_iso_timestamp,
+            quarantine_corrupt=False,
+            create_root_dir=False,
+            include_shortcuts_in_list=False,
+            invalid_name_error=_invalid_name,
+            corrupt_error=_read_failed,
+            not_found_error=lambda _name: _read_failed('not_found'),
+            delete_not_found_error=lambda _name: _write_failed(FileNotFoundError('Profile not found')),
+            newer_schema_error=_newer_format,
+            older_schema_error=lambda _found, _supported: _read_failed('older_schema'),
+            invalid_payload_input_error=lambda _reason: AdapterError('invalid_value', 'hades.error.invalidValue'),
+            list_error=lambda error: _read_failed('list_failed', error),
+            write_error=_write_failed,
+        )
 
     @staticmethod
     def name(value):
-        if not isinstance(value, str):
-            raise AdapterError('profile_invalid', 'hades.error.profileInvalid')
-        value = value.strip()
-        if not 1 <= len(value) <= 64 or any(ord(ch) < 32 for ch in value) or '/' in value or '\\' in value:
-            raise AdapterError('profile_invalid', 'hades.error.profileInvalid')
-        return value
+        return ProfileStore.sanitize_profile_name(value, _invalid_name)
 
     def path(self, name):
-        return self.root / (hashlib.sha256(self.name(name).encode('utf-8')).hexdigest() + '.json')
-
-    def _read(self, path):
-        try:
-            value = json.loads(path.read_text(encoding='utf-8'))
-        except (OSError, ValueError) as error:
-            raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
-        if newer_preference_schema(value):
-            raise _newer_format()
-        try:
-            if (not isinstance(value, dict) or set(value) != {'schemaVersion', 'gameID', 'name', 'updatedAt', 'features'}
-                    or value['gameID'] != 'hades'
-                    or self.path(value['name']) != path or self.name(value['name']) != value['name']
-                    or not isinstance(value['updatedAt'], str) or not value['updatedAt']):
-                raise ValueError('Invalid Hades profile envelope')
-            value['features'] = persisted_preference_document(value['schemaVersion'], value['features'])
-            return value
-        except (ValueError, AdapterError) as error:
-            raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
+        return self._store.path(name)
 
     def list(self):
-        try:
-            paths = sorted(self.root.glob('*.json'))
-        except OSError as error:
-            raise AdapterError('profile_read_failed', 'hades.error.profileReadFailed', diagnostic=str(error)) from error
-        rows = []
-        for path in paths:
-            # One unreadable or newer-format file must not hide every other
-            # Profile or fail a save/delete that already completed; loading
-            # that Profile by name still reports its typed read failure.
-            try:
-                rows.append(self._read(path))
-            except AdapterError:
-                logging.exception('Ignoring unreadable Hades profile %s', path)
-        return sorted(({'name': row['name'], 'updatedAt': row['updatedAt']} for row in rows),
-                      key=lambda row: row['name'].casefold())
+        return self._store.list()
+
+    def load_record(self, name):
+        return self._store.load(name)
 
     def load(self, name):
-        return self._read(self.path(name))['features']
+        return self._store.load(name)['features']
 
-    def save(self, name, features):
-        name = self.name(name)
-        document = {'schemaVersion': PREFERENCE_SCHEMA_VERSION, 'gameID': 'hades', 'name': name,
-                    'updatedAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                    'features': preference_document(features)}
-        refuse_replacing_newer_schema(self.path(name), _newer_format)
-        try:
-            atomic_write_text(
-                self.path(name), json.dumps(document, ensure_ascii=False, allow_nan=False),
-            )
-        except OSError as error:
-            raise AdapterError('profile_write_failed', 'hades.error.profileWriteFailed', diagnostic=str(error)) from error
+    def save(self, name, features, shortcuts=None):
+        self._store.save(name, features, shortcuts)
 
     def delete(self, name):
-        try:
-            self.path(name).unlink()
-        except OSError as error:
-            raise AdapterError('profile_write_failed', 'hades.error.profileWriteFailed', diagnostic=str(error)) from error
+        self._store.delete(name)

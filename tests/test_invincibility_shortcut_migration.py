@@ -45,6 +45,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-invincibility-shortcut-") as td:
         modules=[
             SwiftModule(SWIFT_CORE_MODULE, [
                 ROOT / "Sources/Core/Input/HotkeyChord.swift",
+                ROOT / "Sources/Core/Input/TrainerShortcutStore.swift",
                 ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift",
                 ROOT / "Sources/Core/UI/TrainerWorkbenchSearch.swift",
             ]),

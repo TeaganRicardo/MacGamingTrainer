@@ -1,65 +1,29 @@
-import hashlib
 import json
-import logging
 import re
 import time
+from pathlib import Path
+
+from core.persistence import ProfileStore, normalize_shortcut_map
 
 from .persistence import (
+    PersistenceError,
     UnsupportedSchemaVersionError,
-    atomic_write_text,
-    quarantine_corrupt_file,
 )
 from .preferences import DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 
 PROFILE_SCHEMA_VERSION = 6
 PROFILE_COMPATIBILITY_FLOOR = 3
-_PROFILE_FIELDS = frozenset((
-    'schemaVersion','desiredSchemaVersion','name','updatedAt','desired','shortcuts',
-))
-_SHORTCUT_MODIFIER_MASK = (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)
 _LEGACY_V3_SHORTCUT_MODIFIERS = (1 << 11) | (1 << 12)
 _LEGACY_V3_DIGIT_KEYCODES = {
     0:29, 1:18, 2:19, 3:20, 4:21, 5:23, 6:22, 7:26, 8:28, 9:25,
 }
-
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
 _RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode','gardenQoL'))
 
 
-def _profile_schema_version(payload):
-    if 'schemaVersion' not in payload:return 0
-    value=payload['schemaVersion']
-    if type(value) is not int or value<0:raise ValueError('Profile schemaVersion 无效。')
-    return value
-
-
-def _profile_desired_schema_version(payload):
-    value=payload.get('desiredSchemaVersion')
-    if type(value) is not int or value<0:raise ValueError('Profile desiredSchemaVersion 无效。')
-    return value
-
-
 def _normalize_shortcuts(raw):
     """Validate current Profile shortcut chords without legacy coercion."""
-    if not isinstance(raw,dict):return {}
-    result={}
-    layout_version=raw.get('_layoutVersion')
-    if type(layout_version) is int and layout_version >= 1:
-        result['_layoutVersion']=layout_version
-    actions=sorted(
-        action for action in raw
-        if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)
-        and action not in _RETIRED_SHORTCUT_ACTIONS
-    )
-    for action in actions:
-        row=raw.get(action)
-        if not isinstance(row,dict) or set(row)!= {'keyCode','modifiers','keyLabel'}:continue
-        key_code=row.get('keyCode');modifiers=row.get('modifiers');label=row.get('keyLabel')
-        if type(key_code) is not int or not 0<=key_code<=65535:continue
-        if type(modifiers) is not int or not 0<=modifiers<=0xFFFFFFFF or modifiers & ~_SHORTCUT_MODIFIER_MASK:continue
-        if not isinstance(label,str) or not label or len(label)>16 or any(ord(ch)<32 for ch in label):continue
-        result[action]={'keyCode':key_code,'modifiers':modifiers,'keyLabel':label}
-    return result
+    return normalize_shortcut_map(raw, retired_actions=_RETIRED_SHORTCUT_ACTIONS)
 
 
 def _migrate_v3_shortcuts(raw):
@@ -108,168 +72,70 @@ def _migrate_profile_payload(payload, version):
     return result
 
 
+def _invalid_name_error(reason):
+    if reason == 'non_string':
+        return ValueError('Profile 名称无效。')
+    if reason == 'separator':
+        return ValueError('Profile 名称不能包含路径分隔符。')
+    return ValueError('Profile 名称必须为 1–64 个可见字符。')
+
+
+def _invalid_payload_input_error(reason):
+    if reason == 'shortcuts':
+        return ValueError('Profile shortcuts 字段无效。')
+    return ValueError('Profile desired 字段无效。')
+
+
 class Hades2ProfileService:
-    """Versioned Profile file I/O. Runtime replay remains in the adapter."""
+    """Versioned Profile file I/O over Core ProfileStore."""
     def __init__(self, root):
-        self.root=root
-        self.root.mkdir(parents=True,exist_ok=True)
+        self.root = Path(root)
+        self._store = ProfileStore(
+            self.root,
+            schema_version=PROFILE_SCHEMA_VERSION,
+            compatibility_floor=PROFILE_COMPATIBILITY_FLOOR,
+            payload_key='desired',
+            normalize_payload=normalize_persisted_desired,
+            prepare_save_payload=lambda payload: normalize_persisted_desired(payload, DESIRED_STATE_SCHEMA_VERSION),
+            payload_version_key='desiredSchemaVersion',
+            payload_schema_version=DESIRED_STATE_SCHEMA_VERSION,
+            slug_length=24,
+            serialize=lambda doc: json.dumps(doc,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n',
+            timestamp=lambda: time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+            quarantine_corrupt=True,
+            create_root_dir=True,
+            migrate_envelope=_migrate_profile_payload,
+            retired_shortcut_actions=_RETIRED_SHORTCUT_ACTIONS,
+            include_shortcuts_in_list=True,
+            invalid_name_error=_invalid_name_error,
+            corrupt_error=lambda _reason, exc=None: ValueError('Profile 文件已损坏。'),
+            not_found_error=lambda _name: ValueError('未找到该 Profile。'),
+            newer_schema_error=lambda found, supported: UnsupportedSchemaVersionError('Profile', found, supported),
+            older_schema_error=lambda found, supported: UnsupportedSchemaVersionError('Profile', found, supported),
+            newer_payload_schema_error=lambda found, supported: UnsupportedSchemaVersionError(
+                'Profile desired-state', found, supported
+            ),
+            invalid_payload_input_error=_invalid_payload_input_error,
+            write_error=lambda error: error if isinstance(error, PersistenceError) else PersistenceError('无法安全写入本地配置。'),
+        )
 
     @staticmethod
     def sanitize_name(name):
-        if not isinstance(name,str):raise ValueError('Profile 名称无效。')
-        name=name.strip()
-        if not name or len(name)>64 or any(ord(ch)<32 for ch in name):raise ValueError('Profile 名称必须为 1–64 个可见字符。')
-        if '/' in name or '\\' in name:raise ValueError('Profile 名称不能包含路径分隔符。')
-        return name
+        return ProfileStore.sanitize_profile_name(name, _invalid_name_error)
 
-    def path(self,name):
-        safe=self.sanitize_name(name)
-        slug=hashlib.sha256(safe.encode('utf-8')).hexdigest()[:24]
-        return self.root/(slug+'.json')
-
-    @staticmethod
-    def _quarantine(path, message):
-        quarantined=quarantine_corrupt_file(path)
-        logging.error('%s %s quarantined=%s',message,path,quarantined)
-        return quarantined
-
-    @classmethod
-    def _read_payload(cls,path,quarantine=True):
-        try:
-            text=path.read_text(encoding='utf-8')
-        except UnicodeError:
-            if quarantine:cls._quarantine(path,'Unreadable profile')
-            raise ValueError('Profile 文件已损坏。')
-        except OSError:
-            raise
-        try:
-            payload=json.loads(text)
-        except json.JSONDecodeError:
-            if quarantine:cls._quarantine(path,'Invalid JSON profile')
-            raise ValueError('Profile 文件已损坏。')
-        if not isinstance(payload,dict):
-            if quarantine:cls._quarantine(path,'Invalid profile shape')
-            raise ValueError('Profile 文件已损坏。')
-        return payload
-
-    @classmethod
-    def _validate_schema(cls,path,payload,quarantine=True):
-        try:
-            version=_profile_schema_version(payload)
-        except ValueError:
-            if quarantine:cls._quarantine(path,'Invalid profile schema version')
-            raise ValueError('Profile 文件已损坏。')
-        if version<PROFILE_COMPATIBILITY_FLOOR or version>PROFILE_SCHEMA_VERSION:
-            raise UnsupportedSchemaVersionError('Profile',version,PROFILE_SCHEMA_VERSION)
-        return version
-
-    def _validate_envelope(self,path,payload,quarantine=True):
-        version=self._validate_schema(path,payload,quarantine=quarantine)
-        document=_migrate_profile_payload(payload,version) if version<PROFILE_SCHEMA_VERSION else dict(payload)
-        try:
-            unknown=set(document)-_PROFILE_FIELDS
-            if unknown:raise ValueError('Profile 包含当前 schema 未定义的顶层字段。')
-
-            raw_name=document.get('name')
-            name=self.sanitize_name(raw_name)
-            if raw_name!=name:raise ValueError('Profile 名称未规范化。')
-            if self.path(name)!=path:raise ValueError('Profile 名称与文件标识不一致。')
-
-            desired=document.get('desired')
-            if not isinstance(desired,dict):raise ValueError('Profile desired 字段无效。')
-            desired_schema_version=_profile_desired_schema_version(document)
-            if desired_schema_version>DESIRED_STATE_SCHEMA_VERSION:
-                raise UnsupportedSchemaVersionError(
-                    'Profile desired-state',desired_schema_version,DESIRED_STATE_SCHEMA_VERSION
-                )
-            desired=normalize_persisted_desired(desired,desired_schema_version)
-
-            updated_at=document.get('updatedAt','')
-            if not isinstance(updated_at,str) or len(updated_at)>128 or any(ord(ch)<32 for ch in updated_at):
-                raise ValueError('Profile updatedAt 字段无效。')
-            if not updated_at:
-                raise ValueError('Profile updatedAt 字段缺失。')
-
-            if 'shortcuts' in document and not isinstance(document['shortcuts'],dict):
-                raise ValueError('Profile shortcuts 字段无效。')
-        except UnsupportedSchemaVersionError:
-            raise
-        except ValueError:
-            if quarantine:self._quarantine(path,'Invalid profile envelope')
-            raise ValueError('Profile 文件已损坏。')
-        return {
-            'name':name,
-            'updatedAt':updated_at,
-            'desiredSchemaVersion':desired_schema_version,
-            'desired':desired,
-            'shortcuts':_normalize_shortcuts(document.get('shortcuts')),
-        }
+    def path(self, name):
+        return self._store.path(name)
 
     def list(self):
-        rows=[]
-        for path in sorted(self.root.glob('*.json')):
-            try:
-                data=self._read_payload(path)
-                envelope=self._validate_envelope(path,data)
-                rows.append({'name':envelope['name'],'updatedAt':envelope['updatedAt'],'shortcuts':envelope['shortcuts']})
-            except UnsupportedSchemaVersionError:
-                logging.warning('Ignoring unsupported Profile schema without modifying it: %s',path)
-            except ValueError:logging.exception('Ignoring corrupt profile %s',path)
-            except OSError:logging.exception('Unable to read profile %s',path)
-        rows.sort(key=lambda item:item['name'].casefold())
-        return rows
+        return self._store.list()
 
-    @classmethod
-    def _protect_future_overwrite(cls,path):
-        if not path.is_file():return
-        try:
-            payload=cls._read_payload(path,quarantine=False)
-            version=_profile_schema_version(payload)
-        except (ValueError,OSError):
-            return
-        if version>PROFILE_SCHEMA_VERSION:
-            raise UnsupportedSchemaVersionError('Profile',version,PROFILE_SCHEMA_VERSION)
-        if version==PROFILE_SCHEMA_VERSION:
-            desired_version=payload.get('desiredSchemaVersion')
-            if type(desired_version) is int and desired_version>DESIRED_STATE_SCHEMA_VERSION:
-                raise UnsupportedSchemaVersionError(
-                    'Profile desired-state',desired_version,DESIRED_STATE_SCHEMA_VERSION
-                )
+    def save(self, name, preferences, shortcuts=None):
+        profiles = self._store.save(name, preferences, shortcuts)
+        return {'saved':True,'name':self.sanitize_name(name),'profiles':profiles}
 
-    def save(self,name,preferences,shortcuts=None):
-        name=self.sanitize_name(name)
-        if not isinstance(preferences,dict):raise ValueError('Profile desired 字段无效。')
-        if shortcuts is not None and not isinstance(shortcuts,dict):raise ValueError('Profile shortcuts 字段无效。')
-        path=self.path(name)
-        self._protect_future_overwrite(path)
-        desired=normalize_persisted_desired(preferences,DESIRED_STATE_SCHEMA_VERSION)
-        payload={
-            'schemaVersion':PROFILE_SCHEMA_VERSION,
-            'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
-            'name':name,
-            'updatedAt':time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-            'desired':desired,
-        }
-        if isinstance(shortcuts,dict):
-            payload['shortcuts']=_normalize_shortcuts(shortcuts)
-        atomic_write_text(path,json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n')
-        return {'saved':True,'name':name,'profiles':self.list()}
+    def load(self, name):
+        return self._store.load(name)
 
-    def load(self,name):
-        path=self.path(name)
-        if not path.is_file():raise ValueError('未找到该 Profile。')
-        payload=self._read_payload(path)
-        envelope=self._validate_envelope(path,payload)
-        return {
-            'name':envelope['name'],
-            'desired':envelope['desired'],
-            'shortcuts':envelope['shortcuts'],
-        }
-
-    def delete(self,name):
-        path=self.path(name)
-        if not path.is_file():raise ValueError('未找到该 Profile。')
-        # Deletion is an explicit destructive user action and does not need to
-        # understand the file schema.
-        path.unlink()
-        return {'deleted':True,'name':self.sanitize_name(name),'profiles':self.list()}
+    def delete(self, name):
+        safe_name, profiles = self._store.delete(name)
+        return {'deleted':True,'name':safe_name,'profiles':profiles}

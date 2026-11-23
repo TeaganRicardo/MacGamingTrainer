@@ -34,7 +34,7 @@ publication order. Dismissal invalidates the request, so its later completion
 cannot claim a replacement sheet or newer save. Failure keeps
 the previous stored selection and name draft. Deletion/refresh reconciles to an
 existing entry or clears selection for an empty inventory. Closing the sheet
-does not cancel or replay an in-flight module command. Hades II clears its
+does not cancel or replay an in-flight module command. Both modules clear their
 sheet-specific shortcut compatibility warning when the sheet disappears.
 
 Portable selection regressions cover creation, failed save, external inventory
