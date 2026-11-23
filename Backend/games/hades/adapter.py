@@ -94,13 +94,14 @@ class HadesAdapter(GameAdapter):
         if command == 'list_profiles':
             return {'profiles': self.profiles.list()}
         if command == 'save_profile':
-            self.profiles.save(params.get('name'), self.preferences.load())
+            self.profiles.save(params.get('name'), self.preferences.load(), params.get('shortcuts'))
             return {'profiles': self.profiles.list()}
         if command == 'delete_profile':
             self.profiles.delete(params.get('name'))
             return {'profiles': self.profiles.list()}
         if command == 'load_profile':
-            features = self.profiles.load(params.get('name'))
+            profile = self.profiles.load_record(params.get('name'))
+            features = profile['features']
             self.preferences.save(features)
             self._preferences_error = None
             self.features = features
@@ -122,7 +123,9 @@ class HadesAdapter(GameAdapter):
                 speed_error = self._reconcile_game_speed()
                 if speed_error:
                     raise speed_error
-            return self._observe(state)
+            observed = self._observe(state)
+            observed['shortcuts'] = profile['shortcuts']
+            return observed
         if command == 'diagnostics':
             state = self.dispatch('status', {}, request_id)
             return {**state, 'diagnostics': build_diagnostics(self, state)}

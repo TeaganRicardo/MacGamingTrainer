@@ -336,9 +336,7 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
 }
 
 struct HadesShortcutStore {
-    private let defaults: UserDefaults
-    private(set) var overrides: [HadesShortcutAction: HotkeyChord] = [:]
-    private var resolved: [HadesShortcutAction: HotkeyChord] = [:]
+    private var core: TrainerShortcutStore<HadesShortcutAction>
 
     static func defaultLayout() -> [HadesShortcutAction: HotkeyChord] {
         TrainerHotkeyLayout.defaultLayout(
@@ -348,59 +346,43 @@ struct HadesShortcutStore {
     }
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        defaults.removeObject(forKey: "hades.shortcut.heal")
-        var seen = Set<String>()
-        for action in HadesWorkbenchCatalog.orderedShortcutActions where action != .disableAll {
-            let storageKey = Self.key(action)
-            guard let saved = defaults.object(forKey: storageKey),
-                  let chord = HotkeyChord(payload: saved) else { continue }
-            guard !TrainerHotkeyLayout.isDisableAllChord(chord),
-                  seen.insert(TrainerHotkeyLayout.identity(chord)).inserted else {
-                defaults.removeObject(forKey: storageKey)
-                continue
+        self.core = TrainerShortcutStore(
+            orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
+            defaultLayout: Self.defaultLayout(),
+            lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
+            storage: TrainerShortcutStorage(
+                read: { defaults.object(forKey: Self.key($0)) },
+                write: { defaults.set($1, forKey: Self.key($0)) },
+                remove: { defaults.removeObject(forKey: Self.key($0)) }
+            ),
+            cleanupLegacy: {
+                defaults.removeObject(forKey: "hades.shortcut.heal")
             }
-            overrides[action] = chord
-        }
-        // Retired editable panic-key preferences must never win registration.
-        defaults.removeObject(forKey: Self.key(.disableAll))
-        rebuild()
+        )
     }
 
     func chord(_ action: HadesShortcutAction) -> HotkeyChord {
-        resolved[action] ?? action.defaultChord
+        core.chord(action)
     }
 
     mutating func set(_ action: HadesShortcutAction, chord proposed: HotkeyChord) -> HadesShortcutAction? {
-        if action == .disableAll {
-            return TrainerHotkeyLayout.isDisableAllChord(proposed) ? nil : .disableAll
-        }
-        if TrainerHotkeyLayout.isDisableAllChord(proposed) { return .disableAll }
-        if let conflict = HadesWorkbenchCatalog.orderedShortcutActions.first(where: {
-            $0 != action && TrainerHotkeyLayout.sameKeys(chord($0), proposed)
-        }) { return conflict }
-        overrides[action] = proposed
-        defaults.set(proposed.payload, forKey: Self.key(action))
-        rebuild()
-        return nil
+        core.set(action, chord: proposed)
     }
 
     mutating func reset() {
-        for action in HadesShortcutAction.allCases { defaults.removeObject(forKey: Self.key(action)) }
-        overrides = [:]
-        rebuild()
+        core.reset()
+    }
+
+    func payload() -> [String: Any] {
+        core.payload()
+    }
+
+    @discardableResult
+    mutating func applyProfile(_ values: [String: Any]) -> TrainerShortcutProfileApplyResult {
+        core.applyProfile(values)
     }
 
     private static func key(_ action: HadesShortcutAction) -> String {
         "hades.shortcut.\(action.rawValue)"
-    }
-
-    private mutating func rebuild() {
-        resolved = TrainerHotkeyLayout.resolvedLayout(
-            orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
-            defaults: Self.defaultLayout(),
-            overrides: overrides,
-            locked: [.disableAll: TrainerHotkeyLayout.disableAllChord]
-        )
     }
 }

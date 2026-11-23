@@ -71,6 +71,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var diagnosticsPresented = false
     @Published private(set) var profiles: [HadesSettingsProfile] = []
     @Published private(set) var diagnostics: [TrainerDiagnosticCheck] = []
+    @Published private(set) var profileShortcutWarning: TrainerTextToken?
     private var diagnosticsReport: [String: Any]?
 
     private let services: TrainerModuleServices
@@ -536,9 +537,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func listProfiles() { send(.listProfiles, operation: "hades.manage.profiles", announceSuccess: false) }
     func saveProfile(_ name: String, completion: ((Bool) -> Void)? = nil) {
-        send(.saveProfile(name: name), operation: "hades.profile.save", completion: completion)
+        send(.saveProfile(name: name, shortcuts: shortcuts.payload()), operation: "hades.profile.save", completion: completion)
     }
-    func loadProfile(_ name: String) { send(.loadProfile(name: name), operation: "hades.profile.load") }
+    func clearProfileShortcutWarning() { profileShortcutWarning = nil }
+    func loadProfile(_ name: String) {
+        profileShortcutWarning = nil
+        send(.loadProfile(name: name), operation: "hades.profile.load")
+    }
     func deleteProfile(_ name: String) { send(.deleteProfile(name: name), operation: "host.delete") }
     func runDiagnostics() { send(.diagnostics, operation: "hades.manage.diagnostics", announceSuccess: false) }
     func exportDiagnostics() {
@@ -768,6 +773,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         if let rows = payload["profiles"] {
             profiles = try JSONDecoder().decode([HadesSettingsProfile].self,
                 from: JSONSerialization.data(withJSONObject: rows))
+        }
+        if let profileShortcuts = payload["shortcuts"] as? [String: Any] {
+            switch shortcuts.applyProfile(profileShortcuts) {
+            case .applied:
+                profileShortcutWarning = nil
+                shortcutRevision += 1
+                installShortcuts()
+            case .unsupportedLayoutVersion(let version):
+                profileShortcutWarning = TrainerTextToken(
+                    key: "hades.error.profileShortcutLayoutUnsupported",
+                    arguments: [String(version)]
+                )
+            }
         }
         if let report = payload["diagnostics"] as? [String: Any],
            let checks = report["checks"] as? [[String: Any]] {

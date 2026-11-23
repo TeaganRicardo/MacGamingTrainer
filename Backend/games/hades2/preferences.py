@@ -1,13 +1,14 @@
 import json
 import logging
 import math
+from pathlib import Path
+
+from core.persistence import VersionedDocumentStore
 from .vital_state import normalize_vital_locks
 
 from .persistence import (
     PersistenceError,
     UnsupportedSchemaVersionError,
-    atomic_write_text,
-    quarantine_corrupt_file,
 )
 from .schema import (
     BOON_RARITY_TARGETS,
@@ -176,11 +177,57 @@ def normalize_persisted_desired(raw, schema_version):
     return Hades2PreferenceStore.normalize(migrated)
 
 
+def _prepare_desired_document(preferences, schema_version):
+    # The durable document must state the same intent the runtime acts
+    # on. The multiplier is authoritative here, so persist the projected
+    # pair instead of whatever stale toggle the caller still carried;
+    # the legacy veto belongs to reading an older document, not to
+    # writing the current one.
+    document=canonicalize_damage(preferences,legacy_toggle_veto=False)
+    for key in ('nextRoomReward','nextRoomRewardToken','nextOccurrenceTarget','nextOccurrenceToken'):
+        document.pop(key,None)
+    document['schemaVersion']=schema_version
+    return document
+
+
 class Hades2PreferenceStore:
     def __init__(self, path):
-        self.path = path
-        self.unsupported_schema_version = None
-        self.write_blocked_error = None
+        self.path = Path(path)
+        self._store = VersionedDocumentStore(
+            self.path,
+            schema_version=DESIRED_STATE_SCHEMA_VERSION,
+            compatibility_floor=0,
+            defaults=self.defaults,
+            normalize=normalize_persisted_desired,
+            build_document=_prepare_desired_document,
+            serialize=lambda doc: json.dumps(doc,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n',
+            quarantine_corrupt=True,
+            fallback_on_error=True,
+            newer_schema_error=lambda found, supported: UnsupportedSchemaVersionError('desired-state', found, supported),
+            read_error=lambda _reason, _exc: PersistenceError('现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。'),
+            quarantine_failed_error=lambda reason: PersistenceError(
+                '现有 desired-state 无法安全隔离，已禁止覆盖原文件。'
+                if reason == 'unreadable'
+                else '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。'
+            ),
+            write_error=lambda error: error if isinstance(error, PersistenceError) else PersistenceError('无法安全写入本地配置。'),
+        )
+
+    @property
+    def unsupported_schema_version(self):
+        return self._store.unsupported_schema_version
+
+    @unsupported_schema_version.setter
+    def unsupported_schema_version(self, value):
+        self._store.unsupported_schema_version = value
+
+    @property
+    def write_blocked_error(self):
+        return self._store.write_blocked_error
+
+    @write_blocked_error.setter
+    def write_blocked_error(self, value):
+        self._store.write_blocked_error = value
 
     @staticmethod
     def defaults():
@@ -222,75 +269,11 @@ class Hades2PreferenceStore:
         return result
 
     def load(self):
-        self.unsupported_schema_version=None
-        self.write_blocked_error=None
-        if not self.path.is_file():return self.defaults(),False
-        try:
-            text=self.path.read_text(encoding='utf-8')
-        except UnicodeError:
-            quarantined=quarantine_corrupt_file(self.path)
-            logging.exception('Quarantined unreadable desired-state profile as %s',quarantined)
-            if quarantined is None and self.path.exists():
-                self.write_blocked_error=PersistenceError('现有 desired-state 无法安全隔离，已禁止覆盖原文件。')
-            return self.defaults(),False
-        except FileNotFoundError:
-            # The file may disappear between is_file() and read_text(); that is
-            # equivalent to first-run state and does not justify write-protecting
-            # the store for the rest of this backend lifetime.
-            return self.defaults(),False
-        except OSError:
-            logging.exception('Failed to read desired-state profile')
-            self.write_blocked_error=PersistenceError('现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。')
-            return self.defaults(),False
-        try:
-            raw=json.loads(text)
-        except (json.JSONDecodeError,UnicodeError):
-            quarantined=quarantine_corrupt_file(self.path)
-            logging.exception('Quarantined invalid desired-state profile as %s',quarantined)
-            if quarantined is None and self.path.exists():
-                self.write_blocked_error=PersistenceError('损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。')
-            return self.defaults(),False
-        if not isinstance(raw,dict):
-            quarantined=quarantine_corrupt_file(self.path)
-            logging.error('Quarantined invalid desired-state profile shape as %s',quarantined)
-            if quarantined is None and self.path.exists():
-                self.write_blocked_error=PersistenceError('损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。')
-            return self.defaults(),False
-        try:
-            schema_version=_desired_schema_version(raw)
-        except ValueError:
-            quarantined=quarantine_corrupt_file(self.path)
-            logging.exception('Quarantined desired-state profile with invalid schema version as %s',quarantined)
-            if quarantined is None and self.path.exists():
-                self.write_blocked_error=PersistenceError('损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。')
-            return self.defaults(),False
-        if schema_version>DESIRED_STATE_SCHEMA_VERSION:
-            self.unsupported_schema_version=schema_version
-            self.write_blocked_error=UnsupportedSchemaVersionError(
-                'desired-state',schema_version,DESIRED_STATE_SCHEMA_VERSION
-            )
-            logging.error(
-                'Desired-state schema %s is newer than supported schema %s; preserving file read-only',
-                schema_version,DESIRED_STATE_SCHEMA_VERSION,
-            )
-            return self.defaults(),False
-        return normalize_persisted_desired(raw,schema_version),True
+        return self._store.load()
 
     def save(self, preferences):
         try:
-            if self.write_blocked_error is not None:
-                raise self.write_blocked_error
-            # The durable document must state the same intent the runtime acts
-            # on. The multiplier is authoritative here, so persist the projected
-            # pair instead of whatever stale toggle the caller still carried;
-            # the legacy veto belongs to reading an older document, not to
-            # writing the current one.
-            document=canonicalize_damage(preferences,legacy_toggle_veto=False)
-            for key in ('nextRoomReward','nextRoomRewardToken','nextOccurrenceTarget','nextOccurrenceToken'):
-                document.pop(key,None)
-            document['schemaVersion']=DESIRED_STATE_SCHEMA_VERSION
-            payload=json.dumps(document,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n'
-            atomic_write_text(self.path,payload)
+            self._store.save(preferences)
         except Exception:
             logging.exception('Failed to persist desired-state profile')
             raise

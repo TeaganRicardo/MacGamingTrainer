@@ -280,6 +280,33 @@ precondition(resetStore.applyProfile(["_layoutVersion": 1, "infiniteHealth": res
 precondition(resetStore.chord(.infiniteHealth) == resetChord)
 resetStore.resetToDefaults()
 precondition(matchesDerivedDefaults(resetStore))
+
+// Generic Core TrainerShortcutStore<Action> works for non-game action enums with namespaced keys.
+enum SampleShortcutAction: String, CaseIterable, Hashable {
+    case alpha, beta, disableAll
+}
+let sampleDefaultsLayout = TrainerHotkeyLayout.defaultLayout(
+    orderedActions: SampleShortcutAction.allCases,
+    dedicated: [.disableAll: TrainerHotkeyLayout.disableAllChord]
+)
+let samplePrefs = makeDefaults()
+var sampleStore = TrainerShortcutStore<SampleShortcutAction>(
+    orderedActions: SampleShortcutAction.allCases,
+    defaultLayout: sampleDefaultsLayout,
+    lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
+    storage: TrainerShortcutStorage(
+        read: { samplePrefs.object(forKey: "sample.shortcut.\($0.rawValue)") },
+        write: { samplePrefs.set($1, forKey: "sample.shortcut.\($0.rawValue)") },
+        remove: { samplePrefs.removeObject(forKey: "sample.shortcut.\($0.rawValue)") }
+    )
+)
+let sampleCustom = HotkeyChord(keyCode: 8, modifiers: HotkeyChord.commandModifier, keyLabel: "C")
+precondition(sampleStore.set(.alpha, chord: sampleCustom) == nil)
+precondition(samplePrefs.object(forKey: "sample.shortcut.alpha") != nil)
+precondition(sampleStore.set(.beta, chord: sampleCustom) == .alpha)
+precondition(sampleStore.set(.alpha, chord: sampleDefaultsLayout[.alpha]!) == nil)
+precondition(samplePrefs.object(forKey: "sample.shortcut.alpha") == nil, "setting default chord should elide override")
+
 print("shortcut_chord_semantics_ok")
 '''
 
@@ -293,6 +320,7 @@ with tempfile.TemporaryDirectory() as td:
         modules=[
             SwiftModule(SWIFT_CORE_MODULE, [
                 ROOT / 'Sources/Core/Input/HotkeyChord.swift',
+                ROOT / 'Sources/Core/Input/TrainerShortcutStore.swift',
                 ROOT / 'Sources/Core/UI/TrainerSemanticIcon.swift',
                 ROOT / 'Sources/Core/UI/TrainerWorkbenchSearch.swift',
             ]),

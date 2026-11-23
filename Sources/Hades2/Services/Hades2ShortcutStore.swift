@@ -1,21 +1,11 @@
 import Foundation
 import TrainerCore
 
-/// Hades-specific shortcut persistence. Registration/capture mechanics live in
-/// Core; this store owns action semantics, derived defaults, explicit user
-/// overrides and local migration.
-enum Hades2ShortcutProfileApplyResult: Equatable {
-    case applied
-    case unsupportedLayoutVersion(Int)
-}
+/// Hades II-specific shortcut defaults and historical schema migrations over Core `TrainerShortcutStore`.
+typealias Hades2ShortcutProfileApplyResult = TrainerShortcutProfileApplyResult
 
 struct Hades2ShortcutStore {
-    private(set) var chords: [ShortcutAction: HotkeyChord]
-    private var overrides: [ShortcutAction: HotkeyChord] = [:]
-    private let defaults: UserDefaults
-
-    private static let profileLayoutVersionKey = "_layoutVersion"
-    private static let profileLayoutVersion = 1
+    private var core: TrainerShortcutStore<ShortcutAction>
 
     /// Frozen ordering used only to recognize defaults written by released
     /// shortcut layouts. Active allocation follows the ordered workbench catalog.
@@ -34,11 +24,26 @@ struct Hades2ShortcutStore {
     ]
 
     init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        self.chords = Self.defaultLayout()
-        loadAndMigrate()
-        defaults.removeObject(forKey: "shortcut.action.gardenQoL")
-        defaults.removeObject(forKey: "shortcut.action.damageEnabled")
+        self.core = TrainerShortcutStore(
+            orderedActions: Hades2WorkbenchCatalog.orderedShortcutActions,
+            defaultLayout: Self.defaultLayout(),
+            lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
+            storage: TrainerShortcutStorage(
+                read: { defaults.object(forKey: Self.key($0)) },
+                write: { defaults.set($1, forKey: Self.key($0)) },
+                remove: { defaults.removeObject(forKey: Self.key($0)) },
+                finalizePersistence: {
+                    defaults.removeObject(forKey: "shortcut.action.godMode")
+                    defaults.removeObject(forKey: "shortcut.action.damageEnabled")
+                    defaults.set(6, forKey: "shortcut.layoutVersion")
+                }
+            ),
+            cleanupLegacy: {
+                defaults.removeObject(forKey: "shortcut.action.gardenQoL")
+                defaults.removeObject(forKey: "shortcut.action.damageEnabled")
+            },
+            migrateOverrides: { Self.migrateHistoricalOverrides(defaults) }
+        )
     }
 
     static func defaultLayout() -> [ShortcutAction: HotkeyChord] {
@@ -54,216 +59,88 @@ struct Hades2ShortcutStore {
     }
 
     func chord(_ action: ShortcutAction) -> HotkeyChord {
-        chords[action] ?? Self.defaultLayout()[action]!
+        core.chord(action)
     }
 
     /// Reset explicit user overrides, then derive the current visible action
     /// order again. Keep the fixed Disable All chord and schema migrations.
     mutating func resetToDefaults() {
-        overrides.removeAll()
-        rebuildResolvedLayout()
-        persistOverrides()
+        core.reset()
     }
 
-    /// Profile payloads persist user overrides, not derived defaults. The format
-    /// marker lets older full-layout Profiles migrate without mistaking a new
-    /// intentional shortcut for a chord that used to be a default.
+    /// Profile payloads persist user overrides, not derived defaults.
     func payload() -> [String: Any] {
-        var result: [String: Any] = [Self.profileLayoutVersionKey: Self.profileLayoutVersion]
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            if let explicit = overrides[action] {
-                result[action.rawValue] = explicit.payload
-            }
-        }
-        return result
+        core.payload()
     }
 
     mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> ShortcutAction? {
-        if action == .disableAll {
-            return TrainerHotkeyLayout.isDisableAllChord(newChord) ? nil : .disableAll
-        }
-        if TrainerHotkeyLayout.isDisableAllChord(newChord) { return .disableAll }
-        if let other = ShortcutAction.allCases.first(where: {
-            $0 != action && TrainerHotkeyLayout.sameKeys(chord($0), newChord)
-        }) { return other }
-
-        if newChord == Self.defaultLayout()[action] {
-            overrides[action] = nil
-        } else {
-            overrides[action] = newChord
-        }
-        rebuildResolvedLayout()
-        persistOverrides()
-        return nil
+        core.set(action, chord: newChord, conflictCandidates: ShortcutAction.allCases)
     }
 
     @discardableResult
     mutating func applyProfile(_ values: [String: Any]) -> Hades2ShortcutProfileApplyResult {
-        let importedLayoutVersion = values[Self.profileLayoutVersionKey] as? Int
-        if let importedLayoutVersion, importedLayoutVersion != Self.profileLayoutVersion {
-            return .unsupportedLayoutVersion(importedLayoutVersion)
-        }
-        let isCurrentPayload = importedLayoutVersion == Self.profileLayoutVersion
-        let legacyV4Defaults = Self.legacyV4DefaultLayout()
-        let legacyV3Defaults = Self.legacyV3DefaultChords()
-        var patch: [ShortcutAction: HotkeyChord] = [:]
-        var patchTokens = Set<String>()
-
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
-            guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value),
-                  !TrainerHotkeyLayout.isDisableAllChord(proposed) else { continue }
-            if !isCurrentPayload,
-               (proposed == legacyV4Defaults[action.rawValue] || proposed == legacyV3Defaults[action.rawValue]) {
-                // Old Profiles serialized derived defaults as if they were
-                // user choices. Re-derive those slots in the current UI order.
-                continue
-            }
-            let token = Self.token(proposed)
-            guard !patchTokens.contains(token) else { continue }
-            patch[action] = proposed
-            patchTokens.insert(token)
-        }
-
-        if isCurrentPayload {
-            // Current Profiles are complete override snapshots. An empty
-            // override set intentionally restores derived defaults.
-            overrides = patch
-            rebuildResolvedLayout()
-            persistOverrides()
-            return .applied
-        }
-
-        let completeLegacyV4Layout = Self.legacyV4ActionOrder.filter { ShortcutAction(rawValue: $0) != nil }.allSatisfy {
-            values[$0] != nil
-        }
-        let completeLegacyV3Layout = Self.legacyV3DefaultDigits.keys.allSatisfy {
-            values[$0] != nil
-        }
-        if completeLegacyV4Layout || completeLegacyV3Layout {
-            overrides = patch
-        } else {
-            // Unversioned partial patches keep the historical merge semantics.
-            guard !patch.isEmpty else { return .applied }
-            for action in ShortcutAction.allCases where patch[action] == nil {
-                if let existing = overrides[action], patchTokens.contains(Self.token(existing)) {
-                    overrides[action] = nil
-                }
-            }
-            for (action, proposed) in patch {
-                overrides[action] = proposed
-            }
-        }
-
-        rebuildResolvedLayout()
-        persistOverrides()
-        return .applied
+        core.applyProfile(
+            values,
+            legacyDefaultTables: [Self.legacyV4DefaultLayout(), Self.legacyV3DefaultChords()],
+            completeLegacyLayouts: [
+                Self.legacyV4ActionOrder.filter { ShortcutAction(rawValue: $0) != nil },
+                Array(Self.legacyV3DefaultDigits.keys),
+            ]
+        )
     }
 
-    private mutating func loadAndMigrate() {
+    private static func migrateHistoricalOverrides(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord]? {
         let layoutVersion = defaults.integer(forKey: "shortcut.layoutVersion")
-
-        if layoutVersion >= 6 {
-            loadPersistedOverrides()
-            rebuildResolvedLayout()
-            return
-        }
-
-        if layoutVersion == 5 {
-            migrateV5Identity()
-            rebuildResolvedLayout()
-            persistOverrides()
-            return
-        }
-
-        if layoutVersion == 4 {
-            migrateV4Layout()
-            rebuildResolvedLayout()
-            persistOverrides()
-            return
-        }
-
-        if layoutVersion == 3 {
-            migrateV3Digits()
-            rebuildResolvedLayout()
-            persistOverrides()
-            return
-        }
-
-        // Pre-v3 layouts have already had two historical migrations in released
-        // builds. Treat an unrecognized/empty layout as derived defaults rather
-        // than pinning another obsolete ordering forever.
-        rebuildResolvedLayout()
-        persistOverrides()
+        if layoutVersion >= 6 { return nil }
+        if layoutVersion == 5 { return migrateV5Identity(defaults) }
+        if layoutVersion == 4 { return migrateV4Layout(defaults) }
+        if layoutVersion == 3 { return migrateV3Digits(defaults) }
+        // Pre-v3 layouts have already had two historical migrations in released builds.
+        return [:]
     }
 
-    private mutating func loadPersistedOverrides() {
-        overrides.removeAll()
-        var used = Set<String>()
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
-            guard let value = defaults.object(forKey: key(action)),
-                  let parsed = HotkeyChord(payload: value) else { continue }
-            if TrainerHotkeyLayout.isDisableAllChord(parsed) {
-                defaults.removeObject(forKey: key(action))
-                continue
-            }
-            let token = Self.token(parsed)
-            guard !used.contains(token) else { continue }
-            overrides[action] = parsed
-            used.insert(token)
-        }
-        defaults.removeObject(forKey: key(.disableAll))
-    }
-
-    private mutating func migrateV5Identity() {
-        overrides.removeAll()
+    private static func migrateV5Identity(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
+        var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
         for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             guard let value = defaults.object(forKey: legacyKey(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
-            let token = Self.token(parsed)
-            guard !used.contains(token) else { continue }
-            overrides[action] = parsed
-            used.insert(token)
+            guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
+            result[action] = parsed
         }
+        return result
     }
 
-    private mutating func migrateV3Digits() {
-        overrides.removeAll()
+    private static func migrateV3Digits(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
+        var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
         for action in ShortcutAction.legacyDigitActions {
             guard let digit = defaults.object(forKey: legacyKey(action)) as? Int,
-                  digit != Self.legacyV3DefaultDigits[action.rawValue],
+                  digit != legacyV3DefaultDigits[action.rawValue],
                   let chord = HotkeyChord.controlOptionDigit(digit) else { continue }
-            let token = Self.token(chord)
-            guard !used.contains(token) else { continue }
-            overrides[action] = chord
-            used.insert(token)
+            guard used.insert(TrainerHotkeyLayout.identity(chord)).inserted else { continue }
+            result[action] = chord
         }
+        return result
     }
 
-    private mutating func migrateV4Layout() {
-        overrides.removeAll()
-        let currentDefaults = Self.legacyV4DefaultLayout()
-        let brokenDefaults = Self.knownBrokenV4MigratedLayout()
+    private static func migrateV4Layout(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
+        var result: [ShortcutAction: HotkeyChord] = [:]
+        let currentDefaults = legacyV4DefaultLayout()
+        let brokenDefaults = knownBrokenV4MigratedLayout()
         var used = Set<String>()
 
-        for identity in Self.legacyV4ActionOrder {
+        for identity in legacyV4ActionOrder {
             guard let action = ShortcutAction(rawValue: identity),
                   let value = defaults.object(forKey: legacyKey(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
-
-            // v4 wrote every computed default to disk. It also produced one
-            // deterministic scrambled layout when upgrading untouched v3
-            // digits. Both are derived state, not user intent.
             if parsed == currentDefaults[action.rawValue] || parsed == brokenDefaults[action.rawValue] {
                 continue
             }
-
-            let token = Self.token(parsed)
-            guard !used.contains(token) else { continue }
-            overrides[action] = parsed
-            used.insert(token)
+            guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
+            result[action] = parsed
         }
+        return result
     }
 
     private static func legacyV4DefaultLayout() -> [String: HotkeyChord] {
@@ -284,7 +161,7 @@ struct Hades2ShortcutStore {
             guard let digit = legacyV3DefaultDigits[identity],
                   let proposed = HotkeyChord.controlOptionDigit(digit) else { continue }
             if let other = legacyV4ActionOrder.first(where: {
-                $0 != identity && layout[$0].map(Self.token) == Self.token(proposed)
+                $0 != identity && layout[$0].map(TrainerHotkeyLayout.identity) == TrainerHotkeyLayout.identity(proposed)
             }) {
                 layout[other] = layout[identity]
             }
@@ -293,41 +170,11 @@ struct Hades2ShortcutStore {
         return layout
     }
 
-    private mutating func rebuildResolvedLayout() {
-        // Historic migration detection remains local; Core owns resolution.
-        overrides = overrides.filter {
-            $0.key != .disableAll && !TrainerHotkeyLayout.isDisableAllChord($0.value)
-        }
-        chords = TrainerHotkeyLayout.resolvedLayout(
-            orderedActions: Hades2WorkbenchCatalog.orderedShortcutActions,
-            defaults: Self.defaultLayout(),
-            overrides: overrides,
-            locked: [.disableAll: TrainerHotkeyLayout.disableAllChord]
-        )
-    }
-
-    private static func token(_ chord: HotkeyChord) -> String {
-        TrainerHotkeyLayout.identity(chord)
-    }
-
-    private func key(_ action: ShortcutAction) -> String {
+    private static func key(_ action: ShortcutAction) -> String {
         "shortcut.action.\(action.rawValue)"
     }
 
-    private func legacyKey(_ action: ShortcutAction) -> String {
-        action == .invincibility ? "shortcut.action.godMode" : key(action)
-    }
-
-    private mutating func persistOverrides() {
-        for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            if let explicit = overrides[action] {
-                defaults.set(explicit.payload, forKey: key(action))
-            } else {
-                defaults.removeObject(forKey: key(action))
-            }
-        }
-        defaults.removeObject(forKey: "shortcut.action.godMode")
-        defaults.removeObject(forKey: "shortcut.action.damageEnabled")
-        defaults.set(6, forKey: "shortcut.layoutVersion")
+    private static func legacyKey(_ action: ShortcutAction) -> String {
+        action == .invincibility ? "shortcut.action.godMode" : Self.key(action)
     }
 }

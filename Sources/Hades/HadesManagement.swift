@@ -44,11 +44,13 @@ struct HadesProfileManagerView: View {
                 save: text("hades.profile.save"), load: text("hades.profile.load"), empty: text("hades.profile.empty")),
             entries: model.profiles.map { .init(name: $0.name, updatedAt: $0.updatedAt) },
             busy: model.busy, enabled: model.canUseBackend && model.canAcceptRuntimeAction,
+            warning: model.profileShortcutWarning.map { localization.string($0) } ?? "",
             error: hadesManagementError(model, localization: localization),
             actions: .init(refresh: model.listProfiles,
                 save: { name, completion in model.saveProfile(name, completion: completion) }, load: model.loadProfile,
                 delete: model.deleteProfile, dismiss: { model.profilesPresented = false })
         )
+        .onDisappear { model.clearProfileShortcutWarning() }
     }
 }
 

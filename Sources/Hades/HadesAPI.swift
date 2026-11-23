@@ -11,7 +11,7 @@ enum HadesRequest {
     case catalog
     case diagnostics
     case listProfiles
-    case saveProfile(name: String)
+    case saveProfile(name: String, shortcuts: [String: Any]? = nil)
     case loadProfile(name: String)
     case deleteProfile(name: String)
     case setFeature(feature: String, value: Any)
@@ -80,7 +80,10 @@ enum HadesRequest {
 
     var params: [String: Any] {
         switch self {
-        case .saveProfile(let name), .loadProfile(let name), .deleteProfile(let name):
+        case .saveProfile(let name, let shortcuts):
+            guard let shortcuts else { return ["name": name] }
+            return ["name": name, "shortcuts": shortcuts]
+        case .loadProfile(let name), .deleteProfile(let name):
             return ["name": name]
         case .setFeature(let feature, let value):
             return ["feature": feature, "value": value]
