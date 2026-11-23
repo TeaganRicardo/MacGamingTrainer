@@ -26,17 +26,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from Tools.macos_toolchain_identity import (  # noqa: E402
-    SUPPORTED_RUNNER_ARCH,
-    SUPPORTED_RUNNER_LABEL,
-)
-
-HOSTED_PROFILE = SUPPORTED_RUNNER_LABEL
-HOSTED_ARCH = SUPPORTED_RUNNER_ARCH
+# The hosted macOS runner that .github/workflows/build2-macos.yml uses.
+HOSTED_PROFILE = "macos-26"
+HOSTED_ARCH = "ARM64"
 LOCAL_PROFILE = "local"
 
 # GitHub Actions exports this label from the owning workflow. A hosted run that

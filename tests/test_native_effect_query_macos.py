@@ -1,12 +1,6 @@
 """The native collector locates the supplied main image with a startup dylib."""
 
 MGT_PLATFORM = "macos"
-# The native source is #included by the C fixture. The workflow owns its Lua setup.
-MGT_INPUTS = (
-    "Backend/games/hades2/native/",
-    "tests/test_native_effect_query.py",
-    ".github/workflows/build2-macos.yml",
-)
 
 import os
 import platform

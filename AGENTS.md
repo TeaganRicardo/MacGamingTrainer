@@ -36,7 +36,7 @@ MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh   # use when the repo is in
 
 ```bash
 bash Tools/run_linux_checks.sh                   # every portable test (Linux or macOS)
-bash Tools/run_macos_checks.sh                   # every macOS test
+bash Tools/run_macos_checks.sh                   # every macOS test; --skip-foreground leaves out 3 journeys
 python3 Tools/validate_game_module.py --all
 python3 Tools/supported_build.py
 ```
@@ -46,18 +46,16 @@ python3 Tools/supported_build.py
 - Resident Lua tests need Lua 5.2 (`bash Tools/ci_prerequisites/lua52.sh`). `MGT_LUA52` can name the executable.
 - A test with `MGT_PLATFORM = "macos"` at top level runs only on macOS. Every other test runs in the portable lane.
 - A native UI journey gets one watchdog from `tests/macos_fixture_policy.py`.
-- A few foreground-activation journeys fail on a busy local desktop. The hosted runner is authoritative for them.
+- Three foreground-activation journeys fail on a busy local desktop, so PR CI skips them and a manual run covers them.
 
 ## CI
 
 Every PR needs two checks, and both always run:
 
-- `backend-contracts` (Linux): Lua 5.2, backend compile, module validation, `Tools/check_runtime_revision.py`, then every portable test.
-- `build` (macOS): `./build.sh --all`, `codesign --verify`, then every macOS test except the foreground-activation journeys, and uploads the App.
+- `backend-contracts` (`.github/workflows/linux-contracts.yml`): lint, Lua 5.2, `Tools/check_runtime_revision.py`, then `Tools/run_linux_checks.sh`.
+- `build` (`.github/workflows/build2-macos.yml`): `./build.sh --all`, `codesign --verify`, then `Tools/run_macos_checks.sh --skip-foreground`, and uploads the App.
 
-Each job reads `git diff --name-only` against the base and skips its work when the PR changes nothing it builds or tests, so a docs-only PR finishes in seconds. A manual `workflow_dispatch` run of `build` runs all macOS tests, including the foreground journeys. A separate manual workflow publishes a release. Workflows pin third-party Actions to commit SHAs.
-
-Until #822's CI change merges, the older routed workflows still run, including `build (reference_fixture)`.
+A PR that changes only Markdown skips the work in both jobs. A manual run of `Build 2 macOS` also runs the foreground journeys. The manual `Release` workflow builds `main`, tags it from `Info.plist` and publishes the zip with its SHA-256. Workflows pin third-party Actions to commit SHAs; the macOS runner and Xcode version live in the workflows.
 
 ## Add a game
 
@@ -73,7 +71,7 @@ Until #822's CI change merges, the older routed workflows still run, including `
 | `residentRuntime` | The module injects resident Lua that has a revision number |
 | `saveManagement` | The module offers backups and a Save Editor |
 | `commandContract` | Typed commands with timeouts. Regenerate the Swift side with `python3 Tools/generate_module_commands.py --all` |
-| `buildRequirements` | The module needs an LLDB bridge, a debugger entitlement, Process Time Warp (`processTimeWarp`) or a CI prerequisite |
+| `buildRequirements` | The module needs an LLDB bridge, a debugger entitlement or Process Time Warp (`processTimeWarp`) |
 | `appResources` | The App bundles data files. `@supportedBuild/<file>` resolves to the reference directory |
 
 3. Add the ID to `modules` in `app.json`. A normal game needs no edit in `Sources/Core`, `Sources/App.swift`, `Backend/core` or `build.sh`. The build generates the catalog and the bindings.
@@ -86,7 +84,7 @@ Architectures are separate. The App runs on the `app.json` architectures. The ga
 
 ## Versions
 
-- **Product version:** only in `Info.plist`, and only a release PR edits it. A new game is a MINOR bump; fixes are PATCH. Tags are `vX.Y.Z`, then `vX.Y.Z+bN` for a later build of the same version. Never move or reuse a tag.
+- **Product version:** only in `Info.plist`, and only a release PR edits it. A new game is a MINOR bump; fixes are PATCH. The manual `Release` workflow tags `vX.Y.Z`, or `vX.Y.Z+bN` for a later build of the same version. Never move or reuse a tag.
 - **Supported game build:** only `supportedBuild` in `module.json`. To move to a new game build, follow `docs/development/supported-game-build-update.md`.
 - **Other revisions:** a module's `protocolVersion`, its resident Lua revision and each persisted schema version are separate integers. Bump one only when its own contract changes. A changed resident Lua source needs a revision bump; `Tools/check_runtime_revision.py` checks PRs.
 - Never copy a version, UUID or hash into code, docs or workflows. Read it from its owner.
