@@ -171,6 +171,7 @@ class VersionedDocumentStore:
         normalize: Callable[[dict[str, Any], int], dict[str, Any]],
         build_document: Callable[[dict[str, Any], int], dict[str, Any]] | None = None,
         serialize: Callable[[dict[str, Any]], str] = default_json_serializer,
+        document_label: str = "document",
         quarantine_corrupt: bool = True,
         fallback_on_error: bool = False,
         newer_schema_error: Callable[[int, int], Exception] | None = None,
@@ -186,6 +187,7 @@ class VersionedDocumentStore:
         self._normalize = normalize
         self._build_document = build_document or (lambda value, version: {**value, "schemaVersion": version})
         self._serialize = serialize
+        self._document_label = document_label
         self._quarantine_corrupt = quarantine_corrupt
         self._fallback_on_error = fallback_on_error
         self._newer_schema_error = newer_schema_error or (
@@ -198,11 +200,14 @@ class VersionedDocumentStore:
         self.unsupported_schema_version = None
         self.write_blocked_error = None
 
-    def _quarantine_or_block(self, reason: str, detail: str):
+    def _quarantine_or_block(self, reason: str, message: str, *, exc_info: bool = True):
         if not self._quarantine_corrupt:
             return
         quarantined = quarantine_corrupt_file(self.path)
-        logging.exception("%s quarantined=%s", detail, quarantined)
+        if exc_info:
+            logging.exception(message, quarantined)
+        else:
+            logging.error(message, quarantined)
         if quarantined is None and self.path.exists() and self._quarantine_failed_error:
             self.write_blocked_error = self._quarantine_failed_error(reason)
 
@@ -228,7 +233,7 @@ class VersionedDocumentStore:
             defaults = self._defaults()
             return (defaults, False) if self._fallback_on_error else defaults
         except UnicodeError as exc:
-            self._quarantine_or_block("unreadable", f"Unreadable document {self.path}")
+            self._quarantine_or_block("unreadable", f"Quarantined unreadable {self._document_label} as %s")
             if self._fallback_on_error:
                 return self._defaults(), False
             raise self._read_error("unreadable", exc) from exc
@@ -242,19 +247,23 @@ class VersionedDocumentStore:
         try:
             raw = json.loads(text)
         except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
-            self._quarantine_or_block("invalid_json", f"Invalid JSON document {self.path}")
+            self._quarantine_or_block("invalid_json", f"Quarantined invalid {self._document_label} as %s")
             if self._fallback_on_error:
                 return self._defaults(), False
             raise self._read_error("invalid_json", exc) from exc
         if not isinstance(raw, dict):
-            self._quarantine_or_block("invalid_shape", f"Invalid document shape {self.path}")
+            self._quarantine_or_block(
+                "invalid_shape", f"Quarantined invalid {self._document_label} shape as %s", exc_info=False
+            )
             if self._fallback_on_error:
                 return self._defaults(), False
             raise self._read_error("invalid_shape", None)
         try:
             version = read_schema_version(raw)
         except ValueError as exc:
-            self._quarantine_or_block("invalid_version", f"Invalid schemaVersion {self.path}")
+            self._quarantine_or_block(
+                "invalid_version", f"Quarantined {self._document_label} with invalid schema version as %s"
+            )
             if self._fallback_on_error:
                 return self._defaults(), False
             raise self._read_error("invalid_version", exc) from exc

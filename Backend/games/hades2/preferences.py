@@ -201,6 +201,7 @@ class Hades2PreferenceStore:
             normalize=normalize_persisted_desired,
             build_document=_prepare_desired_document,
             serialize=lambda doc: json.dumps(doc,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n',
+            document_label='desired-state profile',
             quarantine_corrupt=True,
             fallback_on_error=True,
             newer_schema_error=lambda found, supported: UnsupportedSchemaVersionError('desired-state', found, supported),
