@@ -158,6 +158,12 @@ def utc_iso_timestamp():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+class _UnsupportedProfileSchema(Exception):
+    def __init__(self, error: Exception):
+        super().__init__(str(error))
+        self.error = error
+
+
 class VersionedDocumentStore:
     """Versioned JSON document store with quarantine and newer-schema refusal."""
 
@@ -340,6 +346,7 @@ class ProfileStore:
         invalid_name_error: Callable[[str], Exception] | None = None,
         corrupt_error: Callable[[str, Exception | None], Exception] | None = None,
         not_found_error: Callable[[str], Exception] | None = None,
+        delete_not_found_error: Callable[[str], Exception] | None = None,
         newer_schema_error: Callable[[int, int], Exception] | None = None,
         older_schema_error: Callable[[int, int], Exception] | None = None,
         newer_payload_schema_error: Callable[[int, int], Exception] | None = None,
@@ -370,6 +377,7 @@ class ProfileStore:
             lambda reason, exc: ValueError(reason) if exc is None else ValueError(reason)
         )
         self._not_found_error = not_found_error or (lambda name: ValueError(f"Profile {name!r} not found"))
+        self._delete_not_found_error = delete_not_found_error or self._not_found_error
         self._newer_schema_error = newer_schema_error or (
             lambda found, supported: ValueError(f"Unsupported newer Profile schema {found} > {supported}")
         )
@@ -386,14 +394,6 @@ class ProfileStore:
             base_fields.add(self.payload_version_key)
         self._required_fields = frozenset(base_fields)
         self._allowed_fields = frozenset(base_fields | {"shortcuts"})
-        self._unsupported_signatures = frozenset(
-            (type(err), getattr(err, "code", None))
-            for err in (
-                self._newer_schema_error(schema_version + 1, schema_version),
-                self._older_schema_error(0, schema_version),
-                self._newer_payload_schema_error(schema_version + 1, schema_version),
-            )
-        )
 
     @staticmethod
     def sanitize_profile_name(value, error_factory: Callable[[str], Exception] | None = None) -> str:
@@ -451,9 +451,9 @@ class ProfileStore:
                 self._quarantine(path, "Invalid profile schemaVersion")
             raise self._corrupt_error("invalid_version", exc) from exc
         if version > self.schema_version:
-            raise self._newer_schema_error(version, self.schema_version)
+            raise _UnsupportedProfileSchema(self._newer_schema_error(version, self.schema_version))
         if version < self.compatibility_floor:
-            raise self._older_schema_error(version, self.schema_version)
+            raise _UnsupportedProfileSchema(self._older_schema_error(version, self.schema_version))
         return version
 
     def _validate_envelope(self, path: Path, raw: dict[str, Any], *, quarantine: bool = True) -> dict[str, Any]:
@@ -496,13 +496,15 @@ class ProfileStore:
                 if type(payload_version) is not int or payload_version < 0:
                     raise ValueError("Invalid nested schemaVersion")
                 if payload_version > self.payload_schema_version:
-                    raise self._newer_payload_schema_error(payload_version, self.payload_schema_version)
+                    raise _UnsupportedProfileSchema(
+                        self._newer_payload_schema_error(payload_version, self.payload_schema_version)
+                    )
                 normalized_payload = self._normalize_payload(payload_data, payload_version)
             else:
                 normalized_payload = self._normalize_payload(payload_data, version)
+        except _UnsupportedProfileSchema:
+            raise
         except Exception as exc:
-            if (type(exc), getattr(exc, "code", None)) in self._unsupported_signatures:
-                raise
             if quarantine:
                 self._quarantine(path, "Invalid profile envelope")
             raise self._corrupt_error("invalid_envelope", exc) from exc
@@ -553,11 +555,10 @@ class ProfileStore:
                 if self._include_shortcuts_in_list:
                     row["shortcuts"] = envelope["shortcuts"]
                 rows.append(row)
-            except Exception as exc:
-                if (type(exc), getattr(exc, "code", None)) in self._unsupported_signatures:
-                    logging.warning("Ignoring unsupported Profile schema %s", path)
-                else:
-                    logging.exception("Ignoring corrupt profile %s", path)
+            except _UnsupportedProfileSchema:
+                logging.warning("Ignoring unsupported Profile schema %s", path)
+            except Exception:
+                logging.exception("Ignoring corrupt profile %s", path)
         rows.sort(key=lambda item: item["name"].casefold())
         return rows
 
@@ -566,7 +567,10 @@ class ProfileStore:
         if not path.is_file():
             raise self._not_found_error(name)
         raw = self._read_json_dict(path, quarantine=self._quarantine_corrupt)
-        return self._validate_envelope(path, raw, quarantine=self._quarantine_corrupt)
+        try:
+            return self._validate_envelope(path, raw, quarantine=self._quarantine_corrupt)
+        except _UnsupportedProfileSchema as wrapper:
+            raise wrapper.error
 
     def save(self, name: str, payload: dict[str, Any], shortcuts: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         safe_name = self.sanitize_name(name)
@@ -603,7 +607,7 @@ class ProfileStore:
         safe_name = self.sanitize_name(name)
         path = self.path(safe_name)
         if not path.is_file():
-            raise self._not_found_error(safe_name)
+            raise self._delete_not_found_error(safe_name)
         try:
             path.unlink()
         except OSError as exc:

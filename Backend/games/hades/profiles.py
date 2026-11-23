@@ -48,6 +48,7 @@ class HadesProfileStore:
             invalid_name_error=_invalid_name,
             corrupt_error=_read_failed,
             not_found_error=lambda _name: _read_failed('not_found'),
+            delete_not_found_error=lambda _name: _write_failed(FileNotFoundError('Profile not found')),
             newer_schema_error=_newer_format,
             older_schema_error=lambda _found, _supported: _read_failed('older_schema'),
             invalid_payload_input_error=lambda _reason: AdapterError('invalid_value', 'hades.error.invalidValue'),

@@ -1,5 +1,6 @@
 """Contract and behavior tests for Core VersionedDocumentStore, ProfileStore, and Hades I D4 shortcuts."""
 
+import io
 import json
 import logging
 from pathlib import Path
@@ -178,6 +179,42 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     assert not wrong_game.exists()
     assert len(list((root / "profiles").glob(wrong_game.name + ".corrupt-*"))) == 1
 
+    # Default error factories (ValueError) must still quarantine corrupt envelopes instead of matching schema errors.
+    default_profiles = ProfileStore(
+        root / "default-profiles",
+        schema_version=2,
+        compatibility_floor=1,
+        payload_key="settings",
+        normalize_payload=lambda payload, version: {"x": int(payload["x"])},
+        prepare_save_payload=lambda payload: {"x": int(payload["x"])},
+        corrupt_error=lambda reason, exc: RuntimeError(f"corrupt.{reason}:{exc}"),
+    )
+    bad_default = default_profiles.path("bad-default")
+    bad_default.parent.mkdir(parents=True, exist_ok=True)
+    bad_default.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 2,
+                "name": "bad-default",
+                "updatedAt": "2026-11-23T00:00:00+00:00",
+                "settings": "not-a-dict",
+            }
+        ),
+        encoding="utf-8",
+    )
+    logging.disable(logging.CRITICAL)
+    try:
+        try:
+            default_profiles.load("bad-default")
+        except RuntimeError as error:
+            assert str(error).startswith("corrupt.invalid_envelope:")
+        else:
+            raise AssertionError("default ProfileStore did not wrap corrupt envelope as corrupt error")
+    finally:
+        logging.disable(logging.NOTSET)
+    assert not bad_default.exists()
+    assert len(list((root / "default-profiles").glob(bad_default.name + ".corrupt-*"))) == 1
+
     # 3. D4 parity in Hades I adapter: profiles store and replay optional shortcuts,
     # while legacy Hades I profiles without shortcuts return an empty map.
     hades_data = root / "hades-data"
@@ -226,5 +263,38 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     loaded_legacy = hades_adapter.dispatch("load_profile", {"name": "Legacy No Shortcuts"}, "load-legacy")
     assert loaded_legacy["shortcuts"] == {}
     assert normalize_shortcut_map({"bad key": _chord(18, "1")}) == {}
+
+    # HadesProfileStore logs corrupt envelopes as corrupt (not unsupported schema) and keeps profile_write_failed on missing delete.
+    bad_hades = hades_adapter.profiles.path("Corrupt Hades")
+    bad_hades.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 2,
+                "gameID": "hades",
+                "name": "Corrupt Hades",
+                "updatedAt": "2026-11-22T00:00:00+00:00",
+                "features": "not-a-dict",
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured_log = io.StringIO()
+    handler = logging.StreamHandler(captured_log)
+    logging.getLogger().addHandler(handler)
+    try:
+        listed = hades_adapter.profiles.list()
+    finally:
+        logging.getLogger().removeHandler(handler)
+    assert [row["name"] for row in listed] == ["Legacy No Shortcuts", "With Shortcuts"]
+    assert "Ignoring corrupt profile" in captured_log.getvalue()
+    assert "Ignoring unsupported Profile schema" not in captured_log.getvalue()
+    bad_hades.unlink()
+
+    try:
+        hades_adapter.dispatch("delete_profile", {"name": "Missing Profile"}, "del-missing")
+    except AdapterError as error:
+        assert error.code == "profile_write_failed"
+    else:
+        raise AssertionError("missing profile delete did not report profile_write_failed")
 
 print("core_persistence_stores_ok")
