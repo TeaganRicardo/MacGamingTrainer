@@ -702,14 +702,45 @@ def run_context_journey(*, state_only=False):
             manifest["id"] = name
             manifest["displayName"] = word + " Fixture"
             manifest["backend"]["adapter"] = f"games.{name}.adapter:ReferenceFixtureAdapter"
+            if "commandContract" in manifest:
+                manifest["commandContract"]["metadata"] = f"games.{name}.command_contract:command_metadata"
+                manifest["commandContract"]["enumName"] = f"{word}FixtureCommand"
             manifest["frontend"]["sourceDirectory"] = f"Sources/{word}Fixture"
             manifest["frontend"]["moduleType"] = word + "FixtureGameModule"
             manifest["targetApplication"]["processName"] = word + "InertTarget"
             manifest["targetApplication"]["bundleIdentifier"] = "test." + name
+            manifest["appResources"] = [
+                {
+                    "source": f"Sources/{word}Fixture/Localization/{name}.{language}.json",
+                    "destination": f"{name}.{language}.json",
+                }
+                for language in ("zh-CN", "en")
+            ]
             manifest.pop("app", None)
             (destination / "module.json").write_text(json.dumps(manifest))
-            source = project / manifest["frontend"]["sourceDirectory"] / (word + "Module.swift")
-            source.parent.mkdir(parents=True)
+            frontend_dir = project / manifest["frontend"]["sourceDirectory"]
+            (frontend_dir / "Localization").mkdir(parents=True)
+            (frontend_dir / "Generated").mkdir(parents=True)
+            for language in ("zh-CN", "en"):
+                raw_table = (
+                    FIXTURE / f"frontend/Localization/reference_fixture.{language}.json"
+                ).read_text(encoding="utf-8")
+                table = json.loads(raw_table.replace("referenceFixture.", word.lower() + "Fixture."))
+                for index in range(3):
+                    table["entries"][f"{word.lower()}Fixture.section.{index}"] = (
+                        f"较长的章节导航名称 {index}" if language == "zh-CN" else f"A longer section name {index}"
+                    )
+                (frontend_dir / "Localization" / f"{name}.{language}.json").write_text(
+                    json.dumps(table, ensure_ascii=False), encoding="utf-8"
+                )
+            generated_cmd = (
+                FIXTURE / "frontend/Generated/ReferenceFixtureCommand.generated.swift"
+            ).read_text(encoding="utf-8")
+            (frontend_dir / "Generated" / f"{word}FixtureCommand.generated.swift").write_text(
+                generated_cmd.replace("ReferenceFixture", word + "Fixture").replace("reference_fixture", name),
+                encoding="utf-8",
+            )
+            source = frontend_dir / (word + "Module.swift")
             section_items = (
                 f'    static func workbenchSections(model: {word}FixtureModel) -> [TrainerWorkbenchSectionItem] {{\n'
                 f'        (0..<3).map {{ index in\n'
@@ -724,6 +755,7 @@ def run_context_journey(*, state_only=False):
             )
             fixture_source = (FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
                 "referenceFixture.", word.lower() + "Fixture.").replace(
+                "reference_fixture.", f"{name}.").replace(
                 "ReferenceFixture", word + "Fixture").replace(
                 f'    static func workbenchSections(model: {word}FixtureModel) -> [TrainerWorkbenchSectionItem] {{\n'
                 f'        [\n'
@@ -731,15 +763,16 @@ def run_context_journey(*, state_only=False):
                 f'                id: "{word.lower()}Fixture.main",\n'
                 f'                titleKey: "{word.lower()}Fixture.section.main",\n'
                 f'                icon: TrainerSemanticIcon.Section.general\n'
-                f'            )\n'
+                f'            ),\n'
+                f'            TrainerWorkbenchSectionItem(\n'
+                f'                id: "{word.lower()}Fixture.management",\n'
+                f'                titleKey: "{word.lower()}Fixture.section.management",\n'
+                f'                icon: TrainerSemanticIcon.Section.settings,\n'
+                f'                separatedFromPrevious: true\n'
+                f'            ),\n'
                 f'        ]\n'
                 f'    }}',
                 section_items
-            ).replace(
-                f'"{word.lower()}Fixture.section.main": [.zhCN: "常用功能", .en: "General"],',
-                f'"{word.lower()}Fixture.section.0": [.zhCN: "较长的章节导航名称 0", .en: "A longer section name 0"],\n'
-                f'            "{word.lower()}Fixture.section.1": [.zhCN: "较长的章节导航名称 1", .en: "A longer section name 1"],\n'
-                f'            "{word.lower()}Fixture.section.2": [.zhCN: "较长的章节导航名称 2", .en: "A longer section name 2"],'
             ).replace(
                 "    func setEnabled(_ value: Bool)",
                 "    @Published var postponeTermination = false\n    var pendingTermination: (() -> Void)?\n"

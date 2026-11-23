@@ -206,7 +206,8 @@ let session = TrainerBackendSession(
 )
 let capturedLog = testLog("reference.log")
 let context = TrainerGameContext<ReferenceFixtureGameModule>(
-    session: session, backendScriptURL: URL(fileURLWithPath: args[1]), logSink: capturedLog
+    session: session, backendScriptURL: URL(fileURLWithPath: args[1]), logSink: capturedLog,
+    makeModel: { ReferenceFixtureModel(services: $0, defaults: localizationDefaults) }
 )
 let model = context.model
 
@@ -333,15 +334,29 @@ let localizationContractPassed = MainActor.assumeIsolated {
     guard localization.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library" else {
         return false
     }
-    guard ReferenceFixtureGameModule.workbenchSections(model: model).map(\.id) == ["referenceFixture.main"],
-          localization.string("referenceFixture.section.main") == "General" else {
+    guard ReferenceFixtureGameModule.workbenchSections(model: model).map(\.id) == [
+        "referenceFixture.main",
+        "referenceFixture.management",
+    ],
+          localization.string("referenceFixture.section.main") == "General",
+          localization.string("referenceFixture.section.management") == "Management & Diagnostics" else {
         return false
     }
     let groups = context.managementGroups(localization: localization)
-    guard groups.map(\.id) == ["daily", "maintenance"],
-          groups.flatMap(\.actions).map(\.id) == ["refreshStatus", "log", "logHistory", "clearLogs"],
+    guard groups.map(\.id) == ["daily", "settings", "maintenance"],
+          groups.flatMap(\.actions).map(\.id) == [
+              "refreshStatus",
+              "disableAll",
+              "profiles",
+              "shortcuts",
+              "log",
+              "diagnostics",
+              "logHistory",
+              "clearLogs",
+          ],
           groups.map(\.title) == [
               localization.localized("host.manage.daily"),
+              localization.localized("host.manage.settings"),
               localization.localized("host.manage.maintenance"),
           ] else {
         return false
@@ -356,6 +371,76 @@ if !model.connected || !model.enabled {
 }
 if model.backendStatus.backendProtocolVersion != protocolBeforeLanguageChange || protocolBeforeLanguageChange != 6 {
     fail("presentation language changed protocol identity")
+}
+
+// Exercise remaining Host services: typed command binding, shortcuts, profile store, feedback, diagnostics.
+if !ReferenceFixtureCommand.setEnabled.offlineIntent(connected: false)
+    || ReferenceFixtureCommand.setEnabled.requiresTrustedTarget(connected: false)
+    || !ReferenceFixtureCommand.setEnabled.requiresTrustedTarget(connected: true)
+    || ReferenceFixtureCommand.diagnostics.requiresTrustedTarget(connected: true)
+{
+    fail("typed ReferenceFixtureCommand binding flags regressed")
+}
+
+model.reportSampleFeedback(argument: "42")
+if context.feedback.currentIssues.first?.text != TrainerTextToken(key: "referenceFixture.issue.sample", arguments: ["42"])
+    || context.feedback.notice?.text != TrainerTextToken(key: "referenceFixture.issue.sample", arguments: ["42"])
+{
+    fail("reference fixture feedback center integration failed")
+}
+model.clearSampleFeedback()
+if !context.feedback.currentIssues.isEmpty || context.feedback.notice != nil {
+    fail("reference fixture feedback center cleanup failed")
+}
+
+let defaultChord = model.shortcutText(.toggleFeature)
+let customChord = HotkeyChord(keyCode: 23, modifiers: HotkeyChord.controlModifier | HotkeyChord.optionModifier, keyLabel: "5")
+if model.setShortcut(.toggleFeature, chord: customChord) != .applied
+    || model.shortcutText(.toggleFeature) != "⌃⌥5"
+    || model.setShortcut(.toggleFeature, chord: TrainerHotkeyLayout.disableAllChord) != .conflict(actionID: ReferenceFixtureShortcutAction.disableAll.rawValue)
+{
+    fail("reference fixture shortcut store integration failed")
+}
+
+var savedProfileOK: Bool? = nil
+model.saveProfile("fixture-preset") { savedProfileOK = $0 }
+guard waitUntil(2.0, { savedProfileOK == true && model.profiles.map(\.name) == ["fixture-preset"] }) else {
+    fail("reference fixture profile save failed")
+}
+model.resetShortcuts()
+if model.shortcutText(.toggleFeature) != defaultChord {
+    fail("reference fixture shortcut reset failed")
+}
+model.loadProfile("fixture-preset")
+guard waitUntil(2.0, { !model.busy && model.shortcutText(.toggleFeature) == "⌃⌥5" }) else {
+    fail("reference fixture profile load did not restore shortcuts")
+}
+model.deleteProfile("fixture-preset")
+guard waitUntil(2.0, { !model.busy && model.profiles.isEmpty }) else {
+    fail("reference fixture profile delete failed")
+}
+
+var exportedBundleData: Data? = nil
+var exportedFilename: String? = nil
+model.runDiagnostics()
+guard waitUntil(2.0, { !model.busy && model.diagnostics.map(\.id) == ["backend_session", "profile_store"] }) else {
+    fail("reference fixture diagnostics refresh failed")
+}
+model.exportDiagnostics { data, filename, done in
+    exportedBundleData = data
+    exportedFilename = filename
+    done(.saved)
+}
+guard waitUntil(2.0, { !model.busy && exportedBundleData != nil }),
+      let exportedFilename,
+      exportedFilename.hasSuffix("-Diagnostics.json"),
+      let bundleData = exportedBundleData,
+      let bundleJSON = try? JSONSerialization.jsonObject(with: bundleData) as? [String: Any],
+      bundleJSON["gameID"] as? String == "reference_fixture",
+      let bundleChecks = bundleJSON["checks"] as? [[String: Any]],
+      bundleChecks.count == 2
+else {
+    fail("reference fixture diagnostics export failed")
 }
 
 model.setEnabled(false)
