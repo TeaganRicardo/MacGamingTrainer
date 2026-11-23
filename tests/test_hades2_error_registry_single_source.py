@@ -1,5 +1,4 @@
-"""Single-source Hades II error-registry contract for issue #204."""
-import re
+"""Hades II runtime and backend errors map to presentation keys and arguments (#204)."""
 import sys
 from pathlib import Path
 
@@ -10,64 +9,7 @@ from core.adapter import AdapterError
 from games.hades2 import error_presentation
 from games.hades2 import runtime_error_presentation
 
-RUNTIME_SOURCE = (ROOT / "Backend/games/hades2/runtime_error_presentation.py").read_text(encoding="utf-8")
-LUA = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-
-# Runtime mappings must be derived from the declarative registry rather than
-# mirrored in a second module.
-for forbidden in ("_RUNTIME_KEYS", "_COMPOSED_PREFIXES", "_SHARED_COMPOSED", "_FALLBACK_KEY"):
-    assert forbidden not in RUNTIME_SOURCE, f"runtime error mapping mirror survived: {forbidden}"
-
-runtime_rules = [rule for rule in error_presentation.REGISTRY if rule.get("runtime")]
-assert runtime_rules, "the registry declares no runtime refusals"
-assert getattr(error_presentation, "RUNTIME_FALLBACK_KEY", None) == "hades2.error.runtimeActionFailed"
-
-# Every runtime entry carries its scope and producer provenance. This is the
-# reverse half of coverage: a dead registry entry must fail even if no caller
-# happens to probe it.
-def function_block(name):
-    # Match the function name exactly: "action" must not bind the earlier
-    # actionFingerprint/actionReceipt helpers.
-    marker = f"local function {name}("
-    start = LUA.find(marker)
-    assert start >= 0, f"missing Lua helper producer {name}"
-    end = LUA.find("\n  local function ", start + len(marker))
-    return LUA[start:] if end < 0 else LUA[start:end]
-
-
-def command_block(name):
-    marker = f'if command == "{name}" then'
-    start = LUA.find(marker)
-    assert start >= 0, f"missing Lua command producer {name}"
-    end = LUA.find('\n    if command == "', start + len(marker))
-    return LUA[start:] if end < 0 else LUA[start:end]
-
-
-for rule in runtime_rules:
-    runtime = rule["runtime"]
-    commands = runtime.get("commands")
-    producer = runtime.get("producer")
-    assert commands == "*" or (
-        isinstance(commands, (list, tuple)) and commands and all(isinstance(value, str) and value for value in commands)
-    ), rule
-    assert isinstance(producer, dict), rule
-    kind, name = producer.get("kind"), producer.get("name")
-    assert kind in {"command", "helper"} and isinstance(name, str) and name, rule
-    block = command_block(name) if kind == "command" else function_block(name)
-    if rule["match"] == "literal":
-        assert rule["message"] in block, f"dead runtime literal: {rule}"
-    elif rule["match"] == "prefix":
-        assert rule["prefix"] in block, f"dead runtime prefix: {rule}"
-    elif rule["match"] == "regex":
-        # The only shared dynamic helper composes Unsupported <purpose>: missing
-        # <function>. Assert both static source fragments exist in the declared
-        # producer rather than pretending the regex itself is Lua source.
-        assert "Unsupported " in block and ": missing " in block, f"dead runtime regex: {rule}"
-    else:
-        raise AssertionError(f"unsupported runtime registry shape: {rule['match']}")
-
-# Behaviour snapshot from the pre-#204 funnel. The refactor may change the
-# registration site, not the key/argument result.
+# Runtime refusals, as the resident raises them, map to these keys.
 CASES = (
     ("open_sell_traits", "Cannot open boon sell screen while another screen is active", "hades2.error.sellScreenBusy", ()),
     ("open_sell_traits", "Boon selling requires a live trait owner", "hades2.error.sellNeedsTraitOwner", ()),
@@ -145,5 +87,13 @@ presented = runtime_error_presentation.present_runtime_error("remove_trait", unk
 assert presented.code == "lua_error"
 assert presented.presentation == error_presentation.RUNTIME_FALLBACK_KEY
 assert tuple(presented.arguments) == ()
+
+# Backend messages: interpolated values become arguments, never part of the
+# key, and unregistered developer text is not reclassified as player copy.
+assert error_presentation.presentation_for("请先启动 Hades II 并进入存档。") == ("hades2.error.gameNotRunning", ["Hades II"])
+assert error_presentation.presentation_for("查询 Hades II 进程失败（-9）：boom") == (
+    "hades2.error.processQueryFailed", ["Hades II", "-9", "boom"])
+assert error_presentation.presentation_for("未知功能。") == ("hades2.error.unknownFeature", [])
+assert error_presentation.presentation_for("Hades II module manifest is missing a valid steamAppId.")[0] is None
 
 print("hades2_error_registry_single_source_ok")

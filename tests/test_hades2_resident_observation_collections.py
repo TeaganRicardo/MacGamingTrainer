@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "Tools/games/hades2/fixtures")]
+sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests"), str(ROOT / "tests/fixtures/hades2")]
 
 from games.hades2 import localization, resident_session
 from games.hades2.resident_session import Hades2ResidentSession, ResidentSessionError, lua_value
@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
     "MGT_PROFILE_TRAITS": "4", "MGT_PROFILE_CATALOG": "8", "MGT_PROFILE_RESOURCES": "4",
     "MGT_PROFILE_OPERATIONS": "0",
 }):
-    from hades2_profile_backend import OfflineLuaTransport
+    from offline_lua_transport import OfflineLuaTransport
 
     class RecordingTransport(OfflineLuaTransport):
         def execute(self, source, **kwargs):

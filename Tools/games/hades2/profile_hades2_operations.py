@@ -286,7 +286,7 @@ def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_c
     from lua_runtime_support import require_lua52
 
     lua = require_lua52("offline Hades operation profiling")
-    fixture = ROOT / "Tools/games/hades2/fixtures/hades2_operation_profile.lua"
+    fixture = ROOT / "tests/fixtures/hades2/offline_resident.lua"
     runtime = SOURCE_ROOT / "Backend/games/hades2/runtime/hades.lua"
     completed = subprocess.run(
         [lua, str(fixture), str(runtime), str(samples), str(trait_count), str(catalog_trait_count), str(resource_count)],
@@ -455,7 +455,7 @@ def main():
     report["harness_sha256"] = {
         name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
         for name in ("Tools/games/hades2/profile_hades2_operations.py", "Tools/games/hades2/hades2_profile_workloads.py",
-                     "Tools/games/hades2/fixtures/hades2_operation_profile.lua", "Tools/games/hades2/fixtures/hades2_profile_backend.py",
+                     "tests/fixtures/hades2/offline_resident.lua", "Tools/games/hades2/fixtures/hades2_profile_backend.py",
                      "Tools/games/hades2/fixtures/hades2_profile_host.swift", "Tools/games/hades2/fixtures/hades2_time_warp_profile.c",
                      "Backend/core/operation_profile.py", "tests/test_process_time_warp_install_contract.py",
                      "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py", "tests/hades2_debugserver_owner.py",

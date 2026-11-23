@@ -1,4 +1,4 @@
-"""Faults cross the shipped native callbacks and asynchronous action ledger."""
+"""Native modal actions run on a game thread, and faults cross the shipped native callbacks and asynchronous action ledger."""
 
 import ast
 import subprocess
@@ -189,6 +189,81 @@ assert(nativeCalls == 1, 'queued action entered native after terminal outcome un
 assert(observed.lastAction.requestId == 'second-modal' and observed.lastAction.outcome == 'failed',
   'queued action that never entered native was not a known refusal')
 ''' + ASSERT_UNKNOWN
+
+# The native sell screen yields, so it must open on a game thread, never inside
+# the debugger dispatch, and it must leave the shared screen definition intact.
+cases["sell_screen_lifecycle"] = BASE + ASYNC + r'''
+local original = ScreenData.SellTraits
+local entered, seenScreen, closeName
+OpenSellTraitMenu = function()
+  entered = true
+  seenScreen = ScreenData.SellTraits
+  closeName = seenScreen.ComponentData.ActionBar.Children.CloseButton.Data.OnPressedFunctionName
+end
+assert(M.dispatch('open_sell_traits', { requestId = 'sell' }).actionOutcome == 'accepted')
+assert(not entered, 'native sell screen opened inside the debugger dispatch')
+assert(type(pending) == 'function', 'native sell screen was not deferred to a game thread')
+pending()
+assert(entered, 'native sell screen never opened')
+assert(seenScreen ~= original, 'native sell screen used the shared screen definition')
+assert(closeName == 'MacGamingTrainerCloseSellTraitScreen', 'sell screen close button not routed to the Trainer close')
+assert(ScreenData.SellTraits == original, 'shared sell screen definition was not restored')
+assert(original.ComponentData.ActionBar.Children.CloseButton.Data.OnPressedFunctionName == nil,
+  'shared sell screen close button was rewritten')
+local observed = M.dispatch('status', { includeCatalogs = false })
+assert(observed.lastAction.outcome ~= 'outcome_unknown' and observed.lastAction.outcome ~= 'failed')
+assert(not observed.runtimeOutcomeUnknown)
+
+-- Outside a store the Trainer close tears the screen down itself and never
+-- fabricates Store state; inside a store it hands over to the game's close.
+local calls, usedIds = {}, nil
+for _, name in ipairs({ 'UseableOff', 'AltAspectRatioFramesHide', 'OnScreenCloseStarted',
+  'CloseScreen', 'OnScreenCloseFinished', 'ShowCombatUI', 'SetPlayerVulnerable' }) do
+  _G[name] = function(args)
+    calls[#calls + 1] = name
+    if name == 'UseableOff' then usedIds = args.Ids end
+  end
+end
+CloseStoreScreen = function() error('no store is open') end
+CurrentRun.CurrentRoom.Store = nil
+local screen = { Name = 'SellTraitScreen',
+  Components = { PurchaseButton1 = { Id = 11 }, PurchaseButton2 = { Id = 12 }, CloseButton = { Id = 13 } } }
+MacGamingTrainerCloseSellTraitScreen(screen, {})
+assert(table.concat(calls, ',') == 'UseableOff,AltAspectRatioFramesHide,OnScreenCloseStarted,'
+  .. 'CloseScreen,OnScreenCloseFinished,ShowCombatUI,SetPlayerVulnerable', table.concat(calls, ','))
+assert(#usedIds == 2, 'sell screen purchase buttons stayed usable')
+assert(CurrentRun.CurrentRoom.Store == nil, 'Trainer close fabricated Store state')
+local storeClosed
+CurrentRun.CurrentRoom.Store = { StoreOptions = {} }
+CloseStoreScreen = function(closing) storeClosed = closing end
+MacGamingTrainerCloseSellTraitScreen(screen, {})
+assert(storeClosed == screen, 'sell screen inside a store did not use the native store close')
+'''
+
+# Echo's choice reads the run's last reward. The Trainer lends a synthetic one
+# only while the native menu runs and never overwrites a real one.
+cases["echo_last_reward"] = BASE + ASYNC + r'''
+local seen
+OpenUpgradeChoiceMenu = function() seen = CurrentRun.LastReward end
+CurrentRun.LastReward = nil
+assert(M.dispatch('open_special_choice', { source = 'Echo', requestId = 'echo-empty' }).actionOutcome == 'accepted')
+pending()
+assert(seen and seen.Name == 'MaxHealthDrop', 'Echo choice opened without a last reward')
+assert(CurrentRun.LastReward == nil, 'Echo choice leaked its synthetic last reward')
+
+local real = { Type = 'Boon', Name = 'RealReward' }
+CurrentRun.LastReward = real
+assert(M.dispatch('open_special_choice', { source = 'Echo', requestId = 'echo-real' }).actionOutcome == 'accepted')
+pending()
+assert(seen == real and CurrentRun.LastReward == real, 'Echo choice replaced the run last reward')
+
+CurrentRun.LastReward = nil
+OpenUpgradeChoiceMenu = function() seen = CurrentRun.LastReward; error('native fault') end
+M.dispatch('open_special_choice', { source = 'Echo', requestId = 'echo-fault' })
+pending()
+assert(seen and seen.Name == 'MaxHealthDrop')
+assert(CurrentRun.LastReward == nil, 'Echo choice kept its synthetic last reward after a native fault')
+'''
 
 with tempfile.TemporaryDirectory(prefix="mgt-native-outcomes-") as temporary:
     for name, source in cases.items():
