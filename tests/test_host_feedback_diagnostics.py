@@ -241,6 +241,33 @@ struct HostFeedbackDiagnosticsTest {
         diagnostics.clearCompletedLogs()
         precondition(context.feedback.notice?.text.key == "host.logs.cleared", "clearCompletedLogs must publish host notice")
 
+        // 5. Status suppression clears completely across either notice/error consumption or explicit reset.
+        let suppressionCenter = TrainerFeedbackCenter()
+        suppressionCenter.suppressNextStatus(error: true) { $0.error != "host.keep" }
+        var noticeStatus = TrainerBackendStatus()
+        noticeStatus.notice = "host.backend.notice.completed"
+        suppressionCenter.receiveBackendStatus(previous: TrainerBackendStatus(), current: noticeStatus)
+        precondition(suppressionCenter.notice == nil, "suppressed notice transition should stay suppressed")
+        var laterIdleError = noticeStatus
+        laterIdleError.notice = ""
+        laterIdleError.error = "host.backend.error.terminated"
+        suppressionCenter.receiveBackendStatus(previous: noticeStatus, current: laterIdleError)
+        precondition(
+            suppressionCenter.notice?.text.key == "host.backend.error.terminated" && suppressionCenter.notice?.tone == .warning,
+            "consumed notice transition leaked suppressNextStatusError onto a later idle error"
+        )
+
+        suppressionCenter.clearNotice()
+        suppressionCenter.suppressNextStatus(error: true)
+        suppressionCenter.clearStatusSuppression()
+        var resetErrorStatus = TrainerBackendStatus()
+        resetErrorStatus.error = "host.backend.error.terminated"
+        suppressionCenter.receiveBackendStatus(previous: TrainerBackendStatus(), current: resetErrorStatus)
+        precondition(
+            suppressionCenter.notice?.text.key == "host.backend.error.terminated" && suppressionCenter.notice?.tone == .warning,
+            "clearStatusSuppression must clear both notice and error suppression"
+        )
+
         withExtendedLifetime(statusSub) {}
         print("host_feedback_diagnostics_ok")
     }

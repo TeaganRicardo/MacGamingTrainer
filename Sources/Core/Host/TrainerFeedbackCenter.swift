@@ -128,8 +128,7 @@ package final class TrainerFeedbackCenter: ObservableObject {
         if !current.error.isEmpty,
            current.error != previous.error || current.errorArguments != previous.errorArguments {
             let suppressed = suppressNextStatusError && (suppressStatusErrorPredicate?(current) ?? true)
-            suppressNextStatusError = false
-            suppressStatusErrorPredicate = nil
+            clearStatusSuppression()
             if !suppressed {
                 present(
                     TrainerTextToken(key: current.error, arguments: current.errorArguments),
@@ -141,7 +140,7 @@ package final class TrainerFeedbackCenter: ObservableObject {
 
         if !current.notice.isEmpty, current.notice != previous.notice {
             let suppressed = suppressNextStatusNotice
-            suppressNextStatusNotice = false
+            clearStatusSuppression()
             if !suppressed {
                 let tone: TrainerFeedbackTone = current.notice == "host.backend.notice.completed"
                     ? .success

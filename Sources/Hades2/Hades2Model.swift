@@ -1166,6 +1166,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             // here, so a later transport/recovery failure is a new event.
             reply: { [weak self] reply in
                 self?.receiptPresentedDuringReply = false
+                self?.services.feedback.clearStatusSuppression()
                 onReply?(reply)
             },
             completion: { [weak self] success in

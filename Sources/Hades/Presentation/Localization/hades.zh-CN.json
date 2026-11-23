@@ -184,8 +184,6 @@
     "hades.diagnostics.connection": "Hades 连接",
     "hades.diagnostics.hero": "当前角色观察",
     "hades.diagnostics.speed": "游戏速度观察",
-    "hades.error.diagnosticsExport": "无法导出诊断；请检查日志和目标文件的访问权限。",
-    "hades.error.logOpen": "无法打开日志目录；请检查访问权限。",
     "hades.disableAllPending": "设置已重置；重新连接或重启游戏以清除游戏内效果。",
     "hades.moneyNoDecrease": "无限金币",
     "hades.rerollsNoDecrease": "无限重骰",
