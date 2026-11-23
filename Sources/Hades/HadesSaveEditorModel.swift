@@ -554,7 +554,17 @@ final class HadesSaveEditorModel: ObservableObject {
         searchTask?.cancel(); requests.retire(); started = false; queryLoading = false
         workspaceID = nil; baselineGeneration = nil; readyGeneration = nil; editingRow = nil
     }
-    private func release(_ id: String) { session.send("save_editor_close", params: ["workspaceId": id], operation: "host.done", announceSuccess: false, requiresTrustedTarget: false) }
+    private func release(_ id: String) {
+        let command = HadesCommand.saveEditorClose
+        session.send(
+            command.rawValue,
+            params: ["workspaceId": id],
+            operation: "host.done",
+            announceSuccess: false,
+            timeout: command.timeout,
+            requiresTrustedTarget: command.requiresTrustedTarget(connected: false)
+        )
+    }
     private func decode<T: Decodable>(_ result: [String: Any], scope: String) -> T? {
         do { return try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: result)) }
         catch { failures[scope] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return nil }
@@ -578,8 +588,11 @@ final class HadesSaveEditorModel: ObservableObject {
         if let baseline { payload["baselineGeneration"] = baseline }
         if blocking { blockingRequests += 1; busy = true }
         failures.removeValue(forKey: scope)
-        session.send("save_editor_" + suffix, params: payload, operation: "hades.saveEditor.title", announceSuccess: false,
-                     timeout: 30, requiresTrustedTarget: false, reply: { [weak self] reply in
+        guard let command = HadesCommand(rawValue: "save_editor_" + suffix) else {
+            preconditionFailure("Unknown Hades Save Editor command: \(suffix)")
+        }
+        session.send(command.rawValue, params: payload, operation: "hades.saveEditor.title", announceSuccess: false,
+                     timeout: command.timeout, requiresTrustedTarget: command.requiresTrustedTarget(connected: false), reply: { [weak self] reply in
             guard let self else { return }
             guard self.requests.accepts(ticket),
                   workspace == nil || self.workspaceID == workspace,

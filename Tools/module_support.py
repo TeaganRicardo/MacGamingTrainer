@@ -1,10 +1,12 @@
 import json
+import math
 import plistlib
 import re
 import sys
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / 'Backend'
@@ -66,6 +68,13 @@ class AppResource:
 
 
 @dataclass(frozen=True)
+class CommandContractSpec:
+    metadata: str
+    enum_name: str
+    default_timeout_seconds: float
+
+
+@dataclass(frozen=True)
 class NativeLibrary:
     source: str
     filename: str
@@ -81,6 +90,7 @@ class BuildManifest:
     app_resources: tuple
     native_libraries: tuple
     raw: dict
+    command_contract: Optional[CommandContractSpec] = None
 
     @property
     def id(self): return self.runtime.id
@@ -314,7 +324,43 @@ def load_manifest(game_id: str) -> BuildManifest:
             raise ManifestError(f'{field}.architectures must contain unique arm64/x86_64 values.')
         native_libraries.append(NativeLibrary(source, filename, tuple(library_arches)))
 
-    return BuildManifest(runtime, frontend_spec, app_spec, requirements, tuple(app_resources), tuple(native_libraries), raw)
+    command_contract = None
+    if 'commandContract' in raw:
+        raw_contract = raw['commandContract']
+        if not isinstance(raw_contract, dict):
+            raise ManifestError('commandContract must be an object.')
+        unknown_keys = set(raw_contract) - {'metadata', 'enumName', 'defaultTimeoutSeconds'}
+        if unknown_keys:
+            raise ManifestError(f'commandContract contains unknown keys: {", ".join(sorted(unknown_keys))}.')
+        metadata = raw_contract.get('metadata')
+        if not isinstance(metadata, str) or ':' not in metadata:
+            raise ManifestError('commandContract.metadata must look like games.<id>.<module>:<callable>.')
+        module_name, attr_name = metadata.split(':', 1)
+        if (not module_name.startswith(f'games.{runtime.id}.')
+                or not all(part.isidentifier() for part in module_name.split('.'))
+                or not attr_name.isidentifier()):
+            raise ManifestError(f'commandContract.metadata must stay inside games.{runtime.id}.')
+        enum_name = raw_contract.get('enumName', f'{frontend_spec.swift_module}Command')
+        if not isinstance(enum_name, str) or not _SWIFT_TYPE_RE.fullmatch(enum_name):
+            raise ManifestError('commandContract.enumName must be a Swift type identifier.')
+        default_timeout = raw_contract.get('defaultTimeoutSeconds', 6.0)
+        if (type(default_timeout) not in (int, float)
+                or isinstance(default_timeout, bool)
+                or not math.isfinite(default_timeout)
+                or default_timeout <= 0):
+            raise ManifestError('commandContract.defaultTimeoutSeconds must be a finite positive number.')
+        command_contract = CommandContractSpec(metadata, enum_name, float(default_timeout))
+
+    return BuildManifest(
+        runtime,
+        frontend_spec,
+        app_spec,
+        requirements,
+        tuple(app_resources),
+        tuple(native_libraries),
+        raw,
+        command_contract=command_contract,
+    )
 
 
 def normalized_manifest(manifest: BuildManifest) -> dict:
@@ -322,6 +368,11 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         **manifest.runtime.public_metadata(),
         'hostProtocolVersion': HOST_PROTOCOL_VERSION,
         **({'supportedBuild': manifest.raw['supportedBuild']} if 'supportedBuild' in manifest.raw else {}),
+        **({'commandContract': {
+            'metadata': manifest.command_contract.metadata,
+            'enumName': manifest.command_contract.enum_name,
+            'defaultTimeoutSeconds': manifest.command_contract.default_timeout_seconds,
+        }} if manifest.command_contract is not None else {}),
         'backend': {'adapter': manifest.runtime.adapter},
         'frontend': {
             'sourceDirectory': manifest.frontend.source_directory,

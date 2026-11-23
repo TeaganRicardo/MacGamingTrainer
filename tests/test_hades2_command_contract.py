@@ -6,6 +6,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from games.hades2 import operation_budgets as budgets
 import games.hades2.command_contract as command_contract_module
 from games.hades2.command_contract import Hades2CommandContract, command_metadata
 from games.hades2.error_presentation import Hades2PresentationError
@@ -133,19 +134,20 @@ assert names == [
     "delete_profile", "diagnostics", "export_diagnostics", "prepare", "restore",
 ]
 timeouts = {row["name"]: row["timeoutSeconds"] for row in metadata}
-assert {name: value for name, value in timeouts.items() if value != 6.0} == {
-    "scan": 15.0,
-    "status": 15.0,
-    "connect": 90.0,
-    "disconnect": 12.0,
-    "launch": 10.0,
-    "save_editor_query": 30.0,
-    "save_editor_detail": 30.0,
-    "save_editor_apply": 30.0,
-    "diagnostics": 70.0,
-    "export_diagnostics": 85.0,
-    "prepare": 560.0,
-    "restore": 240.0,
+assert {name: value for name, value in timeouts.items() if value != budgets.DEFAULT_COMMAND_TIMEOUT_SECONDS} == {
+    "scan": budgets.POST_PREPARATION_SCAN_BUDGET_SECONDS + 5.0,
+    "status": budgets.STATUS_COMMAND_BUDGET_SECONDS + 3.0,
+    "connect": float(budgets.CONNECT_OPERATION_BUDGET_SECONDS + budgets.CONNECT_ATTACH_HEADROOM_SECONDS),
+    "disconnect": float(budgets.DISCONNECT_OPERATION_BUDGET_SECONDS + 4.0),
+    "launch": float(budgets.LAUNCH_OPERATION_BUDGET_SECONDS + 5.0),
+    "disable_all": float(budgets.DISABLE_ALL_OPERATION_BUDGET_SECONDS + 8.0),
+    "save_editor_query": float(budgets.SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0),
+    "save_editor_detail": float(budgets.SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0),
+    "save_editor_apply": float(budgets.SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0),
+    "diagnostics": float(budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 5.0),
+    "export_diagnostics": float(budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 10.0),
+    "prepare": float(budgets.PREPARATION_OPERATION_BUDGET_SECONDS + 45.0),
+    "restore": float(budgets.RESTORE_OPERATION_BUDGET_SECONDS + 25.0),
 }
 
 
@@ -423,7 +425,6 @@ contract.dispatch(
     "set_boon_rarity_desired",
     {
         "target": "Epic",
-        "multiplier": 250,
         "forceLegendary": True,
         "forceDuo": False,
     },
@@ -433,7 +434,6 @@ assert probe.calls == [(
     "set_boon_rarity_desired",
     {
         "target": "Epic",
-        "multiplier": 250,
         "forceLegendary": True,
         "forceDuo": False,
     },
@@ -442,11 +442,20 @@ expect_error(
     "set_boon_rarity_desired",
     {
         "target": "Mythic",
-        "multiplier": 100,
         "forceLegendary": False,
         "forceDuo": False,
     },
     "最低稀有度无效。",
+)
+expect_error(
+    "set_boon_rarity_desired",
+    {
+        "target": "Epic",
+        "multiplier": 100,
+        "forceLegendary": False,
+        "forceDuo": False,
+    },
+    "稀有度倍率参数已弃用。",
 )
 
 probe.calls.clear()

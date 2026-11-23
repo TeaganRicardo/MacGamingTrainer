@@ -17,7 +17,24 @@ from core.errors import PresentableError
 from . import preparation, save_advanced, save_container
 from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
-from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
+from .operation_budgets import (
+    CONNECT_ATTACH_HEADROOM_SECONDS,
+    CONNECT_OPERATION_BUDGET_SECONDS,
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
+    DISABLE_ALL_OPERATION_BUDGET_SECONDS,
+    DISCONNECT_OPERATION_BUDGET_SECONDS,
+    EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
+    EXPORT_REVEAL_TIMEOUT_SECONDS,
+    LAUNCH_OPERATION_BUDGET_SECONDS,
+    LAUNCH_TIMEOUT_SECONDS,
+    MAILBOX_COMMAND_BUDGET_SECONDS,
+    POST_PREPARATION_SCAN_BUDGET_SECONDS,
+    PREPARATION_OPERATION_BUDGET_SECONDS,
+    RESTORE_OPERATION_BUDGET_SECONDS,
+    SAVE_EDITOR_OPERATION_BUDGET_SECONDS,
+    STATUS_COMMAND_BUDGET_SECONDS,
+)
 from .runtime_error_presentation import present_runtime_error
 from .save_workspace import (
     SAVE_EDITOR_DOMAINS,
@@ -340,21 +357,15 @@ def _trait_mutation(command):
 
 def _boon_rarity(raw):
     params = _params(raw)
+    if "multiplier" in params:
+        raise ValueError("稀有度倍率参数已弃用。")
     config = {
         "target": params.get("target"),
-        "multiplier": params.get("multiplier"),
         "forceLegendary": params.get("forceLegendary"),
         "forceDuo": params.get("forceDuo"),
     }
     if config["target"] not in BOON_RARITY_TARGETS:
         raise ValueError("最低稀有度无效。")
-    if (
-        type(config["multiplier"]) not in (int, float)
-        or isinstance(config["multiplier"], bool)
-        or not math.isfinite(config["multiplier"])
-        or not 0 <= config["multiplier"] <= 1000
-    ):
-        raise ValueError("稀有度倍率必须为 0–1000%。")
     if (
         type(config["forceLegendary"]) is not bool
         or type(config["forceDuo"]) is not bool
@@ -614,7 +625,7 @@ def _launch(adapter, params):
     subprocess.run(
         ["/usr/bin/open", url],
         check=True,
-        timeout=10,
+        timeout=LAUNCH_TIMEOUT_SECONDS,
         shell=False,
     )
     return adapter.scan()
@@ -634,41 +645,88 @@ def _stopped_operation(name):
 class CommandSpec:
     name: str
     timeout_seconds: float
+    worst_case_inner_seconds: float
     requires_request_id: bool
     validate: object
     invoke: object
     reply_kind: str
+    requires_trusted_target: bool = True
+    supports_offline_intent: bool = False
 
 
 def _spec(
     name,
     *,
-    timeout=6.0,
+    timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    inner=None,
     request_id=False,
     validate=_identity,
     invoke=None,
     reply_kind=None,
+    trusted=True,
+    offline=False,
 ):
+    if inner is None:
+        inner = MAILBOX_COMMAND_BUDGET_SECONDS if invoke is None else 0.0
     return CommandSpec(
         name=name,
         timeout_seconds=float(timeout),
+        worst_case_inner_seconds=float(inner),
         requires_request_id=bool(request_id),
         validate=validate,
         invoke=invoke or _runtime(name),
         reply_kind=reply_kind or ("patch" if invoke is None else "independent"),
+        requires_trusted_target=bool(trusted),
+        supports_offline_intent=bool(offline),
     )
 
 
 _COMMAND_SPECS = (
-    _spec("scan", timeout=15.0, invoke=_direct("scan"), reply_kind="snapshot"),
-    _spec("status", timeout=15.0, reply_kind="snapshot"),
-    _spec("connect", timeout=90.0, validate=_connect, invoke=_connect_invoke, reply_kind="snapshot"),
-    _spec("disconnect", timeout=12.0, invoke=_direct("disconnect"), reply_kind="snapshot"),
-    _spec("launch", timeout=10.0, invoke=_launch),
-    _spec("disable_all", reply_kind="snapshot"),
-    _spec("runtime_reset", invoke=_direct("runtime_reset"), reply_kind="snapshot"),
-    _spec("reset_desired", invoke=_direct("reset_desired"), reply_kind="snapshot"),
-    _spec("set_desired", validate=_set_desired, invoke=_set_desired_invoke, reply_kind="patch"),
+    _spec(
+        "scan",
+        timeout=POST_PREPARATION_SCAN_BUDGET_SECONDS + 5.0,
+        inner=POST_PREPARATION_SCAN_BUDGET_SECONDS,
+        invoke=_direct("scan"),
+        reply_kind="snapshot",
+        trusted=False,
+    ),
+    _spec(
+        "status",
+        timeout=STATUS_COMMAND_BUDGET_SECONDS + 3.0,
+        inner=STATUS_COMMAND_BUDGET_SECONDS,
+        reply_kind="snapshot",
+    ),
+    _spec(
+        "connect",
+        timeout=CONNECT_OPERATION_BUDGET_SECONDS + CONNECT_ATTACH_HEADROOM_SECONDS,
+        inner=CONNECT_OPERATION_BUDGET_SECONDS,
+        validate=_connect,
+        invoke=_connect_invoke,
+        reply_kind="snapshot",
+    ),
+    _spec(
+        "disconnect",
+        timeout=DISCONNECT_OPERATION_BUDGET_SECONDS + 4.0,
+        inner=DISCONNECT_OPERATION_BUDGET_SECONDS,
+        invoke=_direct("disconnect"),
+        reply_kind="snapshot",
+    ),
+    _spec(
+        "launch",
+        timeout=LAUNCH_OPERATION_BUDGET_SECONDS + 5.0,
+        inner=LAUNCH_OPERATION_BUDGET_SECONDS,
+        invoke=_launch,
+        trusted=False,
+    ),
+    _spec(
+        "disable_all",
+        timeout=DISABLE_ALL_OPERATION_BUDGET_SECONDS + 8.0,
+        inner=DISABLE_ALL_OPERATION_BUDGET_SECONDS,
+        reply_kind="snapshot",
+    ),
+    _spec("runtime_reset", inner=0.0, invoke=_direct("runtime_reset"), reply_kind="snapshot"),
+    _spec("reset_desired", inner=MAILBOX_COMMAND_BUDGET_SECONDS, invoke=_direct("reset_desired"), reply_kind="snapshot", offline=True),
+    _spec("set_desired", inner=MAILBOX_COMMAND_BUDGET_SECONDS, validate=_set_desired, invoke=_set_desired_invoke, reply_kind="patch", offline=True),
     _spec("set_vital", validate=_set_vital),
     _spec("set_counter", validate=_set_counter),
     _spec("lock_vital", validate=_lock_vital),
@@ -679,15 +737,19 @@ _COMMAND_SPECS = (
     _spec("lock_rerolls", request_id=True, validate=_lock_rerolls),
     _spec(
         "set_gathering_desired",
+        inner=MAILBOX_COMMAND_BUDGET_SECONDS,
         validate=_set_gathering_desired,
         invoke=_gathering_invoke,
         reply_kind="patch",
+        offline=True,
     ),
     _spec(
         "set_chaos_gate_desired",
+        inner=MAILBOX_COMMAND_BUDGET_SECONDS,
         validate=_set_chaos_gate_desired,
         invoke=_chaos_gate_invoke,
         reply_kind="patch",
+        offline=True,
     ),
     _spec("generate_gathering", request_id=True, validate=_generate_gathering),
     _spec("generate_chaos_gate", request_id=True, validate=_generate_chaos_gate),
@@ -698,9 +760,11 @@ _COMMAND_SPECS = (
     _spec("lock_element", validate=_lock_element),
     _spec(
         "set_boon_rarity_desired",
+        inner=MAILBOX_COMMAND_BUDGET_SECONDS,
         validate=_boon_rarity,
         invoke=_boon_rarity_invoke,
         reply_kind="patch",
+        offline=True,
     ),
     _spec("apply_world_occurrence", request_id=True, validate=_world_occurrence_apply),
     _spec("cancel_world_occurrence", request_id=True, validate=_world_occurrence_cancel),
@@ -733,54 +797,84 @@ _COMMAND_SPECS = (
     ),
     _spec("open_special_choice", request_id=True, validate=_special_choice),
     _spec("save_editor_inventory", validate=_save_editor_selection,
-        invoke=lambda adapter, params: adapter.save_editor_inventory(params)),
+        invoke=lambda adapter, params: adapter.save_editor_inventory(params), trusted=False),
     _spec("save_editor_open", validate=_save_editor_selection,
-        invoke=lambda adapter, params: adapter.open_save_editor(params)),
+        invoke=lambda adapter, params: adapter.open_save_editor(params), trusted=False),
     _spec("save_editor_target", validate=_save_editor_target,
-        invoke=lambda adapter, params: adapter.set_save_editor_target(params)),
+        invoke=lambda adapter, params: adapter.set_save_editor_target(params), trusted=False),
     _spec(
         "save_editor_query",
-        timeout=30.0,
+        timeout=SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0,
+        inner=SAVE_EDITOR_OPERATION_BUDGET_SECONDS,
         validate=_save_editor_query,
         invoke=_save_editor_query_invoke,
+        trusted=False,
     ),
     _spec(
         "save_editor_detail",
-        timeout=30.0,
+        timeout=SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0,
+        inner=SAVE_EDITOR_OPERATION_BUDGET_SECONDS,
         validate=_save_editor_detail,
         invoke=lambda adapter, params: adapter.detail_save_editor(params),
+        trusted=False,
     ),
     _spec(
         "save_editor_stage",
         validate=_save_editor_stage,
         invoke=_save_editor_stage_invoke,
+        trusted=False,
     ),
     _spec(
         "save_editor_unstage",
         validate=_save_editor_unstage,
         invoke=lambda adapter, params: adapter.unstage_save_editor(params),
+        trusted=False,
     ),
     _spec(
         "save_editor_review",
         validate=_save_editor_language,
         invoke=lambda adapter, params: adapter.review_save_editor(params),
+        trusted=False,
     ),
     _spec(
         "save_editor_cancel",
         validate=_save_editor_language,
         invoke=lambda adapter, params: adapter.cancel_save_editor(params),
+        trusted=False,
     ),
-    _spec("save_editor_apply", timeout=30.0, validate=_save_editor_apply,
-        invoke=lambda adapter, params: adapter.apply_save_editor(params)),
-    _spec("save_editor_close", invoke=lambda adapter, params: adapter.close_save_editor(params)),
-    _spec("list_profiles", invoke=_list_profiles),
-    _spec("save_profile", invoke=_save_profile),
-    _spec("load_profile", invoke=_load_profile),
-    _spec("delete_profile", invoke=_delete_profile),
-    _spec("diagnostics", timeout=70.0, invoke=_diagnostics),
-    _spec("export_diagnostics", timeout=85.0, invoke=_export_diagnostics),
-    _spec("prepare", timeout=560.0, invoke=_stopped_operation("prepare")),
-    _spec("restore", timeout=240.0, invoke=_stopped_operation("restore")),
+    _spec("save_editor_apply", timeout=SAVE_EDITOR_OPERATION_BUDGET_SECONDS + 5.0,
+        inner=SAVE_EDITOR_OPERATION_BUDGET_SECONDS,
+        validate=_save_editor_apply,
+        invoke=lambda adapter, params: adapter.apply_save_editor(params), trusted=False),
+    _spec("save_editor_close", invoke=lambda adapter, params: adapter.close_save_editor(params), trusted=False),
+    _spec("list_profiles", invoke=_list_profiles, trusted=False),
+    _spec("save_profile", invoke=_save_profile, trusted=False),
+    _spec("load_profile", inner=MAILBOX_COMMAND_BUDGET_SECONDS, invoke=_load_profile, offline=True),
+    _spec("delete_profile", invoke=_delete_profile, trusted=False),
+    _spec(
+        "diagnostics",
+        timeout=DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 5.0,
+        inner=DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
+        invoke=_diagnostics,
+    ),
+    _spec(
+        "export_diagnostics",
+        timeout=EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS + 10.0,
+        inner=EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS,
+        invoke=_export_diagnostics,
+    ),
+    _spec(
+        "prepare",
+        timeout=PREPARATION_OPERATION_BUDGET_SECONDS + 45.0,
+        inner=PREPARATION_OPERATION_BUDGET_SECONDS,
+        invoke=_stopped_operation("prepare"),
+    ),
+    _spec(
+        "restore",
+        timeout=RESTORE_OPERATION_BUDGET_SECONDS + 25.0,
+        inner=RESTORE_OPERATION_BUDGET_SECONDS,
+        invoke=_stopped_operation("restore"),
+    ),
 )
 
 COMMAND_SPECS = {spec.name: spec for spec in _COMMAND_SPECS}
@@ -792,6 +886,20 @@ def command_metadata():
         {
             "name": spec.name,
             "timeoutSeconds": spec.timeout_seconds,
+            "requiresTrustedTarget": spec.requires_trusted_target,
+            "supportsOfflineIntent": spec.supports_offline_intent,
+        }
+        for spec in _COMMAND_SPECS
+    )
+
+
+def command_budget_audit():
+    """Per-command outer timeout vs worst-case inner budget table."""
+    return tuple(
+        {
+            "name": spec.name,
+            "timeoutSeconds": spec.timeout_seconds,
+            "worstCaseInnerSeconds": spec.worst_case_inner_seconds,
         }
         for spec in _COMMAND_SPECS
     )

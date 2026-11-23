@@ -8,6 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.operation_profile import profiled
 from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from games.hades2.operation_budgets import (
+    LUA_BOUNDARY_TIMEOUT_SECONDS,
+    LUA_CLEANUP_TIMEOUT_SECONDS,
+    LUA_EXPRESSION_TIMEOUT_SECONDS,
+)
 
 transport_path = ROOT / 'Backend/games/hades2/transport.py'
 tree = ast.parse(transport_path.read_text())
@@ -146,6 +151,9 @@ namespace = {
     'time': time,
     'LUA_TRANSPORT_SOURCE_LIMIT_BYTES': LUA_TRANSPORT_SOURCE_LIMIT_BYTES,
     'LUA_TRANSPORT_RESULT_LIMIT_BYTES': LUA_TRANSPORT_RESULT_LIMIT_BYTES,
+    'LUA_BOUNDARY_TIMEOUT_SECONDS': LUA_BOUNDARY_TIMEOUT_SECONDS,
+    'LUA_CLEANUP_TIMEOUT_SECONDS': LUA_CLEANUP_TIMEOUT_SECONDS,
+    'LUA_EXPRESSION_TIMEOUT_SECONDS': LUA_EXPRESSION_TIMEOUT_SECONDS,
 }
 exec(compile(isolated, str(transport_path), 'exec'), namespace)
 Transport = namespace['IsolatedTransport']

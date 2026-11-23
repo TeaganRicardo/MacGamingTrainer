@@ -6,8 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from games.hades.command_contract import command_budget_audit as hades_budget_audit
 from games.hades2 import operation_budgets as budgets, preparation
-from games.hades2.command_contract import command_metadata
+from games.hades2.command_contract import (
+    command_budget_audit as hades2_budget_audit,
+    command_metadata,
+)
 
 
 def _maximum_subprocess_calls(function):
@@ -32,13 +36,11 @@ def _maximum_subprocess_calls(function):
 
     def statement_cost(statement):
         if isinstance(statement, ast.If):
-            return expression_cost(statement.test) + max(
-                sequence_cost(statement.body), sequence_cost(statement.orelse)
-            )
+            return expression_cost(statement.test) + max(sequence_cost(statement.body), sequence_cost(statement.orelse))
         if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
-            return expression_cost(statement.iter if isinstance(statement, (ast.For, ast.AsyncFor)) else statement.test) + max(
-                sequence_cost(statement.body), sequence_cost(statement.orelse)
-            )
+            return expression_cost(
+                statement.iter if isinstance(statement, (ast.For, ast.AsyncFor)) else statement.test
+            ) + max(sequence_cost(statement.body), sequence_cost(statement.orelse))
         if isinstance(statement, ast.Try):
             branches = [sequence_cost(statement.body) + sequence_cost(statement.orelse)]
             branches.extend(sequence_cost(handler.body) for handler in statement.handlers)
@@ -56,7 +58,7 @@ def _maximum_subprocess_calls(function):
         body = functions[function].body
         loop_index = next(i for i, statement in enumerate(body) if isinstance(statement, ast.For))
         prefix = sequence_cost(body[:loop_index])
-        return prefix + max(statement_cost(body[loop_index]), sequence_cost(body[loop_index + 1:]))
+        return prefix + max(statement_cost(body[loop_index]), sequence_cost(body[loop_index + 1 :]))
     return function_cost(function)
 
 
@@ -69,10 +71,7 @@ assert _maximum_subprocess_calls("restore") <= budgets.RESTORE_MAX_SUBPROCESS_CA
 
 
 def request_timeout(command):
-    timeouts = {
-        row["name"]: float(row["timeoutSeconds"])
-        for row in command_metadata()
-    }
+    timeouts = {row["name"]: float(row["timeoutSeconds"]) for row in command_metadata()}
     assert command in timeouts, f"Hades Host command contract missing {command}"
     return timeouts[command]
 
@@ -100,12 +99,14 @@ assert budgets.STATUS_CHECK_BUDGET_SECONDS == 2 * (
     + budgets.LUA_EXPRESSION_TIMEOUT_SECONDS
     + 2 * budgets.LUA_CLEANUP_TIMEOUT_SECONDS
 )
-assert budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS == sum((
-    budgets.SUBPROCESS_TIMEOUT_SECONDS,
-    budgets.STATUS_CHECK_BUDGET_SECONDS,
-    budgets.LLDB_DISCOVERY_TIMEOUT_SECONDS,
-    budgets.LLDB_PYTHON_TIMEOUT_SECONDS,
-))
+assert budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS == sum(
+    (
+        budgets.SUBPROCESS_TIMEOUT_SECONDS,
+        budgets.STATUS_CHECK_BUDGET_SECONDS,
+        budgets.LLDB_DISCOVERY_TIMEOUT_SECONDS,
+        budgets.LLDB_PYTHON_TIMEOUT_SECONDS,
+    )
+)
 assert budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS == (
     budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS + budgets.EXPORT_REVEAL_TIMEOUT_SECONDS
 )
@@ -113,5 +114,11 @@ assert request_timeout("diagnostics") > budgets.DIAGNOSTICS_OPERATION_BUDGET_SEC
 assert request_timeout("export_diagnostics") > budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS
 assert budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS == 65
 assert budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS == 75
+
+# Every declared command for both real modules must have outer timeout > worst-case inner budget.
+for game_id, audit in (("hades", hades_budget_audit()), ("hades2", hades2_budget_audit())):
+    assert audit, game_id
+    for row in audit:
+        assert float(row["timeoutSeconds"]) > float(row["worstCaseInnerSeconds"]), (game_id, row)
 
 print("host_watchdog_aggregate_budgets_ok")

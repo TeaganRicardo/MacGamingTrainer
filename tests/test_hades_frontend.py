@@ -1092,13 +1092,13 @@ func pump(_ seconds: TimeInterval = 0.1) {
               && searchFunctions("standard drops").contains { $0.id == "hades.spawn.pickupRewards" && $0.section == .rooms },
               "Generate reward rows missing from bilingual discovery")
         let beforeWorld = commands().count
-        model.worldAction("spawn_reward",roomID:"old:room",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        model.worldAction(.spawnReward("ZeusUpgrade"),roomID:"old:room",operation:"hades.spawnReward")
         pump(); check(commands().count == beforeWorld && model.feedback?.text.key == "hades.error.staleRoom"
                       && model.feedback?.tone == .warning
                       && !model.currentIssues.contains { $0.text.key == "hades.error.staleRoom" },
                       "old-room intent crossed the backend or became a retained issue")
         let staleRoomNotice = model.feedback!.id
-        model.worldAction("spawn_reward",roomID:"run:room:1",params:["reward":"ZeusUpgrade"],operation:"hades.spawnReward")
+        model.worldAction(.spawnReward("ZeusUpgrade"),roomID:"run:room:1",operation:"hades.spawnReward")
         wait("spawn_reward reply for current room: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "spawn_reward" } }
         check(model.feedback?.id != staleRoomNotice && model.feedback?.text.key == "host.backend.notice.completed",
               "a completed room action left the earlier refusal as its feedback")

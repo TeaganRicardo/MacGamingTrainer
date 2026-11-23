@@ -262,7 +262,6 @@ assert adapter_rarity.preference_dirty is True
 
 rarity_config = {
     'target': 'Heroic',
-    'multiplier': 250,
     'forceLegendary': True,
     'forceDuo': False,
 }
