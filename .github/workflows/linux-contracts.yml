@@ -27,7 +27,8 @@ jobs:
           # A pull_request checkout is the merge commit, so HEAD^1 is the base.
           run=true
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            changed="$(git diff --name-only HEAD^1 HEAD)"
+            # --no-renames: a rename must list its old path too (c.py -> c.md is a code change).
+            changed="$(git diff --no-renames --name-only HEAD^1 HEAD)"
             grep -qv '\.md$' <<< "$changed" || { run=false; echo "Only Markdown changed; nothing to check."; }
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"

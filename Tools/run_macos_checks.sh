@@ -19,10 +19,11 @@ trap 'rm -rf -- "$LANE_TMP"' EXIT
 export TMPDIR="$LANE_TMP" HOME="$LANE_TMP/home"
 mkdir -p "$HOME" || exit 2
 
+tests="$(git ls-files 'tests/test_*.py')" && [ -n "$tests" ] || { echo "ERROR: no tracked tests found" >&2; exit 2; }
 failures=()
 run() { echo "==> $1"; if "${@:2}"; then echo "PASS: $1"; else failures+=("$1"); echo "FAIL: $1" >&2; fi; }
 
-for test in $(git ls-files 'tests/test_*.py'); do
+for test in $tests; do
   grep -q '^MGT_PLATFORM = "macos"' "$test" || continue
   if $skip_foreground && [[ " $FOREGROUND " == *" $test "* ]]; then echo "SKIP (foreground): $test"; continue; fi
   run "$test" python3 "$test"

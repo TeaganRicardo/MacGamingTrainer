@@ -12,9 +12,10 @@ mkdir -p "$HOME" || exit 2
 failures=()
 run() { echo "==> $1"; if "${@:2}"; then echo "PASS: $1"; else failures+=("$1"); echo "FAIL: $1" >&2; fi; }
 
+tests="$(git ls-files 'tests/test_*.py')" && [ -n "$tests" ] || { echo "ERROR: no tracked tests found" >&2; exit 2; }
 run "Compile backend" python3 -m compileall -q Backend
 run "Validate game modules" python3 Tools/validate_game_module.py --all
-for test in $(git ls-files 'tests/test_*.py'); do
+for test in $tests; do
   grep -q '^MGT_PLATFORM = "macos"' "$test" || run "$test" python3 "$test"
 done
 

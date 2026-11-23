@@ -29,6 +29,14 @@ jobs:
         run: |
           version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
           build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)"
+          [[ "$build" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid CFBundleVersion: $build" >&2; exit 1; }
+          # The build number must be higher than every released build.
+          for released in $(git tag -l 'v[0-9]*.[0-9]*.[0-9]*'); do
+            released_build="$(git show "$released:Info.plist" | python3 -c 'import plistlib, sys; print(int(plistlib.loads(sys.stdin.buffer.read())["CFBundleVersion"]))')"
+            if [ "$build" -le "$released_build" ]; then
+              echo "CFBundleVersion $build is not higher than $released (build $released_build)" >&2; exit 1
+            fi
+          done
           tag="v$version"
           if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then tag="v$version+b$build"; fi
           if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "$tag already exists" >&2; exit 1; fi
