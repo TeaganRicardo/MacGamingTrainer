@@ -364,10 +364,10 @@ hades_contextual = hades_lifecycle.split("struct HadesEffectLifecycleControls:",
 assert hades_current_row.count("model.removeTrait(trait)") == 1
 assert "model.removeTrait(trait)" not in hades_contextual
 assert "private enum TraitManagerLayout" not in hades2_view
-assert "TrainerTraitManagerLayout.searchWidth" in hades_view
-assert "TrainerTraitManagerLayout.searchWidth" in hades2_view
-assert "TrainerTraitManagerLayout.removeControlWidth" in hades_current_row
-assert "TrainerTraitManagerLayout.removeControlWidth" in hades2_view
+assert "TrainerManagedRowLayout.searchWidth" in hades_view
+assert "TrainerManagedRowLayout.searchWidth" in hades2_view
+assert "TrainerManagedRowLayout.trailingActionWidth" in hades_current_row
+assert "TrainerManagedRowLayout.trailingActionWidth" in hades2_view
 assert "HadesCurrentTraitPlaceholderRow()" in hades_current_panel
 assert ".trainerPicker(.compactValue, state: .unavailable)" in hades_current_panel
 assert ".frame(width: 42, alignment: .trailing)" in hades_current_row
@@ -468,7 +468,7 @@ hades2_traits_block = hades2_view.split("private var currentRunTraitsPanel: some
 )[0] + hades2_view.split("private func currentRunTraitCommonControls(", 1)[1].split(
     "private var resourceSection: some View {", 1
 )[0]
-assert "HStack(spacing: TrainerTraitManagerLayout.rowSpacing)" in hades2_traits_block
+assert "HStack(spacing: TrainerManagedRowLayout.rowSpacing)" in hades2_traits_block
 assert "TrainerTextField(" not in hades2_traits_block
 assert hades2_traits_block.count("TrainerNumberField(") >= 3
 assert hades2_traits_block.count("widthRole: .compactRow") >= 4

@@ -16,7 +16,7 @@ struct HadesTrainerView: View {
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
     @State private var focusedField: EditField?
-    @State private var drafts: [EditField: String] = [:]
+    @State private var drafts = TrainerObservedDrafts<EditField>()
 
     private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
     private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
@@ -50,9 +50,7 @@ struct HadesTrainerView: View {
         }
         // Drafts are owned through edit completion: an observation refreshes
         // every unfocused value and never replaces the focused draft.
-        .onChange(of: observedDrafts, initial: true) { _, observed in
-            for (field, text) in observed where field != focusedField { drafts[field] = text }
-        }
+        .trainerObservedDrafts($drafts, observed: observedDrafts, focused: focusedField)
     }
 
     private var observedDrafts: [EditField: String] {
@@ -70,7 +68,7 @@ struct HadesTrainerView: View {
     }
 
     private func draft(_ field: EditField) -> Binding<String> {
-        Binding(get: { drafts[field] ?? "" }, set: { drafts[field] = $0 })
+        $drafts.binding(field)
     }
 
     /// Commits route to the hero observed when this field's edit began: the
@@ -719,7 +717,7 @@ private struct HadesCurrentTraitsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
-            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+            HStack(spacing: TrainerManagedRowLayout.rowSpacing) {
                 TrainerIconLabel(
                     title: text("hades.currentTraits"),
                     icon: TrainerSemanticIcon.Concept.controls,
@@ -748,7 +746,7 @@ private struct HadesCurrentTraitsPanel: View {
                     placeholder: text("hades.search"),
                     clearLabel: localization.localized("host.search.clear")
                 )
-                .frame(width: TrainerTraitManagerLayout.searchWidth)
+                .frame(width: TrainerManagedRowLayout.searchWidth)
             }
 
             if let selected {
@@ -781,7 +779,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
     }
 
     var body: some View {
-        HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+        HStack(spacing: TrainerManagedRowLayout.rowSpacing) {
             HStack(spacing: 6) {
                 Text(text("hades.level"))
                     .font(.caption)
@@ -803,7 +801,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 )
             }
             .frame(
-                width: TrainerTraitManagerLayout.levelControlsWidth(
+                width: TrainerManagedRowLayout.numericAdjustmentWidth(
                     compactActionWidth: theme.compactActionWidth
                 ),
                 alignment: .trailing
@@ -828,7 +826,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 )
             }
             .frame(
-                width: TrainerTraitManagerLayout.rarityControlsWidth(
+                width: TrainerManagedRowLayout.pickerAdjustmentWidth(
                     compactActionWidth: theme.compactActionWidth,
                     pickerWidth: theme.pickerCompactWidth
                 ),
@@ -840,11 +838,11 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                 Label(text("hades.remove"), systemImage: TrainerSemanticIcon.Action.remove)
             }
             .buttonStyle(.bordered)
-            .frame(width: TrainerTraitManagerLayout.removeControlWidth)
+            .frame(width: TrainerManagedRowLayout.trailingActionWidth)
             .disabled(true)
         }
         .frame(
-            width: TrainerTraitManagerLayout.commonControlsWidth(
+            width: TrainerManagedRowLayout.trailingControlsWidth(
                 compactActionWidth: theme.compactActionWidth,
                 pickerWidth: theme.pickerCompactWidth
             ),
@@ -902,7 +900,7 @@ private struct HadesCurrentTraitRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+            HStack(spacing: TrainerManagedRowLayout.rowSpacing) {
                 HStack(spacing: 6) {
                     Text(text("hades.level"))
                         .font(.caption)
@@ -936,7 +934,7 @@ private struct HadesCurrentTraitRow: View {
                     }
                 }
                 .frame(
-                    width: TrainerTraitManagerLayout.levelControlsWidth(
+                    width: TrainerManagedRowLayout.numericAdjustmentWidth(
                         compactActionWidth: theme.compactActionWidth
                     ),
                     alignment: .trailing
@@ -966,7 +964,7 @@ private struct HadesCurrentTraitRow: View {
                     }
                 }
                 .frame(
-                    width: TrainerTraitManagerLayout.rarityControlsWidth(
+                    width: TrainerManagedRowLayout.pickerAdjustmentWidth(
                         compactActionWidth: theme.compactActionWidth,
                         pickerWidth: theme.pickerCompactWidth
                     ),
@@ -986,11 +984,11 @@ private struct HadesCurrentTraitRow: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .frame(width: TrainerTraitManagerLayout.removeControlWidth)
+                .frame(width: TrainerManagedRowLayout.trailingActionWidth)
                 .disabled(!model.canMutate || !trait.canRemove)
             }
             .frame(
-                width: TrainerTraitManagerLayout.commonControlsWidth(
+                width: TrainerManagedRowLayout.trailingControlsWidth(
                     compactActionWidth: theme.compactActionWidth,
                     pickerWidth: theme.pickerCompactWidth
                 ),

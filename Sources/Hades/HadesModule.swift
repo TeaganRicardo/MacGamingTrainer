@@ -46,7 +46,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published var acquisitionLevel = "1"
     @Published var acquisitionEncounters = "3"
     @Published private(set) var acquisitionTarget: HadesAcquisitionTarget = .exact
-    @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
+    @Published private(set) var acquisitionRarityAdjustment: TrainerOrderedOptionResolution.Adjustment = .none
     private var resolvedAcquisitionSignature: String?
     private var acquisitionLevelIdentity: String?
     @Published private(set) var traitNames: [String: [String: String]] = [:]
@@ -460,12 +460,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             acquisitionLevelIdentity = levelIdentity
         }
         let changed = previousTarget != target || resolvedAcquisitionSignature != signature
-        let resolved = TrainerAcquisitionRarity.resolve(
+        let resolved = TrainerOrderedOptionReconciler.resolve(
             previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
             supported: option.rarities,
-            nativeOrder: ["Common", "Rare", "Epic", "Heroic", "Duo", "Legendary"]
+            preferredOrder: ["Common", "Rare", "Epic", "Heroic", "Duo", "Legendary"]
         )
-        if let rarity = resolved.rarity { acquisitionRarity = rarity }
+        if let rarity = resolved.option { acquisitionRarity = rarity }
         if changed { acquisitionRarityAdjustment = resolved.adjustment }
         resolvedAcquisitionSignature = signature
         return !(confirmationRequired && changed && resolved.requiresVisibleConfirmation)

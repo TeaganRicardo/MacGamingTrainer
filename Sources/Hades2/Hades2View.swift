@@ -3,9 +3,6 @@ import SwiftUI
 import AppKit
 import TrainerCore
 
-// Select the property-wrapper type explicitly: CLT does not ship SwiftUIMacros.
-private typealias ViewState<Value> = SwiftUI.State<Value>
-
 struct Hades2TrainerView: View {
     private enum EditField: Hashable {
         case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge, biomeTime
@@ -21,54 +18,46 @@ struct Hades2TrainerView: View {
         let items: [BoonOption]
     }
 
+    private static let defaultDrafts: [EditField: String] = [
+        .damageMultiplier: String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue),
+        .moneyMultiplier: String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue),
+        .resourceMultiplier: String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue),
+        .gameSpeed: String(Hades2MultiplierKey.gameSpeed.defaultValue),
+        .enemyDamage: "100",
+        .enemyHealth: "100",
+    ]
+
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @Environment(\.trainerToolWindows) private var toolWindows
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    @ViewState<EditField?> private var focusedField = nil
+    @State private var focusedField: EditField?
+    @State private var drafts = TrainerObservedDrafts<EditField>(Self.defaultDrafts)
 
     private var accent: Color { theme.accent }
-    @ViewState<String> private var healthCurrent = ""
-    @ViewState<String> private var healthMaximum = ""
-    @ViewState<String> private var manaCurrent = ""
-    @ViewState<String> private var manaMaximum = ""
-    @ViewState<String> private var armorCurrent = ""
-    @ViewState<String> private var spellCharge = ""
-    @ViewState<String> private var biomeTime = ""
-    @ViewState<Bool> private var vitalsInitialized = false
-    @ViewState<String> private var coins = ""
-    @ViewState<Bool> private var coinsInitialized = false
-    @ViewState<String> private var materialAmount = ""
-    @ViewState<String> private var selectedMaterial = ""
-    @ViewState<String> private var search = ""
-    @ViewState<String> private var multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
-    @ViewState<String> private var moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
-    @ViewState<String> private var materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
-    @ViewState<String> private var gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
-    @ViewState<String?> private var gameSpeedPreview = nil
-    @ViewState<String> private var rerollAmount = ""
-    @ViewState<Bool> private var rerollsInitialized = false
-    @ViewState<String> private var exactSearch = ""
-    @ViewState<String> private var exactSourceSelection = ""
-    @ViewState<String> private var traitSearch = ""
-    @ViewState<String> private var managedTraitSelection = ""
-    @ViewState<[String: String]> private var traitLevelInputs = [:]
-    @ViewState<[String: String]> private var traitRarityInputs = [:]
-    @ViewState<String> private var traitRemainingUsesInput = ""
-    @ViewState<String> private var graspLimit = ""
-    @ViewState<String> private var dodgeChance = ""
-    @ViewState<String> private var critChance = ""
-    @ViewState<String> private var chargeSpeed = ""
-    @ViewState<String> private var moveSpeed = ""
-    @ViewState<String> private var sprintSpeed = ""
-    @ViewState<String> private var dashSpeed = ""
-    @ViewState<String> private var attackSpeed = ""
-    @ViewState<String> private var manaRegen = ""
-    @ViewState<String> private var enemyDamage = "100"
-    @ViewState<String> private var enemyHealth = "100"
-    @ViewState<Bool> private var statsInitialized = false
-    @ViewState<[String: String]> private var elementInputs = [:]
-    @ViewState<Bool> private var elementsInitialized = false
+    @State private var vitalsInitialized = false
+    @State private var coinsInitialized = false
+    @State private var selectedMaterial = ""
+    @State private var search = ""
+    @State private var gameSpeedPreview: String?
+    @State private var rerollsInitialized = false
+    @State private var exactSearch = ""
+    @State private var exactSourceSelection = ""
+    @State private var traitSearch = ""
+    @State private var managedTraitSelection = ""
+    @State private var traitLevelInputs: [String: String] = [:]
+    @State private var traitRarityInputs: [String: String] = [:]
+    @State private var statsInitialized = false
+    @State private var elementsInitialized = false
+
+    private func draft(_ field: EditField) -> Binding<String> {
+        $drafts.binding(field)
+    }
+
+    private var gameSpeedInput: String {
+        get { drafts[.gameSpeed] }
+        nonmutating set { drafts[.gameSpeed] = newValue }
+    }
 
     private var filtered: [MaterialResource] {
         model.resources.filter { $0.id != "Money" && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.englishName.localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search)) }
@@ -468,17 +457,13 @@ struct Hades2TrainerView: View {
     }
 
     private func syncManagedTraitRemainingUsesInput(force: Bool = false) {
-        guard force || focusedField != .traitRemainingUses else { return }
-        guard let trait = managedCurrentRunTrait else {
-            traitRemainingUsesInput = ""
-            return
-        }
-        traitRemainingUsesInput = renderedTraitRemainingUses(trait)
+        let next = managedCurrentRunTrait.map(renderedTraitRemainingUses) ?? ""
+        drafts.observe(.traitRemainingUses, value: next, focused: focusedField, force: force)
     }
 
     private func canApplyTraitRemainingUses(_ trait: CurrentRunTrait) -> Bool {
         guard model.canMutateTraits, trait.canSetRemainingUses,
-              let target = Int(traitRemainingUsesInput.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let target = Int(drafts[.traitRemainingUses].trimmingCharacters(in: .whitespacesAndNewlines)),
               (1...999_999).contains(target) else { return false }
         return trait.remainingUses != Double(target)
     }
@@ -500,7 +485,7 @@ struct Hades2TrainerView: View {
 
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
-            HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+            HStack(spacing: TrainerManagedRowLayout.rowSpacing) {
                 TrainerIconLabel(
                     title: text("hades2.traits.manager"),
                     icon: TrainerSemanticIcon.Concept.controls,
@@ -529,7 +514,7 @@ struct Hades2TrainerView: View {
                     placeholder: text("hades2.traits.search"),
                     clearLabel: localization.localized("host.search.clear")
                 )
-                .frame(width: TrainerTraitManagerLayout.searchWidth)
+                .frame(width: TrainerManagedRowLayout.searchWidth)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -567,7 +552,7 @@ struct Hades2TrainerView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 TrainerNumberField(
-                    text: $traitRemainingUsesInput,
+                    text: draft(.traitRemainingUses),
                     placeholder: "—",
                     accessibilityLabel: text("hades2.traits.remainingUses"),
                     width: theme.inlineFieldWidth,
@@ -591,7 +576,7 @@ struct Hades2TrainerView: View {
                 ) {
                     model.setTraitRemainingUses(
                         trait,
-                        targetRemainingUses: traitRemainingUsesInput
+                        targetRemainingUses: drafts[.traitRemainingUses]
                     )
                 }
 
@@ -629,7 +614,7 @@ struct Hades2TrainerView: View {
     }
 
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
-        HStack(spacing: TrainerTraitManagerLayout.rowSpacing) {
+        HStack(spacing: TrainerManagedRowLayout.rowSpacing) {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.levelLabel"))
                     .font(.caption)
@@ -679,7 +664,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TrainerTraitManagerLayout.levelControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
+            .frame(width: TrainerManagedRowLayout.numericAdjustmentWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             HStack(spacing: 6) {
                 Text(text("hades2.traits.targetRarity"))
@@ -725,7 +710,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TrainerTraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
+            .frame(width: TrainerManagedRowLayout.pickerAdjustmentWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
 
             Button(role: .destructive) {
                 guard let trait else { return }
@@ -741,10 +726,10 @@ struct Hades2TrainerView: View {
                 }
             }
             .buttonStyle(.bordered)
-            .frame(width: TrainerTraitManagerLayout.removeControlWidth)
+            .frame(width: TrainerManagedRowLayout.trailingActionWidth)
             .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
-        .frame(width: TrainerTraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
+        .frame(width: TrainerManagedRowLayout.trailingControlsWidth(compactActionWidth: theme.compactActionWidth, pickerWidth: theme.pickerCompactWidth), alignment: .trailing)
     }
 
     private var resourceSection: some View {
@@ -974,18 +959,14 @@ struct Hades2TrainerView: View {
             return
         }
 
-        if !coinsInitialized, let value = snapshot.money {
-            coins = number(value)
+        if let value = snapshot.money {
+            drafts.observe(.coins, value: number(value), focused: focusedField, force: !coinsInitialized)
             coinsInitialized = true
-        } else if focusedField != .coins, let value = snapshot.money {
-            coins = number(value)
         }
 
-        if !rerollsInitialized, let value = snapshot.rerolls {
-            rerollAmount = number(value)
+        if let value = snapshot.rerolls {
+            drafts.observe(.rerolls, value: number(value), focused: focusedField, force: !rerollsInitialized)
             rerollsInitialized = true
-        } else if focusedField != .rerolls, let value = snapshot.rerolls {
-            rerollAmount = number(value)
         }
 
         if !vitalsInitialized,
@@ -994,84 +975,72 @@ struct Hades2TrainerView: View {
            let mana = snapshot.mana,
            let maxMana = snapshot.maxMana,
            let armor = snapshot.armor {
-            healthCurrent = number(health)
-            healthMaximum = number(maxHealth)
-            manaCurrent = number(mana)
-            manaMaximum = number(maxMana)
-            armorCurrent = number(armor)
-            spellCharge = number(snapshot.spellCharge)
-            biomeTime = Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime)
+            drafts.observe([
+                .healthCurrent: number(health),
+                .healthMax: number(maxHealth),
+                .manaCurrent: number(mana),
+                .manaMax: number(maxMana),
+                .armorCurrent: number(armor),
+                .spellCharge: number(snapshot.spellCharge),
+                .biomeTime: Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime),
+            ], focused: focusedField, force: true)
             vitalsInitialized = true
         } else if vitalsInitialized {
-            if focusedField != .healthCurrent, let value = snapshot.health { healthCurrent = number(value) }
-            if focusedField != .healthMax, let value = snapshot.maxHealth { healthMaximum = number(value) }
-            if focusedField != .manaCurrent, let value = snapshot.mana { manaCurrent = number(value) }
-            if focusedField != .manaMax, let value = snapshot.maxMana { manaMaximum = number(value) }
-            if focusedField != .armorCurrent, let value = snapshot.armor { armorCurrent = number(value) }
-            if focusedField != .spellCharge, let value = snapshot.spellCharge { spellCharge = number(value) }
-            if focusedField != .biomeTime {
-                biomeTime = Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime)
-            }
+            var observed: [EditField: String] = [
+                .biomeTime: Hades2TrainerModel.displayBiomeTime(snapshot.biomeTime),
+            ]
+            if let value = snapshot.health { observed[.healthCurrent] = number(value) }
+            if let value = snapshot.maxHealth { observed[.healthMax] = number(value) }
+            if let value = snapshot.mana { observed[.manaCurrent] = number(value) }
+            if let value = snapshot.maxMana { observed[.manaMax] = number(value) }
+            if let value = snapshot.armor { observed[.armorCurrent] = number(value) }
+            if let value = snapshot.spellCharge { observed[.spellCharge] = number(value) }
+            drafts.observe(observed, focused: focusedField)
         }
     }
 
     private func syncStatSnapshot(_ snapshot: Hades2ViewStatSnapshot) {
         guard model.connected else { return }
-        if !statsInitialized {
-            if let value = snapshot.grasp { graspLimit = number(value) }
-            if let value = snapshot.dodge { dodgeChance = compactNumber(value) }
-            if let value = snapshot.crit { critChance = compactNumber(value) }
-            if let value = snapshot.chargeSpeed { chargeSpeed = compactNumber(value) }
-            if let value = snapshot.moveSpeed { moveSpeed = compactNumber(value) }
-            if let value = snapshot.sprintSpeed { sprintSpeed = compactNumber(value) }
-            if let value = snapshot.dashSpeed { dashSpeed = compactNumber(value) }
-            if let value = snapshot.attackSpeed { attackSpeed = compactNumber(value) }
-            if let value = snapshot.manaRegen { manaRegen = compactNumber(value) }
-            if let value = snapshot.enemyDamage { enemyDamage = compactNumber(value) }
-            if let value = snapshot.enemyHealth { enemyHealth = compactNumber(value) }
-            statsInitialized = true
-            return
-        }
-
-        if focusedField != .grasp, let value = snapshot.grasp { graspLimit = number(value) }
-        if focusedField != .dodge, let value = snapshot.dodge { dodgeChance = compactNumber(value) }
-        if focusedField != .crit, let value = snapshot.crit { critChance = compactNumber(value) }
-        if focusedField != .chargeSpeed, let value = snapshot.chargeSpeed { chargeSpeed = compactNumber(value) }
-        if focusedField != .moveSpeed, let value = snapshot.moveSpeed { moveSpeed = compactNumber(value) }
-        if focusedField != .sprintSpeed, let value = snapshot.sprintSpeed { sprintSpeed = compactNumber(value) }
-        if focusedField != .dashSpeed, let value = snapshot.dashSpeed { dashSpeed = compactNumber(value) }
-        if focusedField != .attackSpeed, let value = snapshot.attackSpeed { attackSpeed = compactNumber(value) }
-        if focusedField != .manaRegen, let value = snapshot.manaRegen { manaRegen = compactNumber(value) }
-        if focusedField != .enemyDamage, let value = snapshot.enemyDamage { enemyDamage = compactNumber(value) }
-        if focusedField != .enemyHealth, let value = snapshot.enemyHealth { enemyHealth = compactNumber(value) }
+        var observed: [EditField: String] = [:]
+        if let value = snapshot.grasp { observed[.grasp] = number(value) }
+        if let value = snapshot.dodge { observed[.dodge] = compactNumber(value) }
+        if let value = snapshot.crit { observed[.crit] = compactNumber(value) }
+        if let value = snapshot.chargeSpeed { observed[.chargeSpeed] = compactNumber(value) }
+        if let value = snapshot.moveSpeed { observed[.moveSpeed] = compactNumber(value) }
+        if let value = snapshot.sprintSpeed { observed[.sprintSpeed] = compactNumber(value) }
+        if let value = snapshot.dashSpeed { observed[.dashSpeed] = compactNumber(value) }
+        if let value = snapshot.attackSpeed { observed[.attackSpeed] = compactNumber(value) }
+        if let value = snapshot.manaRegen { observed[.manaRegen] = compactNumber(value) }
+        if let value = snapshot.enemyDamage { observed[.enemyDamage] = compactNumber(value) }
+        if let value = snapshot.enemyHealth { observed[.enemyHealth] = compactNumber(value) }
+        drafts.observe(observed, focused: focusedField, force: !statsInitialized)
+        statsInitialized = true
     }
 
     private func syncConfigSnapshot(_ snapshot: Hades2ViewConfigSnapshot) {
         syncElementInputs(snapshot.elements)
-        if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
-        if focusedField != .moneyMultiplier { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
-        if focusedField != .resourceMultiplier { materialFactor = compactNumber(snapshot.resourceMultiplier) }
-        if focusedField != .gameSpeed, gameSpeedPreview == nil {
-            gameSpeedInput = speedNumber(snapshot.gameSpeed)
+        var observed: [EditField: String] = [
+            .damageMultiplier: compactNumber(snapshot.damageMultiplier),
+            .moneyMultiplier: compactNumber(snapshot.moneyMultiplier),
+            .resourceMultiplier: compactNumber(snapshot.resourceMultiplier),
+        ]
+        if gameSpeedPreview == nil {
+            observed[.gameSpeed] = speedNumber(snapshot.gameSpeed)
         }
+        drafts.observe(observed, focused: focusedField)
     }
 
     private func syncElementInputs(_ values: [ElementCount]) {
-        if !elementsInitialized {
-            elementInputs = Dictionary(uniqueKeysWithValues: values.map { ($0.id, number($0.count)) })
-            elementsInitialized = true
-            return
-        }
-
-        for item in values where focusedField != .element(item.id) {
-            elementInputs[item.id] = number(item.count)
-        }
+        let observed = Dictionary(uniqueKeysWithValues: values.map { (EditField.element($0.id), number($0.count)) })
+        drafts.observe(observed, focused: focusedField, force: !elementsInitialized)
+        elementsInitialized = true
     }
 
     private func applyCatalogChanges(from oldValue: Hades2ViewCatalogSnapshot, to newValue: Hades2ViewCatalogSnapshot) {
-        if oldValue.materialID != newValue.materialID
-            || (oldValue.materialCount != newValue.materialCount && focusedField != .material) {
-            materialAmount = newValue.materialCount.map { number($0) } ?? ""
+        if oldValue.materialID != newValue.materialID {
+            drafts[.material] = newValue.materialCount.map { number($0) } ?? ""
+        } else if oldValue.materialCount != newValue.materialCount {
+            drafts.observe(.material, value: newValue.materialCount.map { number($0) } ?? "", focused: focusedField)
         }
         if !model.selectedNextOccurrenceTarget.isEmpty
             && !newValue.occurrenceTargetIDs.contains(model.selectedNextOccurrenceTarget) {
@@ -1095,7 +1064,7 @@ struct Hades2TrainerView: View {
         syncConnectionSnapshot(connectionSnapshot)
         syncStatSnapshot(statSnapshot)
         syncConfigSnapshot(configSnapshot)
-        materialAmount = material.map { number($0.count) } ?? ""
+        drafts[.material] = material.map { number($0.count) } ?? ""
     }
 
     private func resetEditorInputs() {
@@ -1103,35 +1072,9 @@ struct Hades2TrainerView: View {
         rerollsInitialized = false
         vitalsInitialized = false
         statsInitialized = false
-        coins = ""
-        rerollAmount = ""
-        materialAmount = ""
-        healthCurrent = ""
-        healthMaximum = ""
-        manaCurrent = ""
-        manaMaximum = ""
-        armorCurrent = ""
-        spellCharge = ""
-        biomeTime = ""
-        gameSpeedPreview = nil
-        gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
-        multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
-        moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
-        materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
-        graspLimit = ""
-        dodgeChance = ""
-        critChance = ""
-        chargeSpeed = ""
-        moveSpeed = ""
-        sprintSpeed = ""
-        dashSpeed = ""
-        attackSpeed = ""
-        manaRegen = ""
-        enemyDamage = "100"
-        enemyHealth = "100"
-        elementInputs = [:]
         elementsInitialized = false
-        traitRemainingUsesInput = ""
+        gameSpeedPreview = nil
+        drafts.reset(to: Self.defaultDrafts)
     }
 
     private var sessionStatsPanel: some View {
@@ -1146,24 +1089,24 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            text("hades2.vital.health"), icon: TrainerSemanticIcon.Concept.vitality, current: $healthCurrent, maximum: $healthMaximum,
+            text("hades2.vital.health"), icon: TrainerSemanticIcon.Concept.vitality, current: draft(.healthCurrent), maximum: draft(.healthMax),
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Concept.energy, current: $manaCurrent, maximum: $manaMaximum,
+            text("hades2.vital.mana"), icon: TrainerSemanticIcon.Concept.energy, current: draft(.manaCurrent), maximum: draft(.manaMax),
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
         editableAmountMetric(
-            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Concept.currency, text: $coins, focus: .coins,
+            text("hades2.vital.runGold"), icon: TrainerSemanticIcon.Concept.currency, text: draft(.coins), focus: .coins,
             color: .yellow, locked: model.moneyLocked, enabled: model.canSetResource,
             edit: .resource("Money"), lockEnabled: !model.infiniteMoney
         ) {
             model.lockResource("Money", locked: !model.moneyLocked)
         }
         editableAmountMetric(
-            text("hades2.vital.armor"), icon: TrainerSemanticIcon.Concept.defense, text: $armorCurrent, focus: .armorCurrent,
+            text("hades2.vital.armor"), icon: TrainerSemanticIcon.Concept.defense, text: draft(.armorCurrent), focus: .armorCurrent,
             color: theme.warning, locked: model.armorLocked, enabled: model.canSetVital("armor"),
             edit: .vital("armor", field: "current")
         ) {
@@ -1174,16 +1117,16 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var expandedSessionMetrics: some View {
         damageMetric
-        editableStatMetric(text("hades2.stat.grasp"), icon: Hades2WorkbenchIcon.grasp, stat: "grasp", text: $graspLimit, focus: .grasp, suffix: "", locked: model.graspLocked)
+        editableStatMetric(text("hades2.stat.grasp"), icon: Hades2WorkbenchIcon.grasp, stat: "grasp", text: draft(.grasp), focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
-            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: $rerollAmount, focus: .rerolls,
+            text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: draft(.rerolls), focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls, lockEnabled: !model.infiniteRerolls
         ) {
             model.lockRerolls(!model.rerollsLocked)
         }
         editableCounterMetric(
-            text("hades2.metric.spellCharge"), icon: Hades2WorkbenchIcon.spellCharge, text: $spellCharge,
+            text("hades2.metric.spellCharge"), icon: Hades2WorkbenchIcon.spellCharge, text: draft(.spellCharge),
             focus: .spellCharge, color: .purple,
             detail: model.spellChargeCost.map { cost in
                     localization.string("hades2.metric.cost", arguments: [number(cost)])
@@ -1192,23 +1135,23 @@ struct Hades2TrainerView: View {
         )
         editableAmountMetric(
             text("hades2.metric.biomeTime"), icon: TrainerSemanticIcon.Concept.timer,
-            text: $biomeTime, focus: .biomeTime,
+            text: draft(.biomeTime), focus: .biomeTime,
             color: .orange, locked: model.biomeTimeLocked,
             enabled: model.canSetBiomeTime, edit: .biomeTime,
             lockEnabled: (model.biomeTime ?? 0) > 0 || model.biomeTimeLocked
         ) {
             model.lockBiomeTime(!model.biomeTimeLocked)
         }
-        editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: $dodgeChance, focus: .dodge, suffix: "%", locked: model.dodgeLocked)
-        editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: $critChance, focus: .crit, suffix: "%", locked: model.critLocked)
-        editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: $enemyDamage, focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
-        editableStatMetric(text("hades2.stat.enemyHealth"), icon: TrainerSemanticIcon.Concept.vitality, stat: "enemyHealth", text: $enemyHealth, focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
-        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: TrainerSemanticIcon.Concept.timer, stat: "chargeSpeed", text: $chargeSpeed, focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
-        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: $moveSpeed, focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
-        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: Hades2WorkbenchIcon.sprintSpeed, stat: "sprintSpeed", text: $sprintSpeed, focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
-        editableStatMetric(text("hades2.stat.dashSpeed"), icon: TrainerSemanticIcon.Concept.dash, stat: "dashSpeed", text: $dashSpeed, focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
-        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: $attackSpeed, focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
-        editableStatMetric(text("hades2.stat.manaRegen"), icon: TrainerSemanticIcon.Concept.energy, stat: "manaRegen", text: $manaRegen, focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
+        editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: draft(.dodge), focus: .dodge, suffix: "%", locked: model.dodgeLocked)
+        editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: draft(.crit), focus: .crit, suffix: "%", locked: model.critLocked)
+        editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: draft(.enemyDamage), focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
+        editableStatMetric(text("hades2.stat.enemyHealth"), icon: TrainerSemanticIcon.Concept.vitality, stat: "enemyHealth", text: draft(.enemyHealth), focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
+        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: TrainerSemanticIcon.Concept.timer, stat: "chargeSpeed", text: draft(.chargeSpeed), focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
+        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: draft(.moveSpeed), focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
+        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: Hades2WorkbenchIcon.sprintSpeed, stat: "sprintSpeed", text: draft(.sprintSpeed), focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
+        editableStatMetric(text("hades2.stat.dashSpeed"), icon: TrainerSemanticIcon.Concept.dash, stat: "dashSpeed", text: draft(.dashSpeed), focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
+        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: draft(.attackSpeed), focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
+        editableStatMetric(text("hades2.stat.manaRegen"), icon: TrainerSemanticIcon.Concept.energy, stat: "manaRegen", text: draft(.manaRegen), focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
     }
 
     private var elementPanel: some View {
@@ -1223,7 +1166,7 @@ struct Hades2TrainerView: View {
     private var damageMetric: some View {
         TrainerMultiplierMetricCard(
             title: text("hades2.feature.damageMultiplier"), icon: TrainerSemanticIcon.Concept.impact,
-            text: $multiplier, focus: $focusedField, focusValue: .damageMultiplier,
+            text: draft(.damageMultiplier), focus: $focusedField, focusValue: .damageMultiplier,
             suffix: "×", editable: model.canEditDesired,
             onCommit: completing(.multiplier("damageMultiplier"))
         )
@@ -1387,7 +1330,7 @@ struct Hades2TrainerView: View {
         let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
         return TrainerDualPickerActionRow(
             title: text("hades2.worldActions.modifyExit"),
-            icon: TrainerSemanticIcon.Context.doorway,
+            icon: Hades2WorkbenchIcon.doorway,
             tint: model.canSelectWorldExit ? theme.accent : theme.inactive,
             emphasized: model.selectedWorldExitLease != nil
         ) {
@@ -1529,9 +1472,9 @@ struct Hades2TrainerView: View {
                 // The two gain multipliers are one family; keep them adjacent so the
                 // shared "gain" meaning is visible instead of split around the editor.
                 multiplierRow(text("hades2.feature.moneyMultiplier"), enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
-                    text: $moneyFactor, feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
+                    text: draft(.moneyMultiplier), feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
                 multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                    text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
+                    text: draft(.resourceMultiplier), feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
             }
             .trainerGroupedRows()
             TrainerResourceEditor(
@@ -1539,7 +1482,7 @@ struct Hades2TrainerView: View {
                 icon: TrainerSemanticIcon.Concept.item,
                 search: $search,
                 selection: $selectedMaterial,
-                amount: $materialAmount,
+                amount: draft(.material),
                 sections: resourceGroups(filtered),
                 enabled: model.canSetResource,
                 lock: TrainerResourceLock(locked: material?.locked ?? false) {
@@ -1935,12 +1878,7 @@ struct Hades2TrainerView: View {
     }
 
     private func elementMetric(_ element: ElementCount) -> some View {
-        let binding = Binding<String>(
-            get: { elementInputs[element.id] ?? number(element.count) },
-            set: {
-                elementInputs[element.id] = $0
-            }
-        )
+        let binding = $drafts.binding(.element(element.id), default: number(element.count))
         let style = elementStyle(element.id)
         return TrainerAmountMetricCard(
             title: elementLabel(element),

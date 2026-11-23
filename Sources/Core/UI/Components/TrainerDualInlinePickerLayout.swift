@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Measures two inline label/native-Picker pairs independently, then reserves
-/// the optional shortcut and trailing action lanes. Used by exact-boon rows.
+/// the optional shortcut and trailing action lanes for dual-selector rows.
 package struct TrainerDualInlinePickerLayout: Layout {
     let minimumPickerWidth: CGFloat
     let maximumPickerWidth: CGFloat

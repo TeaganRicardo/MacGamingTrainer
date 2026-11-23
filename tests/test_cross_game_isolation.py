@@ -403,11 +403,25 @@ def check_manifest_derived_identities(root: Path) -> list[str]:
         app_swift = root / 'Sources' / 'App.swift'
         if app_swift.is_file():
             shared_swift.append(app_swift)
+        core_hades_family_pat = re.compile(
+            r'(?:(?<![A-Za-z0-9_])|(?=[A-Z]))(Hades|hades|boon|Boon|rarity|Rarity|trait|Trait)(?![a-z0-9])'
+        )
         for path in shared_swift:
             rel = path.relative_to(root).as_posix()
-            hits = sorted(set(shared_pattern.findall(_strip_swift_comments(path.read_text(encoding='utf-8')))))
+            stripped = _strip_swift_comments(path.read_text(encoding='utf-8'))
+            hits = sorted(set(shared_pattern.findall(stripped)))
             if hits:
                 errors.append(f'{rel}: shared Swift mentions module identity tokens {hits}')
+            # WP3.6 S-F11: prevent Hades-family concepts from creeping into Core.
+            vocab_hits = sorted(
+                set(
+                    core_hades_family_pat.findall(
+                        stripped.replace('accessibilityAddTraits', '')
+                    )
+                )
+            )
+            if vocab_hits:
+                errors.append(f'{rel}: shared Swift uses Hades-family vocabulary {vocab_hits}')
 
     real_tokens = {tok for spec in real_specs for tok in shared_tokens_for(spec)}
     fixture_pat = _boundary_pattern(real_tokens)
@@ -1224,6 +1238,12 @@ with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
     assert any('unprefixed' in err for err in check_module_storage_keys(synth))
     (synth / 'Sources/Alpha/Holder.swift').unlink()
     (synth / 'Sources/Alpha/Ext.swift').unlink()
+
+    (synth / 'Sources/Core/BadVocab.swift').write_text(
+        'import SwiftUI\nstruct TrainerBoonLayout {}\n', encoding='utf-8'
+    )
+    assert any('Hades-family vocabulary' in err for err in check_manifest_derived_identities(synth))
+    (synth / 'Sources/Core/BadVocab.swift').unlink()
 
     # Core must not write a module-prefixed UserDefaults key.
     (synth / 'Sources/Core/BadCore.swift').write_text(

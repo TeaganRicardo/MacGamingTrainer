@@ -37,13 +37,6 @@ package enum TrainerSemanticIcon {
         package static let level = "arrow.up.circle.fill"
     }
 
-    package enum Context {
-        package static let fishing = "fish.fill"
-        package static let portal = "circle.hexagongrid.fill"
-        package static let characterReward = "moon.stars.fill"
-        package static let doorway = "door.left.hand.open"
-    }
-
     package enum Tool {
         package static let saveEditor = "externaldrive.badge.gearshape"
         package static let saveManagement = "externaldrive"
