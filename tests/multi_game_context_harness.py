@@ -1,8 +1,5 @@
 """Two live backend workers keep their identity, requests and tools across selection."""
 
-# The harness builds two synthetic modules in a copy of the product's Core.
-MGT_INPUTS = ("Sources/Core/", "ContractFixtures/reference_module/", "Resources/Localization/")
-
 import json
 import os
 from pathlib import Path

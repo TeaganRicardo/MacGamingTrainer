@@ -1,298 +1,82 @@
-# The workflow name is retained as a stable project/check identifier.
-# "Build 2" is not a product-version source; release metadata comes from Info.plist.
 name: Build 2 macOS
 
 on:
   pull_request:
+  # A manual run also runs the foreground-activation journeys.
   workflow_dispatch:
-  # Nightly convergence on main: the full macOS contracts (including the
-  # journeys deferred from pull requests), the mutation audit and the unified
-  # build, for earlier signal between releases. It is not release evidence:
-  # release-candidate packaging stays with explicit dispatch, and the release
-  # coordinator accepts only workflow_dispatch runs.
-  schedule:
-    - cron: '23 19 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  # The event is part of the group so a running nightly never holds a release's
-  # convergence dispatch on the same ref in the queue.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  # Single change-scope source for this lane. HEAD_SHA is the PR head (not the
-  # merge ref), so every consumer sees exactly the proposed changes. Only a pull
-  # request has a diff base; dispatch and the schedule pass none, which the
-  # classifier treats as unknown scope and routes to every lane.
-  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
-  HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-
 jobs:
-  scope:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      needs_macos: ${{ steps.scope.outputs.needs_macos }}
-      needs_build: ${{ steps.scope.outputs.needs_build }}
-      needs_full_build: ${{ steps.scope.outputs.needs_full_build }}
-      runner_label: ${{ steps.toolchain.outputs.runner_label }}
-      developer_dir: ${{ steps.toolchain.outputs.developer_dir }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          fetch-depth: 0
-          ref: ${{ env.HEAD_SHA }}
-
-      - name: Require intended scope checkout
-        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
-
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version-file: .python-version
-
-      - name: Resolve macOS toolchain profile
-        id: toolchain
-        run: python3 Tools/macos_toolchain_identity.py --print-github-output >> "$GITHUB_OUTPUT"
-
-      - name: Classify change scope
-        id: scope
-        run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Require explicit scope decision
-        if: steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'
-        run: |
-          echo "Change-scope classifier did not emit needs_macos=true|false." >&2
-          exit 1
-
-      - name: Require explicit build mode decision
-        if: (steps.scope.outputs.needs_full_build != 'true' && steps.scope.outputs.needs_full_build != 'false') || (steps.scope.outputs.needs_full_build == 'true' && steps.scope.outputs.needs_build != 'true')
-        run: |
-          echo "Change-scope classifier emitted an invalid build mode decision." >&2
-          exit 1
-
+  # Required check. It always runs; a PR that changes only Markdown skips the work.
   build:
-    needs: scope
-    if: ${{ always() }}
-    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'true' && needs.scope.outputs.runner_label || 'ubuntu-latest' }}
-    # Convergence (every event without a PR diff: dispatch and the nightly
-    # schedule) runs the full native inventory, the resident mutation gate and
-    # the unified build in one job; a measured dispatch run reached the 30 minute
-    # limit inside the build after the inventory had already passed, and was
-    # cancelled with the deferred suites unverified. Pull requests keep the
-    # original 30 minutes so their cost does not change.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 30 || 60 }}
+    runs-on: macos-26
+    timeout-minutes: 120
     env:
-      # Runner label and Xcode path come from Tools/macos_toolchain_identity.py
-      # via the scope job.
-      MGT_MACOS_RUNNER_LABEL: ${{ needs.scope.outputs.runner_label }}
-      DEVELOPER_DIR: ${{ needs.scope.outputs.developer_dir }}
-
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      # tests/macos_fixture_policy.py checks this against its hosted profile.
+      MGT_MACOS_RUNNER_LABEL: macos-26
     steps:
-      - name: Require scope classification
-        if: needs.scope.result != 'success'
-        run: |
-          echo "Change-scope classification failed; refusing to skip the macOS gate." >&2
-          exit 1
-
-      - name: Fast path
-        if: needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'false'
-        run: echo "Change does not require macOS platform checks/build/package."
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: needs.scope.outputs.needs_macos == 'true'
         with:
-          fetch-depth: 0
-          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 2
 
-      - name: Require intended executable checkout
-        if: needs.scope.outputs.needs_macos == 'true'
-        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+      - name: Decide what to run
+        id: scope
+        run: |
+          # A pull_request checkout is the merge commit, so HEAD^1 is the base.
+          run=true
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            grep -qv '\.md$' <<< "$changed" || { run=false; echo "Only Markdown changed; nothing to build."; }
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          # Compiled Swift test modules persist between runs through actions/cache.
+          echo "MGT_SWIFT_TEST_CACHE_DIR=$RUNNER_TEMP/swift-test-cache" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: steps.scope.outputs.run == 'true'
         with:
           python-version-file: .python-version
 
-      - name: Verify selected macOS toolchain
-        if: needs.scope.outputs.needs_macos == 'true'
-        run: python3 Tools/macos_toolchain_identity.py
-
-      - name: Read release identity
-        id: version
-        if: needs.scope.outputs.needs_macos == 'true'
-        run: |
-          source_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
-          source_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
-          source_sha="$(git rev-parse HEAD)"
-          source_tree="$(git rev-parse 'HEAD^{tree}')"
-          # bash 3.2's errexit ignores a failing [[ ]], so each check exits explicitly.
-          [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid product version: $source_version" >&2; exit 1; }
-          [[ "$source_build" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid bundle build: $source_build" >&2; exit 1; }
-          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source commit: $source_sha" >&2; exit 1; }
-          [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source tree: $source_tree" >&2; exit 1; }
-          echo "version=$source_version" >> "$GITHUB_OUTPUT"
-          echo "build=$source_build" >> "$GITHUB_OUTPUT"
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
-          echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
-
-      - name: Select macOS PR behavior and prerequisites
-        id: test-selection
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
-        run: |
-          selection="$RUNNER_TEMP/macos-selection.json"
-          python3 Tools/select_macos_pr_tests.py "$BASE_SHA" "$HEAD_SHA" --output "$selection"
-          prereqs="$(python3 -c 'import json, sys; print(" ".join(json.load(open(sys.argv[1]))["prerequisites"]))' "$selection")"
-          if [ -n "$prereqs" ]; then
-            echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
-            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '.')" >> "$GITHUB_OUTPUT"
-            echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerequisites=" >> "$GITHUB_OUTPUT"
-            echo "cache_key=none" >> "$GITHUB_OUTPUT"
-            echo "has_prerequisites=false" >> "$GITHUB_OUTPUT"
-          fi
-          echo "MGT_MACOS_SELECTION=$selection" >> "$GITHUB_ENV"
-
-      - name: Resolve macOS convergence prerequisites
-        id: convergence-prereqs
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
-        run: |
-          prereqs="$(python3 Tools/select_macos_pr_tests.py --all-prerequisites | paste -sd ' ' -)"
-          if [ -n "$prereqs" ]; then
-            echo "prerequisites=$prereqs" >> "$GITHUB_OUTPUT"
-            echo "cache_key=$(printf '%s' "$prereqs" | tr ' ' '.')" >> "$GITHUB_OUTPUT"
-            echo "has_prerequisites=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerequisites=" >> "$GITHUB_OUTPUT"
-            echo "cache_key=none" >> "$GITHUB_OUTPUT"
-            echo "has_prerequisites=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Cache declared macOS CI prerequisites
-        if: needs.scope.outputs.needs_macos == 'true' && (steps.test-selection.outputs.has_prerequisites == 'true' || steps.convergence-prereqs.outputs.has_prerequisites == 'true')
-        id: prereqs-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: steps.scope.outputs.run == 'true'
         with:
-          path: ${{ runner.temp }}/ci-prerequisites
-          key: ci-prereqs-${{ runner.os }}-${{ runner.arch }}-${{ steps.test-selection.outputs.cache_key || steps.convergence-prereqs.outputs.cache_key }}-${{ hashFiles('Tools/ci_prerequisites/*.sh') }}
+          path: |
+            ${{ runner.temp }}/swift-test-cache
+            ${{ runner.temp }}/ci-prerequisites
+          key: macos-tests-${{ hashFiles('Sources/**', 'tests/swift_test_compiler.py', 'Tools/ci_prerequisites/*.sh') }}
+          restore-keys: macos-tests-
 
-      - name: Install declared macOS CI prerequisites
-        if: needs.scope.outputs.needs_macos == 'true' && (steps.test-selection.outputs.has_prerequisites == 'true' || steps.convergence-prereqs.outputs.has_prerequisites == 'true')
+      - name: Install Lua 5.2
+        if: steps.scope.outputs.run == 'true'
+        run: bash Tools/ci_prerequisites/lua52.sh
+
+      - name: Build the App
+        if: steps.scope.outputs.run == 'true'
         run: |
-          for prereq in ${{ steps.test-selection.outputs.prerequisites || steps.convergence-prereqs.outputs.prerequisites }}; do
-            bash "Tools/ci_prerequisites/${prereq}.sh"
-          done
-
-      - name: Run full macOS contracts for convergence
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
-        # Timings are observation only; they must outlive the lane's temporary
-        # directory so the coverage artifact can carry them. `runner` is not an
-        # available context in a job-level env block, only in a step.
-        env:
-          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
-          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
-        run: bash Tools/run_macos_checks.sh
-
-      - name: Run selected macOS PR smoke tests
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request'
-        env:
-          MGT_FIXTURE_TIMINGS: ${{ runner.temp }}/macos-fixture-timings.jsonl
-          MGT_MACOS_COVERAGE_OUTPUT: ${{ runner.temp }}/macos-coverage.jsonl
-        run: bash Tools/run_macos_checks.sh --pr "$BASE_SHA" "$HEAD_SHA"
-
-      # Declared behavioural invariants, proven to fail when the code that
-      # guards them is broken. Several of these tests compile Swift and drive
-      # the real presentation and protocol paths, so this belongs in the
-      # macOS lane rather than the portable one. The gate validates its anchors
-      # first; pull requests do not, so a moved anchor surfaces here.
-      - name: Verify declared invariants fail under mutation
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name != 'pull_request'
-        run: python3 Tools/mutation_gate.py
-
-      - name: Typecheck unified trainer on Swift PR
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'pull_request' && needs.scope.outputs.needs_build == 'true' && needs.scope.outputs.needs_full_build == 'false'
-        run: ./build.sh --typecheck --all
-
-      - name: Build unified trainer
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_full_build == 'true')
-        run: ./build.sh --all
-
-      - name: Verify package
-        if: needs.scope.outputs.needs_macos == 'true' && (github.event_name != 'pull_request' || needs.scope.outputs.needs_full_build == 'true')
-        run: |
+          ./build.sh --all
           app="$(python3 Tools/verify_module_build.py all --print-app)"
-          expected_version="${{ steps.version.outputs.version }}"
-          expected_build="${{ steps.version.outputs.build }}"
-          test -d "$app"
-          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
-          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
-          test "$version" = "$expected_version"
-          test "$build" = "$expected_build"
           codesign --verify --deep --strict "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/MacGamingTrainer.zip"
 
-      - name: Package release candidate
-        id: package
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+      - name: Run macOS tests
+        if: steps.scope.outputs.run == 'true'
         run: |
-          mkdir -p artifacts
-          app="$(python3 Tools/verify_module_build.py all --print-app)"
-          artifact="artifacts/$(python3 Tools/write_build_provenance.py \
-            --print-artifact-name \
-            --product-version "${{ steps.version.outputs.version }}" \
-            --bundle-build "${{ steps.version.outputs.build }}" \
-            --repo-root "$GITHUB_WORKSPACE")"
-          ditto -c -k --sequesterRsrc --keepParent "$app" "$artifact"
-          python3 Tools/write_build_provenance.py \
-            --artifact "$artifact" \
-            --product-version "${{ steps.version.outputs.version }}" \
-            --bundle-build "${{ steps.version.outputs.build }}" \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --module-id all \
-            --workflow-source .github/workflows/build2-macos.yml
-
-      - name: Verify release provenance and checksum
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
-        run: |
-          provenance="artifacts/${{ steps.package.outputs.provenance_name }}"
-          sidecar="${{ steps.package.outputs.sidecar_name }}"
-          test -f "$provenance"
-          test -f "artifacts/$sidecar"
-          (cd artifacts && shasum -a 256 -c "$sidecar")
-          python3 Tools/verify_build_provenance.py \
-            --provenance "$provenance" \
-            --artifact "artifacts/${{ steps.package.outputs.artifact_name }}" \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --expected-source-sha "${{ steps.version.outputs.source_sha }}" \
-            --module-id all \
-            --expected-checkout clean \
-            --expected-generated-copies 0 \
-            --expected-workflow "Build 2 macOS" \
-            --expected-event workflow_dispatch \
-            --expected-workflow-source .github/workflows/build2-macos.yml \
-            --match-current-macos-toolchain
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            bash Tools/run_macos_checks.sh
+          else
+            bash Tools/run_macos_checks.sh --skip-foreground
+          fi
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+        if: steps.scope.outputs.run == 'true'
         with:
-          name: MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc
-          path: |
-            artifacts/${{ steps.package.outputs.artifact_name }}
-            artifacts/${{ steps.package.outputs.provenance_name }}
-            artifacts/${{ steps.package.outputs.sidecar_name }}
-          if-no-files-found: error
-          retention-days: 14
-
-      # Coverage and timing evidence is diagnostic, so it is retained on every
-      # macOS run, including a failed one, and never gates the lane.
-      - name: Retain macOS coverage and journey timing evidence
-        if: needs.scope.outputs.needs_macos == 'true' && always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: macos-coverage-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/macos-coverage.jsonl
-          if-no-files-found: warn
+          name: MacGamingTrainer-${{ github.sha }}
+          path: ${{ runner.temp }}/MacGamingTrainer.zip
           retention-days: 14

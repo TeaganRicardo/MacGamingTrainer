@@ -1,0 +1,41 @@
+name: Release
+
+# Manual: build main, verify the signature, and publish a GitHub release whose
+# tag comes from Info.plist (vX.Y.Z, or vX.Y.Z+bN for a later build of X.Y.Z).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version-file: .python-version
+
+      - name: Build, verify and publish
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)"
+          build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)"
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then tag="v$version+b$build"; fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then echo "$tag already exists" >&2; exit 1; fi
+          ./build.sh --all
+          app="$(python3 Tools/verify_module_build.py all --print-app)"
+          codesign --verify --deep --strict "$app"
+          zip="MacGamingTrainer-$version-b$build-${GITHUB_SHA:0:8}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+          shasum -a 256 "$zip" > "$zip.sha256"
+          gh release create "$tag" "$zip" "$zip.sha256" --target "$GITHUB_SHA" --title "$tag" --generate-notes

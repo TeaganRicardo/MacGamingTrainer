@@ -49,7 +49,7 @@ An LLDB expression-engine interruption can bypass Lua VM cleanup. A scratch-memo
 
 The debugger child owns its native shutdown cleanup. Client close or terminal reply loss delivers EOF without killing that worker; its EOF cleanup retains the interrupted attachment and retries bounded termination attempts until the game has exited. Normal disconnect still releases native owners before the child exits. This lifetime policy is specific to the Hades debugger sidecar.
 
-The resident revision and source path are declared in `module.json` and extracted by the existing shared revision/provenance tooling. A different or legacy resident requires a game restart. Runtime-only tables and temporary Trainer projections must be excluded from native saves.
+The resident revision and source path are declared in `module.json` and read by the shared revision tooling (`Tools/resident_runtime.py`). A different or legacy resident requires a game restart. Runtime-only tables and temporary Trainer projections must be excluded from native saves.
 
 The world-definition compatibility identity is a canonical SHA-256 of the exact definitions supplied by the game-owned catalog adapter. Object-key ordering and presentation-only names do not change that identity. An existing resident with different or unidentified definitions requires restarting the game before another runtime command; definitions and pending world actions are never replaced in place. The current runtime change also requires restarting any game that still contains the preceding resident revision. Product version, module protocol and supported-game identity are independent of this revision.
 

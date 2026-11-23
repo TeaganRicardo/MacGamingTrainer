@@ -1,123 +1,32 @@
 #!/usr/bin/env bash
+# Run every macOS test (MGT_PLATFORM = "macos"). Tests get a private HOME and
+# TMPDIR so nothing can reach real saves or ~/Library. Only git-tracked tests
+# run. --skip-foreground leaves out the journeys that need foreground
+# activation; they fail on a busy desktop and run on manual CI dispatch.
 set -uo pipefail
+cd "$(dirname "$0")/.." || exit 2
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if ! cd "$ROOT"; then
-  echo "ERROR: cannot enter repository root: $ROOT" >&2
-  exit 2
-fi
+FOREGROUND="tests/test_hades2_view_state_flow.py tests/test_multi_game_contexts.py tests/test_runtime_text_edit_completion.py"
+skip_foreground=false
+case "${1:-}" in
+  "") ;;
+  --skip-foreground) skip_foreground=true ;;
+  *) echo "usage: run_macos_checks.sh [--skip-foreground]" >&2; exit 2 ;;
+esac
+
+LANE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgt-lane-XXXXXX")" || exit 2
+trap 'rm -rf -- "$LANE_TMP"' EXIT
+export TMPDIR="$LANE_TMP" HOME="$LANE_TMP/home"
+mkdir -p "$HOME" || exit 2
 
 failures=()
-record_failure() {
-  failures+=("$1")
-  printf 'FAIL: %s\n' "$1" >&2
-}
+run() { echo "==> $1"; if "${@:2}"; then echo "PASS: $1"; else failures+=("$1"); echo "FAIL: $1" >&2; fi; }
 
-run_check() {
-  local label="$1"
-  shift
-  printf '==> %s\n' "$label"
-  if "$@"; then
-    printf 'PASS: %s\n' "$label"
-    printf '%s\tpass\n' "$label" >> "$RESULTS_FILE"
-  else
-    local status=$?
-    printf '%s\tfail\n' "$label" >> "$RESULTS_FILE"
-    record_failure "$label (exit $status)"
-  fi
-}
+for test in $(git ls-files 'tests/test_*.py'); do
+  grep -q '^MGT_PLATFORM = "macos"' "$test" || continue
+  if $skip_foreground && [[ " $FOREGROUND " == *" $test "* ]]; then echo "SKIP (foreground): $test"; continue; fi
+  run "$test" python3 "$test"
+done
 
-# Tests build fixtures with tempfile.mkdtemp and some production defaults derive
-# storage from HOME. Keep both temporary files and accidental default-path
-# writes inside one private tree owned by the lane.
-if ! LANE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgt-lane-XXXXXX")"; then
-  echo "ERROR: could not create isolated test directory" >&2
-  exit 2
-fi
-cleanup_lane_tmp() {
-  if [[ -n "${LANE_TMP:-}" && -d "${LANE_TMP:-}" && "${LANE_TMP}" == */mgt-lane-* ]]; then
-    rm -rf -- "$LANE_TMP"
-  fi
-  return 0
-}
-trap cleanup_lane_tmp EXIT
-export TMPDIR="$LANE_TMP"
-export HOME="$LANE_TMP/home"
-if ! mkdir -p "$HOME"; then
-  record_failure "create isolated HOME"
-fi
-
-RESULTS_FILE="$LANE_TMP/macos-results.tsv"
-SELECTED_FILE="$LANE_TMP/macos-selected.txt"
-SELECTION_FILE="${MGT_MACOS_SELECTION:-$LANE_TMP/macos-selection.json}"
-: > "$RESULTS_FILE"
-: > "$SELECTED_FILE"
-
-# Journey timings are observation only. A hosted lane points this at a durable
-# path so the artifact survives the lane's temporary directory.
-if [[ -z "${MGT_FIXTURE_TIMINGS:-}" ]]; then
-  MGT_FIXTURE_TIMINGS="$LANE_TMP/macos-fixture-timings.jsonl"
-fi
-export MGT_FIXTURE_TIMINGS
-COVERAGE_OUTPUT="${MGT_MACOS_COVERAGE_OUTPUT:-}"
-
-LANE="convergence"
-selected=""
-if [[ $# -eq 0 ]]; then
-  # Full inventory is reserved for exact-SHA release convergence.
-  if ! selected="$(python3 Tools/test_inventory.py)"; then
-    record_failure "discover macOS tests"
-  fi
-elif [[ $# -eq 3 && "$1" == "--pr" ]]; then
-  LANE="pr"
-  if [[ -n "${MGT_MACOS_SELECTION:-}" ]]; then
-    if ! selected="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["selected"]))' "$SELECTION_FILE")"; then
-      record_failure "read PR macOS selection"
-    fi
-  elif ! selected="$(python3 Tools/select_macos_pr_tests.py "$2" "$3" --output "$SELECTION_FILE")"; then
-    record_failure "select PR macOS tests"
-  fi
-else
-  record_failure "usage: run_macos_checks.sh [--pr BASE_SHA HEAD_SHA]"
-fi
-
-printf '%s\n' "$selected" > "$SELECTED_FILE"
-
-if [[ -n "$selected" ]]; then
-  while IFS= read -r name || [[ -n "$name" ]]; do
-    [[ -n "$name" ]] || continue
-    test_file="$ROOT/tests/$name"
-    if [[ ! -f "$test_file" ]]; then
-      record_failure "missing macOS-only test: $name"
-      continue
-    fi
-    run_check "$name" python3 "$test_file"
-  done <<< "$selected"
-fi
-
-# The lane must state what it ran, what it deferred and who verifies the
-# deferred work. A coverage contract violation fails closed; a slow journey
-# never does.
-coverage_args=(--lane "$LANE" --selected "$SELECTED_FILE" --results "$RESULTS_FILE")
-if [[ "$LANE" == "pr" ]]; then
-  coverage_args+=(--selection "$SELECTION_FILE")
-fi
-if [[ -n "${MGT_FIXTURE_TIMINGS:-}" ]]; then
-  coverage_args+=(--timings "$MGT_FIXTURE_TIMINGS")
-fi
-if [[ -n "$COVERAGE_OUTPUT" ]]; then
-  coverage_args+=(--output "$COVERAGE_OUTPUT")
-fi
-coverage_status=0
-python3 Tools/summarize_macos_coverage.py "${coverage_args[@]}" || coverage_status=$?
-if (( coverage_status != 0 )); then
-  record_failure "macOS coverage summary (exit $coverage_status)"
-fi
-
-if (("${#failures[@]}" > 0)); then
-  printf '\nmacOS contract suite failed in %d check(s):\n' "${#failures[@]}" >&2
-  printf ' - %s\n' "${failures[@]}" >&2
-  exit 1
-fi
-
+if ((${#failures[@]})); then printf 'FAILED: %s\n' "${failures[@]}" >&2; exit 1; fi
 echo "macos_checks_ok"

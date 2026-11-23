@@ -1,12 +1,6 @@
 """Compile and exercise Host-owned TrainerFeedbackCenter and TrainerDiagnosticsService."""
 
 MGT_PLATFORM = "macos"
-MGT_INPUTS = (
-    "Resources/Localization/",
-    "Sources/Core/Host/",
-    "Sources/Core/Runtime/",
-    "Sources/Core/UI/",
-)
 
 from pathlib import Path
 import shutil

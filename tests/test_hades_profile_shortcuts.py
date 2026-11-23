@@ -1,10 +1,6 @@
 """Verify D4 in Hades I: Profiles save and restore shortcuts while older profiles keep bindings unchanged."""
 
 MGT_PLATFORM = "macos"
-MGT_INPUTS = (
-    "Sources/Core/",
-    "Sources/Hades/",
-)
 
 import json
 import shutil

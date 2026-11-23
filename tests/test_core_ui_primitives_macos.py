@@ -1,7 +1,6 @@
 """Headless macOS behavior checks for shared Core UI primitives and views."""
 
 MGT_PLATFORM = "macos"
-MGT_INPUTS = ("Resources/Localization/",)
 
 import json
 from pathlib import Path

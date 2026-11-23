@@ -6,7 +6,6 @@ and whose executable name exceeds the kernel's 16-byte process name.
 """
 
 MGT_PLATFORM = "macos"
-MGT_INPUTS = ("Backend/core/target_probe.py",)
 
 import os
 import shutil
