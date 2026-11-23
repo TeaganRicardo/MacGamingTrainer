@@ -98,8 +98,17 @@ with open(os.environ['MGT_TOOL_LOG'], 'a', encoding='utf-8') as log:
 if tool == 'python' and args[:1] == ['-']:
     sys.argv = args
     exec(compile(sys.stdin.read(), '<build.sh stdin>', 'exec'), {'__name__': '__main__'})
+elif tool == 'python' and args and pathlib.Path(args[0]).name == 'validate_game_module.py' and '--json' in args:
+    print(json.dumps({'nativeLibraries': []}))
+elif tool == 'python' and args and pathlib.Path(args[0]).name == 'build_module_native.py':
+    import runpy
+    sys.executable = sys.argv[0]
+    sys.argv = args
+    runpy.run_path(args[0], run_name='__main__')
 elif tool == 'xcrun' and args[:1] == ['--find']:
     print(pathlib.Path(sys.argv[0]).parent / args[1])
+elif tool == 'xcrun' and args[:1] == ['lipo']:
+    pathlib.Path(args[args.index('-output') + 1]).write_bytes(b'fixture')
 elif tool in ('clang', 'lipo'):
     pathlib.Path(args[args.index('-o' if tool == 'clang' else '-output') + 1]).write_bytes(b'fixture')
 elif tool == 'file':
@@ -119,7 +128,7 @@ assert not [line for line in build[:build.index('\nTIME_WARP_ROOT=')].splitlines
             if line.lstrip().startswith('codesign ')], 'build.sh signs outside the executed packaging tail'
 
 
-def run_packaging_tail(root, replace_output_with_symlink=None):
+def run_packaging_tail(root, replace_output_with_symlink=None, process_time_warp=True):
     fakebin = root / 'bin'
     fakebin.mkdir()
     for name in ('xcrun', 'clang', 'lipo', 'codesign', 'plutil', 'file', 'python'):
@@ -127,8 +136,10 @@ def run_packaging_tail(root, replace_output_with_symlink=None):
         (fakebin / name).chmod(0o755)
     generated = root / 'generated'
     generated.mkdir()
-    (generated / 'module.normalized.json').write_text(json.dumps(
-        {'moduleIDs': ['fixture'], 'buildRequirements': {'entitlements': []}}))
+    (generated / 'module.normalized.json').write_text(json.dumps({
+        'moduleIDs': ['fixture'],
+        'buildRequirements': {'processTimeWarp': process_time_warp, 'entitlements': []},
+    }))
     # actool's partial Info.plist is the accent owner; a non-default name proves
     # the packaged declaration is copied from it rather than restated.
     (generated / 'asset-catalog-info.plist').write_bytes(plistlib.dumps({'NSAccentColorName': 'FixtureAccent'}))
@@ -183,28 +194,33 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-signing-order-') as temporary
     verified = events.index(['codesign', '--verify', '--deep', '--strict', app])
     assert signatures[-1] < verified < events.index(published[0]), events
 
-    # The Process Time Warp helper is built from its production source and the
-    # bundled fishhook for every Host slice plus x86_64 (target-injected code may
-    # need the Intel slice), with warnings visible but nonfatal, then merged,
-    # ad-hoc signed and shipped with the fishhook licence.
+    # The Process Time Warp helper is built through build_module_native.py from
+    # its production source and the bundled fishhook for the declared Host
+    # architectures only when opted in (no forced x86_64 slice), with warnings
+    # visible, ad-hoc signed after metadata cleanup and shipped with the licence.
     native = Path(app) / 'Contents/Resources/Backend/core/native'
     helper = str(native / 'libMGTTimeWarp.dylib')
     time_warp = ROOT / 'Native/ProcessTimeWarp'
     compiles = {event[event.index('-arch') + 1]: event for event in events if event[0] == 'clang'}
-    assert set(compiles) == {'arm64', 'x86_64'}, compiles
+    assert set(compiles) == {'arm64'}, compiles
     for arch, compile_args in compiles.items():
         flags = set(compile_args)
         assert {'-dynamiclib', '-Wall', '-Wextra'} <= flags and '-Werror' not in flags, compile_args
         assert compile_args[compile_args.index('-isysroot') + 1] == '/synthetic/sdk', compile_args
         assert compile_args[compile_args.index('-framework') + 1] == 'QuartzCore', compile_args
         assert {str(time_warp / 'ProcessTimeWarp.c'), str(time_warp / 'vendor/fishhook/fishhook.c')} <= flags
-    slices = [compile_args[compile_args.index('-o') + 1] for compile_args in compiles.values()]
-    assert ['lipo', '-create', *slices, '-output', helper] in events, events
+    assert Path(helper).is_file(), helper
     assert ['codesign', '--force', '--sign', '-', '--timestamp=none', helper] in events, events
     assert (native / 'LICENSE.fishhook').read_bytes() == (time_warp / 'vendor/fishhook/LICENSE').read_bytes()
     # AppKit native chrome resolves the product accent from the packaged Info.plist.
     packaged_info = plistlib.loads((Path(app) / 'Contents/Info.plist').read_bytes())
     assert packaged_info['NSAccentColorName'] == 'FixtureAccent', packaged_info
+
+with tempfile.TemporaryDirectory(prefix='mgt-build-no-time-warp-') as temporary:
+    result, events, _dist, app, _output = run_packaging_tail(Path(temporary), process_time_warp=False)
+    assert result.returncode == 0, result.stdout + '\n' + result.stderr
+    assert not [event for event in events if event[0] == 'clang'], events
+    assert not (Path(app) / 'Contents/Resources/Backend/core/native').exists()
 
 with tempfile.TemporaryDirectory(prefix='mgt-build-publish-symlink-') as temporary:
     root = Path(temporary)

@@ -468,59 +468,20 @@ for game_id in sys.argv[2:]:
 PY
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
-TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"
-TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"
-TIME_WARP_NATIVE_DIR="$BACKEND/core/native"
-TIME_WARP_DYLIB="$TIME_WARP_NATIVE_DIR/libMGTTimeWarp.dylib"
-[[ -f "$TIME_WARP_SOURCE" && -f "$TIME_WARP_FISHHOOK" ]] || {
-    echo "Missing Process Time Warp native sources." >&2
-    exit 1
-}
-mkdir -p "$TIME_WARP_NATIVE_DIR"
-# Target-injected code may require a CPU slice different from the Host.
-# Package x86_64 alongside the requested Host slices for Intel targets.
-TIME_WARP_ARCHITECTURES=("${ARCHITECTURES[@]}")
-if ! printf '%s\n' "${TIME_WARP_ARCHITECTURES[@]}" | grep -qx 'x86_64'; then
-    TIME_WARP_ARCHITECTURES+=(x86_64)
-fi
-TIME_WARP_ARCH_BINARIES=()
-for arch in "${TIME_WARP_ARCHITECTURES[@]}"; do
-    helper="$GENERATED_DIR/libMGTTimeWarp.$arch.dylib"
-    # Production Process Time Warp + bundled fishhook compile. Keep warnings visible
-    # without making pre-existing/vendor diagnostics a new build-failure gate.
-    "$CLANG" \
-        -dynamiclib \
-        -isysroot "$SDK" \
-        -arch "$arch" \
-        -mmacosx-version-min="$MIN_MACOS" \
-        -std=c11 \
-        -Wall \
-        -Wextra \
-        -Os \
-        -fvisibility=hidden \
-        -I"$TIME_WARP_ROOT/vendor/fishhook" \
-        "$TIME_WARP_SOURCE" "$TIME_WARP_FISHHOOK" \
-        -framework QuartzCore \
-        -o "$helper"
-    TIME_WARP_ARCH_BINARIES+=("$helper")
-done
-if [[ ${#TIME_WARP_ARCH_BINARIES[@]} -eq 1 ]]; then
-    cp "${TIME_WARP_ARCH_BINARIES[0]}" "$TIME_WARP_DYLIB"
-else
-    TIME_WARP_LIPO="$(xcrun --find lipo 2>/dev/null || true)"
-    [[ -n "$TIME_WARP_LIPO" ]] || { echo "Universal Time Warp helper requested but lipo is unavailable." >&2; exit 1; }
-    "$TIME_WARP_LIPO" -create "${TIME_WARP_ARCH_BINARIES[@]}" -output "$TIME_WARP_DYLIB"
-fi
-"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
-codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
-codesign --verify --strict "$TIME_WARP_DYLIB"
-cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
+"$PYTHON" "$ROOT/Tools/build_module_native.py" "$NORMALIZED_MANIFEST" \
+    "$TIME_WARP_ROOT" "$GENERATED_DIR" --process-time-warp \
+    --output-dir "$BACKEND/core/native" \
+    --clean-signing-metadata "$CLEAN_SIGNING_METADATA" --app "$APP" --staging-root "$DIST" \
+    --clang "$CLANG" --sdk "$SDK" --minimum-macos "$MIN_MACOS" \
+    --architectures "${ARCHITECTURES[@]}"
 
 for game_id in "${GAME_IDS[@]}"; do
     module_manifest="$GENERATED_DIR/$game_id.normalized.json"
     "$PYTHON" "$MODULE_VALIDATOR" "$game_id" --json > "$module_manifest"
     "$PYTHON" "$ROOT/Tools/build_module_native.py" "$module_manifest" \
-        "$BACKEND/games/$game_id" "$GENERATED_DIR" --clang "$CLANG" --sdk "$SDK" \
+        "$BACKEND/games/$game_id" "$GENERATED_DIR" \
+        --clean-signing-metadata "$CLEAN_SIGNING_METADATA" --app "$APP" --staging-root "$DIST" \
+        --clang "$CLANG" --sdk "$SDK" \
         --minimum-macos "$MIN_MACOS" --architectures "${ARCHITECTURES[@]}"
 done
 "$PYTHON" - "$NORMALIZED_MANIFEST" "${CONTENTS}/Resources/GAME_MODULES.json" <<'PY'

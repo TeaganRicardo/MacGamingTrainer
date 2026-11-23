@@ -3,6 +3,14 @@ from pathlib import Path
 
 from .adapter import HostPresentationError
 
+TIME_WARP_HELPER_FILENAME = "libMGTTimeWarp.dylib"
+
+
+def time_warp_helper_path(core_dir=None):
+    """Resolve the packaged Core Process Time Warp dylib path."""
+    base = Path(__file__).resolve().parent if core_dir is None else Path(core_dir).resolve()
+    return base / "native" / TIME_WARP_HELPER_FILENAME
+
 
 class ProcessTimeWarpError(HostPresentationError):
     """Core-owned Time Warp failure with a Host presentation identity.
@@ -20,9 +28,9 @@ class ProcessTimeWarpController:
     MIN_SPEED = 0.0
     MAX_SPEED = 10.0
 
-    def __init__(self, driver, helper_path, image_names):
+    def __init__(self, driver, helper_path=None, image_names=()):
         self.driver = driver
-        self.helper_path = Path(helper_path)
+        self.helper_path = time_warp_helper_path() if helper_path is None else Path(helper_path)
         if not image_names or any(
             not isinstance(name, str) or not name or "\n" in name or "\0" in name for name in image_names
         ):

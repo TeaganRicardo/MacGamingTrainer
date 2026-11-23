@@ -22,6 +22,7 @@
   "steamAppId": "1145350",
   "buildRequirements": {
     "lldbPython": true,
+    "processTimeWarp": true,
     "debuggerEntitlement": true,
     "entitlements": "Backend/games/hades2/trainer-entitlements.plist"
   },

@@ -5,7 +5,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.process_time_warp import ProcessTimeWarpController, ProcessTimeWarpError
+from core.process_time_warp import (
+    ProcessTimeWarpController,
+    ProcessTimeWarpError,
+    time_warp_helper_path,
+)
 
 
 class FakeDriver:
@@ -61,7 +65,9 @@ class FakeDriver:
         return self.hooks
 
 
-helper = ROOT / "Backend/core/native/libMGTTimeWarp.dylib"
+helper = time_warp_helper_path()
+assert helper == ROOT / "Backend/core/native/libMGTTimeWarp.dylib"
+assert ProcessTimeWarpController(FakeDriver(), image_names=["Hades II"]).helper_path == helper
 
 # Presentation ownership is enforced by the error type itself, not by a CJK
 # grep. Both localized raw copy and neutral English copy are rejected at the

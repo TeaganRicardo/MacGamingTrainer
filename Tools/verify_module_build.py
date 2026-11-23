@@ -104,6 +104,22 @@ def verify_module_build(game_id, dist_dir):
         for relative, path in actual.items():
             if path.is_symlink() or path.read_bytes() != expected[relative].read_bytes():
                 raise ValueError(f'Packaged debugger backend differs from source: {path}')
+    time_warp_native = resources / 'Backend/core/native'
+    if any(module.requirements.process_time_warp for module in manifest.modules):
+        helper = time_warp_native / 'libMGTTimeWarp.dylib'
+        license_path = time_warp_native / 'LICENSE.fishhook'
+        expected_license = ROOT / 'Native/ProcessTimeWarp/vendor/fishhook/LICENSE'
+        if (
+            time_warp_native.is_symlink()
+            or not helper.is_file()
+            or helper.is_symlink()
+            or not license_path.is_file()
+            or license_path.is_symlink()
+            or license_path.read_bytes() != expected_license.read_bytes()
+        ):
+            raise ValueError(f'Packaged Process Time Warp helper is missing or unsafe: {time_warp_native}')
+    elif time_warp_native.exists() or time_warp_native.is_symlink():
+        raise ValueError(f'Unrequested Process Time Warp helper was packaged: {time_warp_native}')
     for module in manifest.modules:
         for library in module.native_libraries:
             native = games_dir / module.id / 'native' / library.filename
