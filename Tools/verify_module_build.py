@@ -13,6 +13,7 @@ sys.path.insert(0, str(BACKEND))
 
 from core.module_manifest import ManifestError
 from module_inventory import discover_module_ids
+from package_app import verify_python_runtime_metadata
 from product_support import load_selection
 
 
@@ -30,21 +31,10 @@ def verify_python_runtime(resources, manifest):
     source = json.loads(source_path.read_text(encoding='utf-8'))
     packaged = json.loads(metadata_path.read_text(encoding='utf-8'))
     architectures = list(manifest.architectures)
-    if any(arch not in ('arm64', 'x86_64') for arch in architectures):
-        raise ValueError(f'Python runtime has unsupported target architecture: {architectures}')
-    expected = {
-        'schemaVersion': source.get('schemaVersion'),
-        'provider': source.get('provider'),
-        'release': source.get('release'),
-        'version': source.get('version'),
-        'architectures': architectures,
-        'distributions': {
-            arch: source.get('distributions', {}).get(arch)
-            for arch in architectures
-        },
-    }
-    if packaged != expected:
-        raise ValueError(f'Python runtime metadata differs from pinned build input: {metadata_path}')
+    try:
+        verify_python_runtime_metadata(source, packaged, expected_architectures=architectures)
+    except ValueError as error:
+        raise ValueError(f'Python runtime metadata differs from pinned build input: {metadata_path}: {error}') from error
     for arch in architectures:
         executable = runtime_root / arch / 'bin/python3'
         if not executable.is_file():

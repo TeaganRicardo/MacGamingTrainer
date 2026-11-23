@@ -17,7 +17,8 @@ CLANG="$(xcrun --find clang 2>/dev/null || true)"
 PYTHON_RUNTIME_MANIFEST="${ROOT}/Tools/python_runtime.json"
 [[ -f "$PYTHON_RUNTIME_MANIFEST" ]] || { echo "Missing pinned Python runtime manifest: $PYTHON_RUNTIME_MANIFEST" >&2; exit 1; }
 CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
-[[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
+PACKAGE_APP="${ROOT}/Tools/package_app.py"
+[[ -f "$CLEAN_SIGNING_METADATA" && -f "$PACKAGE_APP" ]] || { echo "Missing packaging tools under Tools/." >&2; exit 1; }
 
 # --typecheck uses the same product metadata and Swift compiler preflight as
 # the distributable build, but never downloads/copies bundled Python, emits a
@@ -135,22 +136,7 @@ NORMALIZED_MANIFEST="$GENERATED_DIR/module.normalized.json"
 "$PYTHON" "$ROOT/Tools/product_support.py" "$BUILD_SELECTION" > "$NORMALIZED_MANIFEST"
 
 manifest_field() {
-    "$PYTHON" - "$NORMALIZED_MANIFEST" "$1" <<'PY'
-import json, sys
-value = json.load(open(sys.argv[1], encoding='utf-8'))
-for part in sys.argv[2].split('.'):
-    value = value.get(part) if isinstance(value, dict) else None
-    if value is None:
-        break
-if isinstance(value, bool):
-    print('1' if value else '0')
-elif isinstance(value, list):
-    print(' '.join(str(item) for item in value))
-elif value is None:
-    print('')
-else:
-    print(value)
-PY
+    "$PYTHON" "$PACKAGE_APP" manifest-field "$NORMALIZED_MANIFEST" "$1"
 }
 
 read -r -a GAME_IDS <<< "$(manifest_field moduleIDs)"
@@ -216,30 +202,7 @@ SWIFT_SOURCE_LISTS="$GENERATED_DIR/swift-sources"
 SWIFT_MODULE_ORDER="$GENERATED_DIR/swift-modules.tsv"
 SWIFT_BUILD_DIR="$GENERATED_DIR/swift-build"
 "$PYTHON" "$BINDING_GENERATOR" "$GAME_SELECTION_CSV" --module-sources "$GENERATED_SWIFT_DIR"
-"$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "$GENERATED_SWIFT_DIR" "$SWIFT_SOURCE_LISTS" > "$SWIFT_MODULE_ORDER" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-manifest, root, generated, lists = map(Path, sys.argv[1:])
-sys.path.insert(0, str(root / 'Tools'))
-from module_support import ManifestError
-from product_support import swift_module_sources
-
-lists.mkdir(parents=True, exist_ok=True)
-layout = json.loads(manifest.read_text(encoding='utf-8'))['frontend']['swift']['modules']
-roles = [module['role'] for module in layout]
-if roles[-1:] != ['app'] or roles.count('app') != 1:
-    raise SystemExit('The Swift layout must end with exactly one App module.')
-try:
-    modules = swift_module_sources(layout, root, generated)
-except ManifestError as error:
-    raise SystemExit(str(error))
-for module, sources in modules:
-    name = module['name']
-    (lists / f'{name}.txt').write_text(''.join(f'{source}\n' for source in sources), encoding='utf-8')
-    print('\t'.join((name, module['role'], ','.join(module['dependencies']))))
-PY
+"$PYTHON" "$PACKAGE_APP" prepare-swift-inputs "$NORMALIZED_MANIFEST" "$ROOT" "$GENERATED_SWIFT_DIR" "$SWIFT_SOURCE_LISTS" > "$SWIFT_MODULE_ORDER"
 grep -q "enum TrainerGameCatalog" "$GENERATED_SWIFT_DIR"/*/TrainerGameCatalog.generated.swift || {
     echo "Generated game catalog is invalid." >&2; exit 1;
 }
@@ -320,35 +283,7 @@ for arch in "${ARCHITECTURES[@]}"; do
     mkdir -p "$destination"
     cp -R "$runtime_root/." "$destination/"
 done
-"$PYTHON" - "$PYTHON_RUNTIME_MANIFEST" "$PYTHON_RESOURCES/runtime.json" "${ARCHITECTURES[@]}" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-source_path = Path(sys.argv[1])
-output_path = Path(sys.argv[2])
-architectures = sys.argv[3:]
-source = json.loads(source_path.read_text(encoding="utf-8"))
-distributions = source.get("distributions", {})
-selected = {}
-for architecture in architectures:
-    declaration = distributions.get(architecture)
-    if not isinstance(declaration, dict):
-        raise SystemExit(f"Missing bundled Python declaration for {architecture}")
-    selected[architecture] = declaration
-metadata = {
-    "schemaVersion": source.get("schemaVersion"),
-    "provider": source.get("provider"),
-    "release": source.get("release"),
-    "version": source.get("version"),
-    "architectures": architectures,
-    "distributions": selected,
-}
-output_path.write_text(
-    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
-PY
+"$PYTHON" "$PACKAGE_APP" write-runtime-metadata "$PYTHON_RUNTIME_MANIFEST" "$PYTHON_RESOURCES/runtime.json" "${ARCHITECTURES[@]}"
 for language in en zh-CN; do
     source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"
     [[ -f "$source" ]] || { echo "Missing Host localization table: $source" >&2; exit 1; }
@@ -356,17 +291,7 @@ for language in en zh-CN; do
     mkdir -p "$destination"
     cp "$source" "${destination}/Host.strings"
 done
-"$PYTHON" - "$LOCALIZATION_ROOT" "${CONTENTS}/Resources" <<'PY'
-import sys
-from pathlib import Path
-
-source_root, resources = map(Path, sys.argv[1:])
-for language in ("en", "zh-CN"):
-    source = source_root / f"{language}.lproj/Host.strings"
-    packaged = resources / f"{language}.lproj/Host.strings"
-    if not packaged.is_file() or packaged.read_bytes() != source.read_bytes():
-        raise SystemExit(f"Host localization package mismatch: {packaged}")
-PY
+"$PYTHON" "$PACKAGE_APP" verify-host-localization "$LOCALIZATION_ROOT" "${CONTENTS}/Resources"
 
 # The product purple is the application accent color. AppKit resolves popup
 # indicators, menu selection, focus rings and other native accent chrome from
@@ -422,50 +347,13 @@ cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
 for game_id in "${GAME_IDS[@]}"; do
     cp -R "$ROOT/Backend/games/$game_id" "$BACKEND/games/$game_id"
 done
-"$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources" <<'PY'
-import json, subprocess, sys
-from pathlib import Path
-manifest_path, root, resources = map(Path, sys.argv[1:])
-root = root.resolve()
-resources = resources.resolve()
-manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-for item in manifest.get('appResources', []):
-    source = (root / item['source']).resolve()
-    destination = (resources / item['destination']).resolve()
-    if root not in source.parents or not source.is_file():
-        raise SystemExit(f"Invalid/missing app resource source: {item['source']}")
-    if resources not in destination.parents:
-        raise SystemExit(f"App resource destination escapes Contents/Resources: {item['destination']}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
-    if not destination.is_file():
-        raise SystemExit(f"App resource was not packaged: {item['destination']}")
-PY
+"$PYTHON" "$PACKAGE_APP" package-app-resources "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources"
 
 # Construct the packaged adapter with the pinned application Python.
 # HOME is isolated so build verification cannot touch developer or runner state.
 BACKEND_SMOKE_HOME="$GENERATED_DIR/backend-smoke-home"
 mkdir -p "$BACKEND_SMOKE_HOME"
-PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "$REQUIRES_LLDB" "${GAME_IDS[@]}" <<'PY'
-import os
-import sys
-from pathlib import Path
-from core.registry import create_adapter
-
-if sys.argv[1] == '1':
-    import debugger.lldb_time_warp as time_warp
-    expected = Path(os.environ['PYTHONPATH']) / 'debugger/lldb_time_warp.py'
-    if Path(time_warp.__file__).resolve() != expected.resolve():
-        raise SystemExit('Debugger driver was not imported from the packaged backend.')
-for game_id in sys.argv[2:]:
-    adapter = create_adapter(game_id)
-    try:
-        metadata = adapter.metadata()
-        if metadata.get("id") != game_id:
-            raise SystemExit(f"Backend adapter identity mismatch: {metadata!r}")
-    finally:
-        adapter.close()
-PY
+PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" "$PACKAGE_APP" smoke-adapters "$REQUIRES_LLDB" "${GAME_IDS[@]}"
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
 "$PYTHON" "$ROOT/Tools/build_module_native.py" "$NORMALIZED_MANIFEST" \
@@ -484,12 +372,7 @@ for game_id in "${GAME_IDS[@]}"; do
         --clang "$CLANG" --sdk "$SDK" \
         --minimum-macos "$MIN_MACOS" --architectures "${ARCHITECTURES[@]}"
 done
-"$PYTHON" - "$NORMALIZED_MANIFEST" "${CONTENTS}/Resources/GAME_MODULES.json" <<'PY'
-import json, sys
-from pathlib import Path
-selection = json.loads(Path(sys.argv[1]).read_text())
-Path(sys.argv[2]).write_text(json.dumps(selection['moduleIDs']) + '\n')
-PY
+"$PYTHON" "$PACKAGE_APP" write-game-modules "$NORMALIZED_MANIFEST" "${CONTENTS}/Resources/GAME_MODULES.json"
 
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
@@ -501,30 +384,7 @@ if [[ -f "$ROOT/AppIcon.icns" ]]; then
     HAS_ICON=1
 fi
 
-"$PYTHON" - "${CONTENTS}/Info.plist" "$APP_BUNDLE_ID" "$APP_NAME" "$MIN_MACOS" "$HAS_ICON" "$ASSET_INFO_PLIST" "${ARCHITECTURES[@]}" <<'PY'
-import plistlib, sys
-from pathlib import Path
-path = Path(sys.argv[1])
-bundle_id, app_name, minimum_macos = sys.argv[2:5]
-has_icon = sys.argv[5] == '1'
-asset_info = plistlib.loads(Path(sys.argv[6]).read_bytes())
-architectures = sys.argv[7:]
-with path.open('rb') as stream:
-    data = plistlib.load(stream)
-data['CFBundleIdentifier'] = bundle_id
-data['CFBundleName'] = app_name
-data['CFBundleDisplayName'] = app_name
-data['LSMinimumSystemVersion'] = minimum_macos
-data['LSArchitecturePriority'] = architectures
-if has_icon:
-    data['CFBundleIconFile'] = 'AppIcon'
-else:
-    data.pop('CFBundleIconFile', None)
-# actool owns the accent declaration it compiled into Assets.car.
-data['NSAccentColorName'] = asset_info['NSAccentColorName']
-with path.open('wb') as stream:
-    plistlib.dump(data, stream, sort_keys=False)
-PY
+"$PYTHON" "$PACKAGE_APP" patch-info-plist "${CONTENTS}/Info.plist" "$APP_BUNDLE_ID" "$APP_NAME" "$MIN_MACOS" "$HAS_ICON" "$ASSET_INFO_PLIST" "${ARCHITECTURES[@]}"
 
 chmod 755 "${CONTENTS}/MacOS/${EXECUTABLE}"
 find "$BACKEND" -type f -exec chmod 644 {} +
@@ -545,19 +405,7 @@ done < <(find "$PYTHON_RESOURCES" -type f \( -name 'python3*' -o -name '*.so' -o
 
 if [[ -n "$ENTITLEMENTS_REL" ]]; then
     ENTITLEMENTS="$GENERATED_DIR/product-entitlements.plist"
-    "$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "$ENTITLEMENTS" <<'PY'
-import json, plistlib, sys
-from pathlib import Path
-manifest, root, destination = map(Path, sys.argv[1:])
-merged = {}
-for relative in json.loads(manifest.read_text())['buildRequirements']['entitlements']:
-    values = plistlib.loads((root / relative).read_bytes())
-    for key, value in values.items():
-        if key in merged and merged[key] != value:
-            raise SystemExit(f'Incompatible module entitlement: {key}')
-        merged[key] = value
-destination.write_bytes(plistlib.dumps(merged))
-PY
+    "$PYTHON" "$PACKAGE_APP" merge-entitlements "$NORMALIZED_MANIFEST" "$ROOT" "$ENTITLEMENTS"
     codesign --force --sign - --entitlements "$ENTITLEMENTS" --timestamp=none "$APP"
 else
     codesign --force --sign - --timestamp=none "$APP"

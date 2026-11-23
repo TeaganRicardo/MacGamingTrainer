@@ -16,6 +16,7 @@ from typing import Mapping
 from resident_runtime import parse_resident_runtime_declaration
 from module_support import app_spec_from_manifest
 from macos_toolchain_identity import collect_macos_toolchain
+from package_app import verify_python_runtime_metadata
 
 
 def git_value(repo_root: Path, revision: str) -> str:
@@ -201,53 +202,17 @@ def python_runtime_identity(repo_root: Path, artifact: Path,
             )
         packaged_bytes = archive.read(packaged_path)
     packaged = json.loads(packaged_bytes)
-    if not isinstance(packaged, dict):
-        raise RuntimeError("packaged Python runtime manifest must be an object")
-
-    for field in ("schemaVersion", "provider", "release", "version"):
-        if packaged.get(field) != source.get(field):
-            raise RuntimeError(
-                f"packaged Python runtime {field} differs from tracked declaration"
-            )
-
-    architectures = packaged.get("architectures")
-    if (
-        not isinstance(architectures, list)
-        or not architectures
-        or any(not isinstance(arch, str) or not arch for arch in architectures)
-        or len(set(architectures)) != len(architectures)
-    ):
-        raise RuntimeError("packaged Python runtime architectures are invalid")
-
-    source_distributions = source.get("distributions")
-    packaged_distributions = packaged.get("distributions")
-    if not isinstance(source_distributions, dict) or not isinstance(packaged_distributions, dict):
-        raise RuntimeError("Python runtime distributions must be objects")
     try:
-        selected_distributions = {
-            arch: source_distributions[arch]
-            for arch in architectures
-        }
-    except KeyError as error:
-        raise RuntimeError(
-            f"packaged Python runtime architecture is not declared: {error.args[0]}"
-        ) from error
-    if packaged_distributions != selected_distributions:
-        raise RuntimeError(
-            "packaged Python runtime distributions differ from tracked declaration"
-        )
+        verified = verify_python_runtime_metadata(source, packaged)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
 
     return {
         "manifest": "Tools/python_runtime.json",
         "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
         "packagedPath": packaged_path,
         "packagedMetadataSha256": hashlib.sha256(packaged_bytes).hexdigest(),
-        "schemaVersion": source.get("schemaVersion"),
-        "provider": source.get("provider"),
-        "release": source.get("release"),
-        "version": source.get("version"),
-        "architectures": architectures,
-        "distributions": selected_distributions,
+        **verified,
     }
 
 

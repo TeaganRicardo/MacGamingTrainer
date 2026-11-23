@@ -95,7 +95,7 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
     assert resolved_resource_source(
         manifest["appResources"][0]["source"], SUPPORTED_BUILD
     ) == SOURCE_REFERENCE.relative_to(ROOT).as_posix()
-    assert "appResources" in build
+    assert "package-app-resources" in build
 
     # Both shipped languages must exist in the source tree: a missing table
     # would silently drop one language back to raw keys at runtime.
@@ -103,9 +103,10 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
         table = ROOT / f"Sources/Hades2/Presentation/Localization/hades2.{language}.json"
         assert table.is_file(), f"missing packaged Hades presentation table: {table}"
 
-    # Verify Tools/verify_module_build.py owns declared resource presence and
-    # non-selected exclusion generically instead of duplicating filenames in YAML.
+    # Verify Tools/package_app.py and Tools/verify_module_build.py own declared
+    # resource packaging, presence and non-selected exclusion generically.
     import module_support
+    import package_app
     import plistlib
     import product_support
     import verify_module_build
@@ -130,10 +131,9 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
             (res_dir / "Backend/games/hades").mkdir(parents=True)
             shutil.copy2(project / "Backend/games/hades/module.json", res_dir / "Backend/games/hades/module.json")
             (res_dir / "ACTIVE_GAME_ID").write_text("hades\n", encoding="utf-8")
-            for entry in hades_mod.app_resources:
-                dest = res_dir / "Modules/hades" / entry.destination
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(project / entry.source, dest)
+            norm_manifest = project / "hades.normalized.json"
+            norm_manifest.write_text(json.dumps(hades_selection.normalized()), encoding="utf-8")
+            package_app.package_app_resources(norm_manifest, project, res_dir)
             if hades_mod.requirements.lldb_python:
                 shutil.copytree(project / "Backend/debugger", res_dir / "Backend/debugger")
             for lib in hades_mod.native_libraries:

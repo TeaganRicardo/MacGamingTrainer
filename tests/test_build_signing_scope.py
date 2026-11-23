@@ -100,7 +100,7 @@ if tool == 'python' and args[:1] == ['-']:
     exec(compile(sys.stdin.read(), '<build.sh stdin>', 'exec'), {'__name__': '__main__'})
 elif tool == 'python' and args and pathlib.Path(args[0]).name == 'validate_game_module.py' and '--json' in args:
     print(json.dumps({'nativeLibraries': []}))
-elif tool == 'python' and args and pathlib.Path(args[0]).name == 'build_module_native.py':
+elif tool == 'python' and args and pathlib.Path(args[0]).name in ('build_module_native.py', 'package_app.py'):
     import runpy
     sys.executable = sys.argv[0]
     sys.argv = args
@@ -153,7 +153,8 @@ def run_packaging_tail(root, replace_output_with_symlink=None, process_time_warp
         'APP_NAME': APP_NAME, 'EXECUTABLE': 'FixtureTrainer', 'APP_BUNDLE_ID': 'com.example.fixture',
         'ACTIVE_GAME_ID': 'all', 'BUILD_SELECTION': 'all', 'MIN_MACOS': '14.0', 'SDK': '/synthetic/sdk',
         'CLANG': str(fakebin / 'clang'), 'PYTHON': str(fakebin / 'python'),
-        'CLEAN_SIGNING_METADATA': CLEAN, 'MODULE_VALIDATOR': str(TOOLS / 'validate_game_module.py'),
+        'CLEAN_SIGNING_METADATA': CLEAN, 'PACKAGE_APP': str(TOOLS / 'package_app.py'),
+        'MODULE_VALIDATOR': str(TOOLS / 'validate_game_module.py'),
         'NORMALIZED_MANIFEST': str(generated / 'module.normalized.json'),
         'ASSET_INFO_PLIST': str(generated / 'asset-catalog-info.plist'),
         'ENTITLEMENTS_REL': 'fixture.entitlements', 'REQUIRES_DEBUGGER_ENTITLEMENT': '1',
@@ -257,6 +258,7 @@ def run_localization_packaging(root, corrupt_cp=False):
         'PATH': f'{fakebin}{os.pathsep}{os.environ["PATH"]}',
         'LOCALIZATION_ROOT': str(loc_root),
         'CONTENTS': str(contents),
+        'PACKAGE_APP': str(TOOLS / 'package_app.py'),
         'PYTHON': sys.executable,
     }
     return subprocess.run(['bash', '-c', 'set -euo pipefail\n' + loc_packaging],
@@ -281,7 +283,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-loc-missing-') as temporary:
     (contents / 'Resources').mkdir(parents=True)
     res = subprocess.run(
         ['bash', '-c', 'set -euo pipefail\n' + loc_packaging],
-        env={**os.environ, 'LOCALIZATION_ROOT': str(loc_root), 'CONTENTS': str(contents), 'PYTHON': sys.executable},
+        env={
+            **os.environ,
+            'LOCALIZATION_ROOT': str(loc_root),
+            'CONTENTS': str(contents),
+            'PACKAGE_APP': str(TOOLS / 'package_app.py'),
+            'PYTHON': sys.executable,
+        },
         capture_output=True, text=True,
     )
     assert res.returncode != 0 and 'Missing Host localization table' in res.stderr, res.stderr
@@ -386,5 +394,47 @@ with tempfile.TemporaryDirectory(prefix='mgt-build-asset-missing-car-') as tempo
 with tempfile.TemporaryDirectory(prefix='mgt-build-asset-missing-accent-') as temporary:
     res, *_ = run_asset_catalog_packaging(Path(temporary), extra_env={'MGT_OMIT_ACCENT': '1'})
     assert res.returncode != 0 and 'did not declare the application accent color' in res.stderr, res.stderr
+
+# WP5.4: build.sh contains no inline Python heredoc blocks; Tools/package_app.py
+# owns the importable packaging helpers and the shared runtime.json schema.
+import package_app  # noqa: E402
+
+assert "<<'PY'" not in build and '<<"PY"' not in build and '<<PY' not in build
+
+with tempfile.TemporaryDirectory(prefix='mgt-package-app-unit-') as temporary:
+    root = Path(temporary)
+    manifest_path = root / 'normalized.json'
+    manifest_path.write_text(json.dumps({
+        'id': 'all',
+        'moduleIDs': ['hades2', 'hades'],
+        'buildRequirements': {
+            'lldbPython': True,
+            'processTimeWarp': False,
+            'entitlements': ['e1.plist', 'e2.plist'],
+        },
+        'appResources': [{'source': 'res/item.json', 'destination': 'Modules/hades/item.json'}],
+    }), encoding='utf-8')
+    assert package_app.manifest_field(manifest_path, 'moduleIDs') == 'hades2 hades'
+    assert package_app.manifest_field(manifest_path, 'buildRequirements.lldbPython') == '1'
+    assert package_app.manifest_field(manifest_path, 'buildRequirements.processTimeWarp') == '0'
+    assert package_app.manifest_field(manifest_path, 'missing.field') == ''
+
+    runtime_src = json.loads((ROOT / 'Tools/python_runtime.json').read_text(encoding='utf-8'))
+    runtime_out = root / 'runtime.json'
+    built_meta = package_app.write_python_runtime_metadata(ROOT / 'Tools/python_runtime.json', runtime_out, ['arm64'])
+    assert package_app.verify_python_runtime_metadata(
+        runtime_src,
+        json.loads(runtime_out.read_text(encoding='utf-8')),
+        expected_architectures=['arm64'],
+    ) == built_meta
+
+    (root / 'e1.plist').write_bytes(plistlib.dumps({'com.apple.security.cs.debugger': True}))
+    (root / 'e2.plist').write_bytes(plistlib.dumps({'com.apple.security.cs.debugger': False}))
+    try:
+        package_app.merge_entitlements(manifest_path, root, root / 'merged.plist')
+    except ValueError as err:
+        assert 'Incompatible module entitlement' in str(err), err
+    else:
+        raise AssertionError('conflicting entitlement values were accepted')
 
 print('build_signing_scope_ok')
