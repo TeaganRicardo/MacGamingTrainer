@@ -10,18 +10,18 @@ The three required pull-request check contexts are `backend-contracts` (`Linux c
 
 ## PR routing and build modes
 
-`Tools/ci_docs_only.py` owns PR diff classification (`docs_only`, `needs_linux`, `needs_macos`, `needs_module`, `needs_build`, `needs_full_build`):
+`Tools/ci_docs_only.py` owns PR diff classification (`docs_only`, `needs_linux`, `needs_macos`, `needs_module`, `needs_module_full_build`, `needs_build`, `needs_full_build`):
 
 - Documentation-only changes run `Linux contracts` without launching macOS compilation.
 - Portable backend logic and contracts run in `Linux contracts` (`Tools/run_linux_checks.sh`, using `Tools/discover_linux_tests.py`).
 - Ordinary Swift/AppKit changes run selected macOS smoke tests (`Tools/select_macos_pr_tests.py` / `Tools/run_macos_checks.sh --pr`) and shared `--typecheck` preflight (`./build.sh --typecheck --all`), which compiles and typechecks all declared product modules cleanly without linking, signing or packaging an executable.
 - Entrypoint, native-library, packaging, module-manifest and build-tool changes retain the full optimized, linked and signed product build (`./build.sh --all`). Mixed changes choose the stricter mode.
-- Shared Core/Host/module/build boundary changes also trigger the `reference_fixture` lane in `Module build matrix` (`.github/workflows/module-build-matrix.yml`); game-owned frontend changes do not require duplicate isolated builds. A module-matrix workflow change exercises its reference lane and `Linux contracts` without forcing an unrelated unified product build.
+- Shared Core/Host/module/build boundary changes also trigger the `reference_fixture` lane in `Module build matrix` (`.github/workflows/module-build-matrix.yml`), using `./build.sh --typecheck reference_fixture` when only `Sources/Core/*.swift` changed and the full build when packaging, manifest or build inputs changed; game-owned frontend changes do not require duplicate isolated builds. A module-matrix workflow change exercises its reference lane and `Linux contracts` without forcing an unrelated unified product build.
 - Both build paths in `build.sh` print `MGT_BUILD_TIMING` phase lines so optimization decisions rely on measured CI/build timings rather than adding new always-on jobs.
 
 ## Convergence, isolated modules, and direct release
 
-Full macOS test inventory, full-matrix isolated module builds (`.github/workflows/module-build-matrix.yml`), mutation audits (including anchor validation), and retained release-candidate ZIP packaging/provenance/checksums run on exact-SHA release/convergence dispatch (`workflow_dispatch`). Every full build and isolated matrix build (`build.sh` plus workflow verification in `.github/workflows/build2-macos.yml` and `.github/workflows/module-build-matrix.yml`, including full-build and `reference_fixture` PRs) runs package and code-signature verification (`codesign --verify --deep --strict` and `Tools/verify_module_build.py`). Separately, a nightly `Build 2 macOS` schedule on `main` runs full contracts, the mutation audit, and unified build/package verification for earlier signal without packaging release artifacts or provenance. Merged `main` does not repeat PR checks except during intentional release preparation.
+Full macOS test inventory, full-matrix isolated module builds (`.github/workflows/module-build-matrix.yml`), mutation audits (including anchor validation), and retained release-candidate ZIP packaging/provenance/checksums run on exact-SHA release/convergence dispatch (`workflow_dispatch`). Every full build and full isolated matrix build (`build.sh` plus workflow verification in `.github/workflows/build2-macos.yml` and `.github/workflows/module-build-matrix.yml`, including full-build `reference_fixture` PRs) runs package and code-signature verification (`codesign --verify --deep --strict` and `Tools/verify_module_build.py`). Separately, a nightly `Build 2 macOS` schedule on `main` runs full contracts, the mutation audit, and unified build/package verification for earlier signal without packaging release artifacts or provenance. Merged `main` does not repeat PR checks except during intentional release preparation.
 
 The direct-release coordinator runs on Linux and verifies the retained macOS-generated artifact and recorded toolchain rather than consuming another macOS runner while waiting for convergence.
 

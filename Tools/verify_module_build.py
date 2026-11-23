@@ -2,7 +2,6 @@
 import argparse
 import json
 import plistlib
-import platform
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(BACKEND))
 
 from core.module_manifest import ManifestError
+from module_inventory import discover_module_ids
 from product_support import load_selection
 
 
@@ -114,6 +114,22 @@ def verify_module_build(game_id, dist_dir):
             expected_source = ROOT / resource.source
             if not packaged.is_file() or packaged.is_symlink() or packaged.read_bytes() != expected_source.read_bytes():
                 raise ValueError(f'Declared module app resource is missing or differs from source: {packaged}')
+            flat_leak = resources / resource.destination
+            if flat_leak.exists() or flat_leak.is_symlink():
+                raise ValueError(f'Declared module app resource leaked at flat bundle root: {flat_leak}')
+        if module.app_resources:
+            module_dir = resources / 'Modules' / module.id
+            expected_files = {Path(resource.destination) for resource in module.app_resources}
+            actual_files = {
+                entry.relative_to(module_dir)
+                for entry in module_dir.rglob('*')
+                if entry.is_file() or entry.is_symlink()
+            }
+            if actual_files != expected_files:
+                raise ValueError(
+                    f'Packaged resources for {module.id} differ from declared appResources: '
+                    f'{sorted(str(item) for item in actual_files)}'
+                )
     modules_resources = resources / 'Modules'
     if modules_resources.exists():
         if modules_resources.is_symlink() or not modules_resources.is_dir():
@@ -124,6 +140,26 @@ def verify_module_build(game_id, dist_dir):
             raise ValueError(
                 f'Packaged module resource directories differ from selection: {sorted(actual_resource_dirs)}'
             )
+    selected_ids = {module.id for module in manifest.modules}
+    other_ids = sorted(set(discover_module_ids(ROOT)) - selected_ids)
+    for other_id in other_ids:
+        foreign_dir = resources / 'Modules' / other_id
+        if foreign_dir.exists() or foreign_dir.is_symlink():
+            raise ValueError(f'Non-selected module resource directory leaked into package: {foreign_dir}')
+        other_manifest = json.loads((ROOT / 'Backend/games' / other_id / 'module.json').read_text(encoding='utf-8'))
+        for entry in other_manifest.get('appResources', ()):
+            destination = entry.get('destination', '')
+            if not destination:
+                continue
+            namespaced_leak = resources / 'Modules' / other_id / destination
+            flat_leak = resources / destination
+            if (
+                namespaced_leak.exists()
+                or namespaced_leak.is_symlink()
+                or flat_leak.exists()
+                or flat_leak.is_symlink()
+            ):
+                raise ValueError(f'Non-selected module resource leaked into package: {other_id}/{destination}')
     return app
 
 

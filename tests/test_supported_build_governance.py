@@ -79,7 +79,8 @@ for invalid in ("@supportedBuild/../secrets", "@supportedBuild//etc/passwd", "@s
     else:
         raise AssertionError("unsafe supported-build resource reference was accepted: " + invalid)
 assert classify_scope(["Tools/supported_build.py"]) == {
-    "docs_only": False, "needs_linux": True, "needs_macos": True, "needs_module": True,
+    "docs_only": False, "needs_linux": True, "needs_macos": True,
+    "needs_module": True, "needs_module_full_build": True,
     "needs_build": True, "needs_full_build": True,
 }
 

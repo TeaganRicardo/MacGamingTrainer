@@ -201,4 +201,66 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     else:
         raise AssertionError('Intra-module duplicate resource destinations were accepted')
 
+    # Isolated module verification confirms declared resources exist and
+    # rejects foreign resources or legacy flat bundle copies.
+    one_manifest = project / 'Backend/games/one/module.json'
+    one_data = json.loads(one_manifest.read_text())
+    one_data['appResources'] = [{'source': 'shared.txt', 'destination': 'one.json'}]
+    one_manifest.write_text(json.dumps(one_data))
+    two_manifest = project / 'Backend/games/two/module.json'
+    two_data = json.loads(two_manifest.read_text())
+    two_data['appResources'] = [{'source': 'shared.txt', 'destination': 'two.json'}]
+    two_manifest.write_text(json.dumps(two_data))
+
+    iso_dist = project / 'iso-dist'
+    one_mod = module_support.load_manifest('one')
+    iso_app = iso_dist / f'{one_mod.app.display_name}.app'
+    iso_res = iso_app / 'Contents/Resources'
+    iso_py = iso_res / 'Python'
+    iso_x86 = iso_py / 'x86_64/bin/python3'
+    iso_x86.parent.mkdir(parents=True)
+    iso_x86.write_text('#!/bin/sh\nexit 0\n')
+    iso_x86.chmod(0o755)
+    (iso_py / 'runtime.json').write_text(json.dumps({
+        **{key: runtime_source[key] for key in ('schemaVersion', 'provider', 'release', 'version')},
+        'architectures': ['x86_64'],
+        'distributions': {'x86_64': runtime_source['distributions']['x86_64']},
+    }))
+    iso_one_pkg = iso_res / 'Backend/games/one'
+    shutil.copytree(project / 'Backend/games/one', iso_one_pkg)
+    shutil.copytree(project / 'Backend/debugger', iso_res / 'Backend/debugger')
+    (iso_one_pkg / 'native/libBridge.dylib').write_bytes(b'fixture library')
+    (iso_res / 'ACTIVE_GAME_ID').write_text('one\n')
+    (iso_res / 'Modules/one').mkdir(parents=True)
+    (iso_res / 'Modules/one/one.json').write_bytes((project / 'shared.txt').read_bytes())
+    iso_exe = iso_app / 'Contents/MacOS' / one_mod.app.executable
+    iso_exe.parent.mkdir(parents=True)
+    iso_exe.write_bytes(b'fixture executable')
+    (iso_app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+        'CFBundleExecutable': one_mod.app.executable,
+        'CFBundleIdentifier': one_mod.app.bundle_identifier,
+        'CFBundleName': one_mod.app.display_name,
+        'CFBundleDisplayName': one_mod.app.display_name,
+    }))
+    assert verify_module_build.verify_module_build('one', iso_dist) == iso_app.resolve()
+
+    (iso_res / 'Modules/two').mkdir(parents=True)
+    (iso_res / 'Modules/two/two.json').write_text('leak')
+    try:
+        verify_module_build.verify_module_build('one', iso_dist)
+    except ValueError as error:
+        assert 'two' in str(error) or 'selection' in str(error), error
+    else:
+        raise AssertionError('Isolated build allowed foreign module resource')
+    shutil.rmtree(iso_res / 'Modules/two')
+
+    (iso_res / 'two.json').write_text('flat leak')
+    try:
+        verify_module_build.verify_module_build('one', iso_dist)
+    except ValueError as error:
+        assert 'two/two.json' in str(error), error
+    else:
+        raise AssertionError('Isolated build allowed flat foreign resource')
+    (iso_res / 'two.json').unlink()
+
 print('product_build_ok')
