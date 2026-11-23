@@ -136,6 +136,7 @@ struct ReferenceFixtureContent: View {
             ) {
                 model.setEnabled(!model.enabled)
             }
+            .trainerSectionTarget("referenceFixture.main")
         }
     }
 }
@@ -153,19 +154,29 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         ReferenceFixtureContent(model: model)
     }
 
-    static func makeSidebarActions(model: ReferenceFixtureModel) -> some View {
-        EmptyView()
+    static func workbenchSections(model: ReferenceFixtureModel) -> [TrainerWorkbenchSectionItem] {
+        [
+            TrainerWorkbenchSectionItem(
+                id: "referenceFixture.main",
+                titleKey: "referenceFixture.section.main",
+                icon: TrainerSemanticIcon.Section.general
+            )
+        ]
     }
 
-    static func makeHeaderActions(model: ReferenceFixtureModel) -> some View {
-        EmptyView()
-    }
-
-    static func makeManagementCommands(
+    static func makeManagementCatalog(
         model: ReferenceFixtureModel,
-        localization: TrainerLocalizationStore
-    ) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog? {
+        TrainerManagementCatalog(
+            refresh: .init(
+                .refreshStatus,
+                localization: localization,
+                enabled: { model.hostActionsEnabled },
+                action: model.refreshFromHost
+            )
+        )
     }
 
     // A module owns its own key namespace. This fixture uses a prefix of its own
@@ -180,6 +191,7 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         let tables: [String: [TrainerPresentationLanguage: String]] = [
             "referenceFixture.connected": [.zhCN: "夹具已连接", .en: "Fixture Connected"],
             "referenceFixture.operable": [.zhCN: "夹具可操作", .en: "Fixture Ready"],
+            "referenceFixture.section.main": [.zhCN: "常用功能", .en: "General"],
             // The key the fixture backend emits on a typed failure. It lives in
             // this module's own namespace so the fixture proves the seam end to
             // end: key -> module table -> text, not just a wire shape.

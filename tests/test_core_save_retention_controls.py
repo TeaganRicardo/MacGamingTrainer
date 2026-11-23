@@ -174,11 +174,6 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
     }
-    static func makeSidebarActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static let presentationKeyPrefix = "hostNoSaveFixture."
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
@@ -194,11 +189,6 @@ struct HostSupportedSaveModule: TrainerGameModule {
     static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
-    }
-    static func makeSidebarActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: HostSaveStubModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: HostSaveStubModel, localization: TrainerLocalizationStore) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
     }
     static let presentationKeyPrefix = "hostSaveFixture."
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }

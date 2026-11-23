@@ -250,14 +250,14 @@ print('hades2_feature_contracts_ok')
 occurrence_setting = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
 gathering_panel = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
 chaos_gate_panel = read('Sources/Hades2/Views/Hades2ChaosGatePanel.swift')
-host_actions = read('Sources/Hades2/Views/Hades2HostActions.swift')
+trainer_host = read('Sources/Core/Host/TrainerHost.swift')
 assert "inline: true" in view
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert 'TrainerSection(title: text("hades2.section.elements")' not in view
 assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
 assert "specialSearch" not in view
-assert "TrainerWorkbenchSearchField(" in host_actions
+assert "TrainerWorkbenchSearchField(" in trainer_host
 # AppKit can flip either requested edge when space is limited. Keep the
 # preferred edge guarded on displays that cannot show both placements.
 search_field = read('Sources/Core/UI/Components/TrainerWorkbenchSearchField.swift')

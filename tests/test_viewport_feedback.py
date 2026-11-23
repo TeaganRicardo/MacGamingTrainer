@@ -194,7 +194,12 @@ struct FeedbackInteractionPage: View {
 
     var body: some View {
         TrainerShell {
-            Hades2GameModule.makeSidebarActions(model: model).frame(width: 220)
+            TrainerHostSidebarSections(
+                sections: Hades2GameModule.workbenchSections(model: model),
+                feedback: model.feedbackCenter,
+                diagnostics: model.diagnosticsService
+            )
+            .frame(width: 220)
         } content: {
             VStack {
                 EditorProbe(field: editor).frame(height: 24)
@@ -556,7 +561,11 @@ struct Main {
             VStack {
                 Color.clear.frame(width: 160, height: 1)
                 Spacer()
-                Hades2SidebarActions(model: model)
+                TrainerHostSidebarSections(
+                    sections: Hades2GameModule.workbenchSections(model: model),
+                    feedback: model.feedbackCenter,
+                    diagnostics: model.diagnosticsService
+                )
             }.frame(width: 160)
         } content: {
             VStack {

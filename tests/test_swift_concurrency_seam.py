@@ -46,19 +46,31 @@ package struct GameModuleDescriptor: Sendable {
 @MainActor
 package protocol TrainerHostModel {}
 
+package struct TrainerWorkbenchSectionItem: Identifiable {
+    package let id: String
+    package init(id: String) { self.id = id }
+}
+
+package struct TrainerWorkbenchSearchCatalog {}
+package struct TrainerToolWindowActions {}
+package struct TrainerManagementCatalog {}
+
 package protocol TrainerGameModule {
     associatedtype Model: TrainerHostModel
-    associatedtype ManagementCommands: Commands
 
-    @MainActor static func makeManagementCommands(
+    @MainActor static func workbenchSections(model: Model) -> [TrainerWorkbenchSectionItem]
+    @MainActor static func workbenchSearch(model: Model) -> TrainerWorkbenchSearchCatalog?
+    @MainActor static func makeManagementCatalog(
         model: Model,
-        localization: TrainerLocalizationStore
-    ) -> ManagementCommands
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog?
 }
 
 package final class TrainerGameContext<M: TrainerGameModule> {
     @MainActor package var model: M.Model { fatalError() }
     @MainActor package init() {}
+    package func managementGroups(localization: TrainerLocalizationStore) -> [Any] { [] }
 }
 
 package final class AnyTrainerGameContext {
@@ -78,10 +90,12 @@ package final class TrainerApplicationCoordinator: ObservableObject {
 }
 
 @MainActor
-package final class TrainerLocalizationStore {}
+package final class TrainerLocalizationStore: ObservableObject {
+    package func localized(_ key: String) -> String { key }
+}
 
-package struct TrainerEmptyCommands: Commands {
-    package init() {}
+package struct TrainerManagementCommandMenu: Commands {
+    package init(title: String, groups: [Any]) {}
     package var body: some Commands { CommandGroup(after: .appInfo) { EmptyView() } }
 }
 """
@@ -93,11 +107,14 @@ import TrainerCore
 final class FixtureModel: TrainerHostModel {}
 
 struct FixtureModule: TrainerGameModule {
-    static func makeManagementCommands(
+    static func workbenchSections(model: FixtureModel) -> [TrainerWorkbenchSectionItem] { [] }
+    static func workbenchSearch(model: FixtureModel) -> TrainerWorkbenchSearchCatalog? { nil }
+    static func makeManagementCatalog(
         model: FixtureModel,
-        localization: TrainerLocalizationStore
-    ) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog? {
+        nil
     }
 }
 """
@@ -266,14 +283,6 @@ enum SeamStubModule: TrainerGameModule {
 
     static func makeModel(services: TrainerModuleServices) -> SeamStubModel { SeamStubModel() }
     static func makeContent(model: SeamStubModel) -> some View { EmptyView() }
-    static func makeSidebarActions(model: SeamStubModel) -> some View { EmptyView() }
-    static func makeHeaderActions(model: SeamStubModel) -> some View { EmptyView() }
-    static func makeManagementCommands(
-        model: SeamStubModel,
-        localization: TrainerLocalizationStore
-    ) -> TrainerEmptyCommands {
-        TrainerEmptyCommands()
-    }
     static func presentationText(
         key: String,
         arguments: [String],
@@ -304,10 +313,10 @@ func exerciseSeam<Module: TrainerGameModule>(_ type: Module.Type) {
     )
     let model = Module.makeModel(services: services)
     _ = Module.makeContent(model: model)
-    _ = Module.makeSidebarActions(model: model)
-    _ = Module.makeHeaderActions(model: model)
+    _ = Module.workbenchSections(model: model)
+    _ = Module.workbenchSearch(model: model)
     let localization = TrainerLocalizationStore()
-    _ = Module.makeManagementCommands(model: model, localization: localization)
+    _ = Module.makeManagementCatalog(model: model, localization: localization, toolWindows: .none)
     _ = Module.managedBackupEditor
     model.connectFromHost(reason: .manual)
     model.launchActionFromHost?()
@@ -341,23 +350,23 @@ func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Mode
     _ = Module.makeContent(model: model)
 }
 """,
-    "makeSidebarActions": """
+    "workbenchSections": """
 func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Model) {
-    _ = Module.makeSidebarActions(model: model)
+    _ = Module.workbenchSections(model: model)
 }
 """,
-    "makeHeaderActions": """
+    "workbenchSearch": """
 func offActor<Module: TrainerGameModule>(_ type: Module.Type, model: Module.Model) {
-    _ = Module.makeHeaderActions(model: model)
+    _ = Module.workbenchSearch(model: model)
 }
 """,
-    "makeManagementCommands": """
+    "makeManagementCatalog": """
 func offActor<Module: TrainerGameModule>(
     _ type: Module.Type,
     model: Module.Model,
     localization: TrainerLocalizationStore
 ) {
-    _ = Module.makeManagementCommands(model: model, localization: localization)
+    _ = Module.makeManagementCatalog(model: model, localization: localization, toolWindows: .none)
 }
 """,
     "managedBackupEditor": """

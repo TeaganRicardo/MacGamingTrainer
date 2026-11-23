@@ -117,6 +117,9 @@
 "host.save.error.invalidSnapshot" = "该存档备份无效，无法恢复。";
 "host.save.error.restoreFailed" = "存档恢复失败。";
 "host.trainerMenu" = "修改器";
+"host.manage.daily" = "常用与工具";
+"host.manage.settings" = "设置";
+"host.manage.maintenance" = "诊断与维护";
 "host.shortcutSettings" = "快捷键设置";
 "host.viewRuntimeLog" = "查看运行日志";
 "host.viewLog" = "查看当前日志";

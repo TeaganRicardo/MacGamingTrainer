@@ -58,12 +58,6 @@ struct StubModule: TrainerGameModule {
     static let presentationKeyPrefix = "stub."
     @MainActor static func makeModel(services: TrainerModuleServices) -> StubModuleModel { StubModuleModel(services: services) }
     @MainActor static func makeContent(model: StubModuleModel) -> some View { EmptyView() }
-    @MainActor static func makeSidebarActions(model: StubModuleModel) -> some View { EmptyView() }
-    @MainActor static func makeHeaderActions(model: StubModuleModel) -> some View { EmptyView() }
-    @MainActor static func makeManagementCommands(
-        model: StubModuleModel,
-        localization: TrainerLocalizationStore
-    ) -> TrainerEmptyCommands { TrainerEmptyCommands() }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
         key
     }

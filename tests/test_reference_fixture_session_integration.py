@@ -333,6 +333,19 @@ let localizationContractPassed = MainActor.assumeIsolated {
     guard localization.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library" else {
         return false
     }
+    guard ReferenceFixtureGameModule.workbenchSections(model: model).map(\.id) == ["referenceFixture.main"],
+          localization.string("referenceFixture.section.main") == "General" else {
+        return false
+    }
+    let groups = context.managementGroups(localization: localization)
+    guard groups.map(\.id) == ["daily", "maintenance"],
+          groups.flatMap(\.actions).map(\.id) == ["refreshStatus", "log", "logHistory", "clearLogs"],
+          groups.map(\.title) == [
+              localization.localized("host.manage.daily"),
+              localization.localized("host.manage.maintenance"),
+          ] else {
+        return false
+    }
     return TrainerLocalizationStore(defaults: localizationDefaults).language == .en
 }
 if !localizationContractPassed {

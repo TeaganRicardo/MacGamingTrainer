@@ -1849,14 +1849,7 @@ struct Hades2TrainerView: View {
 
     private var management: some View {
         TrainerSection(title: text("hades2.section.management"), icon: Hades2WorkbenchSection.management.icon) {
-            Hades2ManagementUtilities(
-                model: model,
-                openSaveEditor: {
-                    toolWindows.open("hades2-save-editor", text("hades2.saveEditor.title")) {
-                        Hades2GameModule.makeSaveEditorWindow(model: model)
-                    }
-                }
-            )
+            Hades2ManagementUtilities()
         }
     }
 

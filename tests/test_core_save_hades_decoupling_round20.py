@@ -13,7 +13,6 @@ api = (sources / "Hades2API.swift").read_text(encoding="utf-8")
 model = (sources / "Hades2Model.swift").read_text(encoding="utf-8")
 state = (sources / "Hades2BackendState.swift").read_text(encoding="utf-8")
 types = (sources / "Hades2Types.swift").read_text(encoding="utf-8")
-actions = (sources / "Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 management = (sources / "Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
 main_view = (sources / "Hades2View.swift").read_text(encoding="utf-8")
 
@@ -47,10 +46,9 @@ for token in (
     "openBackupFolder",
     "cancelStagedRestore",
 ):
-    assert token not in model + state + types + actions + management + main_view + api, token
+    assert token not in model + state + types + management + main_view + api, token
 
 assert "Hades2SaveManagerView" not in management
-assert 'Label("存档管理"' not in actions
 assert 'Label("存档管理"' not in main_view
 # Lint: Host game context is event-driven, no polling timer.
 assert "Timer.scheduledTimer" not in host

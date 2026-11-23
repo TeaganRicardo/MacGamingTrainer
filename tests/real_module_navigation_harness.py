@@ -149,10 +149,6 @@ struct StartupAvailabilityModule: TrainerGameModule {
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> StartupAvailabilityModel { .init(services: services) }
     static func makeContent(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
-    static func makeSidebarActions(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
-    static func makeHeaderActions(model: StartupAvailabilityModel) -> EmptyView { EmptyView() }
-    static func makeManagementCommands(model: StartupAvailabilityModel,
-                                      localization: TrainerLocalizationStore) -> TrainerEmptyCommands { .init() }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String { key }
 }
 

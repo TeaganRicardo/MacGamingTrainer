@@ -17,7 +17,7 @@ for forbidden_shape in ('Capsule()', 'RoundedRectangle(', '.background('):
 for path in view_files:
     text = path.read_text()
     for name in re.findall(r'^(?:private )?struct\s+([A-Za-z_][A-Za-z0-9_]*)\s*:', text, re.M):
-        if name in {'Hades2TrainerView','Hades2SaveManagerView','Hades2ProfileManagerView','Hades2DiagnosticsView','Hades2ShortcutSettingsView','Hades2SidebarActions','Hades2HeaderActions'}:
+        if name in {'Hades2TrainerView','Hades2SaveManagerView','Hades2ProfileManagerView','Hades2DiagnosticsView','Hades2ShortcutSettingsView'}:
             continue
         assert not re.search(r'(Row|Card|Toggle|Button|Field|Metric|Editor|Picker|Control|Badge)$', name), (path, name)
 

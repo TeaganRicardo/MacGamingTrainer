@@ -159,8 +159,14 @@ struct HeaderFixture: View {
  let visibility: PageVisibility
  var body: some View {
   VStack {
-   Hades2SidebarActions(model:model)
-   Hades2HeaderActions(model:model)
+   TrainerHostSidebarSections(
+       sections: Hades2GameModule.workbenchSections(model: model),
+       feedback: model.feedbackCenter,
+       diagnostics: model.diagnosticsService
+   )
+   if let search = Hades2GameModule.workbenchSearch(model: model) {
+       TrainerHostWorkbenchSearch(catalog: search)
+   }
   }.environment(\.trainerGamePageVisibility,visibility.pageVisibility)
    .environment(\.trainerNavigateToSection) { visibility.destinations.append($0) }
  }
@@ -323,12 +329,36 @@ struct HeaderFixture: View {
    session.stop(); phase("controls:complete"); return
   }
   let toolWindows=TrainerToolWindowStore()
+  let toolWindowActions=toolWindows.actions(localization:localization,theme:.standard)
   var backupPresentations=0
+  struct ManagementGroupsProvider: ViewModifier {
+   @ObservedObject var model: Hades2TrainerModel
+   @ObservedObject var localization: TrainerLocalizationStore
+   let toolWindows: TrainerToolWindowActions
+   let onSaveManagement: () -> Void
+   func body(content: Content) -> some View {
+    let catalog = Hades2ManagementCatalog.make(model: model, localization: localization, openSaveEditor: {
+     toolWindows.open("hades2-save-editor", localization.string("hades2.saveEditor.title")) {
+      Hades2GameModule.makeSaveEditorWindow(model: model)
+     }
+    }).resolvingHostDefaults(
+     localization: localization,
+     diagnostics: model.diagnosticsService,
+     saveManagement: TrainerManagementAction(
+      .saveManagement,
+      localization: localization,
+      enabled: { model.backendAvailable && model.protocolCompatible && !model.exiting },
+      action: onSaveManagement
+     )
+    )
+    content.environment(\.trainerManagementGroups, catalog.groups)
+   }
+  }
   let host=NSHostingView(rootView:TrainerShell { EmptyView() } content: {
    Hades2TrainerView(model:model)
   }.environmentObject(localization)
-    .environment(\.trainerToolWindows,toolWindows.actions(localization:localization,theme:.standard))
-    .environment(\.trainerManagementActions,TrainerManagementActions(openSaveManagement:{backupPresentations += 1})))
+    .environment(\.trainerToolWindows,toolWindowActions)
+    .modifier(ManagementGroupsProvider(model:model,localization:localization,toolWindows:toolWindowActions,onSaveManagement:{backupPresentations += 1})))
   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1400,height:2600),styleMask:[.titled],backing:.buffered,defer:false)
   window.contentView=host; host.layoutSubtreeIfNeeded(); pump(0.5)
   phase("\(journey):host-ready")
@@ -419,9 +449,9 @@ struct HeaderFixture: View {
    for width:CGFloat in [420,760] {
     for language in [TrainerPresentationLanguage.en,.zhCN] {
      localization.language=language; pump()
-     let layoutHost=NSHostingView(rootView:Hades2ManagementUtilities(model:model,openSaveEditor:{})
+     let layoutHost=NSHostingView(rootView:Hades2ManagementUtilities()
        .environmentObject(localization)
-       .environment(\.trainerManagementActions,TrainerManagementActions(openSaveManagement:{}))
+       .environment(\.trainerManagementGroups, context.managementGroups(localization: localization))
        .frame(width:width))
      let layoutWindow=NSWindow(contentRect:NSRect(x:0,y:0,width:width,height:1000),styleMask:[.titled],backing:.buffered,defer:false)
      layoutWindow.contentView=layoutHost; layoutHost.layoutSubtreeIfNeeded(); pump()

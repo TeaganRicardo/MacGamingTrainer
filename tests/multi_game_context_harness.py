@@ -23,31 +23,6 @@ FIXTURE = ROOT / "ContractFixtures/reference_module"
 NAVIGATION_FIXTURE_VIEWS = r'''
 import SwiftUI
 
-package struct NavigationFixtureSidebar: View {
-    @Environment(\.trainerNavigateToSection) private var navigate
-    @Environment(\.trainerSelectedSection) private var selection
-    @EnvironmentObject private var localization: TrainerLocalizationStore
-    let gameID: String
-    let name: String
-    package init(gameID: String, name: String) {
-        self.gameID = gameID
-        self.name = name
-    }
-    package var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button(name + " sections") {}.accessibilityIdentifier("test.sections." + gameID)
-            ForEach(0..<3) { index in
-                TrainerSectionButton(
-                    title: localization.language == .en ? "A longer section name \(index)" : "较长的章节导航名称 \(index)",
-                    systemImage: "list.bullet", selected: selection == gameID + ".\(index)"
-                ) { navigate(gameID + ".\(index)") }
-                .accessibilityIdentifier("test.navigate.\(gameID).\(index)")
-                .keyboardShortcut(KeyEquivalent(Character(String(index))), modifiers: [.command, .option])
-            }
-        }
-    }
-}
-
 package struct NavigationFixtureSections: View {
     let gameID: String
     package init(gameID: String) { self.gameID = gameID }
@@ -352,10 +327,13 @@ func navigationTrace(_ message: String) {
             }) else { preconditionFailure("Game is missing from the sidebar: \(id)") }
             return button
         }
-        func visibleSections() -> [String] {
-            nativeAccessibilityControls(pageWindow).compactMap(\.identifier).filter { $0.hasPrefix("test.sections.") }
+        func expectedSections(_ game: String) -> [String] {
+            (0..<3).map { "trainer.section.\(game).\($0)" }
         }
-        precondition(visibleSections() == ["test.sections.first_fixture"], "Inactive game sections were expanded")
+        func visibleSections() -> [String] {
+            nativeAccessibilityControls(pageWindow).compactMap(\.identifier).filter { $0.hasPrefix("trainer.section.") }
+        }
+        precondition(visibleSections() == expectedSections("first_fixture"), "Inactive game sections were expanded")
         precondition(!nativeAccessibilityControls(pageWindow).contains {
             $0.role == "AXStaticText" && $0.text == localization.localized("host.gameLibrary") &&
                 $0.frame.maxX < draftField.accessibilityFrame().minX
@@ -373,7 +351,7 @@ func navigationTrace(_ message: String) {
         navigationPump(0.05)
         precondition(gameButton("second_fixture").press())
         wait { application.selectedGameID == "second_fixture" }
-        wait { visibleSections() == ["test.sections.second_fixture"] }
+        wait { visibleSections() == expectedSections("second_fixture") }
         precondition(first.connected && second.connected && first.enabled)
         NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: app)
         precondition(first.activations > 0 && second.activations > 0, "Hidden game lost lifecycle subscription")
@@ -386,7 +364,7 @@ func navigationTrace(_ message: String) {
         precondition(pids["first"] == pids["firstAfter"] && pids["second"] == pids["secondAfter"])
         precondition(gameButton("first_fixture").press())
         wait { application.selectedGameID == "first_fixture" }
-        wait { visibleSections() == ["test.sections.first_fixture"] }
+        wait { visibleSections() == expectedSections("first_fixture") }
         precondition(application.context(id: "first_fixture")?.typed(as: FirstFixtureGameModule.self) === firstContext)
         navigationPump(0.1)
         precondition(fields(pageWindow.contentView!).contains { $0 === draftField && $0.stringValue == "unfinished draft" },
@@ -395,7 +373,7 @@ func navigationTrace(_ message: String) {
 
         func sectionButton(_ game: String, _ index: Int) -> NativeAccessibilityControl {
             nativeAccessibilityControls(pageWindow).first {
-                $0.identifier == "test.navigate.\(game).\(index)"
+                $0.identifier == "trainer.section.\(game).\(index)"
             }!
         }
         func requestCount() -> Int {
@@ -465,7 +443,7 @@ func navigationTrace(_ message: String) {
                          "an already-started navigation kept moving a hidden page")
         }
         precondition(switchToFirst.press())
-        wait { visibleSections() == ["test.sections.first_fixture"] }
+        wait { visibleSections() == expectedSections("first_fixture") }
         precondition(abs(firstScroll.contentView.bounds.origin.y - retiredPosition) < 2,
                      "returning to a page replayed a retired jump")
         // A completed jump must release its finish callback: subsequent manual
@@ -478,7 +456,7 @@ func navigationTrace(_ message: String) {
         precondition(abs(firstScroll.contentView.bounds.origin.y - manualPosition) < 2,
                      "a completed jump overrode a manual scroll on page selection")
         precondition(switchToFirst.press())
-        wait { visibleSections() == ["test.sections.first_fixture"] }
+        wait { visibleSections() == expectedSections("first_fixture") }
         precondition(sectionButton("first_fixture", 1).press())
         wait { abs(firstScroll.contentView.bounds.origin.y - firstDestination.y) < 2 }
         navigationPump(0.3)
@@ -487,7 +465,7 @@ func navigationTrace(_ message: String) {
         // layout request. Neither a delayed callback nor returning may replay it.
         precondition(sectionButton("first_fixture", 2).press())
         precondition(gameButton("second_fixture").press())
-        wait { application.selectedGameID == "second_fixture" && visibleSections() == ["test.sections.second_fixture"] }
+        wait { application.selectedGameID == "second_fixture" && visibleSections() == expectedSections("second_fixture") }
         firstContext.navigation.navigate(to: "first_fixture.2")
         navigationPump(0.3)
         precondition(firstContext.navigation.request == nil && firstContext.navigation.selection == "first_fixture.1")
@@ -514,7 +492,7 @@ func navigationTrace(_ message: String) {
                 pageWindow.setContentSize(NSSize(width: width, height: 1000))
                 for game in ["first_fixture", "second_fixture", "first_fixture"] {
                     precondition(gameButton(game).press())
-                    wait { application.selectedGameID == game && visibleSections() == ["test.sections." + game] }
+                    wait { application.selectedGameID == game && visibleSections() == expectedSections(game) }
                     let controls = nativeAccessibilityControls(pageWindow)
                     for id in ["first_fixture", "second_fixture"] {
                         precondition(controls.filter { $0.identifier == "host.game." + id }.count == 1,
@@ -732,12 +710,37 @@ def run_context_journey(*, state_only=False):
             (destination / "module.json").write_text(json.dumps(manifest))
             source = project / manifest["frontend"]["sourceDirectory"] / (word + "Module.swift")
             source.parent.mkdir(parents=True)
-            source.write_text((FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
+            section_items = (
+                f'    static func workbenchSections(model: {word}FixtureModel) -> [TrainerWorkbenchSectionItem] {{\n'
+                f'        (0..<3).map {{ index in\n'
+                f'            TrainerWorkbenchSectionItem(\n'
+                f'                id: "{name}.\\(index)",\n'
+                f'                titleKey: "{word.lower()}Fixture.section.\\(index)",\n'
+                f'                icon: "list.bullet",\n'
+                f'                keyboardShortcut: KeyboardShortcut(KeyEquivalent(Character(String(index))), modifiers: [.command, .option])\n'
+                f'            )\n'
+                f'        }}\n'
+                f'    }}'
+            )
+            fixture_source = (FIXTURE / "frontend/ReferenceFixtureModule.swift").read_text().replace(
                 "referenceFixture.", word.lower() + "Fixture.").replace(
                 "ReferenceFixture", word + "Fixture").replace(
-                f"static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n        EmptyView()",
-                f'static func makeSidebarActions(model: {word}FixtureModel) -> some View {{\n'
-                f'        NavigationFixtureSidebar(gameID: "{name}", name: "{word}")').replace(
+                f'    static func workbenchSections(model: {word}FixtureModel) -> [TrainerWorkbenchSectionItem] {{\n'
+                f'        [\n'
+                f'            TrainerWorkbenchSectionItem(\n'
+                f'                id: "{word.lower()}Fixture.main",\n'
+                f'                titleKey: "{word.lower()}Fixture.section.main",\n'
+                f'                icon: TrainerSemanticIcon.Section.general\n'
+                f'            )\n'
+                f'        ]\n'
+                f'    }}',
+                section_items
+            ).replace(
+                f'"{word.lower()}Fixture.section.main": [.zhCN: "常用功能", .en: "General"],',
+                f'"{word.lower()}Fixture.section.0": [.zhCN: "较长的章节导航名称 0", .en: "A longer section name 0"],\n'
+                f'            "{word.lower()}Fixture.section.1": [.zhCN: "较长的章节导航名称 1", .en: "A longer section name 1"],\n'
+                f'            "{word.lower()}Fixture.section.2": [.zhCN: "较长的章节导航名称 2", .en: "A longer section name 2"],'
+            ).replace(
                 "    func setEnabled(_ value: Bool)",
                 "    @Published var postponeTermination = false\n    var pendingTermination: (() -> Void)?\n"
                 "    func finishPostponedTermination() {\n        let done = pendingTermination\n"
@@ -746,12 +749,16 @@ def run_context_journey(*, state_only=False):
                 "        if postponeTermination { pendingTermination = completion; return }\n"
                 "        completion()\n    }\n"
                 "    @Published var activations = 0\n    func hostDidBecomeActive() { activations += 1 }\n"
-                "    func setEnabled(_ value: Bool)").replace(
+                "    func setEnabled(_ value: Bool)"
+            ).replace(
                 "    @ObservedObject var model:",
-                '    @State private var draft = "' + word + ' draft"\n    @ObservedObject var model:').replace(
+                '    @State private var draft = "' + word + ' draft"\n    @ObservedObject var model:'
+            ).replace(
                 "        VStack(alignment: .leading, spacing: 12) {",
                 '        VStack(alignment: .leading, spacing: 12) {\n            TextField("Draft", text: $draft)\n'
-                f'            NavigationFixtureSections(gameID: "{name}")'))
+                f'            NavigationFixtureSections(gameID: "{name}")'
+            )
+            source.write_text(fixture_source)
             modules.append(name)
         main = project / "Harness.swift"
         main.write_text(HARNESS)

@@ -85,6 +85,7 @@ for raw in sys.stdin:
         if command=='delete_profile':profiles=[row for row in profiles if row['name']!=params['name']]
         result={'profiles':profiles}
     if command=='load_profile':result={'shortcuts':{'_layoutVersion':999}}
+    if command=='core.save.apply_staged':result={'operation':{'applied':False}}
     mode_path=log_path.with_suffix('.mode')
     mode=mode_path.read_text() if mode_path.exists() else 'viewer'
     if command=='diagnostics':
@@ -294,7 +295,15 @@ struct Main {
         localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
             resolver: Hades2GameModule.presentationText)
         if args.count == 4 && args[3] == "search" {
-            exerciseWorkbenchSearch(Hades2HeaderActions(model: model), localization: localization,
+            struct Hades2SearchFixture: View {
+                @ObservedObject var model: Hades2TrainerModel
+                var body: some View {
+                    if let catalog = Hades2GameModule.workbenchSearch(model: model) {
+                        TrainerHostWorkbenchSearch(catalog: catalog)
+                    }
+                }
+            }
+            exerciseWorkbenchSearch(Hades2SearchFixture(model: model), localization: localization,
                 placeholder: { localization.string("hades2.workbench.search") },
                 emptyLabel: { localization.string("hades2.workbench.searchEmpty") },
                 query: { model.workbenchSearch }, matches: { query in
@@ -439,33 +448,39 @@ struct Main {
 
         session.stop()
         pump(0.20)
+        let managementLocalization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         let managementSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
             executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10)))
-        let managementModel = makeFixtureModel(Hades2GameModule.self, session: managementSession,
+        let menuContext = TrainerGameContext<Hades2GameModule>(
+            session: managementSession,
+            backendScriptURL: worker,
             logSink: TrainerLogSink(url: worker.deletingLastPathComponent().appendingPathComponent("management.log")),
-            backendScriptURL: worker) {
+            targetMonitor: TrainerTargetProcessMonitor(snapshot: { .init(isRunning: false, launchGeneration: 0) }),
+            localization: managementLocalization
+        ) {
             Hades2TrainerModel(services: $0, shortcutDefaults: InMemoryDefaults())
         }
+        let managementModel = menuContext.model
 
-        managementWait(host, "management backend startup") { managementModel.backendAvailable && !managementModel.busy }
+        managementWait(host, "management backend startup") {
+            managementModel.backendAvailable && !managementModel.busy && !menuContext.saveManager.busy
+        }
         managementModel.listProfiles()
         managementWait(host, "management inventory") { !managementModel.busy && managementModel.profiles.count == 1 }
-        localization.language = .en
-        localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix,
-            resolver: Hades2GameModule.presentationText)
+        managementLocalization.language = .en
         var profilesPresented = true
-        func text(_ key: String) -> String { localization.string(key) }
+        func text(_ key: String) -> String { managementLocalization.string(key) }
         exerciseProfileManager(
             Hades2ProfileManagerView(model: managementModel,
                 isPresented: Binding(get: { profilesPresented }, set: { profilesPresented = $0 })),
             labels: .init(title: text("hades2.manage.profiles"), explanation: "",
                 name: text("hades2.profile.namePlaceholder"), picker: "", save: text("hades2.profile.saveCurrent"),
                 load: text("hades2.profile.load"), empty: text("hades2.profile.empty")),
-            localization: localization, inventory: { managementModel.profiles.map(\.name) },
+            localization: managementLocalization, inventory: { managementModel.profiles.map(\.name) },
             busy: { managementModel.busy }, dismissed: { !profilesPresented },
             commands: { commands(at: commandLog) }, afterLoad: { view in
                 managementWait(view, "shortcut compatibility warning") {
-                    managementModel.profileShortcutWarning.map { managementHasText(localization.string($0), in: view) } == true
+                    managementModel.profileShortcutWarning.map { managementHasText(managementLocalization.string($0), in: view) } == true
                 }
             }
         )
@@ -480,54 +495,62 @@ struct Main {
         var diagnosticsPresented = true
         try exerciseDiagnostics(Hades2DiagnosticsView(model: managementModel,
                 isPresented: Binding(get: { diagnosticsPresented }, set: { diagnosticsPresented = $0 })),
-            localization: localization, refreshTitle: text("hades2.diagnostics.rerun"),
+            localization: managementLocalization, refreshTitle: text("hades2.diagnostics.rerun"),
             exportTitle: text("hades2.diagnostics.export"), checkName: "Fixture runtime",
             nonpassingStatus: "host.diagnostics.failed", busy: { managementModel.busy },
             count: { managementModel.diagnostics.count }, dismissed: { !diagnosticsPresented },
             commands: { commands(at: commandLog) }, setMode: setDiagnosticsMode)
-        exerciseDiagnosticStatuses(localization: localization)
-        exerciseManagementRouting(localization: localization)
-        let menuCatalog = Hades2ManagementCatalog.make(model: managementModel, localization: localization)
-        managementCheck(menuCatalog.additionalMaintenance.map(\.id) == ["prepareSigning", "restoreSigning"],
-                        "optional image-maintenance commands lost their module owner")
-        menuCatalog.profiles.perform()
+        exerciseDiagnosticStatuses(localization: managementLocalization)
+        exerciseManagementRouting(localization: managementLocalization)
+        let menuCatalog = menuContext.resolvedManagementCatalog(localization: managementLocalization)!
+        managementCheck(menuCatalog.additionalMaintenance.map(\.id) == ["prepareSigning", "restoreSigning"]
+                        && menuCatalog.saveEditor != nil && menuCatalog.saveManagement != nil,
+                        "Hades II Host-resolved menu omitted Save actions or image maintenance commands")
+        managementCheck(menuContext.managementGroups(localization: managementLocalization).flatMap(\.actions).map(\.id)
+                        == menuCatalog.groups.flatMap(\.actions).map(\.id),
+                        "Hades II App menu actions diverged from resolved Management page groups")
+        menuCatalog.profiles?.perform()
         managementWait(host, "profile menu routed to Hades II") {
             !managementModel.busy && managementModel.profilesPresented
                 && commands(at: commandLog).last?["command"] as? String == "list_profiles"
         }
         managementModel.profilesPresented = false
-        menuCatalog.diagnostics.perform()
+        menuCatalog.diagnostics?.perform()
         managementWait(host, "diagnostics menu routed to Hades II") {
             !managementModel.busy && managementModel.diagnosticsPresented
                 && commands(at: commandLog).last?["command"] as? String == "diagnostics"
         }
         managementModel.diagnosticsPresented = false
+        let layoutCatalog: () -> TrainerManagementCatalog = {
+            menuContext.resolvedManagementCatalog(localization: managementLocalization)!
+        }
         exerciseManagementLayout(content: {
-            Hades2ManagementUtilities(model: managementModel, openSaveEditor: {})
-                .environment(\.trainerManagementActions, TrainerManagementActions(openSaveManagement: {}))
-        }, catalog: { Hades2ManagementCatalog.make(model: managementModel, localization: localization,
-                openSaveEditor: {}, openSaveManagement: {}) }, localization: localization)
-        exerciseManagementPageDismissal(Hades2TrainerView(model: managementModel), localization: localization,
+            Hades2ManagementUtilities()
+                .environment(\.trainerManagementGroups, layoutCatalog().groups)
+        }, catalog: layoutCatalog, localization: managementLocalization)
+        exerciseManagementPageDismissal(Hades2TrainerView(model: managementModel), localization: managementLocalization,
             show: { managementModel.diagnosticsPresented = true }, dismissed: { !managementModel.diagnosticsPresented })
-        exerciseModuleShortcutSheet(Hades2TrainerView(model: managementModel), localization: localization,
+        exerciseModuleShortcutSheet(Hades2TrainerView(model: managementModel), localization: managementLocalization,
             show: { managementModel.shortcutSettingsPresented = true }, isPresented: { managementModel.shortcutSettingsPresented },
             chord: { managementModel.shortcutText(.invincibility) }, commands: { commands(at: commandLog) })
         managementModel.connected = false; managementModel.pid = nil
-        managementCheck(!menuCatalog.disableAll.isEnabled && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled),
+        managementCheck(menuCatalog.disableAll?.isEnabled == false && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled)
+                        && menuCatalog.saveManagement?.isEnabled == true,
                         "detached Hades II command eligibility changed")
         managementModel.pid = 99
         managementCheck(menuCatalog.additionalMaintenance.allSatisfy { !$0.isEnabled },
                         "image-maintenance commands ignored a running target")
         managementModel.pid = nil; managementModel.exiting = true
         let afterExit = commands(at: commandLog).count
-        menuCatalog.profiles.perform(); menuCatalog.diagnostics.perform(); menuCatalog.shortcuts.perform()
+        menuCatalog.profiles?.perform(); menuCatalog.diagnostics?.perform(); menuCatalog.shortcuts?.perform()
         menuCatalog.additionalMaintenance.forEach { $0.perform() }
         pump(0.10)
         managementCheck(commands(at: commandLog).count == afterExit
                         && !managementModel.profilesPresented && !managementModel.diagnosticsPresented
-                        && !managementModel.shortcutSettingsPresented,
+                        && !managementModel.shortcutSettingsPresented
+                        && menuCatalog.saveManagement?.isEnabled == false,
                         "captured Hades II commands crossed shutdown")
-        managementCheck(menuCatalog.log.isEnabled && menuCatalog.logHistory.isEnabled,
+        managementCheck(menuCatalog.log?.isEnabled == true && menuCatalog.logHistory?.isEnabled == true,
                         "shutdown removed diagnostic log access")
         managementSession.stop()
         pump(0.20)

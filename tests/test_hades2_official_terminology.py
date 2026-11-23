@@ -169,19 +169,16 @@ assert 'text("hades2.metric.rerolls")' in view
 assert 'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"' in types
 assert 'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"' in types
 
-host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
+generator = (ROOT / "Tools/generate_game_binding.py").read_text(encoding="utf-8")
 shared_management = (ROOT / "Sources/Core/UI/Components/TrainerManagementGroups.swift").read_text(encoding="utf-8")
 host_zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encoding="utf-8")
 host_en = (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8")
-# The module supplies the localized title and Core passes it to CommandMenu.
-module_commands = host_actions[host_actions.index("struct Hades2ManagementCommands: Commands {"):]
+# Host supplies the localized title to CommandMenu for every module binding.
 shared_menu = shared_management[shared_management.index("struct TrainerManagementCommandMenu: Commands {"):]
-assert 'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"),' in module_commands
+assert 'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"), groups: groups)' in generator
 # Kept (no render hook): SwiftUI Commands cannot mount in NSHostingView; verify CommandMenu forwards its injected localized title.
 assert "CommandMenu(title)" in shared_menu
 assert '"host.trainerMenu" = "修改器";' in host_zh
 assert '"host.trainerMenu" = "Trainer";' in host_en
-assert 'CommandMenu("训练器")' not in host_actions
-assert 'CommandMenu("修改器")' not in host_actions
 
 print("hades2_official_terminology_ok")

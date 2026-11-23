@@ -893,8 +893,67 @@ struct HadesGameModule: TrainerGameModule {
 
     static func makeModel(services: TrainerModuleServices) -> HadesTrainerModel { HadesTrainerModel(services: services) }
     static func makeContent(model: HadesTrainerModel) -> HadesTrainerView { HadesTrainerView(model: model) }
-    static func makeSidebarActions(model: HadesTrainerModel) -> HadesSidebarActions { HadesSidebarActions(model: model) }
-    static func makeHeaderActions(model: HadesTrainerModel) -> some View { HadesHeaderActions(model: model) }
+    static func workbenchSections(model: HadesTrainerModel) -> [TrainerWorkbenchSectionItem] {
+        HadesWorkbenchSection.visible.map { section in
+            TrainerWorkbenchSectionItem(
+                id: section.id,
+                titleKey: section.titleKey,
+                icon: section.icon,
+                separatedFromPrevious: section == .management
+            )
+        }
+    }
+    static func workbenchSearch(model: HadesTrainerModel) -> TrainerWorkbenchSearchCatalog? {
+        TrainerWorkbenchSearchCatalog(
+            query: Binding(
+                get: { model.workbenchSearch },
+                set: { model.workbenchSearch = $0 }
+            ),
+            placeholderKey: "hades.workbench.search",
+            emptyLabelKey: "hades.workbench.searchEmpty",
+            search: { query, localization in
+                HadesWorkbenchCatalog.matches(query, resources: model.resourceCatalog, worldTerms: model.worldTerms) { key in
+                    TrainerPresentationLanguage.allCases.map {
+                        localization.string(key, language: $0)
+                    }
+                }.map { entry in
+                    let title: String
+                    if let names = entry.worldNames {
+                        title = names[localization.language.rawValue] ?? names["en"] ?? ""
+                    } else if let resource = entry.resource {
+                        title = resource.name(language: localization.language.rawValue)
+                    } else {
+                        title = localization.string(entry.titleKey)
+                    }
+                    return TrainerWorkbenchSearchCatalog.Result(
+                        id: entry.id,
+                        title: title,
+                        detail: localization.string(entry.section.titleKey),
+                        icon: entry.icon,
+                        sectionID: entry.section.id,
+                        onNavigate: {
+                            if entry.requiresExpandedMetrics { model.numericControlsExpanded = true }
+                        }
+                    )
+                }
+            }
+        )
+    }
+    static func makeManagementCatalog(
+        model: HadesTrainerModel,
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog? {
+        HadesManagementCatalog.make(
+            model: model,
+            localization: localization,
+            openSaveEditor: {
+                toolWindows.open("hades-save-editor", localization.string("hades.saveEditor.title")) {
+                    makeSaveEditorWindow(model: model)
+                }
+            }
+        )
+    }
     static var managedBackupEditor: (@MainActor (HadesTrainerModel, TrainerSaveSnapshot) -> TrainerToolWindowContent)? {
         { model, snapshot in makeSaveEditorWindow(model: model, snapshotID: snapshot.id) }
     }
@@ -904,9 +963,6 @@ struct HadesGameModule: TrainerGameModule {
         return TrainerToolWindowContent(canClose: { !editor.busy }, onClose: editor.close) {
             HadesSaveEditorView(model: editor)
         }
-    }
-    static func makeManagementCommands(model: HadesTrainerModel, localization: TrainerLocalizationStore) -> HadesManagementCommands {
-        HadesManagementCommands(model: model, localization: localization)
     }
     static func presentationText(key: String, arguments: [String], language: TrainerPresentationLanguage) -> String {
         HadesPresentation.text(key, language: language, arguments: arguments)

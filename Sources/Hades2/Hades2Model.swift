@@ -80,6 +80,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return Hades2Presentation.token("hades2.status.detailWithPID", arguments: [version, String(pid)])
     }
     var hostActionsEnabled: Bool { canAcceptRuntimeAction && !exiting && protocolCompatible }
+    var canAcceptManagementActionsFromHost: Bool { !exiting }
     var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.launchGame() } }
     @Published var workbenchSearch = ""
     @Published var numericControlsExpanded = false

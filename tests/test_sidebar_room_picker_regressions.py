@@ -28,10 +28,14 @@ assert "theme.selectionMarkerWidth(for: contrast)" in section
 
 # Both sidebar navigation sets start with the first visible Values section
 # selected; subsequent navigation transfers the marker to the chosen row.
-for path in ("Sources/Hades/HadesWorkbenchNavigation.swift", "Sources/Hades2/Views/Hades2HostActions.swift"):
-    actions = source(path)
-    assert "selectedSection == section.id || (selectedSection == nil && section == .values)" in actions, path
-    assert "TrainerSectionButton(" in actions, path
+trainer_host = source("Sources/Core/Host/TrainerHost.swift")
+assert "selectedSection == section.id" in trainer_host
+assert "section.id == sections.first?.id" in trainer_host
+assert "TrainerSectionButton(" in trainer_host
+for path in ("Sources/Hades/HadesModule.swift", "Sources/Hades2/Hades2Module.swift"):
+    module_source = source(path)
+    assert "static func workbenchSections(" in module_source, path
+    assert "separatedFromPrevious: section == .management" in module_source, path
 
 # Room/reward Pickers in both modules share the Core row-action role regardless
 # of option-title lengths. Non-inline picker groups remain expanding editors.

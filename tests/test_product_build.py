@@ -87,7 +87,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
         assert 'import TrainerCore\n' in binding
         assert f'package enum {module}Binding' in binding
         assert f'TrainerGameContext<{module}>()' in binding
-        assert f'{module}.makeManagementCommands(model: context.model' in binding
+        assert f'let context = application.context(id: {module}.descriptor.id)?.typed(as: {module}.self)' in binding
+        assert 'let groups = context.managementGroups(localization: localization)' in binding
+        assert 'TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"), groups: groups)' in binding
         assert f'if !application.terminationRequested && application.selectedGameID == {module}.descriptor.id,' in binding
         # A game's generated binding never names another game.
         assert f'{other}Module' not in binding and f'import {other.lower()}' not in binding

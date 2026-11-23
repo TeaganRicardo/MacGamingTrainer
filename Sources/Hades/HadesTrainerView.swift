@@ -370,7 +370,7 @@ struct HadesTrainerView: View {
     private var managementSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.management.titleKey),
                        icon: HadesWorkbenchSection.management.icon) {
-            HadesManagementUtilities(model: model)
+            HadesManagementUtilities()
         }
     }
 }
@@ -1045,14 +1045,5 @@ private struct HadesShortcutSettingsView: View {
                 return model.setShortcut(action, chord: chord)
             }
         )
-    }
-}
-
-struct HadesManagementCommands: Commands {
-    @ObservedObject var model: HadesTrainerModel
-    @ObservedObject var localization: TrainerLocalizationStore
-    var body: some Commands {
-        TrainerManagementCommandMenu(title: localization.localized("host.trainerMenu"),
-            groups: HadesManagementCatalog.make(model: model, localization: localization).groups)
     }
 }
